@@ -23,12 +23,7 @@ import type { RunLifecycle } from "./run-lifecycle.ts";
 import { describeTimeout, TimeoutError } from "./run-registry.ts";
 import type { RunStep } from "./run-stats.ts";
 import { computeStats } from "./run-stats.ts";
-import {
-  describeSdkError,
-  formatStreamError,
-  isTruncatedByTokenLimit,
-  stoppedAtStepCeiling,
-} from "./stream-error.ts";
+import { describeSdkError, formatStreamError } from "./stream-error.ts";
 import { applyToolDurations } from "./tool-durations.ts";
 import {
   eventStatusForRun,
@@ -320,49 +315,118 @@ type StreamedCore = {
   done: Promise<StreamedDriveResult>;
 };
 
+/** What the shared loop is given, whichever shape consumes it. */
+type ModelLoopOptions = DriveBase &
+  DriveConversation &
+  Omit<
+    ChatDriveOptions,
+    "onFinal" | keyof DriveBase | keyof DriveConversation
+  > & {
+    /** The unattended stop condition this loop runs under, when it has one. */
+    noProgress: NoProgressDetector | null;
+    /** The reply this loop continues, with its cut-short marks removed. */
+    continued?: PlatypusUIMessage;
+    /** The folded final messages, handed over by the terminal finish. */
+    onEnd?: (messages: PlatypusUIMessage[]) => void;
+  };
+
+/** The SDK result slice `computeStats` folds — what a headless run reports. */
+type LoopStats = Parameters<typeof computeStats>[0];
+
 /**
- * Runs a `streamText` model loop inside its registered lifecycle and folds the
- * streamed parts into `PlatypusUIMessage`s — metadata, tool durations, stream
- * errors and the terminal finish all handled here — then records the terminal
- * status exactly once, when the snapshot stream drains.
+ * What one model loop settles on, once its chunk stream has drained.
+ *
+ * The loop owns the one cutoff rule: the terminal finish's metadata is read as
+ * it passes through `createMessageMetadata`, so both shapes record an output-
+ * or step-ceiling stop the same way. The no-progress exclusion is applied here
+ * too — a tripped detector owns its stop and is never relabelled as a step
+ * ceiling.
  */
-const runStreamedDrive = (
-  opts: ChatDriveOptions,
-  behavior: StreamedBehavior,
-  split: SplitStream,
-): StreamedCore => {
-  const {
-    run,
-    originalMessages: given = [],
-    facts,
-    generateMessageId,
-    toolDurations,
-    onStepFinish,
-    onToolExecutionEnd,
-    onFinal,
-    events,
-  } = opts;
+type ModelLoopOutcome = {
+  /** The first failure the stream reported, in a caller-facing sentence. */
+  failure?: string;
+  /** The terminal finish hit the model's output ceiling. */
+  truncated: boolean;
+  /** The loop was stopped at its step ceiling with the model still asking to
+   *  continue, so the answer is whatever it had produced by then. */
+  stoppedAtStepLimit: boolean;
+  /** The answer the loop produced. */
+  text: string;
+  /** The provider's unified terminal reason. */
+  finishReason: string | undefined;
+  /** The provider's raw terminal reason — what it actually said. */
+  rawFinishReason: string | undefined;
+  /** The steps the SDK completed, for a caller computing its own statistics. */
+  steps: LoopStats["steps"];
+  /** The usage the provider reported across the loop. */
+  totalUsage: LoopStats["totalUsage"];
+  /** Why the result's terminal promises rejected, when they did. */
+  rejection?: { error: unknown };
+};
 
-  const noProgress = detectorFor(behavior.unattended);
-  const plan = planRecording(opts.plan, events);
-  /** The reply this turn continues: a seeded `/skill` one, or a resumed one. */
-  const continued = withoutCutShortFlags(
-    given.at(-1)?.role === "assistant" ? given.at(-1) : undefined,
-  );
-  const originalMessages = continued
-    ? [...given.slice(0, -1), continued]
-    : given;
+/**
+ * The cutoffs the loop decided, recorded on a run's statistics. One mapping,
+ * so the streamed drives and the headless one cannot label a stop differently.
+ */
+const withCutoffs = (
+  stats: RunStats,
+  outcome: Pick<ModelLoopOutcome, "truncated" | "stoppedAtStepLimit">,
+): RunStats => ({
+  ...stats,
+  ...(outcome.truncated ? { truncatedByTokenLimit: true as const } : {}),
+  ...(outcome.stoppedAtStepLimit ? { stoppedAtStepLimit: true as const } : {}),
+});
 
+/** What one model loop hands its consumer. */
+type ModelLoop = {
+  /** The UI chunk stream to consume. */
+  chunks: ReadableStream<InferUIMessageChunk<PlatypusUIMessage>>;
+  /** Records a failure the stream's consumer saw — the first one wins. */
+  reportFailure: (error: unknown) => void;
+  /**
+   * The loop's outcome. Called once the chunks have been drained: it awaits the
+   * result's terminal promises and reads the cutoffs the extractor captured
+   * while the stream flowed.
+   */
+  outcome: () => Promise<ModelLoopOutcome>;
+};
+
+/**
+ * The one model loop every shape consumes.
+ *
+ * Owns everything the three drives did identically: setting the usage model,
+ * wrapping the plan's tools for Run events, both halves of context-overflow
+ * recovery, `streamText` with the shared callbacks, the UI message stream with
+ * its metadata extractor and stream-error capture, and the single cutoff rule.
+ * What differs between a Chat turn, a delegate and a headless Trigger run is
+ * how the returned chunks are consumed and how the run ends — not the loop.
+ */
+const modelLoop = ({
+  plan: givenPlan,
+  run,
+  noProgress,
+  events,
+  facts,
+  toolDurations,
+  generateMessageId,
+  originalMessages,
+  continued,
+  onStepFinish,
+  onToolExecutionEnd,
+  onEnd,
+  ...conversation
+}: ModelLoopOptions): ModelLoop => {
+  run.setUsageModel(givenPlan.usageModel);
+  const plan = planRecording(givenPlan, events);
+  const overflowRecovery = createOverflowRecovery();
+  // The first error the stream reported, in a caller-facing sentence.
   let failure: string | undefined;
+  const recordFailure = (error: unknown): void => {
+    failure ??= describeSdkError(error);
+  };
+  // The terminal finish's cutoffs, read off the metadata extractor below.
   let truncated = false;
   let stoppedAtStepLimit = false;
-  let finalHandedOver = false;
-  let latest: PlatypusUIMessage | undefined;
-  let handoverMessages: PlatypusUIMessage[] | undefined;
-  let resolveDone!: (result: StreamedDriveResult) => void;
-  const done = new Promise<StreamedDriveResult>((resolve) => {
-    resolveDone = resolve;
-  });
 
   // The Drive's own start — the boundary the brief in issue #354 calls
   // "where the model stream is created". Captured here, immediately before
@@ -371,10 +435,8 @@ const runStreamedDrive = (
   // earliest point the model request can be said to have been sent.
   const driveStartMs = Date.now();
 
-  run.setUsageModel(opts.plan.usageModel);
-  const overflowRecovery = createOverflowRecovery();
   const result = streamText({
-    ...modelArgs({ ...opts, plan }, noProgress, overflowRecovery),
+    ...modelArgs({ plan, run, ...conversation }, noProgress, overflowRecovery),
     onStepEnd: (step: RunStep) => {
       onStepFinish?.(step);
       run.onStep(step);
@@ -387,31 +449,142 @@ const runStreamedDrive = (
     onToolExecutionEnd: (ctx) => {
       onToolExecutionEnd?.(ctx);
     },
+    // A provider error after some output does not reject the result's promises
+    // — it arrives as an error part and the stream ends normally — so the
+    // headless shape would otherwise read a crash as a clean finish. The
+    // streamed shapes fold the same error through `readUIMessageStream`'s own
+    // `onError`; whichever reports first wins.
+    onError: ({ error }) => {
+      recordFailure(error);
+    },
   });
 
-  const uiStream = toUIMessageStream<typeof plan.tools, PlatypusUIMessage>({
+  const extractMetadata = createMessageMetadata({
+    ...facts,
+    toolDurations,
+    // The ceiling the invocation's step-count stop condition is built from.
+    // The extractor sees the terminal finish reason but has no other way to
+    // know whether the loop was stopped or the model was done.
+    stepCeiling: plan.maxSteps,
+    driveStartMs,
+    delegatedUsage: run.delegatedUsage,
+    continued: continued?.metadata,
+    isClearableTool: (toolName) =>
+      isClearableToolName(
+        toolName,
+        (n) => plan.readOnlyToolNames?.has(n) ?? false,
+      ),
+  });
+
+  const chunks = toUIMessageStream<typeof plan.tools, PlatypusUIMessage>({
     stream: overflowRecovery.injectToolErrors(result.stream),
     tools: plan.tools,
     originalMessages,
     generateMessageId,
-    messageMetadata: createMessageMetadata({
-      ...facts,
-      toolDurations,
-      // The ceiling the invocation's step-count stop condition is built from.
-      // The extractor sees the terminal finish reason but has no other way to
-      // know whether the loop was stopped or the model was done.
-      stepCeiling: opts.plan.maxSteps,
-      driveStartMs,
-      delegatedUsage: run.delegatedUsage,
-      continued: continued?.metadata,
-      isClearableTool: (toolName) =>
-        isClearableToolName(
-          toolName,
-          (n) => opts.plan.readOnlyToolNames?.has(n) ?? false,
-        ),
-    }),
+    // The one place a cutoff is decided: the extractor is what stamps the
+    // terminal finish, and both shapes read the same marks from it.
+    messageMetadata: (part) => {
+      const metadata = extractMetadata(part);
+      if (metadata?.truncatedByTokenLimit) truncated = true;
+      if (metadata?.stoppedAtStepLimit) stoppedAtStepLimit = true;
+      return metadata;
+    },
     onError: (error) => formatStreamError(error),
-    onEnd: ({ messages: finalMessages }) => {
+    ...(onEnd ? { onEnd: ({ messages }) => onEnd(messages) } : {}),
+  });
+
+  const outcome = async (): Promise<ModelLoopOutcome> => {
+    const cutoffs = {
+      failure,
+      truncated,
+      // A no-progress abort halts the loop on the same terminal finish reason
+      // the step ceiling does, and under a ceiling as low as the detector's own
+      // threshold it can trip on the ceiling step itself. That stop already
+      // reports itself — a failed run carrying a `no_progress:` message — and is
+      // never relabelled as a step-ceiling stop.
+      stoppedAtStepLimit: !noProgress?.tripped() && stoppedAtStepLimit,
+    };
+    try {
+      const [text, finishReason, rawFinishReason, steps, totalUsage] =
+        await Promise.all([
+          result.text,
+          result.finishReason,
+          result.rawFinishReason,
+          result.steps,
+          result.usage,
+        ]);
+      return {
+        ...cutoffs,
+        text,
+        finishReason,
+        rawFinishReason,
+        steps,
+        totalUsage,
+      };
+    } catch (error) {
+      return {
+        ...cutoffs,
+        text: "",
+        finishReason: undefined,
+        rawFinishReason: undefined,
+        steps: [],
+        totalUsage: {},
+        rejection: { error },
+      };
+    }
+  };
+
+  return {
+    chunks,
+    reportFailure: recordFailure,
+    outcome,
+  };
+};
+
+/**
+ * Runs the shared model loop inside its registered lifecycle and folds the
+ * streamed parts into `PlatypusUIMessage`s — metadata, tool durations, stream
+ * errors and the terminal finish all handled here — then records the terminal
+ * status exactly once, when the snapshot stream drains.
+ */
+const runStreamedDrive = (
+  opts: ChatDriveOptions,
+  behavior: StreamedBehavior,
+  split: SplitStream,
+): StreamedCore => {
+  const {
+    run,
+    originalMessages: given = [],
+    toolDurations,
+    onFinal,
+    events,
+    ...loopOpts
+  } = opts;
+
+  const noProgress = detectorFor(behavior.unattended);
+  /** The reply this turn continues: a seeded `/skill` one, or a resumed one. */
+  const continued = withoutCutShortFlags(
+    given.at(-1)?.role === "assistant" ? given.at(-1) : undefined,
+  );
+  const originalMessages = continued
+    ? [...given.slice(0, -1), continued]
+    : given;
+
+  let finalHandedOver = false;
+  let latest: PlatypusUIMessage | undefined;
+  let handoverMessages: PlatypusUIMessage[] | undefined;
+  let resolveDone!: (result: StreamedDriveResult) => void;
+  const done = new Promise<StreamedDriveResult>((resolve) => {
+    resolveDone = resolve;
+  });
+
+  const loop = modelLoop({
+    ...loopOpts,
+    run,
+    originalMessages,
+    continued,
+    noProgress,
+    onEnd: (finalMessages) => {
       finalHandedOver = true;
       // The terminal finish, stamped with the locally-measured tool durations
       // and the normalized web-tool view (issue #525) — same order both apply
@@ -429,7 +602,9 @@ const runStreamedDrive = (
   // anything downstream reads it — the SDK reuses the message's id but re-emits
   // nothing, and its own fold is the only consumer that already has them. See
   // `replay-seeded-parts.ts`.
-  const withSeeded = uiStream.pipeThrough(replaySeededParts(originalMessages));
+  const withSeeded = loop.chunks.pipeThrough(
+    replaySeededParts(originalMessages),
+  );
 
   // Recorded before the split, so the delegate's Run events see every chunk
   // whichever branch is read first, and a Chat turn (no scope) pays nothing.
@@ -446,7 +621,7 @@ const runStreamedDrive = (
         ...(continued ? { message: structuredClone(continued) } : {}),
         stream: consume,
         onError: (error) => {
-          failure ??= describeSdkError(error);
+          loop.reportFailure(error);
         },
       })) {
         // Normalized live, not only on the folded final: a search must render
@@ -465,33 +640,16 @@ const runStreamedDrive = (
         { err: error, runId: run.handle.runId },
         "Server-side UI stream consumer error",
       );
-      failure ??= describeSdkError(error);
+      loop.reportFailure(error);
     } finally {
-      // The terminal finish attaches its markers to the folded messages it
-      // hands over; if that never fires (an abort before completion), the last
-      // snapshot still carries them. Either way they are read once, here, before
-      // the run's status is decided, so the stats and the outcome agree.
-      const marked = (key: "truncatedByTokenLimit" | "stoppedAtStepLimit") =>
-        (handoverMessages?.some((m) => m.metadata?.[key] === true) ?? false) ||
-        latest?.metadata?.[key] === true;
-
-      truncated = marked("truncatedByTokenLimit");
-      // A no-progress abort halts the loop on the same terminal finish reason
-      // the step ceiling does, and under a ceiling as low as the detector's own
-      // threshold it can trip on the ceiling step itself. That stop already
-      // reports itself — a failed run carrying a `no_progress:` message — and is
-      // never relabelled as a step-ceiling stop.
-      stoppedAtStepLimit =
-        !noProgress?.tripped() && marked("stoppedAtStepLimit");
-      if (truncated || stoppedAtStepLimit) {
-        run.setStats({
-          ...run.stats,
-          ...(truncated ? { truncatedByTokenLimit: true as const } : {}),
-          ...(stoppedAtStepLimit ? { stoppedAtStepLimit: true as const } : {}),
-        });
+      // The cutoffs were decided once, as the loop's terminal finish passed
+      // through its metadata extractor; the run records them from here.
+      const outcome = await loop.outcome();
+      if (outcome.truncated || outcome.stoppedAtStepLimit) {
+        run.setStats(withCutoffs(run.stats, outcome));
       }
       const decision = decideTerminalStatus(run, {
-        failure,
+        failure: outcome.failure,
         noProgress,
         failOnStreamError: behavior.failOnStreamError,
       });
@@ -508,8 +666,8 @@ const runStreamedDrive = (
         messages: handoverMessages,
         latest,
         failure: decision.failure,
-        truncated,
-        stoppedAtStepLimit,
+        truncated: outcome.truncated,
+        stoppedAtStepLimit: outcome.stoppedAtStepLimit,
       });
     }
   })();
@@ -644,6 +802,35 @@ export type DriveOnceOptions = DriveBase &
   };
 
 /**
+ * The one record of how a headless run ended: nobody is watching an unattended
+ * run, and this is the only place the raw finish reason survives.
+ */
+const logHeadlessCompletion = (
+  run: RunLifecycle,
+  outcome: ModelLoopOutcome,
+  stats: RunStats,
+  startTime: number,
+  error: Error | undefined,
+): void => {
+  const trip =
+    error instanceof NoProgressError
+      ? { toolName: error.toolName, count: error.count }
+      : null;
+  logger[trip ? "warn" : "info"](
+    {
+      runId: run.handle.runId,
+      ...(trip ? { toolName: trip.toolName, count: trip.count } : {}),
+      duration: Date.now() - startTime,
+      responseLength: outcome.text.length,
+      finishReason: outcome.finishReason,
+      rawFinishReason: outcome.rawFinishReason,
+      stats,
+    },
+    trip ? "Run aborted: no progress" : "Run generate completed",
+  );
+};
+
+/**
  * Drives a headless run inside its registered lifecycle.
  *
  * Returns a single answer and the computed statistics. Headless means
@@ -670,76 +857,36 @@ export const driveOnce = async (
   const { run } = opts;
   const noProgress = detectorFor(true);
   const startTime = Date.now();
-  const scope: RunEventScope | undefined = opts.events
-    ? { recorder: opts.events, parentEventId: null }
+  const { agentId, onFinal, events: recorder, ...loopOpts } = opts;
+  const scope: RunEventScope | undefined = recorder
+    ? { recorder, parentEventId: null }
     : undefined;
-  // The first error the stream reported, in a caller-facing sentence.
-  let streamFailure: string | undefined;
 
   // The plan's tool wrapping is inside the `try` too: nothing above this drive
   // finishes the run if it throws (issue #1122).
   try {
-    run.setUsageModel(opts.plan.usageModel);
-    const plan = planRecording(opts.plan, scope);
-    const overflowRecovery = createOverflowRecovery();
-    const result = await withAgentCausation(opts.agentId, async () => {
-      const streamed = streamText({
-        ...modelArgs({ ...opts, plan }, noProgress, overflowRecovery),
-        onStepEnd: (step: RunStep) => run.onStep(step),
-        // The only thing that proves a long-running step is still alive —
-        // same as the streamed drives (issue #552).
-        onChunk: () => {
-          run.onStreamChunk();
-        },
-        onError: ({ error }) => {
-          streamFailure ??= describeSdkError(error);
-        },
-      });
+    // Built inside the causation chain so the SDK's stream keeps it alive for
+    // every tool execution it drives (ADR-0022).
+    const loop = withAgentCausation(agentId, () =>
+      modelLoop({ ...loopOpts, noProgress, events: scope }),
+    );
 
-      // Drained through the UI message stream so the Run events are read off
-      // the same chunks a delegate's are. Nothing else reads it.
-      for await (const chunk of toUIMessageStream<
-        typeof plan.tools,
-        PlatypusUIMessage
-      >({
-        stream: overflowRecovery.injectToolErrors(streamed.stream),
-        tools: plan.tools,
-        onError: (error) => formatStreamError(error),
-      })) {
-        if (scope) recordUiChunk(scope, chunk);
-      }
-
-      const [text, finishReason, rawFinishReason, steps, totalUsage] =
-        await Promise.all([
-          streamed.text,
-          streamed.finishReason,
-          streamed.rawFinishReason,
-          streamed.steps,
-          streamed.usage,
-        ]);
-      return { text, finishReason, rawFinishReason, steps, totalUsage };
-    });
-
-    if (streamFailure) throw new Error(streamFailure);
-
-    const stats = computeStats(result);
-    if (isTruncatedByTokenLimit(result.finishReason)) {
-      stats.truncatedByTokenLimit = true;
+    // Drained through the UI message stream so the Run events are read off
+    // the same chunks a delegate's are. Nothing else reads it.
+    for await (const chunk of loop.chunks) {
+      if (scope) recordUiChunk(scope, chunk);
     }
-    // The step ceiling, under the same shared rule the streamed path applies —
-    // read here off the computed step count rather than the stream's finish
-    // parts. A tripped no-progress detector owns the stop instead: it reports
-    // itself as a failure, and on a low ceiling both can fire on one step.
-    if (
-      !noProgress?.tripped() &&
-      stoppedAtStepCeiling({
-        finishReason: result.finishReason,
-        steps: stats.steps ?? 0,
-        stepCeiling: opts.plan.maxSteps,
-      })
-    ) {
-      stats.stoppedAtStepLimit = true;
-    }
+    const outcome = await loop.outcome();
+    // What the stream reported outranks what the result's promises rejected
+    // with: a provider that throws before producing anything rejects them
+    // with a generic "no output" error, and the reason is in the report.
+    if (outcome.failure) throw new Error(outcome.failure);
+    if (outcome.rejection) throw outcome.rejection.error;
+
+    const stats = withCutoffs(
+      computeStats({ steps: outcome.steps, totalUsage: outcome.totalUsage }),
+      outcome,
+    );
     run.setStats(stats);
 
     // The no-progress stop condition halts the loop cleanly (the SDK resolves
@@ -748,40 +895,15 @@ export const driveOnce = async (
       noProgress,
       failOnStreamError: false,
       emptyAtOutputCeiling:
-        !!stats.truncatedByTokenLimit && !result.text.trim(),
+        !!stats.truncatedByTokenLimit && !outcome.text.trim(),
     });
-    const trip =
-      decision.error instanceof NoProgressError
-        ? { toolName: decision.error.toolName, count: decision.error.count }
-        : null;
+    logHeadlessCompletion(run, outcome, stats, startTime, decision.error);
 
-    // Nobody is watching an unattended run, so this log is the only record of
-    // how it ended, and the one place the raw finish reason survives.
-    logger[trip ? "warn" : "info"](
-      {
-        runId: run.handle.runId,
-        ...(trip ? { toolName: trip.toolName, count: trip.count } : {}),
-        duration: Date.now() - startTime,
-        responseLength: result.text.length,
-        finishReason: result.finishReason,
-        rawFinishReason: result.rawFinishReason,
-        stats,
-      },
-      trip ? "Run aborted: no progress" : "Run generate completed",
-    );
-
-    opts.onFinal?.(result.text);
+    onFinal?.(outcome.text);
     await run.finish(decision.status, decision.error);
-    return { text: result.text, stats };
+    return { text: outcome.text, stats };
   } catch (error) {
-    // What the stream reported outranks what the result's promises rejected
-    // with: a provider that throws before producing anything rejects them
-    // with a generic "no output" error, and the reason is in the report.
-    const err = streamFailure
-      ? new Error(streamFailure)
-      : error instanceof Error
-        ? error
-        : new Error(String(error));
+    const err = error instanceof Error ? error : new Error(String(error));
     logger.error(
       { error, runId: run.handle.runId, duration: Date.now() - startTime },
       "Run generate failed",

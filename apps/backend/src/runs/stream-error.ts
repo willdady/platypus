@@ -49,11 +49,10 @@ const intendedToContinue = (finishReason: string | undefined): boolean =>
  * turn whose last allowed step happened to be its answer, which was never cut
  * short.
  *
- * Stated once because two paths read it from different sources: the streamed
- * extractor counts the per-step finish parts it sees, and the headless drive
- * reads the step count off the computed statistics. A rule written twice is a
- * rule that drifts. Deciding a *tripped no-progress detector* owns the stop
- * instead is the caller's — this predicate never sees one.
+ * Stated once because both drive shapes reach it through the same metadata
+ * extractor, which counts the per-step finish parts it sees. A rule written
+ * twice is a rule that drifts. Deciding a *tripped no-progress detector* owns
+ * the stop instead is the caller's — this predicate never sees one.
  *
  * `stepCeiling` is optional so a caller with no ceiling to give reports nothing
  * rather than guessing one.

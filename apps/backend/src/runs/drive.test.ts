@@ -260,6 +260,53 @@ describe("driveOnce", () => {
     expect(runRegistry.has(run.handle.runId)).toBe(false);
   });
 
+  // The Trigger run's stats are what the frontend renders, so the headless
+  // drive's shape is pinned whole — sums, the last step's occupancy and the
+  // tool-call tally, in one object. The streamed drives accumulate the same
+  // figures step by step, and the two must stay byte-identical.
+  it("pins the statistics a multi-step run reports", async () => {
+    const { run, outcome } = startRecordedRun();
+
+    const { stats } = await driveOnce({
+      plan: stuckPlanOf(streamingToolThenStopModel()),
+      run,
+      prompt: "hi",
+    });
+
+    expect(stats).toEqual({
+      steps: 2,
+      toolCalls: [{ name: STUCK_TOOL, count: 1 }],
+      inputTokens: 20,
+      outputTokens: 8,
+      contextOccupancy: 10,
+    });
+    expect(outcome[0].stats).toEqual(stats);
+  });
+
+  // The streamed drives accumulate the same figures step by step. This pins
+  // that the headless drive's whole stats object agrees with a delegate's for
+  // the same model stream, which is what the Trigger row renders.
+  it("reports the same statistics a streamed drive accumulates", async () => {
+    const headless = startRecordedRun();
+    const { stats } = await driveOnce({
+      plan: stuckPlanOf(streamingToolThenStopModel()),
+      run: headless.run,
+      prompt: "hi",
+    });
+
+    const streamed = startRecordedRun();
+    const drive = driveDelegate({
+      plan: stuckPlanOf(streamingToolThenStopModel()),
+      run: streamed.run,
+      prompt: "hi",
+      agentId: "sub-1",
+    });
+    for await (const _ of drive.snapshots) void _;
+    await drive.done;
+
+    expect(streamed.outcome[0].stats).toEqual(stats);
+  });
+
   it("records the output ceiling cutoff on the run's stats", async () => {
     const { run, outcome } = startRecordedRun();
 
