@@ -1,5 +1,6 @@
 import {
   findModelEntry,
+  REASONING_EFFORT_STEPS,
   modelLabelFor,
   providerHonoursReasoningMap,
   resolveModelReference,
@@ -10,6 +11,16 @@ import {
 } from "@platypus/schemas";
 import { getModelConfigs, getSearchCapability } from "./model-config";
 import type { Serialized } from "./api-write";
+
+/**
+ * What a native Provider offers (#1689) — Thinking and every Effort step, no
+ * budget — shaped as a map so the controls render it like any other. Its
+ * fragments are never sent: the backend sends the SDK's `reasoning` option.
+ */
+const NATIVE_REASONING_CONTROLS: ReasoningMap = {
+  thinking: { on: {}, off: {} },
+  effort: Object.fromEntries(REASONING_EFFORT_STEPS.map((step) => [step, {}])),
+};
 
 export type ModelSelectionInput = {
   /** Omit entirely for a caller (like the Agent form) that never selects by Agent. */
@@ -31,8 +42,9 @@ export type ResolvedModel = {
   /** Whether a searching turn against this model would serve search tools. */
   canSearch: boolean;
   /**
-   * The model's Reasoning map (ADR-0040), only where the Provider honours one —
-   * an OpenAI Provider in chat mode — so no control shows that would do nothing.
+   * The Reasoning controls to show: the model's Reasoning map (ADR-0040) where
+   * the Provider honours one — an OpenAI Provider in chat mode — or the native
+   * controls (#1689) on any other, so no control shows that would do nothing.
    */
   reasoning: ReasoningMap | undefined;
 };
@@ -92,6 +104,6 @@ export function resolveModel(input: {
     canSearch: getSearchCapability(provider),
     reasoning: providerHonoursReasoningMap(provider)
       ? entry?.reasoning
-      : undefined,
+      : NATIVE_REASONING_CONTROLS,
   };
 }
