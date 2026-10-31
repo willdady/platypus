@@ -3,9 +3,10 @@ import { paginationQuerySchema, validate } from "../validate.ts";
 import { z } from "zod";
 import { db } from "../index.ts";
 import { chat as chatTable } from "../db/schema.ts";
-import { ConflictError, NotFoundError } from "../errors.ts";
+import { ConflictError, NotFoundError, UpstreamError } from "../errors.ts";
 import {
   chatActiveLeafSchema,
+  chatCompactSchema,
   chatSubmitSchema,
   chatUpdateSchema,
 } from "@platypus/schemas";
@@ -36,7 +37,11 @@ import {
   loadActivePath,
   switchActivePath,
 } from "../services/chat-messages.ts";
-import { loadChatSummaries } from "../services/chat-summary.ts";
+import {
+  compactTranscript,
+  loadChatSummaries,
+  summaryAnchorIndex,
+} from "../services/chat-summary.ts";
 import type { PlatypusUIMessage } from "../types.ts";
 import { oneRow } from "../db/one-row.ts";
 
@@ -261,6 +266,52 @@ chat.delete(
     await deleteMessage(chatId, messageId);
 
     return c.json({ message: "Message deleted" }, 200);
+  },
+);
+
+/**
+ * `/compact` (issue #1111): a Transcript summary of the whole Active path,
+ * taken now with the Chat's own model and steered by the User's instruction
+ * (ADR-0041). No message is written; the next turn reads the summary.
+ */
+chat.post(
+  "/:chatId/compact",
+  requireAuth,
+  requireOrgAccess(),
+  requireWorkspaceAccess,
+  requireWorkspaceOwner,
+  validate("json", chatCompactSchema),
+  async (c) => {
+    const chatId = c.req.param("chatId");
+    const { orgId, workspaceId } = workspaceScopeOf(c);
+    const { instruction } = c.req.valid("json");
+
+    const row = await requireOwned(db, "chat", { id: chatId, workspaceId });
+    // A summary of a path a run is still extending would miss its reply.
+    refuseWhileRunning(row);
+
+    const { messages } = await loadActivePath(chatId, row.activeLeafId);
+    const source = row.agentId
+      ? { agentId: row.agentId }
+      : row.providerId && row.modelId
+        ? { providerId: row.providerId, modelId: row.modelId }
+        : undefined;
+    if (!source || summaryAnchorIndex(messages, 0) === undefined) {
+      throw new ConflictError("There is no completed turn to compact yet");
+    }
+
+    const summary = await compactTranscript({
+      chatId,
+      orgId,
+      workspaceId,
+      source,
+      path: messages,
+      instruction,
+    });
+    if (!summary) {
+      throw new UpstreamError("The model could not summarise this Chat");
+    }
+    return c.json(summary, 201);
   },
 );
 

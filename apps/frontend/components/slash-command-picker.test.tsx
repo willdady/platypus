@@ -255,7 +255,7 @@ describe("SlashCommandPicker", () => {
     expect(textarea).not.toHaveAttribute("aria-controls");
     // Still a popup, and the line explaining why is announced.
     expect(textarea).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByRole("status")).toHaveTextContent("No matching skill");
+    expect(screen.getByRole("status")).toHaveTextContent("No matching command");
   });
 
   it("says so when the agent has no skills assigned", () => {

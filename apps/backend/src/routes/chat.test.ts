@@ -31,7 +31,7 @@ vi.mock("../services/chat-execution.ts", () => ({
   drizzleChatTurnQueries: {},
 }));
 
-import { createUIMessageStreamResponse } from "ai";
+import { createUIMessageStreamResponse, generateText } from "ai";
 import { sql } from "drizzle-orm";
 import app from "../server.ts";
 import { runRegistry } from "../runs/run-registry.ts";
@@ -1703,6 +1703,117 @@ describe("Chat Routes", () => {
 
         expect((await deleteMessage("u1")).status).toBe(403);
         expect(rowOf(fake, "u1")?.deletedAt).toBeNull();
+      });
+    });
+
+    // Issue #1111: `/compact` forces a Transcript summary pass (ADR-0041) on
+    // demand, steered by the User's instruction, with no message written.
+    describe("POST /:chatId/compact", () => {
+      const compact = (body: Record<string, unknown> = {}) =>
+        app.request(`${baseUrl}/chat-1/compact`, {
+          method: "POST",
+          body: JSON.stringify(body),
+          headers: { "Content-Type": "application/json" },
+        });
+
+      /** The Chat on a Direct turn's Provider, with `chat_summary` empty. */
+      const seedCompactable = () => {
+        const fake = seedChat();
+        Object.assign(fake.tables.chat[0], { providerId: "p1", modelId: "m1" });
+        fake.tables.provider = [
+          {
+            id: "p1",
+            name: "Test",
+            workspaceId,
+            organizationId: null,
+            providerType: "OpenAI",
+            apiKey: "sk-test",
+            apiMode: "chat",
+            searchSource: "native",
+            modelIds: [{ id: "m1", passthroughFileTypes: [] }],
+            taskModelId: "m1",
+            memoryExtractionModelId: "m1",
+          },
+        ];
+        fake.tables.chat_summary = [];
+        return fake;
+      };
+
+      const summarises = (text = "The summary.") =>
+        vi.mocked(generateText).mockResolvedValueOnce({
+          text,
+          usage: { inputTokens: 100, outputTokens: 20 },
+        } as never);
+
+      it("summarises the whole Active path, steered by the instruction", async () => {
+        mockSession();
+        const fake = seedCompactable();
+        summarises();
+
+        const res = await compact({ instruction: "keep the API decisions" });
+
+        expect(res.status).toBe(201);
+        expect(await res.json()).toMatchObject({
+          chatId: "chat-1",
+          // Nothing kept verbatim: the next message carries the summary.
+          anchorId: "a2",
+          coveredIds: ["u1", "a1", "u2", "a2"],
+          text: "The summary.",
+        });
+        expect(
+          vi.mocked(generateText).mock.calls.at(-1)![0].instructions,
+        ).toContain("keep the API decisions");
+        expect(fake.tables.chat_summary).toHaveLength(1);
+        expect(fake.tables.chat_message).toHaveLength(4);
+      });
+
+      it("lists the new summary on the Chat", async () => {
+        mockSession();
+        seedCompactable();
+        summarises();
+        await compact();
+
+        const reloaded = (await (
+          await app.request(`${baseUrl}/chat-1`)
+        ).json()) as { summaries: { anchorId: string }[] };
+        expect(reloaded.summaries.map((s) => s.anchorId)).toEqual(["a2"]);
+      });
+
+      it("409s a Chat with no completed turn to summarise", async () => {
+        mockSession();
+        const fake = seedCompactable();
+        fake.tables.chat[0].activeLeafId = "u1";
+
+        expect((await compact()).status).toBe(409);
+        expect(fake.tables.chat_summary).toHaveLength(0);
+      });
+
+      it("409s while a run is in flight", async () => {
+        mockSession();
+        const fake = seedCompactable();
+        fake.tables.chat[0].status = "running";
+
+        expect((await compact()).status).toBe(409);
+        expect(fake.tables.chat_summary).toHaveLength(0);
+      });
+
+      it("502s when the summary pass fails, writing nothing", async () => {
+        mockSession();
+        const fake = seedCompactable();
+        vi.mocked(generateText).mockRejectedValueOnce(new Error("boom"));
+
+        expect((await compact()).status).toBe(502);
+        expect(fake.tables.chat_summary).toHaveLength(0);
+      });
+
+      it("is refused to anyone but the Workspace Owner", async () => {
+        mockSession();
+        seedTenant(
+          { chat: [{ id: "chat-1", workspaceId, activeLeafId: "u1" }] },
+          "user-2",
+        );
+
+        expect((await compact()).status).toBe(403);
       });
     });
 

@@ -23,6 +23,7 @@ import {
 import type { PlatypusUIMessage } from "../types.ts";
 import { logger } from "../logger.ts";
 import { isContextOverflowError } from "./context-overflow.ts";
+import { resolveScoped } from "./scoped-resource.ts";
 import {
   resolveGenerationPlan,
   type GenerationSource,
@@ -58,6 +59,26 @@ export type TranscriptSummaryQueries = {
 };
 
 import type { ProviderRow } from "./provider-write.ts";
+
+/**
+ * The production `TranscriptSummaryQueries`: Scoped-resource reads, exactly as
+ * a Chat turn serves them (ADR-0007), so a Shared (org-scoped) Provider/Agent
+ * resolves for a summary pass the way it resolved the turn.
+ */
+export const drizzleTranscriptSummaryQueries: TranscriptSummaryQueries = {
+  async getAgent(id, orgId, workspaceId) {
+    return (
+      (await resolveScoped(db, "agent", id, { orgId, workspaceId }))?.row ??
+      null
+    );
+  },
+  async getProvider(id, orgId, workspaceId) {
+    return (
+      (await resolveScoped(db, "provider", id, { orgId, workspaceId }))?.row ??
+      null
+    );
+  },
+};
 
 /**
  * The live `agent` row a generation plan re-resolves from, stated minimally
@@ -497,8 +518,8 @@ const incrementalInput = (
  * The structured handoff a Transcript summary is written from: what the
  * conversation intended, decided and concluded, what files and tools were
  * touched, what is still open, and where it stands — compactly, with an
- * explicit length target. An optional steering instruction (nothing passes one
- * yet; #1111 will) tells the pass what to keep.
+ * explicit length target. An optional steering instruction (the User's, from
+ * `/compact`) tells the pass what to keep.
  */
 export const TRANSCRIPT_SUMMARY_PROMPT = (steering?: string) =>
   `You are summarising the earlier part of a conversation, so a model that continues it can answer without seeing every earlier message.
@@ -540,8 +561,11 @@ export type TranscriptSummaryPassInput = {
   readOnlyToolNames?: ReadonlySet<string>;
   /** The running turn's abort signal, when the pass runs inside a turn. */
   signal?: AbortSignal;
-  /** A steering instruction for the summary (nothing passes one yet). */
+  /** A steering instruction for the summary — the User's, on `/compact`. */
   instruction?: string;
+  /** Turns kept verbatim, when the caller decides rather than the reading
+   *  (`/compact` keeps none). */
+  keptTurns?: number;
   /** Injectable clock and summary id, for tests. */
   now?: () => Date;
   generateId?: () => string;
@@ -578,14 +602,12 @@ export const takeTranscriptSummary = async (
     readOnlyToolNames,
     signal,
     instruction,
+    keptTurns = transcriptSummaryKeptTurns(readingSummaryId),
     now = () => new Date(),
     generateId = defaultSummaryId,
   } = input;
 
-  let anchorIndex = summaryAnchorIndex(
-    path,
-    transcriptSummaryKeptTurns(readingSummaryId),
-  );
+  let anchorIndex = summaryAnchorIndex(path, keptTurns);
   if (anchorIndex === undefined) return undefined;
 
   // One bounded retry on a context overflow, with an earlier anchor — a pass
@@ -662,10 +684,7 @@ export const takeTranscriptSummary = async (
       return row;
     } catch (error) {
       if (isContextOverflowError(error) && attempt === 0) {
-        const earlier = summaryAnchorIndex(
-          path,
-          transcriptSummaryKeptTurns(readingSummaryId) + 1,
-        );
+        const earlier = summaryAnchorIndex(path, keptTurns + 1);
         if (earlier === undefined || earlier >= anchorIndex) break;
         anchorIndex = earlier;
         logger.warn(
@@ -707,6 +726,10 @@ export const clearedModelMessages = async (
 
 // --- The pass's model resolution && the in-flight registry ---
 
+/** The Chat's own model reference a summary pass re-resolves (ADR-0017). */
+export type SummariserSource =
+  { agentId: string } | { providerId: string; modelId: string };
+
 /**
  * Re-resolves the model a summary pass writes with, from the same authority a
  * Chat turn resolves its model from (`resolveGenerationPlan`) and with the
@@ -716,7 +739,7 @@ export const clearedModelMessages = async (
  * rewrite the rule in two places.
  */
 export const resolveSummariserModel = async (
-  source: { agentId: string } | { providerId: string; modelId: string },
+  source: SummariserSource,
   orgId: string,
   workspaceId: string,
   queries: TranscriptSummaryQueries,
@@ -826,3 +849,63 @@ export const waitForTranscriptSummary = (
   start: () => Promise<ChatSummaryRow | undefined>,
 ): Promise<ChatSummaryRow | undefined> =>
   registerTranscriptSummary(chatId, start);
+
+/**
+ * `/compact` (issue #1111): takes a Transcript summary NOW, of the whole
+ * Active path through its last turn, steered by the User's instruction. The
+ * same pass the trigger and the backstop take — nothing kept verbatim, so the
+ * next message the User sends is the first one the summary rides.
+ *
+ * A pass already in flight for the Chat (an after-turn one) is awaited first
+ * rather than joined: it was taken without the User's instruction and keeps a
+ * tail, so it is not what was asked for. Ours is registered, so a backstop
+ * arriving meanwhile joins it.
+ *
+ * Resolves `undefined` when the pass fails; the summary is never fatal, but a
+ * failed `/compact` is the caller's to report.
+ */
+export const compactTranscript = async (args: {
+  chatId: string;
+  orgId: string;
+  workspaceId: string;
+  /** The Chat's own model reference, as its last turn resolved it. */
+  source: SummariserSource;
+  path: PlatypusUIMessage[];
+  instruction?: string;
+}): Promise<ChatSummaryRow | undefined> => {
+  const { chatId, orgId, workspaceId, source, path, instruction } = args;
+  const anchorIndex = summaryAnchorIndex(path, 0);
+  if (anchorIndex === undefined) return undefined;
+
+  const claim = { ours: false };
+  const start = async () => {
+    claim.ours = true;
+    const { model, modelId } = await resolveSummariserModel(
+      source,
+      orgId,
+      workspaceId,
+      drizzleTranscriptSummaryQueries,
+    );
+    return takeTranscriptSummary({
+      chatId,
+      model,
+      modelId,
+      path,
+      triggeredFromOccupancy: projectedOccupancyOf(path)?.projected ?? 0,
+      previousSummary: deepestPriorSummary(
+        path,
+        await loadChatSummaries(chatId),
+        anchorIndex,
+      ),
+      readingSummaryId: undefined,
+      instruction,
+      keptTurns: 0,
+    });
+  };
+  // `start` runs synchronously up to its first await, so `claim` is settled
+  // by the time `registerTranscriptSummary` returns.
+  const first = registerTranscriptSummary(chatId, start);
+  if (claim.ours) return first;
+  await first.catch(() => undefined);
+  return registerTranscriptSummary(chatId, start);
+};

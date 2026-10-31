@@ -28,6 +28,8 @@ import type {
   Skill,
 } from "@platypus/schemas";
 import {
+  BUILT_IN_CHAT_COMMANDS,
+  isBuiltInChatCommandName,
   nextTurnOccupancy,
   type Sandbox,
   UNTITLED_CHAT_TITLE,
@@ -88,11 +90,18 @@ import { ChatComposer } from "./chat-composer";
 import { ChatSkeleton } from "./chat-skeleton";
 import { ListError } from "./list-state";
 import type { ModelSelection } from "./composer";
-import { skillsForAgent } from "@/lib/slash-commands";
+import {
+  builtInCommandOf,
+  skillsForAgent,
+  type SlashCommand,
+} from "@/lib/slash-commands";
 
 /** Open surfaces that close on Escape, so a press inside one is theirs. */
 const ESCAPE_OWNERS =
   '[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]';
+
+/** The status line a `/compact` shows while its summary is being taken. */
+const COMPACTING_STATUS = "Summarising the conversation…";
 
 export function Chat({
   orgId,
@@ -385,6 +394,8 @@ export function Chat({
     maxOutputTokens: resolvedModel?.maxOutputTokens,
   };
   const [search, setSearch] = useState(false);
+  // A `/compact` waiting on its summary; the composer holds until it lands.
+  const [compacting, setCompacting] = useState(false);
 
   // The Chat search toggle's one invariant (#624): search may not be on when
   // the resolved selection cannot search. Keyed on `canSearch` itself — not on
@@ -787,11 +798,37 @@ export function Chat({
     sandbox?.transfer.upload && selectedAgent?.toolSetIds?.includes("sandbox"),
   );
 
+  // Built-in commands come first, and only once there is a turn to act on.
+  // A Skill saved under a built-in's name before it was reserved is left out:
+  // typing it runs the built-in.
+  const slashCommands: SlashCommand[] = [
+    ...(messages.length > 0 ? BUILT_IN_CHAT_COMMANDS : []),
+    ...agentSkills.filter((skill) => !isBuiltInChatCommandName(skill.name)),
+  ];
+
   // Sandbox uploads land first; the message goes only once every one has. A
   // rejection keeps the composer's text and chips for a retry.
   const handleSubmit = async (message: PromptInputMessage) => {
     if (turnInFlight) {
       return turn.cancel();
+    }
+    // `/compact` runs here rather than being sent: it takes a Transcript
+    // summary and writes no message (issue #1111). A rejection keeps the text.
+    const builtIn = message.files?.length
+      ? null
+      : builtInCommandOf(message.text);
+    if (builtIn?.name === "compact") {
+      setCompacting(true);
+      const outcome = await writeAt(`${chatUrl}/compact`, {
+        method: "POST",
+        data: builtIn.argument ? { instruction: builtIn.argument } : {},
+      }).finally(() => setCompacting(false));
+      if (outcome.outcome !== "success") {
+        toast.error(outcome.message);
+        throw new Error(outcome.message);
+      }
+      refreshChat();
+      return;
     }
     const sandboxFiles = message.sandboxFiles ?? [];
     if (!message.text && !message.files?.length && !sandboxFiles.length) {
@@ -915,20 +952,20 @@ export function Chat({
         <div className="flex justify-center min-w-0">
           <div className="relative w-full xl:w-4/5 max-w-4xl min-w-0">
             {isRecoveringRun && <ChatReconnectingNotice />}
-            {summarisingStatus && (
+            {(summarisingStatus || compacting) && (
               <p
                 role="status"
                 className="mb-2 text-xs text-muted-foreground sm:mb-1"
               >
-                {summarisingStatus}
+                {summarisingStatus ?? COMPACTING_STATUS}
               </p>
             )}
             {canSendMessages ? (
               <ChatComposer
                 onSubmit={handleSubmit}
                 canUploadToSandbox={canUploadToSandbox}
-                commands={agentSkills}
-                slashEnabled={Boolean(selectedAgent)}
+                commands={slashCommands}
+                slashEnabled={slashCommands.length > 0}
                 className={messages.length === 0 ? "min-h-24" : undefined}
                 placeholder={
                   runHeldElsewhere
@@ -937,7 +974,7 @@ export function Chat({
                       "What would you like to know?"
                 }
                 status={composerStatus}
-                disabled={runHeldElsewhere}
+                disabled={runHeldElsewhere || compacting}
                 passthroughFileTypes={resolvedModel?.passthroughFileTypes ?? []}
                 modelSelection={modelSelection}
                 tools={

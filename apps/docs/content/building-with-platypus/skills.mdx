@@ -26,7 +26,10 @@ From your Workspace, go to the **Skills** section and click **Create skill**.
 
 - **Name** — a kebab-case identifier, e.g. `write-release-note` (lowercase
   letters, numbers, and hyphens; up to 64 characters). This is the name the
-  model uses to request the Skill.
+  model uses to request the Skill. `compact` is taken by a
+  [built-in command](/building-with-platypus/chat#condensing-a-conversation-yourself),
+  so a Skill named that is refused, whether written here, imported or
+  installed.
 - **Description** — a brief summary of what the Skill does and when to reach for
   it (up to 1024 characters). The model reads this to decide _whether_ a request
   is relevant, so make it specific.

@@ -46,12 +46,12 @@ export function SlashCommandPicker({
             role="status"
           >
             {hasCommands
-              ? "No matching skill — this will send as ordinary text."
+              ? "No matching command — this will send as ordinary text."
               : "This agent has no skills assigned."}
           </p>
         ) : (
           <ul
-            aria-label="Skills"
+            aria-label="Commands"
             className="max-h-64 overflow-y-auto p-1"
             id={listboxId}
             role="listbox"

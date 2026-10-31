@@ -110,6 +110,14 @@ describe("appliedTranscriptSummary", () => {
     expect(appliedTranscriptSummary(afterDelete, [deep])).toBeUndefined();
   });
 
+  it("applies a /compact summary anchored at the leaf, which the next message carries", () => {
+    const compacted = summary({
+      anchorId: "a3",
+      coveredIds: ["u1", "a1", "u2", "a2", "u3", "a3"],
+    });
+    expect(appliedTranscriptSummary(path(), [compacted])?.anchorIndex).toBe(5);
+  });
+
   it("returns nothing for a Chat with no summaries", () => {
     expect(appliedTranscriptSummary(path(), undefined)).toBeUndefined();
     expect(appliedTranscriptSummary(path(), [])).toBeUndefined();

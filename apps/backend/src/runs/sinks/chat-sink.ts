@@ -11,6 +11,7 @@ import { generateChatMetadata } from "../../services/chat-metadata.ts";
 import { stillAwaits } from "../../services/chat-messages.ts";
 import {
   deepestPriorSummary,
+  drizzleTranscriptSummaryQueries,
   loadChatSummaries,
   projectedOccupancyOf,
   registerTranscriptSummary,
@@ -20,9 +21,7 @@ import {
   takeTranscriptSummary,
   transcriptSummaryDueAfterTurn,
   transcriptSummaryKeptTurns,
-  type TranscriptSummaryQueries,
 } from "../../services/chat-summary.ts";
-import { resolveScoped } from "../../services/scoped-resource.ts";
 import { extractFiles } from "../../storage/utils.ts";
 import type { PlatypusUIMessage } from "../../types.ts";
 import { FlushScheduler } from "../flush-scheduler.ts";
@@ -486,27 +485,6 @@ export class ChatSink implements RunSink {
   }
 
   /**
-   * The data-access surface the after-turn summary pass re-resolves the
-   * Chat's model with — Scoped-resource reads, exactly as a Chat turn serves
-   * them (ADR-0007), so a Shared (org-scoped) Provider/Agent resolves here the
-   * way it resolved the turn.
-   */
-  private readonly summariserQueries: TranscriptSummaryQueries = {
-    async getAgent(id, orgId, workspaceId) {
-      return (
-        (await resolveScoped(db, "agent", id, { orgId, workspaceId }))?.row ??
-        null
-      );
-    },
-    async getProvider(id, orgId, workspaceId) {
-      return (
-        (await resolveScoped(db, "provider", id, { orgId, workspaceId }))
-          ?.row ?? null
-      );
-    },
-  };
-
-  /**
    * Starts (never awaits) the after-turn Transcript summary pass: the turn's
    * final Projected occupancy crossed the trigger and the declared window
    * exists — or the turn overflowed (issue #1717) — and the Chat's own model
@@ -552,7 +530,7 @@ export class ChatSink implements RunSink {
         source,
         this.params.orgId,
         this.params.workspaceId,
-        this.summariserQueries,
+        drizzleTranscriptSummaryQueries,
       );
       const anchorIndex = summaryAnchorIndex(
         path,
