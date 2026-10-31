@@ -133,8 +133,9 @@ The first Consequence above — a Chat with no declared Context window never
 summarises — holds for the trigger and the backstop wall, which need a window
 to divide by. A turn the Provider rejects as too long is a measurement of its
 own, so it makes the Chat due for a summary with or without a window: the pass
-starts as the failed turn ends, and the next turn waits for it if it has not
-landed. The R3 overflow retry (replace the last tool step's results, retry once)
+starts as the failed turn ends, and a next message waits for it at the
+backstop. A Regenerate's path no longer holds the failed reply, so it reads the
+summary only once the pass has landed. The R3 overflow retry (replace the last tool step's results, retry once)
 is the "one retry per step" seam this ADR's deferred R2 row names.
 
 ## References

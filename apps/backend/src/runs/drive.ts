@@ -390,7 +390,7 @@ const runStreamedDrive = (
   });
 
   const uiStream = toUIMessageStream<typeof plan.tools, PlatypusUIMessage>({
-    stream: overflowRecovery.report(result.stream),
+    stream: overflowRecovery.injectToolErrors(result.stream),
     tools: plan.tools,
     originalMessages,
     generateMessageId,
@@ -702,7 +702,7 @@ export const driveOnce = async (
         typeof plan.tools,
         PlatypusUIMessage
       >({
-        stream: overflowRecovery.report(streamed.stream),
+        stream: overflowRecovery.injectToolErrors(streamed.stream),
         tools: plan.tools,
         onError: (error) => formatStreamError(error),
       })) {

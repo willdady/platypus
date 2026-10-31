@@ -527,16 +527,21 @@ refuses it. Once it does, the Chat condenses anyway — see below.
 
 ## When a Chat says it is too long for the model
 
-The reply stops with a message saying the conversation is too long for the
-model's context window. The model's vendor refused the turn because everything
-it would have been sent — the conversation, plus any tool results from this
-turn — no longer fits.
+The reply stops with an error explaining that the Chat has outgrown the model.
+The model's vendor refused the turn because everything it would have been sent
+— the conversation, plus any tool results from this turn — no longer fits.
 
-**Send your message again, or Regenerate the reply.** A Chat that refuses this
-way condenses its older messages straight away, whether or not a **Context
-window** is declared, and the next turn reads the summary instead of the full
-conversation. The dashed line from [When a long conversation is
+**Send your next message as usual.** A Chat that is refused this way condenses
+its older messages straight away, whether or not a **Context window** is
+declared, and your next message waits for that summary before it is sent. The
+dashed line from [When a long conversation is
 condensed](#when-a-long-conversation-is-condensed) appears where it starts.
+
+<Callout type="warning">
+  **Regenerating straight away can be refused again.** A regenerated reply only
+  uses the summary once it is ready; it does not wait for it. Send a new message
+  instead, or give the summary a moment first.
+</Callout>
 
 If the Chat refuses again, what is left after condensing still does not fit.
 The newest few turns are always sent in full, so a Chat with only a few turns
@@ -547,14 +552,13 @@ a bigger window.
 <Callout type="info">
   **A single oversized tool result does not end the turn.** When the result a
   tool just returned is what pushes the conversation past the window, Platypus
-  replaces that result with an error telling the model to ask for less — a
-  narrower query, a smaller page, or a range — and lets the model carry on. The
-  tool call shows that error as its result, now and after a reload, because it
-  is exactly what the model saw. If the model's narrower request still does not
-  fit, the turn stops with the too-long message above.
+  replaces that result with an error telling the model to ask the tool for less,
+  and lets the model carry on. The tool call shows that error as its result, now
+  and after a reload, because it is exactly what the model saw. If the model's
+  narrower request still does not fit, the turn stops with the error above.
 </Callout>
 
-Triggers and Sub-Agents stop with the same message when their run outgrows the
+Triggers and Sub-Agents stop with the same error when their run outgrows the
 model, and they have no earlier conversation to condense: give the Agent a
 model with a bigger window, or ask it to do less in one run.
 

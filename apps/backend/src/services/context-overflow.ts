@@ -1,4 +1,4 @@
-import { APICallError } from "ai";
+import { APICallError, RetryError } from "ai";
 
 /**
  * Whether an error is a Provider's "the request is too big for this model's
@@ -15,9 +15,15 @@ import { APICallError } from "ai";
  * the two shapes the vendors actually use.
  */
 export const isContextOverflowError = (error: unknown): boolean =>
-  APICallError.isInstance(error) &&
-  [400, 413, 422].includes(error.statusCode ?? 0) &&
-  CONTEXT_OVERFLOW_PATTERN.test(`${error.message} ${error.responseBody ?? ""}`);
+  // The SDK's backoff wraps a call that failed retryably and then overflowed
+  // in a `RetryError`; its last attempt is what the Provider said.
+  RetryError.isInstance(error)
+    ? isContextOverflowError(error.lastError)
+    : APICallError.isInstance(error) &&
+      [400, 413, 422].includes(error.statusCode ?? 0) &&
+      CONTEXT_OVERFLOW_PATTERN.test(
+        `${error.message} ${error.responseBody ?? ""}`,
+      );
 
 const CONTEXT_OVERFLOW_PATTERN =
   /context[ _]length|context_length_exceeded|context window|prompt is too long|maximum context length|exceeds the (?:maximum|max)(?: number of)? (?:input )?tokens|input is too long/i;

@@ -33,7 +33,7 @@ export type OverflowRecovery = {
    * the tool error as the call's result — replacing the result already
    * streamed. The stored Transcript is then re-sendable as it stands.
    */
-  report: <TOOLS extends ToolSet>(
+  injectToolErrors: <TOOLS extends ToolSet>(
     stream: ReadableStream<TextStreamPart<TOOLS>>,
   ) => ReadableStream<TextStreamPart<TOOLS>>;
 };
@@ -83,7 +83,11 @@ export const createOverflowRecovery = (): OverflowRecovery => {
         const results = last.content.filter(
           (part) => part.type === "tool-result",
         );
-        if (results.length === 0) throw error;
+        // Nothing new to replace: this step already took its one retry, and
+        // the SDK's backoff is re-sending it. Fall through to R1.
+        if (results.every((part) => replaced.has(part.toolCallId))) {
+          throw error;
+        }
 
         const inputs = new Map(
           params.prompt
@@ -111,7 +115,7 @@ export const createOverflowRecovery = (): OverflowRecovery => {
     },
   };
 
-  const report = <TOOLS extends ToolSet>(
+  const injectToolErrors = <TOOLS extends ToolSet>(
     stream: ReadableStream<TextStreamPart<TOOLS>>,
   ) => {
     const drain = (
@@ -137,5 +141,5 @@ export const createOverflowRecovery = (): OverflowRecovery => {
     );
   };
 
-  return { middleware, report };
+  return { middleware, injectToolErrors };
 };

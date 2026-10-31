@@ -147,6 +147,9 @@ export const CONTEXT_OVERFLOW_MESSAGE =
  * recognises — a missing API key, a 401, a rate limit — are exactly its causes.
  */
 export const describeSdkError = (error: unknown): string => {
+  // Never the Provider's own text: what the User can act on is that the
+  // conversation outgrew the model, not the vendor's token arithmetic.
+  if (isContextOverflowError(error)) return CONTEXT_OVERFLOW_MESSAGE;
   if (LoadAPIKeyError.isInstance(error)) {
     return "AI provider API key is missing or not configured.";
   }
@@ -160,9 +163,6 @@ export const describeSdkError = (error: unknown): string => {
     if (error.statusCode != null && error.statusCode >= 500) {
       return "AI provider is currently unavailable. Please try again later.";
     }
-    // Never the Provider's own text: what the User can act on is that the
-    // conversation outgrew the model, not the vendor's token arithmetic.
-    if (isContextOverflowError(error)) return CONTEXT_OVERFLOW_MESSAGE;
     return `AI provider error: ${error.message}`;
   }
   // Checked before the generic `Error` branch: both of these ARE Errors, so

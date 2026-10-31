@@ -29,7 +29,7 @@ const USAGE = {
   outputTokens: { total: 4, text: 4, reasoning: undefined },
 };
 
-type Reply = "tool" | "text" | "overflow";
+type Reply = "tool" | "text" | "overflow" | "rateLimited";
 
 const overflow = () =>
   new APICallError({
@@ -73,6 +73,16 @@ const scriptedModel = (...script: Reply[]) => {
       prompts.push(options.prompt);
       const reply = script[prompts.length - 1] ?? "text";
       if (reply === "overflow") return Promise.reject(overflow());
+      if (reply === "rateLimited") {
+        return Promise.reject(
+          new APICallError({
+            message: "Rate limit exceeded",
+            url: "https://provider.example/v1/messages",
+            requestBodyValues: {},
+            statusCode: 429,
+          }),
+        );
+      }
       return Promise.resolve({
         stream: simulateReadableStream({
           chunks: reply === "tool" ? toolCallStream() : textStream(),
@@ -203,6 +213,26 @@ describe("an overflow right after a tool step (R3)", () => {
     });
   });
 });
+
+// The SDK's own backoff re-enters the wrapped model when the retried call
+// fails retryably; that must not open a second R3 retry for the same step.
+it("takes no second retry when the SDK's backoff re-sends the replaced step", async () => {
+  const { model, prompts } = scriptedModel(
+    "tool",
+    "overflow",
+    "rateLimited",
+    "overflow",
+    "text",
+  );
+
+  const { chunks } = await runChat(model);
+
+  expect(prompts).toHaveLength(4);
+  expect(chunks).toContainEqual({
+    type: "error",
+    errorText: CONTEXT_OVERFLOW_MESSAGE,
+  });
+}, 15_000);
 
 describe("an overflow with no tool step before it (R1)", () => {
   it("tells the Chat's User the conversation is too long, without retrying", async () => {

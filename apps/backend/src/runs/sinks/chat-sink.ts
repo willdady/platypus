@@ -15,6 +15,7 @@ import {
   projectedOccupancyOf,
   registerTranscriptSummary,
   resolveSummariserModel,
+  overflowedReply,
   summaryAnchorIndex,
   takeTranscriptSummary,
   transcriptSummaryDueAfterTurn,
@@ -524,7 +525,7 @@ export class ChatSink implements RunSink {
     // the reading or the window: the rejection is the measurement. Taken now
     // rather than only at the next turn's backstop, so a regenerate — whose
     // path no longer holds this reply — still finds the summary waiting.
-    const overflowed = path.at(-1)?.metadata?.contextOverflow === true;
+    const overflowed = overflowedReply(path);
     if (
       !overflowed &&
       (!reading ||
@@ -535,7 +536,7 @@ export class ChatSink implements RunSink {
     // The summary the shrinking tail is measured against: the one the
     // overflowed reply ran with, or the one the triggering reading did.
     const readingSummaryId = overflowed
-      ? path.at(-1)?.metadata?.summaryId
+      ? overflowed.summaryId
       : reading?.summaryId;
 
     // The Chat's own resolved model: an Agent turn re-resolves through its

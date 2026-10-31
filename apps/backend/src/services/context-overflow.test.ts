@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { APICallError } from "ai";
+import { APICallError, RetryError } from "ai";
 import { isContextOverflowError } from "./context-overflow.ts";
 
 /** An `APICallError` as a Provider package throws it for a rejected request. */
@@ -51,6 +51,15 @@ describe("isContextOverflowError", () => {
       expect(isContextOverflowError(error)).toBe(true);
     },
   );
+
+  it("detects an overflow the SDK's backoff wrapped after a retryable failure", () => {
+    const wrapped = new RetryError({
+      message: "Failed after 2 attempts",
+      reason: "errorNotRetryable",
+      errors: [rejection(429, "Rate limit exceeded", ""), OVERFLOWS.anthropic],
+    });
+    expect(isContextOverflowError(wrapped)).toBe(true);
+  });
 
   it("does not take an invalid tool schema 400 for an overflow", () => {
     const error = rejection(

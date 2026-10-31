@@ -338,6 +338,21 @@ export const transcriptSummaryDueAfterTurn = (
   projectedOccupancy / contextWindow >= TRANSCRIPT_SUMMARY_TRIGGER;
 
 /**
+ * The last reply on `path`, when the Provider rejected its turn as too long
+ * (issue #1717): the summary that turn read, if any, as `summaryId`.
+ */
+export const overflowedReply = (
+  path: PlatypusUIMessage[],
+): { summaryId?: string } | undefined => {
+  const metadata = path.findLast(
+    (message) => message.role === "assistant",
+  )?.metadata;
+  return metadata?.contextOverflow === true
+    ? { summaryId: metadata.summaryId }
+    : undefined;
+};
+
+/**
  * Whether the pre-turn **backstop** must run before the model is called:
  * Projected occupancy is at {@link TRANSCRIPT_SUMMARY_BACKSTOP} of the declared
  * window and no usable summary exists — the turn would otherwise send a
@@ -377,17 +392,16 @@ export const transcriptSummaryBackstopDue = (args: {
   // The last turn overflowed (issue #1717): due unless a summary newer than
   // the one it overflowed with is already usable. The Provider's rejection is
   // the measurement, so neither a window nor a reading is needed.
-  const lastReply = path.findLast((message) => message.role === "assistant");
-  const overflowed =
-    lastReply?.metadata?.contextOverflow === true &&
-    usableSummary?.id === lastReply.metadata.summaryId;
+  const overflowed = overflowedReply(path);
+  const overflowDue =
+    overflowed !== undefined && usableSummary?.id === overflowed.summaryId;
   const overTheWall =
     contextWindow !== undefined &&
     projectedOccupancy !== undefined &&
     contextWindow > 0 &&
     projectedOccupancy / contextWindow >= TRANSCRIPT_SUMMARY_BACKSTOP &&
     usableSummary === undefined;
-  return stale || overflowed || overTheWall;
+  return stale || overflowDue || overTheWall;
 };
 
 /**
