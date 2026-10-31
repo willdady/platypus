@@ -233,3 +233,13 @@ to correct and retry it. And the allowlist is core-only and deny by default: an
 input is safe to drop only because what it wrote can be read back, and no MCP or
 plugin tool has a way to say that about itself — a Read-only hint (ADR-0021)
 answers a different question.
+
+## Notes: an undeclared window is named in the composer
+
+Issue #1728 makes the composer say what its silence used to mean. A model with
+no declared Context window still cannot draw a meter — there is no denominator
+— but the composer now shows a line in the meter's place, naming the consequence
+(long Chats are not condensed) and linking to Provider settings, where the
+window is declared. The meter's own display rules are unchanged; this fills only
+the state it was already hiding, and the provider form's field hint is no longer
+the sole place that states the consequence.

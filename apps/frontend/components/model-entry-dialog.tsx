@@ -340,7 +340,8 @@ export function ModelEntryDialog({
                     The model&apos;s <strong>total</strong> token capacity, not
                     a cap on the reply. Listed sizes are decimal, so{" "}
                     <code>128k</code> is 128,000. Optional; without it a Chat on
-                    this model shows no context meter.
+                    this model shows a hint in place of the context meter, and
+                    long Chats are not condensed ahead of time.
                   </>
                 }
                 error={fieldErrors.contextWindow}

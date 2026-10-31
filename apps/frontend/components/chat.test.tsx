@@ -367,12 +367,16 @@ vi.mock("./message-editor", () => ({
     </div>
   ),
 }));
-vi.mock("./context-meter", () => ({
-  ContextMeter: () => null,
-  ContextMeterEntrance: ({ children }: { children?: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
-}));
+vi.mock("./context-meter", async (importOriginal) => {
+  const contextMeter = await importOriginal<typeof import("./context-meter")>();
+  return {
+    ...contextMeter,
+    ContextMeter: () => null,
+    ContextMeterEntrance: ({ children }: { children?: React.ReactNode }) => (
+      <div>{children}</div>
+    ),
+  };
+});
 vi.mock("./file-compatibility-warning", () => ({
   FileCompatibilityWarning: () => null,
 }));
@@ -629,6 +633,24 @@ describe("composer tool row", () => {
     expect(
       screen.getByRole("button", { name: "Settings" }),
     ).toBeInTheDocument();
+  });
+});
+
+describe("the Context window hint", () => {
+  it("points at Provider settings when no Context window is declared", () => {
+    renderWithAgent("as");
+
+    expect(screen.getByText(/No Context window set/)).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /Provider settings/ }),
+    ).toHaveAttribute("href", "/org1/workspace/ws1/settings/providers");
+  });
+
+  it("is not shown when the model declares a Context window", () => {
+    harness.data.set("/agents", { results: [] });
+    renderChat();
+
+    expect(screen.queryByText(/No Context window set/)).not.toBeInTheDocument();
   });
 });
 

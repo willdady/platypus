@@ -448,13 +448,19 @@ condensed](#when-a-long-conversation-is-condensed).
   that condensed conversation starts from.
 </Callout>
 
-**No meter at all** is normal, and means one of three things: the Chat has no
-reply yet, nobody has declared a **Context window** for this model, or the
-Provider does not report token usage. In each case the capacity or the reading is unknown, and Platypus
-would rather show nothing than a number you cannot interpret. An Org Admin
-declares the window on the Provider's model entry — see [Declaring a Context
-window](/self-hosting/providers-and-auth#declaring-a-context-window). Switching
-model switches the meter with it, since the window belongs to the model.
+**No meter at all** is normal once a model is selected, and means one of two
+things: the Chat has no reply yet, or the Provider does not report token usage.
+Without a reading, Platypus would rather show nothing than a number you cannot
+interpret.
+
+Where nobody has declared a **Context window** for the model, a line appears in
+the meter's place instead: **No Context window set: long Chats aren't
+condensed ahead of time.** Select **Add a Context window in Provider settings**
+to open Provider settings, where an Org Admin declares the window on the model
+entry — see [Declaring a Context
+window](/self-hosting/providers-and-auth#declaring-a-context-window).
+Switching model switches the meter with it, since the window belongs to the
+model.
 
 ## Freeing up space during a long tool-using turn
 
