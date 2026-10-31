@@ -45,7 +45,7 @@ export type ChatSummaryRow = typeof chatSummary.$inferSelect;
 /** The data-access surface the pass's model resolution reads (a slice of
  *  `ChatTurnQueries`, stated structurally so this module never imports its
  *  caller — `chat-execution.ts` imports this one). */
-export type TranscriptSummaryQueries = {
+type TranscriptSummaryQueries = {
   getAgent(
     id: string,
     orgId: string,
@@ -65,7 +65,7 @@ import type { ProviderRow } from "./provider-write.ts";
  * a Chat turn serves them (ADR-0007), so a Shared (org-scoped) Provider/Agent
  * resolves for a summary pass the way it resolved the turn.
  */
-export const drizzleTranscriptSummaryQueries: TranscriptSummaryQueries = {
+const drizzleTranscriptSummaryQueries: TranscriptSummaryQueries = {
   async getAgent(id, orgId, workspaceId) {
     return (
       (await resolveScoped(db, "agent", id, { orgId, workspaceId }))?.row ??
@@ -85,7 +85,7 @@ export const drizzleTranscriptSummaryQueries: TranscriptSummaryQueries = {
  * (a SamplingSource satisfies the rest of `GenerationSource`'s agent shape).
  * Production passes the real `agent` table row; tests pass a fixture.
  */
-export type AgentRow = {
+type AgentRow = {
   providerId: string;
   modelId: string;
   maxSteps?: number | null;
@@ -362,7 +362,7 @@ export const transcriptSummaryDueAfterTurn = (
  * The last reply on `path`, when the Provider rejected its turn as too long
  * (issue #1717): the summary that turn read, if any, as `summaryId`.
  */
-export const overflowedReply = (
+const overflowedReply = (
   path: PlatypusUIMessage[],
 ): { summaryId?: string } | undefined => {
   const metadata = path.findLast(
@@ -471,7 +471,7 @@ export const summaryAnchorIndex = (
  * summary the turn just read) or only stale (a summary a Delete broke, whose
  * text is still an accurate base for the stretch its anchor covered).
  */
-export const deepestPriorSummary = (
+const deepestPriorSummary = (
   path: PlatypusUIMessage[],
   summaries: readonly ChatSummaryRow[],
   anchorIndex: number,
@@ -521,7 +521,7 @@ const incrementalInput = (
  * explicit length target. An optional steering instruction (the User's, from
  * `/compact`) tells the pass what to keep.
  */
-export const TRANSCRIPT_SUMMARY_PROMPT = (steering?: string) =>
+const TRANSCRIPT_SUMMARY_PROMPT = (steering?: string) =>
   `You are summarising the earlier part of a conversation, so a model that continues it can answer without seeing every earlier message.
 
 Write a single self-contained summary that preserves everything another model needs to continue the conversation faithfully:
@@ -712,7 +712,7 @@ const defaultSummaryId = (): string => `sum_${randomUUID()}`;
  * survives the pass — the pass must fit its own window, and re-clearing on the
  * way in costs nothing the clearing on the turn would not pay later anyway.
  */
-export const clearedModelMessages = async (
+const clearedModelMessages = async (
   messages: PlatypusUIMessage[],
   readOnlyToolNames?: ReadonlySet<string>,
 ): Promise<ModelMessage[]> =>
@@ -738,7 +738,7 @@ export type SummariserSource =
  * that contract, shared by the turn finish and the backstop so they cannot
  * rewrite the rule in two places.
  */
-export const resolveSummariserModel = async (
+const resolveSummariserModel = async (
   source: SummariserSource,
   orgId: string,
   workspaceId: string,
@@ -840,15 +840,197 @@ export const registerTranscriptSummary = (
 };
 
 /**
- * The backstop: waits for a Transcript summary for `chatId`, starting one if
- * none is already in flight on this instance. A pass that is already being
- * taken is awaited, never duplicated.
+ * The one take the turn verbs start: the anchor, the incremental base and the
+ * occupancy the pass records are derived here once, so the backstop and the
+ * after-turn pass cannot drift. The caller supplies the model (already resolved
+ * for the backstop, freshly resolved for the finish) and the summaries it read.
  */
-export const waitForTranscriptSummary = (
-  chatId: string,
-  start: () => Promise<ChatSummaryRow | undefined>,
-): Promise<ChatSummaryRow | undefined> =>
-  registerTranscriptSummary(chatId, start);
+const takeFromReading = (args: {
+  chatId: string;
+  model: LanguageModel;
+  modelId: string;
+  path: PlatypusUIMessage[];
+  summaries: readonly ChatSummaryRow[];
+  triggeredFromOccupancy: number | undefined;
+  readingSummaryId: string | undefined;
+  readOnlyToolNames?: ReadonlySet<string>;
+  signal?: AbortSignal;
+}): Promise<ChatSummaryRow | undefined> => {
+  const anchorIndex = summaryAnchorIndex(
+    args.path,
+    transcriptSummaryKeptTurns(args.readingSummaryId),
+  );
+  return takeTranscriptSummary({
+    chatId: args.chatId,
+    model: args.model,
+    modelId: args.modelId,
+    path: args.path,
+    triggeredFromOccupancy: args.triggeredFromOccupancy ?? 0,
+    previousSummary: deepestPriorSummary(
+      args.path,
+      args.summaries,
+      anchorIndex ?? 0,
+    ),
+    readingSummaryId: args.readingSummaryId,
+    readOnlyToolNames: args.readOnlyToolNames,
+    signal: args.signal,
+  });
+};
+
+// --- The two turn verbs a caller uses ---
+
+/**
+ * What a Chat turn asks before the model is called: apply the deepest usable
+ * Transcript summary, and — where the pre-turn backstop is due and a Chat id is
+ * known — wait for (or join) a take and apply its result. A Trigger run has no
+ * Chat id: it applies only, never takes (ADR-0041).
+ *
+ * The turn's own resolved model and signal are passed in, so the backstop never
+ * re-resolves a model (unlike {@link afterTurn}) and is cancellable with the
+ * turn that is waiting on it.
+ */
+export const beforeTurn = async (args: {
+  /** The Chat's id; absent on a Trigger run, which never takes a summary. */
+  chatId?: string;
+  /** The stored Transcript, oldest first. */
+  path: PlatypusUIMessage[];
+  /** The Chat's summaries, already loaded by the caller. */
+  summaries: ChatSummaryRow[];
+  contextWindow?: number;
+  model: LanguageModel;
+  modelId: string;
+  readOnlyToolNames?: ReadonlySet<string>;
+  signal?: AbortSignal;
+}): Promise<{
+  messages: PlatypusUIMessage[];
+  summaryId?: string;
+  /** Whether the backstop waited for and applied a freshly taken summary. */
+  backstopEngaged: boolean;
+}> => {
+  const {
+    chatId,
+    path,
+    contextWindow,
+    model,
+    modelId,
+    readOnlyToolNames,
+    signal,
+  } = args;
+  let summaries = args.summaries;
+  let summaryRead = applyTranscriptSummary(path, summaries);
+  const reading = projectedOccupancyOf(path);
+  let backstopEngaged = false;
+
+  if (
+    chatId !== undefined &&
+    transcriptSummaryBackstopDue({
+      projectedOccupancy: reading?.projected,
+      contextWindow,
+      usableSummary: summaryRead.summary,
+      readingSummaryId: reading?.summaryId,
+      summaries,
+      path,
+    })
+  ) {
+    const summary = await registerTranscriptSummary(chatId, () =>
+      takeFromReading({
+        chatId,
+        model,
+        modelId,
+        path,
+        summaries,
+        triggeredFromOccupancy: reading?.projected,
+        readingSummaryId: reading?.summaryId,
+        readOnlyToolNames,
+        signal,
+      }),
+    );
+    if (summary !== undefined) {
+      summaries = await loadChatSummaries(chatId);
+      summaryRead = applyTranscriptSummary(path, summaries);
+      backstopEngaged = summaryRead.summary !== undefined;
+    }
+  }
+
+  return {
+    messages: summaryRead.messages,
+    ...(summaryRead.summary ? { summaryId: summaryRead.summary.id } : {}),
+    backstopEngaged,
+  };
+};
+
+/**
+ * The after-turn pass: fire-and-forget, never throws. Decides due-ness from the
+ * turn's final reading (or an overflowed reply, issue #1717) and registers the
+ * take so a next turn's backstop joins it rather than starting a second.
+ *
+ * Unlike the backstop, this re-resolves the model from `source` — the same
+ * authority the turn resolved it from (ADR-0017) — because the turn that just
+ * finished is no longer holding its plan open.
+ */
+export const afterTurn = (args: {
+  chatId: string;
+  orgId: string;
+  workspaceId: string;
+  path: PlatypusUIMessage[];
+  contextWindow?: number;
+  source: SummariserSource;
+  readOnlyToolNames?: ReadonlySet<string>;
+}): void => {
+  const {
+    chatId,
+    orgId,
+    workspaceId,
+    path,
+    contextWindow,
+    source,
+    readOnlyToolNames,
+  } = args;
+  const reading = projectedOccupancyOf(path);
+  // A reply the Provider rejected as too long (issue #1717) is due whatever
+  // the reading or the window: the rejection is the measurement. Taken now
+  // rather than only at the next turn's backstop, so a regenerate — whose
+  // path no longer holds this reply — still finds the summary waiting.
+  const overflowed = overflowedReply(path);
+  if (
+    !overflowed &&
+    !transcriptSummaryDueAfterTurn(reading?.projected, contextWindow)
+  ) {
+    return;
+  }
+  // The summary the shrinking tail is measured against: the one the
+  // overflowed reply ran with, or the one the triggering reading did.
+  const readingSummaryId = overflowed
+    ? overflowed.summaryId
+    : reading?.summaryId;
+
+  void registerTranscriptSummary(chatId, async () => {
+    const { model, modelId } = await resolveSummariserModel(
+      source,
+      orgId,
+      workspaceId,
+      drizzleTranscriptSummaryQueries,
+    );
+    return takeFromReading({
+      chatId,
+      model,
+      modelId,
+      path,
+      summaries: await loadChatSummaries(chatId),
+      triggeredFromOccupancy: reading?.projected,
+      readingSummaryId,
+      readOnlyToolNames,
+    });
+  }).catch((error) => {
+    // `takeTranscriptSummary` never throws by itself; this is the model
+    // re-resolution's failure (an Agent or Provider deleted mid-flight) and
+    // the occasional join of a backstop's pass. Never fatal either way.
+    logger.error(
+      { error, chatId },
+      "After-turn transcript summary failed; the next turn's finish retries",
+    );
+  });
+};
 
 /**
  * `/compact` (issue #1111): takes a Transcript summary NOW, of the whole

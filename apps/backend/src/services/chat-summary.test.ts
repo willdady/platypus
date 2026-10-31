@@ -1,7 +1,29 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+// The fake db (and its mock of `../index.ts`) must be installed before the
+// module under test — which opens the db handle — is loaded.
+import { resetMockDb, seedDb } from "../test-utils.ts";
+
+// The model call and the model re-resolution are the pass's only I/O. Stub
+// them here so the turn verbs can be observed at their own seam: what they
+// schedule, what they apply, and how they fail.
+const { mockGenerateText, mockResolveGenerationPlan } = vi.hoisted(() => ({
+  mockGenerateText: vi.fn(),
+  mockResolveGenerationPlan: vi.fn(),
+}));
+vi.mock("ai", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("ai")>();
+  return { ...actual, generateText: mockGenerateText };
+});
+vi.mock("../runs/agent-plan.ts", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../runs/agent-plan.ts")>();
+  return { ...actual, resolveGenerationPlan: mockResolveGenerationPlan };
+});
+
 import type { PlatypusUIMessage } from "../types.ts";
 import {
+  afterTurn,
   applyTranscriptSummary,
+  beforeTurn,
   isSummaryUsable,
   lastOccupancyReading,
   projectedOccupancyOf,
@@ -15,9 +37,9 @@ import {
 
 /**
  * Tests for the pure, send-time half of Transcript summarising (ADR-0041,
- * issue #1716) — the decisions no run around them is needed to pin. The
- * model-calling half (`takeTranscriptSummary`) is exercised through the turn
- * and sink suites, which mock the model the same way the run suites do.
+ * issue #1716) and the two turn verbs (`beforeTurn`, `afterTurn`) that
+ * sequence it. The model call itself (`takeTranscriptSummary`) is pinned in
+ * `chat-summary-pass.test.ts`.
  */
 
 const user = (id: string, text = id): PlatypusUIMessage => ({
@@ -448,5 +470,279 @@ describe("lastOccupancyReading / projectedOccupancyOf", () => {
       metadata: { contextOccupancy: null },
     };
     expect(lastOccupancyReading(path)).toBeUndefined();
+  });
+});
+
+// --- The turn verbs ---
+
+const seedSummaryTable = () => seedDb({ chat_summary: [] });
+
+/** Puts a Context occupancy reading on the path's last assistant message. */
+const withReading = (
+  path: PlatypusUIMessage[],
+  inputTokens: number,
+  summaryId?: string,
+): PlatypusUIMessage[] => {
+  const last = path[path.length - 1];
+  path[path.length - 1] = {
+    ...last,
+    metadata: {
+      contextOccupancy: { inputTokens, outputTokens: 100 },
+      ...(summaryId ? { summaryId } : {}),
+    },
+  };
+  return path;
+};
+
+/** Marks the path's last reply as one the Provider rejected as too long. */
+const overflowing = (
+  path: PlatypusUIMessage[],
+  summaryId?: string,
+): PlatypusUIMessage[] => {
+  const last = path[path.length - 1];
+  path[path.length - 1] = {
+    ...last,
+    metadata: {
+      contextOverflow: true,
+      ...(summaryId ? { summaryId } : {}),
+    },
+  };
+  return path;
+};
+
+const stubPassIO = () => {
+  resetMockDb();
+  mockGenerateText.mockReset();
+  mockGenerateText.mockResolvedValue({
+    text: "The summary.",
+    usage: { inputTokens: 10, outputTokens: 5 },
+  });
+  mockResolveGenerationPlan.mockReset();
+  mockResolveGenerationPlan.mockResolvedValue({
+    plan: { model: {} },
+    resolvedModelId: "m1",
+  });
+};
+
+describe("beforeTurn", () => {
+  beforeEach(stubPassIO);
+
+  it("applies the deepest usable summary and reports it, without taking", async () => {
+    seedSummaryTable();
+    const summary = summaryRow({
+      anchorId: "a2",
+      coveredIds: ["u1", "a1", "u2", "a2"],
+    });
+
+    const result = await beforeTurn({
+      path: fiveTurns(),
+      summaries: [summary],
+      model: {} as never,
+      modelId: "m1",
+    });
+
+    expect(result.messages[0].id).toBe("u3");
+    expect(result.summaryId).toBe(summary.id);
+    expect(result.backstopEngaged).toBe(false);
+    expect(mockGenerateText).not.toHaveBeenCalled();
+  });
+
+  it("waits for and applies a fresh summary when the backstop is due", async () => {
+    const fake = seedSummaryTable();
+    const path = withReading(fiveTurns(), 9_600);
+
+    const result = await beforeTurn({
+      chatId: "chat-1",
+      path,
+      summaries: [],
+      contextWindow: 10_000,
+      model: {} as never,
+      modelId: "m1",
+    });
+
+    const row = fake.tables.chat_summary[0];
+    expect(row).toMatchObject({ anchorId: "a1", chatId: "chat-1" });
+    expect(result.summaryId).toBe(row.id);
+    expect(result.backstopEngaged).toBe(true);
+    // The fresh summary rides the first kept message.
+    expect(result.messages[0].id).toBe("u2");
+  });
+
+  it("applies only, never takes, without a chatId (a Trigger run)", async () => {
+    const fake = seedSummaryTable();
+    const path = withReading(fiveTurns(), 9_600);
+
+    const result = await beforeTurn({
+      path,
+      summaries: [],
+      contextWindow: 10_000,
+      model: {} as never,
+      modelId: "m1",
+    });
+
+    expect(result.backstopEngaged).toBe(false);
+    expect(result.summaryId).toBeUndefined();
+    expect(result.messages.map((message) => message.id)).toEqual(
+      fiveTurns().map((message) => message.id),
+    );
+    expect(mockGenerateText).not.toHaveBeenCalled();
+    expect(fake.tables.chat_summary).toHaveLength(0);
+  });
+
+  it("does not take when a usable summary already covers the wall", async () => {
+    seedSummaryTable();
+    const summary = summaryRow({
+      anchorId: "a2",
+      coveredIds: ["u1", "a1", "u2", "a2"],
+    });
+    const path = withReading(fiveTurns(), 9_600);
+
+    const result = await beforeTurn({
+      chatId: "chat-1",
+      path,
+      summaries: [summary],
+      contextWindow: 10_000,
+      model: {} as never,
+      modelId: "m1",
+    });
+
+    expect(result.summaryId).toBe(summary.id);
+    expect(result.backstopEngaged).toBe(false);
+    expect(mockGenerateText).not.toHaveBeenCalled();
+  });
+});
+
+describe("afterTurn", () => {
+  beforeEach(stubPassIO);
+
+  const direct = {
+    orgId: "org-1",
+    workspaceId: "ws-1",
+    source: { providerId: "p1", modelId: "m1" },
+  } as const;
+
+  it("takes exactly one summary when the final occupancy crosses 0.8", async () => {
+    const fake = seedSummaryTable();
+
+    afterTurn({
+      chatId: "chat-1",
+      ...direct,
+      path: withReading(fiveTurns(), 8_100),
+      contextWindow: 10_000,
+    });
+
+    await vi.waitFor(() => expect(fake.tables.chat_summary).toHaveLength(1));
+    expect(fake.tables.chat_summary[0]).toMatchObject({
+      chatId: "chat-1",
+      // The last 4 turns stay verbatim when the reading was taken bare.
+      anchorId: "a1",
+      coveredIds: ["u1", "a1"],
+      text: "The summary.",
+    });
+  });
+
+  it("takes nothing when the occupancy is below the trigger", () => {
+    const fake = seedSummaryTable();
+
+    afterTurn({
+      chatId: "chat-1",
+      ...direct,
+      path: withReading(fiveTurns(), 7_000),
+      contextWindow: 10_000,
+    });
+
+    expect(fake.tables.chat_summary).toHaveLength(0);
+  });
+
+  it("takes nothing for a model with no declared Context window", () => {
+    const fake = seedSummaryTable();
+
+    afterTurn({
+      chatId: "chat-1",
+      ...direct,
+      path: withReading(fiveTurns(), 99_000),
+    });
+
+    expect(fake.tables.chat_summary).toHaveLength(0);
+  });
+
+  it("keeps one turn when the triggering reading was taken with a summary", async () => {
+    const fake = seedSummaryTable();
+
+    afterTurn({
+      chatId: "chat-1",
+      ...direct,
+      path: withReading(fiveTurns(), 8_100, "sum-old"),
+      contextWindow: 10_000,
+    });
+
+    await vi.waitFor(() => expect(fake.tables.chat_summary).toHaveLength(1));
+    expect(fake.tables.chat_summary[0]).toMatchObject({ anchorId: "a4" });
+  });
+
+  // Issue #1717 (R1): a turn the Provider rejected as too long takes its
+  // summary straight away, whatever the reading — so a regenerate, whose
+  // path no longer holds the overflowed reply, still finds one waiting.
+  it("takes a summary after a turn that overflowed, with no window or reading", async () => {
+    const fake = seedSummaryTable();
+
+    afterTurn({
+      chatId: "chat-1",
+      ...direct,
+      path: overflowing(fiveTurns()),
+    });
+
+    await vi.waitFor(() => expect(fake.tables.chat_summary).toHaveLength(1));
+    expect(fake.tables.chat_summary[0]).toMatchObject({ anchorId: "a1" });
+  });
+
+  it("shrinks from the summary the overflowed reply ran with", async () => {
+    const fake = seedSummaryTable();
+
+    afterTurn({
+      chatId: "chat-1",
+      ...direct,
+      path: overflowing(fiveTurns(), "sum-old"),
+    });
+
+    await vi.waitFor(() => expect(fake.tables.chat_summary).toHaveLength(1));
+    // Keeping one turn puts the anchor at a4.
+    expect(fake.tables.chat_summary[0]).toMatchObject({ anchorId: "a4" });
+  });
+
+  it("never throws when the pass fails: it logs and writes nothing", async () => {
+    const fake = seedSummaryTable();
+    mockResolveGenerationPlan.mockRejectedValueOnce(new Error("agent gone"));
+
+    expect(() =>
+      afterTurn({
+        chatId: "chat-1",
+        ...direct,
+        path: withReading(fiveTurns(), 8_100),
+        contextWindow: 10_000,
+      }),
+    ).not.toThrow();
+
+    await vi.waitFor(() =>
+      expect(mockResolveGenerationPlan).toHaveBeenCalled(),
+    );
+    expect(fake.tables.chat_summary).toHaveLength(0);
+  });
+
+  it("never throws when the model call fails: it logs and writes nothing", async () => {
+    const fake = seedSummaryTable();
+    mockGenerateText.mockRejectedValueOnce(new Error("provider exploded"));
+
+    expect(() =>
+      afterTurn({
+        chatId: "chat-1",
+        ...direct,
+        path: withReading(fiveTurns(), 8_100),
+        contextWindow: 10_000,
+      }),
+    ).not.toThrow();
+
+    await vi.waitFor(() => expect(mockGenerateText).toHaveBeenCalled());
+    expect(fake.tables.chat_summary).toHaveLength(0);
   });
 });
