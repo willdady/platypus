@@ -11,14 +11,9 @@ import {
 } from "@/components/ui/field";
 import { ExpandableTextarea } from "@/components/expandable-textarea";
 import { FormTextField } from "@/components/form-text-field";
-import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+import { FormAdvancedSection } from "@/components/form-advanced-section";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { DetailFormState } from "@/components/detail-form-state";
 import { SearchInput } from "@/components/search-input";
@@ -31,7 +26,7 @@ import { useRouter } from "next/navigation";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
 import Link from "next/link";
-import { ChevronsUpDown, ImageIcon, Camera, X, Building } from "lucide-react";
+import { ImageIcon, Camera, X, Building } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Select,
@@ -154,8 +149,6 @@ function AgentForm({
   // org Agent routes (ADR-0007). Otherwise it edits a workspace Agent.
   orgScoped?: boolean;
 }) {
-  const [isOpen, setIsOpen] = useState(false);
-
   const backendUrl = useBackendUrl();
   const { mutate } = useSWRConfig();
 
@@ -882,87 +875,76 @@ function AgentForm({
           </Card>
         )}
 
-        <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-          <CollapsibleTrigger asChild>
-            <div className="flex text-sm justify-between items-center">
-              <span className="cursor-default">Advanced settings</span>
-              <Button variant="ghost" size="icon-sm">
-                <ChevronsUpDown />
-                <span className="sr-only">Toggle</span>
-              </Button>
-            </div>
-          </CollapsibleTrigger>
-          <CollapsibleContent className="mb-6">
-            <FieldGroup className="grid grid-cols-2">
-              <FormTextField
-                label="Temperature"
-                name="temperature"
-                type="number"
-                min={TEMPERATURE_MIN}
-                step="0.1"
-                value={String(formData.temperature ?? "")}
-                onChange={(value) => setFloatField("temperature", value)}
-                disabled={isSubmitting || readOnly}
-                error={validationErrors.temperature}
-              />
-              <FormTextField
-                label="Seed"
-                name="seed"
-                type="number"
-                value={String(formData.seed ?? "")}
-                onChange={(value) => setNumberField("seed", value)}
-                disabled={isSubmitting || readOnly}
-                error={validationErrors.seed}
-              />
-              <FormTextField
-                label="Top-p"
-                name="topP"
-                type="number"
-                min={TOP_P_MIN}
-                max={TOP_P_MAX}
-                step="0.1"
-                value={String(formData.topP ?? "")}
-                onChange={(value) => setFloatField("topP", value)}
-                disabled={isSubmitting || readOnly}
-                error={validationErrors.topP}
-              />
-              <FormTextField
-                label="Top-k"
-                name="topK"
-                type="number"
-                min={TOP_K_MIN}
-                value={String(formData.topK ?? "")}
-                onChange={(value) => setNumberField("topK", value)}
-                disabled={isSubmitting || readOnly}
-                error={validationErrors.topK}
-              />
-              <FormTextField
-                label="Presence Penalty"
-                name="presencePenalty"
-                type="number"
-                min={PENALTY_MIN}
-                max={PENALTY_MAX}
-                step="0.1"
-                value={String(formData.presencePenalty ?? "")}
-                onChange={(value) => setFloatField("presencePenalty", value)}
-                disabled={isSubmitting || readOnly}
-                error={validationErrors.presencePenalty}
-              />
-              <FormTextField
-                label="Frequency Penalty"
-                name="frequencyPenalty"
-                type="number"
-                min={PENALTY_MIN}
-                max={PENALTY_MAX}
-                step="0.1"
-                value={String(formData.frequencyPenalty ?? "")}
-                onChange={(value) => setFloatField("frequencyPenalty", value)}
-                disabled={isSubmitting || readOnly}
-                error={validationErrors.frequencyPenalty}
-              />
-            </FieldGroup>
-          </CollapsibleContent>
-        </Collapsible>
+        <FormAdvancedSection contentClassName="mb-6">
+          <FieldGroup className="grid grid-cols-2">
+            <FormTextField
+              label="Temperature"
+              name="temperature"
+              type="number"
+              min={TEMPERATURE_MIN}
+              step="0.1"
+              value={String(formData.temperature ?? "")}
+              onChange={(value) => setFloatField("temperature", value)}
+              disabled={isSubmitting || readOnly}
+              error={validationErrors.temperature}
+            />
+            <FormTextField
+              label="Seed"
+              name="seed"
+              type="number"
+              value={String(formData.seed ?? "")}
+              onChange={(value) => setNumberField("seed", value)}
+              disabled={isSubmitting || readOnly}
+              error={validationErrors.seed}
+            />
+            <FormTextField
+              label="Top-p"
+              name="topP"
+              type="number"
+              min={TOP_P_MIN}
+              max={TOP_P_MAX}
+              step="0.1"
+              value={String(formData.topP ?? "")}
+              onChange={(value) => setFloatField("topP", value)}
+              disabled={isSubmitting || readOnly}
+              error={validationErrors.topP}
+            />
+            <FormTextField
+              label="Top-k"
+              name="topK"
+              type="number"
+              min={TOP_K_MIN}
+              value={String(formData.topK ?? "")}
+              onChange={(value) => setNumberField("topK", value)}
+              disabled={isSubmitting || readOnly}
+              error={validationErrors.topK}
+            />
+            <FormTextField
+              label="Presence Penalty"
+              name="presencePenalty"
+              type="number"
+              min={PENALTY_MIN}
+              max={PENALTY_MAX}
+              step="0.1"
+              value={String(formData.presencePenalty ?? "")}
+              onChange={(value) => setFloatField("presencePenalty", value)}
+              disabled={isSubmitting || readOnly}
+              error={validationErrors.presencePenalty}
+            />
+            <FormTextField
+              label="Frequency Penalty"
+              name="frequencyPenalty"
+              type="number"
+              min={PENALTY_MIN}
+              max={PENALTY_MAX}
+              step="0.1"
+              value={String(formData.frequencyPenalty ?? "")}
+              onChange={(value) => setFloatField("frequencyPenalty", value)}
+              disabled={isSubmitting || readOnly}
+              error={validationErrors.frequencyPenalty}
+            />
+          </FieldGroup>
+        </FormAdvancedSection>
       </FieldSet>
 
       <FormFooterButtons

@@ -119,7 +119,6 @@ export function ResourceList({
   const scope: Scope = workspaceId ? { orgId, workspaceId } : { orgId };
 
   const {
-    data,
     error,
     isLoading,
     mutate,
@@ -194,7 +193,13 @@ export function ResourceList({
   }
 
   if (error) {
-    return <ListError error={error} subject={config.labels.plural} />;
+    return (
+      <ListError
+        error={error}
+        subject={config.labels.plural}
+        onRetry={() => void mutate()}
+      />
+    );
   }
 
   // The resource's own settings surface, with any trailing segment: a row's

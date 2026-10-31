@@ -217,7 +217,9 @@ Declaring a window makes a **context meter** appear beside the prompt input in
 every Chat on that model, showing how full the conversation already is before
 the next message — see [How full the conversation
 is](/building-with-platypus/chat#how-full-the-conversation-is). Leave it empty
-and that meter is hidden.
+and a Chat on that model shows **No Context window set: long Chats aren't
+condensed ahead of time** in the meter's place, linking back to Provider
+settings.
 
 The window on a Provider's memory-extraction model also sizes Memory
 extraction: each pass sends at most **half** of it, or about **32k tokens** when
@@ -225,11 +227,13 @@ none is declared. A Chat with more new messages than that is read over several
 passes, one part each run.
 
 <Callout type="warning">
-  For a Chat turn, a Context window is a **statement**, not a budget. Declaring
-  it makes the meter appear — it does not make Platypus enforce anything.
-  Nothing warns, trims a conversation to fit, or blocks a turn for approaching
-  the window, and a turn is assembled and sent exactly as it was before.
-  Reaching the real limit still fails at the vendor.
+  For a Chat turn, a Context window is a **statement of capacity**, not a cap
+  Platypus applies to a single reply. It is what the meter measures against, and
+  what lets Platypus condense a long Chat and stop sending older tool results
+  before the vendor refuses the turn — see [How full the conversation
+  is](/building-with-platypus/chat#how-full-the-conversation-is). Leave it
+  undeclared and none of that help engages: the Chat is sent in full until the
+  vendor refuses it.
 </Callout>
 
 #### Capping a single reply

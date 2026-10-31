@@ -2,7 +2,11 @@ import { afterEach, describe, it, expect, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { AnimatePresence, MotionGlobalConfig } from "motion/react";
 
-import { ContextMeter, ContextMeterEntrance } from "./context-meter";
+import {
+  ContextMeter,
+  ContextMeterEntrance,
+  ContextWindowHint,
+} from "./context-meter";
 
 const motionPreference = vi.hoisted(() => ({
   isMobile: true,
@@ -110,6 +114,20 @@ describe("ContextMeterEntrance", () => {
       height: "auto",
       opacity: "1",
     });
+  });
+});
+
+describe("ContextWindowHint", () => {
+  it("says long Chats are not condensed and points at Provider settings", () => {
+    render(
+      <ContextWindowHint href="/org1/workspace/ws1/settings/providers/p1" />,
+    );
+
+    expect(screen.getByText(/No Context window set/)).toBeInTheDocument();
+    expect(screen.getByText(/long Chats aren't condensed/)).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /Provider settings/ }),
+    ).toHaveAttribute("href", "/org1/workspace/ws1/settings/providers/p1");
   });
 });
 

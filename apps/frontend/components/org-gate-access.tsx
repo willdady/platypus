@@ -124,7 +124,13 @@ export function OrgGateAccess({
   }
 
   if (error && !data) {
-    return <ListError error={error} subject={copy.subject} />;
+    return (
+      <ListError
+        error={error}
+        subject={copy.subject}
+        onRetry={() => void mutate()}
+      />
+    );
   }
   if (!data) return null;
 

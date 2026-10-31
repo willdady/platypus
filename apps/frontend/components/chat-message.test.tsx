@@ -921,6 +921,38 @@ describe.each(NOTICES)("ChatMessage $name notice", ({ flag, notice }) => {
   });
 });
 
+describe("ChatMessage transcript summary status", () => {
+  const waiting: PlatypusUIMessage = {
+    id: "m1",
+    role: "assistant",
+    parts: [
+      {
+        type: "data-transcript-summary-status",
+        data: { text: "Summarising earlier messages…" },
+      },
+      { type: "text", text: "Reply" },
+    ],
+  };
+
+  it("renders the status the turn streamed where the reply will be", () => {
+    renderMessage(waiting, { status: "streaming" });
+
+    expect(
+      screen.getByText("Summarising earlier messages…"),
+    ).toBeInTheDocument();
+    // The composer's copy is the live region, so this one is visual only.
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("drops the status once the turn is over", () => {
+    renderMessage(waiting, { status: "ready" });
+
+    expect(
+      screen.queryByText("Summarising earlier messages…"),
+    ).not.toBeInTheDocument();
+  });
+});
+
 describe("ChatMessage notices together", () => {
   // The two cut-short notices name different limits — one bounds the loop, the
   // other bounds a single reply — and a turn only ever hits one of them.
