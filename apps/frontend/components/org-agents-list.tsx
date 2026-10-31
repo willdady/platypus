@@ -71,6 +71,7 @@ export function OrgAgentsList({ orgId }: { orgId: string }) {
         isLoading={isLoading}
         error={error}
         subject="shared agents"
+        onRetry={() => void mutate()}
         skeleton={
           <CardGridSkeleton
             media

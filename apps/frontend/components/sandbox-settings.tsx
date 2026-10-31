@@ -489,7 +489,13 @@ function SandboxSettings({
   }
 
   if (error) {
-    return <ListError error={error} subject="sandbox" />;
+    return (
+      <ListError
+        error={error}
+        subject="sandbox"
+        onRetry={() => void mutate()}
+      />
+    );
   }
 
   const hasSandbox = !!data;

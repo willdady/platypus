@@ -299,7 +299,13 @@ export function AgentsList({
   }
 
   if (agentsError) {
-    return <ListError error={agentsError} subject="agents" />;
+    return (
+      <ListError
+        error={agentsError}
+        subject="agents"
+        onRetry={() => void mutate()}
+      />
+    );
   }
 
   if (!providers.length) {

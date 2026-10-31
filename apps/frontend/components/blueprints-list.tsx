@@ -56,6 +56,7 @@ export function BlueprintsList({ orgId }: { orgId: string }) {
         isLoading={isLoading}
         error={error}
         subject="blueprints"
+        onRetry={() => void mutate()}
         skeleton={
           <>
             <CardGridSkeleton

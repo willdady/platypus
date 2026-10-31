@@ -201,6 +201,10 @@ export function KanbanBoard({
 
   // The one board dialog that is open, with what it acts on.
   const [dialog, setDialog] = useState<BoardDialog>(null);
+  // A refused column delete, shown inline in its dialog rather than toasted.
+  const [deleteColumnError, setDeleteColumnError] = useState<string | null>(
+    null,
+  );
 
   const columns: ColumnWithCards[] = useMemo(
     () => localColumns ?? data?.columns ?? [],
@@ -507,12 +511,16 @@ export function KanbanBoard({
     [baseUrl, sync, setLocalColumns],
   );
 
-  const closeDialog = useCallback(() => setDialog(null), []);
+  const closeDialog = useCallback(() => {
+    setDeleteColumnError(null);
+    setDialog(null);
+  }, []);
 
   /** Sends a dialog's write under the board; closes the dialog once it lands. */
   const submitDialogWrite = async (
     path: string,
     body: Parameters<typeof writeEntity>[3],
+    onError?: (message: string) => void,
   ) => {
     const outcome = await writeEntity(
       backendUrl,
@@ -523,6 +531,8 @@ export function KanbanBoard({
     if (outcome.outcome === "success") {
       setDialog(null);
       await mutate();
+    } else if (onError) {
+      onError(outcome.message);
     } else {
       toast.error(outcome.message);
     }
@@ -542,9 +552,11 @@ export function KanbanBoard({
   const submitEditColumn = (columnId: string, data: { name: string }) =>
     submitDialogWrite("columns", { id: columnId, data });
 
-  // The delete runs once per confirm: a double click would send it twice.
+  // The delete runs once per confirm: a double click would send it twice. A
+  // refused delete is shown in the dialog, not toasted, so the reader can act
+  // on it there — the same rule every other delete follows.
   const deleteColumn = useMutation((columnId: string) =>
-    submitDialogWrite("columns", { id: columnId }),
+    submitDialogWrite("columns", { id: columnId }, setDeleteColumnError),
   );
 
   const openAddCard = useCallback(
@@ -559,8 +571,10 @@ export function KanbanBoard({
   }, []);
 
   const openDeleteColumn = useCallback(
-    (columnId: string, hasCards: boolean) =>
-      setDialog({ kind: "deleteColumn", columnId, hasCards }),
+    (columnId: string, hasCards: boolean) => {
+      setDeleteColumnError(null);
+      setDialog({ kind: "deleteColumn", columnId, hasCards });
+    },
     [],
   );
 
@@ -912,6 +926,7 @@ export function KanbanBoard({
           confirmDisabled={dialog.hasCards}
           onConfirm={() => void deleteColumn.run(dialog.columnId)}
           loading={deleteColumn.pending}
+          error={deleteColumnError}
         />
       )}
 

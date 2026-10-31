@@ -76,6 +76,7 @@ export function EntityCardList<T extends EntityCard>({
   meta,
   menu,
   wrap,
+  onRetry,
 }: {
   items: readonly T[];
   /** Empty slots after the cards, filling a short last page or row. */
@@ -100,6 +101,8 @@ export function EntityCardList<T extends EntityCard>({
   menu?: (item: T) => ReactNode;
   /** Surrounds each card, drawing it with `card`: a per-card read. */
   wrap?: (item: T, card: (extras?: CardExtras) => ReactNode) => ReactNode;
+  /** Reads the list again after a failed read; without it there is no Retry. */
+  onRetry?: () => void;
 }) {
   if (isLoading) {
     return (
@@ -108,7 +111,7 @@ export function EntityCardList<T extends EntityCard>({
   }
 
   if (error) {
-    return <ListError error={error} subject={subject} />;
+    return <ListError error={error} subject={subject} onRetry={onRetry} />;
   }
 
   if (!items.length) {
@@ -277,6 +280,7 @@ export function WorkspaceEntityCardList({
         isLoading={isLoading}
         error={error}
         subject={config.entity}
+        onRetry={() => void mutate()}
         skeleton={<CardGridSkeleton descriptionLines={1} />}
         empty={
           <ListState variant="empty">

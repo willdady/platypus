@@ -301,7 +301,9 @@ export function SkillsList({
   }
 
   if (error) {
-    return <ListError error={error} subject="skills" />;
+    return (
+      <ListError error={error} subject="skills" onRetry={() => void mutate()} />
+    );
   }
 
   // The Command palette's own scorer, applied to the name: a card grid, not a

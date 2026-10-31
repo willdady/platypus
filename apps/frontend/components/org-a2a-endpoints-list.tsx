@@ -117,7 +117,13 @@ export function OrgA2aEndpointsList({ orgId }: { orgId: string }) {
   }
 
   if (error && !data) {
-    return <ListError error={error} subject="A2A endpoints" />;
+    return (
+      <ListError
+        error={error}
+        subject="A2A endpoints"
+        onRetry={() => void mutate()}
+      />
+    );
   }
 
   if (!endpoints.length) {

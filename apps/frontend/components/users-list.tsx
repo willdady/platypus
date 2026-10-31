@@ -89,7 +89,9 @@ export function UsersList() {
   }
 
   if (error) {
-    return <ListError error={error} subject="users" />;
+    return (
+      <ListError error={error} subject="users" onRetry={() => void mutate()} />
+    );
   }
 
   const users = data?.users || [];

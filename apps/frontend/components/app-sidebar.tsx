@@ -10,7 +10,6 @@ import {
   writeEntity,
   type Serialized,
 } from "@/lib/api-write";
-import { toast } from "sonner";
 import type { Workspace, ChatListItem, Organization } from "@platypus/schemas";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import {
