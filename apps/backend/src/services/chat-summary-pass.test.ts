@@ -8,6 +8,7 @@ import type { PlatypusUIMessage } from "../types.ts";
 import {
   registerTranscriptSummary,
   takeTranscriptSummary,
+  TRANSCRIPT_SUMMARY_REQUEST,
   type ChatSummaryRow,
 } from "./chat-summary.ts";
 
@@ -277,6 +278,39 @@ describe("takeTranscriptSummary", () => {
         readingSummaryId: undefined,
       }),
     ).resolves.toBeUndefined();
+  });
+
+  it("ends the model's input on a user request, never on the anchor's assistant message", async () => {
+    seedSummaryTable();
+    const prompts: PromptMessage[][] = [];
+    await takeTranscriptSummary({
+      chatId: "chat-1",
+      model: summaryModel(prompts),
+      modelId: "openai:gpt",
+      path: sixTurns(),
+      triggeredFromOccupancy: 8_200,
+      previousSummary: undefined,
+      readingSummaryId: undefined,
+    });
+    const last = prompts[0]?.at(-1);
+    expect(last?.role).toBe("user");
+    expect(last?.content[0]?.text).toBe(TRANSCRIPT_SUMMARY_REQUEST);
+  });
+
+  it("a blank reply is a failed summary: no row, no throw", async () => {
+    const fake = seedSummaryTable();
+    await expect(
+      takeTranscriptSummary({
+        chatId: "chat-1",
+        model: summaryModel([], " "),
+        modelId: "openai:gpt",
+        path: sixTurns(),
+        triggeredFromOccupancy: 8_200,
+        previousSummary: undefined,
+        readingSummaryId: undefined,
+      }),
+    ).resolves.toBeUndefined();
+    expect(fake.tables.chat_summary).toHaveLength(0);
   });
 
   it("writes no summary when the path has no full tail to keep", async () => {
