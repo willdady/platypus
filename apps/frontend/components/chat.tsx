@@ -66,6 +66,7 @@ import {
   summarisingStatusOf,
 } from "@/lib/chat-summary";
 import { TranscriptSummaryDivider } from "./transcript-summary-divider";
+import { TurnStatus } from "./turn-status";
 import { useStableSet } from "@/hooks/use-stable-set";
 import { useTimeout } from "@/hooks/use-timeout";
 import { useStreamingFavicon } from "@/hooks/use-streaming-favicon";
@@ -964,12 +965,12 @@ export function Chat({
           <div className="relative w-full xl:w-4/5 max-w-4xl min-w-0">
             {isRecoveringRun && <ChatReconnectingNotice />}
             {(summarisingStatus || compacting) && (
-              <p
-                role="status"
-                className="mb-2 text-xs text-muted-foreground sm:mb-1"
-              >
+              // This copy is the live region for a streamed status too: the
+              // transcript's copy sits inside the busy transcript, and is
+              // drawn for the eye rather than announced again.
+              <TurnStatus className="mb-2 sm:mb-1">
                 {summarisingStatus ?? COMPACTING_STATUS}
-              </p>
+              </TurnStatus>
             )}
             {canSendMessages ? (
               <ChatComposer
