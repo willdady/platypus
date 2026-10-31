@@ -1,36 +1,30 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import {
+  DefaultChatTransport,
   lastAssistantMessageIsCompleteWithApprovalResponses,
   type ChatStatus,
   type FileUIPart,
-  type PrepareSendMessagesRequest,
 } from "ai";
 import type { PlatypusUIMessage } from "@platypus/schemas";
-import { reportPdf } from "@/test/chat-test-fixtures";
+import { alternativesRow, reportPdf } from "@/test/chat-test-fixtures";
 import {
-  jsonResponse,
   stubAcceptedSave,
   stubPendingSave,
   stubRejectedSave,
 } from "@/test/test-utils";
 import type { AlternativePosition } from "@/lib/chat-alternatives";
 
-type PrepareRequest = PrepareSendMessagesRequest<PlatypusUIMessage>;
-
 /**
- * The wiring between `Chat` and `lib/chat-recovery` (issue #648).
+ * What the Chat component wires, not what the transcript read decides.
  *
- * The recovery decisions are pure functions with their own tests; what those
- * cannot see is whether the component actually feeds them the right inputs. The
- * original bug was exactly a wiring bug — the poll interval was derived from the
- * fetched row's status and nothing else — so a test that only exercises the
- * predicates would have passed against the broken code.
- *
- * So this file asserts the seams: what the Chat detail read is configured with,
- * what reaches the interval predicate, how a fetched snapshot is applied, and
- * which of the two error surfaces a given state selects. The presentational tree
- * is stubbed down to the props under test — this is not a rendering test.
+ * The recovery decisions, the server-owned Transcript and the tree now live in
+ * `hooks/use-chat-transcript.ts` and are tested there; what this file can see is
+ * that the Chat hands those pieces to the presentational tree correctly — which
+ * composer state a run belief produces, which of the two error surfaces a given
+ * state selects, and that an edit, a send and a Regenerate reach `useChatTurn`.
+ * The presentational tree is stubbed down to the props under test — this is not
+ * a rendering test.
  */
 
 type SwrCall = {
@@ -74,7 +68,7 @@ const { harness } = vi.hoisted(() => ({
     chatOptions: undefined as
       | undefined
       | {
-          transport: { prepareSendMessagesRequest: PrepareRequest };
+          transport: DefaultChatTransport<PlatypusUIMessage>;
           experimental_throttle?: number;
           sendAutomaticallyWhen?: unknown;
         },
@@ -414,8 +408,8 @@ vi.mock("./chat-error-dialog", () => ({
 }));
 
 import { Chat } from "./chat";
+import { prepareChatTurnRequest } from "@/lib/chat-transport";
 import { optionalFetcher } from "@/lib/utils";
-import { CHAT_POLL_INTERVAL_MS } from "@/lib/chat-recovery";
 import { CHAT_MAX_STEPS_ERROR } from "@/lib/chat-turn";
 
 const CHAT_ID = "chat-1";
@@ -433,21 +427,6 @@ function message(id: string, text: string): PlatypusUIMessage {
     role: id.startsWith("u") ? "user" : "assistant",
     parts: [{ type: "text", text }],
   };
-}
-
-/** The config the Chat detail read was last built with. */
-function chatReadConfig() {
-  const call = harness.swrCalls.filter((c) => c.key === CHAT_KEY).at(-1);
-  if (!call) throw new Error("the Chat detail read was never made");
-  return call;
-}
-
-/** What the interval predicate answers for a given fetched row. */
-function pollFor(row: { status: string } | null) {
-  const refreshInterval = chatReadConfig().config?.refreshInterval as (
-    data: unknown,
-  ) => number;
-  return refreshInterval(row);
 }
 
 function renderChat() {
@@ -844,17 +823,9 @@ beforeEach(() => {
 });
 
 describe("Chat detail read", () => {
-  // A brand-new Chat is read before its row exists. `fetcher` throwing on that
-  // 404 is what put an error in the cache, and SWR does not revalidate on an
-  // interval while one is there.
-  it("reads through the fetcher that treats a missing row as absence", () => {
-    renderChat();
-
-    expect(chatReadConfig().fetcher).toBe(optionalFetcher);
-  });
-
   // Every other read keeps the throwing contract; the concession is per-key.
-  // The Sandbox read has it too: a Workspace may have no Sandbox.
+  // The Sandbox read has it too: a Workspace may have no Sandbox. The Chat row's
+  // own read lives behind `useChatTranscript`; it is pinned there.
   it("leaves the other reads on the shared fetcher", () => {
     renderChat();
 
@@ -865,154 +836,6 @@ describe("Chat detail read", () => {
     for (const call of others) {
       expect(call.fetcher).not.toBe(optionalFetcher);
     }
-  });
-
-  // The trap the original code fell into: focus and reconnect revalidation were
-  // switched off, which removed the only two triggers left once the interval
-  // was inert. They are the "user came back" and "network returned" signals.
-  it("leaves focus and reconnect revalidation on", () => {
-    renderChat();
-
-    const { config } = chatReadConfig();
-    expect(config?.revalidateOnFocus).toBeUndefined();
-    expect(config?.revalidateOnReconnect).toBeUndefined();
-  });
-});
-
-// The wiring the pure-function tests cannot see. Under this tab's own stream
-// nothing polls; the read taken when the turn ends is what a dropped stream
-// resumes from.
-describe("polling a live run", () => {
-  it.each([
-    ["submitted", { status: "succeeded" }],
-    ["streaming", { status: "succeeded" }],
-    ["streaming", { status: "running" }],
-    ["submitted", null],
-  ] as const)(
-    "does not poll while this tab's turn is %s (row %j)",
-    (turnStatus, row) => {
-      harness.turn.status = turnStatus;
-      renderChat();
-
-      expect(pollFor(row)).toBe(0);
-    },
-  );
-
-  // The row still reads the previous turn's `succeeded` when the stream drops.
-  // The read taken as the turn ends learns the run is still going, and the
-  // poll picks up from there.
-  it("resumes polling from the read taken when a stream drops", () => {
-    harness.data.set(`/chat/${CHAT_ID}`, { status: "succeeded", messages: [] });
-    renderThrough(...DROPPED);
-
-    expect(harness.chatMutate).toHaveBeenCalledWith();
-    expect(pollFor({ status: "succeeded" })).toBe(0);
-    expect(pollFor({ status: "running" })).toBe(CHAT_POLL_INTERVAL_MS);
-  });
-
-  it("polls a run this tab did not start", () => {
-    renderChat();
-
-    expect(pollFor({ status: "running" })).toBe(CHAT_POLL_INTERVAL_MS);
-  });
-
-  // The recovery itself. A dropped stream leaves the turn at `error` while the
-  // run carries on, and this is the reading that gets the answer moving again.
-  it("keeps polling after a stream drops while the run is still going", () => {
-    harness.data.set(`/chat/${CHAT_ID}`, { status: "running", messages: [] });
-    renderThrough(...DROPPED);
-
-    expect(pollFor({ status: "running" })).toBe(CHAT_POLL_INTERVAL_MS);
-  });
-
-  // Nothing streamed, so the server never took a run: polling for an outcome
-  // that will never come would spin for the life of the page.
-  it("does not poll a turn the server refused", () => {
-    renderThrough(...REFUSED);
-
-    expect(pollFor(null)).toBe(0);
-  });
-
-  it("does not poll an idle Chat", () => {
-    renderChat();
-
-    expect(pollFor({ status: "succeeded" })).toBe(0);
-  });
-});
-
-// Monotonic hydration, at the seam: the effect reads the fetched row and hands
-// `setMessages` an updater rather than a list, so what lands is decided against
-// whatever is on screen at that moment.
-describe("applying a fetched snapshot", () => {
-  const applied = (held: PlatypusUIMessage[]) => {
-    const update = harness.setMessages.mock.calls.at(-1)?.[0] as (
-      held: PlatypusUIMessage[],
-    ) => PlatypusUIMessage[];
-    expect(typeof update).toBe("function");
-    return update(held);
-  };
-
-  it("hydrates an empty transcript from the row", () => {
-    const snapshot = [message("u1", "q"), message("a1", "an answer")];
-    harness.data.set(`/chat/${CHAT_ID}`, {
-      status: "succeeded",
-      messages: snapshot,
-    });
-    renderChat();
-
-    expect(applied([])).toBe(snapshot);
-  });
-
-  // The row is written on a flush interval, so a snapshot fetched mid-run lags
-  // the stream. Applying it would make the answer visibly shorten.
-  it("refuses a snapshot behind what is on screen", () => {
-    harness.data.set(`/chat/${CHAT_ID}`, {
-      status: "running",
-      messages: [message("u1", "q"), message("a1", "the first third")],
-    });
-    renderThrough(...DROPPED);
-
-    const held = [
-      message("u1", "q"),
-      message("a1", "the first third and then some more of it"),
-    ];
-    expect(applied(held)).toBe(held);
-  });
-
-  it("applies a snapshot that has moved on", () => {
-    const snapshot = [
-      message("u1", "q"),
-      message("a1", "the first third and then the rest of the answer"),
-    ];
-    harness.data.set(`/chat/${CHAT_ID}`, {
-      status: "running",
-      messages: snapshot,
-    });
-    renderThrough(...DROPPED);
-
-    expect(applied([message("u1", "q"), message("a1", "the first")])).toBe(
-      snapshot,
-    );
-  });
-
-  // Deleting every message reaches other tabs, and a reload too.
-  it("applies an emptied Chat", () => {
-    harness.data.set(`/chat/${CHAT_ID}`, { status: "succeeded", messages: [] });
-    renderChat();
-
-    expect(applied([message("u1", "q")])).toEqual([]);
-  });
-
-  // A live stream is left alone entirely — the guard that predates this change.
-  it("does not touch the transcript while this tab is streaming", () => {
-    harness.turn.status = "streaming";
-    harness.data.set(`/chat/${CHAT_ID}`, {
-      status: "running",
-      messages: [message("u1", "q")],
-    });
-    renderChat();
-
-    expect(harness.setMessages).not.toHaveBeenCalled();
   });
 });
 
@@ -1033,139 +856,17 @@ describe("streaming renders", () => {
 
     expect(harness.chatOptions!.transport).toBe(first);
   });
-});
 
-// The server owns the Transcript (ADR-0026): a turn sends what is new, never
-// the history, and a delete is stored the moment it is clicked.
-describe("the server-owned Transcript", () => {
-  const prepare = (options: Partial<Parameters<PrepareRequest>[0]>) => {
-    renderChat();
-    return harness.chatOptions!.transport.prepareSendMessagesRequest({
-      id: CHAT_ID,
-      messages: [],
-      body: { providerId: "p1" },
-      requestMetadata: undefined,
-      headers: undefined,
-      credentials: undefined,
-      api: "",
-      trigger: "submit-message",
-      messageId: undefined,
-      ...options,
-    }) as { body: Record<string, unknown> };
-  };
-
-  it("sends a new message with the id it follows, and no history", () => {
-    const next = message("u2", "follow up");
-
-    const { body } = prepare({
-      messages: [message("u1", "q"), message("a1", "a"), next],
-    });
-
-    expect(body).toEqual({
-      providerId: "p1",
-      id: CHAT_ID,
-      message: next,
-      parentId: "a1",
-    });
-  });
-
-  it("sends a new message under the parent an edit names", () => {
-    const { body } = prepare({
-      messages: [message("u1", "q"), message("u2-edit", "q2")],
-      body: { providerId: "p1", parentId: "a1" },
-    });
-
-    expect(body).toEqual({
-      providerId: "p1",
-      id: CHAT_ID,
-      message: message("u2-edit", "q2"),
-      parentId: "a1",
-    });
-  });
-
-  it("sends a Chat's first message as following nothing", () => {
-    const { body } = prepare({ messages: [message("u1", "q")] });
-
-    expect(body.parentId).toBeNull();
-  });
-
-  it("sends a regenerate as the reply to regenerate, and no message", () => {
-    const { body } = prepare({
-      messages: [message("u1", "q")],
-      trigger: "regenerate-message",
-      messageId: "a1",
-    });
-
-    expect(body).toEqual({
-      providerId: "p1",
-      id: CHAT_ID,
-      trigger: "regenerate-message",
-      messageId: "a1",
-    });
-  });
-
-  // Issue #1256: the SDK sends the answers by resubmitting the reply itself.
-  it("sends a reply's answered approvals as the answers alone", () => {
-    const answered = (id: string, approved: boolean) => ({
-      type: "dynamic-tool",
-      toolName: "db__drop_table",
-      toolCallId: `c-${id}`,
-      state: "approval-responded",
-      input: {},
-      approval: { id, approved },
-    });
-    const reply = {
-      ...message("a1", "a"),
-      role: "assistant",
-      parts: [answered("ap1", true), answered("ap2", false)],
-    } as unknown as ReturnType<typeof message>;
-
-    const { body } = prepare({
-      messages: [message("u1", "q"), reply],
-      messageId: "a1",
-    });
-
-    expect(body).toEqual({
-      providerId: "p1",
-      id: CHAT_ID,
-      trigger: "respond-to-approvals",
-      messageId: "a1",
-      responses: [
-        { approvalId: "ap1", approved: true },
-        { approvalId: "ap2", approved: false },
-      ],
-    });
-  });
-
-  it("deletes on the server, then reads the row back", async () => {
-    const fetchMock = stubAcceptedSave({ message: "Message deleted" });
-    harness.turn.messages = [message("u1", "q"), message("a1", "a")];
+  // The body shaping is `lib/chat-transport.test.ts`'s business; what this can
+  // see is that the Chat hands its transport the function that does it.
+  it("shapes each turn's body with the server-owned Transcript request", () => {
     renderChat();
 
-    fireEvent.click(screen.getByRole("button", { name: "Delete u1" }));
-
-    await waitFor(() => expect(harness.chatMutate).toHaveBeenCalled());
-    expect(fetchMock).toHaveBeenCalledWith(
-      "http://test/organizations/org1/workspaces/ws1/chat/chat-1/messages/u1",
-      expect.objectContaining({ method: "DELETE" }),
+    expect(harness.chatOptions!.transport).toBeInstanceOf(DefaultChatTransport);
+    expect(harness.chatOptions!.transport).toHaveProperty(
+      "prepareSendMessagesRequest",
+      prepareChatTurnRequest,
     );
-    // Nothing is cut locally: what the server now holds is what lands.
-    expect(harness.setMessages).not.toHaveBeenCalled();
-  });
-
-  it("says so when the delete is refused, and leaves the transcript", async () => {
-    stubRejectedSave("A reply is still being written in this Chat", 409);
-    harness.turn.messages = [message("u1", "q"), message("a1", "a")];
-    renderChat();
-
-    fireEvent.click(screen.getByRole("button", { name: "Delete u1" }));
-
-    await waitFor(() =>
-      expect(harness.toastError).toHaveBeenCalledWith(
-        "A reply is still being written in this Chat",
-      ),
-    );
-    expect(harness.chatMutate).not.toHaveBeenCalled();
   });
 });
 
@@ -1230,6 +931,21 @@ describe("routing a chat error", () => {
 
     harness.turn.error = new Error("a second failure");
     view.rerender(<Chat orgId="org1" workspaceId="ws1" chatId={CHAT_ID} />);
+
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+});
+
+/**
+ * Whether the turn's stream ever established, judged per turn. The belief is
+ * `useChatTranscript`'s and is pinned there; what this sees is that a second
+ * turn's refused request still opens the modal rather than being read as a
+ * dropped connection to the first turn's stream.
+ */
+describe("turn establishment", () => {
+  it("judges a second turn on its own stream, not an earlier turn's", () => {
+    harness.data.set(`/chat/${CHAT_ID}`, { status: "succeeded", messages: [] });
+    renderThrough("submitted", "streaming", "ready", "submitted", "error");
 
     expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
@@ -1348,35 +1064,6 @@ describe("the search toggle", () => {
     );
 
     expect(searchIsOn()).toBe(true);
-  });
-});
-
-/**
- * Whether the turn's stream ever established, judged per turn. The refused case
- * is already covered above; this pins the reset, so a second turn is not judged
- * on the first turn's stream.
- */
-describe("turn establishment", () => {
-  it("judges a second turn on its own stream, not an earlier turn's", () => {
-    harness.data.set(`/chat/${CHAT_ID}`, { status: "succeeded", messages: [] });
-    renderThrough("submitted", "streaming", "ready", "submitted", "error");
-
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
-  });
-
-  // Once established, it stays established while the broken turn sits there:
-  // repeated `error` renders must not re-open the modal or drop the answer.
-  it("keeps the answer while a broken turn sits there", () => {
-    harness.data.set(`/chat/${CHAT_ID}`, { status: "running", messages: [] });
-    const { container } = renderThrough(
-      "submitted",
-      "streaming",
-      "error",
-      "error",
-    );
-
-    expect(container).toHaveTextContent(/Connection interrupted/);
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 });
 
@@ -1714,69 +1401,14 @@ describe("starting a turn", () => {
   });
 });
 
-// Moving between Alternatives (#712): a local swap straight away, then the
-// server's path. Nothing fetched in between may drag the view back.
+// Moving between Alternatives (#712): the switch itself is
+// `useChatTranscript`'s, and is pinned in its own test. What this sees is that
+// the Chat hands each message the position the hook worked out.
 describe("switching between Alternatives", () => {
-  const SWITCH_URL = `${CHAT_KEY}/active-leaf`;
-
-  /** u1 → a1 → u2 → a2 → u3 → a3, with u2 edited twice: u2b → a2b, and u2c. */
-  const tree = [
-    { id: "u1", parentId: null },
-    { id: "a1", parentId: "u1" },
-    { id: "u2", parentId: "a1" },
-    { id: "a2", parentId: "u2" },
-    { id: "u3", parentId: "a2" },
-    { id: "a3", parentId: "u3" },
-    { id: "u2b", parentId: "a1" },
-    { id: "a2b", parentId: "u2b" },
-    { id: "u2c", parentId: "a1" },
-  ];
-  const path = (...ids: string[]) => ids.map((id) => message(id, id));
-  const original = path("u1", "a1", "u2", "a2", "u3", "a3");
-  const edited = path("u1", "a1", "u2b", "a2b");
-  const row = (messages: PlatypusUIMessage[]) => ({
-    id: CHAT_ID,
-    status: "succeeded",
-    providerId: "p1",
-    modelId: "m1",
-    messages,
-    tree,
-  });
-
-  /** What is on screen: the chat hook's messages, updated as the Chat sets them. */
-  const onScreen = () => harness.turn.messages.map((m) => m.id);
-
-  const rerenderChat = (view: ReturnType<typeof renderChat>) =>
-    view.rerender(<Chat orgId="org1" workspaceId="ws1" chatId={CHAT_ID} />);
-
-  /** A poll landing: the Chat read hands back a fresh row. */
-  const pollLands = (
-    view: ReturnType<typeof renderChat>,
-    messages: PlatypusUIMessage[],
-  ) => {
-    const response = harness.responses.get(CHAT_KEY) as object;
-    harness.responses.set(CHAT_KEY, { ...response, data: row(messages) });
-    rerenderChat(view);
-  };
-
-  /** A PUT that answers only when the test says so. */
-  const deferredFetch = () => {
-    let answer!: (body: unknown, status?: number) => void;
-    const fetchMock = vi.fn(
-      () =>
-        new Promise((resolve) => {
-          answer = (body, status = 200) => resolve(jsonResponse(status, body));
-        }),
-    );
-    vi.stubGlobal("fetch", fetchMock);
-    return {
-      fetchMock,
-      answer: (body: unknown, status?: number) => answer(body, status),
-    };
-  };
+  const edited = ["u1", "a1", "u2b", "a2b"].map((id) => message(id, id));
 
   const showing = (held: PlatypusUIMessage[]) => {
-    harness.data.set(`/chat/${CHAT_ID}`, row(held));
+    harness.data.set(`/chat/${CHAT_ID}`, alternativesRow(held, CHAT_ID));
     harness.turn.messages = held;
     harness.setMessages.mockImplementation((update) => {
       harness.turn.messages =
@@ -1785,153 +1417,14 @@ describe("switching between Alternatives", () => {
     return renderChat();
   };
 
+  // The switch itself — the local swap, one request at a time, the rollback —
+  // is `useChatTranscript`'s and is pinned there. What this sees is that the
+  // Chat hands each message the position the hook worked out.
   it("hands each message its position among its Alternatives", () => {
     showing(edited);
 
     expect(screen.getByText("u2b 2/3")).toBeInTheDocument();
     expect(screen.queryByText(/^a2b /)).not.toBeInTheDocument();
-  });
-
-  it.each([
-    ["a longer path", edited, "Previous u2b", "u2", original],
-    ["a shorter path", original, "Next u2", "u2b", edited],
-  ])(
-    "switches to %s and is not dragged back by a poll while the switch is pending",
-    async (_, from, button, target, to) => {
-      const { fetchMock, answer } = deferredFetch();
-      const view = showing(from);
-
-      fireEvent.click(screen.getByRole("button", { name: button }));
-
-      // Straight away, without waiting on the server.
-      expect(onScreen()).toEqual(["u1", "a1", target]);
-      expect(fetchMock).toHaveBeenCalledWith(
-        SWITCH_URL,
-        expect.objectContaining({
-          method: "PUT",
-          body: JSON.stringify({ messageId: target }),
-        }),
-      );
-
-      pollLands(view, from);
-      expect(onScreen()).toEqual(["u1", "a1", target]);
-
-      answer({ messages: to, tree });
-      await waitFor(() => expect(onScreen()).toEqual(to.map((m) => m.id)));
-      // Written into the read, so the next poll and the screen agree.
-      const [update, options] = harness.chatMutate.mock.calls.at(-1)!;
-      expect(options).toEqual({ revalidate: false });
-      expect(update(row(from))).toEqual(row(to));
-
-      // Released: a later poll lands as any other would.
-      pollLands(view, edited);
-      expect(onScreen()).toEqual(edited.map((m) => m.id));
-    },
-  );
-
-  it("leaves a turn started while the switch was pending alone", async () => {
-    const { answer } = deferredFetch();
-    const view = showing(edited);
-
-    fireEvent.click(screen.getByRole("button", { name: "Previous u2b" }));
-    harness.turn.status = "streaming";
-    rerenderChat(view);
-    answer({ messages: original, tree });
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
-    expect(onScreen()).toEqual(["u1", "a1", "u2"]);
-    expect(harness.chatMutate).not.toHaveBeenCalled();
-  });
-
-  it("reverts and says so when the switch is refused", async () => {
-    stubRejectedSave("A reply is still being written in this Chat", 409);
-    showing(edited);
-
-    fireEvent.click(screen.getByRole("button", { name: "Previous u2b" }));
-
-    await waitFor(() =>
-      expect(harness.toastError).toHaveBeenCalledWith(
-        "A reply is still being written in this Chat",
-      ),
-    );
-    expect(harness.turn.messages).toBe(edited);
-    expect(harness.chatMutate).not.toHaveBeenCalled();
-  });
-
-  it("sends a later switch only once the earlier one has answered, and ends on the later", async () => {
-    const answers: ((body: unknown) => void)[] = [];
-    const fetchMock = vi.fn(
-      () =>
-        new Promise((resolve) => {
-          answers.push((body) => resolve(jsonResponse(200, body)));
-        }),
-    );
-    vi.stubGlobal("fetch", fetchMock);
-    const view = showing(original);
-
-    fireEvent.click(screen.getByRole("button", { name: "Next u2" }));
-    rerenderChat(view);
-    fireEvent.click(screen.getByRole("button", { name: "Next u2b" }));
-
-    // One request at a time, so the server saves them in click order.
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(onScreen()).toEqual(["u1", "a1", "u2c"]);
-
-    // The earlier one answering changes nothing on screen.
-    answers[0]({ messages: edited, tree });
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
-    expect(fetchMock).toHaveBeenLastCalledWith(
-      SWITCH_URL,
-      expect.objectContaining({ body: JSON.stringify({ messageId: "u2c" }) }),
-    );
-    expect(onScreen()).toEqual(["u1", "a1", "u2c"]);
-
-    const last = path("u1", "a1", "u2c");
-    answers[1]({ messages: last, tree });
-    await waitFor(() => expect(harness.chatMutate).toHaveBeenCalled());
-
-    expect(onScreen()).toEqual(["u1", "a1", "u2c"]);
-    expect(harness.toastError).not.toHaveBeenCalled();
-  });
-
-  it("sends only the last of the clicks made while a switch was in flight", async () => {
-    const answers: ((body: unknown) => void)[] = [];
-    const fetchMock = vi.fn(
-      () =>
-        new Promise((resolve) => {
-          answers.push((body) => resolve(jsonResponse(200, body)));
-        }),
-    );
-    vi.stubGlobal("fetch", fetchMock);
-    const view = showing(original);
-
-    fireEvent.click(screen.getByRole("button", { name: "Next u2" }));
-    rerenderChat(view);
-    fireEvent.click(screen.getByRole("button", { name: "Next u2b" }));
-    rerenderChat(view);
-    fireEvent.click(screen.getByRole("button", { name: "Previous u2c" }));
-
-    answers[0]({ messages: edited, tree });
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
-    expect(fetchMock).toHaveBeenLastCalledWith(
-      SWITCH_URL,
-      expect.objectContaining({ body: JSON.stringify({ messageId: "u2b" }) }),
-    );
-  });
-
-  it("reverts a run of switches to where the first one started", async () => {
-    const { fetchMock, answer } = deferredFetch();
-    const view = showing(original);
-
-    fireEvent.click(screen.getByRole("button", { name: "Next u2" }));
-    rerenderChat(view);
-    fireEvent.click(screen.getByRole("button", { name: "Next u2b" }));
-    answer({ error: "Request failed" }, 500);
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
-    answer({ error: "Request failed" }, 500);
-
-    await waitFor(() => expect(harness.toastError).toHaveBeenCalledTimes(1));
-    expect(harness.turn.messages).toBe(original);
   });
 });
 

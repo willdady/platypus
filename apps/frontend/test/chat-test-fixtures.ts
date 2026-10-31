@@ -1,6 +1,6 @@
 import { vi } from "vitest";
 import type { FileUIPart } from "ai";
-import type { Provider } from "@platypus/schemas";
+import type { PlatypusUIMessage, Provider } from "@platypus/schemas";
 import type { Serialized } from "@/lib/api-write";
 import type { SpeechRecognitionWindow } from "@/hooks/use-speech-to-text";
 
@@ -127,3 +127,43 @@ export const screenshotPng: FileUIPart = {
   mediaType: "image/png",
   filename: "shot.png",
 };
+
+/**
+ * One Chat message carrying a single text part. The role follows the id's
+ * prefix — `u1` is the User, `a1` the assistant — which keeps a path fixture
+ * readable.
+ */
+export function chatMessage(id: string, text: string): PlatypusUIMessage {
+  return {
+    id,
+    role: id.startsWith("u") ? "user" : "assistant",
+    parts: [{ type: "text", text }],
+  };
+}
+
+/**
+ * u1 → a1 → u2 → a2 → u3 → a3, with u2 edited twice: u2b → a2b, and u2c.
+ */
+export const alternativesTree = [
+  { id: "u1", parentId: null },
+  { id: "a1", parentId: "u1" },
+  { id: "u2", parentId: "a1" },
+  { id: "a2", parentId: "u2" },
+  { id: "u3", parentId: "a2" },
+  { id: "a3", parentId: "u3" },
+  { id: "u2b", parentId: "a1" },
+  { id: "a2b", parentId: "u2b" },
+  { id: "u2c", parentId: "a1" },
+];
+
+/** A Chat row whose Active path is `messages`, over `alternativesTree`. */
+export function alternativesRow(messages: PlatypusUIMessage[], chatId: string) {
+  return {
+    id: chatId,
+    status: "succeeded",
+    providerId: "p1",
+    modelId: "m1",
+    messages,
+    tree: alternativesTree,
+  };
+}
