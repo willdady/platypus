@@ -1219,6 +1219,26 @@ describe("ChatSink", () => {
       });
     });
 
+    // Issue #1717 (R1): a turn the Provider rejected as too long takes its
+    // summary straight away, whatever the reading — so a regenerate, whose
+    // path no longer holds the overflowed reply, still finds one waiting.
+    it("takes a summary after a turn that overflowed, with no window or reading", async () => {
+      seedChat();
+      const overflowed: PlatypusUIMessage = {
+        ...reply("r1"),
+        metadata: { contextOverflow: true, summaryId: "sum-old" },
+      };
+      await runWith(planWithAgent, longTurn(overflowed));
+      await vi.waitFor(() =>
+        expect(mockTakeTranscriptSummary).toHaveBeenCalledTimes(1),
+      );
+      expect(mockTakeTranscriptSummary.mock.calls[0][0]).toMatchObject({
+        chatId: "chat-1",
+        // The summary it overflowed with is the base to shrink from.
+        readingSummaryId: "sum-old",
+      });
+    });
+
     it("never lets a failed summary fail the turn", async () => {
       seedChat();
       mockTakeTranscriptSummary.mockRejectedValueOnce(new Error("boom"));

@@ -15,6 +15,10 @@ import {
   type NoProgressDetector,
 } from "./no-progress.ts";
 import { buildModelInvocation, type RunPlan } from "./run-plan.ts";
+import {
+  createOverflowRecovery,
+  type OverflowRecovery,
+} from "./context-overflow-recovery.ts";
 import type { RunLifecycle } from "./run-lifecycle.ts";
 import { describeTimeout, TimeoutError } from "./run-registry.ts";
 import type { RunStep } from "./run-stats.ts";
@@ -102,10 +106,12 @@ const conversationArgs = (conversation: DriveConversation) =>
 const modelArgs = (
   opts: DriveBase & DriveConversation,
   noProgress: NoProgressDetector | null,
+  overflowRecovery: OverflowRecovery,
 ) => ({
   ...buildModelInvocation(opts.plan, {
     abortSignal: opts.run.handle.signal,
     extraStopCondition: noProgress?.stopCondition,
+    overflowRecovery,
   }),
   ...conversationArgs(opts),
 });
@@ -366,8 +372,9 @@ const runStreamedDrive = (
   const driveStartMs = Date.now();
 
   run.setUsageModel(opts.plan.usageModel);
+  const overflowRecovery = createOverflowRecovery();
   const result = streamText({
-    ...modelArgs({ ...opts, plan }, noProgress),
+    ...modelArgs({ ...opts, plan }, noProgress, overflowRecovery),
     onStepEnd: (step: RunStep) => {
       onStepFinish?.(step);
       run.onStep(step);
@@ -383,7 +390,7 @@ const runStreamedDrive = (
   });
 
   const uiStream = toUIMessageStream<typeof plan.tools, PlatypusUIMessage>({
-    stream: result.stream,
+    stream: overflowRecovery.report(result.stream),
     tools: plan.tools,
     originalMessages,
     generateMessageId,
@@ -674,9 +681,10 @@ export const driveOnce = async (
   try {
     run.setUsageModel(opts.plan.usageModel);
     const plan = planRecording(opts.plan, scope);
+    const overflowRecovery = createOverflowRecovery();
     const result = await withAgentCausation(opts.agentId, async () => {
       const streamed = streamText({
-        ...modelArgs({ ...opts, plan }, noProgress),
+        ...modelArgs({ ...opts, plan }, noProgress, overflowRecovery),
         onStepEnd: (step: RunStep) => run.onStep(step),
         // The only thing that proves a long-running step is still alive —
         // same as the streamed drives (issue #552).
@@ -694,7 +702,7 @@ export const driveOnce = async (
         typeof plan.tools,
         PlatypusUIMessage
       >({
-        stream: streamed.stream,
+        stream: overflowRecovery.report(streamed.stream),
         tools: plan.tools,
         onError: (error) => formatStreamError(error),
       })) {

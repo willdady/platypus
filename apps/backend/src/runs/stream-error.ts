@@ -5,6 +5,8 @@ import {
   NoSuchToolError,
 } from "ai";
 import { logger } from "../logger.ts";
+import { isContextOverflowError } from "../services/context-overflow.ts";
+import { TOOL_RESULT_TOO_LARGE } from "./context-overflow-recovery.ts";
 import {
   formatIssues,
   findIssues,
@@ -128,6 +130,10 @@ const describeStringifiedToolInputError = (
   )}`;
 };
 
+/** What an unrecovered context overflow tells the User, on every Drive. */
+export const CONTEXT_OVERFLOW_MESSAGE =
+  "This conversation is too long for the model's context window. Start a new Chat, or switch to a model with a larger context window.";
+
 /**
  * Converts AI SDK errors into user-facing strings for the UI message stream.
  *
@@ -154,6 +160,9 @@ export const describeSdkError = (error: unknown): string => {
     if (error.statusCode != null && error.statusCode >= 500) {
       return "AI provider is currently unavailable. Please try again later.";
     }
+    // Never the Provider's own text: what the User can act on is that the
+    // conversation outgrew the model, not the vendor's token arithmetic.
+    if (isContextOverflowError(error)) return CONTEXT_OVERFLOW_MESSAGE;
     return `AI provider error: ${error.message}`;
   }
   // Checked before the generic `Error` branch: both of these ARE Errors, so
@@ -194,6 +203,9 @@ export const describeSdkError = (error: unknown): string => {
  * This is what `toUIMessageStream`'s `onError` is wired to on every run.
  */
 export const formatStreamError = (error: unknown): string => {
+  // A result overflow recovery replaced is a recovered step, not a failure:
+  // it already logged its own warning (issue #1717).
+  if (error === TOOL_RESULT_TOO_LARGE) return error;
   logger.error({ error }, "Chat stream error");
   return describeSdkError(error);
 };

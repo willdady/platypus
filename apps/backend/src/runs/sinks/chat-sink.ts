@@ -507,8 +507,9 @@ export class ChatSink implements RunSink {
 
   /**
    * Starts (never awaits) the after-turn Transcript summary pass: the turn's
-   * final Projected occupancy crossed the trigger, the declared window exists,
-   * and the Chat's own model is available to write the summary. The kept tail
+   * final Projected occupancy crossed the trigger and the declared window
+   * exists — or the turn overflowed (issue #1717) — and the Chat's own model
+   * is available to write the summary. The kept tail
    * shrinks to one turn when the triggering reading itself ran with a summary
    * in place. Registered in the in-flight map so a backstop on the next turn
    * waits for this pass rather than starting a second.
@@ -519,12 +520,23 @@ export class ChatSink implements RunSink {
     const { resolved } = plan;
     const path = this.latestMessages;
     const reading = projectedOccupancyOf(path);
+    // A reply the Provider rejected as too long (issue #1717) is due whatever
+    // the reading or the window: the rejection is the measurement. Taken now
+    // rather than only at the next turn's backstop, so a regenerate — whose
+    // path no longer holds this reply — still finds the summary waiting.
+    const overflowed = path.at(-1)?.metadata?.contextOverflow === true;
     if (
-      !reading ||
-      !transcriptSummaryDueAfterTurn(reading.projected, plan.contextWindow)
+      !overflowed &&
+      (!reading ||
+        !transcriptSummaryDueAfterTurn(reading.projected, plan.contextWindow))
     ) {
       return;
     }
+    // The summary the shrinking tail is measured against: the one the
+    // overflowed reply ran with, or the one the triggering reading did.
+    const readingSummaryId = overflowed
+      ? path.at(-1)?.metadata?.summaryId
+      : reading?.summaryId;
 
     // The Chat's own resolved model: an Agent turn re-resolves through its
     // Agent row, a Direct turn through its Provider+model reference — the same
@@ -543,7 +555,7 @@ export class ChatSink implements RunSink {
       );
       const anchorIndex = summaryAnchorIndex(
         path,
-        transcriptSummaryKeptTurns(reading.summaryId),
+        transcriptSummaryKeptTurns(readingSummaryId),
       );
       if (anchorIndex === undefined) return undefined;
       const summary = await takeTranscriptSummary({
@@ -551,13 +563,13 @@ export class ChatSink implements RunSink {
         model,
         modelId,
         path,
-        triggeredFromOccupancy: reading.projected,
+        triggeredFromOccupancy: reading?.projected ?? 0,
         previousSummary: deepestPriorSummary(
           path,
           await loadChatSummaries(this.runId),
           anchorIndex,
         ),
-        readingSummaryId: reading.summaryId,
+        readingSummaryId,
         readOnlyToolNames: plan.readOnlyToolNames,
       });
       return summary;

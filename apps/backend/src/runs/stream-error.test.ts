@@ -61,6 +61,32 @@ describe("formatStreamError", () => {
       expect(formatStreamError(error)).toContain(expected);
     });
 
+    it("tells the User a context overflow is a conversation too long, never the Provider's text", () => {
+      const error = new APICallError({
+        message: "prompt is too long: 208310 tokens > 200000 maximum",
+        url: "https://example.test",
+        requestBodyValues: {},
+        statusCode: 400,
+      });
+      const formatted = formatStreamError(error);
+      expect(formatted).toMatch(/too long for the model/);
+      expect(formatted).toMatch(/new Chat/);
+      expect(formatted).not.toContain("208310");
+      expect(formatted).not.toContain("AI provider error");
+    });
+
+    it("keeps the generic wording for a 400 that is not an overflow", () => {
+      const error = new APICallError({
+        message: "Invalid schema for function 'searchDocs'",
+        url: "https://example.test",
+        requestBodyValues: {},
+        statusCode: 400,
+      });
+      expect(formatStreamError(error)).toBe(
+        "AI provider error: Invalid schema for function 'searchDocs'",
+      );
+    });
+
     it("falls back to the message of an unrecognised Error", () => {
       expect(formatStreamError(new Error("something specific"))).toBe(
         "something specific",
