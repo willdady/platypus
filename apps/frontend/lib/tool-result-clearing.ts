@@ -1,4 +1,6 @@
 import {
+  CLEARABLE_TOOL_INPUT_FIELDS,
+  TOOL_INPUT_CLEARING_KEEP_RECENT,
   TOOL_RESULT_CLEARING_KEEP_RECENT,
   TOOL_RESULT_CLEARING_THRESHOLD,
   type PlatypusUIMessage,
@@ -50,6 +52,7 @@ type ToolLikePart = {
   toolCallId: string;
   state: string;
   toolName?: string;
+  output?: unknown;
 };
 
 function isToolLikePart(part: unknown): part is ToolLikePart {
@@ -108,6 +111,52 @@ export function clearedToolCallIds(
   const staleCount = Math.max(
     0,
     clearableIds.length - TOOL_RESULT_CLEARING_KEEP_RECENT,
+  );
+  if (staleCount === 0) {
+    return NOTHING_CLEARED;
+  }
+  return new Set(clearableIds.slice(0, staleCount));
+}
+
+/**
+ * The client-side mirror of Tool-input clearing (ADR-0018 Notes, issue #1722,
+ * `apps/backend/src/runs/tool-input-clearing.ts`): the `toolCallId`s of
+ * successful calls to a core write tool whose input the NEXT model call would
+ * no longer receive in full. Unlike results, the allowlist is core-only, so it
+ * is read straight from `@platypus/schemas`.
+ *
+ * Returns the same empty set whenever nothing is cleared, as above.
+ */
+export function clearedInputToolCallIds(
+  messages: readonly PlatypusUIMessage[],
+  reading: { occupancy?: number; contextWindow?: number },
+): ReadonlySet<string> {
+  const { occupancy, contextWindow } = reading;
+  if (occupancy === undefined || contextWindow === undefined) {
+    return NOTHING_CLEARED;
+  }
+  if (occupancy / contextWindow < TOOL_RESULT_CLEARING_THRESHOLD) {
+    return NOTHING_CLEARED;
+  }
+
+  const clearableIds: string[] = [];
+  for (const message of messages) {
+    for (const part of message.parts ?? []) {
+      if (!isToolLikePart(part)) continue;
+      if (part.state !== "output-available") continue;
+      if (!CLEARABLE_TOOL_INPUT_FIELDS.has(toolNameOf(part))) continue;
+      // A domain tool's `{ error }` result is a failure the model must retry.
+      const { output } = part;
+      if (typeof output === "object" && output !== null && "error" in output) {
+        continue;
+      }
+      clearableIds.push(part.toolCallId);
+    }
+  }
+
+  const staleCount = Math.max(
+    0,
+    clearableIds.length - TOOL_INPUT_CLEARING_KEEP_RECENT,
   );
   if (staleCount === 0) {
     return NOTHING_CLEARED;

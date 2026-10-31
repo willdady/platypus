@@ -324,7 +324,8 @@ type ChatMessageProps = {
   copiedMessageId: string | null;
   /**
    * `toolCallId`s whose result Tool-result clearing (ADR-0018 Notes, issue
-   * #524) would leave out of the NEXT model call — derived per render from
+   * #524), or whose input Tool-input clearing (issue #1722), would leave out
+   * of the NEXT model call — derived per render from
    * the current Context occupancy reading, never persisted. Absent/empty
    * renders every tool part exactly as before.
    */

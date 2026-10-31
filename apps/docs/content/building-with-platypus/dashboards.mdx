@@ -124,6 +124,10 @@ a widget's full data**, and **update a widget's data**.
   Agent can't accidentally turn a chart into a metric.)
 </Callout>
 
+In a long Chat, older widget updates stop sending the data they wrote to the
+model once the context fills; see
+[Freeing up space during a long tool-using turn](/building-with-platypus/chat#freeing-up-space-during-a-long-tool-using-turn).
+
 Pair this with a [Trigger](/building-with-platypus/triggers): a scheduled Agent
 run can refresh a dashboard's metrics or charts on a cadence, so the readout stays
 live without anyone opening a Chat.

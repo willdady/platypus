@@ -55,6 +55,7 @@ import {
   skillSchema,
   TOOL_NAME_NAMESPACE_SEPARATOR,
   TOOL_NAME_PATTERN,
+  TOOL_INPUT_CLEARING_KEEP_RECENT,
   TOOL_RESULT_CLEARING_KEEP_RECENT,
   TOOL_RESULT_CLEARING_THRESHOLD,
   triggerBaseSchema,
@@ -2250,6 +2251,14 @@ const SCHEMA_CONSTANTS = [
     phrase: (bytes: number) => `larger than ${bytes / 1024} KB`,
     files: ["self-hosting/providers-and-auth.mdx"],
     cost: "An Org Admin trims a Reasoning map that would have saved, or writes one the dialog refuses.",
+  },
+  {
+    name: "TOOL_INPUT_CLEARING_KEEP_RECENT",
+    value: TOOL_INPUT_CLEARING_KEEP_RECENT,
+    phrase: (count: number) =>
+      `The ${NUMBER_WORDS[count] ?? count} most recent writes keep what`,
+    files: ["building-with-platypus/chat.mdx"],
+    cost: "A User expects the model to still see what an older write sent.",
   },
   {
     name: "RUN_EVENT_ERROR_MAX_BYTES",

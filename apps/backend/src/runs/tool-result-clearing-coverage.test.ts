@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, vi } from "vitest";
 import type { ToolSetContext } from "@platypuschat/plugin-sdk";
+import { CLEARABLE_TOOL_INPUT_FIELDS } from "@platypus/schemas";
 import { isClearableToolName } from "./tool-result-clearing.ts";
 import { createWebFetchTools } from "../tools/fetch.ts";
 import { createSandboxTools } from "../sandbox/tools.ts";
@@ -239,6 +240,14 @@ describe("Tool-result clearing — core tool inventory", () => {
   it("agrees with isClearableToolName on every classified name", () => {
     for (const [name, expected] of Object.entries(EXPECTED_CLEARABLE)) {
       expect(isClearableToolName(name), name).toBe(expected);
+    }
+  });
+
+  // Tool-input clearing (issue #1722): a renamed tool would silently stop
+  // having its input cleared, so every allowlisted name must still exist.
+  it("names only real core tools in the Tool-input clearing allowlist", () => {
+    for (const name of CLEARABLE_TOOL_INPUT_FIELDS.keys()) {
+      expect(materializedNames, name).toContain(name);
     }
   });
 
