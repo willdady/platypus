@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
  * happened rather than naming the Context window.
  */
 export const SUMMARY_DIVIDER_TEXT =
-  "Earlier messages were condensed into a summary the assistant reads instead. They're still here.";
+  "Older messages were summarised for the assistant. They stay readable above.";
 
 /**
  * The expandable divider a **Transcript summary** renders at its anchor
