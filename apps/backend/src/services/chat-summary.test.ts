@@ -327,6 +327,78 @@ describe("the trigger and the backstop", () => {
       ).toBe(true);
     });
 
+    // Issue #1717 (R1): the turn after one the Provider rejected as too long
+    // takes a summary first, whatever the reading says — the Provider's own
+    // rejection is the measurement, so no window is needed either.
+    describe("after a turn that overflowed", () => {
+      const overflowedReply = (summaryId?: string): PlatypusUIMessage => ({
+        id: "a6",
+        role: "assistant",
+        parts: [],
+        metadata: {
+          contextOverflow: true,
+          ...(summaryId ? { summaryId } : {}),
+        },
+      });
+
+      it("is due with no window and no reading", () => {
+        expect(
+          transcriptSummaryBackstopDue({
+            ...base,
+            projectedOccupancy: undefined,
+            contextWindow: undefined,
+            usableSummary: undefined,
+            readingSummaryId: undefined,
+            path: [...path, overflowedReply(), user("u7")],
+          }),
+        ).toBe(true);
+      });
+
+      it("is due when the only usable summary is the one that overflowed", () => {
+        expect(
+          transcriptSummaryBackstopDue({
+            ...base,
+            projectedOccupancy: undefined,
+            usableSummary: usable,
+            readingSummaryId: undefined,
+            summaries: [usable],
+            path: [...path, overflowedReply(usable.id), user("u7")],
+          }),
+        ).toBe(true);
+      });
+
+      it("is not due once a summary newer than the overflowed turn's is usable", () => {
+        expect(
+          transcriptSummaryBackstopDue({
+            ...base,
+            projectedOccupancy: undefined,
+            usableSummary: usable,
+            readingSummaryId: undefined,
+            summaries: [usable],
+            path: [...path, overflowedReply(), user("u7")],
+          }),
+        ).toBe(false);
+      });
+
+      it("is not due for an overflow further back than the last reply", () => {
+        expect(
+          transcriptSummaryBackstopDue({
+            ...base,
+            projectedOccupancy: undefined,
+            usableSummary: undefined,
+            readingSummaryId: undefined,
+            path: [
+              ...path,
+              overflowedReply(),
+              user("u7"),
+              assistant("a7"),
+              user("u8"),
+            ],
+          }),
+        ).toBe(false);
+      });
+    });
+
     it("is never due without a declared window or a reading", () => {
       expect(
         transcriptSummaryBackstopDue({

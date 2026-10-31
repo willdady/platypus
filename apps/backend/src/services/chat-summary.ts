@@ -22,7 +22,7 @@ import {
 } from "@platypus/schemas";
 import type { PlatypusUIMessage } from "../types.ts";
 import { logger } from "../logger.ts";
-import { checkContextOverflow } from "./context-overflow.ts";
+import { isContextOverflowError } from "./context-overflow.ts";
 import { resolveScoped } from "./scoped-resource.ts";
 import {
   resolveGenerationPlan,
@@ -359,10 +359,26 @@ export const transcriptSummaryDueAfterTurn = (
   projectedOccupancy / contextWindow >= TRANSCRIPT_SUMMARY_TRIGGER;
 
 /**
+ * The last reply on `path`, when the Provider rejected its turn as too long
+ * (issue #1717): the summary that turn read, if any, as `summaryId`.
+ */
+export const overflowedReply = (
+  path: PlatypusUIMessage[],
+): { summaryId?: string } | undefined => {
+  const metadata = path.findLast(
+    (message) => message.role === "assistant",
+  )?.metadata;
+  return metadata?.contextOverflow === true
+    ? { summaryId: metadata.summaryId }
+    : undefined;
+};
+
+/**
  * Whether the pre-turn **backstop** must run before the model is called:
  * Projected occupancy is at {@link TRANSCRIPT_SUMMARY_BACKSTOP} of the declared
  * window and no usable summary exists — the turn would otherwise send a
- * Transcript that fills (or has already overflowed) the window. A reading taken
+ * Transcript that fills (or has already overflowed) the window — or the last
+ * turn's model call was rejected as too long (issue #1717). A reading taken
  * with a summary that is no longer usable is stale and due for the same
  * treatment even beneath the backstop wall: that reading does not describe the
  * view this turn will send, so the turn could overflow without any wall being
@@ -394,13 +410,19 @@ export const transcriptSummaryBackstopDue = (args: {
       (summary) =>
         summary.id === readingSummaryId && isSummaryUsable(summary, path),
     );
+  // The last turn overflowed (issue #1717): due unless a summary newer than
+  // the one it overflowed with is already usable. The Provider's rejection is
+  // the measurement, so neither a window nor a reading is needed.
+  const overflowed = overflowedReply(path);
+  const overflowDue =
+    overflowed !== undefined && usableSummary?.id === overflowed.summaryId;
   const overTheWall =
     contextWindow !== undefined &&
     projectedOccupancy !== undefined &&
     contextWindow > 0 &&
     projectedOccupancy / contextWindow >= TRANSCRIPT_SUMMARY_BACKSTOP &&
     usableSummary === undefined;
-  return stale || overTheWall;
+  return stale || overflowDue || overTheWall;
 };
 
 /**
@@ -661,7 +683,7 @@ export const takeTranscriptSummary = async (
       );
       return row;
     } catch (error) {
-      if (checkContextOverflow(error) && attempt === 0) {
+      if (isContextOverflowError(error) && attempt === 0) {
         const earlier = summaryAnchorIndex(path, keptTurns + 1);
         if (earlier === undefined || earlier >= anchorIndex) break;
         anchorIndex = earlier;

@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import type { ModelMessage } from "ai";
 import {
   BEDROCK_CACHE_POINT,
@@ -7,6 +7,7 @@ import {
   type RunPlan,
 } from "./run-plan.ts";
 import { CLEARED_TOOL_RESULT_MARKER } from "./tool-result-clearing.ts";
+import { logger } from "../logger.ts";
 
 /**
  * `buildModelInvocation` is the one seam every Drive shares (`drive.ts`), so
@@ -178,5 +179,71 @@ describe("buildModelInvocation instructions", () => {
   it("emits no instructions message when the plan has no System prompt", () => {
     const invocation = invoke(planOf({}));
     expect(invocation.instructions).toBeUndefined();
+  });
+});
+
+/**
+ * The evidence a later decision on summarising older steps rests on (issue
+ * #1717): one structured line whenever a step's reading is at 0.8 of the
+ * declared window and Tool-result clearing had nothing left to clear.
+ */
+describe("buildModelInvocation context-pressure evidence", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const evidenceLines = (spy: { mock: { calls: unknown[][] } }) =>
+    spy.mock.calls.filter(
+      ([, message]) =>
+        message === "Context near full with nothing left to clear",
+    );
+
+  const alreadyCleared = (n: number): ModelMessage[] =>
+    toolResultMessages(n).map((message) => ({
+      ...message,
+      content: (message.content as Array<Record<string, unknown>>).map(
+        (part) => ({
+          ...part,
+          output: { type: "text", value: CLEARED_TOOL_RESULT_MARKER },
+        }),
+      ),
+    })) as ModelMessage[];
+
+  it.each([
+    ["no clearable results", [] as ModelMessage[]],
+    ["only results already cleared", alreadyCleared(10)],
+  ])(
+    "logs a step at 0.8 of the window when there is %s",
+    async (_, messages) => {
+      const spy = vi.spyOn(logger, "info");
+      const prepareStep = prepareStepOf(planOf({ contextWindow: 100 }));
+      await prepareStep({
+        steps: [{ usage: { inputTokens: 85 } }],
+        messages: [{ role: "user", content: "hi" }, ...messages],
+      });
+      expect(evidenceLines(spy)).toEqual([
+        [
+          expect.objectContaining({ occupancy: 85, contextWindow: 100 }),
+          "Context near full with nothing left to clear",
+        ],
+      ]);
+    },
+  );
+
+  it.each([
+    ["clearing still had results to clear", 85, 100, 10],
+    ["the reading is under 0.8 of the window", 79, 100, 0],
+    ["no window is declared", 85, undefined, 0],
+  ])("logs nothing when %s", async (_, inputTokens, contextWindow, results) => {
+    const spy = vi.spyOn(logger, "info");
+    const prepareStep = prepareStepOf(planOf({ contextWindow }));
+    await prepareStep({
+      steps: [{ usage: { inputTokens } }],
+      messages: [
+        { role: "user", content: "hi" },
+        ...toolResultMessages(results),
+      ],
+    });
+    expect(evidenceLines(spy)).toEqual([]);
   });
 });

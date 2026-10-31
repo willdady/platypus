@@ -49,7 +49,9 @@ vi.mock("ai", async () => {
   const actual = await vi.importActual("ai");
   return {
     ...actual,
-    streamText: vi.fn().mockReturnValue({}),
+    // The drive pipes `stream` through overflow recovery before the mocked
+    // UI conversion below; a fresh one per call.
+    streamText: vi.fn(() => ({ stream: new ReadableStream() })),
     // A fresh stream per call: the drive consumes the one it is handed.
     toUIMessageStream: vi.fn(
       () =>

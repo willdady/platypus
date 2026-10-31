@@ -117,11 +117,14 @@ export const clearStaleToolResults = (
       .map((loc) => `${loc.messageIndex}:${loc.partIndex}`),
   );
 
-  return messages.map((message, messageIndex) => {
+  const cleared = messages.map((message, messageIndex) => {
     if (message.role !== "tool") return message;
     let changed = false;
     const content = message.content.map((part, partIndex) => {
       if (!stale.has(`${messageIndex}:${partIndex}`)) return part;
+      // Already cleared on an earlier step: `prepareStep`'s override carries
+      // forward, so "untouched" stays "same reference" once nothing is left.
+      if (part.type === "tool-result" && isCleared(part.output)) return part;
       changed = true;
       return {
         ...part,
@@ -131,7 +134,13 @@ export const clearStaleToolResults = (
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- set in a callback, which TS narrowing does not track
     return changed ? { ...message, content } : message;
   });
+  return cleared.every((message, i) => message === messages[i])
+    ? messages
+    : cleared;
 };
+
+const isCleared = (output: { type: string; value?: unknown }): boolean =>
+  output.type === "text" && output.value === CLEARED_TOOL_RESULT_MARKER;
 
 /** What decides whether a clearing pass runs at all. */
 export type OccupancyReading = {

@@ -127,14 +127,24 @@ survives.
 | An ingestion cap for MCP results and `fetchUrl`       | One wording and one shape for "too large; request less" is used by the summary pass's overflow retry, so the cap and the recovery path teach the model one pattern.          |
 | Batch clearing for cache hits (`clear_at_least`)      | Trigger/target hysteresis is stated here as the rule for any context reduction, so clearing can adopt it later under this ADR.                                               |
 
+## Amendment: an overflow takes a summary (#1717)
+
+The first Consequence above — a Chat with no declared Context window never
+summarises — holds for the trigger and the backstop wall, which need a window
+to divide by. A turn the Provider rejects as too long is a measurement of its
+own, so it makes the Chat due for a summary with or without a window: the pass
+starts as the failed turn ends, and a next message waits for it at the
+backstop. A Regenerate's path no longer holds the failed reply, so it reads the
+summary only once the pass has landed. The R3 overflow retry (replace the last tool step's results, retry once)
+is the "one retry per step" seam this ADR's deferred R2 row names.
+
 ## Notes
 
 - **`/compact` (#1111) takes a summary on demand.** It is the same pass, steered
   by the User's instruction, with no turn kept verbatim: the anchor is the
   Active path's last assistant message, and the summary rides the next user
-  message sent. It needs no declared **Context window**, so "a Chat with no
-  declared Context window never summarises" now reads "never summarises on its
-  own". Built-in command names are reserved: a Skill may not take one.
+  message sent. Like an overflow (above), it needs no declared **Context
+  window**. Built-in command names are reserved: a Skill may not take one.
 
 ## References
 
