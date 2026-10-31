@@ -344,7 +344,7 @@ describe("KanbanBoard transport", () => {
 
   describe.each(DIALOG_FLOWS)(
     "$name",
-    ({ heading, perform, url, input, request, accepted, refused }) => {
+    ({ name, heading, perform, url, input, request, accepted, refused }) => {
       beforeEach(() => {
         boardState = makeBoardState([makeColumn()]);
       });
@@ -369,19 +369,43 @@ describe("KanbanBoard transport", () => {
         expect(toastError).not.toHaveBeenCalled();
       });
 
-      it("shows the backend's reason and keeps the dialog open on failure", async () => {
-        stubRejectedSave(refused.error, refused.status);
+      // A refused create or edit is a toast; a refused delete belongs in its
+      // dialog, so the reader can read it and retry without the toast
+      // outliving the dialog. Each flow runs only the one that applies.
+      const refusalIsInline = name === "column delete";
 
-        renderBoard();
-        await perform(input.refused);
+      it.runIf(!refusalIsInline)(
+        "shows the backend's reason and keeps the dialog open on failure",
+        async () => {
+          stubRejectedSave(refused.error, refused.status);
 
-        await waitFor(() =>
-          expect(toastError).toHaveBeenCalledWith(refused.error),
-        );
-        expect(
-          screen.getByRole("heading", { name: heading }),
-        ).toBeInTheDocument();
-      });
+          renderBoard();
+          await perform(input.refused);
+
+          await waitFor(() =>
+            expect(toastError).toHaveBeenCalledWith(refused.error),
+          );
+          expect(
+            screen.getByRole("heading", { name: heading }),
+          ).toBeInTheDocument();
+        },
+      );
+
+      it.runIf(refusalIsInline)(
+        "shows a refused delete inline and keeps the dialog open",
+        async () => {
+          stubRejectedSave(refused.error, refused.status);
+
+          renderBoard();
+          await perform(input.refused);
+
+          expect(await screen.findByText(refused.error)).toBeInTheDocument();
+          expect(toastError).not.toHaveBeenCalled();
+          expect(
+            screen.getByRole("heading", { name: heading }),
+          ).toBeInTheDocument();
+        },
+      );
     },
   );
 

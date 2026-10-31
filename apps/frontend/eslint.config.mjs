@@ -270,7 +270,7 @@ const eslintConfig = defineConfig([
     rules: {
       "testing-library/prefer-screen-queries": "error",
       // Ratchets: warnings, not errors, because the existing tests have too
-      // many to fix in one change (132, 30 and 23 when these rules landed),
+      // many to fix in one change (150, 31 and 23 when these rules landed),
       // and many need an accessible name or role the component lacks. Fix
       // them as you touch a file, and make each an error once it reaches 0.
       "testing-library/no-node-access": "warn",
@@ -288,12 +288,18 @@ const eslintConfig = defineConfig([
   },
   // Ratchets on the type-checked preset, for test files only: app code and
   // the `test/` helpers hold every one of these as an error. Each count is the
-  // violations when the preset landed (#1546). Fix them as you touch a file,
-  // and make each rule an error once it reaches 0.
+  // current violations, so a rule that gains one is visible in the diff. Fix
+  // them as you touch a file, and make each rule an error once it reaches 0.
+  // `require-await` is off outright: see the note beside it.
   {
     files: TEST_FILES,
     rules: {
-      "@typescript-eslint/require-await": "warn", // 60
+      // Every occurrence is a test double that must stay `async`: React
+      // Testing Library's `act(async () => …)` flushes microtasks, and a
+      // mocked `Response.json()` / `next/headers` `headers()` returns a
+      // Promise by contract. Removing `async` would change what the test
+      // does, so this one is off rather than ratcheted.
+      "@typescript-eslint/require-await": "off",
       "@typescript-eslint/no-unsafe-member-access": "warn", // 39
       "@typescript-eslint/no-unnecessary-type-assertion": "warn", // 35
       "@typescript-eslint/no-unsafe-assignment": "warn", // 21

@@ -151,6 +151,7 @@ export function Chat({
     results: providers,
     error: providersError,
     isLoading,
+    mutate: mutateProviders,
   } = useScopedList<Provider>("providers", scope);
 
   // Fetch agents
@@ -795,7 +796,11 @@ export function Chat({
     return (
       <div className="flex items-center justify-center h-full p-8">
         <div className="w-full xl:w-4/5 max-w-4xl">
-          <ListError error={providersError} subject="providers" />
+          <ListError
+            error={providersError}
+            subject="providers"
+            onRetry={() => void mutateProviders()}
+          />
         </div>
       </div>
     );

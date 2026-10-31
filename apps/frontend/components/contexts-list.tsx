@@ -22,6 +22,7 @@ function ContextsList({ className }: { className?: string }) {
     results: contexts,
     error,
     isLoading,
+    mutate,
   } = useScopedList<ContextWithNames>("users/me/contexts", {});
 
   if (isLoading) {
@@ -51,7 +52,15 @@ function ContextsList({ className }: { className?: string }) {
     );
   }
 
-  if (error) return <ListError error={error} subject="workspace contexts" />;
+  if (error) {
+    return (
+      <ListError
+        error={error}
+        subject="workspace contexts"
+        onRetry={() => void mutate()}
+      />
+    );
+  }
 
   const workspaceContexts = contexts.filter((c) => c.workspaceId);
 

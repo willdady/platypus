@@ -12,6 +12,7 @@ import {
   stubRejectedSave,
   toastError,
   mutate,
+  setupUser,
 } from "@/test/list-test-harness";
 import { openDropdownMenu } from "@/test/test-utils";
 
@@ -85,10 +86,23 @@ describe("WebhooksList", () => {
     mockScopedSWR({ webhooks: { error: new Error("500") } }, { strict: true });
     await render();
 
-    expect(screen.getByText("Failed to load webhooks.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Failed to load webhooks. 500"),
+    ).toBeInTheDocument();
     expect(
       screen.queryByText("No webhooks configured"),
     ).not.toBeInTheDocument();
+  });
+
+  // A failed read is not the end of the road: the retry re-reads the list
+  // rather than making the reader reload the page.
+  it("offers to retry a failed read", async () => {
+    mockScopedSWR({ webhooks: { error: new Error("500") } }, { strict: true });
+    await render();
+
+    await setupUser().click(screen.getByRole("button", { name: "Retry" }));
+
+    expect(mutate).toHaveBeenCalled();
   });
 
   it("holds the rows with a skeleton, not the empty state, while loading", async () => {

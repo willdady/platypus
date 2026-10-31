@@ -339,7 +339,13 @@ export function TriggerList({
   }
 
   if (error) {
-    return withFooter(<ListError error={error} subject="triggers" />);
+    return withFooter(
+      <ListError
+        error={error}
+        subject="triggers"
+        onRetry={() => void mutate()}
+      />,
+    );
   }
 
   // No controls with nothing to filter, as with the Skills section above it.

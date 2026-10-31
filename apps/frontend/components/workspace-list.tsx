@@ -23,14 +23,20 @@ function WorkspaceList({
   className?: string;
   orgId: string;
 }) {
-  const { data, error, isLoading, results } = useScopedList<Workspace>(
+  const { data, error, isLoading, mutate, results } = useScopedList<Workspace>(
     "workspaces",
     { orgId },
   );
 
   // Only a cold failure replaces the list; a failed revalidation keeps it.
   if (error && !data) {
-    return <ListError error={error} subject="workspaces" />;
+    return (
+      <ListError
+        error={error}
+        subject="workspaces"
+        onRetry={() => void mutate()}
+      />
+    );
   }
 
   if (isLoading || !data) {
