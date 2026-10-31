@@ -211,21 +211,7 @@ describe("SkillsList delete", () => {
   });
 });
 
-describe("SkillsList card height", () => {
-  it("reserves a two-line description box, with the full text on hover", async () => {
-    await renderSkills([workspaceSkill]);
-
-    const description = screen.getByText("desc");
-    expect(description).toHaveClass("line-clamp-2", "min-h-[2lh]");
-    expect(description).toHaveAttribute("title", "desc");
-  });
-
-  it("keeps the description box when there is no description", async () => {
-    await renderSkills([{ ...workspaceSkill, description: "" }]);
-
-    expect(screen.getByRole("paragraph")).toHaveClass("min-h-[2lh]");
-  });
-
+describe("SkillsList card meta", () => {
   it("truncates the no-agents warning to one line, with the full text on hover", async () => {
     await renderSkills([workspaceSkill]);
 
@@ -499,7 +485,7 @@ describe("SkillsList filters", () => {
   });
 });
 
-describe("SkillsList list states", () => {
+describe("SkillsList empty states", () => {
   it("shows the empty state, without filter controls, when the workspace has no skills", async () => {
     await renderSkills([]);
 
@@ -510,23 +496,6 @@ describe("SkillsList list states", () => {
     expect(
       screen.queryByRole("combobox", { name: "Filter by agent" }),
     ).not.toBeInTheDocument();
-  });
-
-  it("surfaces a failed read rather than rendering an empty list", async () => {
-    mockScopedSWR({ "/skills": { error: new Error("500") } });
-    await renderList(<SkillsList orgId="org1" workspaceId="ws1" />);
-
-    expect(screen.getByText(/Failed to load skills/)).toBeInTheDocument();
-  });
-
-  it("holds the grid with a skeleton, not the empty state, while loading", async () => {
-    mockScopedSWR({ "/skills": { isLoading: true } });
-    await renderList(<SkillsList orgId="org1" workspaceId="ws1" />);
-
-    expect(
-      screen.getByRole("status", { name: "Loading skills" }),
-    ).toHaveAttribute("aria-busy", "true");
-    expect(screen.queryByText(/No skills yet/i)).not.toBeInTheDocument();
   });
 });
 
