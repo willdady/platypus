@@ -221,3 +221,15 @@ per-(Provider, model) breakdown beside them. That keeps those fields what this
 ADR said they are, billing sums, and corrects them to cover everything the run
 was billed for. `contextOccupancy` is unchanged: it is still the parent's own
 last call, and Sub-Agent occupancy is still out of scope.
+
+## Notes: Tool-input clearing trusts only success, only on a core allowlist
+
+Issue #1722 clears the bulky input fields of older write calls (`fsWrite`'s
+`content`, `fsEdit`'s `oldString`/`newString`, `updateWidgetData`'s `data`) at
+Tool-result clearing's threshold and seam, keeping its own count of recent
+calls. Two rules bound it. A call's input is cleared only once its result is
+present and not an error, because a failed write's input is what the model needs
+to correct and retry it. And the allowlist is core-only and deny by default: an
+input is safe to drop only because what it wrote can be read back, and no MCP or
+plugin tool has a way to say that about itself — a Read-only hint (ADR-0021)
+answers a different question.

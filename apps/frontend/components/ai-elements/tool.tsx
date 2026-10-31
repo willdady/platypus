@@ -280,7 +280,8 @@ export type ToolHeaderProps = {
   className?: string;
   /**
    * Tool-result clearing (ADR-0018 Notes, issue #524) would leave this
-   * result out of the next model call. The full result stays expandable
+   * result, or Tool-input clearing (issue #1722) this input, out of the next
+   * model call. The full result stays expandable
    * below — this only says the model no longer has it.
    */
   cleared?: boolean;
@@ -321,7 +322,8 @@ export function ToolStatus({ state }: { state: ToolUIPart["state"] }) {
 
 /**
  * Shown on a tool part whose result Tool-result clearing (ADR-0018 Notes,
- * issue #524) has left out of the next model call. The full result is still
+ * issue #524), or whose input Tool-input clearing (issue #1722), has left out
+ * of the next model call. The full result is still
  * expandable below this header — the badge says only that the model no
  * longer has it, never that it's gone.
  */
@@ -338,8 +340,8 @@ export function ClearedResultBadge() {
         </Badge>
       </TooltipTrigger>
       <TooltipContent>
-        This result was left out of the last model call to free up space in the
-        context window. It is still here — expand to read it.
+        This was left out of the last model call to free up space in the context
+        window. It is still here — expand to read it.
       </TooltipContent>
     </Tooltip>
   );
