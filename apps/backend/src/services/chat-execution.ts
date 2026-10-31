@@ -945,6 +945,15 @@ export const prepareChatTurn = async (
         frequencyPenalty: agent ? undefined : context.plan.frequencyPenalty,
         presencePenalty: agent ? undefined : context.plan.presencePenalty,
         seed: agent ? undefined : context.plan.seed,
+        reasoningThinking: agent
+          ? undefined
+          : (request.reasoningThinking ?? undefined),
+        reasoningEffort: agent
+          ? undefined
+          : (request.reasoningEffort ?? undefined),
+        thinkingBudget: agent
+          ? undefined
+          : (request.thinkingBudget ?? undefined),
         // The REQUESTED value, not the plan's resolved ceiling — see
         // `ResolvedGeneration.maxSteps`. Normalised to undefined so a cleared
         // null writes null to the column like every other unset field here.
@@ -1089,6 +1098,9 @@ const resolveChatContext = async (
       seed: data.seed,
       presencePenalty: data.presencePenalty,
       frequencyPenalty: data.frequencyPenalty,
+      reasoningThinking: data.reasoningThinking,
+      reasoningEffort: data.reasoningEffort,
+      thinkingBudget: data.thinkingBudget,
       maxSteps: data.maxSteps,
     };
   } else {

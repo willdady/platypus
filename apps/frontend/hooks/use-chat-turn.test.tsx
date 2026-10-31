@@ -28,6 +28,9 @@ const settings: ChatSettings = {
   seed: undefined,
   presencePenalty: undefined,
   frequencyPenalty: undefined,
+  reasoningThinking: undefined,
+  reasoningEffort: undefined,
+  thinkingBudget: undefined,
   maxSteps: 10,
 };
 const direct: ModelSelection = { agentId: "", providerId: "p1", modelId: "m1" };

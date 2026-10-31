@@ -107,6 +107,29 @@ describe("createAgentManagementTools", () => {
       expect(updateAgentRow).toHaveBeenCalledWith(scope, "a1", { name: "New" });
     });
 
+    it("sets and clears the Reasoning controls", async () => {
+      vi.mocked(updateAgentRow).mockResolvedValue(row());
+      const set = {
+        reasoningThinking: true,
+        reasoningEffort: "high",
+        thinkingBudget: 2048,
+      };
+      const clear = {
+        reasoningThinking: null,
+        reasoningEffort: null,
+        thinkingBudget: null,
+      };
+
+      for (const fields of [set, clear]) {
+        await callTool(tools.updateAgent, {
+          agentId: "a1",
+          label: "Agent",
+          ...fields,
+        });
+        expect(updateAgentRow).toHaveBeenLastCalledWith(scope, "a1", fields);
+      }
+    });
+
     it("returns a rejected write as-is", async () => {
       vi.mocked(updateAgentRow).mockResolvedValueOnce({
         error: "Circular dependency detected",

@@ -1,3 +1,4 @@
+import type { JSONObject } from "@ai-sdk/provider";
 import {
   stepCountIs,
   wrapLanguageModel,
@@ -82,6 +83,12 @@ export type RunPlan = {
   frequencyPenalty?: number;
   presencePenalty?: number;
   seed?: number;
+  /**
+   * Per-Provider request options beyond the cache directives — today the
+   * Reasoning map's resolved fragment under the OpenAI chat-mode Provider's
+   * namespace (ADR-0040). Absent when there is nothing to send.
+   */
+  providerOptions?: Record<string, JSONObject>;
   /** The Org Admin's declared Context window for this model (ADR-0018),
    *  absent where none was declared. The sole gate on Tool-result clearing —
    *  see `buildModelInvocation` below. */
@@ -203,8 +210,10 @@ export const buildModelInvocation = (
   // remains straight into the Converse request — a call-level `cachePoint`
   // would be forwarded as an unrecognised top-level field, where Converse
   // accepts it nowhere and quietly caches nothing. The same hazard applies to
-  // the `openrouter` namespace: never put a foreign key in either.
-  providerOptions: REQUEST_LEVEL_CACHE_DIRECTIVE,
+  // the `openrouter` namespace: never put a foreign key in either. The plan's
+  // own options (a Reasoning fragment) ride beside them, in their own
+  // namespace, so the directives survive.
+  providerOptions: withPlanProviderOptions(plan.providerOptions),
   // Tool-result clearing (ADR-0018 Notes, issue #524) and the trailing Bedrock
   // cache point both live here, mutating the same `messages` value in the same
   // callback. `prepareStep` fires before every step INCLUDING the first, and
@@ -265,6 +274,23 @@ export const buildModelInvocation = (
   ...toolGateOptions(plan.gateScope, options.abortSignal),
   ...declaredSettings(plan),
 });
+
+/**
+ * The cache directives with the plan's own options merged in per namespace,
+ * so a chat-mode Provider that happens to be named `anthropic` or `openrouter`
+ * adds its Reasoning fragment beside `cacheControl` rather than replacing it.
+ */
+const withPlanProviderOptions = (
+  options: RunPlan["providerOptions"],
+): Record<string, JSONObject> => {
+  const merged: Record<string, JSONObject> = {
+    ...REQUEST_LEVEL_CACHE_DIRECTIVE,
+  };
+  for (const [name, value] of Object.entries(options ?? {})) {
+    merged[name] = { ...merged[name], ...value };
+  }
+  return merged;
+};
 
 /**
  * Removes a cache point this function placed on an earlier step, leaving any

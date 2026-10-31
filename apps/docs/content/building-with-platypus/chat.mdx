@@ -777,7 +777,10 @@ When you have picked a Provider and model directly, or nothing yet, a gear butto
 **Settings** — opens **Chat Settings**: an **Instructions** box, and under
 **Advanced settings** the sampling parameters — **Temperature**, **Seed**,
 **Top-p**, **Top-k**, **Presence Penalty** and **Frequency Penalty** — plus
-**Max steps**. They are saved on this Chat and apply to every turn in it.
+**Max steps**, and the [Reasoning
+controls](/building-with-platypus/agents#reasoning-controls) **Thinking**,
+**Effort** and **Thinking budget** where the selected model's Reasoning map
+declares them. They are saved on this Chat and apply to every turn in it.
 
 Think of it as the Agent form for a conversation you didn't build an Agent for.
 Platypus still composes the full system prompt around your Instructions, adding
@@ -808,11 +811,11 @@ edit, or **Regenerate**.
 
 <Callout type="warning">
   **With an Agent selected there is no settings button.** A Chat does not
-  override an Agent's Instructions or sampling parameters for one conversation —
-  the Agent's own settings win, including its **Max steps**, and the info button
-  shows you what they are. If you want different behaviour, edit the Agent, or
-  copy it and edit the copy. Looking for the gear on an Agent-backed Chat and
-  concluding it's a bug is the usual confusion here.
+  override an Agent's Instructions, sampling parameters or Reasoning controls
+  for one conversation — the Agent's own settings win, including its **Max
+  steps**, and the info button shows you what they are. If you want different
+  behaviour, edit the Agent, or copy it and edit the copy. Looking for the gear
+  on an Agent-backed Chat and concluding it's a bug is the usual confusion here.
 </Callout>
 
 ## Telling Agents your timezone

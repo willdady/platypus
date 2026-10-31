@@ -1,16 +1,22 @@
 import { NotFoundError, ValidationError } from "../errors.ts";
-import { openProvider } from "../services/provider.ts";
+import {
+  compatProviderOptionsName,
+  openProvider,
+} from "../services/provider.ts";
 import {
   contextWindowForModel,
   maxOutputTokensForModel,
+  reasoningMapForModel,
   resolveModelId,
 } from "../services/model-capability.ts";
 import {
   resolveSamplingSettings,
   type SamplingSource,
 } from "../services/sampling-settings.ts";
+import { resolveReasoning } from "../services/reasoning.ts";
 import {
   aliasNameFromReference,
+  providerHonoursReasoningMap,
   DEFAULT_AGENT_MAX_STEPS,
   DEFAULT_DIRECT_MAX_STEPS,
 } from "@platypus/schemas";
@@ -142,6 +148,14 @@ export const resolveGenerationPlan = async (
   const model = openProvider(provider).languageModel(resolvedModelId);
   const maxOutputTokens = maxOutputTokensForModel(provider, resolvedModelId);
   const contextWindow = contextWindowForModel(provider, resolvedModelId);
+  const sampling = resolveSamplingSettings(samplingSource);
+  const reasoning = providerHonoursReasoningMap(provider)
+    ? resolveReasoning(
+        reasoningMapForModel(provider, resolvedModelId),
+        samplingSource,
+        sampling,
+      )
+    : undefined;
 
   return {
     plan: {
@@ -157,7 +171,14 @@ export const resolveGenerationPlan = async (
       // sole gate on Tool-result clearing, so an undeclared window must reach
       // `buildModelInvocation` as a true absence, not a guessed default.
       ...(contextWindow !== undefined ? { contextWindow } : {}),
-      ...resolveSamplingSettings(samplingSource),
+      ...sampling,
+      ...(reasoning
+        ? {
+            providerOptions: {
+              [compatProviderOptionsName(provider)]: reasoning,
+            },
+          }
+        : {}),
     },
     provider,
     resolvedModelId,

@@ -4,6 +4,7 @@ import {
   resolveModelReference,
   type ConcreteModelId,
   type ModelConfig,
+  type ReasoningMap,
 } from "@platypus/schemas";
 import type { ProviderRow } from "./provider-write.ts";
 
@@ -162,3 +163,12 @@ export const contextWindowForModel = (
   provider: ProviderModels,
   modelId: ConcreteModelId,
 ): number | undefined => modelEntry(provider, modelId)?.contextWindow;
+
+/**
+ * The Reasoning map an Org Admin declared for this model (ADR-0040), or
+ * `undefined` where none was — in which case nothing is sent.
+ */
+export const reasoningMapForModel = (
+  provider: ProviderModels,
+  modelId: ConcreteModelId,
+): ReasoningMap | undefined => modelEntry(provider, modelId)?.reasoning;

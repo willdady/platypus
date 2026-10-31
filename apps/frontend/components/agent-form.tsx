@@ -72,6 +72,11 @@ import {
 import { findModelOption, getModelOptions } from "@/lib/model-config";
 import { resolveModel } from "@/lib/resolve-model";
 import {
+  hasReasoningControls,
+  ReasoningControls,
+  type ReasoningValue,
+} from "@/components/reasoning-controls";
+import {
   decodeSelectionReference,
   encodeProviderSelection,
 } from "@/lib/selection-reference";
@@ -101,6 +106,9 @@ const RETRACTABLE_FIELDS = [
   "seed",
   "presencePenalty",
   "frequencyPenalty",
+  "reasoningThinking",
+  "reasoningEffort",
+  "thinkingBudget",
 ] as const;
 
 type AgentFormData = {
@@ -120,7 +128,7 @@ type AgentFormData = {
   seed?: number;
   presencePenalty?: number;
   frequencyPenalty?: number;
-};
+} & ReasoningValue;
 
 function AgentForm({
   classNames,
@@ -238,6 +246,9 @@ function AgentForm({
       seed: agent.seed ?? undefined,
       presencePenalty: agent.presencePenalty ?? undefined,
       frequencyPenalty: agent.frequencyPenalty ?? undefined,
+      reasoningThinking: agent.reasoningThinking ?? undefined,
+      reasoningEffort: agent.reasoningEffort ?? undefined,
+      thinkingBudget: agent.thinkingBudget ?? undefined,
       toolSetIds: agent.toolSetIds || [],
       skillIds: agent.skillIds || [],
       subAgentIds: agent.subAgentIds || [],
@@ -283,6 +294,9 @@ function AgentForm({
         seed: data.seed ?? null,
         presencePenalty: data.presencePenalty ?? null,
         frequencyPenalty: data.frequencyPenalty ?? null,
+        reasoningThinking: data.reasoningThinking ?? null,
+        reasoningEffort: data.reasoningEffort ?? null,
+        thinkingBudget: data.thinkingBudget ?? null,
         toolSetIds: data.toolSetIds,
         skillIds: data.skillIds,
         subAgentIds: data.subAgentIds,
@@ -442,6 +456,13 @@ function AgentForm({
       modelId: decoded.modelReference,
     }));
   };
+
+  // The selected model's Reasoning map, where its Provider honours one: the
+  // Reasoning section shows only the controls it declares (ADR-0040).
+  const reasoningMap = resolveModel({
+    providers,
+    selection: { providerId: formData.providerId, modelId: formData.modelId },
+  })?.reasoning;
 
   const form = (
     <div className={classNames}>
@@ -658,6 +679,21 @@ function AgentForm({
             error={validationErrors.maxSteps}
             description="Controls when a tool-calling loop should stop based on the number of steps executed"
           />
+          {hasReasoningControls(reasoningMap) && (
+            <FieldSet>
+              <FieldLegend variant="label">Reasoning</FieldLegend>
+              <ReasoningControls
+                map={reasoningMap}
+                value={formData}
+                onChange={(patch) => {
+                  setFormData((prev) => ({ ...prev, ...patch }));
+                  clearErrors(...Object.keys(patch));
+                }}
+                disabled={isSubmitting || readOnly}
+                budgetError={validationErrors.thinkingBudget}
+              />
+            </FieldSet>
+          )}
         </FieldGroup>
 
         {toolSetsError && (

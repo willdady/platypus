@@ -50,6 +50,7 @@ import {
   MAX_PLUGIN_TOOL_NAME_LENGTH,
   mcpSchema,
   modelConfigSchema,
+  REASONING_MAP_MAX_BYTES,
   RUN_EVENT_ERROR_MAX_BYTES,
   skillSchema,
   TOOL_NAME_NAMESPACE_SEPARATOR,
@@ -2242,6 +2243,13 @@ const SCHEMA_CONSTANTS = [
       `The ${NUMBER_WORDS[count] ?? count} most recent results stay`,
     files: ["building-with-platypus/chat.mdx"],
     cost: "A User expects the model to still see a tool result it no longer gets.",
+  },
+  {
+    name: "REASONING_MAP_MAX_BYTES",
+    value: REASONING_MAP_MAX_BYTES,
+    phrase: (bytes: number) => `larger than ${bytes / 1024} KB`,
+    files: ["self-hosting/providers-and-auth.mdx"],
+    cost: "An Org Admin trims a Reasoning map that would have saved, or writes one the dialog refuses.",
   },
   {
     name: "RUN_EVENT_ERROR_MAX_BYTES",

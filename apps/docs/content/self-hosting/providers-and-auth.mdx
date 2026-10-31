@@ -189,13 +189,14 @@ everything on it beyond the id is **declared, not guessed**:
 | `passthroughFileTypes`  | The media types this model ingests **natively**. Empty means none: the model receives files only as text. See [Declaring native file types](#declaring-native-file-types).   |
 | `maxExtractedTextChars` | Cap on the text a single extracted document may add to a turn. Empty uses the default (50,000 characters).                                                                   |
 | `maxOutputTokens`       | The most this model may produce in a single reply. Empty sends nothing and leaves the vendor's own default in place. See [Capping a single reply](#capping-a-single-reply).  |
+| `reasoning`             | The model's Reasoning map: which reasoning controls Agents and Chats get, and the request fields each sends. See [Declaring a Reasoning map](#declaring-a-reasoning-map).    |
 
 Every field is optional except the id, and a Provider set up before any of them
 existed keeps working with none of them set.
 
 In the form, each model shows as a card: its id, its alias as a badge, and
 whichever of the other fields are set. **Add model** and each card's pencil icon open
-a dialog holding all six fields; every field carries an **i** you can hover or
+a dialog holding all seven fields; every field carries an **i** you can hover or
 focus for the same explanation. The dialog checks the entry on its own, but
 nothing is stored until you save the Provider — and a rule across models, such
 as an alias clashing with another model's, is only checked then. A card the
@@ -254,6 +255,135 @@ applies when that model runs as a Sub-Agent.
 
 Ask for more than the model allows and the vendor rejects the turn — Platypus
 sends the number as typed and does not check it against the model.
+
+#### Declaring a Reasoning map
+
+A **Reasoning map** says which reasoning controls a model has — **Thinking**,
+**Effort** and **Thinking budget**, set on an Agent or in Chat Settings — and
+what each one becomes in the request. Self-hosted model servers steer reasoning
+through request fields that differ per model family, so Platypus does not guess
+them: you write them once here, as JSON, under **Reasoning map** in the model
+dialog. Leave it empty and the model shows no controls and is sent nothing.
+
+<Callout type="info">
+  Only an **OpenAI** Provider in **chat** mode sends a Reasoning map. The field
+  is shown on every Provider type, but a map on any other Provider type, or on
+  OpenAI in Responses mode, is stored and not sent, and its controls are hidden.
+</Callout>
+
+Every key is optional. A key you leave out hides that control:
+
+| Key        | Shape                                                                 | What it does                                                                                                                          |
+| ---------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `always`   | a JSON object                                                         | Sent on every request to this model. Never shown to anyone — the place for per-model extras.                                          |
+| `thinking` | `{ "on": {…}, "off": {…} }`, both sides required                      | Shows the **Thinking** control, and sends `on` or `off`.                                                                              |
+| `effort`   | an object keyed by `minimal`, `low`, `medium`, `high`, `xhigh`, `max` | Shows **Effort**, offering only the steps you declare, and sends the chosen step's object. `xhigh` reads as **Extra high** on screen. |
+| `budget`   | `{ "field": "<name>" }`                                               | Shows **Thinking budget**, and sends the number under that field name.                                                                |
+| `default`  | `{ "thinking": true \| false, "effort": "<step>" }`                   | What a turn uses when nobody chose. `effort` must name a step you declared.                                                           |
+
+**How a request is built.** For each control Platypus takes the Agent's choice
+(or, with no Agent, the Chat's), else the map's `default`, else nothing. It then
+merges, in order: `always`, the `thinking` side, the `effort` step, and the
+budget. Objects merge key by key, so `chat_template_kwargs` from `always` and
+from `effort` end up in one object; a later value wins over an earlier one. With
+thinking **off**, effort and budget are not sent. A map without `thinking` is
+treated as always on.
+
+**Sampling fields in a fragment are defaults only.** A fragment may carry
+`temperature`, `top_p`, `top_k`, `frequency_penalty`, `presence_penalty`,
+`seed`; the value an Agent or Chat sets wins, and the fragment's is
+sent only where that field is left empty. A key nested inside
+`chat_template_kwargs` is never touched.
+
+The dialog refuses a map that is larger than 16 KB, or that sets any of these
+fields at the top level of a fragment or as the budget field, because Platypus
+sets them itself: `model`, `messages`, `tools`, `tool_choice`, `stream`,
+`stream_options`, `n`, `max_tokens`, `max_completion_tokens`,
+`response_format`. Use **Max output tokens** for the reply ceiling.
+
+<Callout type="warning">
+  **A top-level `reasoning_effort` in a fragment is dropped without a word.**
+  The request library writes that field itself, after your fragment, so your
+  value never reaches the server. Spell it `reasoningEffort` — it goes out as
+  `reasoning_effort`. Inside `chat_template_kwargs`, write `reasoning_effort` as
+  usual.
+</Callout>
+
+These examples are starting points for vLLM unless noted. **Verify each one
+against your own checkpoint and server version** before relying on it: send a
+short prompt with each setting and check whether reasoning appears.
+
+```jsonc
+// Qwen 3.6 — on/off and a budget, no effort steps
+{
+  "always": { "chat_template_kwargs": { "preserve_thinking": true } },
+  "thinking": {
+    "on": { "chat_template_kwargs": { "enable_thinking": true } },
+    "off": { "chat_template_kwargs": { "enable_thinking": false } }
+  },
+  "budget": { "field": "thinking_token_budget" },
+  "default": { "thinking": true }
+}
+
+// DeepSeek V4.1 Flash — off via a top-level reasoning_effort of "none"
+{
+  "thinking": { "on": {}, "off": { "reasoningEffort": "none" } },
+  "effort": {
+    "low": { "chat_template_kwargs": { "reasoning_effort": "low" } },
+    "high": { "chat_template_kwargs": { "reasoning_effort": "high" } },
+    "xhigh": { "chat_template_kwargs": { "reasoning_effort": "xhigh" } },
+    "max": { "chat_template_kwargs": { "reasoning_effort": "max" } }
+  },
+  "budget": { "field": "thinking_token_budget" },
+  "default": { "effort": "high" }
+}
+
+// GLM 5.3 Flash — cannot switch thinking off, so no thinking key
+{
+  "always": { "chat_template_kwargs": { "clear_thinking": false } },
+  "effort": {
+    "low": { "chat_template_kwargs": { "reasoning_effort": "low" } },
+    "high": { "chat_template_kwargs": { "reasoning_effort": "high" } },
+    "max": { "chat_template_kwargs": { "reasoning_effort": "max" } }
+  },
+  "default": { "effort": "high" }
+}
+
+// Any model on SGLang — ask for reasoning in its own field on every request
+{
+  "always": { "separate_reasoning": true },
+  "thinking": {
+    "on": { "chat_template_kwargs": { "enable_thinking": true } },
+    "off": { "chat_template_kwargs": { "enable_thinking": false } }
+  }
+}
+
+// Ollama's OpenAI-compatible endpoint — its own think field
+{
+  "thinking": { "on": { "think": true }, "off": { "think": false } },
+  "effort": {
+    "low": { "think": "low" },
+    "medium": { "think": "medium" },
+    "high": { "think": "high" }
+  }
+}
+```
+
+<Callout type="warning">
+  **Platypus sends what the map says; it cannot check the model obeyed.** A turn
+  that runs is not proof the setting took effect — test each one.
+</Callout>
+
+The usual ways a map goes wrong:
+
+- **A step the model's template rejects fails the turn.** Some families accept
+  only some effort values and answer anything else with a server error —
+  declare only the steps the model card lists.
+- **Some families cannot switch thinking off**, or keep reasoning with the
+  switch off. Leave `thinking` out for those rather than offer an **Off** that
+  does nothing.
+- **A server-wide flag can override the request.** llama.cpp's
+  `--reasoning-budget`, for example, wins over any budget a turn sends.
 
 #### Declaring native file types
 

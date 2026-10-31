@@ -262,6 +262,43 @@ const samplingFields = {
   frequencyPenalty: z.number().min(PENALTY_MIN).max(PENALTY_MAX),
 };
 
+/**
+ * The Effort scale a Reasoning control chooses from: the AI SDK's own
+ * `reasoning` steps (minus `none` and `provider-default`, which the Thinking
+ * switch and "unset" already say), so a step means the same thing on every
+ * model and the native Providers can take it unchanged (ADR-0040). One tuple
+ * for the schema, the run-time resolver and the forms.
+ */
+export const REASONING_EFFORT_STEPS = [
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+] as const;
+
+export type ReasoningEffort = (typeof REASONING_EFFORT_STEPS)[number];
+
+export const reasoningEffortSchema = z.enum(REASONING_EFFORT_STEPS);
+
+/**
+ * The Reasoning controls an Agent or a Direct Chat turn carries (ADR-0040).
+ * Nullable like the sampling fields, so a form clears one by writing `null`
+ * (#263); null means "the model's default".
+ */
+const reasoningFields = {
+  reasoningThinking: z.boolean().nullable().optional(),
+  reasoningEffort: reasoningEffortSchema.nullable().optional(),
+  thinkingBudget: z.number().int().positive().nullable().optional(),
+};
+
+export type ReasoningChoice = {
+  reasoningThinking?: boolean | null;
+  reasoningEffort?: ReasoningEffort | null;
+  thinkingBudget?: number | null;
+};
+
 export const chatSchema = z.object({
   id: z.string(),
   workspaceId: z.string(),
@@ -297,6 +334,7 @@ export const chatSchema = z.object({
   seed: samplingFields.seed.optional(),
   presencePenalty: samplingFields.presencePenalty.optional(),
   frequencyPenalty: samplingFields.frequencyPenalty.optional(),
+  ...reasoningFields,
   // Per-chat step ceiling for Direct (no-Agent) turns (#539). Nullable like
   // its six sampling neighbours rather than shaped like the Agent's own
   // `maxSteps`, so a client that clears a field by sending an explicit null
@@ -335,6 +373,11 @@ export const isValidChatMaxSteps = (
   value: number | null | undefined,
 ): boolean => chatSchema.shape.maxSteps.safeParse(value).success;
 
+/** Whether a Chat's Thinking budget is one the turn endpoint will accept. */
+export const isValidThinkingBudget = (
+  value: number | null | undefined,
+): boolean => chatSchema.shape.thinkingBudget.safeParse(value).success;
+
 export type ChatSamplingField = keyof typeof samplingFields;
 
 /**
@@ -359,6 +402,9 @@ const chatTurnSchema = chatSchema
     seed: true,
     presencePenalty: true,
     frequencyPenalty: true,
+    reasoningThinking: true,
+    reasoningEffort: true,
+    thinkingBudget: true,
     maxSteps: true,
   })
   .extend({
@@ -592,6 +638,7 @@ export const agentBaseSchema = z.object({
   seed: samplingFields.seed.nullable().optional(),
   presencePenalty: samplingFields.presencePenalty.nullable().optional(),
   frequencyPenalty: samplingFields.frequencyPenalty.nullable().optional(),
+  ...reasoningFields,
   toolSetIds: z.array(z.string()).optional(),
   skillIds: z.array(z.string()).optional(),
   subAgentIds: z.array(z.string()).optional(),
@@ -636,6 +683,9 @@ export const agentCreateSchema = agentBaseSchema.pick({
   seed: true,
   presencePenalty: true,
   frequencyPenalty: true,
+  reasoningThinking: true,
+  reasoningEffort: true,
+  thinkingBudget: true,
   toolSetIds: true,
   skillIds: true,
   subAgentIds: true,
@@ -655,6 +705,9 @@ export const agentUpdateSchema = agentBaseSchema.pick({
   seed: true,
   presencePenalty: true,
   frequencyPenalty: true,
+  reasoningThinking: true,
+  reasoningEffort: true,
+  thinkingBudget: true,
   toolSetIds: true,
   skillIds: true,
   subAgentIds: true,
@@ -1633,6 +1686,135 @@ export const nextTurnOccupancy = (
 ): number | undefined =>
   reading ? reading.inputTokens + (reading.outputTokens ?? 0) : undefined;
 
+/**
+ * Top-level request-body keys Platypus itself writes, which no Reasoning map
+ * fragment may set and no Thinking budget may be sent under (ADR-0040).
+ * `max_tokens`/`max_completion_tokens` belong to the Output ceiling and
+ * `response_format` to structured output; the rest are the request's own
+ * shape. Sampling keys are not here: a fragment may default them, and the run
+ * drops any the Agent or Chat already set (#1521).
+ */
+export const REASONING_RESERVED_KEYS = [
+  "model",
+  "messages",
+  "tools",
+  "tool_choice",
+  "stream",
+  "stream_options",
+  "n",
+  "max_tokens",
+  "max_completion_tokens",
+  "response_format",
+] as const;
+
+/** The most a Reasoning map may weigh, as JSON. */
+export const REASONING_MAP_MAX_BYTES = 16 * 1024;
+
+const isReservedKey = (key: string): boolean =>
+  (REASONING_RESERVED_KEYS as readonly string[]).includes(key);
+
+/** A request-body fragment: a plain JSON object. */
+const reasoningFragmentSchema = (where: string) =>
+  z
+    .record(z.string(), z.unknown(), {
+      error: `${where} must be a JSON object`,
+    })
+    .superRefine((fragment, ctx) => {
+      for (const key of Object.keys(fragment).filter(isReservedKey)) {
+        ctx.addIssue({
+          code: "custom",
+          path: [key],
+          message: `${where} cannot set "${key}": Platypus sets that field itself`,
+        });
+      }
+    });
+
+// Values are `unknown` rather than `z.json()`: a fragment only ever arrives as
+// parsed JSON, and the recursive JSON type is too deep for consumers that
+// infer through `Provider` (TS2589).
+export type ReasoningFragment = Record<string, unknown>;
+
+/**
+ * The Reasoning map an Org Admin declares on a Model entry (ADR-0040): which
+ * Reasoning controls the model has and the request-body fragment each one
+ * becomes. Every key is optional; a missing key hides that control.
+ */
+export const reasoningMapSchema = z
+  .object({
+    always: reasoningFragmentSchema("always").optional(),
+    thinking: z
+      .object(
+        {
+          on: reasoningFragmentSchema("thinking.on"),
+          off: reasoningFragmentSchema("thinking.off"),
+        },
+        { error: "thinking must be an object with both on and off" },
+      )
+      .strict()
+      .optional(),
+    effort: z
+      .strictObject(
+        Object.fromEntries(
+          REASONING_EFFORT_STEPS.map((step) => [
+            step,
+            reasoningFragmentSchema(`effort.${step}`).optional(),
+          ]),
+        ) as Record<
+          ReasoningEffort,
+          z.ZodOptional<ReturnType<typeof reasoningFragmentSchema>>
+        >,
+        {
+          error: (issue) =>
+            issue.code === "unrecognized_keys"
+              ? `effort has no step named ${issue.keys.map((k) => `"${k}"`).join(", ")}; steps are ${REASONING_EFFORT_STEPS.join(", ")}`
+              : undefined,
+        },
+      )
+      .optional(),
+    budget: z
+      .object({
+        field: z
+          .string()
+          .min(1, "budget.field cannot be empty")
+          .refine((field) => !isReservedKey(field), {
+            error: (issue) =>
+              `budget.field cannot be "${String(issue.input)}": Platypus sets that field itself`,
+          }),
+      })
+      .strict()
+      .optional(),
+    default: z
+      .object({
+        thinking: z.boolean().optional(),
+        effort: reasoningEffortSchema.optional(),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict()
+  .superRefine((map, ctx) => {
+    const step = map.default?.effort;
+    if (step !== undefined && map.effort?.[step] === undefined) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["default", "effort"],
+        message: `default.effort is "${step}", which effort does not declare`,
+      });
+    }
+    if (
+      new TextEncoder().encode(JSON.stringify(map)).length >
+      REASONING_MAP_MAX_BYTES
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: [],
+        message: `The Reasoning map is larger than ${REASONING_MAP_MAX_BYTES / 1024} KB`,
+      });
+    }
+  });
+
+export type ReasoningMap = z.infer<typeof reasoningMapSchema>;
+
 export const modelConfigSchema = z.object({
   id: z.string().min(1),
   // The bare alias name. Absent means the model is referenced by its id.
@@ -1655,6 +1837,8 @@ export const modelConfigSchema = z.object({
     .min(CONTEXT_WINDOW_MIN)
     .max(CONTEXT_WINDOW_MAX)
     .optional(),
+  // ADR-0040. Honoured only by an OpenAI-type Provider in chat mode.
+  reasoning: reasoningMapSchema.optional(),
 });
 
 export type ModelConfig = z.infer<typeof modelConfigSchema>;
@@ -2060,6 +2244,15 @@ export type Provider = z.infer<typeof providerSchema>;
  * `default` covers unknown provider types conservatively: a type this table has
  * never seen cannot be assumed to carry a native tool.
  */
+/**
+ * Whether a Provider sends a Model entry's Reasoning map (ADR-0040): only the
+ * OpenAI chat-mode path passes raw body fields through. Native Providers are
+ * #1689.
+ */
+export const providerHonoursReasoningMap = (
+  provider: Pick<Provider, "providerType" | "apiMode">,
+): boolean => provider.providerType === "OpenAI" && provider.apiMode === "chat";
+
 export const providerHasNativeSearch = (
   provider: Pick<Provider, "providerType" | "apiMode">,
 ): boolean => {

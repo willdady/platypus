@@ -99,6 +99,8 @@ Two levels of control over how the model generates:
   model makes no progress — repeating the same tool call for the same result —
   so a stuck run won't burn its whole step budget; that stop is reported as a
   failure with its own message, not as a step limit.
+- **Reasoning** — appears under the model only when the model's Reasoning
+  map declares a control. See [Reasoning controls](#reasoning-controls).
 - **Advanced settings** — expand this section for the optional sampling
   parameters. Leave any blank to use the Provider's default.
 
@@ -120,6 +122,38 @@ Two levels of control over how the model generates:
   Operator to search the log for the parameter — `temperature`, `seed` — after a
   run to find out whether it reached the model.
 </Callout>
+
+### Reasoning controls
+
+A reasoning model thinks before it answers. Where your Org Admin has written a
+Reasoning map for the selected model, the **Reasoning** section offers up to
+three controls, each shown only when the map declares it:
+
+| Control             | Values                                                                                                                    | What it does                                                           |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| **Thinking**        | **Model default**, **On**, **Off**                                                                                        | Whether the model reasons before answering                             |
+| **Effort**          | **Model default**, then whichever of **Minimal**, **Low**, **Medium**, **High**, **Extra high**, **Max** the map declares | How hard it reasons                                                    |
+| **Thinking budget** | a whole number from `1`                                                                                                   | The most reasoning tokens one reply may spend before the model answers |
+
+**Model default** (or an empty budget) sends whatever the map's own default
+says, or nothing. Turning **Thinking** off greys out **Effort** and **Thinking
+budget**: neither is sent while thinking is off.
+
+The controls apply wherever the Agent runs — a Chat, a Trigger run, and as a
+Sub-Agent. A model with no Reasoning map shows no section and is sent nothing.
+
+<Callout type="warning">
+  **Switching the Agent to another model keeps your choice, even when it
+  disappears.** An **Effort** step the new model's map lacks is not sent — the
+  model's default applies instead — and comes back if you switch back. The
+  **Thinking budget** bounds reasoning only; the model's **Max output tokens**
+  still caps the whole reply, and Platypus does not check one against the other,
+  so a budget close to that ceiling can leave the answer cut short.
+</Callout>
+
+If **Off** still produces reasoning, ask your Org Admin to check the map against the
+model — see [Declaring a Reasoning
+map](/self-hosting/providers-and-auth#declaring-a-reasoning-map).
 
 ## Grant tools and Skills
 

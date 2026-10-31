@@ -9,6 +9,7 @@ import {
   TOP_P_MIN,
   isValidChatMaxSteps,
   isValidChatSampling,
+  isValidThinkingBudget,
   type ChatSamplingField,
 } from "@platypus/schemas";
 import type { ChatSettings } from "@/hooks/use-chat-settings";
@@ -29,6 +30,9 @@ export const CHAT_SAMPLING_ERRORS: Record<ChatSamplingField, string> = {
   presencePenalty: `Presence Penalty in Chat Settings must be between ${PENALTY_MIN} and ${PENALTY_MAX}.`,
   frequencyPenalty: `Frequency Penalty in Chat Settings must be between ${PENALTY_MIN} and ${PENALTY_MAX}.`,
 };
+export const CHAT_THINKING_BUDGET_ERROR =
+  "Thinking budget in Chat Settings must be a whole number of at least 1.";
+
 export const CHAT_SELECTION_ERROR =
   "Please select a model or agent to start the chat";
 
@@ -71,6 +75,9 @@ export function turnRequest({
       return { ok: false, reason: CHAT_SAMPLING_ERRORS[field] };
     }
   }
+  if (!isValidThinkingBudget(settings.thinkingBudget)) {
+    return { ok: false, reason: CHAT_THINKING_BUDGET_ERROR };
+  }
   return {
     ok: true,
     body: {
@@ -83,6 +90,9 @@ export function turnRequest({
       seed: settings.seed,
       presencePenalty: settings.presencePenalty,
       frequencyPenalty: settings.frequencyPenalty,
+      reasoningThinking: settings.reasoningThinking,
+      reasoningEffort: settings.reasoningEffort,
+      thinkingBudget: settings.thinkingBudget,
       maxSteps: settings.maxSteps,
       search,
     },

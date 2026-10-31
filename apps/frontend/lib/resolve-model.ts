@@ -1,10 +1,12 @@
 import {
   findModelEntry,
   modelLabelFor,
+  providerHonoursReasoningMap,
   resolveModelReference,
   type Agent,
   type ConcreteModelId,
   type Provider,
+  type ReasoningMap,
 } from "@platypus/schemas";
 import { getModelConfigs, getSearchCapability } from "./model-config";
 import type { Serialized } from "./api-write";
@@ -28,6 +30,11 @@ export type ResolvedModel = {
   passthroughFileTypes: string[];
   /** Whether a searching turn against this model would serve search tools. */
   canSearch: boolean;
+  /**
+   * The model's Reasoning map (ADR-0040), only where the Provider honours one —
+   * an OpenAI Provider in chat mode — so no control shows that would do nothing.
+   */
+  reasoning: ReasoningMap | undefined;
 };
 
 /**
@@ -83,5 +90,8 @@ export function resolveModel(input: {
     maxOutputTokens: entry?.maxOutputTokens,
     passthroughFileTypes: entry?.passthroughFileTypes ?? [],
     canSearch: getSearchCapability(provider),
+    reasoning: providerHonoursReasoningMap(provider)
+      ? entry?.reasoning
+      : undefined,
   };
 }
