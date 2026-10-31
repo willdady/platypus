@@ -1024,9 +1024,7 @@ describe("ProviderForm model dialog Reasoning map", () => {
   const MAP = { thinking: { on: { think: true }, off: { think: false } } };
 
   const openReasoning = (dialog: HTMLElement) =>
-    fireEvent.click(
-      within(dialog).getByRole("button", { name: /Reasoning map/ }),
-    );
+    fireEvent.click(within(dialog).getByRole("button", { name: "Advanced" }));
 
   it("keeps a stored map through an unrelated edit", async () => {
     const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
