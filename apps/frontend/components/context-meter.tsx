@@ -1,6 +1,7 @@
 "use client";
 
 import { motion, useReducedMotion } from "motion/react";
+import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -47,6 +48,39 @@ export function ContextMeterEntrance({
     >
       {children}
     </motion.div>
+  );
+}
+
+/**
+ * What the composer shows in place of the meter when the model declares no
+ * Context window (ADR-0018, issue #1728).
+ *
+ * A meter cannot be drawn without a denominator, so the composer used to say
+ * nothing at all — and nothing said that condensing and Tool-result clearing
+ * were both off too. The hint names that consequence and links to Provider
+ * settings, where an Org Admin declares the window on the model entry.
+ *
+ * Presentational like the meter: the composing component owns the route.
+ */
+export function ContextWindowHint({
+  href,
+  className,
+}: {
+  /** Provider settings, where the window is declared on the model entry. */
+  href: string;
+  /** Where the hint sits — the composing component's decision, not this one's. */
+  className?: string;
+}) {
+  return (
+    <p className={cn("shrink-0 text-xs text-muted-foreground", className)}>
+      No Context window set: long Chats aren&apos;t condensed ahead of time.{" "}
+      <Link
+        href={href}
+        className="underline underline-offset-2 hover:text-foreground"
+      >
+        Add a Context window in Provider settings
+      </Link>
+    </p>
   );
 }
 
