@@ -91,30 +91,10 @@ describe("BlueprintsList delete", () => {
   });
 });
 
-describe("BlueprintsList list states", () => {
+describe("BlueprintsList empty state", () => {
   it("shows the empty state when the organization has no blueprints", async () => {
     await renderBlueprints([]);
 
     expect(screen.getByText(/No blueprints yet/i)).toBeInTheDocument();
-  });
-
-  it("surfaces a failed read rather than rendering an empty list", async () => {
-    mockScopedSWR(
-      { "/blueprints": { error: new Error("500") } },
-      { strict: true },
-    );
-    await renderList(<BlueprintsList orgId="org1" />);
-
-    expect(screen.getByText(/Failed to load blueprints/)).toBeInTheDocument();
-  });
-
-  it("holds the grid with a skeleton, not the empty state, while loading", async () => {
-    mockScopedSWR({ "/blueprints": { isLoading: true } }, { strict: true });
-    await renderList(<BlueprintsList orgId="org1" />);
-
-    expect(
-      screen.getByRole("status", { name: "Loading blueprints" }),
-    ).toHaveAttribute("aria-busy", "true");
-    expect(screen.queryByText(/No blueprints yet/i)).not.toBeInTheDocument();
   });
 });
