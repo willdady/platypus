@@ -2268,8 +2268,9 @@ export type Provider = z.infer<typeof providerSchema>;
  */
 /**
  * Whether a Provider sends a Model entry's Reasoning map (ADR-0040): only the
- * OpenAI chat-mode path passes raw body fields through. Native Providers are
- * #1689.
+ * OpenAI chat-mode path passes raw body fields through. Every other Provider
+ * is native: it ignores any map, offers Thinking and every Effort step but no
+ * budget, and is sent the SDK's own `reasoning` option (#1689).
  */
 export const providerHonoursReasoningMap = (
   provider: Pick<Provider, "providerType" | "apiMode">,

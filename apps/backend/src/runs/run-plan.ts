@@ -18,6 +18,7 @@ import { toolGateOptions, type ToolGateScope } from "../tool-gates/index.ts";
 import { capToolResults } from "../services/tool-result.ts";
 import type { OverflowRecovery } from "./context-overflow-recovery.ts";
 import { TRANSCRIPT_SUMMARY_TRIGGER } from "@platypus/schemas";
+import type { SdkReasoning } from "../services/reasoning.ts";
 import { logger } from "../logger.ts";
 
 /**
@@ -84,10 +85,14 @@ export type RunPlan = {
   frequencyPenalty?: number;
   presencePenalty?: number;
   seed?: number;
+  /** The SDK's `reasoning` level for a native Provider (#1689); absent when
+   *  the turn chose nothing, which leaves the vendor's default. */
+  reasoning?: SdkReasoning;
   /**
-   * Per-Provider request options beyond the cache directives — today the
-   * Reasoning map's resolved fragment under the OpenAI chat-mode Provider's
-   * namespace (ADR-0040). Absent when there is nothing to send.
+   * Per-Provider request options beyond the cache directives — the Reasoning
+   * map's resolved fragment under the OpenAI chat-mode Provider's namespace
+   * (ADR-0040), or OpenRouter's own `reasoning` option (#1689). Absent when
+   * there is nothing to send.
    */
   providerOptions?: Record<string, JSONObject>;
   /** The Org Admin's declared Context window for this model (ADR-0018),
@@ -145,6 +150,7 @@ const declaredSettings = (plan: RunPlan): Partial<RunPlan> =>
         "frequencyPenalty",
         "presencePenalty",
         "seed",
+        "reasoning",
       ] as const
     )
       .filter((key) => plan[key] !== undefined)
@@ -211,9 +217,9 @@ export const buildModelInvocation = (
   // remains straight into the Converse request — a call-level `cachePoint`
   // would be forwarded as an unrecognised top-level field, where Converse
   // accepts it nowhere and quietly caches nothing. The same hazard applies to
-  // the `openrouter` namespace: never put a foreign key in either. The plan's
-  // own options (a Reasoning fragment) ride beside them, in their own
-  // namespace, so the directives survive.
+  // the `openrouter` namespace: never put a key there the vendor does not
+  // read. The plan's own options (a Reasoning fragment, or OpenRouter's own
+  // `reasoning`) are merged in per namespace, so the directives survive.
   providerOptions: withPlanProviderOptions(plan.providerOptions),
   // Tool-result and Tool-input clearing (ADR-0018 Notes, issues #524, #1722)
   // and the trailing Bedrock cache point all live here, mutating the same

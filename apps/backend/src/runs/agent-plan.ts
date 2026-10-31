@@ -11,9 +11,13 @@ import {
 } from "../services/model-capability.ts";
 import {
   resolveSamplingSettings,
+  type SamplingSettings,
   type SamplingSource,
 } from "../services/sampling-settings.ts";
-import { resolveReasoning } from "../services/reasoning.ts";
+import {
+  resolveReasoning,
+  resolveSdkReasoning,
+} from "../services/reasoning.ts";
 import {
   aliasNameFromReference,
   providerHonoursReasoningMap,
@@ -105,6 +109,38 @@ const unresolvedModelMessage = (
 };
 
 /**
+ * Where a turn's Reasoning controls reach the wire, absent when there is
+ * nothing to send. An OpenAI chat-mode Provider sends the Model entry's
+ * Reasoning map as a body fragment (ADR-0040); every other Provider is native
+ * and takes the SDK's `reasoning` level (#1689) — except OpenRouter, whose
+ * adapter ignores that option and reads its own, which has no `max` step.
+ */
+const reasoningSettings = (
+  provider: ProviderRow,
+  modelId: ConcreteModelId,
+  choice: SamplingSource,
+  sampling: SamplingSettings,
+): Pick<RunPlan, "reasoning" | "providerOptions"> => {
+  if (providerHonoursReasoningMap(provider)) {
+    const fragment = resolveReasoning(
+      reasoningMapForModel(provider, modelId),
+      choice,
+      sampling,
+    );
+    return fragment
+      ? { providerOptions: { [compatProviderOptionsName(provider)]: fragment } }
+      : {};
+  }
+  const reasoning = resolveSdkReasoning(choice);
+  if (!reasoning) return {};
+  if (provider.providerType === "OpenRouter") {
+    const effort = reasoning === "max" ? "xhigh" : reasoning;
+    return { providerOptions: { openrouter: { reasoning: { effort } } } };
+  }
+  return { reasoning };
+};
+
+/**
  * Resolves an Agent row or a direct Provider+model selection to everything its
  * generation needs: the opened model, its step ceiling, its output ceiling,
  * its sampling parameters, and its Provider's guardrails text.
@@ -149,13 +185,6 @@ export const resolveGenerationPlan = async (
   const maxOutputTokens = maxOutputTokensForModel(provider, resolvedModelId);
   const contextWindow = contextWindowForModel(provider, resolvedModelId);
   const sampling = resolveSamplingSettings(samplingSource);
-  const reasoning = providerHonoursReasoningMap(provider)
-    ? resolveReasoning(
-        reasoningMapForModel(provider, resolvedModelId),
-        samplingSource,
-        sampling,
-      )
-    : undefined;
 
   return {
     plan: {
@@ -172,13 +201,7 @@ export const resolveGenerationPlan = async (
       // `buildModelInvocation` as a true absence, not a guessed default.
       ...(contextWindow !== undefined ? { contextWindow } : {}),
       ...sampling,
-      ...(reasoning
-        ? {
-            providerOptions: {
-              [compatProviderOptionsName(provider)]: reasoning,
-            },
-          }
-        : {}),
+      ...reasoningSettings(provider, resolvedModelId, samplingSource, sampling),
     },
     provider,
     resolvedModelId,

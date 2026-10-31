@@ -49,6 +49,17 @@ describe("resolveModel", () => {
       maxOutputTokens: 8_192,
       passthroughFileTypes: ["image/*"],
       canSearch: true,
+      reasoning: {
+        thinking: { on: {}, off: {} },
+        effort: {
+          minimal: {},
+          low: {},
+          medium: {},
+          high: {},
+          xhigh: {},
+          max: {},
+        },
+      },
     });
   });
 
@@ -150,6 +161,45 @@ describe("resolveModel", () => {
       selection: { agentId: "", modelId: "claude", providerId: "p1" },
     });
     expect(resolved?.passthroughFileTypes).toEqual([]);
+  });
+
+  // Issue #1689: a native Provider ignores any map and offers Thinking and
+  // every Effort step, with no budget; OpenAI chat mode offers only its map.
+  it("gives a native model Thinking and every Effort step, but no budget", () => {
+    const resolved = resolveModel({
+      providers: [
+        provider({
+          modelIds: [
+            {
+              id: "claude",
+              passthroughFileTypes: [],
+              reasoning: { budget: { field: "budget" } },
+            },
+          ],
+        }),
+      ],
+      selection: { modelId: "claude", providerId: "p1" },
+    });
+    expect(resolved?.reasoning?.thinking).toBeDefined();
+    expect(Object.keys(resolved?.reasoning?.effort ?? {})).toEqual([
+      "minimal",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max",
+    ]);
+    expect(resolved?.reasoning?.budget).toBeUndefined();
+  });
+
+  it("gives an OpenAI chat-mode model with no map no Reasoning controls", () => {
+    const resolved = resolveModel({
+      providers: [
+        provider({ providerType: "OpenAI" as Provider["providerType"] }),
+      ],
+      selection: { modelId: "gpt-4", providerId: "p1" },
+    });
+    expect(resolved?.reasoning).toBeUndefined();
   });
 
   // Issue #869: five helpers each re-normalised the provider's model list per

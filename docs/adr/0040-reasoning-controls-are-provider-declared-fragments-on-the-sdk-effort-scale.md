@@ -56,3 +56,24 @@ separately (#1689); until then a native Provider is sent no reasoning control.
   defaults (a model card's per-mode recommendations), but any the Agent — or a
   Direct Chat — set itself are dropped from the fragment before it is sent. One
   rule, stated from the form: a value you typed is never beaten by the map.
+
+## Notes: the native half
+
+Issue #1689 adds the native half the Decision deferred. On every Provider other
+than OpenAI in chat mode, any map is ignored and the controls are fixed:
+**Thinking** and all six Effort steps, but no budget. Thinking off becomes the
+SDK's `reasoning: 'none'`, a chosen step goes through unchanged, and no choice
+sends nothing. Three choices bound it:
+
+- **Every step is offered, and none can be hidden.** The vendor adapters already
+  move a level a model lacks to its nearest supported one and report it as a
+  call warning, so an admin-listed subset would only repeat that per Model
+  entry.
+- **No Thinking budget control.** The Anthropic, Google and Bedrock adapters
+  work out a token budget from the level themselves, so a second, raw budget
+  would conflict with it. This keeps the rule that a budget field the model
+  doesn't declare is never sent.
+- **OpenRouter goes through its own option.** Its adapter ignores the SDK's
+  `reasoning` call option, so the level is sent as
+  `providerOptions.openrouter.reasoning.effort`, with `max` capped at `xhigh`,
+  OpenRouter's highest step.

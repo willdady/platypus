@@ -81,10 +81,10 @@ export function createAgentManagementTools(
       frequencyPenalty:
         agentFields.frequencyPenalty.describe("Frequency penalty"),
       reasoningThinking: agentFields.reasoningThinking.describe(
-        "Thinking on or off, where the model's Reasoning map has a switch; null for the model default",
+        "Thinking on or off, on a native Provider or where the model's Reasoning map has a switch; null for the model default",
       ),
       reasoningEffort: agentFields.reasoningEffort.describe(
-        "Reasoning effort step, where the model's Reasoning map declares it; null for the model default",
+        "Reasoning effort step, on a native Provider or where the model's Reasoning map declares it; null for the model default",
       ),
       thinkingBudget: agentFields.thinkingBudget.describe(
         "Most reasoning tokens per reply, where the model's Reasoning map names a budget field; null to clear",
@@ -134,10 +134,10 @@ export function createAgentManagementTools(
       frequencyPenalty:
         agentFields.frequencyPenalty.describe("Frequency penalty"),
       reasoningThinking: agentFields.reasoningThinking.describe(
-        "Thinking on or off, where the model's Reasoning map has a switch; null for the model default",
+        "Thinking on or off, on a native Provider or where the model's Reasoning map has a switch; null for the model default",
       ),
       reasoningEffort: agentFields.reasoningEffort.describe(
-        "Reasoning effort step, where the model's Reasoning map declares it; null for the model default",
+        "Reasoning effort step, on a native Provider or where the model's Reasoning map declares it; null for the model default",
       ),
       thinkingBudget: agentFields.thinkingBudget.describe(
         "Most reasoning tokens per reply, where the model's Reasoning map names a budget field; null to clear",

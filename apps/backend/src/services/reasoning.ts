@@ -84,3 +84,21 @@ export const resolveReasoning = (
   // JSON by construction: every fragment was stored as JSON and parsed back.
   return Object.keys(body).length > 0 ? (body as JSONObject) : undefined;
 };
+
+/** The SDK `reasoning` call levels a turn's choice can become (#1689). */
+export type SdkReasoning = "none" | ReasoningEffort;
+
+/**
+ * The SDK `reasoning` level a native Provider is sent for a turn's Reasoning
+ * controls (#1689), or undefined to send none — the vendor's own default, so a
+ * turn with no choice goes out byte-identical to before. Thinking off is
+ * `none` whatever the step; Thinking on with no step is the vendor's default.
+ * There is no map to declare a budget, and the adapters derive one from the
+ * level themselves, so a stored Thinking budget is never sent.
+ */
+export const resolveSdkReasoning = (
+  choice: ReasoningChoice,
+): SdkReasoning | undefined =>
+  choice.reasoningThinking === false
+    ? "none"
+    : (choice.reasoningEffort ?? undefined);

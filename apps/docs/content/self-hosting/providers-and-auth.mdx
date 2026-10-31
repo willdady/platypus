@@ -268,7 +268,9 @@ dialog. Leave it empty and the model shows no controls and is sent nothing.
 <Callout type="info">
   Only an **OpenAI** Provider in **chat** mode sends a Reasoning map. The field
   is shown on every Provider type, but a map on any other Provider type, or on
-  OpenAI in Responses mode, is stored and not sent, and its controls are hidden.
+  OpenAI in Responses mode, is stored and not sent. Those Providers need no map:
+  every model on them offers **Thinking** and every **Effort** step, which the
+  vendor translates itself, and no **Thinking budget**.
 </Callout>
 
 Every key is optional. A key you leave out hides that control:

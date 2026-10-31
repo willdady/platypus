@@ -32,6 +32,8 @@ import { FIX_FORM_ERRORS_MESSAGE } from "@/lib/apply-write-outcome";
 const provider: Provider = {
   id: "p1",
   name: "OpenAI",
+  providerType: "OpenAI",
+  apiMode: "chat",
   modelIds: [{ id: "gpt-4o", passthroughFileTypes: [] }],
 } as unknown as Provider;
 
@@ -574,6 +576,20 @@ describe("AgentForm Reasoning section", () => {
 
     expect(await screen.findByDisplayValue("Bot")).toBeInTheDocument();
     expect(screen.queryByText("Reasoning")).not.toBeInTheDocument();
+  });
+
+  // Issue #1689: a native model has no map, but still offers Thinking and
+  // Effort; the budget needs a map.
+  it("offers Thinking and Effort, but no budget, on a native model", async () => {
+    setDataFor("/providers", {
+      results: [{ ...provider, providerType: "Anthropic" }],
+    });
+    setDataFor("/agents/a1", stored);
+    renderEdit();
+
+    expect(await screen.findByLabelText("Thinking")).toBeInTheDocument();
+    expect(screen.getByLabelText("Effort")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Thinking budget")).not.toBeInTheDocument();
   });
 
   it("round-trips all three fields, and a cleared one saves as null", async () => {

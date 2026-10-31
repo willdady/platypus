@@ -431,3 +431,200 @@ describe("Reasoning map wire shape", () => {
     expect(plan.providerOptions).toBeUndefined();
   });
 });
+
+/**
+ * Native Reasoning wire shape (#1689): with no Reasoning map, an Agent's or
+ * Direct Chat's Thinking/Effort choice reaches a native Provider through the
+ * SDK's `reasoning` call option, which each vendor adapter translates itself —
+ * except OpenRouter, whose adapter ignores that option and reads its own.
+ */
+describe("native Reasoning wire shape", () => {
+  const NATIVE = [
+    {
+      providerType: "Anthropic" as const,
+      modelId: "claude-sonnet-4-20250514",
+      response: ANTHROPIC_RESPONSE,
+      reasoningOf: (body: Record<string, unknown>) => body.thinking,
+    },
+    {
+      providerType: "Google" as const,
+      modelId: "gemini-2.5-pro",
+      response: GOOGLE_RESPONSE,
+      reasoningOf: (body: Record<string, unknown>) =>
+        (body.generationConfig as { thinkingConfig?: unknown } | undefined)
+          ?.thinkingConfig,
+    },
+    {
+      providerType: "OpenAI" as const,
+      modelId: "o3",
+      response: OPENAI_RESPONSE,
+      reasoningOf: (body: Record<string, unknown>) => body.reasoning,
+    },
+    {
+      providerType: "Bedrock" as const,
+      modelId: "us.anthropic.claude-sonnet-4-20250514-v1:0",
+      response: BEDROCK_RESPONSE,
+      reasoningOf: (body: Record<string, unknown>) =>
+        body.additionalModelRequestFields,
+    },
+    {
+      providerType: "OpenRouter" as const,
+      modelId: "openai/o3",
+      response: OPENROUTER_RESPONSE,
+      reasoningOf: (body: Record<string, unknown>) => body.reasoning,
+    },
+  ];
+
+  const send = async (
+    vendor: (typeof NATIVE)[number],
+    choice: SamplingSource = {},
+  ) => {
+    const captured: CapturedBody[] = [];
+    vi.stubGlobal("fetch", recordingFetch(captured, vendor.response));
+    try {
+      const provider = makeProviderRow({
+        id: "p1",
+        name: "native",
+        organizationId: "org-1",
+        workspaceId: "ws-1",
+        providerType: vendor.providerType,
+        apiMode: "responses",
+        region: "us-east-1",
+        apiKey: "sk-x",
+        modelIds: [{ id: vendor.modelId, passthroughFileTypes: [] }],
+      });
+      const { plan } = await resolveGenerationPlan(
+        { providerId: "p1", modelId: vendor.modelId, ...choice },
+        { orgId: "org-1", workspaceId: "ws-1" },
+        { getProvider: () => Promise.resolve(provider) },
+      );
+      await generateText({
+        ...buildModelInvocation(
+          { ...plan, tools: {}, system: "You are helpful." },
+          { abortSignal: new AbortController().signal },
+        ),
+        prompt: "hello",
+      });
+      return captured[0].body;
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  };
+
+  for (const vendor of NATIVE) {
+    it(`${vendor.providerType}: no choice sends no reasoning control`, async () => {
+      expect(vendor.reasoningOf(await send(vendor))).toBeUndefined();
+      expect(
+        vendor.reasoningOf(
+          await send(vendor, {
+            reasoningThinking: null,
+            reasoningEffort: null,
+            thinkingBudget: null,
+          }),
+        ),
+      ).toBeUndefined();
+    });
+
+    it(`${vendor.providerType}: a chosen Effort step reaches the wire`, async () => {
+      expect(
+        vendor.reasoningOf(await send(vendor, { reasoningEffort: "high" })),
+      ).toBeDefined();
+    });
+
+    // Bedrock's Claude leaves thinking out when it is off — its default — so
+    // there off and no choice are the same request (pinned below).
+    it.skipIf(vendor.providerType === "Bedrock")(
+      `${vendor.providerType}: Thinking off reaches the wire`,
+      async () => {
+        expect(
+          vendor.reasoningOf(
+            await send(vendor, {
+              reasoningThinking: false,
+              reasoningEffort: "high",
+            }),
+          ),
+        ).toBeDefined();
+      },
+    );
+
+    it(`${vendor.providerType}: a Thinking budget is never sent`, async () => {
+      expect(
+        JSON.stringify(
+          await send(vendor, { reasoningEffort: "high", thinkingBudget: 1234 }),
+        ),
+      ).not.toContain("1234");
+    });
+  }
+
+  const byType = (providerType: (typeof NATIVE)[number]["providerType"]) =>
+    NATIVE.find((v) => v.providerType === providerType)!;
+
+  it("Bedrock: Thinking off sends no thinking, Claude's default", async () => {
+    expect(
+      byType("Bedrock").reasoningOf(
+        await send(byType("Bedrock"), {
+          reasoningThinking: false,
+          reasoningEffort: "high",
+        }),
+      ),
+    ).toBeUndefined();
+  });
+
+  it("Anthropic: Thinking off disables thinking", async () => {
+    expect(
+      (
+        await send(byType("Anthropic"), {
+          reasoningThinking: false,
+          reasoningEffort: "high",
+        })
+      ).thinking,
+    ).toEqual({ type: "disabled" });
+  });
+
+  it("OpenAI Responses: the step goes out as reasoning.effort", async () => {
+    expect(
+      (await send(byType("OpenAI"), { reasoningEffort: "low" })).reasoning,
+    ).toMatchObject({ effort: "low" });
+  });
+
+  const OPENROUTER = byType("OpenRouter");
+
+  it("OpenRouter: the step goes out as reasoning.effort", async () => {
+    expect(
+      (await send(OPENROUTER, { reasoningEffort: "low" })).reasoning,
+    ).toEqual({ effort: "low" });
+  });
+
+  it("OpenRouter: max is capped at xhigh, which is its highest step", async () => {
+    expect(
+      (await send(OPENROUTER, { reasoningEffort: "max" })).reasoning,
+    ).toEqual({ effort: "xhigh" });
+  });
+
+  it("OpenRouter: Thinking off sends effort none, and keeps the cache directive", async () => {
+    const body = await send(OPENROUTER, {
+      reasoningThinking: false,
+      reasoningEffort: "high",
+    });
+    expect(body.reasoning).toEqual({ effort: "none" });
+    expect(body.cache_control).toEqual({ type: "ephemeral" });
+  });
+
+  it("an OpenAI chat-mode model with no map still sends nothing", async () => {
+    const provider = makeProviderRow({
+      id: "p1",
+      organizationId: "org-1",
+      workspaceId: "ws-1",
+      providerType: "OpenAI",
+      apiMode: "chat",
+      modelIds: [{ id: "m", passthroughFileTypes: [] }],
+    });
+    const { plan } = await resolveGenerationPlan(
+      { providerId: "p1", modelId: "m", reasoningEffort: "high" },
+      { orgId: "org-1", workspaceId: "ws-1" },
+      { getProvider: () => Promise.resolve(provider) },
+    );
+    expect(plan.reasoning).toBeUndefined();
+    expect(plan.providerOptions).toBeUndefined();
+  });
+});
