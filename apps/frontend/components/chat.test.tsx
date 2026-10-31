@@ -599,6 +599,8 @@ describe("a Transcript summary", () => {
       ],
     );
 
+    // The transcript's copy is `chat-message`'s own test's business; this stub
+    // renders only the composer's.
     expect(
       await screen.findByText("Summarising earlier messages…"),
     ).toBeInTheDocument();
