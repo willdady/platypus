@@ -42,9 +42,9 @@ Provider reference, and this section doesn't repeat it.
 
 ## The screens
 
-Open **Organization settings** from the Organization page, or from inside a
-Workspace through the Workspace switcher at the top of the sidebar. Only Org
-Admins and Operators see either link.
+Open **Organization settings** from the Organization page, or from Workspace
+home or a Chat through the Workspace switcher at the top of the sidebar. Only
+Org Admins and Operators see either link.
 
 **Organization settings** holds:
 
@@ -99,9 +99,8 @@ who owns no Workspaces here gets a plain confirmation.
 deletes every Workspace in the Organization, along with everything scoped to
 them, and every Shared resource. Each Workspace's Sandbox is torn down too.
 With the Docker or Daytona backend that deletes the Sandbox and its storage, so
-any files an Agent left in `/workspace` are gone. With SSH the host is left
-alone. You
-can't recover any of this from inside the product, only from a database backup.
+any files an Agent left in the Sandbox are gone. With SSH the host is left
+alone. You can't recover any of this from inside the product, only from a database backup.
 
 ## Inbound Triggers
 
@@ -127,7 +126,8 @@ Inbound Triggers there either.
 
 Choosing **Selected workspaces** shows **Allowed workspaces**: every Workspace
 in the Organization with its Owner, how many Inbound Triggers it holds, and a
-switch. Every switch starts off. The setting and the switches are saved
+switch. A Workspace's switch starts off, and keeps its last saved state when
+you move to another setting and back. The setting and the switches are saved
 together by one **Save**, so a Workspace you switch on keeps taking calls
 across the change. Each Workspace's
 [settings](/administering/workspaces#allow-inbound-triggers) show the same
@@ -160,7 +160,8 @@ allows. The
 [inbound call log](/reference/backend-configuration#the-inbound-call-log) names
 the reason for each one. Both times update at most once a minute.
 
-**Revoke token** stops a token at once and sends its Owner a notification. It is
+**Revoke token** stops a token at once and sends its Owner a notification. A
+run the token already started keeps going. It is
 the only thing you can do to another person's Trigger here. You cannot edit or
 disable one. It revokes only the token the list showed you: if the Owner issued
 a new one since you opened the page, the revoke is refused and the list
@@ -209,6 +210,12 @@ expires and when it was **Last used** and **Last rejected**. A token that needs
 a look is flagged **Expiring soon** (within 7 days) or **Expired**; an active
 one shows only its expiry. It never shows a token. Both times update at most
 once a minute.
+
+**Last rejected** here is narrower than on Inbound Triggers: it moves only when
+a client presents a token after it expired. A wrong or revoked token can't be
+traced to a token, and a call refused because the Workspace isn't allowed, the
+endpoint is **Disabled** or its Owner has left never reaches the token check,
+so none of those move it.
 
 **Revoke endpoint** deletes the endpoint with all of its tokens, so its URL
 stops answering at once. Its Chats are kept. **Revoke token** deletes one token
