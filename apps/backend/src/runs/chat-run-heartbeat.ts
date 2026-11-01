@@ -45,9 +45,9 @@ export const chatRunStale = (cutoff: Date) =>
 export const chatRunIsLive = (
   chat: {
     status: string;
-    runHeartbeatAt?: Date | null;
-    lastTurnAt?: Date | null;
-    updatedAt?: Date | null;
+    runHeartbeatAt: Date | null;
+    lastTurnAt: Date | null;
+    updatedAt: Date | null;
   },
   now: number = Date.now(),
 ): boolean => {

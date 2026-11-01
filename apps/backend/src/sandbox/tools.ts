@@ -105,7 +105,7 @@ export const createFsDownloadTool = (
  */
 export type ModelFileReading = {
   passthroughFileTypes: string[];
-  maxExtractedTextChars?: number;
+  maxExtractedTextChars: number;
 };
 
 /**
@@ -241,9 +241,8 @@ export const createFsViewTool = (
 export const createSandboxTools = (
   backend: SandboxBackend,
   ctx: SandboxContext,
-  workspaceEnv: Record<string, string> = {},
-  fileReading: () => Promise<ModelFileReading> = () =>
-    Promise.resolve({ passthroughFileTypes: [] }),
+  workspaceEnv: Record<string, string>,
+  fileReading: () => Promise<ModelFileReading>,
 ): Record<string, Tool> => ({
   shellExec: tool({
     description:

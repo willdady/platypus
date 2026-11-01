@@ -29,7 +29,7 @@ type SandboxRecord = typeof sandboxTable.$inferSelect;
 
 // Sandboxes are admin-only and never delegatable to the workspace owner
 // (ADR-0006). Reused on create/delete; PUT applies field-level gating inline.
-const requireSandboxAdmin = requireWorkspaceConfigAccess();
+const requireSandboxAdmin = requireWorkspaceConfigAccess(null);
 
 const sandbox = new Hono<{ Variables: Variables }>();
 

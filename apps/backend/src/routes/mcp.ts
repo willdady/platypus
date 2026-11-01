@@ -237,6 +237,7 @@ mcp.post(
     await clearOAuthTokens(
       db,
       workspaceScopedWhere("mcp", mcpId, scope.workspaceId),
+      { dropRegisteredClient: false },
     );
 
     return c.json({ message: "OAuth authorization revoked" });

@@ -4,6 +4,7 @@ import {
   cronTriggerConfigSchema,
   eventTriggerFiltersSchema,
   eventTriggerEventSchema,
+  triggerCreateSchema,
   type CronTriggerConfig,
   type EventTriggerConfig,
 } from "@platypus/schemas";
@@ -20,6 +21,7 @@ import {
   updateTrigger,
 } from "../services/trigger.ts";
 import { NotFoundError, ValidationError } from "../errors.ts";
+import { formatIssues } from "../zod-issues.ts";
 import { createGetCurrentTime } from "./time.ts";
 import type { ScopeContext } from "../scope.ts";
 
@@ -266,18 +268,23 @@ export function createTriggerTools(
       // Update existing trigger
       if (triggerId) {
         try {
-          const record = await updateTrigger(ctx, triggerId, {
-            agentId: fields.agentId,
-            type: fields.type,
-            name: fields.name,
-            description: fields.description,
-            instruction: fields.instruction,
-            enabled: fields.enabled,
-            maxRunsToKeep: fields.maxRunsToKeep,
-            search: fields.search,
-            includeMemories: fields.includeMemories,
-            config,
-          });
+          const record = await updateTrigger(
+            ctx,
+            triggerId,
+            {
+              agentId: fields.agentId,
+              type: fields.type,
+              name: fields.name,
+              description: fields.description,
+              instruction: fields.instruction,
+              enabled: fields.enabled,
+              maxRunsToKeep: fields.maxRunsToKeep,
+              search: fields.search,
+              includeMemories: fields.includeMemories,
+              config,
+            },
+            { allowInbound: false },
+          );
 
           const url = buildResourceUrl(
             frontendUrl,
@@ -318,7 +325,11 @@ export function createTriggerTools(
           : config;
 
       try {
-        const record = await createTrigger(ctx, {
+        // The create schema is the one defaults table: parsing here fills the
+        // fields the Tool left out, so the Trigger model is handed a complete
+        // set rather than a second copy of the same defaults.
+        const parsed = triggerCreateSchema.safeParse({
+          workspaceId,
           agentId,
           type,
           name,
@@ -329,6 +340,16 @@ export function createTriggerTools(
           search: fields.search,
           includeMemories: fields.includeMemories,
           config: createConfig,
+        });
+        if (!parsed.success) {
+          return { success: false, error: formatIssues(parsed.error.issues) };
+        }
+
+        // The schema needs a workspace to type its values; the Trigger model
+        // takes the one from `ctx`, which is the only identity it may write to.
+        const { workspaceId: _workspaceId, ...createFields } = parsed.data;
+        const record = await createTrigger(ctx, createFields, {
+          allowInbound: false,
         });
 
         const url = buildResourceUrl(
@@ -362,7 +383,9 @@ export function createTriggerTools(
     }),
     execute: async ({ triggerId }) => {
       try {
-        if (!(await deleteTriggerService(ctx, triggerId))) {
+        if (
+          !(await deleteTriggerService(ctx, triggerId, { allowInbound: false }))
+        ) {
           return { error: "Trigger not found" };
         }
       } catch (error) {

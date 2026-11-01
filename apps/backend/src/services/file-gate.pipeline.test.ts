@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { DEFAULT_MAX_EXTRACTED_TEXT_CHARS } from "@platypus/schemas";
 import { promises as fs } from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -54,6 +55,9 @@ const attachment = (
 const textOf = (message: PlatypusUIMessage, index: number) =>
   (message.parts[index] as unknown as { type: string; text: string }).text;
 
+/** The cap these fixtures declare no model for. */
+const cap = { maxExtractedTextChars: DEFAULT_MAX_EXTRACTED_TEXT_CHARS };
+
 describe("attachment pipeline (gate → store → inline → normalize)", () => {
   let tempDir: string;
 
@@ -82,7 +86,7 @@ describe("attachment pipeline (gate → store → inline → normalize)", () => 
     );
     // 3. A later turn replays history: inline, then normalize for the model.
     const inlined = await inlineFileUrls(stored, origin, chat);
-    const [normalized] = await normalizeFileParts(inlined, ["image/*"]);
+    const [normalized] = await normalizeFileParts(inlined, ["image/*"], cap);
     return normalized;
   };
 
@@ -132,7 +136,11 @@ describe("attachment pipeline (gate → store → inline → normalize)", () => 
       for (let turn = 0; turn < turns; turn++) {
         // The client resubmits the history it was served, verbatim.
         const inlined = await inlineFileUrls(served, origin, chat);
-        const [normalized] = await normalizeFileParts(inlined, ["image/*"]);
+        const [normalized] = await normalizeFileParts(
+          inlined,
+          ["image/*"],
+          cap,
+        );
         results.push(normalized);
       }
       return results;

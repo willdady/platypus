@@ -180,13 +180,13 @@ export const buildModelInvocation = (
     /**
      * The loop's context-overflow recovery (issue #1717): wraps the model so
      * an overflow straight after a tool step is retried once. Every Drive
-     * passes one; absent only where a test assembles an invocation alone.
+     * passes one.
      */
-    overflowRecovery?: OverflowRecovery;
+    overflowRecovery: OverflowRecovery;
   },
 ) => ({
   model:
-    options.overflowRecovery && typeof plan.model !== "string"
+    typeof plan.model !== "string"
       ? wrapLanguageModel({
           model: plan.model,
           middleware: options.overflowRecovery.middleware,

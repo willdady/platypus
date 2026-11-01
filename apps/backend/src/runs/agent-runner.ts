@@ -5,6 +5,7 @@ import {
 } from "ai";
 import type { InferUIMessageChunk, ModelMessage } from "ai";
 import {
+  drizzleChatTurnQueries,
   prepareChatTurn,
   validateTurnAttachments,
   type ChatTurn,
@@ -170,29 +171,32 @@ export class AgentRunner {
     // know. `runId` is the run's own identity, not the turn's, so it is the
     // single field held back (issue #837).
     const { runId, ...turnRequest } = input;
-    return prepareChatTurn({
-      ...turnRequest,
-      orgId: scope.orgId,
-      workspaceId: scope.workspaceId,
-      user: userFromScope(scope),
-      // The run's own identity is the Provider Header placeholder's session:
-      // a Chat's run id is the chat id; a Trigger run's is that run's id.
-      sessionId: runId,
-      origin,
-      frontendUrl,
-      runMode: scope.principal.kind === "user" ? "interactive" : "headless",
-      a2aClientName:
-        scope.principal.kind === "a2a" ? scope.principal.name : undefined,
-      onActivity,
-      // Sub-agent delegate tools built for this turn register their own runs
-      // as children of this one, so they need to know whose child they are and
-      // what bounds this run was started under, and report their Token usage
-      // back into this run's.
-      run: { runId, scope, timeouts, setDelegateUsage },
-      // A cancelled run, or one its step timer has already killed, stops
-      // waiting on a Tool set or MCP server that has not answered (#1135).
-      signal,
-    });
+    return prepareChatTurn(
+      {
+        ...turnRequest,
+        orgId: scope.orgId,
+        workspaceId: scope.workspaceId,
+        user: userFromScope(scope),
+        // The run's own identity is the Provider Header placeholder's session:
+        // a Chat's run id is the chat id; a Trigger run's is that run's id.
+        sessionId: runId,
+        origin,
+        frontendUrl,
+        runMode: scope.principal.kind === "user" ? "interactive" : "headless",
+        a2aClientName:
+          scope.principal.kind === "a2a" ? scope.principal.name : undefined,
+        onActivity,
+        // Sub-agent delegate tools built for this turn register their own runs
+        // as children of this one, so they need to know whose child they are and
+        // what bounds this run was started under, and report their Token usage
+        // back into this run's.
+        run: { runId, scope, timeouts, setDelegateUsage },
+        // A cancelled run, or one its step timer has already killed, stops
+        // waiting on a Tool set or MCP server that has not answered (#1135).
+        signal,
+      },
+      drizzleChatTurnQueries,
+    );
   }
 
   /**
@@ -236,13 +240,16 @@ export class AgentRunner {
     // never brick the chat. Runs only when the turn has file parts; throws
     // `FileValidationError`, which the central `onError` (ADR-0010) maps to a
     // 400.
-    await validateTurnAttachments({
-      request: input.request,
-      messages: input.messages,
-      orgId: scope.orgId,
-      workspaceId: scope.workspaceId,
-      sessionId: input.runId,
-    });
+    await validateTurnAttachments(
+      {
+        request: input.request,
+        messages: input.messages,
+        orgId: scope.orgId,
+        workspaceId: scope.workspaceId,
+        sessionId: input.runId,
+      },
+      drizzleChatTurnQueries,
+    );
 
     const state: RunState = {
       messages: input.messages,
