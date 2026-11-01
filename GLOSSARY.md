@@ -69,6 +69,10 @@ _Avoid_: prompt, preamble, prompt template.
 **Provider**:
 A configured connection to an AI vendor (OpenAI, OpenRouter, Bedrock, Anthropic, Google, …). Carries credentials, base URL, the enabled `modelIds`, and a `taskModelId` for one-shot tasks. Lives at either Organization or Workspace scope.
 
+**Header placeholder**:
+A token in a Provider's custom header value that is replaced, on every request to the vendor, with a value from the work being done. The only one is `${SESSION_ID}`: the Chat's id for anything done within a Chat (its turns, Sub-Agents, title, Memories and **Transcript summary**), or the **Trigger run**'s id for a headless run — so a Chat keeps one session upstream, and each Trigger run starts its own. Every request has one, so the header is always sent.
+_Avoid_: header variable, header template, session header.
+
 **Model entry**:
 One model a Provider exposes, identified by the concrete model id sent to the vendor, with its optional **Model alias**, **Context window**, native file types, extracted-text cap, **Output ceiling** and **Reasoning map**. A Provider's model entries are the list Agents and Chats choose from.
 _Avoid_: model row, model config.
