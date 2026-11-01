@@ -41,6 +41,19 @@ app.post("/", requireAuth, validate("json", boardCreateSchema), async (c) => {
   const data = c.req.valid("json");
 ```
 
+## Choosing the verb
+
+`PATCH` applies a partial update: only the fields sent change. `PUT` replaces
+the resource whole. A resource has one address and one write verb per
+operation — never both `PUT` and `PATCH` for the same update.
+
+## Checking a response
+
+A route whose response has an exported response schema sends it through
+`respond(c, schema, value)` from `src/respond.ts` instead of `c.json`. Under
+test it parses the value against the schema, so a dropped field fails the
+route's test rather than the frontend; production sends the value untouched.
+
 ## The error seam
 
 Seven cross-cutting failures are **thrown**, not returned. A single `onError`

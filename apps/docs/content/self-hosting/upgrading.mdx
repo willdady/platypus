@@ -102,8 +102,12 @@ The same rollback protects every other value the new schema rejects: a Chat
 status, Trigger type, Trigger run status or event type, Organization gate or
 member role outside its set, or a Provider, Agent, MCP or Skill holding both
 scopes (or neither). Those rows cannot be repaired automatically, so the log
-names the constraint that refused them; correct or remove the row on your
-current version, then upgrade again.
+names the table, the row's id and the field at fault; correct or remove the row
+on your current version, then upgrade again.
+
+A Provider whose stored models were never converted to the current shape also
+stops the upgrade, and the log names each such Provider. Open it on your
+current version, save its models again, then upgrade again.
 
 ### Dashboards are removed
 
@@ -227,8 +231,6 @@ Attachments are managed through the Workspace's own endpoint only:
 `resourceId`, and `DELETE …/workspaces/<workspace-id>/attachments/<resource-type>/<resource-id>`.
 The Organization attachment list still reads
 `GET …/attachments?resourceType=…&resourceId=…`.
-
-## Coming from 3.30
 
 ### The Docker Sandbox overlay is renamed
 

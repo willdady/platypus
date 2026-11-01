@@ -5,11 +5,10 @@ import {
   createAgent as createAgentRow,
   updateAgent as updateAgentRow,
   deleteAgent as deleteAgentRow,
-  type AgentWriteError,
 } from "../services/agent.ts";
-import { ConflictError, LockedError, NotFoundError } from "../errors.ts";
 import type { ScopeContext } from "../scope.ts";
 import { buildResourceUrl } from "../utils/resource-url.ts";
+import { asToolResult } from "./tool-result.ts";
 
 // Field constraints come from the shared schema so the agent-facing tool can
 // never drift from the bounds the HTTP routes and the web form enforce — the
@@ -36,32 +35,6 @@ export function createAgentManagementTools(
 ): Record<string, Tool> {
   const ctx: ScopeContext = { orgId, workspaceId };
   const scope = { kind: "workspace" as const, ctx };
-
-  /**
-   * Turns `updateAgent`/`deleteAgent`'s thrown `NotFoundError`/`LockedError`
-   * — and `deleteAgent`'s `ConflictError` for an Agent a Trigger still runs —
-   * into the `{ error }` payload a Tool result carries — a Tool reports a
-   * problem back to the model rather than throwing it into the run. The same
-   * rules the routes enforce, in the same words (an attached Shared Agent is a
-   * single source of truth edited only on the Organization surface —
-   * ADR-0007).
-   */
-  async function asToolResult<T>(
-    run: () => Promise<T>,
-  ): Promise<T | AgentWriteError> {
-    try {
-      return await run();
-    } catch (error) {
-      if (
-        error instanceof NotFoundError ||
-        error instanceof LockedError ||
-        error instanceof ConflictError
-      ) {
-        return { error: error.message };
-      }
-      throw error;
-    }
-  }
 
   const createAgent = tool({
     description:

@@ -4,7 +4,7 @@ import {
   clearingPrefixLength,
   occupancyReadingsOf,
   TOOL_INPUT_CLEARING_KEEP_RECENT,
-  TOOL_RESULT_CLEARING_BATCH,
+  TOOL_CLEARING_BATCH,
   TOOL_RESULT_CLEARING_KEEP_RECENT,
   TOOL_RESULT_CLEARING_THRESHOLD,
   type PlatypusUIMessage,
@@ -121,23 +121,11 @@ export function clearedToolCallIds(
   if (!clearingIsEngaged(messages, reading)) return NOTHING_CLEARED;
 
   const clearableToolNames = clearableToolNamesOf(messages);
-  const clearable: ToolLikePart[] = [];
-  for (const message of messages) {
-    for (const part of message.parts ?? []) {
-      if (!isToolLikePart(part)) continue;
-      if (!isComplete(part)) continue;
-      if (!clearableToolNames.has(toolNameOf(part))) continue;
-      clearable.push(part);
-    }
-  }
-
-  const count = clearingPrefixLength({
-    itemCount: clearable.length,
-    keepRecent: TOOL_RESULT_CLEARING_KEEP_RECENT,
-    batchSize: TOOL_RESULT_CLEARING_BATCH,
-  });
-  if (count === 0) return NOTHING_CLEARED;
-  return new Set(clearable.slice(0, count).map((part) => part.toolCallId));
+  return clearedPrefixIds(
+    messages,
+    TOOL_RESULT_CLEARING_KEEP_RECENT,
+    (part) => isComplete(part) && clearableToolNames.has(toolNameOf(part)),
+  );
 }
 
 /**
@@ -159,26 +147,40 @@ export function clearedInputToolCallIds(
 ): ReadonlySet<string> {
   if (!clearingIsEngaged(messages, reading)) return NOTHING_CLEARED;
 
-  const clearable: ToolLikePart[] = [];
+  return clearedPrefixIds(messages, TOOL_INPUT_CLEARING_KEEP_RECENT, (part) => {
+    if (part.state !== "output-available") return false;
+    if (!CLEARABLE_TOOL_INPUT_FIELDS.has(toolNameOf(part))) return false;
+    // A domain tool's `{ error }` result is a failure the model must retry.
+    const { output } = part;
+    return !(
+      typeof output === "object" &&
+      output !== null &&
+      "error" in output
+    );
+  });
+}
+
+/**
+ * The `toolCallId`s of the batched prefix of tool parts `clearable` accepts,
+ * oldest first, keeping the `keepRecent` newest — the boundary both clearing
+ * mirrors share.
+ */
+function clearedPrefixIds(
+  messages: readonly PlatypusUIMessage[],
+  keepRecent: number,
+  clearable: (part: ToolLikePart) => boolean,
+): ReadonlySet<string> {
+  const parts: ToolLikePart[] = [];
   for (const message of messages) {
     for (const part of message.parts ?? []) {
-      if (!isToolLikePart(part)) continue;
-      if (part.state !== "output-available") continue;
-      if (!CLEARABLE_TOOL_INPUT_FIELDS.has(toolNameOf(part))) continue;
-      // A domain tool's `{ error }` result is a failure the model must retry.
-      const { output } = part;
-      if (typeof output === "object" && output !== null && "error" in output) {
-        continue;
-      }
-      clearable.push(part);
+      if (isToolLikePart(part) && clearable(part)) parts.push(part);
     }
   }
-
   const count = clearingPrefixLength({
-    itemCount: clearable.length,
-    keepRecent: TOOL_INPUT_CLEARING_KEEP_RECENT,
-    batchSize: TOOL_RESULT_CLEARING_BATCH,
+    itemCount: parts.length,
+    keepRecent,
+    batchSize: TOOL_CLEARING_BATCH,
   });
   if (count === 0) return NOTHING_CLEARED;
-  return new Set(clearable.slice(0, count).map((part) => part.toolCallId));
+  return new Set(parts.slice(0, count).map((part) => part.toolCallId));
 }

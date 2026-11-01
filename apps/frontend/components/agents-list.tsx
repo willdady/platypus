@@ -73,7 +73,7 @@ import { orgRoutes, workspaceRoutes } from "@/lib/routes";
 // The Agent is shown either in a Workspace, where it may be a workspace-scoped
 // Agent or an attached org-scoped (Shared) Agent rendered with an Organization
 // badge (ADR-0007). The API's response shape always carries `scope`.
-type AgentWithScope = Serialized<AgentResponse>;
+type SerializedAgent = Serialized<AgentResponse>;
 
 // The card's New chat + menu sit beside the content from `xl`, and wrap to a
 // full-width row under it (indented past the avatar) below that.
@@ -122,7 +122,9 @@ export function AgentsList({
   const { actor, ownsWorkspace } = useAuth();
   const backendUrl = useBackendUrl();
   const router = useRouter();
-  const [agentToClone, setAgentToClone] = useState<AgentWithScope | null>(null);
+  const [agentToClone, setAgentToClone] = useState<SerializedAgent | null>(
+    null,
+  );
   const searchParams = useSearchParams();
 
   // Resolved once per render and reused for the list's reads and every write
@@ -136,7 +138,7 @@ export function AgentsList({
     error: agentsError,
     isLoading: isLoadingAgents,
     mutate,
-  } = useScopedList<AgentWithScope>("agents", scope);
+  } = useScopedList<SerializedAgent>("agents", scope);
 
   const { results: providers, isLoading: isLoadingProviders } =
     useScopedList<Provider>("providers", scope);
@@ -145,13 +147,13 @@ export function AgentsList({
 
   const { results: skills } = useScopedList<Skill>("skills", scope);
 
-  const orgAgentDetach = useSharedDetach<AgentWithScope>({
+  const orgAgentDetach = useSharedDetach<SerializedAgent>({
     resourceType: "agent",
     scope,
     mutate,
   });
 
-  const promote = usePromoteShared<AgentWithScope>({
+  const promote = usePromoteShared<SerializedAgent>({
     entity: "agents",
     scope,
     mutate,
@@ -159,8 +161,8 @@ export function AgentsList({
 
   // A pin shows at once and reverts if refused; each agent's Pin item is
   // disabled only while its own write runs.
-  const pins = useOptimisticRows<AgentWithScope>();
-  const togglePin = (agent: AgentWithScope) => {
+  const pins = useOptimisticRows<SerializedAgent>();
+  const togglePin = (agent: SerializedAgent) => {
     if (!backendUrl) return;
     void pins.run(
       agent.id,
@@ -212,20 +214,20 @@ export function AgentsList({
       .filter(Boolean) as string[];
   };
 
-  const deleteFlow = useDeleteFlow<AgentWithScope>({
+  const deleteFlow = useDeleteFlow<SerializedAgent>({
     mutate,
     guidanceOnForbidden: true,
     delete: (agent, url) => writeEntity(url, "agents", scope, { id: agent.id }),
   });
 
-  const handleDeleteClick = (agent: AgentWithScope) => {
+  const handleDeleteClick = (agent: SerializedAgent) => {
     deleteFlow.request(agent);
   };
 
   // A clone keeps only the references visible in this workspace: a Shared
   // Agent may point at Shared resources never attached here (ADR-0007),
   // which the create refuses (sub-agents) or keeps as dead references.
-  const cloneReferences = (agent: AgentWithScope) => {
+  const cloneReferences = (agent: SerializedAgent) => {
     const keep = (ids: string[] | undefined, visible: { id: string }[]) =>
       ids?.filter((id) => visible.some((resource) => resource.id === id));
     const kept = {
@@ -249,7 +251,7 @@ export function AgentsList({
   };
 
   const createClone = (
-    agent: AgentWithScope,
+    agent: SerializedAgent,
     references: ReturnType<typeof cloneReferences>["kept"],
     cloneName: string,
     url: string,
@@ -290,7 +292,7 @@ export function AgentsList({
     );
   }
 
-  const renderMenu = (agent: AgentWithScope) => {
+  const renderMenu = (agent: SerializedAgent) => {
     const isOrgScoped = agent.scope === "organization";
     const pinAction: RowAction[] = canPin
       ? [
@@ -354,7 +356,7 @@ export function AgentsList({
   // Count and list only references that actually resolve in this workspace,
   // so the badge count matches the tooltip — a detached shared resource drops
   // out of both (it is no longer active here).
-  const renderMeta = (agent: AgentWithScope) => {
+  const renderMeta = (agent: SerializedAgent) => {
     const toolSetNames = getToolSetNames(agent.toolSetIds);
     const skillNames = getSkillNames(agent.skillIds);
     const subAgentNames = getSubAgentNames(agent.subAgentIds);

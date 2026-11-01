@@ -10,7 +10,7 @@ import {
  * built from the shipped migrations: the pre-hardening rows are seeded, the
  * migration backfills them, and the constraints it adds are then exercised.
  */
-const TAG = "0100_same_kitty_pryde";
+const TAG = "0100_harden_schema";
 
 let pg: PGlite;
 beforeAll(async () => {
@@ -273,6 +273,41 @@ describe("an unrepairable Trigger config", () => {
       const broken = await migratedPglite(TAG);
       try {
         await seedBroken(broken, type, config);
+        await expect(applyMigration(broken, TAG)).rejects.toThrow(message);
+      } finally {
+        await broken.close();
+      }
+    },
+    120_000,
+  );
+});
+
+describe("a row a new constraint would refuse", () => {
+  it.each([
+    [
+      "a Chat status outside the set",
+      `UPDATE "chat" SET "status" = 'bogus' WHERE "id" = 'chat-1'`,
+      /schema hardening: chat chat-1 has a status outside the allowed set/,
+    ],
+    [
+      "a Provider holding both scopes",
+      `UPDATE "provider" SET "organization_id" = 'org-1' WHERE "id" = 'p1'`,
+      /schema hardening: provider p1 has a scope outside the allowed set/,
+    ],
+  ])(
+    "stops the migration and names the row for %s",
+    async (_case, breakRow, message) => {
+      const broken = await migratedPglite(TAG);
+      try {
+        await broken.exec(`
+          INSERT INTO "user" ("id", "name", "email") VALUES ('u1', 'Jane', 'jane@example.com');
+          INSERT INTO "organization" ("id", "name") VALUES ('org-1', 'Acme');
+          INSERT INTO "workspace" ("id", "organization_id", "owner_id", "name") VALUES ('ws-1', 'org-1', 'u1', 'Support');
+          INSERT INTO "provider" ("id", "workspace_id", "name", "provider_type", "api_key", "task_model_id", "memory_extraction_model_id", "modelIds")
+            VALUES ('p1', 'ws-1', 'P', 'openai', 'k', 'm', 'm', '[]');
+          INSERT INTO "chat" ("id", "workspace_id", "title") VALUES ('chat-1', 'ws-1', 'Legacy');
+          ${breakRow};
+        `);
         await expect(applyMigration(broken, TAG)).rejects.toThrow(message);
       } finally {
         await broken.close();

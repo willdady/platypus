@@ -22,9 +22,10 @@ import {
   updateTrigger as updateTriggerService,
   type TriggerRow,
 } from "../services/trigger.ts";
-import { NotFoundError, ValidationError } from "../errors.ts";
 import { formatIssues } from "../zod-issues.ts";
 import { createGetCurrentTime } from "./time.ts";
+import { toToolError } from "./tool-result.ts";
+import { NotFoundError } from "../errors.ts";
 import type { ScopeContext } from "../scope.ts";
 
 export function createTriggerTools(
@@ -61,15 +62,12 @@ export function createTriggerTools(
     };
   };
 
-  /** Translates the Trigger module's typed errors into a Tool result. */
-  const toToolError = (error: unknown) => {
-    if (error instanceof ValidationError || error instanceof NotFoundError) {
-      const hint = error.message.startsWith("Agent not found")
-        ? ". Use listAgents to find valid agent IDs."
-        : "";
-      return { success: false, error: error.message + hint };
-    }
-    throw error;
+  /** `toToolError`, plus where to find a valid Agent id. */
+  const toTriggerToolError = (error: unknown) => {
+    const result = toToolError(error);
+    return result.error.startsWith("Agent not found")
+      ? { error: `${result.error}. Use listAgents to find valid agent IDs.` }
+      : result;
   };
 
   const listAgents = tool({
@@ -299,7 +297,7 @@ export function createTriggerTools(
           config: asTriggerConfig(fields.config),
         });
         if (!parsed.success) {
-          return { success: false, error: formatIssues(parsed.error.issues) };
+          return { error: formatIssues(parsed.error.issues) };
         }
         // The schema needs a workspace to type its values; the Trigger model
         // takes the one from `ctx`, which is the only identity it may write to.
@@ -310,7 +308,7 @@ export function createTriggerTools(
           }),
         );
       } catch (error) {
-        return toToolError(error);
+        return toTriggerToolError(error);
       }
     },
   });
@@ -367,7 +365,7 @@ export function createTriggerTools(
           ),
         );
       } catch (error) {
-        return toToolError(error);
+        return toTriggerToolError(error);
       }
     },
   });
@@ -391,7 +389,7 @@ export function createTriggerTools(
         }
       } catch (error) {
         // An Inbound Trigger is refused here, as on create and edit.
-        return toToolError(error);
+        return toTriggerToolError(error);
       }
 
       return { success: true };

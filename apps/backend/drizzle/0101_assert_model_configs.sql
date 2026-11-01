@@ -5,9 +5,9 @@
 -- a row it can no longer read.
 DO $$
 DECLARE
-  offending integer;
+  offending text;
 BEGIN
-  SELECT count(*)
+  SELECT string_agg(DISTINCT p."id", ', ')
   INTO offending
   FROM "provider" p,
        jsonb_array_elements(p."modelIds") AS entry
@@ -15,9 +15,9 @@ BEGIN
      OR NOT (entry ? 'id')
      OR NOT (entry ? 'passthroughFileTypes');
 
-  IF offending > 0 THEN
+  IF offending IS NOT NULL THEN
     RAISE EXCEPTION
-      'provider.modelIds has % entry/entries that are not resolved model-config objects; re-run migrations 0047 and 0091 before upgrading',
+      'provider.modelIds is not resolved model-config objects for provider(s) %; open each Provider on your current version, re-save its models, then upgrade again',
       offending;
   END IF;
 END

@@ -3,8 +3,10 @@ import Link from "next/link";
 import { Home, Search } from "lucide-react";
 import { AppSidebar } from "@/components/app-sidebar";
 import { BackButton } from "@/components/back-button";
+import { CommandMenu } from "@/components/command-menu";
 import { Header } from "@/components/header";
 import { MAIN_CONTENT_ID } from "@/components/skip-link";
+import { WorkspaceScrollContainer } from "@/components/workspace-scroll-container";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
 import {
@@ -80,4 +82,27 @@ export function WorkspaceShell({
       </SidebarInset>
     </SidebarProvider>
   );
+}
+
+/**
+ * A Workspace route group's layout: the shell, the scrolling content and the
+ * Command menu. The groups differ only in whether they draw the sidebar.
+ */
+export function workspaceGroupLayout({ sidebar }: { sidebar: boolean }) {
+  return async function WorkspaceGroupLayout({
+    children,
+    params,
+  }: Readonly<{
+    children: ReactNode;
+    params: Promise<{ orgId: string; workspaceId: string }>;
+  }>) {
+    const { orgId, workspaceId } = await params;
+
+    return (
+      <WorkspaceShell orgId={orgId} workspaceId={workspaceId} sidebar={sidebar}>
+        <WorkspaceScrollContainer>{children}</WorkspaceScrollContainer>
+        <CommandMenu orgId={orgId} workspaceId={workspaceId} />
+      </WorkspaceShell>
+    );
+  };
 }

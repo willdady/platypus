@@ -5,7 +5,7 @@ import {
   clearingEngaged,
   clearingPrefixLength,
   TOOL_INPUT_CLEARING_KEEP_RECENT,
-  TOOL_RESULT_CLEARING_BATCH,
+  TOOL_CLEARING_BATCH,
   TOOL_RESULT_CLEARING_THRESHOLD,
 } from "@platypus/schemas";
 import {
@@ -32,7 +32,7 @@ import {
 export const DEFAULT_INPUT_CLEARING_POLICY: ClearingPolicy = {
   thresholdFraction: TOOL_RESULT_CLEARING_THRESHOLD,
   keepRecent: TOOL_INPUT_CLEARING_KEEP_RECENT,
-  batchSize: TOOL_RESULT_CLEARING_BATCH,
+  batchSize: TOOL_CLEARING_BATCH,
 };
 
 type ToolOutput = { type: string; value?: unknown };

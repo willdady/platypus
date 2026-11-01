@@ -238,7 +238,7 @@ function ProviderForm({
 }) {
   // The API's response shape already carries `scope`, so no intersection is
   // needed to read a Provider that may be a Shared one.
-  type ProviderWithScope = Serialized<ProviderResponse>;
+  type SerializedProvider = Serialized<ProviderResponse>;
 
   const router = useRouter();
 
@@ -276,7 +276,7 @@ function ProviderForm({
     ProviderFormData,
     // Undefined only for a draft, whose `write` saves nothing.
     { id: string; aliasRepoints?: unknown } | undefined,
-    ProviderWithScope
+    SerializedProvider
   >({
     initialData: {
       providerType: "OpenAI",

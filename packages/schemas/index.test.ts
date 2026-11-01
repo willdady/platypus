@@ -36,7 +36,7 @@ import {
   clearingEngaged,
   clearingPrefixLength,
   occupancyReadingsOf,
-  TOOL_RESULT_CLEARING_BATCH,
+  TOOL_CLEARING_BATCH,
   attachmentCreateSchema,
   chatSubmitSchema,
   chatSchema,
@@ -1957,8 +1957,8 @@ describe("clearingPrefixLength", () => {
 
   it("keeps the batch a positive integer", () => {
     // A zero or negative batch would divide by zero or reverse the boundary.
-    expect(Number.isInteger(TOOL_RESULT_CLEARING_BATCH)).toBe(true);
-    expect(TOOL_RESULT_CLEARING_BATCH).toBeGreaterThan(0);
+    expect(Number.isInteger(TOOL_CLEARING_BATCH)).toBe(true);
+    expect(TOOL_CLEARING_BATCH).toBeGreaterThan(0);
   });
 });
 

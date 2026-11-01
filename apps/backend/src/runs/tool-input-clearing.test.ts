@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   CLEARED_TOOL_INPUT_MARKER,
-  TOOL_RESULT_CLEARING_BATCH,
+  TOOL_CLEARING_BATCH,
 } from "@platypus/schemas";
 import type { ModelMessage } from "ai";
 import {
@@ -255,7 +255,7 @@ describe("applyToolInputClearing", () => {
     const messages = writes(8);
     const clearedAll = clearStaleToolInputs(messages, {
       keepRecent: 0,
-      batchSize: TOOL_RESULT_CLEARING_BATCH,
+      batchSize: TOOL_CLEARING_BATCH,
     });
     expect(applyToolInputClearing(clearedAll, ABOVE)).toBe(clearedAll);
   });
@@ -269,7 +269,7 @@ describe("batched input boundary", () => {
     let grown = pass(writes(8));
     expect(clearedWriteIds(grown)).toEqual(["w0", "w1", "w2", "w3"]);
 
-    for (let added = 1; added < TOOL_RESULT_CLEARING_BATCH; added += 1) {
+    for (let added = 1; added < TOOL_CLEARING_BATCH; added += 1) {
       grown = [...grown, ...writes(1, `later${added}-`)];
       expect(pass(grown)).toBe(grown);
     }
@@ -277,7 +277,7 @@ describe("batched input boundary", () => {
 
   it("moves the boundary by exactly one batch on the Bth append", () => {
     let grown = pass(writes(8));
-    for (let added = 1; added < TOOL_RESULT_CLEARING_BATCH; added += 1) {
+    for (let added = 1; added < TOOL_CLEARING_BATCH; added += 1) {
       grown = [...grown, ...writes(1, `later${added}-`)];
     }
     const before = grown;
