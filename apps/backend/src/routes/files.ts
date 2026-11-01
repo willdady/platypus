@@ -10,6 +10,7 @@ import {
   workspace as workspaceTable,
 } from "../db/schema.ts";
 import type { Variables } from "../server.ts";
+import { db } from "../index.ts";
 import { getStorage } from "../storage/index.ts";
 import { servedFileHeaders } from "../storage/response-headers.ts";
 
@@ -41,7 +42,6 @@ function parseStorageKey(
  */
 files.get("/*", requireAuth, async (c) => {
   const user = userOf(c);
-  const db = c.get("db");
 
   // Extract the storage key from the wildcard path
   const key = c.req.path.slice(FILES_ROUTE_PREFIX.length);

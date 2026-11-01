@@ -35,13 +35,15 @@ describe("createKanbanTools", () => {
       "listBoards",
       "getBoardState",
       "getCard",
-      "upsertCard",
+      "createCard",
+      "updateCard",
       "moveCard",
       "copyCard",
       "deleteCard",
       "bulkEditCards",
       "listComments",
-      "upsertComment",
+      "createComment",
+      "updateComment",
       "deleteComment",
     ]);
   });
@@ -291,18 +293,30 @@ describe("createKanbanTools", () => {
     });
   });
 
-  describe("upsertCard (create)", () => {
-    it("returns error when columnId and title missing", async () => {
-      expect(await tools.upsertCard.execute!({ label: "test" }, ctx)).toEqual({
-        error: "columnId and title are required when creating a new card",
-      });
-    });
+  describe("createCard", () => {
+    // The AI SDK validates input against this schema before `execute` runs, so
+    // a create missing a create-required field never reaches the module.
+    it.each(["columnId", "title"] as const)(
+      "refuses a create without %s",
+      (field) => {
+        const input: Record<string, unknown> = {
+          columnId: "col-1",
+          title: "Card",
+          label: "test",
+        };
+        delete input[field];
+
+        expect(
+          (tools.createCard.inputSchema as z.ZodType).safeParse(input).success,
+        ).toBe(false);
+      },
+    );
 
     it("does not create in another Workspace's column", async () => {
       const db = seedBoards();
 
       expect(
-        await callTool(tools.upsertCard, {
+        await callTool(tools.createCard, {
           columnId: "col-other",
           title: "Card",
           label: "test",
@@ -312,12 +326,12 @@ describe("createKanbanTools", () => {
     });
   });
 
-  describe("upsertCard (update)", () => {
+  describe("updateCard", () => {
     it("does not reach another Workspace's card", async () => {
       const db = seedBoards();
 
       expect(
-        await callTool(tools.upsertCard, {
+        await callTool(tools.updateCard, {
           cardId: "card-other",
           title: "Updated",
           label: "test",
@@ -331,11 +345,11 @@ describe("createKanbanTools", () => {
 
   // Every diff mode is unit-tested on `applyBodyDiff` in services/kanban.test.ts;
   // here, that the tool applies one to the stored body and reports a stale one.
-  describe("upsertCard (update) — bodyDiff", () => {
+  describe("updateCard — bodyDiff", () => {
     it("applies the diff to the card's stored body", async () => {
       const db = seedBoards();
 
-      await callOkTool(tools.upsertCard, {
+      await callOkTool(tools.updateCard, {
         cardId: "card-2",
         label: "test",
         bodyDiff: [{ search: "long body", replace: "short body" }],
@@ -350,7 +364,7 @@ describe("createKanbanTools", () => {
       const db = seedBoards();
 
       expect(
-        await callTool(tools.upsertCard, {
+        await callTool(tools.updateCard, {
           cardId: "card-2",
           label: "test",
           bodyDiff: [{ search: "missing text", replace: "replacement" }],
@@ -364,7 +378,7 @@ describe("createKanbanTools", () => {
     });
 
     it("rejects when both body and bodyDiff are provided", () => {
-      const schema = tools.upsertCard.inputSchema as z.ZodType;
+      const schema = tools.updateCard.inputSchema as z.ZodType;
       const result = schema.safeParse({
         cardId: "card-1",
         label: "test",
@@ -382,14 +396,14 @@ describe("createKanbanTools", () => {
   // The Tool surface enforces the same label and assignee rules as the HTTP
   // surface: both go through the Kanban module, so an Agent cannot write a
   // label the board does not have or an assignee who cannot work here.
-  describe("upsertCard — label and assignee rules", () => {
+  describe("card writes — label and assignee rules", () => {
     it("rejects an unknown label ID when creating", async () => {
       mockDb.limit
         .mockResolvedValueOnce([{ id: "col-1", boardId: "board-1" }]) // column guard
         .mockResolvedValueOnce([{ labels: [{ id: "lbl-a" }] }]); // board labels
 
       expect(
-        await tools.upsertCard.execute!(
+        await tools.createCard.execute!(
           {
             columnId: "col-1",
             title: "Card",
@@ -408,7 +422,7 @@ describe("createKanbanTools", () => {
       mockDb.where.mockResolvedValueOnce([]); // super admin lookup — not found
 
       expect(
-        await tools.upsertCard.execute!(
+        await tools.createCard.execute!(
           {
             columnId: "col-1",
             title: "Card",
@@ -427,7 +441,7 @@ describe("createKanbanTools", () => {
       mockDb.where.mockResolvedValueOnce([]); // no attached org-scoped agent
 
       expect(
-        await tools.upsertCard.execute!(
+        await tools.createCard.execute!(
           {
             columnId: "col-1",
             title: "Card",
@@ -454,7 +468,7 @@ describe("createKanbanTools", () => {
         { id: "card-1", columnId: "col-1" },
       ]);
 
-      await tools.upsertCard.execute!(
+      await tools.updateCard.execute!(
         {
           cardId: "card-1",
           labelIds: ["lbl-ghost", "lbl-a"],
@@ -480,7 +494,7 @@ describe("createKanbanTools", () => {
       mockDb.where.mockResolvedValueOnce([]); // super admin lookup — not found
 
       expect(
-        await tools.upsertCard.execute!(
+        await tools.updateCard.execute!(
           {
             cardId: "card-1",
             assignees: [{ type: "user", id: "outsider" }],
@@ -776,10 +790,10 @@ describe("createKanbanTools", () => {
       ]);
     });
 
-    it("upsertComment creates a comment attributed to this agent", async () => {
+    it("createComment adds a comment attributed to this agent", async () => {
       const db = seedBoards();
 
-      const result: unknown = await callTool(tools.upsertComment, {
+      const result: unknown = await callTool(tools.createComment, {
         cardId: "card-2",
         body: "Looks good",
         label: "test",
@@ -793,20 +807,20 @@ describe("createKanbanTools", () => {
       expect(db.tables.kanban_card_comment).toContainEqual(result);
     });
 
-    it("upsertComment requires a cardId to create", async () => {
+    it("createComment refuses to build without a cardId", () => {
       expect(
-        await callTool(tools.upsertComment, {
+        (tools.createComment.inputSchema as z.ZodType).safeParse({
           body: "Comment text",
           label: "test",
-        }),
-      ).toEqual({ error: "cardId is required when creating a new comment" });
+        }).success,
+      ).toBe(false);
     });
 
-    it("upsertComment updates a comment's body by commentId", async () => {
+    it("updateComment replaces a comment's body by commentId", async () => {
       const db = seedBoards();
 
       expect(
-        await callTool(tools.upsertComment, {
+        await callTool(tools.updateComment, {
           commentId: "comment-1",
           body: "Edited",
           label: "test",
@@ -839,9 +853,9 @@ describe("createKanbanTools", () => {
         "Card not found",
       ],
       [
-        "upsertComment create",
+        "createComment",
         () =>
-          callTool(tools.upsertComment, {
+          callTool(tools.createComment, {
             cardId: "card-other",
             body: "x",
             label: "x",
@@ -849,9 +863,9 @@ describe("createKanbanTools", () => {
         "Card not found",
       ],
       [
-        "upsertComment update",
+        "updateComment",
         () =>
-          callTool(tools.upsertComment, {
+          callTool(tools.updateComment, {
             commentId: "comment-other",
             body: "x",
             label: "x",

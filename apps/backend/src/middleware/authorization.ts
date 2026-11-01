@@ -1,7 +1,7 @@
 import type { Context } from "hono";
 import { createMiddleware } from "hono/factory";
 import { eq, and } from "drizzle-orm";
-import type { db as appDb } from "../index.ts";
+import { db } from "../index.ts";
 import {
   organizationMember,
   workspace as workspaceTable,
@@ -23,7 +23,7 @@ import {
 /** Hono environment for these middleware: carries the request-scoped Variables. */
 type Env = { Variables: Variables };
 
-export type Database = typeof appDb;
+export type Database = typeof db;
 
 /** The subset of the session user these decisions actually read. */
 type AuthUser = { id: string; role?: string | null };
@@ -147,8 +147,9 @@ const isSuperAdmin = (user: AuthUser | undefined): boolean => {
 export const requireOrgAccess = (requiredRoles?: OrgRole[]) =>
   createMiddleware<Env>(async (c, next) => {
     const user = userOf(c);
-    const db = c.get("db");
-    const parentScope = c.get("userScope") ?? userScope(user);
+    // Derived, never stored: the session user is the one authority for who is
+    // asking, and a second copy on the context could only disagree with it.
+    const parentScope = userScope(user);
     const orgId = c.req.param("orgId");
 
     const access = await resolveOrgMembership(db, user, orgId, requiredRoles);
@@ -264,7 +265,7 @@ export const resolveOrgMembership = async (
  * - Returns 400 if workspace ID not found in request
  * - Returns 404 if workspace not found
  * - Returns 403 if user doesn't have access
- * - Sets `isWorkspaceOwner` in context
+ * - Sets `workspaceScope` in context, ownership included
  *
  * @example
  * ```typescript
@@ -273,7 +274,6 @@ export const resolveOrgMembership = async (
  */
 export const requireWorkspaceAccess = createMiddleware<Env>(async (c, next) => {
   const user = userOf(c);
-  const db = c.get("db");
   const orgMembership = orgMembershipOf(c);
 
   // The Organization half is already resolved and proved; only the Workspace id
@@ -298,7 +298,6 @@ export const requireWorkspaceAccess = createMiddleware<Env>(async (c, next) => {
     return c.json({ error: message }, status);
   }
 
-  c.set("isWorkspaceOwner", access.isWorkspaceOwner);
   c.set(
     "workspaceScope",
     workspaceScope(parent, workspaceId, access.isWorkspaceOwner),
@@ -438,7 +437,7 @@ export const userMayUseWorkspace = async (
  *
  * **Prerequisites:**
  * - Must run AFTER `requireOrgAccess` and `requireWorkspaceAccess` (relies on
- *   `orgMembership` and `isWorkspaceOwner` in context).
+ *   `orgMembership` and the Workspace scope in context).
  *
  * **Access Control:**
  * - Super admins and org admins always pass.
@@ -511,7 +510,7 @@ const CONFIG_ACCESS_DENIED: Record<ConfigAccessDenial, string> = {
  *   MCPs exist in order to select one on an Agent or Chat, delegated or not.
  *
  * **Prerequisites:** must run after `requireOrgAccess` and
- * `requireWorkspaceAccess` (reads `orgMembership` and `isWorkspaceOwner`).
+ * `requireWorkspaceAccess` (reads `orgMembership` and the Workspace scope).
  *
  * @param delegationFlag - `null` for admin-only resources that are never
  *   delegatable.
@@ -529,7 +528,7 @@ const workspaceConfigAccess = async (
   }
 
   // Past requireWorkspaceAccess, a non-admin can only be the workspace owner.
-  if (!c.get("isWorkspaceOwner")) {
+  if (!workspaceScopeOf(c).isWorkspaceOwner) {
     return { allowed: false, reason: "not-owner" };
   }
 
@@ -537,7 +536,6 @@ const workspaceConfigAccess = async (
     return { allowed: false, reason: "not-delegatable" };
   }
 
-  const db = c.get("db");
   const { workspaceId } = workspaceScopeOf(c);
   const [ws] = await db
     .select({ flag: workspaceTable[delegationFlag] })
@@ -655,9 +653,7 @@ export const requireSuperAdmin = createMiddleware<Env>(async (c, next) => {
  * ```
  */
 export const requireWorkspaceOwner = createMiddleware<Env>(async (c, next) => {
-  const isWorkspaceOwner = c.get("isWorkspaceOwner");
-
-  if (!isWorkspaceOwner) {
+  if (!workspaceScopeOf(c).isWorkspaceOwner) {
     return c.json(
       { error: "Only the workspace owner can perform this action" },
       403,

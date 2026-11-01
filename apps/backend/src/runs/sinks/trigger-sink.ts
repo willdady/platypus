@@ -332,12 +332,12 @@ export class TriggerSink implements RunSink {
               parentEventId: event.parentEventId,
               seq: event.seq,
               type: event.type,
-              toolName: event.toolName ?? null,
+              toolName: event.toolName,
               startedAt: event.startedAt,
-              durationMs: event.durationMs ?? null,
+              durationMs: event.durationMs,
               status: event.status,
-              error: event.error ?? null,
-              childrenTruncated: event.childrenTruncated ?? false,
+              error: event.error,
+              childrenTruncated: event.childrenTruncated,
             })),
           )
           .onConflictDoUpdate({
@@ -356,9 +356,9 @@ export class TriggerSink implements RunSink {
           .update(triggerRunEventTable)
           .set({
             status: patch.status,
-            durationMs: patch.durationMs ?? null,
-            error: patch.error ?? null,
-            childrenTruncated: patch.childrenTruncated ?? false,
+            durationMs: patch.durationMs,
+            error: patch.error,
+            childrenTruncated: patch.childrenTruncated,
           })
           .where(eq(triggerRunEventTable.id, patch.id));
         patched++;

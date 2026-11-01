@@ -101,7 +101,7 @@ function toRowEntry(entry: SubAgentActivityEntry): ActivityRowEntry {
 
 /**
  * Folds consecutive completed entries with the same type and toolName into a
- * single row with a count (e.g. "upsertCard ×3"). Running or error entries
+ * single row with a count (e.g. "createCard ×3"). Running or error entries
  * are never folded — a trailing running entry that matches the preceding
  * completed streak stays on its own line.
  */

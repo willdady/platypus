@@ -2,12 +2,17 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mockNanoid } from "../test-setup.ts";
 import { resetMockDb, seedDb, type Row, type Store } from "../test-utils.ts";
 
-vi.mock("../utils/cron.ts", () => ({
-  validateCronExpression: vi.fn((expr: string) => {
+vi.mock("../utils/cron.ts", () => {
+  const validateCronExpression = vi.fn((expr: string) => {
     if (expr === "invalid") return null;
     return new Date("2026-01-01T10:00:00Z");
-  }),
-}));
+  });
+  return {
+    validateCronExpression,
+    nextCronRunAt: (config: { cronExpression: string }) =>
+      validateCronExpression(config.cronExpression),
+  };
+});
 
 mockNanoid.mockReturnValue("trig-new");
 
