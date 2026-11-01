@@ -79,7 +79,7 @@ function TriggerRunDetailPage({
   );
 
   return (
-    <div className="flex justify-center pb-8">
+    <div className="flex justify-center py-8">
       {/* The side gutter stays at every width: between the tablet and desktop
       breakpoints the column is the full content area, and without it the list
       touched the viewport edges. The widths are the workspace home page's, so

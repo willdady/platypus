@@ -27,12 +27,12 @@ export const resourcePageLayout: Record<
 > = {
   bare: { inner: "", title: narrowTitleClass },
   narrow: {
-    outer: "flex justify-center pb-8",
+    outer: "flex justify-center py-8",
     inner: narrowColumnClass,
     title: narrowTitleClass,
   },
   stacked: {
-    outer: "flex justify-center pb-8",
+    outer: "flex justify-center py-8",
     inner: `${narrowColumnClass} flex flex-col gap-8`,
     title: "text-2xl font-bold",
     // The column's gap already spaces the button from the title.
