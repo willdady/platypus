@@ -1,17 +1,18 @@
 "use client";
 
+import { useParams } from "next/navigation";
 import { RouteError, type ErrorBoundaryProps } from "@/components/route-error";
-import { MAIN_CONTENT_ID } from "@/components/skip-link";
-import { SidebarInset } from "@/components/ui/sidebar";
+import { WorkspaceShell } from "@/components/workspace-shell";
 
 /**
- * The Workspace layout itself threw — its read failed — so this renders
- * beside the sidebar, where the Workspace header would be.
+ * The Workspace layout itself threw — its read failed — so this renders in
+ * the plain shell, whose header leads to the Organization home.
  */
 export default function WorkspaceError({ error, retry }: ErrorBoundaryProps) {
+  const { orgId } = useParams<{ orgId: string }>();
   return (
-    <SidebarInset id={MAIN_CONTENT_ID} className="min-w-0">
+    <WorkspaceShell orgId={orgId}>
       <RouteError error={error} retry={retry} source="segment" />
-    </SidebarInset>
+    </WorkspaceShell>
   );
 }

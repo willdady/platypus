@@ -1,18 +1,8 @@
-import { MAIN_CONTENT_ID } from "@/components/skip-link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { scopedTitle } from "@/lib/page-title";
-import { CommandMenu } from "@/components/command-menu";
-import { SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
-import { Kbd } from "@/components/ui/kbd";
-import { Search, Home } from "lucide-react";
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
 import { backendPath, serverRead } from "@/lib/server-read";
-import { Header } from "@/components/header";
-import { workspaceRoutes } from "@/lib/routes";
 import { ProtectedRoute } from "@/components/protected-route";
-import { WorkspaceScrollContainer } from "@/components/workspace-scroll-container";
 import type { Workspace } from "@platypus/schemas";
 
 function readWorkspace(orgId: string, workspaceId: string) {
@@ -53,38 +43,5 @@ export default async function WorkspaceLayout({
     throw new Error(`Workspace read failed: ${workspace.status}`);
   }
 
-  const routes = workspaceRoutes(orgId, workspaceId);
-
-  return (
-    <ProtectedRoute requireWorkspaceAccess>
-      <SidebarInset id={MAIN_CONTENT_ID} className="min-w-0">
-        <Header
-          bordered={false}
-          leftContent={
-            <div className="flex items-center gap-2">
-              <SidebarTrigger />
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                aria-label="Workspace home"
-                asChild
-              >
-                <Link href={routes.root}>
-                  <Home />
-                </Link>
-              </Button>
-            </div>
-          }
-          rightContent={
-            <Kbd className="hidden text-sm font-sans md:flex">
-              <Search className="size-4" /> ⌘K
-            </Kbd>
-          }
-          scope={{ orgId, workspaceId }}
-        />
-        <WorkspaceScrollContainer>{children}</WorkspaceScrollContainer>
-        <CommandMenu orgId={orgId} workspaceId={workspaceId} />
-      </SidebarInset>
-    </ProtectedRoute>
-  );
+  return <ProtectedRoute requireWorkspaceAccess>{children}</ProtectedRoute>;
 }

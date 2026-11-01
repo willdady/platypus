@@ -8,7 +8,6 @@ import { OrgHome } from "@/components/org-home";
 import { OrgListSidebar } from "@/components/org-list-sidebar";
 import { resourcePageLayout } from "@/components/resource-page";
 import { Skeleton } from "@/components/ui/skeleton";
-import WorkspaceShellLayout from "./workspace/layout";
 import WorkspaceLoading from "./workspace/loading";
 
 function MenuSkeleton() {
@@ -120,11 +119,7 @@ export default function OrganizationLoading() {
   }
 
   if (section === "workspace") {
-    return (
-      <WorkspaceShellLayout>
-        <WorkspaceLoading />
-      </WorkspaceShellLayout>
-    );
+    return <WorkspaceLoading />;
   }
 
   if (section === "create") {

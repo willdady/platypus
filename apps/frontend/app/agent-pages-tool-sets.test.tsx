@@ -24,8 +24,8 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), back: vi.fn() }),
 }));
 
-import AgentCreatePage from "./[orgId]/workspace/[workspaceId]/agents/create/page";
-import AgentEditPage from "./[orgId]/workspace/[workspaceId]/agents/[agentId]/page";
+import AgentCreatePage from "./[orgId]/workspace/[workspaceId]/(plain)/agents/create/page";
+import AgentEditPage from "./[orgId]/workspace/[workspaceId]/(plain)/agents/[agentId]/page";
 import OrgAgentEditPage from "./[orgId]/settings/agents/[agentId]/page";
 
 function stubFetch(body: unknown, status = 200) {

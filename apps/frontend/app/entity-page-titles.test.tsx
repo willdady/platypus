@@ -4,8 +4,8 @@ vi.mock("next/headers", () => ({
   headers: async () => new Headers({ cookie: "better-auth.session_token=abc" }),
 }));
 
-import { generateMetadata as agentMetadata } from "./[orgId]/workspace/[workspaceId]/agents/[agentId]/page";
-import { generateMetadata as triggerMetadata } from "./[orgId]/workspace/[workspaceId]/triggers/[triggerId]/page";
+import { generateMetadata as agentMetadata } from "./[orgId]/workspace/[workspaceId]/(plain)/agents/[agentId]/page";
+import { generateMetadata as triggerMetadata } from "./[orgId]/workspace/[workspaceId]/(plain)/triggers/[triggerId]/page";
 
 import { generateMetadata as orgHomeMetadata } from "./[orgId]/(home)/page";
 

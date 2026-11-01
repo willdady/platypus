@@ -21,8 +21,8 @@ type HeaderProps = {
   /** The Organization/Workspace the header's controls act on, when there is one. */
   scope?: Scope;
   /**
-   * Draw the bottom border. The Workspace shell sits beside a sidebar and
-   * omits it; every other shell keeps it.
+   * Draw the bottom border. Dropped only beside the app sidebar (the
+   * Workspace home and Chat); every other shell keeps it.
    */
   bordered?: boolean;
 };

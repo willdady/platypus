@@ -8,7 +8,7 @@ import { ArrowLeft } from "lucide-react";
 type BackButtonProps = {
   /**
    * Where to land when there is no browser history to go back to (a direct
-   * link). Omitted for the header variant, which only ever steps back.
+   * link). Omitted, the button only ever steps back.
    */
   fallbackHref?: string;
   /** `page` is the labelled button above a resource page; `header` is the icon button in a shell header. */
