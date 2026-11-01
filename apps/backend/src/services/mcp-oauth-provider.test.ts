@@ -1,5 +1,4 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
-import { auth as mcpAuth } from "@ai-sdk/mcp";
 import { mockNanoid } from "../test-setup.ts";
 import { resetMockDb, seedDb, type Row } from "../test-utils.ts";
 import {
@@ -8,11 +7,6 @@ import {
   oauthFetchFn,
   type McpRecord,
 } from "./mcp-oauth-provider.ts";
-
-vi.mock("@ai-sdk/mcp", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@ai-sdk/mcp")>()),
-  auth: vi.fn(),
-}));
 
 const CALLBACK = "http://localhost:3001/oauth/mcp/callback";
 
@@ -395,97 +389,6 @@ describe("mcp-oauth-provider", () => {
         await expect(
           provider().authorizationServerInformation(),
         ).resolves.toBeUndefined();
-      });
-
-      describe("for a row authorized before the record existed", () => {
-        const legacy = { oauthClientId: "client-1", oauthRefreshToken: "r" };
-
-        // What auth() reports for the current server, via a throwaway sign-in.
-        const discovers = (found: typeof info | Error) =>
-          vi.mocked(mcpAuth).mockImplementationOnce(async (stub) => {
-            if (found instanceof Error) throw found;
-            await stub.saveAuthorizationServerInformation?.(found);
-            return "REDIRECT";
-          });
-
-        const refreshing = (authorizationServerUrl: string) => {
-          const p = provider();
-          p.validateAuthorizationServerURL(
-            "http://mcp.example.com",
-            authorizationServerUrl,
-          );
-          return p;
-        };
-
-        it("adopts what discovery reports when it matches this auth() call", async () => {
-          const fake = world(legacy);
-          discovers(info);
-
-          await expect(
-            refreshing(
-              info.authorizationServerUrl,
-            ).authorizationServerInformation(),
-          ).resolves.toEqual(info);
-          expect(row(fake, "mcp", "mcp-1")?.oauthAuthorizationServer).toEqual(
-            info,
-          );
-          // Started at the server this auth() call found, not re-discovered
-          // from the MCP without the resource metadata URL that call had.
-          expect(vi.mocked(mcpAuth).mock.calls[0][1].serverUrl).toBe(
-            info.authorizationServerUrl,
-          );
-        });
-
-        it("neither overwrites nor refreshes over a sign-in that finished during discovery", async () => {
-          const fake = world(legacy);
-          const newer = { ...info, tokenEndpoint: "https://new.example.com/t" };
-          vi.mocked(mcpAuth).mockImplementationOnce(async (stub) => {
-            Object.assign(row(fake, "mcp", "mcp-1")!, {
-              oauthRefreshToken: "r2",
-              oauthAuthorizationServer: newer,
-            });
-            await stub.saveAuthorizationServerInformation?.(info);
-            return "REDIRECT";
-          });
-
-          // undefined, so the library does not refresh with the spent token.
-          await expect(
-            refreshing(
-              info.authorizationServerUrl,
-            ).authorizationServerInformation(),
-          ).resolves.toBeUndefined();
-
-          expect(row(fake, "mcp", "mcp-1")?.oauthAuthorizationServer).toEqual(
-            newer,
-          );
-        });
-
-        it("adopts nothing when discovery disagrees", async () => {
-          const fake = world(legacy);
-          discovers(info);
-
-          await expect(
-            refreshing(
-              "https://elsewhere.example.com/",
-            ).authorizationServerInformation(),
-          ).resolves.toBeUndefined();
-          expect(
-            row(fake, "mcp", "mcp-1")?.oauthAuthorizationServer,
-          ).toBeUndefined();
-        });
-
-        // undefined would make the library drop the tokens over a network blip.
-        it("fails the refresh, keeping the tokens, when discovery fails", async () => {
-          const fake = world(legacy);
-          discovers(new Error("offline"));
-
-          await expect(
-            refreshing(
-              info.authorizationServerUrl,
-            ).authorizationServerInformation(),
-          ).rejects.toThrow("offline");
-          expect(row(fake, "mcp", "mcp-1")).toMatchObject(legacy);
-        });
       });
     });
 

@@ -7,6 +7,7 @@ import {
   withAdvisoryLock,
 } from "../src/db/advisory-lock.ts";
 import { databaseConfig } from "../src/db/connection-config.ts";
+import { backfillTriggerNextRunAt } from "../src/db/backfill-trigger-next-run.ts";
 import { logger } from "../src/logger.ts";
 
 const { Pool } = pg;
@@ -39,6 +40,17 @@ async function runMigrations() {
         await db.execute("CREATE EXTENSION IF NOT EXISTS vector");
 
         await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
+
+        // A data step the SQL migrations cannot express: a stranded Cron
+        // Trigger's next run is a cron expression in its own timezone. Runs
+        // after the schema is current, and finds nothing on a healthy database.
+        const { scheduled, skipped } = await backfillTriggerNextRunAt(db);
+        if (scheduled > 0 || skipped > 0) {
+          logger.info(
+            { scheduled, skipped },
+            "Rescheduled Cron Triggers left without a next run",
+          );
+        }
       },
       { wait: true },
     );

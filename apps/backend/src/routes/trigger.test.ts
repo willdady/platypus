@@ -13,6 +13,8 @@ const { mockValidateCronExpression } = vi.hoisted(() => ({
 
 vi.mock("../utils/cron.ts", () => ({
   validateCronExpression: mockValidateCronExpression,
+  nextCronRunAt: (config: { cronExpression: string; timezone: string }) =>
+    mockValidateCronExpression(config.cronExpression, config.timezone),
 }));
 
 mockNanoid.mockReturnValue("trig-new");

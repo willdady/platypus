@@ -19,7 +19,7 @@ import {
 } from "../db/schema.ts";
 import type { ScopeContext } from "../scope.ts";
 import { NotFoundError, ValidationError } from "../errors.ts";
-import { validateCronExpression } from "../utils/cron.ts";
+import { nextCronRunAt } from "../utils/cron.ts";
 import {
   generateBearerToken,
   bearerTokenStatus,
@@ -160,14 +160,9 @@ export const narrowTriggerConfig = (
   );
 };
 
-/**
- * The next `nextRunAt` a cron config names, from now — or `null` when the
- * expression or timezone cannot be parsed. The one statement of the schedule
- * rule: the write model, the post-run bookkeeping and the recovery sweep all
- * call it.
- */
-export const nextCronRunAt = (config: CronTriggerConfig): Date | null =>
-  validateCronExpression(config.cronExpression, config.timezone);
+// The schedule rule has one home, in `utils/cron.ts`: the one-off upgrade
+// step that repairs stranded schedules reads it without this module's db.
+export { nextCronRunAt };
 
 /**
  * Validates a cron config and returns it normalized (Zod defaults applied —

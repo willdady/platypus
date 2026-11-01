@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import type { z } from "zod";
 import { callTool, resetMockDb, seedDb } from "../test-utils.ts";
 
 // The Trigger rules (config validation, nextRunAt, agent visibility, workspace
@@ -54,7 +55,8 @@ describe("createTriggerTools", () => {
       "listAgents",
       "listTriggers",
       "getTrigger",
-      "upsertTrigger",
+      "createTrigger",
+      "updateTrigger",
       "deleteTrigger",
       "getCurrentTime",
     ]);
@@ -175,12 +177,12 @@ describe("createTriggerTools", () => {
     });
   });
 
-  describe("upsertTrigger", () => {
+  describe("createTrigger", () => {
     it("creates through the Trigger module, in the acting User's timezone when none is given, and links the new trigger", async () => {
       vi.mocked(createTrigger).mockResolvedValueOnce({ id: "t9" } as never);
 
       expect(
-        await callTool(tools.upsertTrigger, {
+        await callTool(tools.createTrigger, {
           ...cronCreate,
           includeMemories: true,
         }),
@@ -216,7 +218,7 @@ describe("createTriggerTools", () => {
       } as never);
 
       expect(
-        await callTool(tools.upsertTrigger, {
+        await callTool(tools.createTrigger, {
           ...cronCreate,
           config: {
             cronExpression: "0 9 11 10 *",
@@ -241,27 +243,29 @@ describe("createTriggerTools", () => {
       );
     });
 
+    // The AI SDK validates input against this schema before `execute` runs,
+    // so a create missing a create-required field never reaches the module.
     it.each(["name", "agentId", "instruction", "type", "config"] as const)(
       "refuses a create without %s",
-      async (field) => {
+      (field) => {
         const input: Record<string, unknown> = { ...cronCreate };
         delete input[field];
 
         expect(
-          await callTool(tools.upsertTrigger, input as typeof cronCreate),
-        ).toEqual({
-          error:
-            "name, agentId, instruction, type, and config are required when creating a new trigger",
-        });
+          (tools.createTrigger.inputSchema as z.ZodType).safeParse(input)
+            .success,
+        ).toBe(false);
         expect(createTrigger).not.toHaveBeenCalled();
       },
     );
+  });
 
+  describe("updateTrigger", () => {
     it("updates by triggerId, forwarding only what the call carries, and links it", async () => {
       vi.mocked(updateTrigger).mockResolvedValueOnce({ id: "t1" } as never);
 
       expect(
-        await callTool(tools.upsertTrigger, {
+        await callTool(tools.updateTrigger, {
           triggerId: "t1",
           label: "Daily",
           description: "Runs every day",
@@ -275,28 +279,45 @@ describe("createTriggerTools", () => {
       expect(updateTrigger).toHaveBeenCalledWith(
         ctx,
         "t1",
-        expect.objectContaining({
-          description: "Runs every day",
-          includeMemories: true,
-          agentId: undefined,
-          config: undefined,
-        }),
+        // Only what the call carried: a patch never rewrites a field it was
+        // not given.
+        { description: "Runs every day", includeMemories: true },
       );
       expect(createTrigger).not.toHaveBeenCalled();
+    });
+
+    it("runs a cron config the update left without a timezone in the acting User's zone", async () => {
+      vi.mocked(updateTrigger).mockResolvedValueOnce({ id: "t1" } as never);
+
+      await callTool(tools.updateTrigger, {
+        triggerId: "t1",
+        label: "Daily",
+        config: { cronExpression: "0 9 * * *" },
+      });
+
+      expect(updateTrigger).toHaveBeenCalledWith(
+        ctx,
+        "t1",
+        expect.objectContaining({
+          config: { cronExpression: "0 9 * * *", timezone },
+        }),
+      );
     });
 
     describe.each([
       {
         mode: "create",
+        pick: (t: ReturnType<typeof createTriggerTools>) => t.createTrigger,
         service: createTrigger,
         input: cronCreate,
       },
       {
         mode: "update",
+        pick: (t: ReturnType<typeof createTriggerTools>) => t.updateTrigger,
         service: updateTrigger,
         input: { ...cronCreate, triggerId: "t1" },
       },
-    ])("$mode refusals", ({ service, input }) => {
+    ])("$mode refusals", ({ pick, service, input }) => {
       it.each([
         [
           new NotFoundError("Agent not found in this workspace"),
@@ -310,7 +331,7 @@ describe("createTriggerTools", () => {
       ])("reports %s as a failed result", async (error, message) => {
         vi.mocked(service).mockRejectedValueOnce(error);
 
-        expect(await callTool(tools.upsertTrigger, input)).toEqual({
+        expect(await callTool(pick(tools), input)).toEqual({
           success: false,
           error: message,
         });
@@ -319,7 +340,7 @@ describe("createTriggerTools", () => {
       it("lets any other failure throw", async () => {
         vi.mocked(service).mockRejectedValueOnce(new Error("connection lost"));
 
-        await expect(callTool(tools.upsertTrigger, input)).rejects.toThrow(
+        await expect(callTool(pick(tools), input)).rejects.toThrow(
           "connection lost",
         );
       });
