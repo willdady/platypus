@@ -55,6 +55,7 @@ import {
   TOOL_NAME_NAMESPACE_SEPARATOR,
   TOOL_NAME_PATTERN,
   TOOL_INPUT_CLEARING_KEEP_RECENT,
+  TOOL_RESULT_CLEARING_BATCH,
   TOOL_RESULT_CLEARING_KEEP_RECENT,
   TOOL_RESULT_CLEARING_THRESHOLD,
   triggerBaseSchema,
@@ -2269,6 +2270,13 @@ const SCHEMA_CONSTANTS = [
       `The ${NUMBER_WORDS[count] ?? count} most recent results stay`,
     files: ["building-with-platypus/chat.mdx"],
     cost: "A User expects the model to still see a tool result it no longer gets.",
+  },
+  {
+    name: "TOOL_RESULT_CLEARING_BATCH",
+    value: TOOL_RESULT_CLEARING_BATCH,
+    phrase: (count: number) => `in batches of ${NUMBER_WORDS[count] ?? count}`,
+    files: ["building-with-platypus/chat.mdx"],
+    cost: "A User expects clearing to move one result at a time and discard the cached prefix on every step.",
   },
   {
     name: "REASONING_MAP_MAX_BYTES",

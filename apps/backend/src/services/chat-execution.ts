@@ -44,12 +44,14 @@ import {
 } from "./memory-retrieval.ts";
 import {
   nextTurnOccupancy,
+  occupancyReadingsOf,
   providerHasNativeSearch,
   SEARCH_SOURCE_NATIVE,
   SEARCH_SOURCE_NONE,
 } from "@platypus/schemas";
 import type {
   ConcreteModelId,
+  ContextOccupancyReading,
   Skill,
   UnloadedToolSet,
 } from "@platypus/schemas";
@@ -169,15 +171,8 @@ export type ChatTurn = {
  * clearing simply does not engage on their first model call.
  */
 const initialOccupancyFrom = (
-  messages: PlatypusUIMessage[],
-): number | undefined => {
-  const lastReading = messages
-    .filter((m) => m.role === "assistant")
-    .map((m) => m.metadata?.contextOccupancy)
-    .filter((reading) => reading !== undefined)
-    .at(-1);
-  return nextTurnOccupancy(lastReading);
-};
+  readings: readonly (ContextOccupancyReading | null)[],
+): number | undefined => nextTurnOccupancy(readings.at(-1));
 
 /**
  * What `prepareChatTurn` needs on top of the turn itself: the tenant and User
@@ -856,11 +851,10 @@ export const prepareChatTurn = async (
     );
 
     // Read from the INCOMING history, before this turn appends anything — Tool-
-    // result clearing's only reading for the first model call of the turn
-    // (ADR-0018 Notes, issue #524). Left off entirely rather than sent as
-    // `undefined` when there is no prior reading, matching every other optional
-    // field on this plan.
-    const initialOccupancy = initialOccupancyFrom(messages);
+    // result clearing's starting reading and the sticky readings that keep it
+    // engaged across turns (ADR-0018 Notes, issue #524; ADR-0041).
+    const priorOccupancyReadings = occupancyReadingsOf(messages);
+    const initialOccupancy = initialOccupancyFrom(priorOccupancyReadings);
 
     return {
       stream: {
@@ -880,6 +874,9 @@ export const prepareChatTurn = async (
         // the session's own: a delegate's run carries its nested session's.
         gateScope: session.gateScope,
         ...(initialOccupancy !== undefined ? { initialOccupancy } : {}),
+        ...(priorOccupancyReadings.length > 0
+          ? { priorOccupancyReadings }
+          : {}),
       },
       resolved: {
         agentId: context.resolvedAgentId,

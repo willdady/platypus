@@ -153,7 +153,10 @@ from them that the original decision left open or silent.
   derivation, reading it to gate the first model call of a turn — before that
   turn's own first step has reported anything. Dropping the output-token figure
   from what is persisted would silently disable clearing on exactly the call it
-  is most needed on, with no error to say so.
+  is most needed on, with no error to say so. Since #1731 the gate is sticky:
+  every reading still on the Active path is consulted, not only the newest, so
+  the figure stays load-bearing on older assistant messages too. A Delete or an
+  Alternative that removes those messages stops it, which is the point.
 
 ## Notes: the composer meter shows Projected occupancy
 

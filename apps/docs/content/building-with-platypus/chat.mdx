@@ -480,13 +480,27 @@ reading a URL, reading a file or listing a directory in a Sandbox, reading a
 Skill's bundled files — plus any
 MCP tool whose server declares it read-only (see
 [MCP](/building-with-platypus/mcp)). An MCP server that declares nothing gets
-no benefit from this for that tool. The four most recent results stay; every
-older one is no longer sent.
+no benefit from this for that tool.
+
+It moves in batches: once it starts, older results stop being sent in batches of
+four, rather than one more result on every step. Providers cache the
+opening of every request, and clearing one more result on every step would
+change an earlier message on every step, throwing that cache away each time.
+Changing four at once leaves the cached part alone until four more clearable
+results have arrived. The four most recent results stay live; older ones are no
+longer sent.
+
+Once it has started it stays on for the Chat, even if the meter falls back below
+**70%** because of the space it just freed. Going back to sending everything
+would undo the saving and throw the cache away again. Deleting the message that
+first took the Chat over the line, or switching to a different version of the
+conversation that never did, stops it.
 
 Older file writes and file edits get the same help at the same point, once
 they have succeeded: the model stops being sent what they wrote, but still sees
 which file each one changed, so it can read the
-current contents back if it needs them. The four most recent writes keep what
+current contents back if it needs them. They move in the same batches, and
+clearing stays on under the same rule. The four most recent writes keep what
 they wrote. A write that failed always keeps it, so the model can fix and retry
 it.
 

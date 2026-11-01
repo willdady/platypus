@@ -6,8 +6,10 @@ import {
   REQUEST_LEVEL_CACHE_DIRECTIVE,
   type RunPlan,
 } from "./run-plan.ts";
-import { CLEARED_TOOL_RESULT_MARKER } from "./tool-result-clearing.ts";
-import { CLEARED_TOOL_INPUT_MARKER } from "./tool-input-clearing.ts";
+import {
+  CLEARED_TOOL_INPUT_MARKER,
+  CLEARED_TOOL_RESULT_MARKER,
+} from "@platypus/schemas";
 import { ANSWER_STEP_INSTRUCTION } from "./answer-step.ts";
 import { logger } from "../logger.ts";
 import { createOverflowRecovery } from "./context-overflow-recovery.ts";
@@ -38,7 +40,12 @@ const toolResultMessages = (n: number, toolName = "read_url"): ModelMessage[] =>
         type: "tool-result" as const,
         toolCallId: `t${i}`,
         toolName,
-        output: { type: "text" as const, value: `content ${i}` },
+        // Any payload works now that the boundary is a count: the batch does
+        // not depend on bytes freed.
+        output: {
+          type: "text" as const,
+          value: `content ${i} ${"x".repeat(5_000)}`,
+        },
       },
     ],
   }));
@@ -53,7 +60,11 @@ const fsWriteMessages = (n: number): ModelMessage[] =>
           type: "tool-call",
           toolCallId: `w${i}`,
           toolName: "fsWrite",
-          input: { path: `f${i}`, content: `body ${i}`, mode: "create" },
+          input: {
+            path: `f${i}`,
+            content: `body ${i} ${"x".repeat(1_400)}`,
+            mode: "create",
+          },
         },
       ],
     },
@@ -134,6 +145,33 @@ describe("buildModelInvocation prepareStep", () => {
       expect(firstOutput.value === CLEARED_TOOL_RESULT_MARKER).toBe(clears);
     },
   );
+
+  it("keeps clearing below the trigger when a reading on the Active path engaged", async () => {
+    // The gate flip-flop: the plan's latest reading is under the trigger, but
+    // an earlier reading on the path crossed it. Clearing must stay on rather
+    // than re-send every result for this turn.
+    const prepareStep = prepareStepOf(
+      planOf({
+        contextWindow: 100,
+        initialOccupancy: 60,
+        priorOccupancyReadings: [
+          { inputTokens: 90, outputTokens: 0 },
+          { inputTokens: 60, outputTokens: 0 },
+        ],
+      }),
+    );
+    const result = await prepareStep({
+      steps: [],
+      stepNumber: 0,
+      messages: toolResultMessages(10),
+    });
+    const firstOutput = (
+      result.messages![0] as {
+        content: Array<{ output: { value: string } }>;
+      }
+    ).content[0].output;
+    expect(firstOutput.value).toBe(CLEARED_TOOL_RESULT_MARKER);
+  });
 
   // An MCP tool is clearable only when the turn resolved it read-only
   // (ADR-0021); the plan is how that reaches the clearing pass.
@@ -393,7 +431,7 @@ describe("buildModelInvocation context-pressure evidence", () => {
     const result = await prepareStep({
       steps: [{ usage: { inputTokens: 85 } }],
       stepNumber: 1,
-      messages: [{ role: "user", content: "hi" }, ...fsWriteMessages(5)],
+      messages: [{ role: "user", content: "hi" }, ...fsWriteMessages(8)],
     });
     expect(evidenceLines(spy)).toEqual([]);
     expect(JSON.stringify(result.messages)).toContain(

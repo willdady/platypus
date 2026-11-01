@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { resetMockDb, seedDb } from "../test-utils.ts";
 import { APICallError } from "ai";
 import { MockLanguageModelV3 } from "ai/test";
+import { CLEARED_TOOL_RESULT_MARKER } from "@platypus/schemas";
 import type { PlatypusUIMessage } from "../types.ts";
 import {
   registerTranscriptSummary,
@@ -165,6 +166,40 @@ describe("takeTranscriptSummary", () => {
       "u5",
       "a5",
     ]);
+  });
+
+  it("clears every clearable tool result in its input, however small", async () => {
+    // The gated turn rule leaves a result no larger than its marker alone; the
+    // summary pass must not, because its input has no window of its own to
+    // protect and every clearable result in the range is surplus.
+    seedSummaryTable();
+    const prompts: PromptMessage[][] = [];
+    const path = sixTurns();
+    const anchor = path[1];
+    path[1] = {
+      ...anchor,
+      parts: [
+        ...anchor.parts,
+        {
+          type: "tool-read_url",
+          toolCallId: "t1",
+          state: "output-available",
+          input: {},
+          output: "tiny",
+        } as unknown as PlatypusUIMessage["parts"][number],
+      ],
+    };
+    await takeTranscriptSummary({
+      chatId: "chat-1",
+      model: summaryModel(prompts),
+      modelId: "openai:gpt",
+      path,
+      triggeredFromOccupancy: 8_200,
+      previousSummary: undefined,
+      readingSummaryId: undefined,
+    });
+
+    expect(JSON.stringify(prompts[0])).toContain(CLEARED_TOOL_RESULT_MARKER);
   });
 
   it("is incremental: the previous summary plus the messages after its anchor", async () => {

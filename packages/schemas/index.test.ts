@@ -33,6 +33,10 @@ import {
   skillUpdateSchema,
   attachmentSchema,
   nextTurnOccupancy,
+  clearingEngaged,
+  clearingPrefixLength,
+  occupancyReadingsOf,
+  TOOL_RESULT_CLEARING_BATCH,
   attachmentCreateSchema,
   chatSubmitSchema,
   chatSchema,
@@ -1909,6 +1913,131 @@ describe("triggerRunStatusSchema", () => {
     expect(Object.keys(TRIGGER_RUN_STATUS_LABELS).sort()).toEqual(
       [...triggerRunStatusSchema.options].sort(),
     );
+  });
+});
+
+describe("clearingPrefixLength", () => {
+  const base = { itemCount: 8, keepRecent: 4, batchSize: 4 };
+
+  it("clears the largest whole batch that leaves the keep-recent tail", () => {
+    // floor((8 - 4) / 4) * 4 = 4: one batch, with four survivors.
+    expect(clearingPrefixLength(base)).toBe(4);
+    // One more clearable item is not enough to move the boundary.
+    expect(clearingPrefixLength({ ...base, itemCount: 11 })).toBe(4);
+    // The next multiple moves it by exactly one whole batch.
+    expect(clearingPrefixLength({ ...base, itemCount: 12 })).toBe(8);
+    expect(clearingPrefixLength({ ...base, itemCount: 13 })).toBe(8);
+  });
+
+  it("waits for a full batch when fewer than keepRecent + batchSize are live", () => {
+    // Between keepRecent and keepRecent + batchSize - 1 nothing changes, which
+    // is what keeps earlier messages byte-identical between passes.
+    for (const itemCount of [0, 1, 4, 5, 6, 7]) {
+      expect(clearingPrefixLength({ ...base, itemCount })).toBe(0);
+    }
+    expect(clearingPrefixLength({ ...base, itemCount: 8 })).toBe(4);
+  });
+
+  it("never clears into the keep-recent window", () => {
+    expect(clearingPrefixLength({ ...base, keepRecent: 2 })).toBe(4);
+    expect(clearingPrefixLength({ ...base, keepRecent: 3 })).toBe(4);
+    expect(clearingPrefixLength({ ...base, keepRecent: 4 })).toBe(4);
+    expect(clearingPrefixLength({ ...base, keepRecent: 6 })).toBe(0);
+    expect(clearingPrefixLength({ ...base, keepRecent: 8 })).toBe(0);
+  });
+
+  it("clears everything when nothing is kept, for the summary pass", () => {
+    // The summary pass's input has no protected tail: a batch that left up to
+    // `batchSize - 1` results live would defeat the pass's bound.
+    expect(clearingPrefixLength({ ...base, keepRecent: 0 })).toBe(8);
+    expect(clearingPrefixLength({ ...base, itemCount: 7, keepRecent: 0 })).toBe(
+      7,
+    );
+  });
+
+  it("keeps the batch a positive integer", () => {
+    // A zero or negative batch would divide by zero or reverse the boundary.
+    expect(Number.isInteger(TOOL_RESULT_CLEARING_BATCH)).toBe(true);
+    expect(TOOL_RESULT_CLEARING_BATCH).toBeGreaterThan(0);
+  });
+});
+
+describe("clearingEngaged", () => {
+  const trigger = { contextWindow: 1_000, thresholdFraction: 0.7 };
+
+  it("engages when the current reading reaches the trigger", () => {
+    expect(clearingEngaged({ ...trigger, occupancy: 700 })).toBe(true);
+    expect(clearingEngaged({ ...trigger, occupancy: 699 })).toBe(false);
+  });
+
+  it("stays engaged when an earlier reading on the path reached it", () => {
+    // The flip-flop: the pass cleared a batch, the latest reading (taken with
+    // it in place) fell back under the trigger, and an earlier reading still
+    // says clearing had engaged on this path.
+    expect(
+      clearingEngaged({
+        ...trigger,
+        occupancy: 600,
+        priorReadings: [
+          { inputTokens: 900, outputTokens: 20 },
+          { inputTokens: 580, outputTokens: 20 },
+        ],
+      }),
+    ).toBe(true);
+    // A `null` reading is unknown, not a high-water mark.
+    expect(
+      clearingEngaged({
+        ...trigger,
+        occupancy: 600,
+        priorReadings: [null, { inputTokens: 580, outputTokens: 20 }],
+      }),
+    ).toBe(false);
+  });
+
+  it("disengages when nothing on the path ever reached the trigger", () => {
+    expect(
+      clearingEngaged({
+        ...trigger,
+        occupancy: 600,
+        priorReadings: [
+          { inputTokens: 400, outputTokens: 20 },
+          { inputTokens: 580, outputTokens: 20 },
+        ],
+      }),
+    ).toBe(false);
+    expect(clearingEngaged({ ...trigger, occupancy: 600 })).toBe(false);
+  });
+
+  it("clears nothing without a declared window", () => {
+    expect(
+      clearingEngaged({
+        contextWindow: undefined,
+        thresholdFraction: 0.7,
+        occupancy: 1_000_000,
+        priorReadings: [{ inputTokens: 900, outputTokens: 0 }],
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("occupancyReadingsOf", () => {
+  it("reads assistant messages that carry a reading, in transcript order", () => {
+    expect(
+      occupancyReadingsOf([
+        { role: "user", metadata: undefined },
+        {
+          role: "assistant",
+          metadata: { contextOccupancy: { inputTokens: 10, outputTokens: 2 } },
+        },
+        // A user message carrying the key is not a Context reading.
+        {
+          role: "user",
+          metadata: { contextOccupancy: { inputTokens: 99, outputTokens: 1 } },
+        },
+        // The key is present but null: an erased reading, kept as unknown.
+        { role: "assistant", metadata: { contextOccupancy: null } },
+      ]),
+    ).toEqual([{ inputTokens: 10, outputTokens: 2 }, null]);
   });
 });
 

@@ -116,16 +116,16 @@ Each of these is deliberately not built yet. The constraint that makes it cheap
 later is in the code today, so the issue can be closed and the constraint
 survives.
 
-| Deferred                                              | Constraint already in place                                                                                                                                                  |
-| ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A "discard this summary" control                      | It is `/compact` (#1111): a new summary supersedes the old by being newer at the same anchor. `chat_summary` needs no `discardedAt` column for it.                           |
-| A cheaper summariser model, or the Workspace's one    | The summariser takes its model as a parameter and records the model id in `stats`, so switching is a resolver change, not a schema change.                                   |
-| Showing what a summary cost                           | `stats` stores the model and the vendor's input and output counts from day one. Usage never recorded could never be shown.                                                   |
-| A live "compacting…" trace in more places             | The backstop's status is a Run event (ADR-0023), not a one-off UI flag. A later trace is the same event rendered in more places, not a second mechanism.                     |
-| The general in-call trim (R2 of #1263)                | Overflow is caught at the summary pass, which is the seam a general retry plugs into. **At most one retry per step, whichever strategy takes it** is the rule this ADR sets. |
-| Summarising older steps inside a long tool-using turn | This ADR's hysteresis rule is stated generally, so an in-turn pass adopts it under the same decision rather than a new one.                                                  |
-| An ingestion cap for MCP results and `fetchUrl`       | One wording and one shape for "too large; request less" is used by the summary pass's overflow retry, so the cap and the recovery path teach the model one pattern.          |
-| Batch clearing for cache hits (`clear_at_least`)      | Trigger/target hysteresis is stated here as the rule for any context reduction, so clearing can adopt it later under this ADR.                                               |
+| Deferred                                              | Constraint already in place                                                                                                                                                    |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| A "discard this summary" control                      | It is `/compact` (#1111): a new summary supersedes the old by being newer at the same anchor. `chat_summary` needs no `discardedAt` column for it.                             |
+| A cheaper summariser model, or the Workspace's one    | The summariser takes its model as a parameter and records the model id in `stats`, so switching is a resolver change, not a schema change.                                     |
+| Showing what a summary cost                           | `stats` stores the model and the vendor's input and output counts from day one. Usage never recorded could never be shown.                                                     |
+| A live "compacting…" trace in more places             | The backstop's status is a Run event (ADR-0023), not a one-off UI flag. A later trace is the same event rendered in more places, not a second mechanism.                       |
+| The general in-call trim (R2 of #1263)                | Overflow is caught at the summary pass, which is the seam a general retry plugs into. **At most one retry per step, whichever strategy takes it** is the rule this ADR sets.   |
+| Summarising older steps inside a long tool-using turn | This ADR's hysteresis rule is stated generally, so an in-turn pass adopts it under the same decision rather than a new one.                                                    |
+| An ingestion cap for MCP results and `fetchUrl`       | One wording and one shape for "too large; request less" is used by the summary pass's overflow retry, so the cap and the recovery path teach the model one pattern.            |
+| Batch clearing for cache hits (`clear_at_least`)      | Trigger/target hysteresis is stated here as the rule for any context reduction, so clearing can adopt it later under this ADR. **Adopted in #1731** — see the amendment below. |
 
 ## Amendment: an overflow takes a summary (#1717)
 
@@ -137,6 +137,40 @@ starts as the failed turn ends, and a next message waits for it at the
 backstop. A Regenerate's path no longer holds the failed reply, so it reads the
 summary only once the pass has landed. The R3 overflow retry (replace the last tool step's results, retry once)
 is the "one retry per step" seam this ADR's deferred R2 row names.
+
+## Amendment: clearing adopts the hysteresis rule (#1731)
+
+The deferred `clear_at_least` row above is now built, under this ADR's rule
+rather than a new decision. **Tool-result clearing** and **Tool-input clearing**
+keep their 0.7 trigger. Once a pass engages it moves the survivor boundary by a
+fixed batch — 4 items, shared by both mechanisms and both frontend mirrors —
+rather than by one item per step. With `n` clearable items and `k` kept, the
+pass clears the oldest `floor((n − k) / b) · b`. Between `k` and `k + b − 1`
+items stay live, and the `b`th append moves the boundary by exactly `b`.
+
+Every step that moves the boundary changes an earlier message, which
+invalidates the Provider's cached prompt prefix from that message onward. The
+batch is our stand-in for Anthropic's `clear_at_least`, which is a token amount;
+a count is what can be known without the local token estimate ADR-0018 refuses.
+`keepRecent` is unchanged and still protects the newest four results or writes.
+The summary pass's unconditional `clearStaleToolResults` call with
+`keepRecent: 0` is unchanged too: it clears everything in its input, because
+its input has no window of its own to protect and a batch that left items live
+would defeat the pass's bound.
+
+Engagement is **sticky**. A pass clears a batch, the turn's last reading is
+taken with that batch in place and can fall back under the trigger, so gating
+only on the current reading would re-send every cleared item next turn and then
+clear again the turn after — the cache cost this change exists to remove.
+Clearing therefore engages when the current reading reaches the trigger **or**
+any Context occupancy reading already on the **Active path**, projected with
+`nextTurnOccupancy`, reached it. A Delete or a switch to an Alternative that
+removes the high reading disengages it naturally; there is no stored flag. The
+accepted ceiling is that after a **Transcript summary** the covered messages
+stay on the Active path, so a pre-summary high reading keeps clearing engaged
+even with headroom. That only drops older read-only results and successful
+write inputs, which is harmless. Within a turn, the per-step reading still
+drives `prepareStep` as before.
 
 ## Notes
 

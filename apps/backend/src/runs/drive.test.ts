@@ -18,7 +18,7 @@ import {
 import { RunEventRecorder } from "./run-events.ts";
 import type { PlatypusUIMessage } from "../types.ts";
 import type { RunStats, RunStatus } from "./types.ts";
-import { CLEARED_TOOL_RESULT_MARKER } from "./tool-result-clearing.ts";
+import { CLEARED_TOOL_RESULT_MARKER } from "@platypus/schemas";
 import type { ModelMessage } from "ai";
 import { ANSWER_STEP_INSTRUCTION } from "./answer-step.ts";
 import type { RunPlan } from "./run-plan.ts";
@@ -1236,7 +1236,10 @@ describe("Tool-result clearing inheritance", () => {
           type: "tool-result" as const,
           toolCallId: `t${i}`,
           toolName: "read_url",
-          output: { type: "text" as const, value: `page ${i} content` },
+          output: {
+            type: "text" as const,
+            value: `page ${i} content ${"x".repeat(5_000)}`,
+          },
         },
       ],
     }));

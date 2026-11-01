@@ -1,12 +1,16 @@
 import type { ModelMessage } from "ai";
 import {
   CLEARABLE_TOOL_INPUT_FIELDS,
+  CLEARED_TOOL_INPUT_MARKER,
+  clearingEngaged,
+  clearingPrefixLength,
   TOOL_INPUT_CLEARING_KEEP_RECENT,
+  TOOL_RESULT_CLEARING_BATCH,
   TOOL_RESULT_CLEARING_THRESHOLD,
 } from "@platypus/schemas";
-import type {
-  ClearingPolicy,
-  OccupancyReading,
+import {
+  type ClearingPolicy,
+  type OccupancyReading,
 } from "./tool-result-clearing.ts";
 
 /**
@@ -18,19 +22,17 @@ import type {
  * only, like result clearing — what is persisted and what a User sees keep
  * the full input. Wired in beside `applyToolResultClearing` in
  * `buildModelInvocation` (`./run-plan.ts`), so every Drive gets it.
+ *
+ * Same batched boundary and sticky gate as result clearing, through the same
+ * `clearingPrefixLength` and `clearingEngaged`: once engaged it moves the
+ * survivor boundary by a whole batch of successful writes, so the cached
+ * prompt prefix survives the steps in between.
  */
-
-/**
- * What a cleared input field becomes. Unlike the result marker this points at
- * reading back: the write succeeded, so its effect is still there to read,
- * which is exactly why its input is safe to drop.
- */
-export const CLEARED_TOOL_INPUT_MARKER =
-  "[Tool input cleared: this content was removed from what was sent to the model to free up space in its context window. The call succeeded; read the file back to see its current state.]";
 
 export const DEFAULT_INPUT_CLEARING_POLICY: ClearingPolicy = {
   thresholdFraction: TOOL_RESULT_CLEARING_THRESHOLD,
   keepRecent: TOOL_INPUT_CLEARING_KEEP_RECENT,
+  batchSize: TOOL_RESULT_CLEARING_BATCH,
 };
 
 type ToolOutput = { type: string; value?: unknown };
@@ -80,43 +82,44 @@ const clearFields = (input: unknown, fields: readonly string[]): unknown => {
   };
 };
 
-/**
- * Clears the allowlisted input fields of every successful clearable call
- * EXCEPT the `keepRecent` most recent, once occupancy has reached
- * `thresholdFraction` of the declared window. An undeclared window or unknown
- * occupancy clears nothing, as with result clearing.
- *
- * Returns the same array reference when nothing changes, so a caller can tell
- * "untouched" from "rebuilt" by identity.
- */
-export const applyToolInputClearing = (
-  messages: ModelMessage[],
-  reading: OccupancyReading,
-  policy: ClearingPolicy = DEFAULT_INPUT_CLEARING_POLICY,
-): ModelMessage[] => {
-  const { occupancy, contextWindow } = reading;
-  if (occupancy === undefined || contextWindow === undefined) return messages;
-  if (occupancy / contextWindow < policy.thresholdFraction) return messages;
-
+/** The `toolCallId`s of successful calls to a clearable write tool, in transcript order. */
+const clearableCallIds = (messages: ModelMessage[]): string[] => {
   const succeededIds = succeededCallIds(messages);
-  const clearableIds: string[] = [];
+  const ids: string[] = [];
   for (const message of messages) {
     if (message.role !== "assistant" || typeof message.content === "string")
       continue;
     for (const part of message.content) {
-      if (
-        part.type === "tool-call" &&
-        CLEARABLE_TOOL_INPUT_FIELDS.has(part.toolName) &&
-        succeededIds.has(part.toolCallId)
-      ) {
-        clearableIds.push(part.toolCallId);
-      }
+      if (part.type !== "tool-call") continue;
+      if (!CLEARABLE_TOOL_INPUT_FIELDS.has(part.toolName)) continue;
+      if (!succeededIds.has(part.toolCallId)) continue;
+      ids.push(part.toolCallId);
     }
   }
-  const stale = new Set(
-    clearableIds.slice(0, Math.max(0, clearableIds.length - policy.keepRecent)),
-  );
-  if (stale.size === 0) return messages;
+  return ids;
+};
+
+/**
+ * Clears the batched prefix of clearable calls' input — the oldest
+ * `floor((n - keepRecent) / batchSize) * batchSize` — leaving the newest
+ * `keepRecent` untouched. No occupancy check: `applyToolInputClearing` is the
+ * gated entry point.
+ */
+export const clearStaleToolInputs = (
+  messages: ModelMessage[],
+  policy: Pick<
+    ClearingPolicy,
+    "keepRecent" | "batchSize"
+  > = DEFAULT_INPUT_CLEARING_POLICY,
+): ModelMessage[] => {
+  const callIds = clearableCallIds(messages);
+  const count = clearingPrefixLength({
+    itemCount: callIds.length,
+    keepRecent: policy.keepRecent,
+    batchSize: policy.batchSize,
+  });
+  if (count === 0) return messages;
+  const stale = new Set(callIds.slice(0, count));
 
   const cleared = messages.map((message) => {
     if (message.role !== "assistant" || typeof message.content === "string")
@@ -136,4 +139,31 @@ export const applyToolInputClearing = (
   return cleared.every((message, i) => message === messages[i])
     ? messages
     : cleared;
+};
+
+/**
+ * The gated entry point: clears a batch of allowlisted input fields once
+ * clearing has engaged — the current reading is at `thresholdFraction` of the
+ * declared window, or an earlier reading on the Active path was. An undeclared
+ * window clears nothing, as with result clearing.
+ *
+ * Returns the same array reference when nothing changes, so a caller can tell
+ * "untouched" from "rebuilt" by identity.
+ */
+export const applyToolInputClearing = (
+  messages: ModelMessage[],
+  reading: OccupancyReading,
+  policy: ClearingPolicy = DEFAULT_INPUT_CLEARING_POLICY,
+): ModelMessage[] => {
+  if (
+    !clearingEngaged({
+      occupancy: reading.occupancy,
+      contextWindow: reading.contextWindow,
+      thresholdFraction: policy.thresholdFraction,
+      priorReadings: reading.priorReadings,
+    })
+  ) {
+    return messages;
+  }
+  return clearStaleToolInputs(messages, policy);
 };
