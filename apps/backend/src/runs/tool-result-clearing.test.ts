@@ -33,7 +33,7 @@ const userMessage = (text: string): ModelMessage => ({
 
 const POLICY: ClearingPolicy = {
   thresholdFraction: 0.7,
-  targetFraction: 0.5,
+  targetFraction: 0.4,
   keepRecent: 2,
   minBatch: 4,
 };
@@ -221,19 +221,18 @@ describe("clearToolResultsToTarget", () => {
   const reading = { occupancy: 700, contextWindow: 1_000 };
 
   it("clears a batch down to the target fraction rather than every stale result", () => {
-    // 50,000 observed characters, 700 of a 1,000-token window: reaching 500
-    // means freeing 200/700 of what is sent (about 14,286 characters). Three
-    // 5,000-character results would do it; the four-result batch floor clears
-    // one more, and the remaining four stale ones stay so the boundary does not
-    // have to move again for several steps.
+    // 50,000 observed characters, 700 of a 1,000-token window: reaching 400
+    // means freeing 300/700 of what is sent (about 21,429 characters). Five
+    // 5,000-character results do it, and the remaining stale ones stay so the
+    // boundary does not have to move again for several steps.
     const messages = Array.from({ length: 10 }, (_, i) => bigResult(`t${i}`));
 
     const result = clearToolResultsToTarget(messages, reading, POLICY);
 
-    expect(clearedIds(result)).toEqual(["t0", "t1", "t2", "t3"]);
+    expect(clearedIds(result)).toEqual(["t0", "t1", "t2", "t3", "t4"]);
     // Every surviving message is the same object, not a rebuilt equal one.
-    result.slice(4).forEach((message, index) => {
-      expect(message).toBe(messages[index + 4]);
+    result.slice(5).forEach((message, index) => {
+      expect(message).toBe(messages[index + 5]);
     });
   });
 
@@ -266,7 +265,7 @@ describe("clearToolResultsToTarget", () => {
           keepRecent: 4,
         }),
       ),
-    ).toEqual(["t0", "t1", "t2", "t3"]);
+    ).toEqual(["t0", "t1", "t2", "t3", "t4"]);
   });
 
   it("leaves the prefix byte-identical across the steps the target buys", () => {
@@ -305,6 +304,7 @@ describe("clearToolResultsToTarget", () => {
       "t5",
       "t6",
       "t7",
+      "t8",
     ]);
   });
 });
@@ -373,7 +373,7 @@ describe("applyToolResultClearing", () => {
           { ...POLICY, keepRecent: 4 },
         ),
       ),
-    ).toEqual(["t0", "t1", "t2", "t3"]);
+    ).toEqual(["t0", "t1", "t2", "t3", "t4"]);
   });
 
   it("waits for a batch rather than clearing one result at a time", () => {

@@ -142,7 +142,7 @@ is the "one retry per step" seam this ADR's deferred R2 row names.
 
 The deferred `clear_at_least` row above is now built, under this ADR's rule
 rather than a new decision. **Tool-result clearing** and **Tool-input clearing**
-keep their 0.7 trigger. Once a pass engages it clears down to 0.5 of the
+keep their 0.7 trigger. Once a pass engages it clears down to 0.4 of the
 declared window, and it clears at least four live results when that many are
 available. A pass that cannot reach the target and has fewer than four live
 results waits for the next ones instead of moving the survivor boundary by one

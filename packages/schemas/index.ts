@@ -1631,7 +1631,7 @@ export const TOOL_INPUT_CLEARING_KEEP_RECENT = 4;
  * changing the declared window. A fixed "clear N more" would be a different
  * amount of relief on every model.
  */
-export const TOOL_RESULT_CLEARING_TARGET = 0.5;
+export const TOOL_RESULT_CLEARING_TARGET = 0.4;
 
 /**
  * The smallest number of clearable results a pass clears once it engages —

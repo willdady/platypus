@@ -92,7 +92,7 @@ describe("clearedToolCallIds", () => {
     expect(result).toEqual(new Set());
   });
 
-  it("marks a target-sized batch rather than every stale result", () => {
+  it("marks every stale result when the target reaches all of them", () => {
     const messages = Array.from({ length: 10 }, (_, i) =>
       toolResultMessage("read_url", `t${i}`),
     );
@@ -100,9 +100,9 @@ describe("clearedToolCallIds", () => {
       occupancy: 95,
       contextWindow: 100,
     });
-    // Six are stale by count; clearing to the 0.5 target needs five of the
-    // 5,000-character results, so the last five stay live.
-    expect(result).toEqual(new Set(["t0", "t1", "t2", "t3", "t4"]));
+    // Six are stale by count and the 0.4 target needs all six of the
+    // 5,000-character results to reach it.
+    expect(result).toEqual(new Set(["t0", "t1", "t2", "t3", "t4", "t5"]));
   });
 
   it("marks a failed read's result as cleared, as the backend does", () => {
@@ -124,7 +124,7 @@ describe("clearedToolCallIds", () => {
       occupancy: 95,
       contextWindow: 100,
     });
-    expect(result).toEqual(new Set(["t0", "t1", "t2", "t3", "t4"]));
+    expect(result).toEqual(new Set(["t0", "t1", "t2", "t3", "t4", "t5"]));
   });
 
   it("never marks a tool's result as cleared when no message reports it clearable", () => {
@@ -149,7 +149,7 @@ describe("clearedToolCallIds", () => {
       occupancy: 95,
       contextWindow: 100,
     });
-    expect(result).toEqual(new Set(["t0", "t1", "t2", "t3", "t4"]));
+    expect(result).toEqual(new Set(["t0", "t1", "t2", "t3", "t4", "t5"]));
   });
 
   it("unions clearable names reported across different messages", () => {
@@ -171,7 +171,7 @@ describe("clearedToolCallIds", () => {
       occupancy: 95,
       contextWindow: 100,
     });
-    expect(result).toEqual(new Set(["t0", "t1", "t2", "t3", "t4"]));
+    expect(result).toEqual(new Set(["t0", "t1", "t2", "t3", "t4", "t5"]));
   });
 
   // The transcript memo compares this Set by identity, so "nothing is cleared"
@@ -251,9 +251,9 @@ describe("clearedInputToolCallIds", () => {
   it("marks a target-sized batch of writes rather than every stale one", () => {
     const messages = Array.from({ length: 12 }, (_, i) => write(`w${i}`));
     const cleared = clearedInputToolCallIds(messages, ABOVE);
-    // Eight are stale by count; the target stops the batch after seven.
+    // Eight are stale by count and the 0.4 target reaches all of them.
     expect(cleared).toEqual(
-      new Set(["w0", "w1", "w2", "w3", "w4", "w5", "w6"]),
+      new Set(["w0", "w1", "w2", "w3", "w4", "w5", "w6", "w7"]),
     );
   });
 

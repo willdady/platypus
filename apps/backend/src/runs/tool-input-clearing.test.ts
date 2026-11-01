@@ -106,8 +106,8 @@ describe("applyToolInputClearing", () => {
     const messages = writes(12);
     const cleared = applyToolInputClearing(messages, ABOVE);
 
-    // Eight are stale; the target needs six, so the boundary stays put for
-    // the next several writes instead of sliding by one on every step.
+    // Eight are stale; the 0.4 target reaches past all of them, so this is
+    // the maximum batch rather than a partial one.
     expect(clearedWriteIds(cleared)).toEqual([
       "w0",
       "w1",
@@ -115,8 +115,10 @@ describe("applyToolInputClearing", () => {
       "w3",
       "w4",
       "w5",
+      "w6",
+      "w7",
     ]);
-    for (let i = 6; i < 12; i += 1) {
+    for (let i = 8; i < 12; i += 1) {
       expect(inputOf(cleared, `w${i}`)).toBe(inputOf(messages, `w${i}`));
     }
   });

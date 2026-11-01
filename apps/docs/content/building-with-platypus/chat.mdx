@@ -475,7 +475,7 @@ MCP tool whose server declares it read-only (see
 no benefit from this for that tool.
 
 It works in batches: once it starts, it keeps clearing until the meter is back
-to about **50%**, and it clears at least four results when there are that many
+to about **40%**, and it clears at least four results when there are that many
 to clear. That gap is deliberate. Providers cache the opening of every request,
 and clearing one more result on every step would change an earlier message on
 every step, throwing that cache away each time. Clearing a batch leaves the

@@ -174,10 +174,8 @@ const ROOMY = {
 };
 
 /**
- * A turn where clearing everything past keep-recent would drop well below the
- * 0.5 target. The target stops earlier, so it keeps more context live — and
- * when the boundary does move, more of the suffix is live content that has to
- * be re-read. Recorded below as the cost the creep-regime win is bought with.
+ * A turn where clearing everything past keep-recent already reaches the 0.4
+ * target: the old rule clears all of it, and so does the new one.
  */
 const MID = {
   basePromptChars: 300_000,
@@ -243,26 +241,20 @@ describe("Tool-result clearing — cached prompt prefix measurement", () => {
     );
   });
 
-  it("sends byte-identical prompts on a turn that already had room to clear", () => {
-    // The control: same inputs, both rules step by step. This is stronger than
-    // comparing aggregate metrics, which could hide a different set of changes.
-    const before = simulate(ROOMY, oldRule).prompts.map((p) =>
+  it.each([
+    ["a turn with room to spare", ROOMY],
+    ["a turn where clearing everything reaches the target", MID],
+  ])("sends byte-identical prompts on %s", (_, scenario) => {
+    // The controls: same inputs, both rules step by step. This is stronger
+    // than comparing aggregate metrics, which could hide a different set of
+    // changes.
+    const before = simulate(scenario, oldRule).prompts.map((p) =>
       JSON.stringify(p),
     );
-    const after = simulate(ROOMY, newRule).prompts.map((p) =>
+    const after = simulate(scenario, newRule).prompts.map((p) =>
       JSON.stringify(p),
     );
     expect(after).toEqual(before);
-  });
-
-  it("records the cost where clearing everything would go well below the target", () => {
-    const before = measure(MID, oldRule);
-    const after = measure(MID, newRule);
-    // One invalidation either way in this window, but the target leaves more
-    // live content, so the suffix re-read on that invalidation is larger. This
-    // is the trade the creep-regime win is bought with, not a hidden win.
-    expect(after.stepsWithEarlierChange).toBe(before.stepsWithEarlierChange);
-    expect(after.invalidatedChars).toBeGreaterThan(before.invalidatedChars);
   });
 
   it("does not push a small window past where the old rule took it", () => {
