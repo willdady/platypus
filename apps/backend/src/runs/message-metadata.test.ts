@@ -1084,6 +1084,73 @@ describe("the step-ceiling stop over a real multi-step stream", () => {
     expect(message?.metadata).not.toHaveProperty("stoppedAtStepLimit");
   });
 
+  // Issue #1730. The answer step counts inside the ceiling, so a model told to
+  // answer that instead stops without writing anything is still an unanswered
+  // turn at the ceiling. The finish reason cannot say so — it is a normal
+  // "stop" — so the step count and the step's own silence have to.
+  it("flags the answer step that wrote nothing", async () => {
+    const result = streamText({
+      model: mockModel([
+        toolCallStep(usage(1_000, 30)),
+        chunks([
+          { type: "stream-start", warnings: [] },
+          {
+            type: "finish",
+            finishReason: { unified: "stop", raw: "end_turn" },
+            usage: usage(4_200, 0),
+          },
+        ]),
+      ]),
+      prompt: "Ping the service and tell me what it said.",
+      tools: { ping },
+      stopWhen: [stepCountIs(2)],
+    });
+
+    const message = await lastSnapshot(
+      toUIMessageStream({
+        stream: result.stream,
+        messageMetadata: createMessageMetadata({
+          agentId: "agent-1",
+          stepCeiling: 2,
+        }),
+      }),
+    );
+
+    expect(message?.metadata?.stoppedAtStepLimit).toBe(true);
+    expect(message?.metadata).not.toHaveProperty("truncatedByTokenLimit");
+  });
+
+  // The same empty stop below the ceiling is a model that simply said nothing:
+  // it wasted no allotted work, so no cutoff is reported.
+  it("says nothing about a silent stop that left steps unused", async () => {
+    const result = streamText({
+      model: mockModel([
+        chunks([
+          { type: "stream-start", warnings: [] },
+          {
+            type: "finish",
+            finishReason: { unified: "stop", raw: "end_turn" },
+            usage: usage(1_000, 0),
+          },
+        ]),
+      ]),
+      prompt: "Say nothing.",
+      stopWhen: [stepCountIs(2)],
+    });
+
+    const message = await lastSnapshot(
+      toUIMessageStream({
+        stream: result.stream,
+        messageMetadata: createMessageMetadata({
+          agentId: "agent-1",
+          stepCeiling: 2,
+        }),
+      }),
+    );
+
+    expect(message?.metadata).not.toHaveProperty("stoppedAtStepLimit");
+  });
+
   // The output ceiling is the other way a turn is cut short, and the two are
   // separate facts: a truncated reply is not a step-limit stop.
   it("reports the output ceiling, not the step limit, when the reply ran out of room", async () => {

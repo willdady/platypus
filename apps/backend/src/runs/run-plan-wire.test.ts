@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import type { LanguageModel } from "ai";
-import { generateText } from "ai";
+import { generateText, tool } from "ai";
+import { z } from "zod";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock";
@@ -8,6 +9,7 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import type { ModelConfig } from "@platypus/schemas";
 import { createOverflowRecovery } from "./context-overflow-recovery.ts";
+import { ANSWER_STEP_INSTRUCTION } from "./answer-step.ts";
 import {
   buildModelInvocation,
   REQUEST_LEVEL_CACHE_DIRECTIVE,
@@ -121,11 +123,18 @@ const TWO_TURN = [
   { role: "user" as const, content: "now what" },
 ];
 
-const runOne = async (model: LanguageModel, prompt?: string) => {
-  const invocation = buildModelInvocation(planWith(model), {
-    abortSignal: new AbortController().signal,
-    overflowRecovery: createOverflowRecovery(),
-  });
+const runOne = async (
+  model: LanguageModel,
+  prompt?: string,
+  overrides: Partial<RunPlan> = {},
+) => {
+  const invocation = buildModelInvocation(
+    { ...planWith(model), ...overrides },
+    {
+      abortSignal: new AbortController().signal,
+      overflowRecovery: createOverflowRecovery(),
+    },
+  );
   return generateText({
     ...invocation,
     ...(prompt ? { prompt } : { messages: TWO_TURN }),
@@ -232,6 +241,70 @@ describe("prompt cache wire shape", () => {
       }
       expect(result.warnings ?? []).toEqual([]);
     }
+  });
+});
+
+/**
+ * The answer step's wire shape (issue #1730): on a turn whose ceiling is one, a
+ * Chat's opening user message is followed straight away by the instruction, so
+ * the request carries two user messages in a row. Both vendor adapters group
+ * them into one turn — the assertion here is that the second form does not
+ * produce an invalid request — and the tools stay declared, which is the whole
+ * reason the instruction is a message rather than a tool override.
+ */
+describe("the answer step wire shape", () => {
+  const probe = () =>
+    tool({
+      description: "Look something up.",
+      inputSchema: z.object({ q: z.string().optional() }),
+      execute: () => Promise.resolve("ok"),
+    });
+
+  it("Anthropic: one user turn carrying the instruction, with the tools still declared", async () => {
+    const captured: CapturedBody[] = [];
+    const model = createAnthropic({
+      apiKey: "sk-x",
+      fetch: recordingFetch(captured, ANTHROPIC_RESPONSE),
+    })("claude-sonnet-4-20250514");
+
+    const result = await runOne(model, "hello", {
+      maxSteps: 1,
+      tools: { probe: probe() },
+    });
+
+    const body = captured[0].body;
+    expect(JSON.stringify(body.messages)).toContain(ANSWER_STEP_INSTRUCTION);
+    // Two ModelMessages (the user's and the instruction) become one turn.
+    expect(
+      (body.messages as Array<{ role: string }>).map((m) => m.role),
+    ).toEqual(["user"]);
+    expect((body.tools as unknown[]).length).toBe(1);
+    expect(result.warnings ?? []).toEqual([]);
+  });
+
+  it("Bedrock: the cache point trails the instruction, and the tool is declared", async () => {
+    const captured: CapturedBody[] = [];
+    const model = createAmazonBedrock({
+      region: "us-east-1",
+      accessKeyId: "a",
+      secretAccessKey: "b",
+      fetch: recordingFetch(captured, BEDROCK_RESPONSE),
+    })("anthropic.claude-3-5-sonnet-20240620-v1:0");
+
+    await runOne(model, "hello", { maxSteps: 1, tools: { probe: probe() } });
+
+    const body =
+      captured.find((c) => c.url.includes("converse")) ?? captured[0];
+    const messages = body.body.messages as Array<{ content: unknown[] }>;
+    expect(JSON.stringify(body.body)).toContain(ANSWER_STEP_INSTRUCTION);
+    // One Converse message: the user's text, the instruction, then the point.
+    expect(messages).toHaveLength(1);
+    expect(
+      (messages[0].content as Array<{ cachePoint?: unknown }>).at(-1),
+    ).toHaveProperty("cachePoint");
+    expect((body.body.toolConfig as { tools: unknown[] }).tools).toHaveLength(
+      1,
+    );
   });
 });
 

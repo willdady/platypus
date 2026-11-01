@@ -31,10 +31,12 @@ export const SUB_AGENT_CUT_SHORT_NOTICE =
 /**
  * The same thing for the other limit: the Sub-Agent's tool-calling loop ran out
  * of steps while it was still working, so what came back is as far as it got —
- * which may be a tool result and no answer at all.
+ * which may be a tool result and no answer at all. The delegate was told on its
+ * last step to answer from what it had (issue #1730); its **Max steps** is its
+ * own, so raising the parent's changes nothing.
  */
 export const SUB_AGENT_STEP_LIMIT_NOTICE =
-  "Sub-Agent response cut short at the step limit.";
+  "Sub-Agent response cut short at the step limit. Raise the Sub-Agent's Max steps to let it finish.";
 
 function isSubAgentActivity(output: unknown): output is SubAgentActivity {
   return (

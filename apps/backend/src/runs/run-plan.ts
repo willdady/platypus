@@ -13,6 +13,7 @@ import {
   DEFAULT_CLEARING_POLICY,
 } from "./tool-result-clearing.ts";
 import { applyToolInputClearing } from "./tool-input-clearing.ts";
+import { withAnswerStepInstruction } from "./answer-step.ts";
 import { stepOccupancy, type UsageModel } from "./run-stats.ts";
 import { toolGateOptions, type ToolGateScope } from "../tool-gates/index.ts";
 import { capToolResults } from "../services/tool-result.ts";
@@ -221,18 +222,21 @@ export const buildModelInvocation = (
   // read. The plan's own options (a Reasoning fragment, or OpenRouter's own
   // `reasoning`) are merged in per namespace, so the directives survive.
   providerOptions: withPlanProviderOptions(plan.providerOptions),
-  // Tool-result and Tool-input clearing (ADR-0018 Notes, issues #524, #1722)
-  // and the trailing Bedrock cache point all live here, mutating the same
-  // `messages` value in the same callback. `prepareStep` fires before every
-  // step INCLUDING the first, and its `messages` override carries forward to
-  // later steps — the one seam that reaches both a within-turn blowup and, via
-  // `initialOccupancy`, a turn's very first call. It never touches `onFinish`'s response messages, so what
-  // a Chat persists is unaffected regardless of what this returns.
+  // Tool-result and Tool-input clearing (ADR-0018 Notes, issues #524, #1722),
+  // the final-step answer instruction (issue #1730) and the trailing Bedrock
+  // cache point all live here, mutating the same `messages` value in the same
+  // callback. `prepareStep` fires before every step INCLUDING the first, and its
+  // `messages` override carries forward to later steps — the one seam that
+  // reaches both a within-turn blowup and, via `initialOccupancy`, a turn's very
+  // first call. It never touches `onFinish`'s response messages, so what a Chat
+  // persists is unaffected regardless of what this returns.
   prepareStep: ({
     steps,
+    stepNumber,
     messages,
   }: {
     steps: Array<{ usage?: { inputTokens?: number } }>;
+    stepNumber: number;
     messages: ModelMessage[];
   }) => {
     // The most recently completed step's occupancy IS the current context
@@ -276,13 +280,21 @@ export const buildModelInvocation = (
         "Context near full with nothing left to clear",
       );
     }
+    // The Step ceiling's answer step (issue #1730): on the last call the
+    // ceiling allows, the model is told so in a trailing message. It is
+    // appended rather than expressed by removing Tools — see
+    // `withAnswerStepInstruction` — so the cached prefix is untouched.
+    const withAnswerStep = withAnswerStepInstruction(cleared, {
+      stepNumber,
+      maxSteps: plan.maxSteps,
+    });
     // Always a `messages` override, never an empty object: Tool-result
     // clearing (above) and the trailing cache point (below) both act on this
     // array and both must survive a single pass. The cache point is attached
     // to the final message here rather than at the call level because Bedrock
     // has no automatic mode — its point must follow the end of the conversation
     // as it grows, which only this per-step seam can track.
-    return { messages: withBedrockCachePoint(cleared) };
+    return { messages: withBedrockCachePoint(withAnswerStep) };
   },
   // The Tool gate (ADR-0033): absent entirely when no gate is enabled.
   ...toolGateOptions(plan.gateScope, options.abortSignal),

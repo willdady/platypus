@@ -10,7 +10,8 @@ export const RUN_CUT_SHORT_NOTICE =
   "Run cut short at the model's output limit.";
 
 /** The same for a run whose tool-calling loop hit its step ceiling. */
-export const RUN_STEP_LIMIT_NOTICE = "Run cut short at the step limit.";
+export const RUN_STEP_LIMIT_NOTICE =
+  "Run cut short at the step limit. Raise Max steps to let it finish.";
 
 /**
  * The muted warning row for a per-turn notice about how an answer was produced

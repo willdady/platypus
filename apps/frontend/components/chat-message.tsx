@@ -91,11 +91,14 @@ export const CUT_SHORT_NOTICE =
 /**
  * The same thing for the other limit: the turn's tool-calling loop ran out of
  * steps while the model was still working, so the reply is whatever it had
- * produced by then — often nothing after the last tool row. States the fact and
- * stops: the ceiling is raisable on an Agent turn and not on a direct one, so a
- * remedy sentence would be wrong for half the turns that see this.
+ * produced by then — often nothing after the last tool row. The model was told
+ * on its last step to answer from what it had (issue #1730), so this means it
+ * called a tool again instead, or had nothing left to say. **Max steps** is the
+ * remedy on every turn that shows it: an Agent has the field, and a direct Chat
+ * has the same setting in Chat Settings.
  */
-export const STEP_LIMIT_NOTICE = "Response cut short at the step limit.";
+export const STEP_LIMIT_NOTICE =
+  "Response cut short at the step limit. Raise Max steps to let it finish.";
 
 /**
  * What the person reading a reply is told when they turned search on and the
