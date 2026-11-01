@@ -98,12 +98,6 @@ interface RawPluginConfig {
   credentials?: unknown;
 }
 
-// The full Operator-supplied config map, keyed by plugin name (`manifest.name`).
-// Parsed from the deprecated combined `PLATYPUS_PLUGIN_CONFIG` (see {@link
-// parsePluginConfig}); per-plugin `PLATYPUS_PLUGIN_CONFIG_<NAME>` vars are read
-// alongside it at load time.
-export type PluginConfigMap = Record<string, RawPluginConfig>;
-
 /**
  * What the loader derives each plugin's logger from — core's own logger, whose
  * level the Operator sets with `LOG_LEVEL`. Declared structurally, one method
@@ -158,11 +152,10 @@ export interface LoadPluginsOptions {
    */
   registerGate?: (registration: ToolGateRegistration) => void;
   /**
-   * Deploy-time plugin config/credentials keyed by plugin name, standing in for
-   * the combined `PLATYPUS_PLUGIN_CONFIG` (see {@link parsePluginConfig}).
-   * Per-plugin `PLATYPUS_PLUGIN_CONFIG_<NAME>` vars are still read from the env.
+   * The environment the `PLATYPUS_PLUGIN_CONFIG_<NAME>` vars are read from.
+   * Defaults to `process.env`.
    */
-  pluginConfig?: PluginConfigMap;
+  env?: Record<string, string | undefined>;
   /**
    * Parent of the per-plugin child loggers. Defaults to core's own logger, so a
    * plugin's lines share core's stream, format and `LOG_LEVEL`.
@@ -198,35 +191,6 @@ const parseJsonObject = (
     throw new Error(`${varName} must be a JSON object ${expected}.`);
   }
   return parsed;
-};
-
-/**
- * Parse the deprecated combined `PLATYPUS_PLUGIN_CONFIG` value — a JSON object
- * keyed by plugin name, each value an optional `{ config?, credentials? }` —
- * into a {@link PluginConfigMap}. An unset/empty value yields `{}`. Fail-loud:
- * malformed JSON, a non-object root, or a non-object entry aborts boot.
- */
-export const parsePluginConfig = (raw: string | undefined): PluginConfigMap => {
-  const trimmed = (raw ?? "").trim();
-  if (trimmed.length === 0) return {};
-
-  const parsed = parseJsonObject(
-    "PLATYPUS_PLUGIN_CONFIG",
-    trimmed,
-    "keyed by plugin name",
-  );
-
-  const map: PluginConfigMap = {};
-  for (const [pluginName, entry] of Object.entries(parsed)) {
-    if (!isRecord(entry)) {
-      throw new Error(
-        `PLATYPUS_PLUGIN_CONFIG["${pluginName}"] must be an object with optional "config" / "credentials".`,
-      );
-    }
-    const { config, credentials } = entry as RawPluginConfig;
-    map[pluginName] = { config, credentials };
-  }
-  return map;
 };
 
 const PER_PLUGIN_CONFIG_PREFIX = "PLATYPUS_PLUGIN_CONFIG_";
@@ -460,14 +424,15 @@ export async function loadPlugins(
   const registerSandbox = opts.registerSandbox ?? registerSandboxBackend;
   const registerWeb = opts.registerWeb ?? registerWebBackend;
   const registerGate = opts.registerGate ?? registerToolGate;
-  const combinedRaw = process.env.PLATYPUS_PLUGIN_CONFIG;
-  if (combinedRaw?.trim()) {
-    logger.warn(
-      "PLATYPUS_PLUGIN_CONFIG is deprecated and will be removed in the next major release. Replace it with one PLATYPUS_PLUGIN_CONFIG_<NAME> variable per plugin, each holding that plugin's { config, credentials } block.",
+  const env = opts.env ?? process.env;
+  // The combined var was removed in v4 (#1046). Ignoring it would boot every
+  // plugin it configured without its credentials, so its presence aborts boot.
+  if (env.PLATYPUS_PLUGIN_CONFIG?.trim()) {
+    throw new Error(
+      'PLATYPUS_PLUGIN_CONFIG is no longer supported. Move each of its keys into that plugin\'s own PLATYPUS_PLUGIN_CONFIG_<NAME> variable (the manifest name without "@platypus/", uppercased, with "-" as "_", e.g. PLATYPUS_PLUGIN_CONFIG_DOCKER), then unset PLATYPUS_PLUGIN_CONFIG.',
     );
   }
-  const pluginConfig = opts.pluginConfig ?? parsePluginConfig(combinedRaw);
-  const perPluginConfig = parsePerPluginConfig(process.env);
+  const perPluginConfig = parsePerPluginConfig(env);
   const baseLogger = opts.baseLogger ?? logger;
 
   // Tracks contribution id -> owning plugin name for owner-attributed
@@ -599,16 +564,6 @@ export async function loadPlugins(
     }
     configVarOwners.set(configVar, manifest.name);
 
-    // A plugin's own var and a combined-var entry are never merged: which one
-    // wins would be a guess, so having both aborts boot.
-    const ownConfig = perPluginConfig.get(configVar);
-    const combinedConfig = pluginConfig[manifest.name];
-    if (ownConfig && combinedConfig) {
-      throw new Error(
-        `Plugin "${manifest.name}" is configured in both ${configVar} and PLATYPUS_PLUGIN_CONFIG. Keep ${configVar} and remove the "${manifest.name}" key from PLATYPUS_PLUGIN_CONFIG.`,
-      );
-    }
-
     // Resolve the plugin's deploy-time config/credentials once (fail-loud) and
     // share the single block across every contribution factory below — this
     // object identity IS the "one credential block per plugin" of ADR-0013. The
@@ -616,7 +571,7 @@ export async function loadPlugins(
     // addition reaches all three Extension points with no per-point plumbing.
     const pluginCtx = resolvePluginConfig(
       manifest,
-      ownConfig ?? combinedConfig ?? {},
+      perPluginConfig.get(configVar) ?? {},
       baseLogger,
     );
 
@@ -660,18 +615,10 @@ export async function loadPlugins(
   }
 
   // Fail-loud (ADR-0013) on deploy-time config that targets no loaded plugin.
-  // PLATYPUS_PLUGIN_CONFIG is keyed by manifest name; a key matching nothing is
-  // almost always a typo or a plugin missing from PLATYPUS_PLUGINS — silently
-  // dropping the block (so a credential never reaches its factory) is exactly the
-  // kind of quiet misconfiguration the fail-loud boot posture exists to catch.
-  const loadedNames = new Set(loaded.map((p) => p.name));
-  for (const key of Object.keys(pluginConfig)) {
-    if (!loadedNames.has(key)) {
-      throw new Error(
-        `PLATYPUS_PLUGIN_CONFIG has an entry for "${key}", but no loaded plugin has that name. Config is keyed by the plugin's manifest name — check for a typo, or a plugin missing from PLATYPUS_PLUGINS.`,
-      );
-    }
-  }
+  // A var matching nothing is almost always a typo or a plugin missing from
+  // PLATYPUS_PLUGINS — silently dropping the block (so a credential never
+  // reaches its factory) is exactly the kind of quiet misconfiguration the
+  // fail-loud boot posture exists to catch.
   for (const varName of perPluginConfig.keys()) {
     if (!configVarOwners.has(varName)) {
       throw new Error(
