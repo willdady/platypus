@@ -414,6 +414,13 @@ export type FakeDbOptions = {
   /** Called before every insert, for tests that inject a failure mid-write. */
   onInsert?: (table: string, values: Row) => void;
   /**
+   * Column values Postgres fills from a column default on insert, per table
+   * (`createdAt`/`updatedAt` from `defaultNow()`). The fake has no column
+   * definitions to read, so a test that validates a write's response supplies
+   * the timestamps the database would have stamped.
+   */
+  defaults?: Record<string, Row>;
+  /**
    * Called as each query runs, before it touches a row. Throw (typically a
    * {@link dbError}) to fail that query the way the driver would.
    */
@@ -807,6 +814,7 @@ export const createFakeDb = (
       const write = (values: Row | Row[]) => {
         record({ kind: "insert", table: name });
         inserted = (Array.isArray(values) ? values : [values]).map((row) => ({
+          ...(options.defaults?.[name] ?? {}),
           ...row,
         }));
         for (const row of inserted) {

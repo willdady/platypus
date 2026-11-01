@@ -16,16 +16,25 @@ describe("redactProviderSecrets", () => {
     baseUrl: "https://api.openai.com",
   };
 
-  it("returns the row untouched when the caller may manage it", () => {
-    expect(redactProviderSecrets(row, { reveal: true })).toBe(row);
+  it("keeps the credential values when the caller may manage it", () => {
+    expect(redactProviderSecrets(row, { reveal: true })).toMatchObject({
+      apiKey: "sk-secret",
+      headers: { Authorization: "Bearer secret" },
+      apiKeySet: { configured: true },
+      headersSet: { configured: true },
+    });
   });
 
-  it("fails closed when no option is passed", () => {
-    // A new call site that forgets the flag must redact, not leak.
-    expect(redactProviderSecrets(row)).not.toHaveProperty("apiKey");
+  it("reports presence whatever the reveal decision", () => {
+    // One type, one set of presence keys: only the value keys differ.
+    for (const reveal of [true, false]) {
+      const out = redactProviderSecrets(row, { reveal });
+      expect(out.apiKeySet).toEqual({ configured: true });
+      expect(out.headersSet).toEqual({ configured: true });
+    }
   });
 
-  it("removes the credential fields and keeps the rest", () => {
+  it("removes the credential values but reports their presence", () => {
     const out = redactProviderSecrets(row, { reveal: false });
     expect(out).not.toHaveProperty("apiKey");
     expect(out).not.toHaveProperty("headers");
@@ -33,18 +42,21 @@ describe("redactProviderSecrets", () => {
       id: "p1",
       name: "OpenAI",
       baseUrl: "https://api.openai.com",
+      apiKeySet: { configured: true },
+      headersSet: { configured: true },
     });
     expect(JSON.stringify(out)).not.toContain("sk-secret");
     expect(JSON.stringify(out)).not.toContain("Bearer secret");
   });
 
   it("reports whether a credential is configured without revealing it", () => {
-    expect(redactProviderSecrets(row, { reveal: false })).toMatchObject({
-      apiKeySet: { configured: true },
-      headersSet: { configured: true },
-    });
     expect(
-      redactProviderSecrets({ ...row, apiKey: "", headers: null }, {}),
+      redactProviderSecrets(
+        { ...row, apiKey: "", headers: null },
+        {
+          reveal: false,
+        },
+      ),
     ).toMatchObject({
       apiKeySet: { configured: false },
       headersSet: { configured: false },
@@ -55,7 +67,9 @@ describe("redactProviderSecrets", () => {
     // `{}` round-trips out of jsonb for a Provider saved with no custom headers;
     // reporting it as configured would send the form hunting for a value that
     // isn't there.
-    expect(redactProviderSecrets({ ...row, headers: {} }, {})).toMatchObject({
+    expect(
+      redactProviderSecrets({ ...row, headers: {} }, { reveal: false }),
+    ).toMatchObject({
       headersSet: { configured: false },
     });
   });
@@ -70,15 +84,16 @@ describe("redactMcpSecrets", () => {
     headers: { "X-Api-Key": "hdr-secret" },
   };
 
-  it("returns the row untouched when the caller may manage it", () => {
-    expect(redactMcpSecrets(row, { reveal: true })).toBe(row);
+  it("keeps the request credentials when the caller may manage it", () => {
+    expect(redactMcpSecrets(row, { reveal: true })).toMatchObject({
+      bearerToken: "tok-secret",
+      headers: { "X-Api-Key": "hdr-secret" },
+      bearerTokenSet: { configured: true },
+      headersSet: { configured: true },
+    });
   });
 
-  it("fails closed when no option is passed", () => {
-    expect(redactMcpSecrets(row)).not.toHaveProperty("bearerToken");
-  });
-
-  it("removes the request credentials and keeps the rest", () => {
+  it("removes the credential values but reports their presence", () => {
     const out = redactMcpSecrets(row, { reveal: false });
     expect(out).not.toHaveProperty("bearerToken");
     expect(out).not.toHaveProperty("headers");
@@ -86,6 +101,8 @@ describe("redactMcpSecrets", () => {
       id: "mcp-1",
       name: "Rovo",
       authType: "Bearer",
+      bearerTokenSet: { configured: true },
+      headersSet: { configured: true },
     });
     expect(JSON.stringify(out)).not.toContain("tok-secret");
     expect(JSON.stringify(out)).not.toContain("hdr-secret");
@@ -94,7 +111,7 @@ describe("redactMcpSecrets", () => {
   it("reports presence for an OAuth MCP that has no bearer token", () => {
     const out = redactMcpSecrets(
       { id: "m", authType: "OAuth", bearerToken: null },
-      {},
+      { reveal: false },
     );
     expect(out).toMatchObject({ bearerTokenSet: { configured: false } });
   });
@@ -126,7 +143,7 @@ describe("read models", () => {
   } as unknown as McpRecord;
 
   it("strips minted OAuth secrets even when credentials are revealed", () => {
-    const out = mcpReadModel(mcp, { reveal: true });
+    const out = mcpReadModel(mcp, { reveal: true, scope: "workspace" });
     const json = JSON.stringify(out);
     expect(json).not.toContain("oauth-access");
     expect(json).not.toContain("oauth-refresh");
@@ -143,31 +160,26 @@ describe("read models", () => {
   });
 
   it("strips both secret classes when credentials are not revealed", () => {
-    const json = JSON.stringify(mcpReadModel(mcp, { reveal: false }));
+    const json = JSON.stringify(
+      mcpReadModel(mcp, { reveal: false, scope: "workspace" }),
+    );
     expect(json).not.toContain("oauth-access");
     expect(json).not.toContain("tok-secret");
     expect(json).not.toContain("hdr-secret");
   });
 
-  it("fails closed when reveal is not passed", () => {
-    const json = JSON.stringify(mcpReadModel(mcp));
-    expect(json).not.toContain("tok-secret");
+  it("always carries the resolved scope, on both surfaces", () => {
     expect(
-      JSON.stringify(
-        providerReadModel({ id: "p", apiKey: "sk-secret" } as never),
-      ),
-    ).not.toContain("sk-secret");
-  });
-
-  it("carries the resolved scope only when one is given", () => {
-    expect(mcpReadModel(mcp, { scope: "organization" })).toMatchObject({
-      scope: "organization",
-    });
-    expect(mcpReadModel(mcp)).not.toHaveProperty("scope");
+      mcpReadModel(mcp, { reveal: false, scope: "workspace" }),
+    ).toMatchObject({ scope: "workspace" });
+    expect(
+      mcpReadModel(mcp, { reveal: false, scope: "organization" }),
+    ).toMatchObject({ scope: "organization" });
     expect(
       providerReadModel({ id: "p", apiKey: "k" } as never, {
-        scope: "workspace",
+        reveal: false,
+        scope: "organization",
       }),
-    ).toMatchObject({ scope: "workspace" });
+    ).toMatchObject({ scope: "organization" });
   });
 });

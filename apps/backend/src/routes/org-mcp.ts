@@ -3,8 +3,10 @@ import { validate } from "../validate.ts";
 import { db } from "../index.ts";
 import {
   mcpCreateSchema,
-  mcpUpdateSchema,
+  mcpListResponseSchema,
+  mcpResponseSchema,
   mcpTestSchema,
+  mcpUpdateSchema,
 } from "@platypus/schemas";
 import { requireAuth } from "../middleware/authentication.ts";
 import {
@@ -25,11 +27,9 @@ import {
   clearOAuthTokens,
   probeMcpConnection,
 } from "../services/mcp-connection.ts";
-import {
-  mcpReadModel,
-  sanitizeMcpResponse,
-} from "../services/credential-redaction.ts";
+import { mcpReadModel } from "../services/credential-redaction.ts";
 import { createMcp, deleteMcp, updateMcp } from "../services/mcp-write.ts";
+import { respond } from "../respond.ts";
 
 // Org-scoped MCPs are Shared resources (ADR-0007). They introduce credentials
 // and external reach, so all mutations are org-admin-only (ADR-0006) — there is
@@ -49,7 +49,12 @@ orgMcp.post(
     // A duplicate name surfaces as a Postgres unique violation, mapped to 409
     // by the central onError (ADR-0010).
     const row = await createMcp({ kind: "organization", orgId }, data);
-    return c.json(sanitizeMcpResponse(row), 201);
+    return respond(
+      c,
+      mcpResponseSchema,
+      mcpReadModel(row, { reveal: true, scope: "organization" }),
+      201,
+    );
   },
 );
 
@@ -60,8 +65,10 @@ orgMcp.get("/", requireAuth, requireOrgAccess(), async (c) => {
   // This route admits any Organization member — a Shared MCP has to be listable
   // to be granted. Only an Org Admin sees its request credentials (ADR-0006).
   const reveal = orgCredentialsVisible(c);
-  return c.json({
-    results: results.map((row) => mcpReadModel(row, { reveal })),
+  return respond(c, mcpListResponseSchema, {
+    results: results.map((row) =>
+      mcpReadModel(row, { reveal, scope: "organization" }),
+    ),
   });
 });
 
@@ -72,7 +79,11 @@ orgMcp.get("/:mcpId", requireAuth, requireOrgAccess(), async (c) => {
   const record = await requireOrgScoped(db, "mcp", mcpId, orgId);
   // See the list route: request credentials are Org-Admin-only (ADR-0006).
   const reveal = orgCredentialsVisible(c);
-  return c.json(mcpReadModel(record, { reveal }));
+  return respond(
+    c,
+    mcpResponseSchema,
+    mcpReadModel(record, { reveal, scope: "organization" }),
+  );
 });
 
 /** Update an org-scoped MCP by ID (admin only) */
@@ -89,7 +100,12 @@ orgMcp.put(
     // A duplicate name surfaces as a Postgres unique violation, mapped to 409
     // by the central onError (ADR-0010).
     const row = await updateMcp({ kind: "organization", orgId }, mcpId, data);
-    return c.json(sanitizeMcpResponse(row), 200);
+    return respond(
+      c,
+      mcpResponseSchema,
+      mcpReadModel(row, { reveal: true, scope: "organization" }),
+      200,
+    );
   },
 );
 

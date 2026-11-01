@@ -15,7 +15,7 @@ import {
   requireOrgScoped,
 } from "../services/scoped-resource.ts";
 import { avatarBodyLimit } from "./avatar-body-limit.ts";
-import { agentWithAvatarUrl } from "../utils/avatar-url.ts";
+import { agentResponse } from "../services/scoped-response.ts";
 import { getOrigin } from "../utils/get-origin.ts";
 import type { Variables } from "../server.ts";
 import { NotFoundError } from "../errors.ts";
@@ -32,7 +32,7 @@ orgAgent.get("/", requireAuth, requireOrgAccess(), async (c) => {
   const baseUrl = getOrigin(c);
   const results = await listOrgScoped(db, "agent", orgId);
   return c.json({
-    results: results.map((r) => agentWithAvatarUrl(r, baseUrl)),
+    results: results.map((r) => agentResponse(r, "organization", baseUrl)),
   });
 });
 
@@ -42,7 +42,7 @@ orgAgent.get("/:agentId", requireAuth, requireOrgAccess(), async (c) => {
   const agentId = c.req.param("agentId");
   const baseUrl = getOrigin(c);
   const record = await requireOrgScoped(db, "agent", agentId, orgId);
-  return c.json(agentWithAvatarUrl(record, baseUrl));
+  return c.json(agentResponse(record, "organization", baseUrl));
 });
 
 /** Update an org-scoped Agent by ID (admin only) */
@@ -77,7 +77,7 @@ orgAgent.put(
       }
       return c.json({ error: result.error }, 400);
     }
-    return c.json(agentWithAvatarUrl(result.row, baseUrl), 200);
+    return c.json(agentResponse(result.row, "organization", baseUrl), 200);
   },
 );
 
@@ -94,7 +94,7 @@ orgAgent.post(
       c.req.param("agentId"),
       body["file"],
     );
-    return c.json(agentWithAvatarUrl(row, getOrigin(c)));
+    return c.json(agentResponse(row, "organization", getOrigin(c)));
   },
 );
 
@@ -108,7 +108,7 @@ orgAgent.delete(
       { kind: "organization", orgId: orgScopeOf(c).orgId },
       c.req.param("agentId"),
     );
-    return c.json(agentWithAvatarUrl(row, getOrigin(c)));
+    return c.json(agentResponse(row, "organization", getOrigin(c)));
   },
 );
 
