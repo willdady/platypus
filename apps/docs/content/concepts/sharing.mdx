@@ -38,12 +38,7 @@ That rule bites when you Promote an Agent: it's **refused** while
 its Provider, any of its Skills or Sub-Agents, or any MCP it's granted is still
 Workspace-scoped. Promote the Skills and Sub-Agents first. A Provider or MCP
 can't be promoted; recreate it at Organization scope (see [Promote](#promote)).
-Platypus does not resolve the prerequisite for you by quietly pulling it up
-alongside, because that would make something Organization-readable that no Org
-Admin ever named.
-
-The corollary is the useful half: nothing reaches Organization scope by accident.
-If a resource is Shared, somebody chose it.
+Nothing reaches Organization scope unless an Org Admin chose it.
 
 ### The Sandbox is the exception, and deliberately so
 
@@ -102,8 +97,10 @@ A **Blueprint** is a named, Organization-level recipe for setting up a Workspace
 in one step. Applying a Blueprint to a Workspace does two things at once:
 
 1. **attaches a chosen set of Shared resources** to the Workspace, and
-2. **sets the Workspace's defaults** — its task and memory **Providers**, and a
-   default **[Context](/concepts/memory-and-context)**.
+2. **sets the Workspace's defaults** — its task and memory **Providers**, and
+   the Workspace's own **Context** field (not your personal Context; see [Three
+   different things are called
+   Context](/concepts/memory-and-context#three-different-things-are-called-context)).
 
 **Why you'd use one:** onboarding. Instead of hand-configuring every new
 Workspace, an Org Admin defines a Blueprint once, then applies it with **Apply to

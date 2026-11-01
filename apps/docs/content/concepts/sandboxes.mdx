@@ -17,8 +17,8 @@ _inside_ that environment — not inside the Platypus backend itself.
 
 **Why you'd use one:** lots of useful work involves actually executing
 something — running a script, building a project, inspecting files. A Sandbox
-runs that work in its own environment — a container, or a remote host you point
-it at. How isolated that environment is depends on the backend; see [Sandbox
+runs that work in its own environment — a container, a remote host you point it
+at, or a hosted sandbox. How isolated that environment is depends on the backend; see [Sandbox
 infrastructure](/self-hosting/sandbox).
 
 Like an MCP, a Sandbox resolves to a **[Tool set](/concepts/tools)** at Chat-turn
@@ -49,7 +49,8 @@ neither one alone does anything:
 ## Pluggable backends
 
 The same Agent-facing tools can be powered by different backends. Platypus
-ships **Local Docker** and **SSH (Remote Host)**; others come from Plugins. Which
+ships **Local Docker**, **SSH (Remote Host)** and **Daytona**, each a Plugin the
+Operator enables; third-party Plugins can add more. Which
 backends a deployment offers is an Operator decision — see [Extending → Sandbox
 backends](/extending/sandbox-backends).
 
@@ -87,8 +88,7 @@ the model, unless the Agent views one itself (below).
 Not every backend supports file transfer. **Upload to Sandbox** appears only
 when the backend accepts uploads and the selected Agent has the Sandbox Tool
 set; when the backend can't serve downloads, the Agent doesn't get
-`fsDownload` or `fsView`. Local Docker and SSH support both
-directions.
+`fsDownload` or `fsView`. All three shipped backends support both directions.
 
 <Callout type="info">
   Setting up a Sandbox is an infrastructure task. See [Sandbox
