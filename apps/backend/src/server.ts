@@ -46,7 +46,7 @@ import { logger } from "./logger.ts";
 import { pingDatabase } from "./ready.ts";
 import { mapError } from "./errors.ts";
 import { runRegistry } from "./runs/run-registry.ts";
-import type { UserScope, OrgScope, WorkspaceScope } from "./scope.ts";
+import type { OrgScope, WorkspaceScope } from "./scope.ts";
 import { env } from "./env.ts";
 
 /**
@@ -76,31 +76,14 @@ export type { OrgRole } from "@platypus/schemas";
  * These are set by various middleware functions and can be accessed in route handlers.
  */
 export type Variables = {
-  /** Database instance for querying */
-  db: typeof db;
-
   /** Authenticated user from session (set by requireAuth middleware) */
   user?: typeof auth.$Infer.Session.user;
-
-  /** Session data (set by requireAuth middleware) */
-  session?: typeof auth.$Infer.Session.session;
 
   /**
    * Organization membership data (set by requireOrgAccess middleware).
    * Can be either regular membership or super admin membership.
    */
   orgMembership?: OrganizationMembership | SuperAdminOrgMembership;
-
-  /**
-   * Whether the current user owns the workspace (set by requireWorkspaceAccess middleware).
-   */
-  isWorkspaceOwner?: boolean;
-
-  /**
-   * User-level scope (set by requireAuth middleware).
-   * Carries the Principal identifying who is executing the request.
-   */
-  userScope?: UserScope;
 
   /**
    * Organization-level scope (set by requireOrgAccess middleware).
@@ -148,11 +131,6 @@ app.use("*", async (c, next) => {
 // Auth routes - must be before the db middleware
 app.on(["POST", "GET"], "/auth/*", (c) => {
   return auth.handler(c.req.raw);
-});
-
-app.use("*", async (c, next) => {
-  c.set("db", db);
-  await next();
 });
 
 // Liveness only: `ok` says the process is up and serving, nothing about the

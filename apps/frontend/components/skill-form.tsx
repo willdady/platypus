@@ -32,6 +32,7 @@ import {
   SKILL_DESCRIPTION_MAX_LENGTH,
   SKILL_NAME_MAX_LENGTH,
   type Skill,
+  type SkillResponse,
   type Agent,
 } from "@platypus/schemas";
 import { useScopedList } from "@/hooks/use-scoped-list";
@@ -135,11 +136,7 @@ function SkillForm({
     handleChange,
     toFieldChange,
     submit,
-  } = useEntityForm<
-    typeof INITIAL_DATA,
-    unknown,
-    Skill & { agentIds?: string[] }
-  >({
+  } = useEntityForm<typeof INITIAL_DATA, unknown, SkillResponse>({
     initialData: INITIAL_DATA,
     entity: "skills",
     scope,

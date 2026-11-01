@@ -54,8 +54,8 @@ const intendedToContinue = (finishReason: string | undefined): boolean =>
  * twice is a rule that drifts. Deciding a *tripped no-progress detector* owns
  * the stop instead is the caller's — this predicate never sees one.
  *
- * `stepCeiling` is optional so a caller with no ceiling to give reports nothing
- * rather than guessing one.
+ * Every turn has a step ceiling — it is the loop's step-count stop condition —
+ * so the caller always has one to give.
  */
 export const stoppedAtStepCeiling = ({
   finishReason,
@@ -64,11 +64,8 @@ export const stoppedAtStepCeiling = ({
 }: {
   finishReason: string | undefined;
   steps: number;
-  stepCeiling?: number;
-}): boolean =>
-  stepCeiling !== undefined &&
-  steps >= stepCeiling &&
-  intendedToContinue(finishReason);
+  stepCeiling: number;
+}): boolean => steps >= stepCeiling && intendedToContinue(finishReason);
 
 const describeValidationFailure = (error: InvalidToolInputError): string => {
   const issues = findIssues(error.cause);

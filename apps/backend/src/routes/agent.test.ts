@@ -138,7 +138,11 @@ describe("Agent Routes", () => {
       expect(res.status).toBe(201);
       const body = (await res.json()) as { id: string };
       expect(body).toEqual(
-        expect.objectContaining({ name: "New Agent", workspaceId }),
+        expect.objectContaining({
+          name: "New Agent",
+          workspaceId,
+          scope: "workspace",
+        }),
       );
       expect(fake.tables.agent).toEqual([
         expect.objectContaining({

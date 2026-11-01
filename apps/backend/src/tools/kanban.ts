@@ -40,7 +40,7 @@ export function createKanbanTools(
   workspaceId: string,
   agentId: string,
   orgId: string,
-  frontendUrl: string | undefined,
+  frontendUrl: string,
 ): Record<string, Tool> {
   // No board is named: an Agent works across every board in its Workspace.
   const ctx: KanbanContext = {
@@ -49,24 +49,22 @@ export function createKanbanTools(
     actor: { agentId },
   };
 
-  /** The board's page in the frontend, when one is configured. */
-  const boardUrl = (boardId: string): string | undefined =>
+  /** The board's page in the frontend. */
+  const boardUrl = (boardId: string): string =>
     buildResourceUrl(frontendUrl, orgId, workspaceId, `boards/${boardId}`);
 
   /** A deep link that opens the card on its board. */
-  const cardUrl = (boardId: string, cardId: string): string | undefined => {
-    const url = boardUrl(boardId);
-    return url && `${url}?cardId=${cardId}`;
-  };
+  const cardUrl = (boardId: string, cardId: string): string =>
+    `${boardUrl(boardId)}?cardId=${cardId}`;
 
   /** A written card as a Tool returns it: the row, plus a link to it. */
   const withCardUrl = <T extends { id: string }>(result: {
     card: T;
     boardId: string;
-  }) => {
-    const url = cardUrl(result.boardId, result.card.id);
-    return { ...result.card, ...(url && { url }) };
-  };
+  }) => ({
+    ...result.card,
+    url: cardUrl(result.boardId, result.card.id),
+  });
 
   const listAgents = createListAgentsTool({ orgId, workspaceId });
   const { listBoards, getBoardState } = createBoardReadTools(ctx, frontendUrl);
@@ -96,31 +94,55 @@ export function createKanbanTools(
       }),
   });
 
-  const upsertCard = tool({
+  /** The card fields a write may set, without the create-only ones. */
+  const cardFields = {
+    body: z.string().optional().describe("The card body/description"),
+    labelIds: z.array(z.string()).optional().describe("Label IDs to apply"),
+    assignees: z
+      .array(
+        z.object({
+          type: z.enum(["user", "agent"]),
+          id: z.string(),
+        }),
+      )
+      .max(1)
+      .optional()
+      .describe(
+        "Card assignee - array with at most one {type, id} object, or empty to unassign",
+      ),
+    dueDate: z
+      .string()
+      .optional()
+      .describe("Due date as ISO 8601 string, or null to clear"),
+    priority: z
+      .enum(["none", "low", "medium", "high", "urgent"])
+      .optional()
+      .describe("Priority level"),
+  };
+
+  const createCardTool = tool({
     description:
-      "Create a new card or update an existing card. If cardId is provided, updates the existing card. If cardId is not provided, creates a new card (requires columnId and title).",
+      "Create a new card at the end of a column. Requires columnId and title; every other field is optional.",
+    inputSchema: z.object({
+      label: z.string().describe("The card title (for display purposes)"),
+      columnId: z.string().describe("The column to create the card in"),
+      title: z.string().describe("The card title"),
+      ...cardFields,
+    }),
+    execute: async ({ columnId, title, label: _label, ...fields }) =>
+      asToolResult(async () =>
+        withCardUrl(await createCard(db, ctx, { ...fields, columnId, title })),
+      ),
+  });
+
+  const updateCardTool = tool({
+    description:
+      "Update an existing card. Only the fields provided are changed; omitted fields are left as they are.",
     inputSchema: z
       .object({
-        cardId: z
-          .string()
-          .optional()
-          .describe(
-            "The card ID to update. If not provided, a new card will be created.",
-          ),
-        label: z
-          .string()
-          .describe(
-            "The card title for display purposes (required when updating by cardId)",
-          ),
-        columnId: z
-          .string()
-          .optional()
-          .describe("The column ID (required when creating a new card)"),
-        title: z
-          .string()
-          .optional()
-          .describe("The card title (required when creating a new card)"),
-        body: z.string().optional().describe("The card body/description"),
+        cardId: z.string().describe("The card ID to update"),
+        label: z.string().describe("The card title (for display purposes)"),
+        title: z.string().optional().describe("The new card title"),
         bodyDiff: z
           .union([
             z.array(z.object({ search: z.string(), replace: z.string() })),
@@ -136,49 +158,15 @@ export function createKanbanTools(
               "OR a single {mode: 'append'|'prepend', content} object for boundary additions. " +
               "Mutually exclusive with `body`.",
           ),
-        labelIds: z.array(z.string()).optional().describe("Label IDs to apply"),
-        assignees: z
-          .array(
-            z.object({
-              type: z.enum(["user", "agent"]),
-              id: z.string(),
-            }),
-          )
-          .max(1)
-          .optional()
-          .describe(
-            "Card assignee - array with at most one {type, id} object, or empty to unassign",
-          ),
-        dueDate: z
-          .string()
-          .optional()
-          .describe("Due date as ISO 8601 string, or null to clear"),
-        priority: z
-          .enum(["none", "low", "medium", "high", "urgent"])
-          .optional()
-          .describe("Priority level"),
+        ...cardFields,
       })
       .refine((v) => !(v.body !== undefined && v.bodyDiff !== undefined), {
         message: "body and bodyDiff are mutually exclusive",
       }),
-    execute: async ({ cardId, columnId, title, label: _label, ...fields }) =>
-      asToolResult(async () => {
-        if (cardId) {
-          return withCardUrl(
-            await updateCard(db, ctx, cardId, { title, ...fields }),
-          );
-        }
-
-        if (!columnId || !title) {
-          return {
-            error: "columnId and title are required when creating a new card",
-          };
-        }
-
-        return withCardUrl(
-          await createCard(db, ctx, { ...fields, columnId, title }),
-        );
-      }),
+    execute: async ({ cardId, label: _label, ...fields }) =>
+      asToolResult(async () =>
+        withCardUrl(await updateCard(db, ctx, cardId, fields)),
+      ),
   });
 
   const moveCardTool = tool({
@@ -249,39 +237,32 @@ export function createKanbanTools(
       ),
   });
 
-  const upsertComment = tool({
-    description:
-      "Create a new comment or update an existing comment. If commentId is provided, updates the existing comment. If commentId is not provided, creates a new comment (requires cardId and body).",
+  const createCommentTool = tool({
+    description: "Add a comment to a kanban card.",
     inputSchema: z.object({
-      commentId: z
-        .string()
-        .optional()
-        .describe(
-          "The comment ID to update. If not provided, a new comment will be created.",
-        ),
+      cardId: z.string().describe("The card to comment on"),
       label: z
         .string()
         .describe("A short description of the comment (for display purposes)"),
-      cardId: z
-        .string()
-        .optional()
-        .describe(
-          "The card ID to comment on (required when creating a new comment)",
-        ),
       body: z.string().min(1).describe("The comment text (supports markdown)"),
     }),
-    execute: async ({ commentId, cardId, body }) =>
+    execute: async ({ cardId, body }) =>
+      asToolResult(async () => createComment(db, ctx, cardId, body)),
+  });
+
+  const updateCommentTool = tool({
+    description: "Replace the text of an existing comment.",
+    inputSchema: z.object({
+      commentId: z.string().describe("The comment ID to update"),
+      label: z
+        .string()
+        .describe("A short description of the comment (for display purposes)"),
+      body: z.string().min(1).describe("The comment text (supports markdown)"),
+    }),
+    execute: async ({ commentId, body }) =>
       asToolResult(async () => {
-        if (commentId) {
-          const comment = await requireComment(db, ctx, commentId);
-          return updateCommentBody(db, comment, body);
-        }
-
-        if (!cardId) {
-          return { error: "cardId is required when creating a new comment" };
-        }
-
-        return createComment(db, ctx, cardId, body);
+        const comment = await requireComment(db, ctx, commentId);
+        return updateCommentBody(db, comment, body);
       }),
   });
 
@@ -424,13 +405,15 @@ export function createKanbanTools(
     listBoards,
     getBoardState,
     getCard: getCardTool,
-    upsertCard,
+    createCard: createCardTool,
+    updateCard: updateCardTool,
     moveCard: moveCardTool,
     copyCard: copyCardTool,
     deleteCard,
     bulkEditCards,
     listComments: listCommentsTool,
-    upsertComment,
+    createComment: createCommentTool,
+    updateComment: updateCommentTool,
     deleteComment,
   };
 }
@@ -465,10 +448,7 @@ export async function asToolResult<T>(
  * under the same names — and marked shared, so an Agent granted both gets
  * each once with no collision reported.
  */
-export function createBoardReadTools(
-  scope: KanbanScope,
-  frontendUrl: string | undefined,
-) {
+export function createBoardReadTools(scope: KanbanScope, frontendUrl: string) {
   const listBoards = shareTool(
     "kanban.listBoards",
     tool({
@@ -527,7 +507,7 @@ export function createBoardReadTools(
               })),
             })),
             labels: board.labels,
-            ...(url && { url }),
+            url,
           };
         }),
     }),

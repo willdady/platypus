@@ -171,7 +171,10 @@ const uiStreamOf = <TOOLS extends ToolSet>(result: {
 }) =>
   toUIMessageStream({
     stream: result.stream,
-    messageMetadata: createMessageMetadata({ agentId: "agent-1" }),
+    messageMetadata: createMessageMetadata({
+      stepCeiling: 3,
+      agentId: "agent-1",
+    }),
   });
 
 /**
@@ -342,6 +345,7 @@ describe("tool durations over a real multi-step stream", () => {
       toUIMessageStream({
         stream: result.stream,
         messageMetadata: createMessageMetadata({
+          stepCeiling: 3,
           agentId: "agent-1",
           toolDurations,
         }),
@@ -383,7 +387,10 @@ describe("tool durations over a real multi-step stream", () => {
     const message = await lastSnapshot(
       toUIMessageStream({
         stream: result.stream,
-        messageMetadata: createMessageMetadata({ agentId: "agent-1" }),
+        messageMetadata: createMessageMetadata({
+          stepCeiling: 3,
+          agentId: "agent-1",
+        }),
       }),
     );
 
@@ -412,7 +419,10 @@ describe("Token usage over a real multi-step stream", () => {
       message: await lastSnapshot(
         toUIMessageStream({
           stream: result.stream,
-          messageMetadata: createMessageMetadata({ agentId: "agent-1" }),
+          messageMetadata: createMessageMetadata({
+            stepCeiling: 3,
+            agentId: "agent-1",
+          }),
         }),
       ),
     };
@@ -445,6 +455,7 @@ describe("Token usage over a real multi-step stream", () => {
       toUIMessageStream({
         stream: result.stream,
         messageMetadata: createMessageMetadata({
+          stepCeiling: 3,
           delegatedUsage: () => [
             {
               providerId: "p",
@@ -483,6 +494,7 @@ describe("Token usage over a real multi-step stream", () => {
       toUIMessageStream({
         stream: result.stream,
         messageMetadata: createMessageMetadata({
+          stepCeiling: 3,
           prepDurationMs: 40,
           driveStartMs: 1_000,
           now: () => (clock += 500),
@@ -520,7 +532,10 @@ describe("Token usage over a real multi-step stream", () => {
     const message = await lastSnapshot(
       toUIMessageStream({
         stream: result.stream,
-        messageMetadata: createMessageMetadata({ agentId: "agent-1" }),
+        messageMetadata: createMessageMetadata({
+          stepCeiling: 3,
+          agentId: "agent-1",
+        }),
       }),
     );
 
@@ -539,7 +554,10 @@ describe("Token usage over a real multi-step stream", () => {
     const message = await lastSnapshot(
       toUIMessageStream({
         stream: result.stream,
-        messageMetadata: createMessageMetadata({ agentId: "agent-1" }),
+        messageMetadata: createMessageMetadata({
+          stepCeiling: 3,
+          agentId: "agent-1",
+        }),
       }),
     );
 
@@ -558,7 +576,10 @@ describe("Token usage over a real multi-step stream", () => {
     return lastSnapshot(
       toUIMessageStream({
         stream: result.stream,
-        messageMetadata: createMessageMetadata({ agentId: "agent-1" }),
+        messageMetadata: createMessageMetadata({
+          stepCeiling: 3,
+          agentId: "agent-1",
+        }),
       }),
     );
   };
@@ -658,6 +679,7 @@ describe("Preparation and Model durations", () => {
       toUIMessageStream({
         stream: answerOnly().stream,
         messageMetadata: createMessageMetadata({
+          stepCeiling: 3,
           agentId: "agent-1",
           prepDurationMs: 842,
         }),
@@ -671,7 +693,10 @@ describe("Preparation and Model durations", () => {
     const message = await lastSnapshot(
       toUIMessageStream({
         stream: answerOnly().stream,
-        messageMetadata: createMessageMetadata({ agentId: "agent-1" }),
+        messageMetadata: createMessageMetadata({
+          stepCeiling: 3,
+          agentId: "agent-1",
+        }),
       }),
     );
 
@@ -699,6 +724,7 @@ describe("Preparation and Model durations", () => {
       toUIMessageStream({
         stream: result.stream,
         messageMetadata: createMessageMetadata({
+          stepCeiling: 3,
           agentId: "agent-1",
           driveStartMs: 1_000,
           now,
@@ -732,6 +758,7 @@ describe("Preparation and Model durations", () => {
       toUIMessageStream({
         stream: result.stream,
         messageMetadata: createMessageMetadata({
+          stepCeiling: 3,
           agentId: "agent-1",
           driveStartMs: 1_000,
           now,
@@ -752,7 +779,10 @@ describe("Preparation and Model durations", () => {
     const message = await lastSnapshot(
       toUIMessageStream({
         stream: answerOnly().stream,
-        messageMetadata: createMessageMetadata({ agentId: "agent-1" }),
+        messageMetadata: createMessageMetadata({
+          stepCeiling: 3,
+          agentId: "agent-1",
+        }),
       }),
     );
 
@@ -781,6 +811,7 @@ describe("read-only Tool names over a real multi-step stream", () => {
       toUIMessageStream({
         stream: result.stream,
         messageMetadata: createMessageMetadata({
+          stepCeiling: 3,
           agentId: "agent-1",
           isClearableTool: (name) => name === "ping",
         }),
@@ -805,6 +836,7 @@ describe("read-only Tool names over a real multi-step stream", () => {
       toUIMessageStream({
         stream: result.stream,
         messageMetadata: createMessageMetadata({
+          stepCeiling: 3,
           agentId: "agent-1",
           isClearableTool: () => false,
         }),
@@ -830,6 +862,7 @@ describe("read-only Tool names over a real multi-step stream", () => {
       toUIMessageStream({
         stream: result.stream,
         messageMetadata: createMessageMetadata({
+          stepCeiling: 3,
           agentId: "agent-1",
           isClearableTool: () => true,
         }),
@@ -860,6 +893,7 @@ describe("search availability over a real stream", () => {
       toUIMessageStream({
         stream: answerOnly().stream,
         messageMetadata: createMessageMetadata({
+          stepCeiling: 3,
           agentId: "agent-1",
           searchUnavailable: true,
         }),
@@ -874,6 +908,7 @@ describe("search availability over a real stream", () => {
       toUIMessageStream({
         stream: answerOnly().stream,
         messageMetadata: createMessageMetadata({
+          stepCeiling: 3,
           agentId: "agent-1",
           searchUnavailable: true,
         }),
@@ -892,6 +927,7 @@ describe("search availability over a real stream", () => {
       toUIMessageStream({
         stream: answerOnly().stream,
         messageMetadata: createMessageMetadata({
+          stepCeiling: 3,
           agentId: "agent-1",
           searchUnavailable: false,
         }),
@@ -905,7 +941,10 @@ describe("search availability over a real stream", () => {
     const message = await lastSnapshot(
       toUIMessageStream({
         stream: answerOnly().stream,
-        messageMetadata: createMessageMetadata({ searchUnavailable: true }),
+        messageMetadata: createMessageMetadata({
+          stepCeiling: 3,
+          searchUnavailable: true,
+        }),
       }),
     );
 
@@ -933,6 +972,7 @@ describe("search availability over a real stream", () => {
       toUIMessageStream({
         stream: result.stream,
         messageMetadata: createMessageMetadata({
+          stepCeiling: 3,
           agentId: "agent-1",
           searchUnavailable: true,
         }),

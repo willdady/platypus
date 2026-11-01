@@ -230,7 +230,9 @@ describe("mcp-connection", () => {
     it("nulls the oauth token columns for the given where clause", async () => {
       mockDb.returning.mockResolvedValueOnce([{ id: "mcp-1" }]);
 
-      await clearOAuthTokens(asDb(mockDb), someWhere);
+      await clearOAuthTokens(asDb(mockDb), someWhere, {
+        dropRegisteredClient: false,
+      });
 
       expect(mockDb.set).toHaveBeenCalledWith(
         expect.objectContaining({

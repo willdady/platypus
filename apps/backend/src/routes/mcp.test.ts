@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
+  insertTimestamps,
   mockSession,
   resetMockDb,
   seedDb,
@@ -48,28 +49,31 @@ describe("MCP Routes", () => {
     } = {},
   ): FakeDb => {
     const { role = "admin", mcpSelfManagement = false, rows = {} } = options;
-    return seedDb({
-      organization_member: [
-        { id: "m1", userId: "user-1", organizationId: orgId, role },
-      ],
-      workspace: [
-        {
-          id: workspaceId,
-          name: "Alpha",
-          organizationId: orgId,
-          ownerId: "user-1",
-          mcpSelfManagement,
-        },
-        {
-          id: "ws-2",
-          name: "Beta",
-          organizationId: orgId,
-          ownerId: "user-1",
-          mcpSelfManagement,
-        },
-      ],
-      ...rows,
-    });
+    return seedDb(
+      {
+        organization_member: [
+          { id: "m1", userId: "user-1", organizationId: orgId, role },
+        ],
+        workspace: [
+          {
+            id: workspaceId,
+            name: "Alpha",
+            organizationId: orgId,
+            ownerId: "user-1",
+            mcpSelfManagement,
+          },
+          {
+            id: "ws-2",
+            name: "Beta",
+            organizationId: orgId,
+            ownerId: "user-1",
+            mcpSelfManagement,
+          },
+        ],
+        ...rows,
+      },
+      { defaults: { mcp: insertTimestamps() } },
+    );
   };
 
   /** An MCP owned by this Workspace. */
@@ -81,6 +85,8 @@ describe("MCP Routes", () => {
     authType: "None",
     organizationId: null,
     workspaceId,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    updatedAt: new Date("2026-01-01T00:00:00.000Z"),
     ...over,
   });
 
@@ -93,6 +99,8 @@ describe("MCP Routes", () => {
     authType: "None",
     organizationId: orgId,
     workspaceId: null,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    updatedAt: new Date("2026-01-01T00:00:00.000Z"),
     ...over,
   });
 
@@ -131,7 +139,13 @@ describe("MCP Routes", () => {
 
       expect(res.status).toBe(201);
       expect(await res.json()).toEqual(
-        expect.objectContaining({ name: "New MCP", url: "http://mcp.com" }),
+        expect.objectContaining({
+          name: "New MCP",
+          url: "http://mcp.com",
+          scope: "workspace",
+          bearerTokenSet: { configured: false },
+          headersSet: { configured: false },
+        }),
       );
       expect(fake.tables.mcp).toEqual([
         expect.objectContaining({
@@ -388,7 +402,13 @@ describe("MCP Routes", () => {
       const res = await put("mcp-1");
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual(
-        expect.objectContaining({ id: "mcp-1", name: "Renamed" }),
+        expect.objectContaining({
+          id: "mcp-1",
+          name: "Renamed",
+          scope: "workspace",
+          bearerTokenSet: { configured: false },
+          headersSet: { configured: false },
+        }),
       );
       expect(fake.tables.mcp[0]).toMatchObject({
         name: "Renamed",

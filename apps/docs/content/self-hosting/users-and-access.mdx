@@ -12,45 +12,23 @@ OIDC, no SAML, no social login, and no configuration that adds any of them. If a
 identity-provider requirement is a condition of adopting Platypus, it is not met
 today.
 
-Sessions are cookies, signed with `BETTER_AUTH_SECRET` and valid for **7 days**.
-Rotating that secret signs everybody out.
+Sessions are cookies, signed with `BETTER_AUTH_SECRET` and valid for **7 days**
+after their last use. A revoked session, or one signed out after a password
+change, stops working once its 5-minute cookie cache expires. Rotating the
+secret signs everybody out.
 
 ## Who can create an account
 
 That is the Operator's call, made with one backend variable:
-`REQUIRE_INVITATION_TO_SIGN_UP`. It is **off by default**, so upgrading changes
-nothing until you set it.
+`REQUIRE_INVITATION_TO_SIGN_UP`. It is **on by default**: a fresh deployment
+admits accounts only by invitation.
 
-### Open sign-up (the default)
+### Invitation-only sign-up (the default)
 
-Self-serve sign-up is **open**. The sign-in page links to **Sign up**, the form
-takes a name, an email and a password, and the account exists immediately —
-**email verification is off**, so no address is ever confirmed.
-
-<Callout type="warning">
-  Put Platypus on the public internet with sign-up open and strangers will be
-  able to register accounts. Either require an invitation (next section) or
-  treat network reachability as the access control: keep the frontend behind a
-  VPN, an SSO-aware reverse proxy, or an IP allowlist if the set of people who
-  may hold an account is not "anyone who can route to it".
-</Callout>
-
-The mitigating half, worth knowing before you panic:
-
-A self-registered account has **no Organization and no Workspace**. Signing in
-gets them an empty shell — nothing to read, nothing to run, no model, no Chats.
-Only a **Super Admin** can create an Organization, and only an **Org Admin** can
-invite someone into one. So open sign-up leaks the ability to hold an account, not
-the ability to reach anything in your deployment.
-
-Registered accounts still accumulate rows in your database, so the exposure is
-worth closing rather than shrugging at.
-
-### Invitation-only sign-up
-
-Set `REQUIRE_INVITATION_TO_SIGN_UP=true` on the backend and restart it. From then
-on an account comes into existence in exactly one way: somebody redeems an
-[invitation link](#inviting-someone-in).
+An account comes into existence in exactly one way: somebody redeems an
+[invitation link](#inviting-someone-in). Setting
+`REQUIRE_INVITATION_TO_SIGN_UP=true` says so explicitly; `false` or `0` opens
+public sign-up.
 
 What changes:
 
@@ -76,6 +54,32 @@ password passes through an administrator's hands. Only the entrance changed.
 
 Rate limiting for sign-in and invitation links belongs at the reverse proxy —
 see [Put a rate limiter in front](/self-hosting/production#put-a-rate-limiter-in-front).
+
+### Open sign-up (opt-in)
+
+Set `REQUIRE_INVITATION_TO_SIGN_UP=false` (or `0`) on the backend and restart
+it. Self-serve sign-up is then **open**: the sign-in page links to **Sign up**,
+the form takes a name, an email and a password, and the account exists
+immediately — **email verification is off**, so no address is ever confirmed.
+
+<Callout type="warning">
+  Put Platypus on the public internet with sign-up open and strangers will be
+  able to register accounts. Either leave sign-up invitation-only or treat
+  network reachability as the access control: keep the frontend behind a VPN, an
+  SSO-aware reverse proxy, or an IP allowlist if the set of people who may hold
+  an account is not "anyone who can route to it".
+</Callout>
+
+The mitigating half, worth knowing before you panic:
+
+A self-registered account has **no Organization and no Workspace**. Signing in
+gets them an empty shell — nothing to read, nothing to run, no model, no Chats.
+Only a **Super Admin** can create an Organization, and only an **Org Admin** can
+invite someone into one. So open sign-up leaks the ability to hold an account, not
+the ability to reach anything in your deployment.
+
+Registered accounts still accumulate rows in your database, so the exposure is
+worth closing rather than shrugging at.
 
 ## Inviting someone in
 

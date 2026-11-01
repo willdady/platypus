@@ -45,6 +45,42 @@ Two more things worth doing every time:
 
 ## Coming from 3.30
 
+### Some MCP servers must be signed in to again
+
+An MCP server using OAuth keeps the authorization server that issued its tokens,
+so a later token refresh can be checked against the same one. Platypus used to
+discover and record that server on the fly for servers authorized before it kept
+the record. That repair is gone in 4.0.
+
+If such a server is still connected, its stored token can no longer be
+refreshed: the MCP fails the same way an expired token does. Sign in to it again
+from its MCP page. A server authorized since Platypus started keeping the record
+is unaffected.
+
+### Kanban and Trigger write tools are split into create and update
+
+Each create-or-update tool is now two tools: a create that requires every field a
+new record needs, and an update that changes only the fields you pass.
+
+| Tool set      | Before          | After                            |
+| ------------- | --------------- | -------------------------------- |
+| Kanban Cards  | `upsertCard`    | `createCard`, `updateCard`       |
+| Kanban Cards  | `upsertComment` | `createComment`, `updateComment` |
+| Kanban Boards | `upsertBoard`   | `createBoard`, `updateBoard`     |
+| Kanban Boards | `upsertColumn`  | `createColumn`, `updateColumn`   |
+| Triggers      | `upsertTrigger` | `createTrigger`, `updateTrigger` |
+
+An Agent or Skill whose Instructions tell it to call one of the old tools no
+longer has it, so rewrite those Instructions to name the right half. Chats that
+already ran keep their record of the old names and still show them.
+
+### Stranded Trigger schedules are repaired on upgrade
+
+A Cron Trigger whose next run time was lost to the old scheduler is put back on
+its schedule automatically when the backend container starts; there is nothing
+to do. A Trigger whose cron expression no longer parses is left alone and named
+in the backend log, so you can fix or delete it.
+
 ### Stored data the new schema forbids stops the upgrade
 
 Every Trigger's configuration is now checked against its type — its schedule,
@@ -81,6 +117,79 @@ instructions.
 
 To keep showing data your Agents produce, use a purpose-built dashboard tool such
 as Grafana or Metabase, and have the Agent write to the store it reads from.
+
+### Deployment URLs are required, and sign-up is invitation-only
+
+Three settings that used to fall back silently must now be set, and the backend
+refuses to start without them, naming the one at fault:
+
+- **`DATABASE_URL`** — no fallback to node-postgres' `PG*` variables. Compose
+  sets this for you; a hand-rolled environment must set it.
+- **`BETTER_AUTH_URL`** — no fallback to `http://localhost:4001`. Compose
+  derives it from `BACKEND_URL`.
+- **`FRONTEND_URL`** — no fallback to `http://localhost:3001`. It must match the
+  URL people load the app from, so check `.env` before you upgrade.
+
+`REQUIRE_INVITATION_TO_SIGN_UP` now defaults to **true**: after the upgrade,
+accounts can only be created by redeeming an invitation link. If you meant to
+keep public sign-up open, set it to `false`. See
+[Who can create an account](/self-hosting/users-and-access#who-can-create-an-account).
+
+The example admin password no longer works in production. With
+`NODE_ENV=production`, which the published image sets, first boot refuses the
+well-known `admin@example.com` / `admin123` pair and exits, as it already did
+for any password under 8 characters. The shipped Compose `.example.env` now
+leaves `ADMIN_PASSWORD` empty, so set one before first boot. A deployment that
+has already seeded its admin is unaffected: the seed never runs again, so
+**change that account's password from the app** if it is still the example one.
+
+### An unsupported cookie topology stops the backend
+
+A backend and frontend on hosts no session cookie can cover — different parent
+domains — used to log an error and start anyway, leaving every server-rendered
+request unauthenticated. It now stops the backend at boot, naming both hostnames
+and `AUTH_COOKIE_DOMAIN`, and so does a malformed `AUTH_COOKIE_DOMAIN`. Put both
+services on one origin or on two subdomains of one parent domain; see
+[Supported topologies](/self-hosting/configuration#supported-topologies).
+
+### Session lifetimes are documented as fixed
+
+Session lifetimes were never configurable, and there is nothing to change; the
+lifetime and the revocation delay are now stated in
+[Sessions](/reference/backend-configuration#sessions) rather than left implicit.
+
+### The session read has a bound
+
+`/auth/get-session` is no longer exempt from rate limiting: it allows 300 reads
+per rolling 60 seconds, far above what reloading and tab-switching produce. Only
+a runaway client reaches it. If you put your own limit on that path at the
+proxy, keep it well above the number of reads a page load makes.
+
+### Plugin authors: `frontendUrl` is never undefined
+
+`ctx.frontendUrl` in the Plugin SDK is typed `string`, not `string | undefined`,
+because the backend cannot boot without `FRONTEND_URL`. Drop any
+`if (ctx.frontendUrl)` guard; it is always a frontend origin.
+
+### The Plugin API is v4, and v2 Plugins no longer load
+
+Core speaks **Plugin API v4** and accepts **3 and 4** together. A third-party
+Plugin built for API v2 is refused at boot, with an error naming it and the
+supported window, so the backend does not start until that Plugin is updated.
+
+Update the Plugin to `@platypuschat/plugin-sdk` **3.x** and set its `apiVersion`
+to 4. On top of the number:
+
+- give every Tool set a `description`;
+- read `ctx.timezone` and `ctx.sessionId` directly — v4 makes both required, and
+  core has always supplied them;
+- declare the manifest's config types (`PlatypusPlugin<Config, Credentials>`) if
+  it was casting `plugin.config` or `plugin.credentials`.
+
+Nothing in your own deployment configuration changes. The core Plugins ship with
+this release, so a deployment listing only `@platypus/*` Plugins has nothing to
+do. See [Moving to API
+v4](/extending/plugin-api-and-config#moving-to-api-v4).
 
 ## Coming from 3.30
 

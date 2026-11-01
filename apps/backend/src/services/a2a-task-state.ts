@@ -305,7 +305,7 @@ const STOP_REASON_TEXT: Record<StopReason, string> = {
  */
 export const recordedReplies = async (
   tasks: { id: string; chatId: string; status: TaskStatus }[],
-  { withText = true }: { withText?: boolean } = {},
+  { withText }: { withText: boolean },
 ): Promise<Map<string, RecordedReply>> => {
   const completed = tasks.flatMap(({ id, chatId, status }) =>
     status.state === TaskState.TASK_STATE_COMPLETED && status.replyId
@@ -421,7 +421,9 @@ export const readWithStatus = async (
   task: TaskRow,
   status: TaskStatus,
 ): Promise<Task> => {
-  const replies = await recordedReplies([{ ...task, status }]);
+  const replies = await recordedReplies([{ ...task, status }], {
+    withText: true,
+  });
   return toTask(task, status, replies.get(task.id));
 };
 

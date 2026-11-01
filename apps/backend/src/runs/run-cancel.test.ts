@@ -1,5 +1,6 @@
 import { EventEmitter } from "node:events";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { mockLogger } from "../test-setup.ts";
 
 /**
  * Two instances share one Postgres. The pool here stands in for it: a
@@ -117,6 +118,26 @@ describe("the notification listener", () => {
     }
 
     expect(handle.signal.aborted).toBe(false);
+  });
+
+  it("logs and drops a payload it does not understand, never throwing on the listener", async () => {
+    const client = fakeClient();
+    pool.connect.mockResolvedValueOnce(client);
+    startNotificationListener();
+    await vi.waitFor(() =>
+      expect(client.query).toHaveBeenCalledWith("LISTEN run_cancel"),
+    );
+    listeners.push(client);
+
+    await pool.query("SELECT pg_notify($1, $2)", [
+      "run_cancel",
+      JSON.stringify({ runId: "chat-1", unexpected: true }),
+    ]);
+
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ payload: expect.any(String) as unknown }),
+      expect.stringContaining("run_cancel"),
+    );
   });
 
   it("spares a run held here that started after another instance's cancel", async () => {

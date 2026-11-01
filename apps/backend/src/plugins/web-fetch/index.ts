@@ -20,7 +20,7 @@ type WebFetchConfig = z.infer<typeof webFetchConfigSchema>;
 // without touching the rest of the standard tools. The Tool set id stays the
 // unprefixed core id "web-fetch", so existing `agent.toolSetIds` references
 // keep working.
-export const plugin: PlatypusPlugin = {
+export const plugin: PlatypusPlugin<WebFetchConfig> = {
   name: "@platypus/web-fetch",
   version: "0.1.0",
   apiVersion: PLUGIN_API_VERSION,
@@ -35,9 +35,7 @@ export const plugin: PlatypusPlugin = {
         // Factory form: core injects the resolved plugin config at load, so the
         // tool reads `ignoreRobotsTxt` from deploy-time config, not process.env.
         tools: (_ctx, plugin) =>
-          createWebFetchTools(
-            (plugin.config as WebFetchConfig).ignoreRobotsTxt,
-          ),
+          createWebFetchTools(plugin.config.ignoreRobotsTxt),
       },
     ],
   },

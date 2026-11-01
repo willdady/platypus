@@ -47,6 +47,10 @@ import {
   providerCreateSchema,
   providerUpdateSchema,
   providerSchema,
+  providerResponseSchema,
+  mcpResponseSchema,
+  agentResponseSchema,
+  skillResponseSchema,
   providerHasNativeSearch,
   SEARCH_SOURCE_NONE,
   SEARCH_SOURCE_NATIVE,
@@ -69,6 +73,7 @@ import {
   webhookCreateSchema,
   webhookUpdateSchema,
   triggerRunStatsSchema,
+  runEventSchema,
   triggerRunStatusSchema,
   TRIGGER_RUN_STATUS_LABELS,
   triggerUpdateSchema,
@@ -972,6 +977,135 @@ describe("Provider Schema", () => {
     expect(providerSchema.safeParse(bedrock).success).toBe(false);
     expect(
       providerSchema.safeParse({ ...bedrock, region: "us-east-1" }).success,
+    ).toBe(true);
+  });
+});
+
+describe("Scoped response schemas", () => {
+  const provider = {
+    id: "prov-1",
+    organizationId: "org-1",
+    workspaceId: null,
+    name: "Test Provider",
+    providerType: "OpenAI" as const,
+    region: null,
+    baseUrl: null,
+    headers: null,
+    extraBody: null,
+    organization: null,
+    project: null,
+    apiMode: "responses" as const,
+    searchSource: "native",
+    securityGuardrails: null,
+    modelIds: [{ id: "gpt-4", passthroughFileTypes: [] }],
+    taskModelId: "gpt-4",
+    memoryExtractionModelId: "gpt-4",
+    embeddingModelId: null,
+    embeddingDimensions: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  it("requires a scope on a Provider response", () => {
+    expect(
+      providerResponseSchema.safeParse({
+        ...provider,
+        apiKeySet: { configured: false },
+        headersSet: { configured: false },
+      }).success,
+    ).toBe(false);
+    expect(
+      providerResponseSchema.safeParse({
+        ...provider,
+        scope: "organization",
+        apiKeySet: { configured: false },
+        headersSet: { configured: false },
+      }).success,
+    ).toBe(true);
+  });
+
+  it("accepts a redacted and a revealed Provider under the same schema", () => {
+    const redacted = {
+      ...provider,
+      scope: "workspace",
+      apiKeySet: { configured: true },
+      headersSet: { configured: false },
+    };
+    const revealed = {
+      ...redacted,
+      apiKey: "sk-test",
+      headers: { Authorization: "Bearer token" },
+    };
+    expect(providerResponseSchema.safeParse(redacted).success).toBe(true);
+    expect(providerResponseSchema.safeParse(revealed).success).toBe(true);
+  });
+
+  it("requires the presence indicators, not just the optional values", () => {
+    expect(
+      providerResponseSchema.safeParse({ ...provider, scope: "workspace" })
+        .success,
+    ).toBe(false);
+  });
+
+  it("describes an MCP response with its scope and without minted secrets", () => {
+    const mcp = {
+      id: "mcp-1",
+      organizationId: null,
+      workspaceId: "ws-1",
+      name: "Rovo",
+      slug: "rovo",
+      url: "https://mcp.example.com",
+      authType: "OAuth" as const,
+      oauthClientId: "client",
+      oauthRequestedScope: "read",
+      oauthAuthorized: true,
+      scope: "workspace" as const,
+      bearerTokenSet: { configured: false },
+      headersSet: { configured: false },
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    expect(mcpResponseSchema.safeParse(mcp).success).toBe(true);
+    expect(Object.keys(mcpResponseSchema.shape)).not.toContain(
+      "oauthClientSecret",
+    );
+    expect(Object.keys(mcpResponseSchema.shape)).not.toContain(
+      "oauthAccessToken",
+    );
+  });
+
+  it("requires a scope on Agent and Skill responses", () => {
+    const agent = {
+      id: "agent-1",
+      organizationId: "org-1",
+      providerId: "prov-1",
+      name: "Agent",
+      description: "An agent",
+      modelId: "gpt-4",
+      toolSetIds: [],
+      skillIds: [],
+      subAgentIds: [],
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    expect(agentResponseSchema.safeParse(agent).success).toBe(false);
+    expect(
+      agentResponseSchema.safeParse({ ...agent, scope: "organization" })
+        .success,
+    ).toBe(true);
+
+    const skill = {
+      id: "skill-1",
+      workspaceId: "ws-1",
+      name: "my-skill",
+      description: "A skill",
+      body: "Instructions",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    expect(skillResponseSchema.safeParse(skill).success).toBe(false);
+    expect(
+      skillResponseSchema.safeParse({ ...skill, scope: "workspace" }).success,
     ).toBe(true);
   });
 });
@@ -2136,6 +2270,37 @@ describe("sampling parameter bounds (#1144)", () => {
       false,
     );
   });
+});
+
+describe("runEventSchema", () => {
+  const event = {
+    id: "rev-1",
+    runId: "run-1",
+    parentEventId: null,
+    seq: 0,
+    type: "tool-call",
+    toolName: "search",
+    startedAt: 1_700_000_000_000,
+    durationMs: 250,
+    status: "completed",
+    error: null,
+    childrenTruncated: false,
+  };
+
+  it("accepts an event the recorder wrote", () => {
+    expect(runEventSchema.safeParse(event).success).toBe(true);
+  });
+
+  // The recorder writes all four on every event, and the sink used to fill in
+  // a default for each. v4 requires them, so an older or hand-written payload
+  // fails here rather than silently rendering as an open, nameless event.
+  it.each(["toolName", "durationMs", "error", "childrenTruncated"] as const)(
+    "rejects an event missing %s",
+    (field) => {
+      const { [field]: _omitted, ...rest } = event;
+      expect(runEventSchema.safeParse(rest).success).toBe(false);
+    },
+  );
 });
 
 describe("unchecked payload fields (#1630)", () => {

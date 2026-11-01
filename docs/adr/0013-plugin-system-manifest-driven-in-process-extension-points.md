@@ -71,3 +71,12 @@ Dashboards were removed in 4.0.0 (#1430), taking the `dashboards` tool set out o
 
 - **Still set aborts boot.** The loader does not read the combined variable, and a non-empty value stops boot with an error naming the per-plugin replacement. Ignoring it would have booted every plugin it configured without its credentials, the quiet misconfiguration the fail-loud posture exists to catch. An empty value is treated as unset, the same as an empty per-plugin variable.
 - **No collision with the prefix.** The per-plugin prefix is `PLATYPUS_PLUGIN_CONFIG_`, trailing underscore included, so the bare name is never read as a per-plugin variable.
+
+## Update (2026-11-01): API v4
+
+[#1774](https://github.com/willdady/platypus/issues/1774) bumps `PLUGIN_API_VERSION` to **4**, so the window becomes `[3, 4]` and a v2 Plugin is refused at boot with the existing "below the oldest core supports" error. The SDK package takes its own major (3.0.0).
+
+- **Three members stop being optional,** each because a v3 manifest cannot reach a core that lacks it: `ToolSetContext.timezone` and `ToolSetContext.sessionId`, both filled on every turn since they arrived, and `ToolSetContribution.description`, which every core Tool set already supplies and the Agent form shows.
+- **Deploy-time config is typed through the manifest.** `PlatypusPlugin<TConfig, TCredentials>` carries the output types of its `configSchema` / `credentialsSchema` into every contribution factory's `PluginConfigContext`, so a plugin reads `plugin.config` without a cast or a re-parse. A manifest that declares neither keeps `unknown`, so the widening is opt-in. The registry's `getPluginConfig<T>` is the same idea for the one request handler that reads a plugin's boot-resolved block: the loader parsed it once against that plugin's own schema.
+- **Byte-transfer members stay optional.** ADR-0027 makes `fsReadBytes` / `fsWriteBytes` adapter capabilities, not compatibility: a backend may implement either, neither or both, and core probes for what it has. The `configSchema` factory form is likewise a designed capability, not a v2 leftover, so a plain schema stays valid.
+- **`ToolSetContext.frontendUrl` stays optional:** it is absent on a deployment that has not set one, which is a real state rather than an older core.

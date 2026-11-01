@@ -3,8 +3,10 @@ import { validate } from "../validate.ts";
 import { db } from "../index.ts";
 import {
   mcpCreateSchema,
-  mcpUpdateSchema,
+  mcpListResponseSchema,
+  mcpResponseSchema,
   mcpTestSchema,
+  mcpUpdateSchema,
 } from "@platypus/schemas";
 import { requireAuth } from "../middleware/authentication.ts";
 import {
@@ -15,10 +17,7 @@ import {
   workspaceCredentialsVisible,
   workspaceScopeOf,
 } from "../middleware/authorization.ts";
-import {
-  mcpReadModel,
-  sanitizeMcpResponse,
-} from "../services/credential-redaction.ts";
+import { mcpReadModel } from "../services/credential-redaction.ts";
 import {
   listScoped,
   requireScoped,
@@ -39,6 +38,7 @@ import {
   probeMcpConnection,
 } from "../services/mcp-connection.ts";
 import { createMcp, deleteMcp, updateMcp } from "../services/mcp-write.ts";
+import { respond } from "../respond.ts";
 
 const mcp = new Hono<{ Variables: Variables }>();
 
@@ -58,7 +58,12 @@ mcp.post(
     // body carried, so a caller cannot name another Workspace, or mint a
     // Shared MCP from the Workspace surface (ADR-0006, ADR-0007).
     const row = await createMcp({ kind: "workspace", ctx: scope }, data);
-    return c.json(sanitizeMcpResponse(row), 201);
+    return respond(
+      c,
+      mcpResponseSchema,
+      mcpReadModel(row, { reveal: true, scope: "workspace" }),
+      201,
+    );
   },
 );
 
@@ -82,7 +87,7 @@ mcp.get(
       mcpReadModel(row, { reveal: reveal && scope === "workspace", scope }),
     );
 
-    return c.json({ results });
+    return respond(c, mcpListResponseSchema, { results });
   },
 );
 
@@ -97,7 +102,9 @@ mcp.get(
     const found = await requireScoped(db, "mcp", mcpId, workspaceScopeOf(c));
     // See the list route: redacted unless this caller may manage the MCP.
     const reveal = await workspaceCredentialsVisible(c, "mcp");
-    return c.json(
+    return respond(
+      c,
+      mcpResponseSchema,
       mcpReadModel(found.row, {
         reveal: reveal && found.scope === "workspace",
         scope: found.scope,
@@ -123,7 +130,12 @@ mcp.put(
     // surface (ADR-0007); `updateMcp` throws NotFound (→404) when the MCP is
     // not visible here, then Locked (→403) when it is org-scoped.
     const row = await updateMcp({ kind: "workspace", ctx: scope }, mcpId, data);
-    return c.json(sanitizeMcpResponse(row), 200);
+    return respond(
+      c,
+      mcpResponseSchema,
+      mcpReadModel(row, { reveal: true, scope: "workspace" }),
+      200,
+    );
   },
 );
 
@@ -237,6 +249,7 @@ mcp.post(
     await clearOAuthTokens(
       db,
       workspaceScopedWhere("mcp", mcpId, scope.workspaceId),
+      { dropRegisteredClient: false },
     );
 
     return c.json({ message: "OAuth authorization revoked" });

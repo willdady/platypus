@@ -20,6 +20,7 @@ const LOADED: LoadedPlugin[] = [
     sandboxBackendIds: [],
     webBackendIds: ["acme-search.searx"],
     toolGateIds: [],
+    config: undefined,
   },
 ];
 

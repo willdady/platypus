@@ -48,7 +48,7 @@ describe("Organization Skill Routes", () => {
       });
 
       expect(res.status).toBe(201);
-      expect(await res.json()).toEqual(mockSkill);
+      expect(await res.json()).toEqual({ ...mockSkill, scope: "organization" });
     });
 
     it("returns 403 if not org admin", async () => {
@@ -93,7 +93,12 @@ describe("Organization Skill Routes", () => {
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({ results: skills });
+      expect(await res.json()).toEqual({
+        results: skills.map((skill) => ({
+          ...skill,
+          scope: "organization",
+        })),
+      });
     });
   });
 
@@ -108,6 +113,7 @@ describe("Organization Skill Routes", () => {
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({
         ...skill,
+        scope: "organization",
         files: [],
         modified: false,
       });
@@ -149,7 +155,7 @@ describe("Organization Skill Routes", () => {
       });
 
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual(updated);
+      expect(await res.json()).toEqual({ ...updated, scope: "organization" });
     });
 
     // #605: the org surface used to skip the existence pre-check, discovering a

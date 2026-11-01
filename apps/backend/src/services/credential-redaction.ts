@@ -12,7 +12,10 @@
  * MCPs to select one on an Agent or Chat whether or not credentials were delegated
  * to them, so the rows must keep flowing with the secrets removed.
  *
- * `reveal` defaults to `false` on both helpers so a new call site fails closed.
+ * Every helper here returns one fixed shape. A secret is either its value (the
+ * caller may manage the resource) or absent, and its presence indicator
+ * (`apiKeySet`, `headersSet`, `bearerTokenSet`) is always present, so a caller
+ * can tell "unset" from "not shown" without branching on who is reading.
  *
  * *Who* may reveal is decided once per surface, not per route:
  * `workspaceCredentialsVisible` and `orgCredentialsVisible`
@@ -20,15 +23,14 @@
  * argument comes from.
  */
 
-import type { Scope } from "./scoped-resource.ts";
+import type {
+  McpResponse,
+  ProviderResponse,
+  ResourceScope,
+  SecretPresence,
+} from "@platypus/schemas";
 import type { McpRecord } from "./mcp-oauth-provider.ts";
 import type { provider as providerTable } from "../db/schema.ts";
-
-/** Replaces a redacted secret so a caller can tell "unset" from "not shown". */
-export type SecretPresence = {
-  /** True when a value is stored, whatever it is. Never the value itself. */
-  configured: boolean;
-};
 
 const presence = (value: unknown): SecretPresence => ({
   configured:
@@ -52,17 +54,17 @@ type ProviderSecretFields = {
  */
 export const redactProviderSecrets = <T extends ProviderSecretFields>(
   row: T,
-  opts: { reveal?: boolean } = {},
-):
-  | T
-  | (Omit<T, "apiKey" | "headers"> & {
-      apiKeySet: SecretPresence;
-      headersSet: SecretPresence;
-    }) => {
-  if (opts.reveal) return row;
+  opts: { reveal: boolean },
+): Omit<T, "apiKey" | "headers"> & {
+  apiKey?: string;
+  apiKeySet: SecretPresence;
+  headers?: Record<string, string> | null;
+  headersSet: SecretPresence;
+} => {
   const { apiKey, headers, ...rest } = row;
   return {
     ...rest,
+    ...(opts.reveal && { apiKey, headers }),
     apiKeySet: presence(apiKey),
     headersSet: presence(headers),
   };
@@ -76,24 +78,24 @@ type McpSecretFields = {
 /**
  * Strips an MCP's stored request credentials unless the caller may manage it.
  *
- * Distinct from the OAuth token strip in `sanitizeMcpResponse`, which is
+ * Distinct from the OAuth token strip in {@link sanitizeMcpResponse}, which is
  * unconditional: those tokens are minted by Platypus and never belong in a
  * response, whereas `bearerToken` and `headers` are Operator-entered config that
  * the edit form legitimately reads back for whoever may edit it.
  */
 export const redactMcpSecrets = <T extends McpSecretFields>(
   row: T,
-  opts: { reveal?: boolean } = {},
-):
-  | T
-  | (Omit<T, "bearerToken" | "headers"> & {
-      bearerTokenSet: SecretPresence;
-      headersSet: SecretPresence;
-    }) => {
-  if (opts.reveal) return row;
+  opts: { reveal: boolean },
+): Omit<T, "bearerToken" | "headers"> & {
+  bearerToken?: string | null;
+  bearerTokenSet: SecretPresence;
+  headers?: Record<string, string> | null;
+  headersSet: SecretPresence;
+} => {
   const { bearerToken, headers, ...rest } = row;
   return {
     ...rest,
+    ...(opts.reveal && { bearerToken, headers }),
     bearerTokenSet: presence(bearerToken),
     headersSet: presence(headers),
   };
@@ -107,7 +109,7 @@ export const redactMcpSecrets = <T extends McpSecretFields>(
  * goes too, with when its fetch last failed: a Chat turn's internal cache
  * (ADR-0029, ADR-0031), not configuration.
  */
-export const sanitizeMcpResponse = (record: McpRecord) => {
+const sanitizeMcpResponse = (record: McpRecord) => {
   const {
     oauthAccessToken,
     oauthRefreshToken,
@@ -128,37 +130,47 @@ export const sanitizeMcpResponse = (record: McpRecord) => {
   };
 };
 
-/** What a read route adds to a row: who may see secrets, and the resolved scope. */
+/** What a read route supplies to its read model: who may see secrets, and the scope. */
 type ReadModelOptions = {
   /** Decided per surface by `workspaceCredentialsVisible`/`orgCredentialsVisible`. */
-  reveal?: boolean;
+  reveal: boolean;
   /**
-   * The scope the Scoped-resource module resolved the row at, which the frontend
-   * uses to mark a Shared row read-only. Omitted on the Organization surface,
-   * where every row is Organization-scoped by construction.
+   * The scope the Scoped-resource module resolved the row at. Always present:
+   * the Organization surface passes `"organization"`, where every row is
+   * Organization-scoped by construction, rather than omitting the field.
    */
-  scope?: Scope;
+  scope: ResourceScope;
 };
 
-const withScope = <T extends object>(model: T, scope?: Scope) =>
-  scope ? { ...model, scope } : model;
-
 /**
- * The read shape of an MCP, for every route that returns one to a reader.
+ * The read shape of an MCP, for every route that returns one to a reader or a
+ * writer.
  *
  * The pairing is the point: the OAuth strip is unconditional and the credential
  * redaction is not, and assembling them per route meant each site had to
  * remember both. A route that reached for `redactMcpSecrets` alone would answer
  * with the OAuth tokens still on the row.
  */
-export const mcpReadModel = (row: McpRecord, opts: ReadModelOptions = {}) =>
-  withScope(
-    redactMcpSecrets(sanitizeMcpResponse(row), { reveal: opts.reveal }),
-    opts.scope,
-  );
+export const mcpReadModel = (
+  row: McpRecord,
+  opts: ReadModelOptions,
+): McpResponse => {
+  const model = {
+    ...redactMcpSecrets(sanitizeMcpResponse(row), { reveal: opts.reveal }),
+    scope: opts.scope,
+  };
+  // `authType` is a text column; every write path narrows it to the enum.
+  return model as McpResponse;
+};
 
-/** The read shape of a Provider, for every route that returns one to a reader. */
+/** The read shape of a Provider, for every route that returns one to a reader or a writer. */
 export const providerReadModel = (
   row: typeof providerTable.$inferSelect,
-  opts: ReadModelOptions = {},
-) => withScope(redactProviderSecrets(row, { reveal: opts.reveal }), opts.scope);
+  opts: ReadModelOptions,
+): ProviderResponse => ({
+  ...redactProviderSecrets(row, { reveal: opts.reveal }),
+  scope: opts.scope,
+  // Stored rows may still hold bare model ids; the schema accepts both shapes,
+  // and the form normalizes either into model objects.
+  modelIds: row.modelIds as ProviderResponse["modelIds"],
+});

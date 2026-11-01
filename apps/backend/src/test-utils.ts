@@ -273,6 +273,15 @@ export const seedDb = (
 };
 
 /**
+ * The `createdAt`/`updatedAt` Postgres stamps on insert via `defaultNow()`, for
+ * `seedDb`'s `defaults` option when a test validates a write's response.
+ */
+export const insertTimestamps = () => ({
+  createdAt: new Date("2026-01-01T00:00:00.000Z"),
+  updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+});
+
+/**
  * Resets the shared `mockDb` to fresh chainable mocks, clearing stubbed state —
  * and uninstalls any {@link seedDb} fake, so a file mixing the two starts each
  * test on the chainable mock.
@@ -448,11 +457,11 @@ export const makeFakePluginLogger = (): FakePluginLogger => ({
  * default to `undefined` — what a manifest declaring no schema resolves to — and
  * the logger is a spy, so a test can assert on what the contribution wrote.
  */
-export const makePluginContext = (
-  over: Partial<PluginConfigContext> = {},
-): PluginConfigContext => ({
-  config: undefined,
-  credentials: undefined,
+export const makePluginContext = <TConfig = unknown, TCredentials = unknown>(
+  over: Partial<PluginConfigContext<TConfig, TCredentials>> = {},
+): PluginConfigContext<TConfig, TCredentials> => ({
+  config: undefined as TConfig,
+  credentials: undefined as TCredentials,
   logger: makeFakePluginLogger(),
   ...over,
 });

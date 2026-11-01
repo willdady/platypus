@@ -94,6 +94,11 @@ First boot creates a **Default Organization** and an admin account from
 super-admin. It creates no Workspace: you create the first one yourself, and
 connect it to a model as you do.
 
+The installer generates the password and prints it. A manual install from the
+shipped `.example.env` leaves `ADMIN_PASSWORD` empty, so set it there before
+the stack starts; the old `admin@example.com` / `admin123` pair is refused in
+production.
+
 Editing `ADMIN_EMAIL` / `ADMIN_PASSWORD` after first boot changes nothing —
 change the password from within the app. The full rule, and the recovery path
 for a first boot that failed, are in

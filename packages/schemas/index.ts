@@ -25,6 +25,16 @@ export const partialWithoutDefaults = <Shape extends z.ZodRawShape>(
     >;
   }>;
 
+// Scoped-resource responses (ADR-0007). A Provider, MCP, Agent or Skill lives at
+// exactly one scope; every response that returns one says which, so a caller
+// never has to infer it from the endpoint it called.
+export const resourceScopeSchema = z.enum(["workspace", "organization"]);
+export type ResourceScope = z.infer<typeof resourceScopeSchema>;
+
+// A secret the caller may not read: whether one is stored, never the value.
+export const secretPresenceSchema = z.object({ configured: z.boolean() });
+export type SecretPresence = z.infer<typeof secretPresenceSchema>;
+
 // Shared free-text bounds, exported so the forms' `maxLength` attributes read
 // the same source as the server rule.
 //
@@ -557,11 +567,6 @@ export const chatListItemSchema = chatSchema.pick({
 
 export type ChatListItem = z.infer<typeof chatListItemSchema>;
 
-export const chatListSchema = z.object({
-  results: z.array(chatListItemSchema),
-  totalCount: z.number(),
-});
-
 // Agent
 
 /**
@@ -657,28 +662,39 @@ export const agentBaseSchema = z.object({
   updatedAt: z.date(),
 });
 
-export const agentSchema = agentBaseSchema
-  // The three id arrays are stored non-null with an `[]` default, so a read
-  // always carries them. Creates and updates still leave them optional.
-  .extend({
-    toolSetIds: z.array(z.string()),
-    skillIds: z.array(z.string()),
-    subAgentIds: z.array(z.string()),
-  })
-  .refine(
-    (data) => {
-      const hasOrg = Boolean(data.organizationId);
-      const hasWorkspace = Boolean(data.workspaceId);
-      return (hasOrg || hasWorkspace) && !(hasOrg && hasWorkspace);
-    },
-    {
-      message:
-        "Agent must have either organizationId or workspaceId, but not both",
-      path: ["organizationId"],
-    },
-  );
+// The three id arrays are stored non-null with an `[]` default, so a read
+// always carries them. Creates and updates still leave them optional.
+const agentStoredIdArrays = {
+  toolSetIds: z.array(z.string()),
+  skillIds: z.array(z.string()),
+  subAgentIds: z.array(z.string()),
+};
+
+export const agentSchema = agentBaseSchema.extend(agentStoredIdArrays).refine(
+  (data) => {
+    const hasOrg = Boolean(data.organizationId);
+    const hasWorkspace = Boolean(data.workspaceId);
+    return (hasOrg || hasWorkspace) && !(hasOrg && hasWorkspace);
+  },
+  {
+    message:
+      "Agent must have either organizationId or workspaceId, but not both",
+    path: ["organizationId"],
+  },
+);
 
 export type Agent = z.infer<typeof agentSchema>;
+
+/**
+ * An Agent as a route returns one. `scope` is always present, including on the
+ * Organization surface where every row is Organization-scoped by construction.
+ */
+export const agentResponseSchema = agentBaseSchema.extend({
+  ...agentStoredIdArrays,
+  scope: resourceScopeSchema,
+});
+
+export type AgentResponse = z.infer<typeof agentResponseSchema>;
 
 export const agentCreateSchema = agentBaseSchema.pick({
   workspaceId: true,
@@ -856,6 +872,18 @@ export const skillSchema = skillBaseSchema.refine(
 );
 
 export type Skill = z.infer<typeof skillSchema>;
+
+/**
+ * A Skill as a route returns one. `scope` is always present, including on the
+ * Organization surface where every row is Organization-scoped by construction.
+ * A single Skill's read may add its `agentIds`; lists do not.
+ */
+export const skillResponseSchema = skillBaseSchema.extend({
+  scope: resourceScopeSchema,
+  agentIds: z.array(z.string()).optional(),
+});
+
+export type SkillResponse = z.infer<typeof skillResponseSchema>;
 
 export const skillCreateSchema = skillBaseSchema
   .pick({
@@ -1221,6 +1249,48 @@ export const mcpSchema = mcpBaseSchema
 
 export type MCP = z.infer<typeof mcpSchema>;
 
+/**
+ * An MCP as stored: nullable scope columns and nullable optional fields, as the
+ * row resolves from Postgres. OAuth tokens and the cached tool listing are not
+ * part of it — no response carries them (see `mcpResponseSchema`).
+ */
+export const mcpRecordSchema = mcpBaseSchema.extend({
+  organizationId: z.string().nullish(),
+  workspaceId: z.string().nullish(),
+  url: z.url().nullish(),
+  headers: z.record(z.string(), z.string()).nullish(),
+  bearerToken: z.string().nullish(),
+  oauthClientId: z.string().nullish(),
+  oauthClientSecret: z.string().nullish(),
+  oauthRequestedScope: z.string().max(1024).nullish(),
+});
+
+export type McpRecord = z.infer<typeof mcpRecordSchema>;
+
+/**
+ * An MCP as a route returns one — one shape for every reader, writes included.
+ * Minted OAuth tokens never appear; `oauthAuthorized` reports whether the server
+ * is signed in. Operator-entered credentials are `bearerToken` / `headers` plus
+ * their presence indicators: a caller who may manage the MCP gets the values,
+ * every other caller gets the indicators alone. `scope` is always present.
+ */
+export const mcpResponseSchema = mcpRecordSchema
+  .omit({ oauthClientSecret: true })
+  .extend({
+    scope: resourceScopeSchema,
+    bearerToken: z.string().nullish(),
+    bearerTokenSet: secretPresenceSchema,
+    headers: z.record(z.string(), z.string()).nullish(),
+    headersSet: secretPresenceSchema,
+  });
+
+export type McpResponse = z.infer<typeof mcpResponseSchema>;
+
+/** The Workspace and Organization MCP lists. */
+export const mcpListResponseSchema = z.object({
+  results: z.array(mcpResponseSchema),
+});
+
 export const mcpCreateSchema = mcpBaseSchema
   .pick({
     organizationId: true,
@@ -1522,14 +1592,16 @@ export const resolveModelReference = (
 };
 
 /** What a de-migration rewrote when an alias stopped existing (see ADR-0017). */
-export type AliasRepoint = {
+export const aliasRepointSchema = z.object({
   /** The alias name that no longer exists. */
-  alias: string;
+  alias: z.string(),
   /** The concrete id its references were rewritten to. */
-  modelId: string;
-  agents: number;
-  chats: number;
-};
+  modelId: z.string(),
+  agents: z.number().int().nonnegative(),
+  chats: z.number().int().nonnegative(),
+});
+
+export type AliasRepoint = z.infer<typeof aliasRepointSchema>;
 
 /**
  * A Provider pointer-setting: always a concrete model id, never an alias.
@@ -2192,6 +2264,12 @@ const providerHeadersSchema = z
     },
   );
 
+// Shared by the create shape and the stored record so the two cannot drift.
+const providerSecurityGuardrailsSchema = z
+  .string()
+  .max(PROVIDER_SECURITY_GUARDRAILS_MAX_LENGTH);
+const embeddingDimensionsSchema = z.number().int().min(256).max(4096);
+
 const providerBaseSchema = z.object({
   id: z.string(),
   organizationId: z.string().optional(),
@@ -2245,11 +2323,7 @@ const providerBaseSchema = z.object({
   // ones. Append-only and non-suppressible — the escape hatch is to point the
   // agent at a different provider. A prompt-level FLOOR, not a guarantee.
   // Length-bounded against abuse; nullable so existing providers are unchanged.
-  securityGuardrails: z
-    .string()
-    .max(PROVIDER_SECURITY_GUARDRAILS_MAX_LENGTH)
-    .nullable()
-    .optional(),
+  securityGuardrails: providerSecurityGuardrailsSchema.nullable().optional(),
   modelIds: modelIdsSchema,
   // The three pointer-settings hold a concrete model id and never an alias —
   // enforced on the FIELD, not in a `providerSchema.refine`, because
@@ -2259,13 +2333,7 @@ const providerBaseSchema = z.object({
   taskModelId: pointerModelIdSchema,
   memoryExtractionModelId: pointerModelIdSchema,
   embeddingModelId: pointerModelIdSchema.nullable().optional(),
-  embeddingDimensions: z
-    .number()
-    .int()
-    .min(256)
-    .max(4096)
-    .nullable()
-    .optional(),
+  embeddingDimensions: embeddingDimensionsSchema.nullable().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -2297,6 +2365,58 @@ export const providerSchema = providerBaseSchema
   );
 
 export type Provider = z.infer<typeof providerSchema>;
+
+/**
+ * A Provider as stored: the create shape with the columns a saved row always
+ * resolves, where "unset" is a stored `null` rather than a missing key. Kept
+ * apart from {@link providerCreateSchema} so a response can be checked against
+ * what the database actually returns.
+ */
+export const providerRecordSchema = providerBaseSchema.extend({
+  organizationId: z.string().nullish(),
+  workspaceId: z.string().nullish(),
+  region: z.string().nullish(),
+  baseUrl: z.string().nullish(),
+  headers: providerHeadersSchema.nullish(),
+  extraBody: z.record(z.string(), z.unknown()).nullish(),
+  organization: z.string().nullish(),
+  project: z.string().nullish(),
+  securityGuardrails: providerSecurityGuardrailsSchema.nullish(),
+  embeddingModelId: pointerModelIdSchema.nullish(),
+  embeddingDimensions: embeddingDimensionsSchema.nullish(),
+});
+
+export type ProviderRecord = z.infer<typeof providerRecordSchema>;
+
+/**
+ * A Provider as a route returns one — one shape for every reader.
+ *
+ * The credential fields are `apiKey` / `headers` plus their presence
+ * indicators: a caller who may manage the Provider gets the values, every other
+ * caller gets the indicators alone. `scope` is always present, including on the
+ * Organization surface where every row is Organization-scoped by construction.
+ */
+export const providerResponseSchema = providerRecordSchema
+  .omit({ apiKey: true, headers: true })
+  .extend({
+    scope: resourceScopeSchema,
+    apiKey: z.string().optional(),
+    apiKeySet: secretPresenceSchema,
+    headers: providerHeadersSchema.nullish(),
+    headersSet: secretPresenceSchema,
+  });
+
+export type ProviderResponse = z.infer<typeof providerResponseSchema>;
+
+/** The Workspace and Organization Provider lists. */
+export const providerListResponseSchema = z.object({
+  results: z.array(providerResponseSchema),
+});
+
+/** A Provider update, which reports any alias references it rewrote. */
+export const providerUpdateResponseSchema = providerResponseSchema.extend({
+  aliasRepoints: z.array(aliasRepointSchema),
+});
 
 /**
  * Whether a provider can search the web on its own, with no Web-search backend
@@ -2763,10 +2883,6 @@ export const orgMemberListItemSchema = organizationMemberWithUserSchema.extend({
 });
 
 export type OrgMemberListItem = z.infer<typeof orgMemberListItemSchema>;
-
-export const orgMemberListSchema = z.object({
-  results: z.array(orgMemberListItemSchema),
-});
 
 // Context
 
@@ -3269,10 +3385,6 @@ export const triggerRunSchema = z.object({
   createdAt: z.date(),
 });
 
-export const triggerRunListSchema = z.object({
-  results: z.array(triggerRunSchema),
-});
-
 /**
  * A run as the workspace-wide Trigger runs list returns it: the run plus the
  * name of the Trigger it belongs to. The list mixes runs from every Trigger, so
@@ -3354,7 +3466,7 @@ export type RunEventError = z.infer<typeof runEventErrorSchema>;
  *
  * `startedAt` is an absolute wall-clock instant in epoch milliseconds, so it
  * lines up with backend logs and a delegate's events need no rebasing;
- * `durationMs` comes from a monotonic clock and is absent while the event is
+ * `durationMs` comes from a monotonic clock and is null while the event is
  * still open. `parentEventId` is null for an event of the root run and the id
  * of the `delegate` event for an event of that delegate's run. `seq` is the
  * run's monotonic insertion order, kept for incremental polling; display order
@@ -3366,18 +3478,18 @@ export const runEventSchema = z.object({
   parentEventId: z.string().nullable(),
   seq: z.number().int().nonnegative(),
   type: runEventTypeSchema,
-  toolName: z.string().nullable().optional(),
+  toolName: z.string().nullable(),
   startedAt: z.number().int().nonnegative(),
-  durationMs: z.number().int().nonnegative().nullable().optional(),
+  durationMs: z.number().int().nonnegative().nullable(),
   status: runEventStatusSchema,
-  error: runEventErrorSchema.nullable().optional(),
+  error: runEventErrorSchema.nullable(),
   /**
    * Set when the run hit its event ceiling while this event was open, so
    * children it would have had were dropped. Marked on the node — not only on
    * the run — so a delegate whose children were dropped does not render as a
    * delegate that did nothing.
    */
-  childrenTruncated: z.boolean().optional(),
+  childrenTruncated: z.boolean(),
 });
 
 export type RunEvent = z.infer<typeof runEventSchema>;

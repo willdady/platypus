@@ -55,10 +55,10 @@ for every advisory published here.
 
 Two things get reported often and are working as intended:
 
-- **The default `admin@example.com` / `admin123` account.** This is the
-  documented first-startup credential, overridden with `ADMIN_EMAIL` and
-  `ADMIN_PASSWORD`. A deployment left on the default is a deployment that
-  skipped its own setup.
+- **The development `admin@example.com` / `admin123` account.** It is a local
+  development credential, overridden with `ADMIN_EMAIL` and `ADMIN_PASSWORD`.
+  The backend refuses to seed it when `NODE_ENV=production`, which the published
+  image sets, so a deployment cannot boot on it.
 - **Anything that needs an Operator account first.** The Operator — the platform
   super-admin — already controls the deployment, its environment, and its
   database, and bypasses in-app authorization by design. A finding that begins

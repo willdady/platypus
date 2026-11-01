@@ -825,7 +825,7 @@ describe("fireTrigger", () => {
       await fireTrigger(trigger, cause);
 
       expect(generateArgs().input.includeMemories).toBe(false);
-      expect(generateArgs().input.memoryTools ?? true).toBe(true);
+      expect(generateArgs().input.memoryTools).toBe(true);
     });
 
     it("puts the inputs in a labelled block above the Instruction", async () => {

@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
+import { DEFAULT_MAX_EXTRACTED_TEXT_CHARS } from "@platypus/schemas";
 import {
   extractDocumentText,
   resetExtractedTextCache,
@@ -19,6 +20,9 @@ const ok = (result: ExtractionResult): ExtractedText => {
   return result as ExtractedText;
 };
 
+/** The cap production passes for a model that declares none. */
+const cap = { maxChars: DEFAULT_MAX_EXTRACTED_TEXT_CHARS };
+
 describe("extractDocumentText", () => {
   beforeEach(() => {
     resetExtractedTextCache();
@@ -28,6 +32,7 @@ describe("extractDocumentText", () => {
     const result = await extractDocumentText(
       bytes(buildTestPdf(["Quarterly revenue rose", "Costs held flat"])),
       { mediaType: "application/pdf", filename: "report.pdf" },
+      cap,
     );
     expect(result.status).toBe("ok");
     expect(ok(result).text).toContain("Quarterly revenue rose");
@@ -43,6 +48,7 @@ describe("extractDocumentText", () => {
           "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         filename: "spec.docx",
       },
+      cap,
     );
     expect(ok(result).text).toContain("First paragraph.");
     expect(ok(result).text).toContain("Second paragraph.");
@@ -52,6 +58,7 @@ describe("extractDocumentText", () => {
     const result = await extractDocumentText(
       bytes(buildTestPdf(["No extension here"])),
       { mediaType: "application/pdf" },
+      cap,
     );
     expect(ok(result).text).toContain("No extension here");
   });
@@ -60,40 +67,57 @@ describe("extractDocumentText", () => {
     const result = await extractDocumentText(
       bytes(buildTestPdf(["Octet stream lottery"])),
       { mediaType: "application/octet-stream", filename: "report.pdf" },
+      cap,
     );
     expect(ok(result).text).toContain("Octet stream lottery");
   });
 
   it("reports a format it cannot extract as unextractable", async () => {
-    const result = await extractDocumentText(new Uint8Array([1, 2, 3]), {
-      mediaType: "application/zip",
-      filename: "bundle.zip",
-    });
+    const result = await extractDocumentText(
+      new Uint8Array([1, 2, 3]),
+      {
+        mediaType: "application/zip",
+        filename: "bundle.zip",
+      },
+      cap,
+    );
     expect(result.status).toBe("unextractable");
   });
 
   it("reports bytes that are not really the declared format as unextractable", async () => {
-    const result = await extractDocumentText(new Uint8Array([1, 2, 3, 4, 5]), {
-      mediaType: "application/pdf",
-      filename: "broken.pdf",
-    });
+    const result = await extractDocumentText(
+      new Uint8Array([1, 2, 3, 4, 5]),
+      {
+        mediaType: "application/pdf",
+        filename: "broken.pdf",
+      },
+      cap,
+    );
     expect(result.status).toBe("unextractable");
   });
 
   it("reports a PDF with no text layer (the scanned-document case) as unextractable", async () => {
-    const result = await extractDocumentText(bytes(buildTestPdf([])), {
-      mediaType: "application/pdf",
-      filename: "scan.pdf",
-    });
+    const result = await extractDocumentText(
+      bytes(buildTestPdf([])),
+      {
+        mediaType: "application/pdf",
+        filename: "scan.pdf",
+      },
+      cap,
+    );
     expect(result.status).toBe("unextractable");
   });
 
   it("refuses to parse a document past the input ceiling", async () => {
     const oversized = new Uint8Array(MAX_EXTRACTION_INPUT_BYTES + 1);
-    const result = await extractDocumentText(oversized, {
-      mediaType: "application/pdf",
-      filename: "huge.pdf",
-    });
+    const result = await extractDocumentText(
+      oversized,
+      {
+        mediaType: "application/pdf",
+        filename: "huge.pdf",
+      },
+      cap,
+    );
     expect(result.status).toBe("too-large");
   });
 
@@ -113,6 +137,7 @@ describe("extractDocumentText", () => {
     const result = await extractDocumentText(
       bytes(buildTestDocx(["Alpha", "", "", "", "Beta"])),
       { filename: "sparse.docx" },
+      cap,
     );
     expect(ok(result).text).not.toMatch(/\n{3}/);
     expect(ok(result).text).toContain("Alpha");

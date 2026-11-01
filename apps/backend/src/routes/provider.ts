@@ -1,7 +1,13 @@
 import { Hono } from "hono";
 import { validate } from "../validate.ts";
 import { db } from "../index.ts";
-import { providerCreateSchema, providerUpdateSchema } from "@platypus/schemas";
+import {
+  providerCreateSchema,
+  providerListResponseSchema,
+  providerResponseSchema,
+  providerUpdateResponseSchema,
+  providerUpdateSchema,
+} from "@platypus/schemas";
 import { requireAuth } from "../middleware/authentication.ts";
 import {
   requireOrgAccess,
@@ -17,6 +23,7 @@ import {
   deleteProvider,
   updateProvider,
 } from "../services/provider-write.ts";
+import { respond } from "../respond.ts";
 import type { Variables } from "../server.ts";
 
 const provider = new Hono<{ Variables: Variables }>();
@@ -40,8 +47,15 @@ provider.post(
     // and Skills. Spreading the body let a caller name another Workspace, or
     // set `organizationId` and mint a Shared Provider from the Workspace
     // surface, which only an Org Admin may do (ADR-0006, ADR-0007).
-    const row = await createProvider({ kind: "workspace", ctx }, data);
-    return c.json(row, 201);
+    const row = await createProvider({ kind: "workspace", ctx }, data, db);
+    // The caller just wrote the credentials and may manage this Provider, so
+    // the write response reads the row back in full.
+    return respond(
+      c,
+      providerResponseSchema,
+      providerReadModel(row, { reveal: true, scope: "workspace" }),
+      201,
+    );
   },
 );
 
@@ -66,7 +80,7 @@ provider.get(
         scope,
       }),
     );
-    return c.json({ results });
+    return respond(c, providerListResponseSchema, { results });
   },
 );
 
@@ -87,7 +101,9 @@ provider.get(
     );
     // See the list route: redacted unless this caller may manage the Provider.
     const reveal = await workspaceCredentialsVisible(c, "provider");
-    return c.json(
+    return respond(
+      c,
+      providerResponseSchema,
       providerReadModel(found.row, {
         reveal: reveal && found.scope === "workspace",
         scope: found.scope,
@@ -119,7 +135,15 @@ provider.put(
       data,
     );
 
-    return c.json({ ...row, aliasRepoints }, 200);
+    return respond(
+      c,
+      providerUpdateResponseSchema,
+      {
+        ...providerReadModel(row, { reveal: true, scope: "workspace" }),
+        aliasRepoints,
+      },
+      200,
+    );
   },
 );
 

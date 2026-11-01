@@ -226,6 +226,7 @@ const registerMemoryToolSet = () => {
       contribution: {
         name: "Memory",
         category: "Memory",
+        description: "Call the Memory tool under test",
         tools: () => ({
           memorySearch: memoryTool("Search Memories"),
           memoryGet: memoryTool("Get a Memory"),

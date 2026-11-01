@@ -9,6 +9,7 @@ import {
 import { CLEARED_TOOL_RESULT_MARKER } from "./tool-result-clearing.ts";
 import { CLEARED_TOOL_INPUT_MARKER } from "./tool-input-clearing.ts";
 import { logger } from "../logger.ts";
+import { createOverflowRecovery } from "./context-overflow-recovery.ts";
 
 /**
  * `buildModelInvocation` is the one seam every Drive shares (`drive.ts`), so
@@ -69,7 +70,10 @@ const fsWriteMessages = (n: number): ModelMessage[] =>
   ]).flat();
 
 const invoke = (plan: RunPlan) =>
-  buildModelInvocation(plan, { abortSignal: new AbortController().signal });
+  buildModelInvocation(plan, {
+    abortSignal: new AbortController().signal,
+    overflowRecovery: createOverflowRecovery(),
+  });
 
 /** The `prepareStep` override, as the SDK calls it. */
 type PrepareStep = (opts: {

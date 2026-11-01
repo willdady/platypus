@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import {
   type Agent,
+  type AgentResponse,
   type Provider,
   type ToolSet,
   type Skill,
@@ -71,10 +72,8 @@ import { orgRoutes, workspaceRoutes } from "@/lib/routes";
 
 // The Agent is shown either in a Workspace, where it may be a workspace-scoped
 // Agent or an attached org-scoped (Shared) Agent rendered with an Organization
-// badge (ADR-0007). The backend tags each row with its scope.
-type AgentWithScope = Serialized<Agent> & {
-  scope?: "organization" | "workspace";
-};
+// badge (ADR-0007). The API's response shape always carries `scope`.
+type AgentWithScope = Serialized<AgentResponse>;
 
 // The card's New chat + menu sit beside the content from `xl`, and wrap to a
 // full-width row under it (indented past the avatar) below that.
@@ -219,7 +218,7 @@ export function AgentsList({
     delete: (agent, url) => writeEntity(url, "agents", scope, { id: agent.id }),
   });
 
-  const handleDeleteClick = (agent: Serialized<Agent>) => {
+  const handleDeleteClick = (agent: AgentWithScope) => {
     deleteFlow.request(agent);
   };
 
