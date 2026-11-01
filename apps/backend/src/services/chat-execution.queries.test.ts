@@ -15,7 +15,7 @@ vi.mock("./memory-retrieval.ts", async (importActual) => ({
   retrieveRecentSummaries: mockRetrieveRecentSummaries,
 }));
 
-import { prepareChatTurn } from "./chat-execution.ts";
+import { drizzleChatTurnQueries, prepareChatTurn } from "./chat-execution.ts";
 import { NotFoundError } from "../errors.ts";
 import { SANDBOX_TOOLSET_ID } from "../tools/index.ts";
 
@@ -127,19 +127,25 @@ const world = (agents: Row[] = []) =>
   });
 
 const turnFor = (agentId: string, overrides: Record<string, unknown> = {}) =>
-  prepareChatTurn({
-    orgId: "org-1",
-    workspaceId: "ws-1",
-    user: { id: "user-1", name: "Test User" },
-    sessionId: "chat-1",
-    messages: [],
-    origin: "http://localhost:4000",
-    request: { agentId },
-    // Pinned so no memory retrieval runs; memories are not what this pins.
-    memorySnapshot: "",
-    memoriesReferenceDate: new Date("2026-05-03T12:00:00Z"),
-    ...overrides,
-  });
+  prepareChatTurn(
+    {
+      orgId: "org-1",
+      workspaceId: "ws-1",
+      user: { id: "user-1", name: "Test User" },
+      sessionId: "chat-1",
+      messages: [],
+      origin: "http://localhost:4000",
+      request: { agentId },
+      // Pinned so no memory retrieval runs; memories are not what this pins.
+      memorySnapshot: "",
+      memoriesReferenceDate: new Date("2026-05-03T12:00:00Z"),
+      runMode: "interactive",
+      includeMemories: true,
+      memoryTools: true,
+      ...overrides,
+    },
+    drizzleChatTurnQueries,
+  );
 
 describe("prepareChatTurn on the Drizzle-backed queries", () => {
   beforeEach(() => {

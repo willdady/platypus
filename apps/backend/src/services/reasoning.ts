@@ -54,7 +54,7 @@ const deepMerge = (
 export const resolveReasoning = (
   map: ReasoningMap | undefined,
   choice: ReasoningChoice,
-  sampling: SamplingSettings = {},
+  sampling: SamplingSettings,
 ): JSONObject | undefined => {
   if (!map) return undefined;
 

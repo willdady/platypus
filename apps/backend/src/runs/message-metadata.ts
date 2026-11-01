@@ -59,14 +59,10 @@ export type MessageMetadataFacts = TurnFacts & {
   /**
    * The turn's resolved **Step ceiling** — the same figure the loop's step-count
    * stop condition is built from. Needed here because the terminal finish reason
-   * alone cannot say whether the loop was stopped or the model was done.
-   *
-   * Optional like every fact above it, so this factory keeps its no-argument
-   * form: a caller that leaves it out gets no step-ceiling reporting rather than
-   * a comparison against a guessed ceiling. Every production caller passes it —
-   * the drive reads it off the plan it is about to invoke.
+   * alone cannot say whether the loop was stopped or the model was done. The
+   * drive reads it off the plan it is about to invoke.
    */
-  stepCeiling?: number;
+  stepCeiling: number;
   /** When the model request was sent, on the same clock as `now`. `modelDurationMs`
    *  is the elapsed time from here, recomputed on every `finish-step`. */
   driveStartMs?: number;
@@ -108,7 +104,7 @@ export const createMessageMetadata = ({
   delegatedUsage,
   continued,
   summaryId,
-}: MessageMetadataFacts = {}) => {
+}: MessageMetadataFacts) => {
   const priorUsage = continued?.tokenUsage ? [continued.tokenUsage] : [];
   const priorModelMs = continued?.modelDurationMs ?? 0;
   // Whether any step of this turn has reported an input-token count. Only

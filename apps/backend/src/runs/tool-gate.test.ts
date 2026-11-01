@@ -10,6 +10,7 @@ import { z } from "zod";
 import type { ToolGateCall, ToolGateVerdict } from "@platypuschat/plugin-sdk";
 import { startRun } from "./run-lifecycle.ts";
 import { driveChat, driveDelegate, driveOnce } from "./drive.ts";
+import { createOverflowRecovery } from "./context-overflow-recovery.ts";
 import { buildModelInvocation, type RunPlan } from "./run-plan.ts";
 import { RunEventRecorder } from "./run-events.ts";
 import type { RunStatus } from "./types.ts";
@@ -652,6 +653,7 @@ describe("with no gate enabled", () => {
       "toolApproval" in
         buildModelInvocation(plan, {
           abortSignal: new AbortController().signal,
+          overflowRecovery: createOverflowRecovery(),
         }),
     ).toBe(false);
     await driveOnce({ plan, prompt: "go", run });

@@ -103,6 +103,8 @@ const {
 });
 
 vi.mock("../services/chat-execution.ts", () => ({
+  // Passed through to the mocked turn preparation, which ignores it.
+  drizzleChatTurnQueries: {},
   prepareChatTurn: mockPrepareChatTurn,
   validateTurnAttachments: mockValidateTurnAttachments,
 }));
@@ -228,6 +230,8 @@ const baseInput: RunInput = {
   request: { agentId: "agent-1" },
   messages: [],
   memoriesReferenceDate: new Date("2026-05-03T12:00:00Z"),
+  includeMemories: true,
+  memoryTools: true,
 };
 
 const fakeTurn = (overrides?: { dispose?: () => Promise<void> }) => {
@@ -827,6 +831,7 @@ describe("AgentRunner.generate", () => {
           // A Chat's run id is the chat id; a Trigger run's is that run's id.
           sessionId: baseInput.runId,
         }),
+        expect.anything(),
       );
     },
   );
@@ -1488,6 +1493,7 @@ describe("a turn that resolves after its run has already terminated", () => {
         saveMcpToolListing: () => Promise.resolve(),
         setMcpFetchFailedAt: () => Promise.resolve(),
       },
+      { withheldToolSetIds: [], interactive: false },
     );
     const close = vi.fn().mockResolvedValue(undefined);
     session.registerCloser(close);

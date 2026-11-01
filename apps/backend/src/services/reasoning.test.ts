@@ -23,7 +23,7 @@ describe("resolveReasoning", () => {
     ["no map", undefined, { reasoningThinking: true, reasoningEffort: "high" }],
     ["an empty map", {}, { reasoningEffort: "high", thinkingBudget: 9 }],
   ] as const)("sends nothing for %s", (_, map, choice) => {
-    expect(resolveReasoning(map, choice)).toBeUndefined();
+    expect(resolveReasoning(map, choice, {})).toBeUndefined();
   });
 
   it("deep-merges always, thinking and effort, then the budget, in that order", () => {
@@ -46,6 +46,7 @@ describe("resolveReasoning", () => {
           reasoningEffort: "high",
           thinkingBudget: 512,
         },
+        {},
       ),
     ).toEqual({
       chat_template_kwargs: {
@@ -58,7 +59,7 @@ describe("resolveReasoning", () => {
   });
 
   it("falls back to the map's defaults when nobody chose", () => {
-    expect(resolveReasoning(QWEN, {})).toEqual({
+    expect(resolveReasoning(QWEN, {}, {})).toEqual({
       chat_template_kwargs: {
         preserve_thinking: true,
         enable_thinking: true,
@@ -69,24 +70,31 @@ describe("resolveReasoning", () => {
 
   it("prefers the stored choice over the default", () => {
     expect(
-      resolveReasoning(QWEN, { reasoningEffort: "high" })?.chat_template_kwargs,
+      resolveReasoning(QWEN, { reasoningEffort: "high" }, {})
+        ?.chat_template_kwargs,
     ).toMatchObject({ reasoning_effort: "high" });
   });
 
   it("sends nothing for a control with neither a choice nor a default", () => {
     const { default: _, ...noDefault } = QWEN;
-    expect(resolveReasoning(noDefault, { reasoningThinking: null })).toEqual({
+    expect(
+      resolveReasoning(noDefault, { reasoningThinking: null }, {}),
+    ).toEqual({
       chat_template_kwargs: { preserve_thinking: true },
     });
   });
 
   it("thinking off drops effort and budget", () => {
     expect(
-      resolveReasoning(QWEN, {
-        reasoningThinking: false,
-        reasoningEffort: "high",
-        thinkingBudget: 512,
-      }),
+      resolveReasoning(
+        QWEN,
+        {
+          reasoningThinking: false,
+          reasoningEffort: "high",
+          thinkingBudget: 512,
+        },
+        {},
+      ),
     ).toEqual({
       chat_template_kwargs: { preserve_thinking: true, enable_thinking: false },
     });
@@ -97,25 +105,28 @@ describe("resolveReasoning", () => {
       resolveReasoning(
         { effort: { low: { think: "low" } }, budget: { field: "b" } },
         { reasoningThinking: false, reasoningEffort: "low", thinkingBudget: 3 },
+        {},
       ),
     ).toEqual({ think: "low", b: 3 });
   });
 
   it("an undeclared stored step falls back to the default, else nothing", () => {
     expect(
-      resolveReasoning(QWEN, { reasoningEffort: "max" })?.chat_template_kwargs,
+      resolveReasoning(QWEN, { reasoningEffort: "max" }, {})
+        ?.chat_template_kwargs,
     ).toMatchObject({ reasoning_effort: "low" });
     expect(
       resolveReasoning(
         { effort: { low: { e: 1 } } },
         { reasoningEffort: "max" },
+        {},
       ),
     ).toBeUndefined();
   });
 
   it("sends a budget only when the map names its field", () => {
     expect(
-      resolveReasoning({ always: { a: 1 } }, { thinkingBudget: 100 }),
+      resolveReasoning({ always: { a: 1 } }, { thinkingBudget: 100 }, {}),
     ).toEqual({ a: 1 });
   });
 

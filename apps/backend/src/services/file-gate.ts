@@ -1,3 +1,4 @@
+import { DEFAULT_MAX_EXTRACTED_TEXT_CHARS } from "@platypus/schemas";
 import type { PlatypusUIMessage } from "../types.ts";
 import { classifyFilePart } from "./file-classification.ts";
 import {
@@ -149,7 +150,9 @@ export const assertFilePartsSupported = async (
       const bytes = decodeDataUrl(url)?.bytes;
       if (!bytes) continue;
 
-      const extracted = await extractDocumentText(bytes, part);
+      const extracted = await extractDocumentText(bytes, part, {
+        maxChars: DEFAULT_MAX_EXTRACTED_TEXT_CHARS,
+      });
       if (extracted.status !== "ok") {
         rejections.push({ file: label, reason: extracted.status });
       }
@@ -245,7 +248,7 @@ export const fileTextForModel = async (
   bytes: Uint8Array,
   file: { mediaType?: string; filename?: string },
   outcome: "text" | "extract",
-  options: { maxExtractedTextChars?: number } = {},
+  options: { maxExtractedTextChars: number },
 ): Promise<string> => {
   if (outcome === "text") {
     return annotateInlinedText(file.filename, new TextDecoder().decode(bytes));
@@ -284,7 +287,7 @@ export const fileTextForModel = async (
 export const normalizeFileParts = async (
   messages: PlatypusUIMessage[],
   passthroughFileTypes: string[],
-  options: { maxExtractedTextChars?: number } = {},
+  options: { maxExtractedTextChars: number },
 ): Promise<PlatypusUIMessage[]> =>
   Promise.all(
     messages.map(async (message) => {

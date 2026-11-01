@@ -29,6 +29,11 @@ import { NotFoundError, ValidationError } from "../errors.ts";
 const ctx = { orgId: "org-1", workspaceId: "ws-1" };
 const NEXT_RUN = new Date("2026-01-01T10:00:00Z");
 
+/** The Agent Tool surface's write options: never reaches Inbound Triggers. */
+const asTool = { allowInbound: false } as const;
+/** Both list flags off — the wider read. */
+const everyTrigger = { enabledOnly: false, includeFired: false } as const;
+
 const cronFields = (): TriggerCreateFields => ({
   agentId: "agent-1",
   type: "cron",
@@ -106,7 +111,7 @@ describe("trigger module", () => {
     it("computes nextRunAt and inserts a cron trigger", async () => {
       const fake = world();
 
-      const row = await createTrigger(ctx, cronFields());
+      const row = await createTrigger(ctx, cronFields(), asTool);
 
       expect(row).toMatchObject({ id: "trig-new", workspaceId: "ws-1" });
       expect(fake.tables.trigger).toEqual([
@@ -117,7 +122,11 @@ describe("trigger module", () => {
     it("accepts a Shared agent attached to this workspace", async () => {
       const fake = world();
 
-      await createTrigger(ctx, { ...cronFields(), agentId: "shared-attached" });
+      await createTrigger(
+        ctx,
+        { ...cronFields(), agentId: "shared-attached" },
+        asTool,
+      );
 
       expect(fake.tables.trigger).toEqual([
         expect.objectContaining({ agentId: "shared-attached" }),
@@ -132,7 +141,7 @@ describe("trigger module", () => {
       const fake = world();
 
       await expect(
-        createTrigger(ctx, { ...cronFields(), agentId }),
+        createTrigger(ctx, { ...cronFields(), agentId }, asTool),
       ).rejects.toThrow(
         new ValidationError("Agent not found in this workspace"),
       );
@@ -140,44 +149,51 @@ describe("trigger module", () => {
       expect(fake.tables.trigger ?? []).toHaveLength(0);
     });
 
-    it("applies the defaults to fields the caller omits", async () => {
+    it("writes the scalar fields it is given, with no defaults of its own", async () => {
       const fake = world();
-      const {
-        enabled: _e,
-        maxRunsToKeep: _m,
-        search: _s,
-        includeMemories: _i,
-        ...required
-      } = cronFields();
 
-      await createTrigger(ctx, required);
+      await createTrigger(
+        ctx,
+        {
+          ...cronFields(),
+          enabled: false,
+          maxRunsToKeep: 3,
+          search: true,
+          includeMemories: true,
+        },
+        asTool,
+      );
 
       expect(fake.tables.trigger[0]).toMatchObject({
-        enabled: true,
-        maxRunsToKeep: 10,
-        search: false,
-        includeMemories: false,
+        enabled: false,
+        maxRunsToKeep: 3,
+        search: true,
+        includeMemories: true,
       });
     });
 
     it("throws ValidationError for an invalid cron expression", async () => {
       world();
       await expect(
-        createTrigger(ctx, {
-          ...cronFields(),
-          config: {
-            cronExpression: "invalid",
-            timezone: "UTC",
-            isOneOff: false,
+        createTrigger(
+          ctx,
+          {
+            ...cronFields(),
+            config: {
+              cronExpression: "invalid",
+              timezone: "UTC",
+              isOneOff: false,
+            },
           },
-        }),
+          asTool,
+        ),
       ).rejects.toThrow(ValidationError);
     });
 
     it("throws ValidationError when cronExpression is missing", async () => {
       world();
       await expect(
-        createTrigger(ctx, { ...cronFields(), config: {} as never }),
+        createTrigger(ctx, { ...cronFields(), config: {} as never }, asTool),
       ).rejects.toThrow(ValidationError);
     });
 
@@ -192,7 +208,7 @@ describe("trigger module", () => {
         },
       };
 
-      await createTrigger(ctx, { ...eventFields(), config });
+      await createTrigger(ctx, { ...eventFields(), config }, asTool);
 
       expect(fake.tables.trigger[0]).toMatchObject({
         config,
@@ -203,37 +219,53 @@ describe("trigger module", () => {
     it("throws ValidationError for an empty events array", async () => {
       world();
       await expect(
-        createTrigger(ctx, { ...eventFields(), config: { events: [] } }),
+        createTrigger(
+          ctx,
+          { ...eventFields(), config: { events: [] } },
+          asTool,
+        ),
       ).rejects.toThrow(ValidationError);
     });
 
     it("throws ValidationError for an event name outside the real enum", async () => {
       world();
       await expect(
-        createTrigger(ctx, {
-          ...eventFields(),
-          config: { events: ["card.commented"] as never },
-        }),
+        createTrigger(
+          ctx,
+          {
+            ...eventFields(),
+            config: { events: ["card.commented"] as never },
+          },
+          asTool,
+        ),
       ).rejects.toThrow(ValidationError);
     });
 
     it("throws ValidationError for a filters object with an unknown-shaped field", async () => {
       world();
       await expect(
-        createTrigger(ctx, {
-          ...eventFields(),
-          config: {
-            events: ["card.created"],
-            filters: { changedFields: "not-an-array" as never },
+        createTrigger(
+          ctx,
+          {
+            ...eventFields(),
+            config: {
+              events: ["card.created"],
+              filters: { changedFields: "not-an-array" as never },
+            },
           },
-        }),
+          asTool,
+        ),
       ).rejects.toThrow(ValidationError);
     });
 
     it("throws ValidationError for an unrecognized trigger type", async () => {
       world();
       await expect(
-        createTrigger(ctx, { ...cronFields(), type: "invalid" as never }),
+        createTrigger(
+          ctx,
+          { ...cronFields(), type: "invalid" as never },
+          asTool,
+        ),
       ).rejects.toThrow(ValidationError);
     });
   });
@@ -244,9 +276,9 @@ describe("trigger module", () => {
         trigger: [triggerRow({ workspaceId: "ws-2", name: "Theirs" })],
       });
 
-      await expect(updateTrigger(ctx, "trig-1", { name: "x" })).rejects.toThrow(
-        NotFoundError,
-      );
+      await expect(
+        updateTrigger(ctx, "trig-1", { name: "x" }, asTool),
+      ).rejects.toThrow(NotFoundError);
       expect(fake.tables.trigger[0].name).toBe("Theirs");
     });
 
@@ -254,7 +286,12 @@ describe("trigger module", () => {
       world();
 
       await expect(
-        updateTrigger(ctx, "trig-missing", { agentId: "agent-missing" }),
+        updateTrigger(
+          ctx,
+          "trig-missing",
+          { agentId: "agent-missing" },
+          asTool,
+        ),
       ).rejects.toThrow(NotFoundError);
     });
 
@@ -264,7 +301,7 @@ describe("trigger module", () => {
         const fake = world({ trigger: [triggerRow()] });
 
         await expect(
-          updateTrigger(ctx, "trig-1", { agentId, name: "Renamed" }),
+          updateTrigger(ctx, "trig-1", { agentId, name: "Renamed" }, asTool),
         ).rejects.toThrow(
           new ValidationError("Agent not found in this workspace"),
         );
@@ -278,7 +315,12 @@ describe("trigger module", () => {
     it("accepts an agent change to a Shared agent attached here", async () => {
       const fake = world({ trigger: [triggerRow()] });
 
-      await updateTrigger(ctx, "trig-1", { agentId: "shared-attached" });
+      await updateTrigger(
+        ctx,
+        "trig-1",
+        { agentId: "shared-attached" },
+        asTool,
+      );
 
       expect(fake.tables.trigger[0].agentId).toBe("shared-attached");
     });
@@ -289,7 +331,7 @@ describe("trigger module", () => {
         trigger: [triggerRow({ agentId: "agent-deleted" })],
       });
 
-      await updateTrigger(ctx, "trig-1", { name: "Renamed" });
+      await updateTrigger(ctx, "trig-1", { name: "Renamed" }, asTool);
 
       expect(fake.tables.trigger[0].name).toBe("Renamed");
     });
@@ -297,14 +339,19 @@ describe("trigger module", () => {
     it("writes every scalar field the update carries", async () => {
       const fake = world({ trigger: [triggerRow()] });
 
-      await updateTrigger(ctx, "trig-1", {
-        description: "About it",
-        instruction: "Do the other thing",
-        enabled: false,
-        maxRunsToKeep: 3,
-        search: true,
-        includeMemories: true,
-      });
+      await updateTrigger(
+        ctx,
+        "trig-1",
+        {
+          description: "About it",
+          instruction: "Do the other thing",
+          enabled: false,
+          maxRunsToKeep: 3,
+          search: true,
+          includeMemories: true,
+        },
+        asTool,
+      );
 
       expect(fake.tables.trigger[0]).toMatchObject({
         description: "About it",
@@ -323,7 +370,7 @@ describe("trigger module", () => {
       });
 
       await expect(
-        updateTrigger(ctx, "trig-1", { name: "Renamed" }),
+        updateTrigger(ctx, "trig-1", { name: "Renamed" }, asTool),
       ).rejects.toThrow(
         new ValidationError(
           "Invalid trigger type. Must be 'cron', 'event' or 'inbound'.",
@@ -335,14 +382,19 @@ describe("trigger module", () => {
     it("recomputes nextRunAt when a cron trigger's config changes", async () => {
       const fake = world({ trigger: [triggerRow()] });
 
-      const row = await updateTrigger(ctx, "trig-1", {
-        name: "Updated",
-        config: {
-          cronExpression: "0 10 * * *",
-          timezone: "UTC",
-          isOneOff: false,
+      const row = await updateTrigger(
+        ctx,
+        "trig-1",
+        {
+          name: "Updated",
+          config: {
+            cronExpression: "0 10 * * *",
+            timezone: "UTC",
+            isOneOff: false,
+          },
         },
-      });
+        asTool,
+      );
 
       expect(row).toMatchObject({ name: "Updated", nextRunAt: NEXT_RUN });
       expect(fake.tables.trigger[0].nextRunAt).toEqual(NEXT_RUN);
@@ -352,7 +404,7 @@ describe("trigger module", () => {
       const stale = new Date("2020-01-01T00:00:00Z");
       const fake = world({ trigger: [triggerRow({ nextRunAt: stale })] });
 
-      await updateTrigger(ctx, "trig-1", { enabled: false });
+      await updateTrigger(ctx, "trig-1", { enabled: false }, asTool);
 
       expect(fake.tables.trigger[0].nextRunAt).toEqual(stale);
     });
@@ -370,7 +422,7 @@ describe("trigger module", () => {
         ],
       });
 
-      await updateTrigger(ctx, "trig-1", { enabled: true });
+      await updateTrigger(ctx, "trig-1", { enabled: true }, asTool);
 
       expect(fake.tables.trigger[0].nextRunAt).toEqual(NEXT_RUN);
     });
@@ -381,7 +433,12 @@ describe("trigger module", () => {
       const current = new Date("2026-06-01T09:00:00Z");
       const fake = world({ trigger: [triggerRow({ nextRunAt: current })] });
 
-      await updateTrigger(ctx, "trig-1", { enabled: true, name: "Renamed" });
+      await updateTrigger(
+        ctx,
+        "trig-1",
+        { enabled: true, name: "Renamed" },
+        asTool,
+      );
 
       expect(fake.tables.trigger[0].nextRunAt).toEqual(current);
     });
@@ -398,7 +455,7 @@ describe("trigger module", () => {
         ],
       });
 
-      await updateTrigger(ctx, "trig-1", { enabled: true });
+      await updateTrigger(ctx, "trig-1", { enabled: true }, asTool);
 
       expect(fake.tables.trigger[0].nextRunAt).toBeNull();
     });
@@ -407,23 +464,33 @@ describe("trigger module", () => {
       world({ trigger: [triggerRow()] });
 
       await expect(
-        updateTrigger(ctx, "trig-1", {
-          config: {
-            cronExpression: "invalid",
-            timezone: "UTC",
-            isOneOff: false,
+        updateTrigger(
+          ctx,
+          "trig-1",
+          {
+            config: {
+              cronExpression: "invalid",
+              timezone: "UTC",
+              isOneOff: false,
+            },
           },
-        }),
+          asTool,
+        ),
       ).rejects.toThrow(ValidationError);
     });
 
     it("clears nextRunAt when switching to event type", async () => {
       const fake = world({ trigger: [triggerRow({ nextRunAt: NEXT_RUN })] });
 
-      await updateTrigger(ctx, "trig-1", {
-        type: "event",
-        config: { events: ["card.created"] },
-      });
+      await updateTrigger(
+        ctx,
+        "trig-1",
+        {
+          type: "event",
+          config: { events: ["card.created"] },
+        },
+        asTool,
+      );
 
       expect(fake.tables.trigger[0]).toMatchObject({
         type: "event",
@@ -440,7 +507,7 @@ describe("trigger module", () => {
       world({ trigger: [triggerRow()] });
 
       await expect(
-        updateTrigger(ctx, "trig-1", { type: "event" }),
+        updateTrigger(ctx, "trig-1", { type: "event" }, asTool),
       ).rejects.toThrow(ValidationError);
     });
 
@@ -453,7 +520,7 @@ describe("trigger module", () => {
       });
 
       await expect(
-        updateTrigger(ctx, "trig-1", { type: "cron" }),
+        updateTrigger(ctx, "trig-1", { type: "cron" }, asTool),
       ).rejects.toThrow(ValidationError);
     });
 
@@ -464,7 +531,12 @@ describe("trigger module", () => {
       const config = { events: ["card.created"], filters: { boardId: "b-1" } };
       const fake = world({ trigger: [triggerRow({ type: "event", config })] });
 
-      await updateTrigger(ctx, "trig-1", { type: "event", name: "renamed" });
+      await updateTrigger(
+        ctx,
+        "trig-1",
+        { type: "event", name: "renamed" },
+        asTool,
+      );
 
       expect(fake.tables.trigger[0]).toMatchObject({ name: "renamed", config });
     });
@@ -477,7 +549,7 @@ describe("trigger module", () => {
       });
 
       await expect(
-        updateTrigger(ctx, "trig-1", { config: { events: [] } }),
+        updateTrigger(ctx, "trig-1", { config: { events: [] } }, asTool),
       ).rejects.toThrow(ValidationError);
     });
 
@@ -489,9 +561,14 @@ describe("trigger module", () => {
       });
 
       await expect(
-        updateTrigger(ctx, "trig-1", {
-          config: { events: ["card.commented"] as never },
-        }),
+        updateTrigger(
+          ctx,
+          "trig-1",
+          {
+            config: { events: ["card.commented"] as never },
+          },
+          asTool,
+        ),
       ).rejects.toThrow(ValidationError);
     });
 
@@ -516,7 +593,7 @@ describe("trigger module", () => {
         },
       };
 
-      await updateTrigger(ctx, "trig-1", { config: newConfig });
+      await updateTrigger(ctx, "trig-1", { config: newConfig }, asTool);
 
       expect(fake.tables.trigger[0].config).toEqual(newConfig);
     });
@@ -534,9 +611,14 @@ describe("trigger module", () => {
         ],
       });
 
-      await updateTrigger(ctx, "trig-1", {
-        config: { events: ["card.created", "card.updated"] },
-      });
+      await updateTrigger(
+        ctx,
+        "trig-1",
+        {
+          config: { events: ["card.created", "card.updated"] },
+        },
+        asTool,
+      );
 
       expect(fake.tables.trigger[0].config).toEqual({
         events: ["card.created", "card.updated"],
@@ -565,7 +647,7 @@ describe("trigger module", () => {
     it("returns only this workspace's triggers, newest first", async () => {
       world(rows());
 
-      const result = await listTriggers(ctx);
+      const result = await listTriggers(ctx, everyTrigger);
 
       expect(result.map((t) => t.id)).toEqual(["new-off", "mid", "old"]);
     });
@@ -573,7 +655,10 @@ describe("trigger module", () => {
     it("filters to enabled triggers with enabledOnly", async () => {
       world(rows());
 
-      const result = await listTriggers(ctx, { enabledOnly: true });
+      const result = await listTriggers(ctx, {
+        enabledOnly: true,
+        includeFired: false,
+      });
 
       expect(result.map((t) => t.id)).toEqual(["mid", "old"]);
     });
@@ -605,10 +690,12 @@ describe("trigger module", () => {
     it("refuses the 51st pending One-off in a workspace, naming the limit", async () => {
       world({ trigger: pending(50) });
 
-      await expect(createTrigger(ctx, oneOffFields())).rejects.toThrow(
+      await expect(createTrigger(ctx, oneOffFields(), asTool)).rejects.toThrow(
         ValidationError,
       );
-      await expect(createTrigger(ctx, oneOffFields())).rejects.toThrow(/50/);
+      await expect(createTrigger(ctx, oneOffFields(), asTool)).rejects.toThrow(
+        /50/,
+      );
     });
 
     it("counts a One-off disabled before it fired, but not a fired one or another workspace's", async () => {
@@ -625,9 +712,11 @@ describe("trigger module", () => {
         ],
       });
 
-      await createTrigger(ctx, oneOffFields());
+      await createTrigger(ctx, oneOffFields(), asTool);
 
-      await expect(createTrigger(ctx, oneOffFields())).rejects.toThrow(/50/);
+      await expect(createTrigger(ctx, oneOffFields(), asTool)).rejects.toThrow(
+        /50/,
+      );
       expect(fake.tables.trigger).toHaveLength(52);
     });
 
@@ -635,7 +724,7 @@ describe("trigger module", () => {
       world({ trigger: [...pending(50), triggerRow()] });
 
       await expect(
-        updateTrigger(ctx, "trig-1", { config: oneOffConfig }),
+        updateTrigger(ctx, "trig-1", { config: oneOffConfig }, asTool),
       ).rejects.toThrow(/50/);
     });
 
@@ -643,7 +732,12 @@ describe("trigger module", () => {
       world({ trigger: pending(50) });
 
       await expect(
-        updateTrigger(ctx, "once-0", { config: oneOffConfig, name: "Renamed" }),
+        updateTrigger(
+          ctx,
+          "once-0",
+          { config: oneOffConfig, name: "Renamed" },
+          asTool,
+        ),
       ).resolves.toMatchObject({ name: "Renamed" });
     });
 
@@ -663,9 +757,9 @@ describe("trigger module", () => {
       async (_label, fields) => {
         world({ trigger: [fired()] });
 
-        await expect(updateTrigger(ctx, "fired", fields)).rejects.toThrow(
-          ValidationError,
-        );
+        await expect(
+          updateTrigger(ctx, "fired", fields, asTool),
+        ).rejects.toThrow(ValidationError);
       },
     );
 
@@ -673,21 +767,30 @@ describe("trigger module", () => {
       world({ trigger: [fired()] });
 
       await expect(
-        updateTrigger(ctx, "fired", {
-          name: "Renamed",
-          enabled: false,
-          config: oneOffConfig,
-        }),
+        updateTrigger(
+          ctx,
+          "fired",
+          {
+            name: "Renamed",
+            enabled: false,
+            config: oneOffConfig,
+          },
+          asTool,
+        ),
       ).resolves.toMatchObject({ name: "Renamed", enabled: false });
-      await expect(deleteTrigger(ctx, "fired")).resolves.toBe(true);
+      await expect(deleteTrigger(ctx, "fired", asTool)).resolves.toBe(true);
     });
 
     it("hides fired One-offs from the list unless includeFired is set", async () => {
       world({ trigger: [fired(), triggerRow()] });
 
-      expect((await listTriggers(ctx)).map((t) => t.id)).toEqual(["trig-1"]);
+      expect((await listTriggers(ctx, everyTrigger)).map((t) => t.id)).toEqual([
+        "trig-1",
+      ]);
       expect(
-        (await listTriggers(ctx, { includeFired: true })).map((t) => t.id),
+        (
+          await listTriggers(ctx, { enabledOnly: false, includeFired: true })
+        ).map((t) => t.id),
       ).toEqual(["fired", "trig-1"]);
     });
 
@@ -710,7 +813,10 @@ describe("trigger module", () => {
         ],
       });
 
-      const result = await listTriggers(ctx, { includeFired: true });
+      const result = await listTriggers(ctx, {
+        enabledOnly: false,
+        includeFired: true,
+      });
 
       expect(
         result.map(({ id, lastRunStatus, lastRunStartedAt }) => ({
@@ -747,14 +853,14 @@ describe("trigger module", () => {
     it("deletes this workspace's trigger", async () => {
       const fake = world({ trigger: [triggerRow()] });
 
-      expect(await deleteTrigger(ctx, "trig-1")).toBe(true);
+      expect(await deleteTrigger(ctx, "trig-1", asTool)).toBe(true);
       expect(fake.tables.trigger).toHaveLength(0);
     });
 
     it("returns false and leaves another workspace's trigger intact", async () => {
       const fake = world({ trigger: [triggerRow({ workspaceId: "ws-2" })] });
 
-      expect(await deleteTrigger(ctx, "trig-1")).toBe(false);
+      expect(await deleteTrigger(ctx, "trig-1", asTool)).toBe(false);
       expect(fake.tables.trigger).toHaveLength(1);
     });
 
@@ -763,7 +869,7 @@ describe("trigger module", () => {
       // deleting its own integration would stop it silently.
       const fake = world({ trigger: [triggerRow({ type: "inbound" })] });
 
-      await expect(deleteTrigger(ctx, "trig-1")).rejects.toThrow(
+      await expect(deleteTrigger(ctx, "trig-1", asTool)).rejects.toThrow(
         ValidationError,
       );
       expect(fake.tables.trigger).toHaveLength(1);
@@ -781,7 +887,7 @@ describe("trigger module", () => {
     it("is refused unless the caller is the Owner's surface", async () => {
       const fake = world();
 
-      await expect(createTrigger(ctx, inboundFields())).rejects.toThrow(
+      await expect(createTrigger(ctx, inboundFields(), asTool)).rejects.toThrow(
         ValidationError,
       );
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- a table no test seeded or wrote is absent
@@ -856,7 +962,7 @@ describe("trigger module", () => {
       world({ trigger: [triggerRow({ type: "inbound", config: {} })] });
 
       await expect(
-        updateTrigger(ctx, "trig-1", { name: "Renamed" }),
+        updateTrigger(ctx, "trig-1", { name: "Renamed" }, asTool),
       ).rejects.toThrow(ValidationError);
     });
 
