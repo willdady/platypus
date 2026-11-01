@@ -16,9 +16,12 @@ import {
   failBeforeDrive,
 } from "./drive.ts";
 import { RunEventRecorder } from "./run-events.ts";
-import type { RunStatus } from "./types.ts";
+import type { PlatypusUIMessage } from "../types.ts";
+import type { RunStats, RunStatus } from "./types.ts";
 import { CLEARED_TOOL_RESULT_MARKER } from "./tool-result-clearing.ts";
 import type { ModelMessage } from "ai";
+import { ANSWER_STEP_INSTRUCTION } from "./answer-step.ts";
+import type { RunPlan } from "./run-plan.ts";
 import {
   currentCausingAgents,
   withCausation,
@@ -136,7 +139,7 @@ const startRecordedRun = (timeouts?: {
   perStepTimeoutMs?: number;
   perRunTimeoutMs?: number;
 }) => {
-  const outcome: Array<{ status: RunStatus; error?: Error; stats: unknown }> =
+  const outcome: Array<{ status: RunStatus; error?: Error; stats: RunStats }> =
     [];
   const run = startRun({
     runId: `drive-${Math.random().toString(36).slice(2)}`,
@@ -910,6 +913,231 @@ describe("driveChat", () => {
 
     expect(seen).toEqual([["agent-7"]]);
   });
+});
+
+/**
+ * The Step ceiling's answer step (issue #1730).
+ *
+ * A turn used to end wherever the model got to when its loop ran out of steps,
+ * often with a Tool row and no answer. On the last permitted step the model is
+ * now told it is the last one and asked to answer from what it has — in the
+ * request only, with the tool set untouched. Asserted on every Drive shape,
+ * because the seam they share is the whole point.
+ */
+describe("the Step ceiling's answer step", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  type Shape = "chat" | "delegate" | "trigger";
+
+  const toolLoopPlan = (model: MockLanguageModelV3, maxSteps = 3): RunPlan => ({
+    model,
+    tools: {
+      [STUCK_TOOL]: {
+        inputSchema: z.object({ n: z.number().optional() }),
+        execute: () => Promise.resolve("same"),
+      },
+    },
+    maxSteps,
+  });
+
+  // Distinct arguments every call: the unattended shapes carry the no-progress
+  // detector, and a genuinely repeated call would trip it before the ceiling.
+  const toolStep = (step: number): LanguageModelV3StreamPart[] => [
+    { type: "stream-start", warnings: [] },
+    { type: "tool-input-start", id: `tc${step}`, toolName: STUCK_TOOL },
+    { type: "tool-input-end", id: `tc${step}` },
+    {
+      type: "tool-call",
+      toolCallId: `tc${step}`,
+      toolName: STUCK_TOOL,
+      input: JSON.stringify({ n: step }),
+    },
+    {
+      type: "finish",
+      finishReason: { unified: "tool-calls", raw: "tool_calls" },
+      usage: USAGE,
+    },
+  ];
+
+  const stopStep = (...deltas: string[]): LanguageModelV3StreamPart[] => [
+    { type: "stream-start", warnings: [] },
+    { type: "text-start", id: "t1" },
+    ...deltas.map((delta) => ({
+      type: "text-delta" as const,
+      id: "t1",
+      delta,
+    })),
+    { type: "text-end", id: "t1" },
+    {
+      type: "finish",
+      finishReason: { unified: "stop", raw: "stop" },
+      usage: USAGE,
+    },
+  ];
+
+  type Captured = { prompt: unknown; tools: unknown };
+
+  /** A model whose every call is chosen by step, recording what it was sent. */
+  const recordingModel = (
+    captured: Captured[],
+    chunksFor: (step: number) => LanguageModelV3StreamPart[],
+  ) => {
+    let index = 0;
+    return new MockLanguageModelV3({
+      doStream: (options: { prompt: unknown; tools?: unknown }) => {
+        const step = index++;
+        captured.push({ prompt: options.prompt, tools: options.tools });
+        return Promise.resolve({
+          stream: simulateReadableStream({ chunks: chunksFor(step) }),
+        });
+      },
+    });
+  };
+
+  const sentInstruction = (captured: Captured): boolean =>
+    JSON.stringify(captured.prompt).includes(ANSWER_STEP_INSTRUCTION);
+
+  const sentTool = (captured: Captured): boolean =>
+    JSON.stringify(captured.tools).includes(STUCK_TOOL);
+
+  /** A model that ignores the instruction and calls a tool again anyway. */
+  const ignoresTheInstruction = (captured: Captured[]) =>
+    recordingModel(captured, (step) => toolStep(step));
+
+  /** The same loop, but the last step answers. */
+  const obeysOnTheLastStep = (captured: Captured[], steps = 3) =>
+    recordingModel(captured, (step) =>
+      step < steps - 1 ? toolStep(step) : stopStep("answered"),
+    );
+
+  type ShapeOutcome = {
+    stoppedAtStepLimit: boolean;
+    /** The stats the run recorded — what a Trigger row renders. */
+    stats: RunStats;
+    /** The Chat turn's folded messages — absent for the other shapes. */
+    messages?: PlatypusUIMessage[];
+    /** The Trigger run's final answer — absent for the streamed shapes. */
+    text?: string;
+  };
+
+  /** Drives one shape to completion, so a shared fact is stated once. */
+  const runShape = async (
+    shape: Shape,
+    plan: RunPlan,
+  ): Promise<ShapeOutcome> => {
+    const { run, outcome } = startRecordedRun();
+    const stats = () => outcome[0].stats;
+    if (shape === "chat") {
+      const drive = driveChat({
+        plan,
+        run,
+        modelMessages: [{ role: "user", content: "hi" }],
+      });
+      for await (const _ of drive.snapshots) void _;
+      const result = await drive.done;
+      await drive.response.cancel();
+      return {
+        stoppedAtStepLimit: result.stoppedAtStepLimit,
+        stats: stats(),
+        messages: result.messages,
+      };
+    }
+    if (shape === "delegate") {
+      const drive = driveDelegate({
+        plan,
+        run,
+        prompt: "hi",
+        agentId: "sub-1",
+      });
+      for await (const _ of drive.snapshots) void _;
+      const result = await drive.done;
+      return { stoppedAtStepLimit: result.stoppedAtStepLimit, stats: stats() };
+    }
+    const { text, stats: runStats } = await driveOnce({
+      plan,
+      run,
+      prompt: "hi",
+    });
+    return {
+      stoppedAtStepLimit: !!runStats.stoppedAtStepLimit,
+      stats: stats(),
+      text,
+    };
+  };
+
+  it.each(["chat", "delegate", "trigger"] as const)(
+    "tells the %s's model on the last step, and no earlier",
+    async (shape) => {
+      const captured: Captured[] = [];
+      const { stoppedAtStepLimit, stats } = await runShape(
+        shape,
+        toolLoopPlan(ignoresTheInstruction(captured)),
+      );
+
+      expect(captured).toHaveLength(3);
+      expect(captured.map(sentInstruction)).toEqual([false, false, true]);
+      // The tools are sent unchanged on the answer step — removing them would
+      // rewrite the prefix every Provider caches (ADR-0020).
+      expect(captured.every(sentTool)).toBe(true);
+      // The model ignored it, so the cutoff is still recorded.
+      expect(stoppedAtStepLimit).toBe(true);
+      expect(stats).toMatchObject({ stoppedAtStepLimit: true });
+    },
+  );
+
+  // It exists only in the request: what a Chat persists is untouched.
+  it("keeps the instruction out of the Chat's persisted messages", async () => {
+    const captured: Captured[] = [];
+    const { messages } = await runShape(
+      "chat",
+      toolLoopPlan(ignoresTheInstruction(captured)),
+    );
+
+    expect(JSON.stringify(messages)).not.toContain(ANSWER_STEP_INSTRUCTION);
+    expect(messages?.at(-1)?.metadata?.stoppedAtStepLimit).toBe(true);
+  });
+
+  // A ceiling of one means the only call is the answer step: no extra call, no
+  // special case. Proven end to end through each drive, not just at the
+  // `prepareStep` seam.
+  it.each(["chat", "delegate", "trigger"] as const)(
+    "puts the instruction on a %s's only call when the ceiling is one",
+    async (shape) => {
+      const captured: Captured[] = [];
+      const { stoppedAtStepLimit } = await runShape(
+        shape,
+        toolLoopPlan(ignoresTheInstruction(captured), 1),
+      );
+
+      expect(captured).toHaveLength(1);
+      expect(sentInstruction(captured[0])).toBe(true);
+      expect(sentTool(captured[0])).toBe(true);
+      expect(stoppedAtStepLimit).toBe(true);
+    },
+  );
+
+  it.each(["chat", "delegate", "trigger"] as const)(
+    "records no cutoff when the %s's model answers on the last step",
+    async (shape) => {
+      const captured: Captured[] = [];
+      const result = await runShape(
+        shape,
+        toolLoopPlan(obeysOnTheLastStep(captured)),
+      );
+
+      expect(result.stoppedAtStepLimit).toBe(false);
+      expect(result.stats).not.toHaveProperty("stoppedAtStepLimit");
+      if (result.messages) {
+        expect(JSON.stringify(result.messages)).toContain("answered");
+        expect(result.messages.at(-1)?.metadata ?? {}).not.toHaveProperty(
+          "stoppedAtStepLimit",
+        );
+      }
+      if (shape === "trigger") expect(result.text).toBe("answered");
+    },
+  );
 });
 
 /** Drain a UI message stream branch into an array of its chunks. */

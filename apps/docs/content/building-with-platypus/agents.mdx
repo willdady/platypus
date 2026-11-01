@@ -91,14 +91,20 @@ Two levels of control over how the model generates:
 
 - **Max steps** — how many steps a tool-calling loop may run before it stops.
   This lives in the main form (default `15`, and never below `1`). Raise it for
-  Agents that chain many tool calls; lower it to cap runaway loops. An Agent
-  that reaches the number stops there with work outstanding, and says so: the
-  Chat reply carries a line reading **Response cut short at the step limit.**,
-  and a Trigger run carries **Run cut short at the step limit.** in the runs
-  view. Unattended runs (Trigger runs and Sub-Agents) also stop early if the
-  model makes no progress — repeating the same tool call for the same result —
-  so a stuck run won't burn its whole step budget; that stop is reported as a
-  failure with its own message, not as a step limit.
+  Agents that chain many tool calls; lower it to cap runaway loops. On the last
+  step it is allowed, the model is told the turn is ending and asked to answer
+  from what it has gathered — so a busy turn usually ends with a written answer
+  rather than in the middle of the work. The last step counts as one of the
+  steps, so the turn still makes at most **Max steps** calls. If the model calls
+  a tool again instead, the turn stops there with work outstanding: the Chat
+  reply carries a line reading
+  **Response cut short at the step limit. Raise Max steps to let it finish.**,
+  and a Trigger run carries **Run cut short at the step limit. Raise Max steps to
+  let it finish.** in the runs view. Unattended runs (Trigger runs and
+  Sub-Agents) also stop early if the model makes no progress — repeating the same
+  tool call for the same result — so a stuck run won't burn its whole step
+  budget; that stop is reported as a failure with its own message, not as a step
+  limit.
 - **Reasoning** — appears under the model when it has reasoning controls. See
   [Reasoning controls](#reasoning-controls).
 - **Advanced settings** — expand this section for the optional sampling
@@ -310,11 +316,15 @@ response reading **Sub-Agent response cut short at the model's output limit.**
 
 A delegation can also stop early for the other reason: the Sub-Agent ran out of
 _steps_ rather than room to write. Its **Max steps** is its own, the same way its
-output ceiling is, and reaching it stops the delegation with work outstanding.
-The row then shows a muted line under the response reading **Sub-Agent response
-cut short at the step limit.**, and the parent Agent is told in the same breath
-that what came back is not a finished answer — so it reports a partial result
-rather than presenting it as the finding.
+output ceiling is, and its last permitted step is told to answer from what it has
+gathered, just as the parent's is. If it calls a tool again instead, the
+delegation stops with work outstanding. The row then shows a muted line under the
+response reading **Sub-Agent response cut short at the step limit. Raise the
+Sub-Agent's Max steps to let it finish.**, and the parent Agent is told in the
+same breath that what came back is not a finished answer — so it reports a
+partial result rather than presenting it as the finding. Raising the parent's
+**Max steps** does not change this; the Sub-Agent's own field is the one that
+matters.
 
 ## Clone an Agent
 

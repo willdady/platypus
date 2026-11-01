@@ -205,7 +205,10 @@ learns one out of your Chats.
   deleting it leaves the Task with its state and no artifact.
 - **A reply cut short says so.** A run that stops at the Agent's
   **Max steps**, or at the model's output limit, still ends `completed`, with
-  what the Agent wrote by then as its artifact. The Task's `metadata` carries
+  what the Agent wrote by then as its artifact. On its last permitted step the
+  Agent is told to answer from what it has gathered, so reaching **Max steps**
+  usually still produces a reply; when it calls a tool again instead, the Task
+  records the cutoff below. The Task's `metadata` carries
   a `stopReason`: `max_steps` or `output_limit`. Its status carries a short
   message from the Agent saying the reply stopped early and why. Both appear
   wherever the client reads the Task: `GetTask`, `ListTasks`, the last status
