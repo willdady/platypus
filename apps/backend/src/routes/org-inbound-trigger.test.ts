@@ -76,19 +76,21 @@ describe("Org Inbound Trigger Routes", () => {
     expect(res.status).toBe(409);
   });
 
-  it.each(["", "?tokenCreatedAt=", "?tokenCreatedAt=yesterday"])(
-    "400s a revoke that doesn't name the token (%s)",
-    async (query) => {
-      asRole("admin");
+  it.each([
+    "",
+    "?tokenCreatedAt=",
+    "?tokenCreatedAt=yesterday",
+    `?tokenCreatedAt=${SEEN}&foo=1`,
+  ])("400s a revoke that doesn't name the token (%s)", async (query) => {
+    asRole("admin");
 
-      const res = await app.request(`${baseUrl}/trig-1/token${query}`, {
-        method: "DELETE",
-      });
+    const res = await app.request(`${baseUrl}/trig-1/token${query}`, {
+      method: "DELETE",
+    });
 
-      expect(res.status).toBe(400);
-      expect(revokeInboundTriggerToken).not.toHaveBeenCalled();
-    },
-  );
+    expect(res.status).toBe(400);
+    expect(revokeInboundTriggerToken).not.toHaveBeenCalled();
+  });
 
   it("404s a revoke of a Trigger not in the Organization", async () => {
     asRole("admin");

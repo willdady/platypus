@@ -11,6 +11,7 @@ import {
   webhookEventScope,
   organizationSchema,
   organizationUpdateSchema,
+  kanbanBoardUpdateSchema,
   workspaceSchema,
   workspaceCreateSchema,
   agentSchema,
@@ -1261,6 +1262,40 @@ describe("Organization identityContext", () => {
       }).success,
     ).toBe(false);
   });
+
+  it("requires identityContext on the update schema", () => {
+    expect(
+      organizationUpdateSchema.safeParse({ name: "Acme Org" }).success,
+    ).toBe(false);
+    expect(
+      organizationUpdateSchema.safeParse({
+        name: "Acme Org",
+        identityContext: null,
+      }).success,
+    ).toBe(true);
+  });
+});
+
+describe("kanbanBoardUpdateSchema", () => {
+  const board = {
+    name: "Board",
+    description: null,
+    labels: [{ id: "label-1", name: "Bug", color: "#ef4444" }],
+  };
+
+  it("accepts every editable field", () => {
+    expect(kanbanBoardUpdateSchema.safeParse(board).success).toBe(true);
+  });
+
+  it.each(["name", "description", "labels"])(
+    "requires %s, so a partial replacement is rejected",
+    (key) => {
+      const partial: Record<string, unknown> = { ...board };
+      delete partial[key];
+
+      expect(kanbanBoardUpdateSchema.safeParse(partial).success).toBe(false);
+    },
+  );
 });
 
 describe("sandboxEnvSchema", () => {

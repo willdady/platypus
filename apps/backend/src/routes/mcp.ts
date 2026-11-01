@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { z } from "zod";
 import { validate } from "../validate.ts";
 import { db } from "../index.ts";
 import {
@@ -192,6 +193,10 @@ mcp.post(
   },
 );
 
+const oauthAuthorizeQuerySchema = z.strictObject({
+  force: z.enum(["true", "false"]).optional(),
+});
+
 /**
  * Initiate OAuth authorization for an MCP (org-admin, or delegated owner).
  * Mutates org-owned OAuth credentials, so the row is resolved with
@@ -204,6 +209,7 @@ mcp.post(
   requireOrgAccess(),
   requireWorkspaceAccess,
   requireMcpConfigAccess,
+  validate("query", oauthAuthorizeQuerySchema),
   async (c) => {
     const mcpId = c.req.param("mcpId");
     const scope = workspaceScopeOf(c);
@@ -215,9 +221,9 @@ mcp.post(
       scope,
     );
 
-    const force = c.req.query("force") === "true";
+    const { force } = c.req.valid("query");
     const result = await authorizeMcpOAuth(db, mcpRecord, {
-      force,
+      force: force === "true",
       clearTokensWhere: workspaceScopedWhere("mcp", mcpId, scope.workspaceId),
       userId: userOf(c).id,
     });

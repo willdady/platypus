@@ -266,11 +266,29 @@ describe("Organization Routes", () => {
         },
       });
 
-      const res = await put({ name: "Renamed" });
+      const res = await put({ name: "Renamed", identityContext: null });
 
       expect(res.status).toBe(404);
       expect(await res.json()).toEqual({ error: "Organization not found" });
     });
+
+    it.each(["name", "identityContext"])(
+      "400s when %s is omitted",
+      async (key) => {
+        mockSession({ id: "user-1", role: "user" });
+        seed("admin");
+
+        const body: Record<string, unknown> = {
+          name: "Renamed",
+          identityContext: null,
+        };
+        delete body[key];
+
+        const res = await put(body);
+
+        expect(res.status).toBe(400);
+      },
+    );
   });
 
   describe("DELETE /organizations/:orgId", () => {

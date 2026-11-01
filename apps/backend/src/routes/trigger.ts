@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { z } from "zod";
 import { validate } from "../validate.ts";
 import { triggerCreateSchema, triggerUpdateSchema } from "@platypus/schemas";
 import { requireAuth } from "../middleware/authentication.ts";
@@ -23,6 +24,11 @@ import { logger } from "../logger.ts";
 
 const trigger = new Hono<{ Variables: Variables }>();
 
+/** The list's one filter: include Fired One-off Triggers. */
+const listQuerySchema = z.strictObject({
+  includeFired: z.enum(["true", "false"]).optional(),
+});
+
 /**
  * List the triggers in the workspace. Fired One-off Triggers are left out
  * unless `?includeFired=true`.
@@ -32,9 +38,11 @@ trigger.get(
   requireAuth,
   requireOrgAccess(),
   requireWorkspaceAccess,
+  validate("query", listQuerySchema),
   async (c) => {
+    const { includeFired } = c.req.valid("query");
     const results = await listTriggers(workspaceScopeOf(c), {
-      includeFired: c.req.query("includeFired") === "true",
+      includeFired: includeFired === "true",
     });
     return c.json({ results: results.map(toPublicTrigger) });
   },

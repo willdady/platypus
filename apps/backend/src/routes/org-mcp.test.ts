@@ -481,6 +481,16 @@ describe("Organization MCP Routes", () => {
       expect(res.status).toBe(403);
       expect(mcpAuth).not.toHaveBeenCalled();
     });
+
+    it("rejects an unknown query key", async () => {
+      mockSession();
+      world("admin");
+
+      const res = await authorize("mcp-1", "?force=true&foo=1");
+
+      expect(res.status).toBe(400);
+      expect(mcpAuth).not.toHaveBeenCalled();
+    });
   });
 
   describe("POST /:mcpId/oauth/revoke", () => {

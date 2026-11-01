@@ -8,7 +8,12 @@ import {
   setInboundTriggerAccess,
 } from "../services/inbound-trigger.ts";
 import { NotFoundError } from "../errors.ts";
-import { mountGateAccess, seenTokenCreatedAt } from "./org-gate-access.ts";
+import {
+  mountGateAccess,
+  seenTokenCreatedAt,
+  tokenCreatedAtQuerySchema,
+} from "./org-gate-access.ts";
+import { validate } from "../validate.ts";
 import type { Variables } from "../server.ts";
 
 /**
@@ -46,12 +51,13 @@ orgInboundTrigger.delete(
   "/:triggerId/token",
   requireAuth,
   requireOrgAccess(["admin"]),
+  validate("query", tokenCreatedAtQuerySchema),
   async (c) => {
     const { orgId } = orgScopeOf(c);
     const found = await revokeInboundTriggerToken(
       orgId,
       c.req.param("triggerId"),
-      seenTokenCreatedAt(c),
+      seenTokenCreatedAt(c.req.valid("query")),
     );
     if (!found) {
       throw new NotFoundError("Inbound trigger not found");

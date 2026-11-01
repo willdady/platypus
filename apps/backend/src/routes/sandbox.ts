@@ -33,6 +33,11 @@ const requireSandboxAdmin = requireWorkspaceConfigAccess();
 
 const sandbox = new Hono<{ Variables: Variables }>();
 
+/** The one flag PUT and DELETE accept: skip the outgoing backend's teardown. */
+const forceQuerySchema = z.strictObject({
+  force: z.enum(["true", "false"]).optional(),
+});
+
 // Credentials are server-side only, to admins too. Stripping here is a quiet
 // improvement over the Provider/MCP routes which still return their secret
 // fields; revisit when those routes adopt a similar redaction pattern. In their
@@ -118,13 +123,15 @@ sandbox.put(
   requireAuth,
   requireOrgAccess(),
   requireWorkspaceAccess,
+  validate("query", forceQuerySchema),
   validate("json", sandboxUpdateSchema),
   async (c) => {
     const { workspaceId } = workspaceScopeOf(c);
     const isAdmin = c.get("orgMembership")?.role === "admin";
+    const { force } = c.req.valid("query");
     const record = await updateSandbox(workspaceId, c.req.valid("json"), {
       isAdmin,
-      force: c.req.query("force") === "true",
+      force: force === "true",
     });
     // A non-admin owner gets adminEnv values redacted.
     return c.json(sanitizeSandboxResponse(record, isAdmin));
@@ -140,10 +147,12 @@ sandbox.delete(
   requireOrgAccess(),
   requireWorkspaceAccess,
   requireSandboxAdmin,
+  validate("query", forceQuerySchema),
   async (c) => {
     const { workspaceId } = workspaceScopeOf(c);
+    const { force } = c.req.valid("query");
     await deleteSandbox(workspaceId, {
-      force: c.req.query("force") === "true",
+      force: force === "true",
     });
     return c.json({ message: "Sandbox deleted" });
   },

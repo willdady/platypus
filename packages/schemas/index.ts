@@ -75,18 +75,19 @@ export const bearerTokenStatusSchema = z.enum([
 
 export type BearerTokenStatus = z.infer<typeof bearerTokenStatusSchema>;
 
+// Free-text organization identity / context, rendered EARLY in the system
+// prompt beside the workspace context as framing — NOT a security control
+// (see the provider `securityGuardrails` field for that). Length-bounded
+// against abuse; nullable so existing orgs are unchanged.
+const organizationIdentityContextSchema = z
+  .string()
+  .max(ORGANIZATION_IDENTITY_CONTEXT_MAX_LENGTH)
+  .nullable();
+
 export const organizationSchema = z.object({
   id: z.string(),
   name: z.string().min(3).max(30),
-  // Free-text organization identity / context, rendered EARLY in the system
-  // prompt beside the workspace context as framing — NOT a security control
-  // (see the provider `securityGuardrails` field for that). Length-bounded
-  // against abuse; nullable so existing orgs are unchanged.
-  identityContext: z
-    .string()
-    .max(ORGANIZATION_IDENTITY_CONTEXT_MAX_LENGTH)
-    .nullable()
-    .optional(),
+  identityContext: organizationIdentityContextSchema.optional(),
   // Which Workspaces may take calls on an Inbound Trigger (ADR-0030). `off`
   // by default; `selected` defers to each Workspace's
   // `inboundTriggersAllowed`. Settable only by an Org Admin.
@@ -112,10 +113,11 @@ export const organizationCreateSchema = strictRequest(
 // The Inbound Trigger gate is not here: it is saved with the per-Workspace
 // switches on the Organization's Inbound Triggers screen
 // (`orgGateAccessUpdateSchema`), so one place owns it.
+// PUT replaces the whole Organization: `identityContext` is required (and
+// nullable), so omitting it is a 400 rather than leaving the stored value.
 export const organizationUpdateSchema = strictRequest(
-  organizationSchema.pick({
-    name: true,
-    identityContext: true,
+  organizationSchema.pick({ name: true }).extend({
+    identityContext: organizationIdentityContextSchema,
   }),
 );
 
@@ -3514,11 +3516,13 @@ export type KanbanLabel = z.infer<typeof kanbanLabelSchema>;
 
 // Kanban Board
 
+const kanbanBoardDescriptionSchema = z.string().max(500).nullable();
+
 export const kanbanBoardSchema = z.object({
   id: z.string(),
   workspaceId: z.string(),
   name: z.string().min(1).max(100),
-  description: z.string().max(500).nullable().optional(),
+  description: kanbanBoardDescriptionSchema.optional(),
   labels: z.array(kanbanLabelSchema).default([]),
   createdAt: z.date(),
   updatedAt: z.date(),
@@ -3534,17 +3538,19 @@ export const kanbanBoardCreateSchema = strictRequest(
   }),
 );
 
-// `labels` is optional on update (rather than defaulting to `[]`) so an update
-// that only touches the name or description leaves the board's labels — and the
-// cards referencing them — alone.
+// PUT replaces the whole board: every editable field is required, so an
+// omitted one is a 400 rather than leaving its stored value. `labels` is
+// deliberately not defaulted here for the same reason.
 export const kanbanBoardUpdateSchema = strictRequest(
   kanbanBoardSchema
     .pick({
       name: true,
       description: true,
+      labels: true,
     })
     .extend({
-      labels: z.array(kanbanLabelSchema).optional(),
+      description: kanbanBoardDescriptionSchema,
+      labels: z.array(kanbanLabelSchema),
     }),
 );
 

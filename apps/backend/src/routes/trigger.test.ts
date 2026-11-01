@@ -128,6 +128,14 @@ describe("Trigger Routes", () => {
       ]);
     });
 
+    it("rejects an unknown query key", async () => {
+      stubAuthLookups();
+
+      const res = await app.request(`${baseUrl}?includeFired=true&foo=1`);
+
+      expect(res.status).toBe(400);
+    });
+
     it("never returns an Inbound Trigger's token hash", async () => {
       stubAuthLookups();
       mockDb.orderBy.mockResolvedValueOnce([

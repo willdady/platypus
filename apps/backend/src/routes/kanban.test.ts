@@ -179,7 +179,11 @@ describe("Kanban Routes", () => {
 
       const res = await app.request(
         `${baseUrl}/${boardId}`,
-        json("PUT", { name: "Updated Board" }),
+        json("PUT", {
+          name: "Updated Board",
+          description: null,
+          labels: [],
+        }),
       );
 
       expect(res.status).toBe(200);
@@ -189,13 +193,35 @@ describe("Kanban Routes", () => {
       });
     });
 
+    it.each(["name", "description", "labels"])(
+      "returns 400 when %s is omitted",
+      async (key) => {
+        boardWorld();
+        mockSession();
+
+        const body: Record<string, unknown> = {
+          name: "Updated Board",
+          description: null,
+          labels: [],
+        };
+        delete body[key];
+
+        const res = await app.request(
+          `${baseUrl}/${boardId}`,
+          json("PUT", body),
+        );
+
+        expect(res.status).toBe(400);
+      },
+    );
+
     it("returns 404 for another Workspace's board", async () => {
       const fake = boardWorld();
       mockSession();
 
       const res = await app.request(
         `${baseUrl}/board-b`,
-        json("PUT", { name: "Hijacked" }),
+        json("PUT", { name: "Hijacked", description: null, labels: [] }),
       );
 
       expect(res.status).toBe(404);

@@ -660,6 +660,18 @@ describe("MCP Routes", () => {
 
       expect(res.status).toBe(404);
     });
+
+    it("rejects an unknown query key", async () => {
+      mockSession();
+      world({ rows: { mcp: [oauthMcp] } });
+
+      const res = await app.request(`${authorizeUrl}?force=true&foo=1`, {
+        method: "POST",
+      });
+
+      expect(res.status).toBe(400);
+      expect(mcpAuth).not.toHaveBeenCalled();
+    });
   });
 
   describe("POST /:mcpId/oauth/revoke", () => {

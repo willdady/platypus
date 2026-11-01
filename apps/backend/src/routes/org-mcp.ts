@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { z } from "zod";
 import { validate } from "../validate.ts";
 import { db } from "../index.ts";
 import {
@@ -148,20 +149,25 @@ orgMcp.post(
   },
 );
 
+const oauthAuthorizeQuerySchema = z.strictObject({
+  force: z.enum(["true", "false"]).optional(),
+});
+
 /** Initiate OAuth authorization for an org-scoped MCP (admin only) */
 orgMcp.post(
   "/:mcpId/oauth/authorize",
   requireAuth,
   requireOrgAccess(["admin"]),
+  validate("query", oauthAuthorizeQuerySchema),
   async (c) => {
     const { orgId } = orgScopeOf(c);
     const mcpId = c.req.param("mcpId");
 
     const mcpRecord = await requireOrgScoped(db, "mcp", mcpId, orgId);
 
-    const force = c.req.query("force") === "true";
+    const { force } = c.req.valid("query");
     const result = await authorizeMcpOAuth(db, mcpRecord, {
-      force,
+      force: force === "true",
       clearTokensWhere: orgScopedWhere("mcp", mcpId, orgId),
       userId: userOf(c).id,
     });
