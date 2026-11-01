@@ -31,10 +31,10 @@ import {
   skillUpdateSchema,
   attachmentSchema,
   nextTurnOccupancy,
+  clearingEngaged,
   clearingPrefixLength,
-  TOOL_RESULT_CLEARING_MIN_BATCH,
-  TOOL_RESULT_CLEARING_TARGET,
-  TOOL_RESULT_CLEARING_THRESHOLD,
+  occupancyReadingsOf,
+  TOOL_RESULT_CLEARING_BATCH,
   attachmentCreateSchema,
   orgAttachmentCreateSchema,
   chatSubmitSchema,
@@ -1770,156 +1770,127 @@ describe("triggerRunStatusSchema", () => {
 });
 
 describe("clearingPrefixLength", () => {
-  const base = {
-    itemSizes: [1_000, 1_000, 1_000, 1_000],
-    conversationSize: 10_000,
-    keepRecent: 0,
-    occupancy: 700,
-    contextWindow: 1_000,
-    targetFraction: 0.5,
-  };
+  const base = { itemCount: 8, keepRecent: 4, batchSize: 4 };
 
-  it("clears enough of the oldest items to reach the target fraction", () => {
-    // 700 -> 500 of a 1,000-token window must free 200/700 of what is sent.
-    // 10,000 observed characters x 200/700 = 2,857, so three 1,000-char items
-    // reach it and a fourth would overshoot.
-    expect(clearingPrefixLength(base)).toBe(3);
+  it("clears the largest whole batch that leaves the keep-recent tail", () => {
+    // floor((8 - 4) / 4) * 4 = 4: one batch, with four survivors.
+    expect(clearingPrefixLength(base)).toBe(4);
+    // One more clearable item is not enough to move the boundary.
+    expect(clearingPrefixLength({ ...base, itemCount: 11 })).toBe(4);
+    // The next multiple moves it by exactly one whole batch.
+    expect(clearingPrefixLength({ ...base, itemCount: 12 })).toBe(8);
+    expect(clearingPrefixLength({ ...base, itemCount: 13 })).toBe(8);
   });
 
-  it("rounds up past the target rather than stopping short", () => {
-    // Three 700-char items free 2,100, short of 2,857; with only three
-    // candidates the pass clears every one rather than stopping early.
-    expect(clearingPrefixLength({ ...base, itemSizes: [700, 700, 700] })).toBe(
-      3,
-    );
-    expect(
-      clearingPrefixLength({ ...base, itemSizes: [800, 800, 800, 800] }),
-    ).toBe(4);
+  it("waits for a full batch when fewer than keepRecent + batchSize are live", () => {
+    // Between keepRecent and keepRecent + batchSize - 1 nothing changes, which
+    // is what keeps earlier messages byte-identical between passes.
+    for (const itemCount of [0, 1, 4, 5, 6, 7]) {
+      expect(clearingPrefixLength({ ...base, itemCount })).toBe(0);
+    }
+    expect(clearingPrefixLength({ ...base, itemCount: 8 })).toBe(4);
   });
 
   it("never clears into the keep-recent window", () => {
-    expect(clearingPrefixLength({ ...base, keepRecent: 2 })).toBe(2);
-    expect(clearingPrefixLength({ ...base, keepRecent: 3 })).toBe(1);
-    expect(clearingPrefixLength({ ...base, keepRecent: 4 })).toBe(0);
+    expect(clearingPrefixLength({ ...base, keepRecent: 2 })).toBe(4);
+    expect(clearingPrefixLength({ ...base, keepRecent: 3 })).toBe(4);
+    expect(clearingPrefixLength({ ...base, keepRecent: 4 })).toBe(4);
+    expect(clearingPrefixLength({ ...base, keepRecent: 6 })).toBe(0);
+    expect(clearingPrefixLength({ ...base, keepRecent: 8 })).toBe(0);
   });
 
-  it("clears every candidate when the target is out of reach", () => {
-    expect(
-      clearingPrefixLength({
-        ...base,
-        itemSizes: [10, 10, 10, 10, 10, 10],
-        keepRecent: 2,
-      }),
-    ).toBe(4);
-  });
-
-  it("clears nothing when nothing would free space", () => {
-    expect(
-      clearingPrefixLength({
-        ...base,
-        itemSizes: [0, 0, 0],
-      }),
-    ).toBe(0);
-  });
-
-  it("clears nothing when occupancy is already at or below the target", () => {
-    expect(clearingPrefixLength({ ...base, occupancy: 500 })).toBe(0);
-    expect(clearingPrefixLength({ ...base, occupancy: 400 })).toBe(0);
-  });
-
-  it("keeps the target strictly below the trigger and the floor positive", () => {
-    // The gap between the two is the headroom the batched pass buys; a target
-    // at or above the trigger would re-engage on the very next step.
-    expect(TOOL_RESULT_CLEARING_TARGET).toBeLessThan(
-      TOOL_RESULT_CLEARING_THRESHOLD,
+  it("clears everything when nothing is kept, for the summary pass", () => {
+    // The summary pass's input has no protected tail: a batch that left up to
+    // `batchSize - 1` results live would defeat the pass's bound.
+    expect(clearingPrefixLength({ ...base, keepRecent: 0 })).toBe(8);
+    expect(clearingPrefixLength({ ...base, itemCount: 7, keepRecent: 0 })).toBe(
+      7,
     );
-    expect(TOOL_RESULT_CLEARING_MIN_BATCH).toBeGreaterThan(0);
   });
 
-  it("clears nothing without a measured conversation or occupancy", () => {
-    expect(clearingPrefixLength({ ...base, conversationSize: 0 })).toBe(0);
-    expect(clearingPrefixLength({ ...base, occupancy: 0 })).toBe(0);
+  it("keeps the batch a positive integer", () => {
+    // A zero or negative batch would divide by zero or reverse the boundary.
+    expect(Number.isInteger(TOOL_RESULT_CLEARING_BATCH)).toBe(true);
+    expect(TOOL_RESULT_CLEARING_BATCH).toBeGreaterThan(0);
+  });
+});
+
+describe("clearingEngaged", () => {
+  const trigger = { contextWindow: 1_000, thresholdFraction: 0.7 };
+
+  it("engages when the current reading reaches the trigger", () => {
+    expect(clearingEngaged({ ...trigger, occupancy: 700 })).toBe(true);
+    expect(clearingEngaged({ ...trigger, occupancy: 699 })).toBe(false);
   });
 
-  describe("with a minimum batch", () => {
-    const outOfReach = {
-      ...base,
-      conversationSize: 10_000,
-      occupancy: 700,
-      targetFraction: 0.5,
-      minBatch: 4,
-    };
+  it("stays engaged when an earlier reading on the path reached it", () => {
+    // The flip-flop: the pass cleared a batch, the latest reading (taken with
+    // it in place) fell back under the trigger, and an earlier reading still
+    // says clearing had engaged on this path.
+    expect(
+      clearingEngaged({
+        ...trigger,
+        occupancy: 600,
+        priorReadings: [
+          { inputTokens: 900, outputTokens: 20 },
+          { inputTokens: 580, outputTokens: 20 },
+        ],
+      }),
+    ).toBe(true);
+    // A `null` reading is unknown, not a high-water mark.
+    expect(
+      clearingEngaged({
+        ...trigger,
+        occupancy: 600,
+        priorReadings: [null, { inputTokens: 580, outputTokens: 20 }],
+      }),
+    ).toBe(false);
+  });
 
-    it("clears the floor even when the target needs fewer", () => {
-      // Six 5,000-character items; the target needs two, the floor clears four.
-      expect(
-        clearingPrefixLength({
-          ...outOfReach,
-          itemSizes: [5_000, 5_000, 5_000, 5_000, 5_000, 5_000],
-        }),
-      ).toBe(4);
-    });
+  it("disengages when nothing on the path ever reached the trigger", () => {
+    expect(
+      clearingEngaged({
+        ...trigger,
+        occupancy: 600,
+        priorReadings: [
+          { inputTokens: 400, outputTokens: 20 },
+          { inputTokens: 580, outputTokens: 20 },
+        ],
+      }),
+    ).toBe(false);
+    expect(clearingEngaged({ ...trigger, occupancy: 600 })).toBe(false);
+  });
 
-    it("waits while fewer than the floor are live and the target is out of reach", () => {
-      expect(
-        clearingPrefixLength({
-          ...outOfReach,
-          itemSizes: [100, 100, 100],
-        }),
-      ).toBe(0);
-    });
+  it("clears nothing without a declared window", () => {
+    expect(
+      clearingEngaged({
+        contextWindow: undefined,
+        thresholdFraction: 0.7,
+        occupancy: 1_000_000,
+        priorReadings: [{ inputTokens: 900, outputTokens: 0 }],
+      }),
+    ).toBe(false);
+  });
+});
 
-    it("takes a partial batch when one more item would overflow the window", () => {
-      // Same wait state, but one more 1,500-character item would take the
-      // reading from 700 to ~805 tokens on an 800-token window. Safety wins.
-      expect(
-        clearingPrefixLength({
-          ...outOfReach,
-          contextWindow: 800,
-          itemSizes: [1_500, 1_500],
-          keepRecent: 0,
-        }),
-      ).toBe(2);
-      // Smaller items leave room for another, so the wait stands.
-      expect(
-        clearingPrefixLength({
-          ...outOfReach,
-          contextWindow: 800,
-          itemSizes: [1_000, 1_000],
-          keepRecent: 0,
-        }),
-      ).toBe(0);
-    });
-
-    it("clears once the floor is live", () => {
-      expect(
-        clearingPrefixLength({
-          ...outOfReach,
-          itemSizes: [100, 100, 100, 100],
-        }),
-      ).toBe(4);
-    });
-
-    it("counts live items past an already-cleared prefix, not the no-ops", () => {
-      // Two leading zeros are already cleared; three live items are still
-      // short of the floor.
-      expect(
-        clearingPrefixLength({
-          ...outOfReach,
-          itemSizes: [0, 0, 100, 100, 100],
-          keepRecent: 0,
-        }),
-      ).toBe(0);
-      // A fourth live item makes the batch, and the leading no-ops ride along
-      // in the returned prefix index.
-      expect(
-        clearingPrefixLength({
-          ...outOfReach,
-          itemSizes: [0, 0, 100, 100, 100, 100],
-          keepRecent: 0,
-        }),
-      ).toBe(6);
-    });
+describe("occupancyReadingsOf", () => {
+  it("reads assistant messages that carry a reading, in transcript order", () => {
+    expect(
+      occupancyReadingsOf([
+        { role: "user", metadata: undefined },
+        {
+          role: "assistant",
+          metadata: { contextOccupancy: { inputTokens: 10, outputTokens: 2 } },
+        },
+        // A user message carrying the key is not a Context reading.
+        {
+          role: "user",
+          metadata: { contextOccupancy: { inputTokens: 99, outputTokens: 1 } },
+        },
+        // The key is present but null: an erased reading, kept as unknown.
+        { role: "assistant", metadata: { contextOccupancy: null } },
+      ]),
+    ).toEqual([{ inputTokens: 10, outputTokens: 2 }, null]);
   });
 });
 

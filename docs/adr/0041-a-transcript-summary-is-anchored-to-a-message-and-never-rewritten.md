@@ -138,28 +138,39 @@ backstop. A Regenerate's path no longer holds the failed reply, so it reads the
 summary only once the pass has landed. The R3 overflow retry (replace the last tool step's results, retry once)
 is the "one retry per step" seam this ADR's deferred R2 row names.
 
-## Amendment: clearing adopts the trigger/target shape (#1731)
+## Amendment: clearing adopts the hysteresis rule (#1731)
 
 The deferred `clear_at_least` row above is now built, under this ADR's rule
 rather than a new decision. **Tool-result clearing** and **Tool-input clearing**
-keep their 0.7 trigger. Once a pass engages it clears down to 0.4 of the
-declared window, and it clears at least four live results when that many are
-available. A pass that cannot reach the target and has fewer than four live
-results waits for the next ones instead of moving the survivor boundary by one
-on every step — unless one more item the size of the largest live one would
-push the call past the declared window, in which case it takes the partial batch
-now. Every step that moves the boundary changes an earlier message, which
-invalidates the Provider's cached prompt prefix from that message onward; the
-gap between trigger and target is the headroom later steps grow into before the
-next invalidation.
+keep their 0.7 trigger. Once a pass engages it moves the survivor boundary by a
+fixed batch — 4 items, shared by both mechanisms and both frontend mirrors —
+rather than by one item per step. With `n` clearable items and `k` kept, the
+pass clears the oldest `floor((n − k) / b) · b`. Between `k` and `k + b − 1`
+items stay live, and the `b`th append moves the boundary by exactly `b`.
 
-The target is a fraction of the window, not a count, so the same rule means the
-same thing on a 16K window and a 1M one. The batch is sized from the observed
-characters of the results being cleared, never from a local token count: the
-vendor-reported occupancy still decides _whether_ a pass runs, and ADR-0018
-still refuses an estimate of occupancy. `keepRecent` is unchanged and still
-protects the newest four results or writes; the summary pass's unconditional
-clear is unchanged too, because its input has no window of its own to protect.
+Every step that moves the boundary changes an earlier message, which
+invalidates the Provider's cached prompt prefix from that message onward. The
+batch is our stand-in for Anthropic's `clear_at_least`, which is a token amount;
+a count is what can be known without the local token estimate ADR-0018 refuses.
+`keepRecent` is unchanged and still protects the newest four results or writes.
+The summary pass's unconditional `clearStaleToolResults` call with
+`keepRecent: 0` is unchanged too: it clears everything in its input, because
+its input has no window of its own to protect and a batch that left items live
+would defeat the pass's bound.
+
+Engagement is **sticky**. A pass clears a batch, the turn's last reading is
+taken with that batch in place and can fall back under the trigger, so gating
+only on the current reading would re-send every cleared item next turn and then
+clear again the turn after — the cache cost this change exists to remove.
+Clearing therefore engages when the current reading reaches the trigger **or**
+any Context occupancy reading already on the **Active path**, projected with
+`nextTurnOccupancy`, reached it. A Delete or a switch to an Alternative that
+removes the high reading disengages it naturally; there is no stored flag. The
+accepted ceiling is that after a **Transcript summary** the covered messages
+stay on the Active path, so a pre-summary high reading keeps clearing engaged
+even with headroom. That only drops older read-only results and successful
+write inputs, which is harmless. Within a turn, the per-step reading still
+drives `prepareStep` as before.
 
 ## Notes
 

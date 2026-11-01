@@ -39,8 +39,8 @@ const toolResultMessages = (n: number, toolName = "read_url"): ModelMessage[] =>
         type: "tool-result" as const,
         toolCallId: `t${i}`,
         toolName,
-        // Big enough that clearing frees more than the marker replacing it, so
-        // the target rule actually engages.
+        // Any payload works now that the boundary is a count: the batch does
+        // not depend on bytes freed.
         output: {
           type: "text" as const,
           value: `content ${i} ${"x".repeat(5_000)}`,
@@ -142,6 +142,32 @@ describe("buildModelInvocation prepareStep", () => {
       expect(firstOutput.value === CLEARED_TOOL_RESULT_MARKER).toBe(clears);
     },
   );
+
+  it("keeps clearing below the trigger when a reading on the Active path engaged", async () => {
+    // The gate flip-flop: the plan's latest reading is under the trigger, but
+    // an earlier reading on the path crossed it. Clearing must stay on rather
+    // than re-send every result for this turn.
+    const prepareStep = prepareStepOf(
+      planOf({
+        contextWindow: 100,
+        initialOccupancy: 60,
+        priorOccupancyReadings: [
+          { inputTokens: 90, outputTokens: 0 },
+          { inputTokens: 60, outputTokens: 0 },
+        ],
+      }),
+    );
+    const result = await prepareStep({
+      steps: [],
+      messages: toolResultMessages(10),
+    });
+    const firstOutput = (
+      result.messages![0] as {
+        content: Array<{ output: { value: string } }>;
+      }
+    ).content[0].output;
+    expect(firstOutput.value).toBe(CLEARED_TOOL_RESULT_MARKER);
+  });
 
   // An MCP tool is clearable only when the turn resolved it read-only
   // (ADR-0021); the plan is how that reaches the clearing pass.

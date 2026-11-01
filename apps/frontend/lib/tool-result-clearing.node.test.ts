@@ -36,6 +36,20 @@ function toolResultMessage(
   } as unknown as PlatypusUIMessage;
 }
 
+/** An assistant message that carries a Context occupancy reading, and no tool parts. */
+function readingMessage(
+  id: string,
+  inputTokens: number,
+  outputTokens = 0,
+): PlatypusUIMessage {
+  return {
+    id,
+    role: "assistant",
+    parts: [{ type: "text", text: "done" }],
+    metadata: { contextOccupancy: { inputTokens, outputTokens } },
+  } as unknown as PlatypusUIMessage;
+}
+
 describe("clearedToolCallIds", () => {
   it("returns nothing when the Context window is unknown", () => {
     const messages = [
@@ -58,6 +72,39 @@ describe("clearedToolCallIds", () => {
     ];
     expect(
       clearedToolCallIds(messages, { occupancy: 10, contextWindow: 100 }),
+    ).toEqual(new Set());
+  });
+
+  it("stays engaged when an earlier reading on the path crossed the trigger", () => {
+    // The flip-flop: the earlier turn crossed 0.7 and a pass cleared the oldest
+    // results, so the latest reading — taken with them cleared — is back below
+    // 0.7. Gating on the latest reading alone would re-send everything this
+    // turn, then clear again the turn after.
+    const messages = [
+      readingMessage("r-high", 900, 20),
+      ...Array.from({ length: 8 }, (_, i) =>
+        toolResultMessage("read_url", `t${i}`),
+      ),
+      readingMessage("r-low", 600, 20),
+    ];
+
+    expect(
+      clearedToolCallIds(messages, { occupancy: 620, contextWindow: 1_000 }),
+    ).toEqual(new Set(["t0", "t1", "t2", "t3"]));
+  });
+
+  it("disengages once the only high reading is gone from the path", () => {
+    // Same shape without the earlier high reading: a Delete or an Alternative
+    // that removed it leaves nothing that ever crossed the trigger.
+    const messages = [
+      ...Array.from({ length: 8 }, (_, i) =>
+        toolResultMessage("read_url", `t${i}`),
+      ),
+      readingMessage("r-low", 600, 20),
+    ];
+
+    expect(
+      clearedToolCallIds(messages, { occupancy: 620, contextWindow: 1_000 }),
     ).toEqual(new Set());
   });
 
@@ -92,7 +139,7 @@ describe("clearedToolCallIds", () => {
     expect(result).toEqual(new Set());
   });
 
-  it("marks every stale result when the target reaches all of them", () => {
+  it("marks the oldest whole batch of results", () => {
     const messages = Array.from({ length: 10 }, (_, i) =>
       toolResultMessage("read_url", `t${i}`),
     );
@@ -100,9 +147,8 @@ describe("clearedToolCallIds", () => {
       occupancy: 95,
       contextWindow: 100,
     });
-    // Six are stale by count and the 0.4 target needs all six of the
-    // 5,000-character results to reach it.
-    expect(result).toEqual(new Set(["t0", "t1", "t2", "t3", "t4", "t5"]));
+    // floor((10 - 4) / 4) * 4 = 4: one batch, not the six stale-by-count.
+    expect(result).toEqual(new Set(["t0", "t1", "t2", "t3"]));
   });
 
   it("marks a failed read's result as cleared, as the backend does", () => {
@@ -124,7 +170,7 @@ describe("clearedToolCallIds", () => {
       occupancy: 95,
       contextWindow: 100,
     });
-    expect(result).toEqual(new Set(["t0", "t1", "t2", "t3", "t4", "t5"]));
+    expect(result).toEqual(new Set(["t0", "t1", "t2", "t3"]));
   });
 
   it("never marks a tool's result as cleared when no message reports it clearable", () => {
@@ -149,7 +195,7 @@ describe("clearedToolCallIds", () => {
       occupancy: 95,
       contextWindow: 100,
     });
-    expect(result).toEqual(new Set(["t0", "t1", "t2", "t3", "t4", "t5"]));
+    expect(result).toEqual(new Set(["t0", "t1", "t2", "t3"]));
   });
 
   it("unions clearable names reported across different messages", () => {
@@ -171,7 +217,7 @@ describe("clearedToolCallIds", () => {
       occupancy: 95,
       contextWindow: 100,
     });
-    expect(result).toEqual(new Set(["t0", "t1", "t2", "t3", "t4", "t5"]));
+    expect(result).toEqual(new Set(["t0", "t1", "t2", "t3"]));
   });
 
   // The transcript memo compares this Set by identity, so "nothing is cleared"
@@ -255,6 +301,22 @@ describe("clearedInputToolCallIds", () => {
     expect(cleared).toEqual(
       new Set(["w0", "w1", "w2", "w3", "w4", "w5", "w6", "w7"]),
     );
+  });
+
+  it("marks a batch of writes below the trigger when an earlier reading engaged", () => {
+    // The same sticky gate as results: a prior turn crossed 0.7, its pass moved
+    // the boundary, and the latest reading fell back under the trigger.
+    const messages = [
+      readingMessage("r-high", 900, 20),
+      ...Array.from({ length: 8 }, (_, i) => write(`w${i}`)),
+      readingMessage("r-low", 600, 20),
+    ];
+    expect(
+      clearedInputToolCallIds(messages, {
+        occupancy: 620,
+        contextWindow: 1_000,
+      }),
+    ).toEqual(new Set(["w0", "w1", "w2", "w3"]));
   });
 
   it("skips a failed call and an `{ error }` result", () => {

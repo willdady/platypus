@@ -1156,6 +1156,7 @@ describe("chat-execution", () => {
         );
 
         expect(turn.stream).not.toHaveProperty("initialOccupancy");
+        expect(turn.stream).not.toHaveProperty("priorOccupancyReadings");
       });
 
       it("sums the last assistant message's input and output tokens", async () => {
@@ -1223,6 +1224,48 @@ describe("chat-execution", () => {
         );
 
         expect(turn.stream.initialOccupancy).toBe(5050);
+      });
+
+      it("records every reading on the Active path for the sticky gate", async () => {
+        // Engagement survives a pass that took the latest reading back under
+        // the trigger, so the plan carries the whole path's readings, not just
+        // the one `initialOccupancy` sums.
+        const queries = createInMemoryChatTurnQueries({
+          workspaces: [baseWorkspace],
+          providers: [baseProvider],
+        });
+
+        const turn = await prepareChatTurn(
+          {
+            ...baseInput,
+            messages: [
+              {
+                id: "m1",
+                role: "assistant",
+                parts: [{ type: "text", text: "first" }],
+                metadata: {
+                  contextOccupancy: { inputTokens: 900, outputTokens: 20 },
+                },
+              },
+              {
+                id: "m2",
+                role: "assistant",
+                parts: [{ type: "text", text: "second" }],
+                metadata: {
+                  contextOccupancy: { inputTokens: 600, outputTokens: 20 },
+                },
+              },
+            ] as PlatypusUIMessage[],
+            request: { providerId: baseProvider.id, modelId: "gpt-4" },
+          },
+          queries,
+        );
+
+        expect(turn.stream.priorOccupancyReadings).toEqual([
+          { inputTokens: 900, outputTokens: 20 },
+          { inputTokens: 600, outputTokens: 20 },
+        ]);
+        expect(turn.stream.initialOccupancy).toBe(620);
       });
 
       it("treats a null (erased, stale) reading as unknown, same as absent", async () => {

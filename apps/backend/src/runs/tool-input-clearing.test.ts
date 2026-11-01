@@ -1,9 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { CLEARED_TOOL_INPUT_MARKER } from "@platypus/schemas";
+import {
+  CLEARED_TOOL_INPUT_MARKER,
+  TOOL_RESULT_CLEARING_BATCH,
+} from "@platypus/schemas";
 import type { ModelMessage } from "ai";
 import {
   applyToolInputClearing,
-  clearToolInputsToTarget,
+  clearStaleToolInputs,
 } from "./tool-input-clearing.ts";
 
 type Output = Extract<
@@ -44,7 +47,6 @@ const inputOf = (messages: ModelMessage[], toolCallId: string): unknown => {
   throw new Error(`no call ${toolCallId}`);
 };
 
-/** Body large enough that clearing it frees more than the marker replaces. */
 const BODY = "b".repeat(1_400);
 
 const ABOVE = { occupancy: 80, contextWindow: 100 };
@@ -72,10 +74,11 @@ const clearedWriteIds = (messages: ModelMessage[]): string[] =>
   });
 
 describe("applyToolInputClearing", () => {
-  it("clears `content` of the oldest writes, stopping at the batch floor", () => {
+  it("clears `content` of the oldest writes in one batch", () => {
     const messages = writes(8);
     const cleared = applyToolInputClearing(messages, ABOVE);
 
+    // floor((8 - 4) / 4) * 4 = 4: the oldest batch, with four kept live.
     for (const id of ["w0", "w1", "w2", "w3"]) {
       expect(inputOf(cleared, id)).toMatchObject({
         content: CLEARED_TOOL_INPUT_MARKER,
@@ -88,26 +91,11 @@ describe("applyToolInputClearing", () => {
     expect(inputOf(messages, "w0")).toMatchObject({ content: BODY });
   });
 
-  it("uses a caller-supplied conversation size rather than re-measuring", () => {
-    // The backend hands both passes the size of the messages the step started
-    // with; input clearing must not measure the result-cleared conversation
-    // again, or it would size its batch from a picture the frontend mirror
-    // never sees.
-    const messages = writes(12);
-    const cleared = applyToolInputClearing(messages, {
-      ...ABOVE,
-      conversationSize: 2_000,
-    });
-
-    expect(clearedWriteIds(cleared)).toEqual(["w0", "w1", "w2", "w3"]);
-  });
-
-  it("clears a batch sized to the target rather than everything stale", () => {
+  it("clears a batch rather than everything stale", () => {
     const messages = writes(12);
     const cleared = applyToolInputClearing(messages, ABOVE);
 
-    // Eight are stale; the 0.4 target reaches past all of them, so this is
-    // the maximum batch rather than a partial one.
+    // floor((12 - 4) / 4) * 4 = 8: two batches, not all eight stale writes.
     expect(clearedWriteIds(cleared)).toEqual([
       "w0",
       "w1",
@@ -123,18 +111,34 @@ describe("applyToolInputClearing", () => {
     }
   });
 
-  it("leaves the prefix byte-identical across the steps the target buys", () => {
-    const pass = clearToolInputsToTarget(writes(12), ABOVE, {
-      thresholdFraction: 0.7,
-      targetFraction: 0.5,
-      keepRecent: 4,
-      minBatch: 4,
-    });
-    const grown = [...pass, ...writes(2, "later")];
+  it("stays engaged when an earlier reading on the path crossed the trigger", () => {
+    // The flip-flop, on the write-input sibling: a prior turn crossed 0.7 and
+    // moved the boundary, so the latest reading fell back under it.
+    const messages = writes(8);
 
     expect(
-      applyToolInputClearing(grown, { occupancy: 69, contextWindow: 100 }),
-    ).toBe(grown);
+      clearedWriteIds(
+        applyToolInputClearing(messages, {
+          occupancy: 620,
+          contextWindow: 1_000,
+          priorReadings: [
+            { inputTokens: 900, outputTokens: 20 },
+            { inputTokens: 600, outputTokens: 20 },
+          ],
+        }),
+      ),
+    ).toEqual(["w0", "w1", "w2", "w3"]);
+  });
+
+  it("does not engage below the trigger without a qualifying earlier reading", () => {
+    const messages = writes(8);
+    expect(
+      applyToolInputClearing(messages, {
+        occupancy: 620,
+        contextWindow: 1_000,
+        priorReadings: [{ inputTokens: 600, outputTokens: 20 }, null],
+      }),
+    ).toBe(messages);
   });
 
   it("keeps a failed fsEdit's input at any occupancy", () => {
@@ -148,7 +152,7 @@ describe("applyToolInputClearing", () => {
       },
       { type: "error-text", value: "oldString not found" },
     );
-    const messages = [...failed, ...writes(6)];
+    const messages = [...failed, ...writes(8)];
     const cleared = applyToolInputClearing(messages, {
       occupancy: 100,
       contextWindow: 100,
@@ -161,7 +165,7 @@ describe("applyToolInputClearing", () => {
     const newString = "n".repeat(1_000);
     const messages = [
       ...call("fsEdit", "e0", { path: "a.txt", oldString, newString }),
-      ...writes(8),
+      ...writes(7),
     ];
     expect(inputOf(applyToolInputClearing(messages, ABOVE), "e0")).toEqual({
       path: "a.txt",
@@ -182,7 +186,7 @@ describe("applyToolInputClearing", () => {
         value: { error: "File already exists" },
       }),
       ...call("fsWrite", "u1", input("b")),
-      ...writes(8),
+      ...writes(7),
     ];
     const cleared = applyToolInputClearing(messages, ABOVE);
     expect(inputOf(cleared, "u0")).toBe(inputOf(messages, "u0"));
@@ -196,9 +200,12 @@ describe("applyToolInputClearing", () => {
     const messages = [
       ...call("docs__write", "m0", { content: "big" }),
       ...call("shellExec", "s0", { command: "cat > f <<EOF big EOF" }),
-      ...writes(4),
+      ...writes(8),
     ];
-    expect(applyToolInputClearing(messages, ABOVE)).toBe(messages);
+    const cleared = applyToolInputClearing(messages, ABOVE);
+    expect(inputOf(cleared, "m0")).toBe(inputOf(messages, "m0"));
+    expect(inputOf(cleared, "s0")).toBe(inputOf(messages, "s0"));
+    expect(clearedWriteIds(cleared)).toEqual(["w0", "w1", "w2", "w3"]);
   });
 
   it("leaves a call with no result yet alone", () => {
@@ -214,16 +221,25 @@ describe("applyToolInputClearing", () => {
           },
         ],
       },
-      ...writes(4),
+      ...writes(8),
     ];
-    expect(applyToolInputClearing(messages, ABOVE)).toBe(messages);
+    const cleared = applyToolInputClearing(messages, ABOVE);
+    expect(inputOf(cleared, "p0")).toBe(inputOf(messages, "p0"));
+    expect(clearedWriteIds(cleared)).toEqual(["w0", "w1", "w2", "w3"]);
   });
 
-  it("clears nothing for input no larger than the marker", () => {
-    const messages = Array.from({ length: 6 }, (_, i) =>
+  it("clears by count rather than by payload size", () => {
+    // The boundary no longer depends on bytes freed, so a small write in the
+    // oldest batch is cleared along with its neighbours.
+    const messages = Array.from({ length: 8 }, (_, i) =>
       call("fsWrite", `s${i}`, { path: "p", content: "tiny" }),
     ).flat();
-    expect(applyToolInputClearing(messages, ABOVE)).toBe(messages);
+    expect(clearedWriteIds(applyToolInputClearing(messages, ABOVE))).toEqual([
+      "s0",
+      "s1",
+      "s2",
+      "s3",
+    ]);
   });
 
   it.each([
@@ -231,18 +247,50 @@ describe("applyToolInputClearing", () => {
     ["with no declared window", { occupancy: 80 }],
     ["with no occupancy reading", { contextWindow: 100 }],
   ])("returns the same array %s", (_, reading) => {
-    const messages = writes(6);
+    const messages = writes(8);
     expect(applyToolInputClearing(messages, reading)).toBe(messages);
   });
 
-  it("returns the same array once every stale call is already cleared", () => {
-    const messages = writes(12);
-    const clearedAll = clearToolInputsToTarget(messages, ABOVE, {
-      thresholdFraction: 0,
-      targetFraction: 0,
+  it("returns the same array once every clearable call is already cleared", () => {
+    const messages = writes(8);
+    const clearedAll = clearStaleToolInputs(messages, {
       keepRecent: 0,
-      minBatch: 1,
+      batchSize: TOOL_RESULT_CLEARING_BATCH,
     });
     expect(applyToolInputClearing(clearedAll, ABOVE)).toBe(clearedAll);
+  });
+});
+
+describe("batched input boundary", () => {
+  const pass = (messages: ModelMessage[]) =>
+    applyToolInputClearing(messages, ABOVE);
+
+  it("leaves every earlier message byte-identical until the next full batch arrives", () => {
+    let grown = pass(writes(8));
+    expect(clearedWriteIds(grown)).toEqual(["w0", "w1", "w2", "w3"]);
+
+    for (let added = 1; added < TOOL_RESULT_CLEARING_BATCH; added += 1) {
+      grown = [...grown, ...writes(1, `later${added}-`)];
+      expect(pass(grown)).toBe(grown);
+    }
+  });
+
+  it("moves the boundary by exactly one batch on the Bth append", () => {
+    let grown = pass(writes(8));
+    for (let added = 1; added < TOOL_RESULT_CLEARING_BATCH; added += 1) {
+      grown = [...grown, ...writes(1, `later${added}-`)];
+    }
+    const before = grown;
+    const next = [...grown, ...writes(1, "last-")];
+
+    const after = pass(next);
+
+    before.slice(0, 4).forEach((message, index) => {
+      expect(after[index]).toBe(message);
+    });
+    expect(clearedWriteIds(after)).toHaveLength(8);
+    after.slice(-8).forEach((message, index) => {
+      expect(message).toBe(next[next.length - 8 + index]);
+    });
   });
 });

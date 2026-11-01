@@ -4,13 +4,11 @@ import {
   applyToolResultClearing,
   clearStaleToolResults,
   DEFAULT_CLEARING_POLICY,
-  observedConversationSize,
-  type ClearingPolicy,
 } from "./tool-result-clearing.ts";
 
 /**
  * A before/after measurement of what batched clearing buys the Provider's
- * cached prompt prefix, on simulated long tool-using turns.
+ * cached prompt prefix, on a simulated long tool-using turn.
  *
  * The quantity measured is what a cache miss costs: for every step after the
  * first, how many already-sent messages changed, and the characters from the
@@ -31,7 +29,7 @@ import {
 const CHARS_PER_TOKEN = 4;
 const DEFAULT_STEPS = 60;
 
-const POLICY: ClearingPolicy = DEFAULT_CLEARING_POLICY;
+const POLICY = DEFAULT_CLEARING_POLICY;
 
 const toolResultMessage = (
   toolCallId: string,
@@ -48,8 +46,17 @@ const toolResultMessage = (
   ],
 });
 
-const messageChars = (message: ModelMessage): number =>
-  observedConversationSize([message]);
+const messageChars = (message: ModelMessage): number => {
+  if (typeof message.content === "string") return message.content.length;
+  let total = 0;
+  for (const part of message.content) {
+    if (part.type === "text") total += part.text.length;
+    else if (part.type === "tool-result" && part.output.type === "text") {
+      total += part.output.value.length;
+    }
+  }
+  return total;
+};
 
 type Measurement = {
   steps: number;
@@ -67,10 +74,14 @@ type Rule = (
   window: number,
 ) => ModelMessage[];
 
-/** The rule before this change: clear everything past keep-recent once engaged. */
+/**
+ * The rule before this change: clear everything past keep-recent once engaged.
+ * `batchSize: 1` makes the shared prefix helper return every stale item, which
+ * is exactly the old boundary.
+ */
 const oldRule: Rule = (messages, occupancy, window) => {
   if (occupancy / window < POLICY.thresholdFraction) return messages;
-  return clearStaleToolResults(messages, POLICY);
+  return clearStaleToolResults(messages, { ...POLICY, batchSize: 1 });
 };
 
 /** The shipped rule. */
@@ -166,42 +177,11 @@ const CREEP = {
   window: 200_000,
 };
 
-/** A turn with room to spare: clearing everything past keep-recent is enough. */
-const ROOMY = {
-  basePromptChars: 400_000,
+/** A turn that never reaches the trigger: neither rule touches it. */
+const BELOW = {
+  basePromptChars: 40_000,
   resultChars: 6_000,
   window: 200_000,
-};
-
-/**
- * A turn where clearing everything past keep-recent already reaches the 0.4
- * target: the old rule clears all of it, and so does the new one.
- */
-const MID = {
-  basePromptChars: 300_000,
-  resultChars: 6_000,
-  window: 200_000,
-};
-
-/**
- * A small 8K-token window with 1K-token results: four protected results plus
- * the prompt already exceed the trigger, so the batch floor alone would wait
- * and let the call grow past the window. The urgent fraction must take a
- * partial batch instead.
- */
-const SMALL_URGENT = {
-  basePromptChars: 8_000,
-  resultChars: 4_000,
-  window: 8_000,
-  steps: 40,
-};
-
-/** The same small window with 500-token results, where batching has room. */
-const SMALL_ROOMY = {
-  basePromptChars: 8_000,
-  resultChars: 2_000,
-  window: 8_000,
-  steps: 60,
 };
 
 describe("Tool-result clearing — cached prompt prefix measurement", () => {
@@ -209,73 +189,35 @@ describe("Tool-result clearing — cached prompt prefix measurement", () => {
   const creepNew = measure(CREEP, newRule);
 
   it("stops moving the survivor boundary on most steps in the creep regime", () => {
-    // Recorded from this simulation; a change to the trigger, target, minimum
-    // batch or urgent fraction moves these and should update them deliberately.
-    expect({ before: creepOld, after: creepNew }).toMatchObject({
-      before: {
-        steps: 60,
-        stepsWithEarlierChange: 56,
-        changedEarlierMessages: 56,
-        invalidatedChars: 7_176_456,
-        maxInvalidatedChars: 128_151,
-      },
-      after: {
-        steps: 60,
-        stepsWithEarlierChange: 14,
-        changedEarlierMessages: 56,
-        invalidatedChars: 1_800_456,
-        maxInvalidatedChars: 128_604,
-      },
-    });
+    // Recorded from this simulation. The batch moves the boundary once per
+    // four results instead of once per result, so the invalidation count is a
+    // quarter of the old rule's.
+    expect(creepOld.stepsWithEarlierChange).toBe(56);
+    expect(creepNew.stepsWithEarlierChange).toBe(14);
+    expect(creepNew.stepsWithEarlierChange * POLICY.batchSize).toBe(
+      creepOld.stepsWithEarlierChange,
+    );
   });
 
-  it("re-sends a quarter of the prompt characters the old rule did", () => {
+  it("re-sends far fewer prompt characters than the old rule", () => {
     expect(creepNew.invalidatedChars).toBeLessThan(
       creepOld.invalidatedChars / 3,
     );
     // The change still happens in batches: an invalidation re-sends about the
     // same suffix as one old-rule step (the live tail dominates it), but it
-    // happens 14 times instead of 56.
-    expect(creepNew.maxInvalidatedChars).toBeGreaterThan(
+    // happens a quarter as often.
+    expect(creepNew.maxInvalidatedChars).toBeGreaterThanOrEqual(
       creepOld.maxInvalidatedChars,
     );
   });
 
-  it.each([
-    ["a turn with room to spare", ROOMY],
-    ["a turn where clearing everything reaches the target", MID],
-  ])("sends byte-identical prompts on %s", (_, scenario) => {
-    // The controls: same inputs, both rules step by step. This is stronger
-    // than comparing aggregate metrics, which could hide a different set of
-    // changes.
-    const before = simulate(scenario, oldRule).prompts.map((p) =>
+  it("sends byte-identical prompts on a turn that never reaches the trigger", () => {
+    const before = simulate(BELOW, oldRule).prompts.map((p) =>
       JSON.stringify(p),
     );
-    const after = simulate(scenario, newRule).prompts.map((p) =>
+    const after = simulate(BELOW, newRule).prompts.map((p) =>
       JSON.stringify(p),
     );
     expect(after).toEqual(before);
-  });
-
-  it("does not push a small window past where the old rule took it", () => {
-    // Without the safety valve the batch floor waits for four live results
-    // and reads 9,000 tokens on an 8,000-token window before clearing. With
-    // it, the rule takes a partial batch when one more item would overflow,
-    // so it stays at or below what the old per-step rule did.
-    const before = measure(SMALL_URGENT, oldRule);
-    const after = measure(SMALL_URGENT, newRule);
-    expect(after.maxOccupancy).toBeLessThanOrEqual(before.maxOccupancy);
-    // It still clears; the point is that it clears a partial batch rather than
-    // holding back.
-    expect(after.stepsWithEarlierChange).toBeGreaterThan(0);
-  });
-
-  it("batches on a small window when there is room", () => {
-    const before = measure(SMALL_ROOMY, oldRule);
-    const after = measure(SMALL_ROOMY, newRule);
-    expect(after.stepsWithEarlierChange).toBeLessThan(
-      before.stepsWithEarlierChange,
-    );
-    expect(after.invalidatedChars).toBeLessThan(before.invalidatedChars);
   });
 });

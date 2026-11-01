@@ -1619,33 +1619,18 @@ export const CLEARABLE_TOOL_INPUT_FIELDS: ReadonlyMap<
 export const TOOL_INPUT_CLEARING_KEEP_RECENT = 4;
 
 /**
- * The fraction of the declared Context window a clearing pass clears down to,
- * once the 0.7 trigger has engaged (ADR-0041's trigger/target hysteresis).
- * Well below the trigger so the pass clears a batch large enough for several
- * later steps to run without changing an earlier message, which is what keeps
- * the Provider's cached prompt prefix valid. Shared by Tool-result clearing,
- * Tool-input clearing and both frontend mirrors, like the trigger above it.
+ * How many clearable items a batched clearing pass moves the boundary by —
+ * our stand-in for Anthropic's `clear_at_least`, which is a token amount we
+ * cannot count locally (ADR-0018). Clearing invalidates the Provider's cached
+ * prompt prefix from the oldest changed result onward, so a pass that clears
+ * one item at a time pays that cost on almost every step while moving the
+ * boundary by one. Moving it in fixed batches instead leaves the prefix
+ * byte-identical between passes.
  *
- * A fraction rather than a count of results: the same rule must mean the same
- * thing on a 16K window and a 1M one, and it has to survive the Operator
- * changing the declared window. A fixed "clear N more" would be a different
- * amount of relief on every model.
+ * One constant for both Tool-result and Tool-input clearing, and both
+ * frontend mirrors, so the four boundaries move together.
  */
-export const TOOL_RESULT_CLEARING_TARGET = 0.4;
-
-/**
- * The smallest number of clearable results a pass clears once it engages —
- * our stand-in for Anthropic's `clear_at_least`, which is a token amount. We
- * cannot count tokens locally (ADR-0018), so the floor is a count: clearing
- * invalidates the cached prefix from the oldest changed result onward, and a
- * pass that clears one result at a time pays that cost on every step while
- * moving the boundary by one.
- *
- * The target still decides *how far* a pass clears; this is the floor that
- * decides *when* a partial pass is worth doing at all. Shared by result
- * clearing, input clearing and both frontend mirrors.
- */
-export const TOOL_RESULT_CLEARING_MIN_BATCH = 4;
+export const TOOL_RESULT_CLEARING_BATCH = 4;
 
 /**
  * What a cleared Tool result's content becomes in what the model is sent.
@@ -1654,9 +1639,6 @@ export const TOOL_RESULT_CLEARING_MIN_BATCH = 4;
  * holds regardless of whether the tool happens to be one core has affirmative
  * reason to believe only reads (issue #626) — the marker's audience is the
  * model, not an Operator deciding what is safe to clear.
- *
- * Shared with the frontend mirror, which needs the marker's length to size a
- * clearing batch from the characters it would stop sending.
  */
 export const CLEARED_TOOL_RESULT_MARKER =
   "[Tool result cleared: this content was removed from what was sent to the model to free up space in its context window. It is no longer available here.]";
@@ -1670,127 +1652,59 @@ export const CLEARED_TOOL_INPUT_MARKER =
   "[Tool input cleared: this content was removed from what was sent to the model to free up space in its context window. The call succeeded; read the file back to see its current state.]";
 
 /**
- * Observed size, in characters, of a value as the model receives it.
- * `undefined` and anything JSON cannot represent count as nothing rather than
- * throwing.
+ * How many of the oldest clearable items a batched pass clears: the largest
+ * multiple of `batchSize` that still leaves the newest `keepRecent` untouched.
+ * With `n` clearable items, `floor((n - keepRecent) / batchSize) * batchSize`.
  *
- * An observation, never a measurement of tokens: it exists so clearing can
- * size a batch from the payloads it is about to drop (ADR-0018 still refuses a
- * local token count, and this never gates anything).
- */
-export const observedValueSize = (value: unknown): number => {
-  if (value === undefined) return 0;
-  if (typeof value === "string") return value.length;
-  if (typeof value === "function" || typeof value === "symbol") return 0;
-  try {
-    return JSON.stringify(value).length;
-  } catch {
-    return 0;
-  }
-};
-
-/**
- * How many of the oldest clearable items a pass removes to take occupancy from
- * the current reading down to `targetFraction` of the window.
+ * The boundary therefore moves only every `batchSize` items: between `keepRecent`
+ * and `keepRecent + batchSize - 1` stay live, and each append changes no earlier
+ * message until the count crosses the next multiple. That is the whole point —
+ * an earlier message that does not change keeps the Provider's cached prompt
+ * prefix valid (ADR-0041).
  *
- * `itemSizes` are the observed characters each item would stop being sent if
- * cleared, oldest first; `conversationSize` is the observed characters of
- * everything the call sends. Their ratio is the only sizing available without
- * tokenising locally, which ADR-0018 refuses: a pass assumes an item's share of
- * occupancy is its share of the observed conversation, so it frees roughly
- * `conversationSize * (occupancy - target) / occupancy` characters.
+ * `keepRecent: 0` is the summary pass, whose input has no protected tail to
+ * hold back: it clears every clearable item, because a batch that left some
+ * live would defeat the pass's own bound.
  *
- * `minBatch` is the `clear_at_least` floor: a pass that cannot reach the target
- * and has fewer than that many live items waits instead, because the cache
- * invalidation it causes is only worth paying once it moves the boundary far
- * enough. When the target is already out of reach, waiting is the difference
- * between moving the boundary by one on every step and moving it in batches of
- * `minBatch`. When the target is reachable with fewer, the floor still clears
- * that many, so a pass never does less work than the floor.
- *
- * That wait has a safety valve, derived rather than configured: if one more
- * item the size of the largest live one would push occupancy past the declared
- * window, the pass takes the partial batch now. On a window small enough that
- * the protected tail is already near it, batching must yield to not
- * overflowing the model.
- *
- * The returned number is a prefix length, not a count of live items: it
- * includes any already-cleared (or marker-sized) no-ops in front of the batch,
- * because clearing is oldest-first and callers slice the same prefix.
- *
- * This chooses a batch size, never a gate: whether clearing runs at all is
- * decided from the vendor-reported occupancy by each caller. An imprecise
- * target can only clear too much or too little in one pass; the next reading,
- * taken with the pass's result in place, corrects it.
+ * Returns a prefix length, not a count of live items: callers slice the same
+ * oldest-first prefix, and already-cleared items in front of it are no-ops.
  *
  * Shared by Tool-result clearing, Tool-input clearing and both frontend
- * mirrors, so the four cannot round a batch differently (ADR-0018 Notes record
- * a past divergence between the backend gate and its mirror).
+ * mirrors, so the four cannot round a boundary differently (ADR-0018 Notes
+ * record a past divergence between the backend gate and its mirror).
  */
 export const clearingPrefixLength = (input: {
-  itemSizes: readonly number[];
-  conversationSize: number;
+  itemCount: number;
   keepRecent: number;
-  occupancy: number;
-  contextWindow: number;
-  targetFraction: number;
-  minBatch?: number;
+  batchSize: number;
 }): number => {
-  const candidates = Math.max(0, input.itemSizes.length - input.keepRecent);
-  if (candidates === 0) return 0;
-  if (input.occupancy <= 0 || input.conversationSize <= 0) return 0;
-
-  const tokensToFree =
-    input.occupancy - input.targetFraction * input.contextWindow;
-  if (tokensToFree <= 0) return 0;
-
-  const sizeToFree = (input.conversationSize * tokensToFree) / input.occupancy;
-  const minBatch = Math.max(1, input.minBatch ?? 1);
-
-  // An already-cleared item, or a live one no larger than the marker replacing
-  // it, frees nothing and is always a leading run: passes clear oldest-first,
-  // so anything already handled sits in front. Skipping it makes the batch
-  // floor count real work rather than no-ops.
-  let leadingNoOps = 0;
-  while (
-    leadingNoOps < candidates &&
-    (input.itemSizes[leadingNoOps] ?? 0) <= 0
-  ) {
-    leadingNoOps += 1;
-  }
-  const live = candidates - leadingNoOps;
-  if (live === 0) return 0;
-
-  let freed = 0;
-  let liveNeeded = 0;
-  while (liveNeeded < live && freed < sizeToFree) {
-    freed += Math.max(0, input.itemSizes[leadingNoOps + liveNeeded] ?? 0);
-    liveNeeded += 1;
-  }
-  const targetReachable = freed >= sizeToFree;
-  if (!targetReachable && live < minBatch) {
-    const largestLive = input.itemSizes
-      .slice(leadingNoOps, candidates)
-      .reduce((largest, size) => Math.max(largest, size), 0);
-    const withOneMore =
-      (input.occupancy * (input.conversationSize + largestLive)) /
-      input.conversationSize;
-    if (withOneMore < input.contextWindow) return 0;
-  }
-  const clearLive = Math.max(liveNeeded, Math.min(minBatch, live));
-  return leadingNoOps + clearLive;
+  if (input.keepRecent === 0) return input.itemCount;
+  const movable = Math.max(0, input.itemCount - input.keepRecent);
+  return Math.floor(movable / input.batchSize) * input.batchSize;
 };
 
 /**
- * Characters a payload stops sending when clearing replaces it with `marker`,
- * never negative: a payload no larger than the marker frees nothing. The one
- * place the marker overhead is subtracted, so backend result clearing, backend
- * input clearing and both frontend mirrors cannot round it differently.
+ * The Context occupancy readings already persisted on a Chat's Active path, in
+ * transcript order. Only assistant messages carrying the key count: an absent
+ * key means the turn reported no reading, while `null` is an erased reading
+ * and reads as unknown, like `nextTurnOccupancy` treats it.
+ *
+ * Shared so the backend's gate and the frontend mirror cannot disagree about
+ * which messages are on the path — a Delete or an Alternative changes this
+ * list, and the same change reaches both sides.
  */
-export const reclaimedCharacters = (
-  payloadSize: number,
-  marker: string,
-): number => Math.max(0, payloadSize - marker.length);
+export const occupancyReadingsOf = (
+  messages: readonly {
+    role?: string;
+    metadata?: { contextOccupancy?: ContextOccupancyReading | null };
+  }[],
+): (ContextOccupancyReading | null)[] =>
+  messages.flatMap((message) => {
+    if (message.role !== "assistant") return [];
+    const metadata = message.metadata;
+    if (metadata === undefined || !("contextOccupancy" in metadata)) return [];
+    return [metadata.contextOccupancy ?? null];
+  });
 
 /**
  * Transcript summarising (ADR-0041, issue #1716): a durable **Transcript
@@ -1880,6 +1794,41 @@ export const nextTurnOccupancy = (
   reading: ContextOccupancyReading | null | undefined,
 ): number | undefined =>
   reading ? reading.inputTokens + (reading.outputTokens ?? 0) : undefined;
+
+/**
+ * Whether a clearing pass engages (ADR-0041's trigger, made sticky).
+ *
+ * True when the current reading is at or above the trigger, or when any
+ * reading already persisted on the Active path projects at or above it. The
+ * second half is what stops the gate flip-flop: a pass clears a batch, the
+ * turn's last reading is taken with that batch in place and falls back under
+ * the trigger, and gating on the latest reading alone would re-send every
+ * cleared item next turn — then clear again the turn after.
+ *
+ * Readings come from the Active path the caller is working from, so a Delete
+ * or an Alternative that removes the high reading disengages clearing
+ * naturally, with no stored flag to go stale.
+ *
+ * ponytail: after a Transcript summary, the covered messages stay on the
+ * Active path, so a pre-summary high reading keeps clearing engaged even with
+ * headroom. Accepted: the pass only drops older read-only results and
+ * successful write inputs, which is harmless.
+ */
+export const clearingEngaged = (input: {
+  occupancy?: number;
+  contextWindow?: number;
+  thresholdFraction: number;
+  priorReadings?: readonly (ContextOccupancyReading | null)[];
+}): boolean => {
+  const { occupancy, contextWindow, thresholdFraction } = input;
+  if (contextWindow === undefined) return false;
+  const trigger = contextWindow * thresholdFraction;
+  if (occupancy !== undefined && occupancy >= trigger) return true;
+  return (input.priorReadings ?? []).some((reading) => {
+    const projected = nextTurnOccupancy(reading);
+    return projected !== undefined && projected >= trigger;
+  });
+};
 
 /**
  * Top-level request-body keys Platypus itself writes, which no Reasoning map

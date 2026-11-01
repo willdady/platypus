@@ -1496,8 +1496,8 @@ describe("transcript stability", () => {
           ],
           metadata: {
             readOnlyToolNames: ["read_url"],
-            // 950/1000 is past the clearing threshold; the four newest stay
-            // and the 0.4 target clears all six stale ones.
+            // 950/1000 is past the clearing threshold; the batch boundary
+            // clears the four oldest and the four newest stay.
             contextOccupancy: { inputTokens: 950, outputTokens: 0 },
           },
         }) as unknown as PlatypusUIMessage,
@@ -1505,7 +1505,7 @@ describe("transcript stability", () => {
     harness.turn.messages = [...toolResults, message("a-last", "an answer")];
     const view = renderChat();
     const first = harness.lastChatMessageProps!.staleToolCallIds;
-    expect(first?.size).toBe(6);
+    expect(first?.size).toBe(4);
 
     harness.turn.messages = [
       ...toolResults,

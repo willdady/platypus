@@ -17,6 +17,7 @@ import {
   TRANSCRIPT_SUMMARY_KEEP_TURNS_WITH_SUMMARY,
   TRANSCRIPT_SUMMARY_MAX_OUTPUT_TOKENS,
   TRANSCRIPT_SUMMARY_TRIGGER,
+  TOOL_RESULT_CLEARING_BATCH,
   nextTurnOccupancy,
   type ContextOccupancyReading,
 } from "@platypus/schemas";
@@ -743,7 +744,9 @@ const clearedModelMessages = async (
     await convertToModelMessages(messages, { ignoreIncompleteToolCalls: true }),
     // keepRecent 0: the pass's only limit is its own window, and every
     // clearable result in the range is older than the tail the pass protects.
-    { keepRecent: 0 },
+    // `clearingPrefixLength` clears all of them for keepRecent 0; the batch size
+    // is irrelevant there.
+    { keepRecent: 0, batchSize: TOOL_RESULT_CLEARING_BATCH },
     (toolName) => readOnlyToolNames?.has(toolName) ?? false,
   );
 

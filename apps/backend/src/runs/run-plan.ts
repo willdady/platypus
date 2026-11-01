@@ -11,14 +11,16 @@ import type { NoProgressDetector } from "./no-progress.ts";
 import {
   applyToolResultClearing,
   DEFAULT_CLEARING_POLICY,
-  observedConversationSize,
 } from "./tool-result-clearing.ts";
 import { applyToolInputClearing } from "./tool-input-clearing.ts";
 import { stepOccupancy, type UsageModel } from "./run-stats.ts";
 import { toolGateOptions, type ToolGateScope } from "../tool-gates/index.ts";
 import { capToolResults } from "../services/tool-result.ts";
 import type { OverflowRecovery } from "./context-overflow-recovery.ts";
-import { TRANSCRIPT_SUMMARY_TRIGGER } from "@platypus/schemas";
+import {
+  TRANSCRIPT_SUMMARY_TRIGGER,
+  type ContextOccupancyReading,
+} from "@platypus/schemas";
 import type { SdkReasoning } from "../services/reasoning.ts";
 import { logger } from "../logger.ts";
 
@@ -109,6 +111,15 @@ export type RunPlan = {
    * history, and for a Chat's very first turn.
    */
   initialOccupancy?: number;
+  /**
+   * Every Context occupancy reading already persisted on the Chat's Active
+   * path, in transcript order — the sticky half of Tool-result and Tool-input
+   * clearing's gate (ADR-0041). A reading that reached the trigger keeps
+   * clearing engaged after a pass has moved the boundary back under it.
+   * Absent for a delegated Sub-Agent, a headless Trigger run, and a Chat's
+   * first turn, none of which has a prior Chat reading to consult.
+   */
+  priorOccupancyReadings?: readonly (ContextOccupancyReading | null)[];
   /**
    * The id of the Transcript summary this turn's occupancy reading was taken
    * with (ADR-0041, issue #1716) — the read at the start of the turn. Absent
@@ -244,28 +255,18 @@ export const buildModelInvocation = (
       steps.length > 0
         ? stepOccupancy(steps[steps.length - 1]?.usage)
         : plan.initialOccupancy;
-    // The vendor's last reading is the gate; the observed character count is
-    // measured once, from the messages as this step received them, and handed
-    // to both passes. Input clearing runs after result clearing, and measuring
-    // the already-shrunk conversation again would let the two size their
-    // batches from different pictures — as would the frontend mirror, which
-    // only ever has the one Transcript. Measured only once clearing can engage:
-    // below the trigger nothing sizes anything, and serialising every tool
-    // input on every step is not free.
-    const clearingEngaged =
-      occupancy !== undefined &&
-      plan.contextWindow !== undefined &&
-      occupancy / plan.contextWindow >=
-        DEFAULT_CLEARING_POLICY.thresholdFraction;
+    // Tool-result and Tool-input clearing share one reading: the current
+    // occupancy plus the readings already on the Active path, which is what
+    // keeps clearing engaged once a pass has taken the current reading back
+    // under the trigger. Both return `messages` itself when they change
+    // nothing.
     const reading = {
       occupancy,
       contextWindow: plan.contextWindow,
-      ...(clearingEngaged
-        ? { conversationSize: observedConversationSize(messages) }
-        : {}),
+      priorReadings: plan.priorOccupancyReadings,
     };
     // Tool-input clearing (issue #1722) runs after result clearing and before
-    // the cache point; both return `messages` itself when they change nothing.
+    // the cache point.
     const cleared = applyToolInputClearing(
       applyToolResultClearing(
         messages,
