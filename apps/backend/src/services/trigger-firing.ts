@@ -11,6 +11,7 @@ import {
 import { logger } from "../logger.ts";
 import { errorMessage } from "../utils/error-message.ts";
 import { agentRunner } from "../runs/agent-runner.ts";
+import { frontendBaseUrl } from "../base-urls.ts";
 import { TriggerSink } from "../runs/sinks/trigger-sink.ts";
 import { callerDataBlock } from "./caller-data.ts";
 import {
@@ -42,7 +43,6 @@ import type {
   InboundTriggerInput,
   EventTriggerEventPayload,
 } from "@platypus/schemas";
-import { env } from "../env.ts";
 
 /**
  * Trigger firing: the one place a Trigger row becomes a run.
@@ -361,7 +361,7 @@ const runTrigger = async (
         input,
         sink,
         options: {
-          frontendUrl: env().FRONTEND_URL,
+          frontendUrl: frontendBaseUrl(),
           timeouts: triggerTimeouts(),
         },
       }),

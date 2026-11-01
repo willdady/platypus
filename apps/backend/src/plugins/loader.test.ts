@@ -1210,7 +1210,7 @@ describe("loadPlugins — deploy-time plugin config injection", () => {
       workspaceId: "w",
       agentId: "a",
       orgId: "o",
-      frontendUrl: undefined,
+      frontendUrl: "http://localhost:3000",
       userId: "u",
       registerCloser: () => {},
     });
@@ -1260,7 +1260,7 @@ describe("loadPlugins — deploy-time plugin config injection", () => {
       workspaceId: "w",
       agentId: "a",
       orgId: "o",
-      frontendUrl: undefined,
+      frontendUrl: "http://localhost:3000",
       userId: "u",
       registerCloser: () => {},
     });
@@ -1348,7 +1348,7 @@ describe("loadPlugins — deploy-time plugin config injection", () => {
       workspaceId: "w",
       agentId: "a",
       orgId: "o",
-      frontendUrl: undefined,
+      frontendUrl: "http://localhost:3000",
       userId: "u",
       registerCloser: () => {},
     });
@@ -1441,7 +1441,7 @@ describe("loadPlugins — plugin logger injection", () => {
       workspaceId: "w",
       agentId: "a",
       orgId: "o",
-      frontendUrl: undefined,
+      frontendUrl: "http://localhost:3000",
       userId: "u",
       registerCloser: () => {},
     });
@@ -1562,7 +1562,7 @@ describe("loadPlugins — example third-party plugin", () => {
       workspaceId: "w",
       agentId: "a",
       orgId: "o",
-      frontendUrl: undefined,
+      frontendUrl: "http://localhost:3000",
       userId: "u",
       registerCloser: () => {},
     })) as unknown as Record<
@@ -2179,7 +2179,7 @@ describe("loadPlugins — example third-party npm package (end to end)", () => {
       workspaceId: "ws-1",
       agentId: "agent-1",
       orgId: "org-1",
-      frontendUrl: undefined,
+      frontendUrl: "http://localhost:3000",
       userId: "user-1",
       registerCloser: () => {},
     });
@@ -2221,7 +2221,7 @@ describe("loadPlugins — example third-party npm package (end to end)", () => {
       workspaceId: "ws-1",
       agentId: "agent-1",
       orgId: "org-1",
-      frontendUrl: undefined,
+      frontendUrl: "http://localhost:3000",
       userId: "user-1",
       registerCloser: () => {},
     });

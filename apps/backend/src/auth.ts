@@ -13,12 +13,34 @@ import {
 import { env } from "./env.ts";
 import { deleteOwnedWorkspaces } from "./services/user-delete.ts";
 
-// Reported at module load, before the HTTP server listens: a backend and
-// frontend on unrelated hosts cannot authenticate server-side requests, and
-// silently starting half-broken is the failure this names (issue #819). It
-// logs and carries on — see `auth-cookie-domain.ts` for why it does not refuse
-// to start.
+// Resolved at module load, before the HTTP server listens: a backend and
+// frontend topology that cannot authenticate server-side requests stops boot,
+// naming the hostnames and `AUTH_COOKIE_DOMAIN` (issue #819, #1761). A backend
+// that started would sign people in and then silently serve degraded pages.
 const authCookieDomain = resolveAuthCookieDomain();
+
+/**
+ * Session lifetimes. Fixed rather than Operator settings: changing the expiry
+ * does not make a deployment safer, and leaving the revocation delay implicit
+ * does. A session lasts this long from its last touch, a read extends it at
+ * most once per refresh age (so a stolen cookie is useless within a day of the
+ * User's last request), and the cookie cache only defers the database read,
+ * never the expiry.
+ */
+export const SESSION_LIFETIME_DAYS = 7;
+export const SESSION_REFRESH_AGE_HOURS = 24;
+/** How long a browser may trust its cached copy of the session. */
+export const SESSION_COOKIE_CACHE_MINUTES = 5;
+
+/**
+ * `/get-session`'s own rate limit: a rolling minute, 300 reads. Generous on
+ * purpose — the path is read on every page load and again whenever a tab
+ * regains focus, by every tab — and still finite, so a runaway client cannot
+ * poll it forever. Fixed rather than configurable: it is an internal safety
+ * bound, not a deployment knob.
+ */
+export const SESSION_READ_WINDOW_SECONDS = 60;
+export const SESSION_READ_MAX = 300;
 
 export const auth = betterAuth({
   baseURL: backendBaseUrl(),
@@ -59,21 +81,26 @@ export const auth = betterAuth({
     },
   },
   session: {
-    expiresIn: 60 * 60 * 24 * 7, // 7 days
-    updateAge: 60 * 60 * 24, // Update session every 24 hours
+    expiresIn: 60 * 60 * 24 * SESSION_LIFETIME_DAYS,
+    updateAge: 60 * 60 * SESSION_REFRESH_AGE_HOURS,
     cookieCache: {
       enabled: true,
-      maxAge: 5 * 60, // 5 minutes
+      maxAge: 60 * SESSION_COOKIE_CACHE_MINUTES,
     },
   },
   rateLimit: {
-    // better-auth's default limiter (on in production) counts a rolling
-    // window from the *last* request, so a client that reads the session at
-    // least once every 10 seconds never resets and hits the 100 cap: a page
-    // reload then gets a 429, which the frontend reports as a failed session
-    // read. `/get-session` is read on every page load and tab focus by every
-    // tab, so it is exempt; the credential paths keep the default limits.
-    customRules: { "/get-session": false },
+    // better-auth's default limiter counts a rolling window from the *last*
+    // request, so a client that reads the session at least once every 10
+    // seconds never resets and hits the 100 cap: a page reload then gets a
+    // 429, which the frontend reports as a failed session read (#1216).
+    // `/get-session` gets its own, far larger bound instead of an exemption;
+    // the credential paths keep the default limits.
+    customRules: {
+      "/get-session": {
+        window: SESSION_READ_WINDOW_SECONDS,
+        max: SESSION_READ_MAX,
+      },
+    },
   },
   trustedOrigins: env().ALLOWED_ORIGINS,
   ...crossSubdomainCookieConfig(authCookieDomain),

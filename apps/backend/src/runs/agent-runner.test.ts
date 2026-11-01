@@ -343,6 +343,7 @@ describe("finish reason instrumentation", () => {
         scope,
         input: baseInput,
         sink: new RecordingSink(),
+        options: { frontendUrl: "http://localhost:3000" },
       });
 
       expect(stepLogs()[0]).toMatchObject({ finishReason, rawFinishReason });
@@ -367,6 +368,7 @@ describe("finish reason instrumentation", () => {
       scope,
       input: baseInput,
       sink: new RecordingSink(),
+      options: { frontendUrl: "http://localhost:3000" },
     });
 
     const warned = vi
@@ -389,7 +391,12 @@ describe("finish reason instrumentation", () => {
     );
     const sink = new RecordingSink();
 
-    const result = await runner.generate({ scope, input: baseInput, sink });
+    const result = await runner.generate({
+      scope,
+      input: baseInput,
+      sink,
+      options: { frontendUrl: "http://localhost:3000" },
+    });
 
     expect(sink.finalStats()?.truncatedByTokenLimit).toBe(true);
     expect(result.stats.truncatedByTokenLimit).toBe(true);
@@ -408,7 +415,12 @@ describe("finish reason instrumentation", () => {
     );
     const sink = new RecordingSink();
 
-    const result = await runner.generate({ scope, input: baseInput, sink });
+    const result = await runner.generate({
+      scope,
+      input: baseInput,
+      sink,
+      options: { frontendUrl: "http://localhost:3000" },
+    });
 
     expect(sink.finalStats()).not.toHaveProperty("truncatedByTokenLimit");
     expect(result.text).toBe("ok");
@@ -428,6 +440,7 @@ describe("finish reason instrumentation", () => {
       scope,
       input: baseInput,
       sink: new RecordingSink(),
+      options: { frontendUrl: "http://localhost:3000" },
     });
 
     const completed = vi
@@ -479,6 +492,7 @@ describe("rejected tool input instrumentation", () => {
       scope,
       input: baseInput,
       sink: new RecordingSink(),
+      options: { frontendUrl: "http://localhost:3000" },
     });
   };
 
@@ -544,7 +558,7 @@ describe("rejected tool input instrumentation", () => {
       scope,
       input: { ...baseInput, runId: "s-rejected" },
       sink: new RecordingSink(),
-      options: { origin: "http://test" },
+      options: { origin: "http://test", frontendUrl: "http://localhost:3000" },
     });
     streamHarness.onStepEnd!(
       stepWith([
@@ -604,6 +618,7 @@ describe("AgentRunner.generate", () => {
       scope,
       input: { ...baseInput, runId: "events-1" },
       sink,
+      options: { frontendUrl: "http://localhost:3000" },
     });
 
     const start = sink.events[0] as Extract<
@@ -621,7 +636,12 @@ describe("AgentRunner.generate", () => {
     );
 
     const sink = new RecordingSink();
-    await runner.generate({ scope, input: baseInput, sink });
+    await runner.generate({
+      scope,
+      input: baseInput,
+      sink,
+      options: { frontendUrl: "http://localhost:3000" },
+    });
 
     const finish = sink.events.at(-1) as Extract<
       LifecycleEvent,
@@ -636,7 +656,12 @@ describe("AgentRunner.generate", () => {
     mockStreamText.mockReturnValueOnce(streamResultOf(fakeGenerateResult));
 
     const sink = new RecordingSink();
-    const result = await runner.generate({ scope, input: baseInput, sink });
+    const result = await runner.generate({
+      scope,
+      input: baseInput,
+      sink,
+      options: { frontendUrl: "http://localhost:3000" },
+    });
 
     expect(sink.names()).toEqual(["onStart", "onResolved", "onFinish"]);
     const finish = sink.events.at(-1) as Extract<
@@ -667,7 +692,12 @@ describe("AgentRunner.generate", () => {
     );
 
     const sink = new RecordingSink();
-    const result = await runner.generate({ scope, input: baseInput, sink });
+    const result = await runner.generate({
+      scope,
+      input: baseInput,
+      sink,
+      options: { frontendUrl: "http://localhost:3000" },
+    });
 
     expect(result.stats.contextOccupancy).toBe(3_500);
     const finish = sink.events.at(-1) as Extract<
@@ -709,7 +739,12 @@ describe("AgentRunner.generate", () => {
       progressed.push(ctx.stats?.contextOccupancy);
       return recorded(ctx);
     };
-    await runner.generate({ scope, input: baseInput, sink });
+    await runner.generate({
+      scope,
+      input: baseInput,
+      sink,
+      options: { frontendUrl: "http://localhost:3000" },
+    });
 
     expect(progressed).toEqual([1_000, undefined]);
   });
@@ -725,7 +760,12 @@ describe("AgentRunner.generate", () => {
     );
 
     const sink = new RecordingSink();
-    const result = await runner.generate({ scope, input: baseInput, sink });
+    const result = await runner.generate({
+      scope,
+      input: baseInput,
+      sink,
+      options: { frontendUrl: "http://localhost:3000" },
+    });
 
     // Unknown stays unknown: nothing is estimated, and 0 would read as a
     // measurement of an empty context.
@@ -737,7 +777,12 @@ describe("AgentRunner.generate", () => {
 
     const sink = new RecordingSink();
     await expect(
-      runner.generate({ scope, input: baseInput, sink }),
+      runner.generate({
+        scope,
+        input: baseInput,
+        sink,
+        options: { frontendUrl: "http://localhost:3000" },
+      }),
     ).rejects.toThrow("Agent not found");
 
     expect(sink.names()).toEqual(["onStart", "onFinish"]);
@@ -760,7 +805,12 @@ describe("AgentRunner.generate", () => {
 
     const sink = new RecordingSink();
     await expect(
-      runner.generate({ scope, input: baseInput, sink }),
+      runner.generate({
+        scope,
+        input: baseInput,
+        sink,
+        options: { frontendUrl: "http://localhost:3000" },
+      }),
     ).rejects.toThrow("Model error");
 
     expect(sink.names()).toEqual(["onStart", "onResolved", "onFinish"]);
@@ -818,6 +868,7 @@ describe("AgentRunner.generate", () => {
         scope: { ...scope, principal },
         input: baseInput,
         sink: new RecordingSink(),
+        options: { frontendUrl: "http://localhost:3000" },
       });
 
       expect(mockPrepareChatTurn).toHaveBeenCalledWith(
@@ -845,7 +896,12 @@ describe("AgentRunner.generate", () => {
     sink.onProgress = () => Promise.reject(new Error("progress write failed"));
     sink.onFinish = () => Promise.reject(new Error("finish write failed"));
 
-    const result = await runner.generate({ scope, input: baseInput, sink });
+    const result = await runner.generate({
+      scope,
+      input: baseInput,
+      sink,
+      options: { frontendUrl: "http://localhost:3000" },
+    });
 
     expect(result.text).toBe("ok");
     const errors = vi.mocked(logger.error).mock.calls.map((c) => c[1]);
@@ -859,7 +915,12 @@ describe("AgentRunner.generate", () => {
     mockStreamText.mockReturnValueOnce(streamResultOf(fakeGenerateResult));
 
     const sink = new RecordingSink();
-    await runner.generate({ scope, input: baseInput, sink });
+    await runner.generate({
+      scope,
+      input: baseInput,
+      sink,
+      options: { frontendUrl: "http://localhost:3000" },
+    });
 
     const resolved = sink.events.find((e) => e.name === "onResolved");
     expect(resolved?.plan.resolved.agentId).toBe("agent-1");
@@ -877,7 +938,12 @@ describe("AgentRunner.generate", () => {
     mockStreamText.mockReturnValueOnce(streamResultOf(fakeGenerateResult));
 
     const sink = new RecordingSink();
-    await runner.generate({ scope, input: baseInput, sink });
+    await runner.generate({
+      scope,
+      input: baseInput,
+      sink,
+      options: { frontendUrl: "http://localhost:3000" },
+    });
 
     const resolved = sink.events.find((e) => e.name === "onResolved");
     expect(resolved?.plan.unloadedToolSets).toEqual(unloadedToolSets);
@@ -923,6 +989,7 @@ describe("AgentRunner.generate", () => {
       scope,
       input: { ...baseInput, runId: "np-1" },
       sink,
+      options: { frontendUrl: "http://localhost:3000" },
     });
 
     // Two stop conditions for an unattended run: step ceiling + no-progress.
@@ -964,6 +1031,7 @@ describe("AgentRunner.generate", () => {
       scope,
       input: { ...baseInput, runId: "np-2" },
       sink,
+      options: { frontendUrl: "http://localhost:3000" },
     });
 
     const finish = sink.events.at(-1) as Extract<
@@ -991,7 +1059,10 @@ describe("AgentRunner.stream — failure paths", () => {
         scope,
         input: baseInput,
         sink,
-        options: { origin: "http://test" },
+        options: {
+          origin: "http://test",
+          frontendUrl: "http://localhost:3000",
+        },
       }),
     ).rejects.toThrow("Workspace missing");
 
@@ -1043,7 +1114,7 @@ describe("AgentRunner — duplicate submission for a live run", () => {
         messages: [{ id: "u1", role: "user", parts: [] }] as never,
       },
       sink,
-      options: { origin: "http://test" },
+      options: { origin: "http://test", frontendUrl: "http://localhost:3000" },
     });
   };
 
@@ -1066,7 +1137,10 @@ describe("AgentRunner — duplicate submission for a live run", () => {
           ] as never,
         },
         sink,
-        options: { origin: "http://test" },
+        options: {
+          origin: "http://test",
+          frontendUrl: "http://localhost:3000",
+        },
       }),
     ).rejects.toThrow(ConflictError);
 
@@ -1087,7 +1161,10 @@ describe("AgentRunner — duplicate submission for a live run", () => {
         scope,
         input: { ...baseInput, runId: "chat-live" },
         sink,
-        options: { origin: "http://test" },
+        options: {
+          origin: "http://test",
+          frontendUrl: "http://localhost:3000",
+        },
       }),
     ).rejects.toThrow(ConflictError);
 
@@ -1108,7 +1185,10 @@ describe("AgentRunner — duplicate submission for a live run", () => {
         scope,
         input: { ...baseInput, runId: "chat-start-throws" },
         sink,
-        options: { origin: "http://test" },
+        options: {
+          origin: "http://test",
+          frontendUrl: "http://localhost:3000",
+        },
       }),
     ).rejects.toThrow("row write failed");
 
@@ -1126,7 +1206,10 @@ describe("AgentRunner — duplicate submission for a live run", () => {
         scope,
         input: { ...baseInput, runId: "chat-start-throws" },
         sink,
-        options: { origin: "http://test" },
+        options: {
+          origin: "http://test",
+          frontendUrl: "http://localhost:3000",
+        },
       }),
     ).rejects.toThrow(ConflictError);
 
@@ -1171,7 +1254,15 @@ describe("a throw after the run adopts its turn", () => {
 
     const sink = new RecordingSink();
     await expect(
-      runner.stream({ scope, input, sink, options: { origin: "http://test" } }),
+      runner.stream({
+        scope,
+        input,
+        sink,
+        options: {
+          origin: "http://test",
+          frontendUrl: "http://localhost:3000",
+        },
+      }),
     ).rejects.toThrow("malformed stored part");
 
     const finishes = finishesOf(sink);
@@ -1191,9 +1282,14 @@ describe("a throw after the run adopts its turn", () => {
     const sink = new RecordingSink();
     sink.onResolved = () => Promise.reject(new Error("plan write failed"));
 
-    await expect(runner.generate({ scope, input, sink })).rejects.toThrow(
-      "plan write failed",
-    );
+    await expect(
+      runner.generate({
+        scope,
+        input,
+        sink,
+        options: { frontendUrl: "http://localhost:3000" },
+      }),
+    ).rejects.toThrow("plan write failed");
 
     const finishes = finishesOf(sink);
     expect(finishes).toHaveLength(1);
@@ -1214,7 +1310,15 @@ describe("a throw after the run adopts its turn", () => {
 
     const sink = new RecordingSink();
     await expect(
-      runner.stream({ scope, input, sink, options: { origin: "http://test" } }),
+      runner.stream({
+        scope,
+        input,
+        sink,
+        options: {
+          origin: "http://test",
+          frontendUrl: "http://localhost:3000",
+        },
+      }),
     ).rejects.toThrow("bad model args");
 
     const finishes = finishesOf(sink);
@@ -1233,13 +1337,23 @@ describe("a throw after the run adopts its turn", () => {
       new Error("malformed stored part"),
     );
     await expect(
-      runner.generate({ scope, input, sink: new RecordingSink() }),
+      runner.generate({
+        scope,
+        input,
+        sink: new RecordingSink(),
+        options: { frontendUrl: "http://localhost:3000" },
+      }),
     ).rejects.toThrow("malformed stored part");
 
     mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
     mockStreamText.mockReturnValueOnce(streamResultOf(fakeGenerateResult));
     const retry = new RecordingSink();
-    const result = await runner.generate({ scope, input, sink: retry });
+    const result = await runner.generate({
+      scope,
+      input,
+      sink: retry,
+      options: { frontendUrl: "http://localhost:3000" },
+    });
 
     expect(result.text).toBe("ok");
     expect(finishesOf(retry)[0]?.status).toBe("succeeded");
@@ -1263,6 +1377,7 @@ describe("AgentRunner.cancel", () => {
       scope,
       input: { ...baseInput, runId: "cancel-1" },
       sink,
+      options: { frontendUrl: "http://localhost:3000" },
     });
 
     // Wait a tick so the run registers
@@ -1302,6 +1417,7 @@ describe("AgentRunner.cancel", () => {
       scope,
       input: { ...baseInput, runId: "cancel-dispose" },
       sink,
+      options: { frontendUrl: "http://localhost:3000" },
     });
 
     await new Promise((r) => setTimeout(r, 0));
@@ -1329,6 +1445,7 @@ describe("AgentRunner.cancel", () => {
       input: { ...baseInput, runId: "timeout-1" },
       sink,
       options: {
+        frontendUrl: "http://localhost:3000",
         timeouts: { perRunTimeoutMs: 5, perStepTimeoutMs: 1_000_000 },
       },
     });
@@ -1352,6 +1469,7 @@ describe("AgentRunner.cancel", () => {
       scope,
       input: { ...baseInput, runId: "ok-1" },
       sink,
+      options: { frontendUrl: "http://localhost:3000" },
     });
 
     expect(runRegistry.cancel("ok-1")).toBe(false);
@@ -1447,6 +1565,7 @@ describe("a turn that resolves after its run has already terminated", () => {
       input: { ...baseInput, runId: "late-prepare" },
       sink,
       options: {
+        frontendUrl: "http://localhost:3000",
         timeouts: { perStepTimeoutMs: 5, perRunTimeoutMs: 1_000_000 },
       },
     });
@@ -1478,7 +1597,7 @@ describe("a turn that resolves after its run has already terminated", () => {
         orgId: "org-1",
         workspaceId: "ws-1",
         userId: "user-1",
-        frontendUrl: undefined,
+        frontendUrl: "http://localhost:3000",
         timezone: "UTC",
         sessionId: "chat-1",
       },
@@ -1545,6 +1664,7 @@ describe("a turn that resolves after its run has already terminated", () => {
       scope,
       input: { ...baseInput, runId: "cancel-prepare" },
       sink,
+      options: { frontendUrl: "http://localhost:3000" },
     });
     inFlight.catch(() => {});
 
@@ -1575,6 +1695,7 @@ describe("a turn that resolves after its run has already terminated", () => {
       scope,
       input: { ...baseInput, runId: "cancel-prepare-throws" },
       sink,
+      options: { frontendUrl: "http://localhost:3000" },
     });
     inFlight.catch(() => {});
 
@@ -1619,7 +1740,7 @@ describe("AgentRunner.stream — success & interruption", () => {
       scope,
       input: { ...baseInput, runId: "s-output" },
       sink: withOutput,
-      options: { origin: "http://test" },
+      options: { origin: "http://test", frontendUrl: "http://localhost:3000" },
     });
 
     const text = (t: string) => ({
@@ -1659,7 +1780,7 @@ describe("AgentRunner.stream — success & interruption", () => {
       scope,
       input: { ...baseInput, runId: "s-ok" },
       sink,
-      options: { origin: "http://test" },
+      options: { origin: "http://test", frontendUrl: "http://localhost:3000" },
     });
     expect(res).toBe(streamHarness.responseSentinel);
 
@@ -1737,7 +1858,7 @@ describe("AgentRunner.stream — success & interruption", () => {
         messages: [user, seeded] as RunInput["messages"],
       },
       sink,
-      options: { origin: "http://test" },
+      options: { origin: "http://test", frontendUrl: "http://localhost:3000" },
     });
 
     // The SDK's continuation: the streamed message carries the seeded id, with
@@ -1781,7 +1902,7 @@ describe("AgentRunner.stream — success & interruption", () => {
         messages: [user] as RunInput["messages"],
       },
       sink,
-      options: { origin: "http://test" },
+      options: { origin: "http://test", frontendUrl: "http://localhost:3000" },
     });
 
     const fresh = { id: "m1", role: "assistant", parts: [] };
@@ -1808,7 +1929,7 @@ describe("AgentRunner.stream — success & interruption", () => {
       scope,
       input: { ...baseInput, runId: "s-durations" },
       sink,
-      options: { origin: "http://test" },
+      options: { origin: "http://test", frontendUrl: "http://localhost:3000" },
     });
 
     streamHarness.onToolExecutionEnd!({
@@ -1877,7 +1998,7 @@ describe("AgentRunner.stream — success & interruption", () => {
       scope,
       input: { ...baseInput, runId: "s-late-snapshot" },
       sink,
-      options: { origin: "http://test" },
+      options: { origin: "http://test", frontendUrl: "http://localhost:3000" },
     });
 
     streamHarness.onToolExecutionEnd!({
@@ -1946,7 +2067,7 @@ describe("AgentRunner.stream — success & interruption", () => {
       scope,
       input: { ...baseInput, runId: "s-no-detector" },
       sink,
-      options: { origin: "http://test" },
+      options: { origin: "http://test", frontendUrl: "http://localhost:3000" },
     });
 
     // Only the step ceiling — no no-progress condition for interactive runs.
@@ -1968,7 +2089,7 @@ describe("AgentRunner.stream — success & interruption", () => {
       scope,
       input: { ...baseInput, runId: "s-cancel" },
       sink,
-      options: { origin: "http://test" },
+      options: { origin: "http://test", frontendUrl: "http://localhost:3000" },
     });
 
     const partial = {
@@ -2007,7 +2128,7 @@ describe("AgentRunner.stream — success & interruption", () => {
       scope,
       input: { ...baseInput, runId: "s-cancel-final" },
       sink,
-      options: { origin: "http://test" },
+      options: { origin: "http://test", frontendUrl: "http://localhost:3000" },
     });
 
     expect(runRegistry.cancel("s-cancel-final")).toBe(true);
@@ -2065,6 +2186,7 @@ describe("AgentRunner.stream — success & interruption", () => {
       sink,
       options: {
         origin: "http://test",
+        frontendUrl: "http://localhost:3000",
         timeouts: { perRunTimeoutMs: 5, perStepTimeoutMs: 1_000_000 },
       },
     });
@@ -2121,7 +2243,7 @@ describe("AgentRunner.stream — message metadata", () => {
       scope,
       input: { ...baseInput, runId: `s-meta-${Math.random()}` },
       sink: new RecordingSink(),
-      options: { origin: "http://test" },
+      options: { origin: "http://test", frontendUrl: "http://localhost:3000" },
     });
 
     return {
@@ -2254,6 +2376,7 @@ describe("model output ceiling", () => {
       scope,
       input: baseInput,
       sink: new RecordingSink(),
+      options: { frontendUrl: "http://localhost:3000" },
     });
 
     expect(mockStreamText).toHaveBeenCalledWith(
@@ -2270,7 +2393,7 @@ describe("model output ceiling", () => {
       scope,
       input: { ...baseInput, runId: "s-ceiling" },
       sink: new RecordingSink(),
-      options: { origin: "http://test" },
+      options: { origin: "http://test", frontendUrl: "http://localhost:3000" },
     });
 
     expect(mockStreamText).toHaveBeenCalledWith(
@@ -2289,6 +2412,7 @@ describe("model output ceiling", () => {
       scope,
       input: baseInput,
       sink: new RecordingSink(),
+      options: { frontendUrl: "http://localhost:3000" },
     });
 
     const args = mockStreamText.mock.calls[0][0] as {
@@ -2332,6 +2456,7 @@ describe("dangling tool calls in the Transcript", () => {
       scope,
       input: baseInput,
       sink: new RecordingSink(),
+      options: { frontendUrl: "http://localhost:3000" },
     });
 
     expect(vi.mocked(convertToModelMessages)).toHaveBeenCalledWith(

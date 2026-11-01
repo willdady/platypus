@@ -32,7 +32,7 @@ import type {
 
 export type StreamOptions = {
   origin: string;
-  frontendUrl?: string;
+  frontendUrl: string;
   /**
    * Override per-step / per-run timeouts for this run. The HTTP request
    * abort signal is intentionally NOT accepted — Chat runs continue to
@@ -42,7 +42,7 @@ export type StreamOptions = {
 };
 
 export type GenerateOptions = {
-  frontendUrl?: string;
+  frontendUrl: string;
   timeouts?: RunTimeouts;
 };
 
@@ -160,7 +160,7 @@ export class AgentRunner {
     scope: WorkspaceScope,
     input: RunInput,
     origin: string | undefined,
-    frontendUrl: string | undefined,
+    frontendUrl: string,
     timeouts: RunTimeouts | undefined,
     onActivity: (event: ToolActivityEvent) => void,
     signal: AbortSignal,
@@ -210,7 +210,7 @@ export class AgentRunner {
     input: RunInput;
     sink: RunSink;
     origin?: string;
-    frontendUrl?: string;
+    frontendUrl: string;
     timeouts?: RunTimeouts;
     /** The run's Run event recorder, for a headless run that keeps one. */
     events?: RunEventRecorder;
@@ -518,10 +518,10 @@ export class AgentRunner {
     scope: WorkspaceScope;
     input: RunInput;
     sink: RunSink;
-    options?: GenerateOptions;
+    options: GenerateOptions;
   }): Promise<GenerateResult> {
     const { input } = params;
-    const options = params.options ?? {};
+    const options = params.options;
     // One Run event recorder per headless run (#647): the sink is handed it at
     // start and flushes it on its own cadence; the drive fills it, and routes
     // it down to any Sub-Agent the run delegates to.

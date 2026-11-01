@@ -139,7 +139,7 @@ describe("composeToolSet", () => {
     workspaceId: "ws-1",
     agentId: "agent-1",
     userId: "user-1",
-    frontendUrl: undefined,
+    frontendUrl: "http://localhost:3000",
     registerCloser: () => {},
   };
 
@@ -315,7 +315,7 @@ describe("composeToolSet tool-name namespacing", () => {
     workspaceId: "ws-1",
     agentId: "agent-1",
     userId: "user-1",
-    frontendUrl: undefined,
+    frontendUrl: "http://localhost:3000",
     registerCloser: () => {},
   };
 
@@ -557,7 +557,7 @@ describe("the sandbox tool set", () => {
     workspaceId: "ws-1",
     agentId: "agent-1",
     userId: "user-1",
-    frontendUrl: undefined,
+    frontendUrl: "http://localhost:3000",
     registerCloser: () => {},
   };
   const shellExec = vi.fn();
