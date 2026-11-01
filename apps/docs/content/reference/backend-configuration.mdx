@@ -93,12 +93,17 @@ The manifest side is in
 ## Sessions
 
 Session lifetimes are fixed; they are not environment variables. A session
-expires 7 days after it was last used. Any read of it extends it, at most once
-per 24 hours, so a revoked session or a changed password stops working within a
-day rather than immediately. Deleting the User ends their sessions at once.
+expires 7 days after it was last used. Any read slides that expiry forward, at
+most once per 24 hours; that figure is only how often the lifetime renews, not
+a revocation delay. A stolen cookie therefore stays usable for as long as the
+session is kept alive, and for up to a week after its last use.
 
-The browser holds a 5-minute cookie cache, which saves the backend a database
-read per request; it does not extend the session beyond either bound.
+Revoking a session, changing a password in a way that signs other sessions out,
+or deleting the User removes the session from the database, but a cookie
+already issued keeps working until its 5-minute cookie cache expires. That
+cache saves the backend a database read per request, so revocation takes effect
+when it expires rather than at once; it does not extend the session beyond
+either bound.
 
 ## Default admin
 

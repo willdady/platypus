@@ -14,7 +14,8 @@ today.
 
 Sessions are cookies, signed with `BETTER_AUTH_SECRET` and valid for **7 days**
 after their last use. A revoked session, or one signed out after a password
-change, stops working within a day. Rotating the secret signs everybody out.
+change, stops working once its 5-minute cookie cache expires. Rotating the
+secret signs everybody out.
 
 ## Who can create an account
 

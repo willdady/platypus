@@ -22,14 +22,19 @@ const authCookieDomain = resolveAuthCookieDomain();
 /**
  * Session lifetimes. Fixed rather than Operator settings: changing the expiry
  * does not make a deployment safer, and leaving the revocation delay implicit
- * does. A session lasts this long from its last touch, a read extends it at
- * most once per refresh age (so a stolen cookie is useless within a day of the
- * User's last request), and the cookie cache only defers the database read,
- * never the expiry.
+ * does. A session row expires this many days after its last use; a database
+ * read slides that expiry forward, at most once per refresh age. That refresh
+ * age is not a revocation bound: a stolen cookie stays usable for as long as
+ * the session is kept alive, and for this lifetime after its last use.
  */
 export const SESSION_LIFETIME_DAYS = 7;
 export const SESSION_REFRESH_AGE_HOURS = 24;
-/** How long a browser may trust its cached copy of the session. */
+/**
+ * How long the backend trusts the signed session cookie without reading the
+ * database. This is the bound on how long a revoked session, a password change
+ * that signs other sessions out, or a deleted User keeps working; it does not
+ * extend the session.
+ */
 export const SESSION_COOKIE_CACHE_MINUTES = 5;
 
 /**

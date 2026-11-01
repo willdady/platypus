@@ -2207,7 +2207,10 @@ const BACKEND_CONSTANTS = [
     source: "apps/backend/src/auth.ts",
     name: "SESSION_COOKIE_CACHE_MINUTES",
     phrase: (minutes: number) => `${minutes}-minute cookie cache`,
-    files: ["reference/backend-configuration.mdx"],
+    files: [
+      "reference/backend-configuration.mdx",
+      "self-hosting/users-and-access.mdx",
+    ],
     cost: "A reader takes the cache for a second lifetime bound it is not.",
   },
   {
