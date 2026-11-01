@@ -42,9 +42,13 @@ describe("generateEmbedding", () => {
       baseProvider,
       concrete("text-embedding-3-small"),
       "hello world",
+      "chat-1",
     );
 
     expect(result).toEqual([0.1, 0.2, 0.3]);
+    expect(mockOpenProvider).toHaveBeenCalledWith(baseProvider, {
+      sessionId: "chat-1",
+    });
     expect(embeddingModelFn).toHaveBeenCalledWith("text-embedding-3-small");
     expect(mockEmbed).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -65,6 +69,7 @@ describe("generateEmbedding", () => {
         { ...baseProvider, providerType: "Anthropic" },
         concrete("model"),
         "text",
+        "chat-1",
       ),
     ).rejects.toThrow(
       "Provider type 'Anthropic' does not support text embeddings.",

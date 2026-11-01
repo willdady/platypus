@@ -59,6 +59,19 @@ from the Providers available in your Workspace. If a model you expect isn't
 there, it's because no available Provider has it enabled — whoever manages that
 Provider controls the list.
 
+## Header placeholders
+
+A custom header's **value** can carry a placeholder, replaced on every request
+with a value from the work being done. The only one is `${SESSION_ID}`:
+
+| Placeholder     | Replaced with                                                                                                                                                                                                                                                                        |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `${SESSION_ID}` | The **Chat**'s id, for anything done in that Chat — its turns, the Sub-Agents they delegate to, its title, its Memories and its Transcript summary. For a headless **Trigger** run, that run's id instead, so a Chat keeps one session upstream and each Trigger run starts its own. |
+
+A value may contain the placeholder more than once, and header _names_ are never
+substituted. A `$` not followed by `{` is sent as written. Any other
+`${…}` token is rejected when the Provider is saved.
+
 ## Model aliases
 
 A **Model alias** is a stable name a Provider gives one of its models — `fast`,

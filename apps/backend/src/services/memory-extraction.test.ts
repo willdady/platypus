@@ -333,7 +333,11 @@ describe("processMemoryExtractionBatch", () => {
       expect.objectContaining({ id: "p-embed" }),
       "text-embedding-3-small",
       "Updated summary",
+      "chat-1",
     );
+    expect(mockOpenProvider).toHaveBeenCalledWith(extractionProvider, {
+      sessionId: "chat-1",
+    });
     expect(mockDb.values).toHaveBeenCalledWith(
       expect.objectContaining({ embedding: [0.1, 0.2, 0.3] }),
     );

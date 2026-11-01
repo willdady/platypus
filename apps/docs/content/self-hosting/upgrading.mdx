@@ -69,6 +69,30 @@ The overlay that enables the Docker Sandbox is now `compose.docker-sandbox.yaml`
 
 See [Docker adapter](/self-hosting/sandbox/docker#enabling-it).
 
+### PLATYPUS_PLUGIN_CONFIG is removed
+
+Plugin config and credentials now come only from one
+`PLATYPUS_PLUGIN_CONFIG_<NAME>` variable per Plugin. The backend won't start
+while `PLATYPUS_PLUGIN_CONFIG` is still set to a value, so move its contents
+before you upgrade.
+
+For each key in the old JSON object, set a variable named after that key and
+give it the key's value. `<NAME>` is the key without a leading `@platypus/`,
+uppercased, with each `-` turned into `_`:
+
+```bash
+# Before
+PLATYPUS_PLUGIN_CONFIG={"@platypus/docker":{"config":{"allowedNetworks":["shared-services"]}},"cloud-sandbox":{"credentials":{"apiToken":"dtn_live_…"}}}
+
+# After
+PLATYPUS_PLUGIN_CONFIG_DOCKER={"config":{"allowedNetworks":["shared-services"]}}
+PLATYPUS_PLUGIN_CONFIG_CLOUD_SANDBOX={"credentials":{"apiToken":"dtn_live_…"}}
+```
+
+Then delete `PLATYPUS_PLUGIN_CONFIG`. See [Plugin config &
+credentials](/self-hosting/configuration#plugin-config--credentials) for the
+naming rule in full.
+
 ## Coming from 3.29
 
 `/compact` is now a built-in Chat command, so `compact` is no longer a valid
@@ -155,7 +179,8 @@ Platypus 2.0 introduced the
 [Plugin system](/extending/plugin-api-and-config#the-plugin-model). The web-fetch
 tool set and the Docker Sandbox backend stopped having their own environment
 variables and became **Plugins**, enabled through `PLATYPUS_PLUGINS` and
-configured through `PLATYPUS_PLUGIN_CONFIG`.
+configured through `PLATYPUS_PLUGIN_CONFIG`. Since 4.0 each Plugin has its own
+`PLATYPUS_PLUGIN_CONFIG_<NAME>` variable instead, and the steps below use that.
 
 For that hop specifically the changes are **deployment configuration only** —
 three variables removed, their behaviour moved onto the Plugin surface, no
@@ -176,8 +201,8 @@ releases do bring migrations, which is why the section above still applies.
 | Removed in 2.0                             | Replaced by                                                                                |
 | ------------------------------------------ | ------------------------------------------------------------------------------------------ |
 | `PLATYPUS_SANDBOX_DOCKER_ENABLED`          | Listing `@platypus/docker` in `PLATYPUS_PLUGINS` (list membership _is_ the enable switch). |
-| `PLATYPUS_SANDBOX_DOCKER_ALLOWED_NETWORKS` | `config.allowedNetworks` on `@platypus/docker` in `PLATYPUS_PLUGIN_CONFIG`.                |
-| `FETCH_TOOL_IGNORE_ROBOTS_TXT`             | `config.ignoreRobotsTxt` on `@platypus/web-fetch` in `PLATYPUS_PLUGIN_CONFIG`.             |
+| `PLATYPUS_SANDBOX_DOCKER_ALLOWED_NETWORKS` | `config.allowedNetworks` in `PLATYPUS_PLUGIN_CONFIG_DOCKER`.                               |
+| `FETCH_TOOL_IGNORE_ROBOTS_TXT`             | `config.ignoreRobotsTxt` in `PLATYPUS_PLUGIN_CONFIG_WEB_FETCH`.                            |
 
 All three are inert in 2.x. Delete them from your environment.
 
@@ -188,24 +213,18 @@ All three are inert in 2.x. Delete them from your environment.
    keep composing the overlay, now named `compose.docker-sandbox.yaml`. It adds
    `@platypus/docker` to `PLATYPUS_PLUGINS` for you, so don't list it in `.env`.
 3. **If you set `PLATYPUS_SANDBOX_DOCKER_ALLOWED_NETWORKS`:** move the value into
-   `config.allowedNetworks` on `@platypus/docker` in `PLATYPUS_PLUGIN_CONFIG`. The
-   old comma-separated list becomes a JSON array of strings.
+   `config.allowedNetworks` in `PLATYPUS_PLUGIN_CONFIG_DOCKER`. The old
+   comma-separated list becomes a JSON array of strings.
 4. **If you set `FETCH_TOOL_IGNORE_ROBOTS_TXT=true`:** move it to
-   `config.ignoreRobotsTxt` on `@platypus/web-fetch` in `PLATYPUS_PLUGIN_CONFIG`.
+   `config.ignoreRobotsTxt` in `PLATYPUS_PLUGIN_CONFIG_WEB_FETCH`.
 5. **Delete the three removed variables.**
 6. **Restart the backend**, then confirm the result in **Organization settings →
    Plugins**, which lists everything loaded at boot.
 
 Boot is **fail-loud**: a listed Plugin that can't be resolved, or a
-`PLATYPUS_PLUGIN_CONFIG` entry that is malformed or keyed to a Plugin that isn't
-loaded, aborts startup rather than degrading quietly. The error names the Plugin,
-or the variable or config key to fix.
-
-<Callout type="info">
-  `PLATYPUS_PLUGIN_CONFIG` is a **single** JSON object keyed by Plugin name. If
-  you're migrating more than one setting, merge them into one object — don't set
-  the variable twice.
-</Callout>
+`PLATYPUS_PLUGIN_CONFIG_<NAME>` variable that is malformed or matches no loaded
+Plugin, aborts startup rather than degrading quietly. The error names the Plugin
+or the variable to fix.
 
 ### Before and after
 
@@ -222,13 +241,14 @@ FETCH_TOOL_IGNORE_ROBOTS_TXT=true
 becomes:
 
 ```bash
-# 2.x
+# current
 PLATYPUS_PLUGINS=@platypus/web-fetch,@platypus/docker
-PLATYPUS_PLUGIN_CONFIG={"@platypus/docker":{"config":{"allowedNetworks":["shared-services","public-tools"]}},"@platypus/web-fetch":{"config":{"ignoreRobotsTxt":true}}}
+PLATYPUS_PLUGIN_CONFIG_DOCKER={"config":{"allowedNetworks":["shared-services","public-tools"]}}
+PLATYPUS_PLUGIN_CONFIG_WEB_FETCH={"config":{"ignoreRobotsTxt":true}}
 ```
 
-Treat `PLATYPUS_PLUGIN_CONFIG` like any secret-bearing variable — it can carry a
-Plugin's `credentials` block. Inject it from your secret manager; never commit it.
+Treat each `PLATYPUS_PLUGIN_CONFIG_<NAME>` like any secret-bearing variable — it
+can carry a Plugin's `credentials` block. Inject it from your secret manager; never commit it.
 
 ### Also new in 2.0
 

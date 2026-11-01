@@ -291,26 +291,9 @@ A third-party Plugin's manifest name is the name its line in the boot log and
 Treat every `PLATYPUS_PLUGIN_CONFIG_<NAME>` like any secret-bearing env var:
 inject it from your secret manager, never commit it.
 
-<Callout type="warning">
-  **`PLATYPUS_PLUGIN_CONFIG` is deprecated** and will be removed in the next
-  major release. It still works, and boot logs a `warn` while it is set. It is
-  one JSON object keyed by manifest name; migrate by moving each key's value
-  into that Plugin's own variable:
-
-```bash
-# Before
-PLATYPUS_PLUGIN_CONFIG={"@platypus/docker":{"config":{"allowedNetworks":["shared-services"]}},"cloud-sandbox":{"credentials":{"apiToken":"dtn_live_…"}}}
-
-# After
-PLATYPUS_PLUGIN_CONFIG_DOCKER={"config":{"allowedNetworks":["shared-services"]}}
-PLATYPUS_PLUGIN_CONFIG_CLOUD_SANDBOX={"credentials":{"apiToken":"dtn_live_…"}}
-```
-
-The two are never merged. A Plugin configured in both its own variable and
-`PLATYPUS_PLUGIN_CONFIG` aborts boot, so move a Plugin's block in one step
-rather than copying it.
-
-</Callout>
+The single combined `PLATYPUS_PLUGIN_CONFIG` variable is gone, and boot aborts
+while it is set. To move off it, see
+[Upgrading](/self-hosting/upgrading#coming-from-330).
 
 ## Sandbox
 

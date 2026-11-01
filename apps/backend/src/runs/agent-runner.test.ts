@@ -821,7 +821,12 @@ describe("AgentRunner.generate", () => {
       });
 
       expect(mockPrepareChatTurn).toHaveBeenCalledWith(
-        expect.objectContaining({ user, runMode }),
+        expect.objectContaining({
+          user,
+          runMode,
+          // A Chat's run id is the chat id; a Trigger run's is that run's id.
+          sessionId: baseInput.runId,
+        }),
       );
     },
   );
@@ -1475,6 +1480,7 @@ describe("a turn that resolves after its run has already terminated", () => {
         userId: "user-1",
         frontendUrl: undefined,
         timezone: "UTC",
+        sessionId: "chat-1",
       },
       undefined,
       {

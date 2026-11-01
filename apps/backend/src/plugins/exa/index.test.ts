@@ -101,7 +101,7 @@ describe("@platypus/exa plugin", () => {
   it("registers the exa web backend when loaded", async () => {
     const { plugins: loaded } = await loadPlugins({
       pluginNames: ["@platypus/exa"],
-      pluginConfig: { "@platypus/exa": { credentials: { apiKey: "k" } } },
+      env: { PLATYPUS_PLUGIN_CONFIG_EXA: '{"credentials":{"apiKey":"k"}}' },
     });
     expect(loaded[0]).toMatchObject({
       name: "@platypus/exa",

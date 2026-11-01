@@ -19,8 +19,8 @@ describe("@platypus/daytona plugin manifest", () => {
 
     const { plugins: loaded } = await loadPlugins({
       pluginNames: ["@platypus/daytona"],
-      pluginConfig: {
-        "@platypus/daytona": { credentials: { apiKey: "dtn_test" } },
+      env: {
+        PLATYPUS_PLUGIN_CONFIG_DAYTONA: '{"credentials":{"apiKey":"dtn_test"}}',
       },
     });
 

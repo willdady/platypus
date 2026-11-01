@@ -82,6 +82,12 @@ from their profile, else the deployment's `TIMEZONE`, else `UTC`. Current core
 always fills it in; the type marks it optional only because an older core
 doesn't, so fall back to `UTC` if your Plugin must run on one.
 
+Read `sessionId` to tell which Chat or Trigger run the turn belongs to: the
+Chat's id, or the Trigger run's id on a headless run. It stays the same for
+every turn of a Chat and every delegate that Chat starts, and changes on each
+Trigger run. Current core always fills it in too; the type marks it optional
+only because an older core doesn't.
+
 A factory also receives the Plugin's deploy-time config as an appended second
 argument — see
 [Plugin API & config](/extending/plugin-api-and-config#deploy-time-config-and-credentials).

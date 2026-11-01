@@ -192,6 +192,12 @@ export type PrepareChatTurnInput = TurnRequest & {
   workspaceId: string;
   user: { id: string; name: string };
   /**
+   * The Chat's id, or the Trigger run's id for a headless run — the value a
+   * Provider Header's `${SESSION_ID}` placeholder resolves to for every call
+   * this turn makes, including its delegates and background work.
+   */
+  sessionId: string;
+  /**
    * The Chat's Transcript summaries (ADR-0041, issue #1716), newest first —
    * loaded by the caller that owns the chat's id (`startChatTurn`), the same
    * way the pinned Memories block rides down through `RunInput` so turn
@@ -618,13 +624,14 @@ export const prepareChatTurn = async (
     request,
     orgId,
     workspaceId,
+    input.sessionId,
   );
   const { provider, agent, resolvedModelId } = context;
 
   // Opened again here (resolveGenerationPlan already opened it once, to build
   // `context.plan.model`) only for its native search tools — a concern the
   // generation plan itself has no reason to know about.
-  const opened = openProvider(provider);
+  const opened = openProvider(provider, { sessionId: input.sessionId });
 
   // Where this turn runs, shared by the Agent and every delegate it may reach.
   const scope: ToolSessionScope = {
@@ -632,6 +639,9 @@ export const prepareChatTurn = async (
     workspaceId,
     userId: user.id,
     frontendUrl,
+    // The memory tool's embedding call sends the same placeholder value as
+    // every other call this turn makes.
+    sessionId: input.sessionId,
     // Tools always need a zone to work in; the prompt states only the profile's.
     timezone: profileTimezone ?? env().TIMEZONE,
   };
@@ -948,6 +958,8 @@ export const validateTurnAttachments = async (
   args: Pick<TurnRequest, "request" | "messages"> & {
     orgId: string;
     workspaceId: string;
+    /** The run's session id — see `PrepareChatTurnInput.sessionId`. */
+    sessionId: string;
   },
   queries: ChatTurnQueries = drizzleChatTurnQueries,
 ): Promise<void> => {
@@ -960,6 +972,7 @@ export const validateTurnAttachments = async (
       args.request,
       args.orgId,
       args.workspaceId,
+      args.sessionId,
     );
     passthroughFileTypes = passthroughFileTypesForModel(
       context.provider,
@@ -1026,6 +1039,7 @@ const resolveChatContext = async (
   data: ChatTurnRequest,
   orgId: string,
   workspaceId: string,
+  sessionId: string,
 ): Promise<ChatContext> => {
   const { agentId, providerId, modelId } = data;
 
@@ -1061,7 +1075,11 @@ const resolveChatContext = async (
   }
 
   const { plan, provider, resolvedModelId, modelReference, guardrails } =
-    await resolveGenerationPlan(source, { orgId, workspaceId }, queries);
+    await resolveGenerationPlan(
+      source,
+      { orgId, workspaceId, sessionId },
+      queries,
+    );
 
   return {
     provider,
@@ -1119,7 +1137,7 @@ const loadSubAgents = async (
     };
   }
 
-  const { orgId, workspaceId } = scope;
+  const { orgId, workspaceId, sessionId } = scope;
   const assignedIds = [...new Set(agent.subAgentIds)];
   const subAgentRecords = await queries.getSubAgentsByIds(
     assignedIds,
@@ -1148,7 +1166,9 @@ const loadSubAgents = async (
     (subAgent) =>
       resolveGenerationPlan(
         { agent: subAgent },
-        { orgId, workspaceId },
+        // A delegate carries its parent's session id, so a Chat keeps one
+        // upstream session and a Trigger run keeps its own.
+        { orgId, workspaceId, sessionId },
         queries,
       ),
     // Called on a delegate's FIRST invocation, not now: a parent with three
