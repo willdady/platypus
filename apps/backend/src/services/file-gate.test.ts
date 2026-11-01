@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
+import { DEFAULT_MAX_EXTRACTED_TEXT_CHARS } from "@platypus/schemas";
 import type { PlatypusUIMessage } from "../types.ts";
 import {
   FileValidationError,
@@ -30,6 +31,9 @@ const DOCX_TYPE =
 
 const msg = (parts: unknown[]): PlatypusUIMessage =>
   ({ id: "m1", role: "user", parts }) as unknown as PlatypusUIMessage;
+
+/** The cap these fixtures declare no model for. */
+const cap = { maxExtractedTextChars: DEFAULT_MAX_EXTRACTED_TEXT_CHARS };
 
 describe("messagesHaveFileParts", () => {
   it("detects a file part anywhere in the list", () => {
@@ -219,7 +223,7 @@ describe("normalizeFileParts", () => {
         { type: "file", mediaType: "image/png", filename: "a.png", url: "u" },
       ]),
     ];
-    const out = await normalizeFileParts(input, chatPassthrough);
+    const out = await normalizeFileParts(input, chatPassthrough, cap);
     expect(out[0].parts[0]).toEqual(input[0].parts[0]);
   });
 
@@ -236,6 +240,7 @@ describe("normalizeFileParts", () => {
         ]),
       ],
       chatPassthrough,
+      cap,
     );
     const part = out[0].parts[0] as { type: string; text: string };
     expect(part.type).toBe("text");
@@ -256,6 +261,7 @@ describe("normalizeFileParts", () => {
         ]),
       ],
       chatPassthrough,
+      cap,
     );
     const part = out[0].parts[0] as { type: string; text: string };
     // The wrapper fence must be longer than the longest run inside it.
@@ -276,6 +282,7 @@ describe("normalizeFileParts", () => {
         ]),
       ],
       chatPassthrough,
+      cap,
     );
     const part = out[0].parts[0] as { type: string; text: string };
     expect(part.type).toBe("text");
@@ -296,6 +303,7 @@ describe("normalizeFileParts", () => {
         ]),
       ],
       chatPassthrough,
+      cap,
     );
     const part = out[0].parts[0] as { type: string; text: string };
     expect(part.text).toContain("[extracted text from spec.docx]");
@@ -313,7 +321,7 @@ describe("normalizeFileParts", () => {
         },
       ]),
     ];
-    const out = await normalizeFileParts(input, nativePdfPassthrough);
+    const out = await normalizeFileParts(input, nativePdfPassthrough, cap);
     expect(out[0].parts[0]).toEqual(input[0].parts[0]);
   });
 
@@ -356,6 +364,7 @@ describe("normalizeFileParts", () => {
         ]),
       ],
       chatPassthrough,
+      cap,
     );
     const part = out[0].parts[0] as { type: string; text: string };
     expect(part.type).toBe("text");
@@ -379,6 +388,7 @@ describe("normalizeFileParts", () => {
         ]),
       ],
       chatPassthrough,
+      cap,
     );
     const part = out[0].parts[0] as { type: string; text: string };
     expect(part.text).toContain("too large");
@@ -398,6 +408,7 @@ describe("normalizeFileParts", () => {
         ]),
       ],
       chatPassthrough,
+      cap,
     );
     const part = out[0].parts[0] as { type: string; text: string };
     expect(part.type).toBe("text");
@@ -418,6 +429,7 @@ describe("normalizeFileParts", () => {
         ]),
       ],
       chatPassthrough,
+      cap,
     );
     const part = out[0].parts[0] as { type: string; text: string };
     expect(part.type).toBe("text");
@@ -438,6 +450,7 @@ describe("normalizeFileParts", () => {
         ]),
       ],
       chatPassthrough,
+      cap,
     );
     const part = out[0].parts[0] as { type: string; text: string };
     expect(part.text).toContain("report.pdf");
@@ -457,6 +470,7 @@ describe("normalizeFileParts", () => {
         ]),
       ],
       chatPassthrough,
+      cap,
     );
     const part = out[0].parts[0] as { type: string; text: string };
     expect(part.type).toBe("text");
@@ -475,7 +489,7 @@ describe("normalizeFileParts", () => {
         },
       ]),
     ];
-    const out = await normalizeFileParts(input, chatPassthrough);
+    const out = await normalizeFileParts(input, chatPassthrough, cap);
     expect(out[0].parts[0]).toEqual(input[0].parts[0]);
   });
 });

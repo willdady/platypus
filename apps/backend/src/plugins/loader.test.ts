@@ -1206,14 +1206,18 @@ describe("loadPlugins — deploy-time plugin config injection", () => {
 
     // Tool-set factory: invoked as core would at Chat-turn time, with ctx only.
     // Third-party ids are namespaced, so the registry key is prefixed.
-    await registered["acmecloud.managed"].buildTurnTools({
-      workspaceId: "w",
-      agentId: "a",
-      orgId: "o",
-      frontendUrl: undefined,
-      userId: "u",
-      registerCloser: () => {},
-    });
+    await registered["acmecloud.managed"].buildTurnTools(
+      {
+        workspaceId: "w",
+        agentId: "a",
+        orgId: "o",
+        frontendUrl: "http://localhost:3000",
+        userId: "u",
+        registerCloser: () => {},
+      },
+      undefined,
+      () => {},
+    );
 
     // Sandbox create(): invoked as core would, with the per-Workspace values.
     sandboxCalls[0].create({}, {});
@@ -1256,14 +1260,18 @@ describe("loadPlugins — deploy-time plugin config injection", () => {
       },
     });
 
-    await registered["acmecloud.managed"].buildTurnTools({
-      workspaceId: "w",
-      agentId: "a",
-      orgId: "o",
-      frontendUrl: undefined,
-      userId: "u",
-      registerCloser: () => {},
-    });
+    await registered["acmecloud.managed"].buildTurnTools(
+      {
+        workspaceId: "w",
+        agentId: "a",
+        orgId: "o",
+        frontendUrl: "http://localhost:3000",
+        userId: "u",
+        registerCloser: () => {},
+      },
+      undefined,
+      () => {},
+    );
     sandboxCalls[0].create({}, {});
 
     // The two contributions must be handed the *same* resolved block — one
@@ -1344,14 +1352,18 @@ describe("loadPlugins — deploy-time plugin config injection", () => {
       },
     });
 
-    await registered["noschema.plain"].buildTurnTools({
-      workspaceId: "w",
-      agentId: "a",
-      orgId: "o",
-      frontendUrl: undefined,
-      userId: "u",
-      registerCloser: () => {},
-    });
+    await registered["noschema.plain"].buildTurnTools(
+      {
+        workspaceId: "w",
+        agentId: "a",
+        orgId: "o",
+        frontendUrl: "http://localhost:3000",
+        userId: "u",
+        registerCloser: () => {},
+      },
+      undefined,
+      () => {},
+    );
 
     expect(seenPlugin).toEqual({
       config: undefined,
@@ -1437,14 +1449,18 @@ describe("loadPlugins — plugin logger injection", () => {
       baseLogger: opts.baseLogger,
     });
 
-    await registered[`${opts.pluginName}.tools`].buildTurnTools({
-      workspaceId: "w",
-      agentId: "a",
-      orgId: "o",
-      frontendUrl: undefined,
-      userId: "u",
-      registerCloser: () => {},
-    });
+    await registered[`${opts.pluginName}.tools`].buildTurnTools(
+      {
+        workspaceId: "w",
+        agentId: "a",
+        orgId: "o",
+        frontendUrl: "http://localhost:3000",
+        userId: "u",
+        registerCloser: () => {},
+      },
+      undefined,
+      () => {},
+    );
     sandboxCalls[0].create({}, {});
     await webCalls[0].buildTurnTools({
       orgId: "o",
@@ -1558,14 +1574,18 @@ describe("loadPlugins — example third-party plugin", () => {
     // Management tool set: its tool description reflects the SAME token/region.
     const tools = (await registered[
       "example-cloud-sandbox.management"
-    ].buildTurnTools({
-      workspaceId: "w",
-      agentId: "a",
-      orgId: "o",
-      frontendUrl: undefined,
-      userId: "u",
-      registerCloser: () => {},
-    })) as unknown as Record<
+    ].buildTurnTools(
+      {
+        workspaceId: "w",
+        agentId: "a",
+        orgId: "o",
+        frontendUrl: "http://localhost:3000",
+        userId: "u",
+        registerCloser: () => {},
+      },
+      undefined,
+      () => {},
+    )) as unknown as Record<
       string,
       { execute: (i: unknown) => Promise<string> }
     >;
@@ -2175,14 +2195,18 @@ describe("loadPlugins — example third-party npm package (end to end)", () => {
     expect(set.category).toBe("Examples");
     expect(getToolSet("greeting")).toBeUndefined();
 
-    const tools = await set.buildTurnTools({
-      workspaceId: "ws-1",
-      agentId: "agent-1",
-      orgId: "org-1",
-      frontendUrl: undefined,
-      userId: "user-1",
-      registerCloser: () => {},
-    });
+    const tools = await set.buildTurnTools(
+      {
+        workspaceId: "ws-1",
+        agentId: "agent-1",
+        orgId: "org-1",
+        frontendUrl: "http://localhost:3000",
+        userId: "user-1",
+        registerCloser: () => {},
+      },
+      undefined,
+      () => {},
+    );
     // The author writes `greet`; the model is offered `example__greet`
     // (issue #664). The bare name is gone, so core's own turn tools have nothing
     // of this plugin's left to overwrite.
@@ -2217,14 +2241,18 @@ describe("loadPlugins — example third-party npm package (end to end)", () => {
       baseLogger,
     });
 
-    await calls[0].registration.buildTurnTools({
-      workspaceId: "ws-1",
-      agentId: "agent-1",
-      orgId: "org-1",
-      frontendUrl: undefined,
-      userId: "user-1",
-      registerCloser: () => {},
-    });
+    await calls[0].registration.buildTurnTools(
+      {
+        workspaceId: "ws-1",
+        agentId: "agent-1",
+        orgId: "org-1",
+        frontendUrl: "http://localhost:3000",
+        userId: "user-1",
+        registerCloser: () => {},
+      },
+      undefined,
+      () => {},
+    );
 
     expect(lines).toEqual([]);
   });

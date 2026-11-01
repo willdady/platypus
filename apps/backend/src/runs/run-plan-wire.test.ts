@@ -7,6 +7,7 @@ import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import type { ModelConfig } from "@platypus/schemas";
+import { createOverflowRecovery } from "./context-overflow-recovery.ts";
 import {
   buildModelInvocation,
   REQUEST_LEVEL_CACHE_DIRECTIVE,
@@ -123,6 +124,7 @@ const TWO_TURN = [
 const runOne = async (model: LanguageModel, prompt?: string) => {
   const invocation = buildModelInvocation(planWith(model), {
     abortSignal: new AbortController().signal,
+    overflowRecovery: createOverflowRecovery(),
   });
   return generateText({
     ...invocation,
@@ -268,7 +270,10 @@ describe("Reasoning map wire shape", () => {
       const result = await generateText({
         ...buildModelInvocation(
           { ...plan, tools: {}, system: "You are helpful." },
-          { abortSignal: new AbortController().signal },
+          {
+            abortSignal: new AbortController().signal,
+            overflowRecovery: createOverflowRecovery(),
+          },
         ),
         prompt: "hello",
       });
@@ -388,7 +393,10 @@ describe("Reasoning map wire shape", () => {
         ...planWith(createOpenAI({ apiKey: "sk-x" })("gpt-4o")),
         providerOptions: { "local-vllm": { think: true } },
       },
-      { abortSignal: new AbortController().signal },
+      {
+        abortSignal: new AbortController().signal,
+        overflowRecovery: createOverflowRecovery(),
+      },
     );
     expect(invocation.providerOptions).toEqual({
       ...REQUEST_LEVEL_CACHE_DIRECTIVE,
@@ -402,7 +410,10 @@ describe("Reasoning map wire shape", () => {
         ...planWith(createOpenAI({ apiKey: "sk-x" })("gpt-4o")),
         providerOptions: { anthropic: { think: true } },
       },
-      { abortSignal: new AbortController().signal },
+      {
+        abortSignal: new AbortController().signal,
+        overflowRecovery: createOverflowRecovery(),
+      },
     );
     expect(invocation.providerOptions.anthropic).toEqual({
       ...REQUEST_LEVEL_CACHE_DIRECTIVE.anthropic,
@@ -501,7 +512,10 @@ describe("native Reasoning wire shape", () => {
       await generateText({
         ...buildModelInvocation(
           { ...plan, tools: {}, system: "You are helpful." },
-          { abortSignal: new AbortController().signal },
+          {
+            abortSignal: new AbortController().signal,
+            overflowRecovery: createOverflowRecovery(),
+          },
         ),
         prompt: "hello",
       });

@@ -9,16 +9,14 @@
  * unrelated hosts can never work: the browser never sends one host's cookie to
  * the other, and there is no service credential an internal caller can present.
  *
- * The check is loud but not fatal. An Operator on an unsupported topology
- * otherwise gets an app that signs in and then silently serves degraded pages —
- * every server-rendered request arrives unauthenticated and nothing says so.
- * Refusing to start would say it louder still, but it would also turn an
- * upgrade into an outage for a deployment that was running before, so the
- * unsupported topology is reported at startup and then run anyway, exactly as
- * it ran before this check existed.
+ * The check is fatal. An Operator on an unsupported topology otherwise gets an
+ * app that signs in and then silently serves degraded pages — every
+ * server-rendered request arrives unauthenticated and nothing says so. Refusing
+ * to start names the topologies and the variable that fixes them, at boot,
+ * instead of serving a half-broken app until someone notices.
  */
 
-import { logger } from "./logger.ts";
+import { failStartup } from "./boot-env.ts";
 import { backendBaseUrl, frontendBaseUrl } from "./base-urls.ts";
 import { env } from "./env.ts";
 
@@ -73,8 +71,8 @@ const badCookieDomain = (
 ): AuthTopologyResult => ({
   valid: false,
   message:
-    `Server-rendered requests will not be authenticated: ${origins} need a ` +
-    `session cookie scoped to a ` +
+    `This deployment cannot authenticate server-rendered requests: ` +
+    `${origins} need a session cookie scoped to a ` +
     `shared parent domain, but ${AUTH_COOKIE_DOMAIN_VAR} is set to ` +
     `"${domain}", which is not usable as a cookie domain because ${reason}. ` +
     rule,
@@ -105,11 +103,9 @@ export const checkAuthTopology = (
     return {
       valid: false,
       message:
-        `Server-rendered requests may not be authenticated: could not read a ` +
-        `hostname from ${unreadable}. ` +
-        `The backend and frontend hostnames have to be compared before ` +
-        `server-rendered requests can be authenticated. Set each to an ` +
-        `absolute URL (for example, https://api.example.com).`,
+        `This deployment cannot authenticate server-rendered requests: could ` +
+        `not read a hostname from ${unreadable}. Set each to an absolute URL ` +
+        `(for example, https://api.example.com).`,
     };
   }
 
@@ -153,7 +149,7 @@ export const checkAuthTopology = (
     return {
       valid: false,
       message:
-        `Server-rendered requests will not be authenticated: ` +
+        `This deployment cannot authenticate server-rendered requests: ` +
         `${originsClause(backendHost, frontendHost)} are on ` +
         `different hosts, so the browser never sends the backend's session ` +
         `cookie to the frontend and every server-rendered request reaches the ` +
@@ -165,14 +161,14 @@ export const checkAuthTopology = (
 };
 
 /**
- * Read the three values from the environment and report — at module load,
- * before the HTTP server listens — when the topology cannot authenticate
+ * Read the three values from the environment and refuse to start — at module
+ * load, before the HTTP server listens — when the topology cannot authenticate
  * server-side requests. Returns the validated cookie domain, or `undefined`
- * when there is none to apply, including on a topology that was reported.
+ * when the deployment needs none.
  *
- * An unusable `AUTH_COOKIE_DOMAIN` is dropped rather than handed to
- * better-auth: a cookie scoped to a domain neither origin sits under is not
- * sent to either of them, which is a worse failure than the host-only default.
+ * An unusable `AUTH_COOKIE_DOMAIN` is a startup failure too: a cookie scoped to
+ * a domain neither origin sits under is not sent to either of them, so running
+ * with it silently would leave every server-rendered request unauthenticated.
  */
 export const resolveAuthCookieDomain = (): string | undefined => {
   const cookieDomain = env().AUTH_COOKIE_DOMAIN;
@@ -183,8 +179,7 @@ export const resolveAuthCookieDomain = (): string | undefined => {
     cookieDomain,
   );
   if (!result.valid) {
-    logger.error(result.message);
-    return undefined;
+    failStartup(new Error(result.message));
   }
   return result.cookieDomain;
 };

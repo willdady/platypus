@@ -11,6 +11,7 @@ import {
 import { logger } from "../logger.ts";
 import { errorMessage } from "../utils/error-message.ts";
 import { agentRunner } from "../runs/agent-runner.ts";
+import { frontendBaseUrl } from "../base-urls.ts";
 import { TriggerSink } from "../runs/sinks/trigger-sink.ts";
 import { callerDataBlock } from "./caller-data.ts";
 import {
@@ -42,7 +43,6 @@ import type {
   InboundTriggerInput,
   EventTriggerEventPayload,
 } from "@platypus/schemas";
-import { env } from "../env.ts";
 
 /**
  * Trigger firing: the one place a Trigger row becomes a run.
@@ -315,6 +315,8 @@ const runTrigger = async (
     // Off unless this Trigger opts in (#645), which is what keeps a firing's
     // prompt from drifting with interactive-chat activity unrelated to it.
     includeMemories: trigger.includeMemories,
+    // Always on: only a Chat turn withholds the Agent's Memory tools (ADR-0032).
+    memoryTools: true,
   };
 
   const owner = { workspaceId, ownerId: workspace.ownerId };
@@ -361,7 +363,7 @@ const runTrigger = async (
         input,
         sink,
         options: {
-          frontendUrl: env().FRONTEND_URL,
+          frontendUrl: frontendBaseUrl(),
           timeouts: triggerTimeouts(),
         },
       }),

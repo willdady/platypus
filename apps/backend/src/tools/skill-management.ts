@@ -27,7 +27,7 @@ const skillFields = skillBaseSchema.shape;
 export function createSkillManagementTools(
   workspaceId: string,
   orgId: string,
-  frontendUrl: string | undefined,
+  frontendUrl: string,
 ): Record<string, Tool> {
   const ctx: ScopeContext = { orgId, workspaceId };
 
@@ -67,7 +67,7 @@ export function createSkillManagementTools(
         `skills/${found.row.id}`,
       );
 
-      return { ...found.row, scope: found.scope, ...(url && { url }) };
+      return { ...found.row, scope: found.scope, url };
     },
   });
 
@@ -106,7 +106,7 @@ export function createSkillManagementTools(
         `skills/${row.id}`,
       );
 
-      return { ...row, ...(url && { url }) };
+      return { ...row, url };
     },
   });
 

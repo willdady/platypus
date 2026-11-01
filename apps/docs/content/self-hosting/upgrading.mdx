@@ -94,6 +94,59 @@ instructions.
 To keep showing data your Agents produce, use a purpose-built dashboard tool such
 as Grafana or Metabase, and have the Agent write to the store it reads from.
 
+### Deployment URLs are required, and sign-up is invitation-only
+
+Three settings that used to fall back silently must now be set, and the backend
+refuses to start without them, naming the one at fault:
+
+- **`DATABASE_URL`** — no fallback to node-postgres' `PG*` variables. Compose
+  sets this for you; a hand-rolled environment must set it.
+- **`BETTER_AUTH_URL`** — no fallback to `http://localhost:4001`. Compose
+  derives it from `BACKEND_URL`.
+- **`FRONTEND_URL`** — no fallback to `http://localhost:3001`. It must match the
+  URL people load the app from, so check `.env` before you upgrade.
+
+`REQUIRE_INVITATION_TO_SIGN_UP` now defaults to **true**: after the upgrade,
+accounts can only be created by redeeming an invitation link. If you meant to
+keep public sign-up open, set it to `false`. See
+[Who can create an account](/self-hosting/users-and-access#who-can-create-an-account).
+
+The example admin password no longer works in production. With
+`NODE_ENV=production`, which the published image sets, first boot refuses the
+well-known `admin@example.com` / `admin123` pair and exits, as it already did
+for any password under 8 characters. The shipped Compose `.example.env` now
+leaves `ADMIN_PASSWORD` empty, so set one before first boot. A deployment that
+has already seeded its admin is unaffected: the seed never runs again, so
+**change that account's password from the app** if it is still the example one.
+
+### An unsupported cookie topology stops the backend
+
+A backend and frontend on hosts no session cookie can cover — different parent
+domains — used to log an error and start anyway, leaving every server-rendered
+request unauthenticated. It now stops the backend at boot, naming both hostnames
+and `AUTH_COOKIE_DOMAIN`, and so does a malformed `AUTH_COOKIE_DOMAIN`. Put both
+services on one origin or on two subdomains of one parent domain; see
+[Supported topologies](/self-hosting/configuration#supported-topologies).
+
+### Session lifetimes are documented as fixed
+
+Session lifetimes were never configurable, and there is nothing to change; the
+lifetime and the revocation delay are now stated in
+[Sessions](/reference/backend-configuration#sessions) rather than left implicit.
+
+### The session read has a bound
+
+`/auth/get-session` is no longer exempt from rate limiting: it allows 300 reads
+per rolling 60 seconds, far above what reloading and tab-switching produce. Only
+a runaway client reaches it. If you put your own limit on that path at the
+proxy, keep it well above the number of reads a page load makes.
+
+### Plugin authors: `frontendUrl` is never undefined
+
+`ctx.frontendUrl` in the Plugin SDK is typed `string`, not `string | undefined`,
+because the backend cannot boot without `FRONTEND_URL`. Drop any
+`if (ctx.frontendUrl)` guard; it is always a frontend origin.
+
 ## Coming from 3.30
 
 ### The Docker Sandbox overlay is renamed

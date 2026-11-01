@@ -196,9 +196,13 @@ const baseInput = {
   user: { id: "user-1", name: "Test User" },
   messages: [],
   origin: "http://localhost:4000",
+  frontendUrl: "http://localhost:3000",
   // Fixed, not `new Date()`: the retrieval window is an input, so a test that
   // does not care about it must still not vary by when it ran.
   memoriesReferenceDate: new Date("2026-05-03T12:00:00Z"),
+  runMode: "interactive" as const,
+  includeMemories: true,
+  memoryTools: true,
 };
 
 describe("chat-execution", () => {

@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { generateText, jsonSchema, tool } from "ai";
 import type { LanguageModelV3CallOptions } from "@ai-sdk/provider";
 import { MockLanguageModelV3 } from "ai/test";
+import { createOverflowRecovery } from "./context-overflow-recovery.ts";
 import { buildModelInvocation } from "./run-plan.ts";
 import {
   capToolResult,
@@ -97,7 +98,10 @@ describe("tool result size cap", () => {
     const result = await generateText({
       ...buildModelInvocation(
         { model: twoToolModel(prompts), tools, maxSteps: 5 },
-        { abortSignal: new AbortController().signal },
+        {
+          abortSignal: new AbortController().signal,
+          overflowRecovery: createOverflowRecovery(),
+        },
       ),
       prompt: "go",
     });
@@ -137,7 +141,10 @@ describe("tool result size cap", () => {
     await generateText({
       ...buildModelInvocation(
         { model: twoToolModel(prompts), tools, maxSteps: 5 },
-        { abortSignal: new AbortController().signal },
+        {
+          abortSignal: new AbortController().signal,
+          overflowRecovery: createOverflowRecovery(),
+        },
       ),
       prompt: "go",
     });

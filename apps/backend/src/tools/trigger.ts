@@ -4,6 +4,7 @@ import {
   cronTriggerConfigSchema,
   eventTriggerFiltersSchema,
   eventTriggerEventSchema,
+  triggerCreateSchema,
   type CronTriggerConfig,
   type EventTriggerConfig,
 } from "@platypus/schemas";
@@ -21,13 +22,14 @@ import {
   type TriggerRow,
 } from "../services/trigger.ts";
 import { NotFoundError, ValidationError } from "../errors.ts";
+import { formatIssues } from "../zod-issues.ts";
 import { createGetCurrentTime } from "./time.ts";
 import type { ScopeContext } from "../scope.ts";
 
 export function createTriggerTools(
   workspaceId: string,
   orgId: string,
-  frontendUrl: string | undefined,
+  frontendUrl: string,
   /** The acting User's effective timezone (`ToolSetContext.timezone`). */
   timezone: string,
 ): Record<string, Tool> {
@@ -282,12 +284,25 @@ export function createTriggerTools(
     }),
     execute: async (params) => {
       const { label: _label, ...fields } = params;
-      // The module validates the shape against the chosen type.
       try {
+        // The create schema is the one defaults table: parsing here fills the
+        // fields the Tool left out, so the Trigger model is handed a complete
+        // set rather than a second copy of the same defaults. The module then
+        // validates the config against the chosen type.
+        const parsed = triggerCreateSchema.safeParse({
+          ...fields,
+          workspaceId,
+          config: asTriggerConfig(fields.config),
+        });
+        if (!parsed.success) {
+          return { success: false, error: formatIssues(parsed.error.issues) };
+        }
+        // The schema needs a workspace to type its values; the Trigger model
+        // takes the one from `ctx`, which is the only identity it may write to.
+        const { workspaceId: _workspaceId, ...createFields } = parsed.data;
         return withTriggerResult(
-          await createTriggerService(ctx, {
-            ...fields,
-            config: asTriggerConfig(fields.config),
+          await createTriggerService(ctx, createFields, {
+            allowInbound: false,
           }),
         );
       } catch (error) {
@@ -335,12 +350,17 @@ export function createTriggerTools(
       const { triggerId, label: _label, ...fields } = params;
       try {
         return withTriggerResult(
-          await updateTriggerService(ctx, triggerId, {
-            ...fields,
-            ...(fields.config !== undefined && {
-              config: asTriggerConfig(fields.config),
-            }),
-          }),
+          await updateTriggerService(
+            ctx,
+            triggerId,
+            {
+              ...fields,
+              ...(fields.config !== undefined && {
+                config: asTriggerConfig(fields.config),
+              }),
+            },
+            { allowInbound: false },
+          ),
         );
       } catch (error) {
         return toToolError(error);
@@ -360,7 +380,9 @@ export function createTriggerTools(
     }),
     execute: async ({ triggerId }) => {
       try {
-        if (!(await deleteTriggerService(ctx, triggerId))) {
+        if (
+          !(await deleteTriggerService(ctx, triggerId, { allowInbound: false }))
+        ) {
           return { error: "Trigger not found" };
         }
       } catch (error) {

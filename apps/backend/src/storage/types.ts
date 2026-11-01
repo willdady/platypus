@@ -59,5 +59,4 @@ export interface FileExtractionContext {
   orgId: string;
   workspaceId: string;
   chatId: string;
-  messageId?: string;
 }

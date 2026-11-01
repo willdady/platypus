@@ -40,7 +40,7 @@ provider.post(
     // and Skills. Spreading the body let a caller name another Workspace, or
     // set `organizationId` and mint a Shared Provider from the Workspace
     // surface, which only an Org Admin may do (ADR-0006, ADR-0007).
-    const row = await createProvider({ kind: "workspace", ctx }, data);
+    const row = await createProvider({ kind: "workspace", ctx }, data, db);
     return c.json(row, 201);
   },
 );

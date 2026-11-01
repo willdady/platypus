@@ -40,7 +40,7 @@ export function createKanbanTools(
   workspaceId: string,
   agentId: string,
   orgId: string,
-  frontendUrl: string | undefined,
+  frontendUrl: string,
 ): Record<string, Tool> {
   // No board is named: an Agent works across every board in its Workspace.
   const ctx: KanbanContext = {
@@ -49,24 +49,22 @@ export function createKanbanTools(
     actor: { agentId },
   };
 
-  /** The board's page in the frontend, when one is configured. */
-  const boardUrl = (boardId: string): string | undefined =>
+  /** The board's page in the frontend. */
+  const boardUrl = (boardId: string): string =>
     buildResourceUrl(frontendUrl, orgId, workspaceId, `boards/${boardId}`);
 
   /** A deep link that opens the card on its board. */
-  const cardUrl = (boardId: string, cardId: string): string | undefined => {
-    const url = boardUrl(boardId);
-    return url && `${url}?cardId=${cardId}`;
-  };
+  const cardUrl = (boardId: string, cardId: string): string =>
+    `${boardUrl(boardId)}?cardId=${cardId}`;
 
   /** A written card as a Tool returns it: the row, plus a link to it. */
   const withCardUrl = <T extends { id: string }>(result: {
     card: T;
     boardId: string;
-  }) => {
-    const url = cardUrl(result.boardId, result.card.id);
-    return { ...result.card, ...(url && { url }) };
-  };
+  }) => ({
+    ...result.card,
+    url: cardUrl(result.boardId, result.card.id),
+  });
 
   const listAgents = createListAgentsTool({ orgId, workspaceId });
   const { listBoards, getBoardState } = createBoardReadTools(ctx, frontendUrl);
@@ -450,10 +448,7 @@ export async function asToolResult<T>(
  * under the same names — and marked shared, so an Agent granted both gets
  * each once with no collision reported.
  */
-export function createBoardReadTools(
-  scope: KanbanScope,
-  frontendUrl: string | undefined,
-) {
+export function createBoardReadTools(scope: KanbanScope, frontendUrl: string) {
   const listBoards = shareTool(
     "kanban.listBoards",
     tool({
@@ -512,7 +507,7 @@ export function createBoardReadTools(
               })),
             })),
             labels: board.labels,
-            ...(url && { url }),
+            url,
           };
         }),
     }),

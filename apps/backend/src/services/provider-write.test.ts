@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { mockDb, resetMockDb, seedDb } from "../test-utils.ts";
+import { asDb, mockDb, resetMockDb, seedDb } from "../test-utils.ts";
 
 vi.mock("./embedding-invalidation.ts", () => ({
   handleEmbeddingConfigChange: vi.fn().mockResolvedValue(undefined),
@@ -49,6 +49,7 @@ const updateFields = (): ProviderUpdateFields => baseFields();
 // The handle `db.transaction` hands its callback: forwards to the chainable
 // mock but is not `db` itself, so a helper handed `db` instead fails the match.
 const tx = new Proxy(mockDb, {});
+const exec = asDb<Parameters<typeof createProvider>[2]>(mockDb);
 
 describe("provider-write module", () => {
   beforeEach(() => {
@@ -69,6 +70,7 @@ describe("provider-write module", () => {
       const row = await createProvider(
         { kind: "workspace", ctx: workspaceCtx },
         baseFields(),
+        exec,
       );
 
       expect(row).toEqual(inserted);
@@ -84,6 +86,7 @@ describe("provider-write module", () => {
       await createProvider(
         { kind: "organization", orgId: "org-1" },
         baseFields(),
+        exec,
       );
 
       const values = mockDb.values.mock.calls[0][0] as Record<string, unknown>;
@@ -103,6 +106,7 @@ describe("provider-write module", () => {
             { id: "gpt-4", passthroughFileTypes: [] },
           ],
         },
+        exec,
       );
 
       const values = mockDb.values.mock.calls[0][0] as Record<string, unknown>;

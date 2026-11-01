@@ -441,23 +441,25 @@ export const userMayUseWorkspace = async (
  *
  * **Access Control:**
  * - Super admins and org admins always pass.
- * - A non-admin Workspace Owner passes only when a `delegationFlag` is supplied
- *   AND that boolean column is `true` on the workspace row. Without a flag, the
+ * - A non-admin Workspace Owner passes only when a `delegationFlag` names a
+ *   boolean column that is `true` on the workspace row. With `null`, the
  *   resource is admin-only and never delegatable (e.g. Sandboxes).
  *
- * @param delegationFlag - Optional workspace column that, when true, lets the
- *                         owner self-manage this resource. Omit for admin-only.
+ * @param delegationFlag - The workspace column that, when true, lets the owner
+ *                         self-manage this resource, or `null` for admin-only.
  *
  * @example
  * ```typescript
  * // Sandbox: admin-only, never delegatable
- * sandbox.post("/", requireAuth, requireOrgAccess(), requireWorkspaceAccess, requireWorkspaceConfigAccess(), handler);
+ * sandbox.post("/", requireAuth, requireOrgAccess(), requireWorkspaceAccess, requireWorkspaceConfigAccess(null), handler);
  *
  * // MCP: admin by default, owner if the workspace flag is set
  * mcp.post("/", requireAuth, requireOrgAccess(), requireWorkspaceAccess, requireWorkspaceConfigAccess("mcpSelfManagement"), handler);
  * ```
  */
-export const requireWorkspaceConfigAccess = (delegationFlag?: DelegationFlag) =>
+export const requireWorkspaceConfigAccess = (
+  delegationFlag: DelegationFlag | null,
+) =>
   createMiddleware<Env>(async (c, next) => {
     const access = await workspaceConfigAccess(c, delegationFlag);
 
@@ -510,11 +512,12 @@ const CONFIG_ACCESS_DENIED: Record<ConfigAccessDenial, string> = {
  * **Prerequisites:** must run after `requireOrgAccess` and
  * `requireWorkspaceAccess` (reads `orgMembership` and the Workspace scope).
  *
- * @param delegationFlag - Omit for admin-only resources that are never delegatable.
+ * @param delegationFlag - `null` for admin-only resources that are never
+ *   delegatable.
  */
 const workspaceConfigAccess = async (
   c: Context<Env>,
-  delegationFlag?: DelegationFlag,
+  delegationFlag: DelegationFlag | null,
 ): Promise<WorkspaceConfigAccess> => {
   const user = c.get("user");
   const orgMembership = c.get("orgMembership");

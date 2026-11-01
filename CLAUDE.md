@@ -28,7 +28,7 @@ script, test files included. CI fails on any type error — ESLint does not catc
 them, so run it before pushing. Other packages join the gate by adding their own
 `typecheck` script.
 
-Default admin on first startup: `admin@example.com` / `admin123` (override via `ADMIN_EMAIL` / `ADMIN_PASSWORD`).
+Default admin in local development: `admin@example.com` / `admin123` (override via `ADMIN_EMAIL` / `ADMIN_PASSWORD`). The published image sets `NODE_ENV=production`, where the seed refuses that pair, so a deployment must choose its own.
 
 ## Monorepo Layout
 

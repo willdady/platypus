@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { parseEnv } from "./env.ts";
+import { databaseUrl, parseEnv } from "./env.ts";
 
-const valid = { ALLOWED_ORIGINS: "http://localhost:3001" };
+const valid = {
+  ALLOWED_ORIGINS: "http://localhost:3001",
+  DATABASE_URL: "postgres://u:p@db:5432/platypus",
+  BETTER_AUTH_URL: "http://localhost:4001",
+  FRONTEND_URL: "http://localhost:3001",
+};
 
 describe("parseEnv", () => {
   it("applies the defaults to a minimal environment", () => {
@@ -14,6 +19,44 @@ describe("parseEnv", () => {
 
   it("refuses a missing required variable", () => {
     expect(() => parseEnv({})).toThrow(/ALLOWED_ORIGINS/);
+  });
+
+  it.each(["DATABASE_URL", "BETTER_AUTH_URL", "FRONTEND_URL"])(
+    "refuses to boot without %s rather than falling back to a default",
+    (name) => {
+      const source = { ...valid };
+      delete source[name as keyof typeof source];
+
+      expect(() => parseEnv(source)).toThrow(
+        new RegExp(`${name}: is required`),
+      );
+    },
+  );
+
+  it("refuses a malformed deployment URL, naming the variable", () => {
+    expect(() =>
+      parseEnv({ ...valid, BETTER_AUTH_URL: "api.example.com" }),
+    ).toThrow(/BETTER_AUTH_URL/);
+    expect(() => parseEnv({ ...valid, FRONTEND_URL: "not a url" })).toThrow(
+      /FRONTEND_URL/,
+    );
+  });
+
+  it("refuses a DATABASE_URL that is not a Postgres connection string", () => {
+    expect(() =>
+      parseEnv({ ...valid, DATABASE_URL: "mysql://u@db/x" }),
+    ).toThrow(/DATABASE_URL/);
+    expect(() =>
+      parseEnv({ ...valid, DATABASE_URL: "db:5432/platypus" }),
+    ).toThrow(/DATABASE_URL/);
+  });
+
+  it("defaults sign-up to invitation-only", () => {
+    expect(parseEnv(valid).REQUIRE_INVITATION_TO_SIGN_UP).toBe(true);
+    expect(
+      parseEnv({ ...valid, REQUIRE_INVITATION_TO_SIGN_UP: "false" })
+        .REQUIRE_INVITATION_TO_SIGN_UP,
+    ).toBe(false);
   });
 
   it("refuses a non-numeric interval instead of becoming NaN", () => {
@@ -43,12 +86,12 @@ describe("parseEnv", () => {
 
   it("trims comma-list entries and refuses an empty one", () => {
     expect(
-      parseEnv({ ALLOWED_ORIGINS: " http://a.test , http://b.test " })
+      parseEnv({ ...valid, ALLOWED_ORIGINS: " http://a.test , http://b.test " })
         .ALLOWED_ORIGINS,
     ).toEqual(["http://a.test", "http://b.test"]);
-    expect(() => parseEnv({ ALLOWED_ORIGINS: "http://a.test,," })).toThrow(
-      /ALLOWED_ORIGINS/,
-    );
+    expect(() =>
+      parseEnv({ ...valid, ALLOWED_ORIGINS: "http://a.test,," }),
+    ).toThrow(/ALLOWED_ORIGINS/);
   });
 
   it("treats an empty value as unset", () => {
@@ -82,5 +125,20 @@ describe("parseEnv", () => {
         [set]: "x",
       }),
     ).toThrow(new RegExp(`${missing}: is required when ${set} is set`));
+  });
+});
+
+describe("databaseUrl", () => {
+  it("validates only DATABASE_URL, so the migration runner needs no other setting", () => {
+    expect(
+      databaseUrl({ DATABASE_URL: "postgres://u:p@db:5432/platypus" }),
+    ).toBe("postgres://u:p@db:5432/platypus");
+  });
+
+  it("refuses an unset or malformed value, naming the variable", () => {
+    expect(() => databaseUrl({})).toThrow(/DATABASE_URL: is required/);
+    expect(() => databaseUrl({ DATABASE_URL: "mysql://u@db/x" })).toThrow(
+      /DATABASE_URL/,
+    );
   });
 });

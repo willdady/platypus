@@ -26,23 +26,22 @@ describe("mcp-oauth-provider", () => {
   describe("buildOAuthCallbackUrl", () => {
     // The URL is cached at module scope, so each case imports a fresh copy.
     beforeEach(() => {
-      delete process.env.FRONTEND_URL;
+      process.env.FRONTEND_URL = "http://localhost:3001";
       vi.resetModules();
     });
 
     afterEach(() => {
-      delete process.env.FRONTEND_URL;
+      process.env.FRONTEND_URL = "http://localhost:3001";
     });
 
     it.each([
-      [undefined, "http://localhost:3001/oauth/mcp/callback"],
       ["https://app.example.com", "https://app.example.com/oauth/mcp/callback"],
       [
         "https://app.example.com///",
         "https://app.example.com/oauth/mcp/callback",
       ],
     ])("builds the callback from FRONTEND_URL=%s", async (env, expected) => {
-      if (env) process.env.FRONTEND_URL = env;
+      process.env.FRONTEND_URL = env;
       const { buildOAuthCallbackUrl } = await import("./mcp-oauth-provider.ts");
       expect(buildOAuthCallbackUrl()).toBe(expected);
     });
