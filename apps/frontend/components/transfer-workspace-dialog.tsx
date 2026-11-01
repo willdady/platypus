@@ -165,7 +165,7 @@ export function TransferWorkspaceAction({
                 </li>
                 <li>
                   {historyOutcome(keepHistory, nameOf(newOwnerId))} Boards,
-                  cards, Sandbox files and Dashboards are kept.
+                  cards and Sandbox files are kept.
                 </li>
                 <li>
                   Every Trigger is switched off, and every Inbound Trigger and

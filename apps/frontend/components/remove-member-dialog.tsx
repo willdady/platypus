@@ -153,7 +153,7 @@ export function RemoveMemberDialog({
               They own {owned.length === 1 ? "a workspace" : "these workspaces"}{" "}
               here. Transfer each one to another member, or delete it. A
               transfer switches off its Triggers, revokes its tokens and clears
-              its sign-ins; its Boards, Sandbox files and Dashboards are kept.
+              its sign-ins; its Boards and Sandbox files are kept.
             </p>
             {recipients.length === 0 && <NoRecipientHint orgId={orgId} />}
             {owned.map((w) => {

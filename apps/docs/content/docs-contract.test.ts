@@ -41,7 +41,6 @@ import {
   agentSchema,
   chatSchema,
   invitationRedemptionRegisterSchema,
-  dashboardCreateSchema,
   DEFAULT_DIRECT_MAX_STEPS,
   inboundTriggerInputSchema,
   DEFAULT_MAX_EXTRACTED_TEXT_CHARS,
@@ -1616,18 +1615,6 @@ const LIMIT_CLAIMS: LimitClaim[] = [
     anchor: "**Description** _(optional)_ — up to",
     source: "packages/schemas/index.ts (kanbanBoardSchema.description)",
     expected: { max: stringField(kanbanBoardSchema, "description").max },
-  },
-  {
-    doc: "building-with-platypus/dashboards.mdx",
-    anchor: "**Name** — must be unique within the Workspace",
-    source: "packages/schemas/index.ts (dashboardCreateSchema.name)",
-    expected: stringField(dashboardCreateSchema, "name"),
-  },
-  {
-    doc: "building-with-platypus/dashboards.mdx",
-    anchor: "**Description** _(optional)_ — up to",
-    source: "packages/schemas/index.ts (dashboardCreateSchema.description)",
-    expected: { max: stringField(dashboardCreateSchema, "description").max },
   },
   {
     doc: "building-with-platypus/triggers.mdx",

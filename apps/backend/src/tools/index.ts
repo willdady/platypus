@@ -506,7 +506,7 @@ export const MEMORY_TOOLSET_ID = "memory";
 // Note: the native Tool sets now ship as core plugins loaded via the plugin
 // loader from `PLATYPUS_PLUGINS` (see ADR-0013) — `math-conversions`/`time` as
 // `@platypus/tools-basic`, `web-fetch` as `@platypus/web-fetch`, and the
-// Platypus-domain sets (kanban, dashboards, triggers, agent-discovery,
+// Platypus-domain sets (kanban, triggers, agent-discovery,
 // skill-management, agent-management, notifications, memory) as
 // `@platypus/tools-platform`. Their factories live in `./*.ts`; the manifests
 // live under `apps/backend/src/plugins/`.

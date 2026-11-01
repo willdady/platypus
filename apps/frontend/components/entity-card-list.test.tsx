@@ -20,7 +20,6 @@ vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("swr", () => swrMock);
 
 import { BoardsList } from "./boards-list";
-import { DashboardsList } from "./dashboards-list";
 import { EntityCardList } from "./entity-card-list";
 
 // --- Fixtures ----------------------------------------------------------------
@@ -46,13 +45,6 @@ const RESOURCES: {
     entity: "boards",
     confirmPhrase: "delete board",
     queryParam: "boardQuery",
-  },
-  {
-    name: "dashboards",
-    List: DashboardsList,
-    entity: "dashboards",
-    confirmPhrase: "delete dashboard",
-    queryParam: "dashboardQuery",
   },
 ];
 
@@ -210,15 +202,6 @@ describe.each(RESOURCES)(
         expect(screen.getByText("Bravo")).toBeInTheDocument();
         expect(screen.queryByText("Alpha")).not.toBeInTheDocument();
       });
-
-      it("ignores the other list's param", async () => {
-        const other = RESOURCES.find((r) => r.entity !== entity)!;
-        window.history.replaceState(null, "", `?${other.queryParam}=br`);
-        await renderCards(cards);
-
-        expect(searchbox()).toHaveValue("");
-        expect(screen.getByText("Alpha")).toBeInTheDocument();
-      });
     });
   },
 );
@@ -270,17 +253,6 @@ describe("list paging", () => {
     expect(
       screen.getByRole("link", { name: /Create board/ }),
     ).toBeInTheDocument();
-  });
-
-  it("does not page Dashboards, and leaves its button to the page", async () => {
-    mockScopedSWR({ "/dashboards": ten }, { strict: true });
-    await renderList(<DashboardsList orgId="org1" workspaceId="ws1" />);
-
-    expect(shownNames()).toHaveLength(10);
-    expect(screen.queryByRole("navigation")).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("link", { name: /Create/ }),
-    ).not.toBeInTheDocument();
   });
 });
 

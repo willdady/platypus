@@ -26,8 +26,8 @@ Teams self-host Platypus for four reasons:
    for Platypus over a cloud assistant.
 2. **Always-on.** Agents run in the background on shared infrastructure — not on a
    laptop that has to stay awake and plugged in overnight.
-3. **Under one roof.** Agents, Boards, Dashboards, Sandboxes, MCP, Triggers, and Memory
-   in one platform, rather than a stack of stitched-together services.
+3. **Under one roof.** Agents, Boards, Sandboxes, MCP, Triggers, and Memory in one
+   platform, rather than a stack of stitched-together services.
 4. **Provider-agnostic.** Local _or_ frontier models, chosen per Agent and per task, so
    you control the cost/capability trade-off yourself.
 

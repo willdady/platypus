@@ -197,7 +197,7 @@ describe("clearedInputToolCallIds", () => {
   it("skips a failed call and an `{ error }` result", () => {
     const messages = [
       write("e0", { state: "output-error", output: undefined }),
-      write("e1", { toolName: "updateWidgetData", output: { error: "nope" } }),
+      write("e1", { output: { error: "nope" } }),
       ...Array.from({ length: 4 }, (_, i) => write(`w${i}`)),
     ];
     expect(clearedInputToolCallIds(messages, ABOVE).size).toBe(0);

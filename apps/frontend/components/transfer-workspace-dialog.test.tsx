@@ -94,7 +94,7 @@ describe("TransferWorkspaceAction", () => {
       screen.getByText(/Every Trigger is switched off/),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/Boards, cards, Sandbox files and Dashboards are kept/),
+      screen.getByText(/Boards, cards and Sandbox files are kept/),
     ).toBeInTheDocument();
     expect(screen.getByText("Team OpenAI")).toBeInTheDocument();
     expect(screen.queryByText("Shared Anthropic")).not.toBeInTheDocument();

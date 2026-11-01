@@ -475,9 +475,9 @@ MCP tool whose server declares it read-only (see
 no benefit from this for that tool. The four most recent results stay; every
 older one is no longer sent.
 
-Older file writes, file edits and dashboard widget updates get the same help at
-the same point, once they have succeeded: the model stops being sent what they
-wrote, but still sees which file or widget each one changed, so it can read the
+Older file writes and file edits get the same help at the same point, once
+they have succeeded: the model stops being sent what they wrote, but still sees
+which file each one changed, so it can read the
 current contents back if it needs them. The four most recent writes keep what
 they wrote. A write that failed always keeps it, so the model can fix and retry
 it.

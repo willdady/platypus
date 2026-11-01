@@ -105,26 +105,25 @@ describe("applyToolInputClearing", () => {
     });
   });
 
-  it("keeps updateWidgetData's `data` when its result is an `{ error }`, clears it on success", () => {
+  it("keeps an fsWrite's `content` when its result is an `{ error }`, clears it on success", () => {
     const input = (id: string) => ({
-      dashboardId: "d",
-      widgetId: id,
-      type: "markdown",
-      data: { markdown: "big" },
+      path: `${id}.txt`,
+      content: "big",
+      mode: "create",
     });
     const messages = [
-      ...call("updateWidgetData", "u0", input("a"), {
+      ...call("fsWrite", "u0", input("a"), {
         type: "json",
-        value: { error: "Widget not found" },
+        value: { error: "File already exists" },
       }),
-      ...call("updateWidgetData", "u1", input("b")),
+      ...call("fsWrite", "u1", input("b")),
       ...writes(4),
     ];
     const cleared = applyToolInputClearing(messages, ABOVE);
     expect(inputOf(cleared, "u0")).toBe(inputOf(messages, "u0"));
     expect(inputOf(cleared, "u1")).toEqual({
       ...input("b"),
-      data: CLEARED_TOOL_INPUT_MARKER,
+      content: CLEARED_TOOL_INPUT_MARKER,
     });
   });
 

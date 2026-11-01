@@ -37,6 +37,11 @@ core drives_, never _a view core frames_.
 
 ## Preferred alternative: an iframe widget on the existing dashboards feature
 
+> **Update (2026-11-01):** Dashboards were removed in 4.0.0 (#1430), so this
+> alternative no longer exists. Embedding an external view is now left to the
+> external tool itself (Grafana, Metabase and similar). The plugin extension-point
+> decision below is unchanged.
+
 Platypus already has a first-class, workspace-scoped **dashboards** feature —
 `widgetTypeSchema` (`packages/schemas/index.ts`) with a `widgetDataSchema`
 discriminated union, backend routes in `apps/backend/src/routes/dashboard.ts`,

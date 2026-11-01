@@ -57,7 +57,6 @@ describe("Tool Set Registry", () => {
         "time",
         "web-fetch",
         "kanban",
-        "dashboards",
         "triggers",
         "agent-discovery",
         "skill-management",

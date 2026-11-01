@@ -43,12 +43,20 @@ Two more things worth doing every time:
 - **Bump both images together.** The backend and frontend are released as a pair
   and are only tested against each other.
 
-## Dashboards are removed in 4.0.0
+## Coming from 3.30
 
-Dashboards are deprecated through 3.x. Upgrading to 4.0.0 deletes every
-Dashboard and its widgets, and Agents lose the **Dashboards** Tool set. Move
-anything you want to keep before you upgrade; see
-[Dashboards](/building-with-platypus/dashboards).
+### Dashboards are removed
+
+The upgrade deletes every Dashboard and its widgets, and there is no export.
+Copy anything you want to keep before you upgrade.
+
+The **Dashboards** Tool set is gone too, and every Agent that had it loses it.
+An Agent or Skill whose instructions tell it to call `listDashboards`,
+`listWidgets` or `updateWidgetData` no longer has those tools, so rewrite those
+instructions.
+
+To keep showing data your Agents produce, use a purpose-built dashboard tool such
+as Grafana or Metabase, and have the Agent write to the store it reads from.
 
 ## Coming from 3.29
 
@@ -88,25 +96,6 @@ existing deployment:
 
 See [Backend configuration](/reference/backend-configuration) for what each
 variable accepts.
-
-## Coming from 3.4
-
-The Embed widget added in 3.4.0 was stored under the type name `iframe`. From
-3.5.0 it is stored as `embed`, matching what the Dashboard UI has always called
-it. A migration rewrites existing rows when the backend starts, so a production
-upgrade needs nothing from you.
-
-Two cases do:
-
-- **You create Widgets through the REST API.** Send `"type": "embed"`; the
-  backend no longer accepts `iframe`.
-- **You run a development database with `drizzle-kit push`.** Push applies
-  schema changes only and skips migration files, so Embed widgets created before
-  this release keep the old name and stop rendering. Rewrite them by hand:
-
-  ```sql
-  UPDATE "widget" SET "type" = 'embed' WHERE "type" = 'iframe';
-  ```
 
 ## Coming from 2.x
 

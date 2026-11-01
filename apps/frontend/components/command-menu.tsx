@@ -15,7 +15,6 @@ import {
   KanbanSquare,
   Zap,
   Radio,
-  LayoutDashboard,
   BookOpen,
   History,
   RotateCw,
@@ -183,14 +182,6 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
           >
             <KanbanSquare />
             <span>New board</span>
-          </CommandItem>
-          <CommandItem
-            onSelect={() => {
-              runCommand(() => router.push(routes.dashboards.create));
-            }}
-          >
-            <LayoutDashboard />
-            <span>New dashboard</span>
           </CommandItem>
           <CommandItem
             onSelect={() => {

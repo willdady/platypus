@@ -113,7 +113,6 @@ beforeEach(async () => {
     INSERT INTO "context" ("id", "user_id", "workspace_id", "content") VALUES
       ('ctx-1', 'u-old', 'ws-1', 'I am Olive');
     INSERT INTO "kanban_board" ("id", "workspace_id", "name") VALUES ('board-1', 'ws-1', 'Work');
-    INSERT INTO "dashboard" ("id", "workspace_id", "name") VALUES ('dash-1', 'ws-1', 'Stats');
   `);
 });
 
@@ -264,7 +263,6 @@ describe("transferWorkspace, whatever the history choice", () => {
       await transfer("u-new", keepHistory);
 
       expect(await ids("kanban_board")).toEqual(["board-1"]);
-      expect(await ids("dashboard")).toEqual(["dash-1"]);
       expect(await ids("sandbox")).toEqual(["sb-1", "sb-2"]);
       expect(await ids("provider")).toEqual(["p-1", "p-2"]);
       expect(

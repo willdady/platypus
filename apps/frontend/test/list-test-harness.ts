@@ -23,7 +23,7 @@ export {
 
 /**
  * Shared setup for the resource-list test files (agents, org agents, skills,
- * triggers, blueprints, boards, dashboards, users, manage-sharing): one auth,
+ * triggers, blueprints, boards, users, manage-sharing): one auth,
  * navigation, toast and data-fetching mock, plus the row-menu and confirm
  * gestures every one of them performs, in place of a hand-rolled copy per
  * file.

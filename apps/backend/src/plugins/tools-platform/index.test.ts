@@ -32,7 +32,6 @@ import {
 const EXPECTED_IDS = [
   "kanban",
   "kanban-boards",
-  "dashboards",
   "triggers",
   "agent-discovery",
   "skill-management",

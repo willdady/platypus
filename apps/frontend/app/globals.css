@@ -191,12 +191,6 @@
   }
 }
 
-/* Override react-grid-layout placeholder outside any @layer so it beats the
-   unlayered stylesheet imported from the package. */
-.react-grid-item.react-grid-placeholder {
-  background: var(--primary) !important;
-}
-
 /* Honour the OS "reduce motion" setting for CSS animations and transitions:
    Tailwind's animate-*, tw-animate-css's enter and exit, and every transition.
    Near-zero rather than none, so animationend and transitionend still fire for

@@ -60,3 +60,7 @@ The "one config namespace" above was carried by a single `PLATYPUS_PLUGIN_CONFIG
 - **The v1 `configSchema` branch is gone,** as the API v2 amendment above expected. With no shape difference left inside the window, core no longer carries the manifest's `apiVersion` into `prepare`.
 - **`OLDEST_SUPPORTED_API_VERSION` is `PLUGIN_API_VERSION - 1`.** The `Math.max(1, …)` floor only mattered at major 1.
 - **Shipped as a core minor, not a major.** Every published SDK before 1.1.1 pointed `main` at `index.ts`, which Node will not strip types from under `node_modules`, so no Plugin importing a runtime value from the SDK has ever loaded from npm. The only v1 Plugins that could be running are bundled ones or ones using `import type` with a literal `apiVersion`; a code search found none outside this repo. That residual risk is accepted. The SDK itself still takes a major (2.0.0) because `PLUGIN_API_VERSION` changes.
+
+## Update (2026-11-01): `dashboards` tool set removed
+
+Dashboards were removed in 4.0.0 (#1430), taking the `dashboards` tool set out of `@platypus/tools-platform`. The grouping rule above is unchanged.

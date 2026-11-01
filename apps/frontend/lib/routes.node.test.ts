@@ -106,18 +106,12 @@ describe("workspaceRoutes", () => {
     expect(routes.agents.create).toBe("/org1/workspace/ws1/agents/create");
     expect(routes.skills.create).toBe("/org1/workspace/ws1/skills/create");
     expect(routes.boards.create).toBe("/org1/workspace/ws1/boards/create");
-    expect(routes.dashboards.create).toBe(
-      "/org1/workspace/ws1/dashboards/create",
-    );
     expect(routes.triggers.create).toBe("/org1/workspace/ws1/triggers/create");
   });
 
   it("builds item paths", () => {
     expect(routes.agents.detail("a1")).toBe("/org1/workspace/ws1/agents/a1");
     expect(routes.boards.detail("b1")).toBe("/org1/workspace/ws1/boards/b1");
-    expect(routes.dashboards.detail("d1")).toBe(
-      "/org1/workspace/ws1/dashboards/d1",
-    );
     expect(routes.triggers.detail("t1")).toBe(
       "/org1/workspace/ws1/triggers/t1",
     );
@@ -126,9 +120,6 @@ describe("workspaceRoutes", () => {
   it("builds the per-item settings paths", () => {
     expect(routes.boards.settings("b1")).toBe(
       "/org1/workspace/ws1/boards/b1/settings",
-    );
-    expect(routes.dashboards.settings("d1")).toBe(
-      "/org1/workspace/ws1/dashboards/d1/settings",
     );
   });
 

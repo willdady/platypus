@@ -28,18 +28,18 @@ Platypus is an open-source, full-stack application for building AI Agents that r
 
 - **Sovereignty.** Run against local or in-house models (Ollama, vLLM, Qwen, …) so internal data never leaves your infrastructure.
 - **Always-on.** Agents run on triggers and keep working server-side after you close the tab — not on a laptop that has to stay awake.
-- **Under one roof.** Agents, Boards, Dashboards, Sandboxes, MCP, Triggers, and Memory in one platform instead of a stack of stitched-together services.
+- **Under one roof.** Agents, Boards, Sandboxes, MCP, Triggers, and Memory in one platform instead of a stack of stitched-together services.
 - **Provider-agnostic.** Local _or_ frontier models, chosen per Agent, so you control the cost/capability trade-off.
 
 ## ✨ Key Features
 
 - **🤖 Agents, Skills & Sub-Agents:** Build an Agent once — model, instructions, and tools — then give it reusable Skills it loads on demand and sub-agents it can delegate to.
-- **🧰 Built-in Tool Sets:** Agents move Kanban cards, update Dashboards, post Notifications, manage Triggers, read the web, and even build other Agents and Skills.
+- **🧰 Built-in Tool Sets:** Agents move Kanban cards, post Notifications, manage Triggers, read the web, and even build other Agents and Skills.
 - **🔌 MCP Support:** First-class **Model Context Protocol** support, so Agents connect securely to local and remote data sources.
 - **📡 A2A Endpoints:** Expose an Agent to outside agents and chat platforms over the open [A2A](https://a2a-protocol.org) protocol, with a token per client and every conversation kept as an ordinary Chat.
 - **🏖️ Sandbox:** Shell and filesystem access inside an isolated, per-workspace execution environment, with pluggable Docker and SSH reference backends.
 - **🧠 Memory:** Facts and preferences are extracted from your conversations in the background and injected into future chats, so Agents remember you over time.
-- **📋 Boards & Dashboards:** Drag-and-drop Kanban boards and widget-based dashboards, both readable and updatable by Agents through built-in tools.
+- **📋 Boards:** Drag-and-drop Kanban boards, readable and updatable by Agents through built-in tools.
 - **⏰ Triggers:** Run Agents on a cron schedule, as a one-off, or in response to Workspace events like a card landing on a Board.
 - **🔔 Notifications & Webhooks:** Agents post Notifications to the Workspace, and HMAC-signed webhooks push Board and Notification events to your own systems, with per-event filtering and automatic retries.
 - **🏢 Multi-Tenancy:** Organizations and Workspaces isolate data and keep one team's work out of another's.
@@ -75,7 +75,7 @@ The docs site is the single source of truth for setup, concepts, and reference m
 - **[Administering](https://docs.platypus.chat/administering)** — managing Workspaces and sharing resources across an Organization.
 - **[Self-Hosting](https://docs.platypus.chat/self-hosting)** — Docker Compose, configuration & environment, providers & auth, and sandbox infrastructure.
 - **[Concepts](https://docs.platypus.chat/concepts)** — the domain model: Organizations, Workspaces, Agents, Skills, MCP, Sandbox, and Memory.
-- **[Building with Platypus](https://docs.platypus.chat/building-with-platypus)** — agents & sub-agents, skills, tool sets, MCP servers, A2A endpoints, triggers, boards, dashboards, notifications, and webhooks.
+- **[Building with Platypus](https://docs.platypus.chat/building-with-platypus)** — agents & sub-agents, skills, tool sets, MCP servers, A2A endpoints, triggers, boards, notifications, and webhooks.
 - **[Extending](https://docs.platypus.chat/extending)** — writing plugins: Tool sets, Sandbox backends, and web-search backends.
 - **[Reference](https://docs.platypus.chat/reference)** — backend and frontend configuration reference.
 

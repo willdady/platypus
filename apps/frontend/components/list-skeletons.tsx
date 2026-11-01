@@ -184,7 +184,7 @@ export type CardSkeletonProps = {
 
 /**
  * The `grid-cols-1 lg:grid-cols-2` card list most resources use (agents,
- * skills, triggers, blueprints, boards, dashboards): outline `Item` cards of
+ * skills, triggers, blueprints, boards): outline `Item` cards of
  * a title, a description, whatever the card carries below it, and the menu.
  */
 export function CardGridSkeleton({

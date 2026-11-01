@@ -2,7 +2,6 @@ import type { PlatypusPlugin } from "@platypuschat/plugin-sdk";
 import { PLUGIN_API_VERSION } from "@platypuschat/plugin-sdk";
 import { createKanbanTools } from "../../tools/kanban.ts";
 import { createKanbanBoardTools } from "../../tools/kanban-boards.ts";
-import { createDashboardTools } from "../../tools/dashboard.ts";
 import { createTriggerTools } from "../../tools/trigger.ts";
 import { createAgentDiscoveryTools } from "../../tools/agent-discovery.ts";
 import { createSkillManagementTools } from "../../tools/skill-management.ts";
@@ -11,7 +10,7 @@ import { createNotificationTools } from "../../tools/notification.ts";
 import { createMemoryTools } from "../../tools/memory.ts";
 
 // Core plugin: the Platypus-domain Tool sets — the ones that touch Platypus's
-// own data (kanban boards, dashboards, triggers, memory, notifications, agent
+// own data (kanban boards, triggers, memory, notifications, agent
 // discovery/management, skill management). Grouped by cohesion per ADR-0013: no
 // single one of these is a capability an Operator would deny in isolation (that
 // carve-out is reserved for @platypus/web-fetch's egress and @platypus/docker's
@@ -45,14 +44,6 @@ export const plugin: PlatypusPlugin = {
           "Create, edit and delete kanban boards and their columns in this workspace",
         tools: ({ workspaceId, orgId, frontendUrl }) =>
           createKanbanBoardTools(workspaceId, orgId, frontendUrl),
-      },
-      {
-        id: "dashboards",
-        name: "Dashboards",
-        category: "Productivity",
-        description:
-          "List dashboards and widgets, and update widget data in this workspace",
-        tools: ({ workspaceId }) => createDashboardTools(workspaceId),
       },
       {
         id: "triggers",

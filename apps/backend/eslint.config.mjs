@@ -11,7 +11,6 @@ const POSITIONAL_DB_ROUTE_TESTS = [
   "src/routes/attachment.test.ts",
   "src/routes/chat.test.ts",
   "src/routes/context.test.ts",
-  "src/routes/dashboard.test.ts",
   "src/routes/files.test.ts",
   "src/routes/hooks.test.ts",
   "src/routes/invitation-link.test.ts",
