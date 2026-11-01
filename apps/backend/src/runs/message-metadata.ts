@@ -118,9 +118,9 @@ export const createMessageMetadata = ({
   // Whether the step currently being folded has written any prose, and whether
   // the one before it did. The Step ceiling's answer step (issue #1730) is the
   // last permitted call, so at the terminal finish the second says whether that
-  // call — the one told to answer — actually answered. Only read there: a
-  // stream that aborts mid-step emits no terminal finish, so a stale reading
-  // cannot be consulted.
+  // call — the one told to answer — wrote anything. It is consulted only when
+  // the terminal finish is a normal stop; an aborted or errored run settles
+  // through its own path and never reaches the step-ceiling rule.
   let stepWroteText = false;
   let lastStepWroteText = false;
   // The running Token usage sum (issue #354) — folded across every step that

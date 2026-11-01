@@ -1099,6 +1099,25 @@ describe("the Step ceiling's answer step", () => {
     expect(messages?.at(-1)?.metadata?.stoppedAtStepLimit).toBe(true);
   });
 
+  // A ceiling of one means the only call is the answer step: no extra call, no
+  // special case. Proven end to end through each drive, not just at the
+  // `prepareStep` seam.
+  it.each(["chat", "delegate", "trigger"] as const)(
+    "puts the instruction on a %s's only call when the ceiling is one",
+    async (shape) => {
+      const captured: Captured[] = [];
+      const { stoppedAtStepLimit } = await runShape(
+        shape,
+        toolLoopPlan(ignoresTheInstruction(captured), 1),
+      );
+
+      expect(captured).toHaveLength(1);
+      expect(sentInstruction(captured[0])).toBe(true);
+      expect(sentTool(captured[0])).toBe(true);
+      expect(stoppedAtStepLimit).toBe(true);
+    },
+  );
+
   it.each(["chat", "delegate", "trigger"] as const)(
     "records no cutoff when the %s's model answers on the last step",
     async (shape) => {

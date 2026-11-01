@@ -306,6 +306,31 @@ describe("the answer step wire shape", () => {
       1,
     );
   });
+
+  // Gemini does not coalesce the two, and does not need to: this provider
+  // already sends one `contents` entry per tool-result message, so a second
+  // user entry in a row is a shape it produces today. Pinned so the adapter's
+  // behaviour is recorded rather than assumed.
+  it("Google: the instruction is a second user content, with the tool declared", async () => {
+    const captured: CapturedBody[] = [];
+    const model = createGoogleGenerativeAI({
+      apiKey: "sk-x",
+      fetch: recordingFetch(captured, GOOGLE_RESPONSE),
+    })("gemini-2.5-pro");
+
+    const result = await runOne(model, "hello", {
+      maxSteps: 1,
+      tools: { probe: probe() },
+    });
+
+    const contents = captured[0].body.contents as Array<{
+      role: string;
+    }>;
+    expect(contents.map((c) => c.role)).toEqual(["user", "user"]);
+    expect(JSON.stringify(contents)).toContain(ANSWER_STEP_INSTRUCTION);
+    expect(captured[0].body.tools).toHaveLength(1);
+    expect(result.warnings ?? []).toEqual([]);
+  });
 });
 
 /**

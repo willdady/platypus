@@ -19,14 +19,13 @@ instruction on the only call, and no turn makes `maxSteps + 1` calls.
 ## Considered options
 
 - **`toolChoice: "none"` on the last step.** The obvious reading of "reserve the
-  step for an answer", and rejected on two measured grounds. On Bedrock the
-  provider reads `none` by emptying its tool list, so the request declares no
-  tools while the conversation it carries is still full of `toolUse` and
-  `toolResult` blocks — exactly the shape the disabled-tools path exists to
-  avoid, arriving at the vendor instead. Across every Provider type it also
-  changes the front of the request, and the front is what is cached (ADR-0020):
-  the whole research phase would be re-read at full price on the one call that is
-  supposed to use it.
+  step for an answer", and rejected on two grounds. On Bedrock the provider reads
+  `none` by emptying its tool list, so the request declares no tools while the
+  conversation it carries still holds `toolUse` and `toolResult` blocks — a shape
+  the providers are never sent today, arrived at only by taking tools away.
+  Across every Provider type it also rewrites the front of the request, and the
+  front is what is cached (ADR-0020): the whole research phase would be re-read
+  at full price on the one call that is supposed to use it.
 - **`activeTools: []`, or any Provider-type branch.** The same prefix problem
   without even the vendor-side guarantee, and a branch is what the caching seam
   deliberately does not have.
@@ -42,15 +41,19 @@ instruction on the only call, and no turn makes `maxSteps + 1` calls.
 - **The instruction is a trailing user message, and nothing else changes.** No
   `tools`, `activeTools` or `toolChoice` override; `prepareStep` returns only a
   `messages` array, as it already did for Tool-result clearing and the Bedrock
-  cache point. Every Provider coalesces a user message that follows tool results
-  into the same turn, so there is one wire message, not two.
+  cache point. What the adapters do with it differs and is not papered over:
+  Anthropic and Bedrock group it with the preceding user/tool turn into one wire
+  message; OpenAI accepts a second user message; Gemini already receives one
+  `contents` entry per tool-result message from this provider, so an extra user
+  entry is a shape it handles today.
 - **It exists in the request only.** `prepareStep`'s override never reaches the
   reducer's response messages, so nothing is persisted, rendered, or replayed on
   a later turn.
 - **The Bedrock point still trails the request.** The point is placed after the
-  instruction, because the instruction is the final message. The prefix in front
-  of it is byte-identical to the previous step, which is what keeps the cache
-  read.
+  instruction, because the instruction is the final message. The conversation in
+  front of it is the one the previous step sent — only the point moves from the
+  old tail to the new one — so the earlier prefix is still a cacheable prefix on
+  every Provider type.
 - **A model that ignores it still cuts off visibly.** It calls a tool, the loop
   stops after that step, `stoppedAtStepLimit` is recorded and the "cut short at
   the step limit" notice is shown exactly as before. A model that stops on the
@@ -74,4 +77,5 @@ instruction on the only call, and no turn makes `maxSteps + 1` calls.
   (the Output-ceiling analogue for Trigger runs), #540 and #324 (the notices and
   the empty-delegate fallback).
 - ADR-0018 (declared context windows, tool-result clearing), ADR-0020 (the
-  stable cached prefix, and the tail channel this ADR declines to build).
+  stable cached prefix; its "no tail channel" consequence is amended by this
+  ADR, which adds one — a single instruction, used once and never persisted).

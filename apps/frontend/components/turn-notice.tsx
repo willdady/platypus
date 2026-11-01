@@ -37,11 +37,14 @@ export function TurnNotice({
   return (
     <div
       className={cn(
-        "flex items-center gap-1.5 text-muted-foreground text-xs",
+        // `items-start` keeps the icon on the first line once a notice wraps:
+        // the step-limit notices name their remedy in a second sentence, and a
+        // centred icon beside two lines reads as belonging to neither.
+        "flex items-start gap-1.5 text-muted-foreground text-xs",
         className,
       )}
     >
-      <TriangleAlertIcon className="size-3.5 shrink-0" />
+      <TriangleAlertIcon className="mt-0.5 size-3.5 shrink-0" />
       <span>{children}</span>
     </div>
   );
