@@ -4,21 +4,17 @@ import { AgentCardsSkeleton, AgentsList } from "@/components/agents-list";
 import { SkillCardsSkeleton, SkillsList } from "@/components/skills-list";
 import { TriggerCardsSkeleton, TriggerList } from "@/components/trigger-list";
 import { BoardsList } from "@/components/boards-list";
-import { DashboardsList } from "@/components/dashboards-list";
 import { CollapsibleSection } from "@/components/collapsible-section";
 import { useSectionOpen } from "@/hooks/use-section-open";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import {
   Bot,
   MessageSquare,
-  Plus,
   FolderOpen,
   Sparkles,
   Zap,
   KanbanSquare,
-  LayoutDashboard,
   AlertCircle,
   type LucideIcon,
 } from "lucide-react";
@@ -28,7 +24,6 @@ import {
   CardGridSkeleton,
   SkeletonLine,
 } from "@/components/list-skeletons";
-import Link from "next/link";
 import { NoProvidersEmptyState } from "@/components/no-providers-empty-state";
 import { ListError } from "@/components/list-state";
 import { FetchErrorNotice } from "@/components/fetch-error-notice";
@@ -46,13 +41,12 @@ import {
   type Organization,
 } from "@platypus/schemas";
 import { useParams } from "next/navigation";
-import { orgRoutes, workspaceRoutes } from "@/lib/routes";
+import { orgRoutes } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 
 /** Where each collapsible section persists its open state. */
 const SECTION_KEYS = {
   skills: "section:skills:open",
-  dashboards: "section:dashboards:open",
   boards: "section:boards:open",
   triggers: "section:triggers:open",
 } as const;
@@ -132,13 +126,13 @@ function WorkspaceSkeleton() {
 
       {/* Stats Cards - mobile */}
       <div className="flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden pb-1 lg:hidden">
-        {Array.from({ length: 6 }).map((_, i) => (
+        {Array.from({ length: 5 }).map((_, i) => (
           <Skeleton key={i} className="h-[46px] w-24 shrink-0 rounded-xl" />
         ))}
       </div>
       {/* Stats Cards - desktop */}
-      <div className="hidden lg:grid gap-4 grid-cols-6">
-        {Array.from({ length: 6 }).map((_, i) => (
+      <div className="hidden lg:grid gap-4 grid-cols-5">
+        {Array.from({ length: 5 }).map((_, i) => (
           <Skeleton key={i} className="h-[106px] w-full rounded-xl" />
         ))}
       </div>
@@ -161,17 +155,6 @@ function WorkspaceSkeleton() {
       >
         <SkillCardsSkeleton cards={2} agentLine />
         <ButtonRowSkeleton widths={["w-32"]} />
-      </CollapsibleSectionSkeleton>
-
-      <Separator />
-
-      <CollapsibleSectionSkeleton
-        storageKey={SECTION_KEYS.dashboards}
-        titleWidth="w-36"
-        descriptionWidth="w-96"
-      >
-        <CardGridSkeleton cards={2} descriptionLines={1} />
-        <ButtonRowSkeleton widths={["w-44"]} />
       </CollapsibleSectionSkeleton>
 
       <Separator />
@@ -243,7 +226,6 @@ function Workspace() {
   const params = useParams();
   const orgId = params.orgId as string;
   const workspaceId = params.workspaceId as string;
-  const routes = workspaceRoutes(orgId, workspaceId);
   const { user } = useAuth();
   const backendUrl = useBackendUrl();
 
@@ -278,7 +260,6 @@ function Workspace() {
   );
   const agents = useScopedList<unknown>("agents", scope);
   const skills = useScopedList<unknown>("skills", scope);
-  const dashboards = useScopedList<unknown>("dashboards", scope);
   const boards = useScopedList<unknown>("boards", scope);
   const triggers = useScopedList<unknown>("triggers?includeFired=true", scope);
 
@@ -334,13 +315,6 @@ function Workspace() {
       icon: Sparkles,
       read: skills,
       count: listCount(skills),
-    },
-    {
-      label: "Dashboards",
-      description: "Widget-based views",
-      icon: LayoutDashboard,
-      read: dashboards,
-      count: listCount(dashboards),
     },
     {
       label: "Boards",
@@ -401,7 +375,7 @@ function Workspace() {
               </Card>
             ))}
           </div>
-          <div className="hidden lg:grid gap-4 grid-cols-6">
+          <div className="hidden lg:grid gap-4 grid-cols-5">
             {stats.map((stat) => (
               <Card key={stat.label} className="gap-2 py-4">
                 <CardHeader className="flex flex-row items-center justify-between pb-0 px-4">
@@ -449,26 +423,6 @@ function Workspace() {
             storageKey={SECTION_KEYS.skills}
           >
             <SkillsList orgId={orgId} workspaceId={workspaceId} />
-          </CollapsibleSection>
-
-          <Separator />
-
-          {/* Dashboards Section */}
-          <CollapsibleSection
-            title={
-              <>
-                <LayoutDashboard className="size-5" /> Dashboards
-              </>
-            }
-            description="Widget-based dashboards for surfacing agent data at a glance."
-            storageKey={SECTION_KEYS.dashboards}
-          >
-            <DashboardsList orgId={orgId} workspaceId={workspaceId} />
-            <Button variant="outline" className="self-start" asChild>
-              <Link href={routes.dashboards.create}>
-                <Plus /> Create dashboard
-              </Link>
-            </Button>
           </CollapsibleSection>
 
           <Separator />

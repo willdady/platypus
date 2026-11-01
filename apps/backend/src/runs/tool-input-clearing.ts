@@ -26,7 +26,7 @@ import type {
  * which is exactly why its input is safe to drop.
  */
 export const CLEARED_TOOL_INPUT_MARKER =
-  "[Tool input cleared: this content was removed from what was sent to the model to free up space in its context window. The call succeeded; read the file or widget back to see its current state.]";
+  "[Tool input cleared: this content was removed from what was sent to the model to free up space in its context window. The call succeeded; read the file back to see its current state.]";
 
 export const DEFAULT_INPUT_CLEARING_POLICY: ClearingPolicy = {
   thresholdFraction: TOOL_RESULT_CLEARING_THRESHOLD,

@@ -5,7 +5,7 @@ description: Card conventions for Platypus frontend lists. Use when adding or ch
 
 # Frontend Card Conventions
 
-The Workspace home's Agents, Boards, Dashboards, Triggers and Skills cards are
+The Workspace home's Agents, Boards, Triggers and Skills cards are
 the reference implementation; a new card list reads the same way.
 
 Build every card list on `EntityCardList` (`components/entity-card-list.tsx`).
@@ -26,7 +26,6 @@ itself stays a plain, non-clickable surface.
 | --------- | --------------------------------- | ----------------------------------------------- |
 | Agent     | nothing — **New chat** is primary | the visible button is the main action           |
 | Board     | the board                         | its main view                                   |
-| Dashboard | the dashboard                     | its main view                                   |
 | Trigger   | its runs, filtered to it          | the runs are what a Trigger produces            |
 | Skill     | Edit                              | it has no view beyond its settings              |
 

@@ -10,12 +10,11 @@ description: Which Platypus frontend component a UI state uses, and how it reads
 Every empty state renders through one of two components, picked by what the
 empty thing _is_ on the page:
 
-| The empty thing is…                                            | Component                    | Examples                                                                                           |
-| -------------------------------------------------------------- | ---------------------------- | -------------------------------------------------------------------------------------------------- |
-| A **screen's** main content: a settings page, a top-level list | `EmptyCard`                  | Providers, MCP, Sandbox, Webhooks, A2A endpoints, Organization Skills, Blueprints, Agents, Members |
-| A **section** within a page, or a list **filtered** to nothing | `ListState variant="empty"`  | Workspace home Skills / Dashboards / Boards / Triggers, "No skills match your filters", A2A tokens |
-| A picker or command list inside a popover                      | `CommandEmpty`               | Command menu, timezone and model pickers                                                           |
-| A widget tile with no data                                     | the widget's own placeholder | "No data yet" in dashboard widgets                                                                 |
+| The empty thing is…                                            | Component                   | Examples                                                                                           |
+| -------------------------------------------------------------- | --------------------------- | -------------------------------------------------------------------------------------------------- |
+| A **screen's** main content: a settings page, a top-level list | `EmptyCard`                 | Providers, MCP, Sandbox, Webhooks, A2A endpoints, Organization Skills, Blueprints, Agents, Members |
+| A **section** within a page, or a list **filtered** to nothing | `ListState variant="empty"` | Workspace home Skills / Boards / Triggers, "No skills match your filters", A2A tokens              |
+| A picker or command list inside a popover                      | `CommandEmpty`              | Command menu, timezone and model pickers                                                           |
 
 The same list can take both: `SkillsList` shows `EmptyCard` on the
 Organization Skills screen and `ListState` inside the workspace home section.
@@ -56,7 +55,7 @@ dialogs and chat.
 
 ### ListState
 
-One short line in the same dashed frame: `No dashboards yet.`,
+One short line in the same dashed frame: `No triggers yet.`,
 `No Cron triggers to show.` The section's buttons sit below it, so the line
 states the fact and leaves the instruction to the buttons.
 
@@ -68,7 +67,7 @@ you connect to and `Create` for things you author:
 | Verb     | For                                                                   |
 | -------- | --------------------------------------------------------------------- |
 | `Add`    | provider, MCP server, webhook, endpoint, workspace, workspace context |
-| `Create` | agent, skill, blueprint, board, dashboard, trigger, organization      |
+| `Create` | agent, skill, blueprint, board, trigger, organization                 |
 
 Name the noun in full (`Add MCP server`). The form's own submit button
 follows `form-conventions`.

@@ -243,3 +243,7 @@ no declared Context window still cannot draw a meter — there is no denominator
 window is declared. The meter's own display rules are unchanged; this fills only
 the state it was already hiding, and the provider form's field hint is no longer
 the sole place that states the consequence.
+
+## Update (2026-11-01): `updateWidgetData` removed
+
+Dashboards were removed in 4.0.0 (#1430), so `updateWidgetData` is gone from the Tool-input clearing allowlist. The rules for that allowlist are unchanged.

@@ -27,14 +27,11 @@ import type {
   Provider,
   providerApiModeSchema,
   ReasoningEffort,
-  RglLayoutItem,
   RunEventError,
   TranscriptSummaryStats,
   TriggerRunStats,
   triggerSchema,
   UnloadedToolSet,
-  Widget,
-  WidgetType,
 } from "@platypus/schemas";
 import type {
   ListToolsResult,
@@ -1651,56 +1648,5 @@ export const kanbanCardHistory = pgTable(
     ),
     index("idx_kanban_card_history_actor_user_id").on(t.actorUserId),
     index("idx_kanban_card_history_actor_agent_id").on(t.actorAgentId),
-  ],
-);
-
-// Dashboard
-
-export const dashboard = pgTable(
-  "dashboard",
-  (t) => ({
-    id: t.text("id").primaryKey(),
-    workspaceId: t
-      .text("workspace_id")
-      .notNull()
-      .references(() => workspace.id, { onDelete: "cascade" }),
-    name: t.text("name").notNull(),
-    description: t.text("description"),
-    desktopLayout: t
-      .jsonb("desktop_layout")
-      .$type<RglLayoutItem[]>()
-      .notNull()
-      .default([]),
-    mobileLayout: t
-      .jsonb("mobile_layout")
-      .$type<RglLayoutItem[]>()
-      .notNull()
-      .default([]),
-    createdAt: t.timestamp("created_at").notNull().defaultNow(),
-    updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
-  }),
-  (t) => [
-    index("idx_dashboard_workspace_id").on(t.workspaceId),
-    uniqueIndex("uq_dashboard_workspace_name").on(t.workspaceId, t.name),
-  ],
-);
-
-export const widget = pgTable(
-  "widget",
-  (t) => ({
-    id: t.text("id").primaryKey(),
-    dashboardId: t
-      .text("dashboard_id")
-      .notNull()
-      .references(() => dashboard.id, { onDelete: "cascade" }),
-    type: t.text("type").$type<WidgetType>().notNull(),
-    title: t.text("title").notNull(),
-    data: t.jsonb("data").$type<Widget["data"]>(),
-    createdAt: t.timestamp("created_at").notNull().defaultNow(),
-    updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
-  }),
-  (t) => [
-    index("idx_widget_dashboard_id").on(t.dashboardId),
-    uniqueIndex("uq_widget_dashboard_title").on(t.dashboardId, t.title),
   ],
 );

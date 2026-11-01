@@ -137,12 +137,6 @@ export function workspaceRoutes(orgId: string, workspaceId: string) {
       detail: (boardId: string) => `${root}/boards/${boardId}`,
       settings: (boardId: string) => `${root}/boards/${boardId}/settings`,
     },
-    dashboards: {
-      create: `${root}/dashboards/create`,
-      detail: (dashboardId: string) => `${root}/dashboards/${dashboardId}`,
-      settings: (dashboardId: string) =>
-        `${root}/dashboards/${dashboardId}/settings`,
-    },
     triggers: {
       create: `${root}/triggers/create`,
       detail: (triggerId: string) => `${root}/triggers/${triggerId}`,

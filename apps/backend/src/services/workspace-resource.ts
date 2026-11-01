@@ -2,8 +2,6 @@ import { and, eq, type SQL } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import {
   chat as chatTable,
-  dashboard as dashboardTable,
-  widget as widgetTable,
   trigger as triggerTable,
   webhook as webhookTable,
   notification as notificationTable,
@@ -14,8 +12,8 @@ import type { db, Tx } from "../index.ts";
 import { NotFoundError } from "../errors.ts";
 
 /**
- * The **Workspace-child resource**: a Chat, Dashboard, Trigger, Webhook,
- * A2A endpoint, Notification, Widget, or Sandbox whose row lives at exactly one
+ * The **Workspace-child resource**: a Chat, Trigger, Webhook, A2A endpoint,
+ * Notification, or Sandbox whose row lives at exactly one
  * Workspace — no dual scope, no Attachment, unlike the Scoped resources in
  * `scoped-resource.ts`. Containment used to be hand-rolled at each of the 13
  * route files that own one of these tables, with the write side
@@ -36,11 +34,6 @@ import { NotFoundError } from "../errors.ts";
  * cover the shapes that used to be bespoke quartets:
  *
  * - the flat resources are scoped by `workspaceId`;
- * - a Widget is nested one level down, carrying a `dashboardId` instead
- *   (mirroring `services/kanban-shared.ts`'s `withinScope` for Card/Column under
- *   Board): the caller establishes the Dashboard is in this Workspace once
- *   (`requireOwned` with type `"dashboard"`), then every Widget lookup scopes
- *   to that id;
  * - the Sandbox is a one-per-Workspace singleton with no id to route on, so
  *   its ref carries the scope keys alone and every predicate is scope-only.
  */
@@ -49,61 +42,47 @@ type Database = typeof db | Tx;
 
 /**
  * The flat Workspace-child resource types — one row per id, scoped by
- * `workspaceId` — plus Widget (scoped by `dashboardId`) and the Sandbox
- * singleton (addressed by `workspaceId` alone).
+ * `workspaceId` — plus the Sandbox singleton (addressed by `workspaceId`
+ * alone).
  */
 export type WorkspaceResourceType =
-  | "chat"
-  | "dashboard"
-  | "trigger"
-  | "webhook"
-  | "a2aEndpoint"
-  | "notification"
-  | "widget"
-  | "sandbox";
+  "chat" | "trigger" | "webhook" | "a2aEndpoint" | "notification" | "sandbox";
 
 /**
- * The eight Workspace-child tables, each at its real type. They share the
+ * The six Workspace-child tables, each at its real type. They share the
  * `id` column and a scope column this module relies on; the per-resource row
  * type is recovered via the `RowOf` cast at each return.
  */
 type WorkspaceTable =
   | typeof chatTable
-  | typeof dashboardTable
   | typeof triggerTable
   | typeof webhookTable
   | typeof a2aEndpointTable
   | typeof notificationTable
-  | typeof widgetTable
   | typeof sandboxTable;
 
 /** Maps each resource type to its Drizzle row type, for per-resource typing. */
 type RowOf = {
   chat: typeof chatTable.$inferSelect;
-  dashboard: typeof dashboardTable.$inferSelect;
   trigger: typeof triggerTable.$inferSelect;
   webhook: typeof webhookTable.$inferSelect;
   a2aEndpoint: typeof a2aEndpointTable.$inferSelect;
   notification: typeof notificationTable.$inferSelect;
-  widget: typeof widgetTable.$inferSelect;
   sandbox: typeof sandboxTable.$inferSelect;
 };
 
 /**
  * The scope keys a caller passes for each type — the value the registry's
- * scope column is matched against. A Widget's scope is its Dashboard's id;
- * everything else's is the Workspace's.
+ * scope column is matched against: the Workspace's id.
  */
 type WorkspaceScope = { workspaceId: string };
 
 type ScopeOf = {
   chat: WorkspaceScope;
-  dashboard: WorkspaceScope;
   trigger: WorkspaceScope;
   webhook: WorkspaceScope;
   a2aEndpoint: WorkspaceScope;
   notification: WorkspaceScope;
-  widget: { dashboardId: string };
   sandbox: WorkspaceScope;
 };
 
@@ -116,7 +95,7 @@ type OwnedRef<T extends WorkspaceResourceType> = ScopeOf[T] &
   (T extends "sandbox" ? { id?: undefined } : { id: string });
 
 /** The key a caller's ref passes its scope value under. */
-type ScopeParam = "workspaceId" | "dashboardId";
+type ScopeParam = "workspaceId";
 
 type RegistryEntry = {
   /** The Drizzle table backing this resource type. */
@@ -149,11 +128,6 @@ const REGISTRY: Record<WorkspaceResourceType, RegistryEntry> = {
     label: "Chat",
     scope: { column: chatTable.workspaceId, param: "workspaceId" },
   },
-  dashboard: {
-    table: dashboardTable,
-    label: "Dashboard",
-    scope: { column: dashboardTable.workspaceId, param: "workspaceId" },
-  },
   trigger: {
     table: triggerTable,
     label: "Trigger",
@@ -173,11 +147,6 @@ const REGISTRY: Record<WorkspaceResourceType, RegistryEntry> = {
     table: notificationTable,
     label: "Notification",
     scope: { column: notificationTable.workspaceId, param: "workspaceId" },
-  },
-  widget: {
-    table: widgetTable,
-    label: "Widget",
-    scope: { column: widgetTable.dashboardId, param: "dashboardId" },
   },
   sandbox: {
     table: sandboxTable,
@@ -203,7 +172,7 @@ const allOf = (...conditions: (SQL | undefined)[]): SQL => {
 
 /**
  * The scope-half of every predicate here: this scope column equals this
- * value. The one place that equality is written for all eight tables.
+ * value. The one place that equality is written for all six tables.
  */
 const scopeWhere = (scope: RegistryEntry["scope"], scopeValue: string): SQL =>
   eq(scope.column, scopeValue);

@@ -114,7 +114,7 @@ Replacing the content of an older tool result in what a model call receives, lea
 _Avoid_: pruning, compaction (that names taking a **Transcript summary**), context editing, truncation (that names a per-call bound on a single result or reply).
 
 **Tool-input clearing**:
-**Tool-result clearing**'s sibling for writes: replacing the bulky input of an older tool call — what a file write, file edit or dashboard widget update wrote — in what a model call receives, keeping the fields that say what was written where. Same threshold and the same send-time-only rule as **Tool-result clearing**, with its own count of recent calls kept. Only for a call that succeeded, since what it wrote can be read back, and only for core write tools named for it; a failed call keeps its input so the model can retry it, and no **MCP** or plugin tool's input is ever cleared.
+**Tool-result clearing**'s sibling for writes: replacing the bulky input of an older tool call — what a file write or file edit wrote — in what a model call receives, keeping the fields that say what was written where. Same threshold and the same send-time-only rule as **Tool-result clearing**, with its own count of recent calls kept. Only for a call that succeeded, since what it wrote can be read back, and only for core write tools named for it; a failed call keeps its input so the model can retry it, and no **MCP** or plugin tool's input is ever cleared.
 _Avoid_: Tier 2 (that names Blueprint pointer-settings, ADR-0008), pruning, compaction.
 
 **Tool-result truncation**:
@@ -208,14 +208,6 @@ _Avoid_: ticket, issue, item, task.
 **Card history**:
 The record of how a **Card** reached its current state: an ordered, capped series of **history entries**, each naming what changed, when, and who did it — the User or Agent that made the write itself, at whatever delegation depth. Scoped to field writes addressed to one Card: a Board-level write that reshapes many Cards at once (deleting a Label) is in none of their histories, and a Comment is its own durable record rather than a history entry. Working context for whoever acts on the Card next, not an audit trail: entries roll off, and the history dies with the Card. Durable, exportable board activity is what the `card.*` **Webhook events** are for.
 _Avoid_: event log, audit log, audit trail, card timeline, activity feed.
-
-**Dashboard**:
-A Workspace-scoped grid of **Widgets** with separate desktop and mobile layouts, auto-refreshing in view mode. Deliberately split by ownership: Users own the layout and the widget set; an Agent updates Widget data only, and never an Embed's URL.
-_Avoid_: report, page, view.
-
-**Widget**:
-A typed tile on a **Dashboard** — metric, text/markdown, image, Embed, weather, or chart. An Agent may bring a Widget's data current but can never change its type, placement, size, or presence; updating requires matching the declared type, so a chart cannot be overwritten into a metric. An Embed is the one exception to data currency: it renders a human-provided HTTPS page, and its URL is set only through the Dashboard UI — no Agent can write it. The exception costs nothing, because an Embed's URL is a pointer rather than content: the page behind it is already self-updating, so an Agent write would buy no currency while moving configuration — which Users own — into Agent hands. An Embed's frame never shares the application's origin, whatever URL it holds — the isolation is a property of the Embed rather than of the URL, so nothing has to reason about where a URL points or where it redirects to; the cost is that an embedded page gets none of its own cookies or storage.
-_Avoid_: tile, panel, component.
 
 **Trigger**:
 A saved automation that runs an Agent unattended against a fixed Instruction — no Chat, nobody watching. One of three shapes: a **Cron Trigger**, firing on a schedule evaluated in the Trigger's own timezone and never overlapping itself — a run that comes due while its last run is still live is skipped, not queued; an **Event Trigger**, firing when a subscribed **Webhook event** occurs in the Workspace, debounced so a burst coalesces into one run, and capped per entity so no Event Trigger runs without bound against one Card or Notification; or an **Inbound Trigger**, fired by an external caller. The event's payload, or the inbound call's **Trigger inputs**, arrive above the Instruction, so the Instruction can point at them. An Agent's own writes never fire that Agent's own Event Trigger — including writes made on its behalf by a Sub-Agent, at any depth.
@@ -343,7 +335,7 @@ _Avoid_: registration, self-registration.
 ## Relationships
 
 - An **Organization** has many **Workspaces**.
-- A **Workspace** has many **Chats**, **Agents**, **MCPs**, **Skills**, **Boards**, **Dashboards**, **Triggers**, **Webhooks**, and **Notifications**, and zero-or-one **Sandbox**.
+- A **Workspace** has many **Chats**, **Agents**, **MCPs**, **Skills**, **Boards**, **Triggers**, **Webhooks**, and **Notifications**, and zero-or-one **Sandbox**.
 - A **Chat** is produced by a sequence of **Chat turns**.
 - A **Chat**'s messages form a tree: each message follows exactly one parent, or opens the Chat, and messages following the same parent — or all opening it — are **Alternatives**. Exactly one path through it is the **Active path**, and that path is the **Transcript**.
 - A **Chat turn** runs in two sequential phases: **Turn resolution** assembles what the turn needs, then the **Drive** runs the model loop. A slow turn is slow in one phase or the other, and they are attributed separately.

@@ -30,7 +30,6 @@ import { context } from "./routes/context.ts";
 import { trigger } from "./routes/trigger.ts";
 import { triggerRun } from "./routes/trigger-run.ts";
 import { kanban } from "./routes/kanban.ts";
-import { dashboard } from "./routes/dashboard.ts";
 import { notification } from "./routes/notification.ts";
 import { webhook } from "./routes/webhook.ts";
 import { mcpOauthCallback } from "./routes/mcp-oauth-callback.ts";
@@ -221,10 +220,6 @@ app.route(
   triggerRun,
 );
 app.route("/organizations/:orgId/workspaces/:workspaceId/boards", kanban);
-app.route(
-  "/organizations/:orgId/workspaces/:workspaceId/dashboards",
-  dashboard,
-);
 app.route(
   "/organizations/:orgId/workspaces/:workspaceId/notifications",
   notification,

@@ -25,8 +25,8 @@ const UNINITIALIZED = Symbol("useResetOnChange:uninitialized");
  * run is a harmless no-op when there is nothing to sync yet.
  *
  * @param key   A primitive (or identity-stable) value that changes when the
- *              synced source changes — e.g. `widget.title` or
- *              `String(widget.updatedAt)`.
+ *              synced source changes — e.g. `board.name` or
+ *              `String(board.updatedAt)`.
  * @param reset Applies the latest source values to local state.
  */
 export function useResetOnChange(key: unknown, reset: () => void) {

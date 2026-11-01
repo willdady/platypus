@@ -25,3 +25,7 @@ A Workspace still has exactly one Owner, but the Owner can now change. An Org Ad
 - **In-flight work.** Chat turns, Trigger runs and A2A Tasks running at transfer time are cancelled.
 - **Unchanged.** The old Owner's Context stays theirs and invisible to the new Owner. Card authorship, assignees and Card history keep naming the old Owner. The runtime check that stops a Workspace acting once its Owner has left the Organization stays, for Workspaces stranded before this ships.
 - **Telling people.** The new Owner gets a Notification in the Workspace. Users are told in the docs, up front, that a Workspace belongs to the Organization, that Org Admins can read its Chats, and that it can be transferred with its history.
+
+## Update (2026-11-01): Dashboards removed
+
+Dashboards were removed in 4.0.0 (#1430), so "keeps Boards, Sandbox files and Dashboards" under **History** now reads "keeps Boards and Sandbox files". The rule is unchanged: work products and setup survive a cleared history.

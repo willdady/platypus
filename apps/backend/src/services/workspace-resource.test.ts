@@ -16,9 +16,8 @@ import {
 import { NotFoundError } from "../errors.ts";
 
 const workspaceId = "ws-1";
-const dashboardId = "dash-1";
 
-// Each table holds a row this Workspace (or Dashboard) owns and one with the
+// Each table holds a row this Workspace owns and one with the
 // same shape owned elsewhere, so a predicate that dropped its scope column
 // reaches the other tenant's row and the test fails.
 const ROWS = {
@@ -26,7 +25,6 @@ const ROWS = {
     { id: "chat-1", workspaceId, title: "Hello" },
     { id: "chat-2", workspaceId: "ws-2", title: "Theirs" },
   ],
-  dashboard: [{ id: "dash-1", workspaceId, name: "Dashboard" }],
   trigger: [
     { id: "trig-old", workspaceId, createdAt: 1 },
     { id: "trig-new", workspaceId, createdAt: 2 },
@@ -35,10 +33,6 @@ const ROWS = {
   webhook: [
     { id: "wh-1", workspaceId },
     { id: "wh-2", workspaceId: "ws-2" },
-  ],
-  widget: [
-    { id: "widget-1", dashboardId, data: null },
-    { id: "widget-2", dashboardId: "dash-2", data: null },
   ],
   sandbox: [
     { id: "sbx-1", workspaceId, name: "Mine" },
@@ -62,8 +56,8 @@ describe("WorkspaceResource module", () => {
         resolveOwned(db, "chat", { id: "chat-1", workspaceId }),
       ).resolves.toEqual(ROWS.chat[0]);
       await expect(
-        requireOwned(db, "dashboard", { id: "dash-1", workspaceId }),
-      ).resolves.toEqual(ROWS.dashboard[0]);
+        requireOwned(db, "webhook", { id: "wh-1", workspaceId }),
+      ).resolves.toEqual(ROWS.webhook[0]);
     });
 
     it("returns null for another workspace's row", async () => {
@@ -74,8 +68,8 @@ describe("WorkspaceResource module", () => {
 
     it("throws NotFoundError with the type's label when missing", async () => {
       await expect(
-        requireOwned(db, "dashboard", { id: "dash-9", workspaceId }),
-      ).rejects.toThrow(new NotFoundError("Dashboard not found"));
+        requireOwned(db, "webhook", { id: "wh-9", workspaceId }),
+      ).rejects.toThrow(new NotFoundError("Webhook not found"));
       await expect(
         requireOwned(db, "trigger", { id: "trig-other", workspaceId }),
       ).rejects.toThrow(new NotFoundError("Trigger not found"));
@@ -146,37 +140,6 @@ describe("WorkspaceResource module", () => {
       // reaching past it (e.g. an absent route param) at runtime.
       const ref = { workspaceId } as never;
       expect(() => ownedWhere("chat", ref)).toThrow("requires an id");
-    });
-  });
-
-  // --- Widget: nested under its Dashboard ---
-
-  describe("widget", () => {
-    it("resolves, lists, updates and deletes by dashboardId", async () => {
-      const ref = { id: "widget-1", dashboardId };
-      await expect(resolveOwned(db, "widget", ref)).resolves.toEqual(
-        ROWS.widget[0],
-      );
-      await expect(
-        listOwned(db, "widget", { dashboardId }, null),
-      ).resolves.toEqual([ROWS.widget[0]]);
-      await expect(
-        updateOwned(db, "widget", ref, { data: { value: 1, label: "Users" } }),
-      ).resolves.toMatchObject({ data: { value: 1, label: "Users" } });
-      await expect(deleteOwned(db, "widget", ref)).resolves.toBe(true);
-      expect(fake.tables.widget).toEqual([ROWS.widget[1]]);
-    });
-
-    it("does not reach another dashboard's widget", async () => {
-      const ref = { id: "widget-2", dashboardId };
-      await expect(requireOwned(db, "widget", ref)).rejects.toThrow(
-        new NotFoundError("Widget not found"),
-      );
-      await expect(
-        updateOwned(db, "widget", ref, { data: { value: 1, label: "Users" } }),
-      ).resolves.toBeNull();
-      await expect(deleteOwned(db, "widget", ref)).resolves.toBe(false);
-      expect(fake.tables.widget).toEqual(ROWS.widget);
     });
   });
 

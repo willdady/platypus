@@ -285,24 +285,24 @@ export function EntityCardList<T extends EntityCard>({
 
 export type WorkspaceEntityCardListConfig = {
   /** Collection entity as the API spells it, and the key to its routes. */
-  readonly entity: "boards" | "dashboards";
-  /** The URL param holding the name search: "boardQuery" / "dashboardQuery". */
-  readonly queryParam: "boardQuery" | "dashboardQuery";
+  readonly entity: "boards";
+  /** The URL param holding the name search: "boardQuery". */
+  readonly queryParam: "boardQuery";
   readonly labels: {
-    /** Delete confirmation title: "Delete Board" / "Delete Dashboard". */
+    /** Delete confirmation title: "Delete Board". */
     readonly deleteTitle: string;
-    /** The entity named mid-sentence: "board" / "dashboard". */
+    /** The entity named mid-sentence: "board". */
     readonly deleteNoun: string;
-    /** What deleting it takes with it: "and all of its data." / "and all of its widgets.". */
+    /** What deleting it takes with it: "and all of its data.". */
     readonly deleteTail: string;
-    /** The phrase the user types to confirm: "delete board" / "delete dashboard". */
+    /** The phrase the user types to confirm: "delete board". */
     readonly confirmPhrase: string;
   };
   /**
    * Pages the list and draws its footer row: Create on the left, pagination
-   * on the right. Without it, neither — Dashboards' Create sits in the page.
+   * on the right.
    */
-  readonly paging?: {
+  readonly paging: {
     /** The URL param holding the page: "boardsPage". */
     readonly param: string;
     readonly pageSize: number;
@@ -314,8 +314,7 @@ export type WorkspaceEntityCardListConfig = {
 };
 
 /**
- * The workspace's sorted card list of a named entity, one component for
- * Boards and Dashboards. Each card links to its detail page and carries the
+ * The workspace's sorted card list of a named entity (Boards). Each card links to its detail page and carries the
  * same edit/delete menu; the entity noun, search param, delete copy, and
  * confirmation phrase are the parameters.
  */
@@ -345,7 +344,7 @@ export function WorkspaceEntityCardList({
   const setNameFilter = (value: string) => {
     setNameFilterState(value);
     replaceSearchParam(config.queryParam, value.trim() || null);
-    if (config.paging) replaceSearchParam(config.paging.param, null);
+    replaceSearchParam(config.paging.param, null);
   };
 
   const routes = workspaceRoutes(orgId, workspaceId)[config.entity];
@@ -356,9 +355,7 @@ export function WorkspaceEntityCardList({
     .sort((a, b) => a.name.localeCompare(b.name))
     .filter((card) => !query || defaultFilter(card.name, query) > 0);
   const { paging } = config;
-  const page = paging
-    ? pageOf(searchParams.get(paging.param), cards, paging.pageSize)
-    : { items: cards, page: 1, pageCount: 1, ...NO_GHOSTS };
+  const page = pageOf(searchParams.get(paging.param), cards, paging.pageSize);
 
   const deleteFlow = useDeleteFlow<EntityCard>({
     mutate,
@@ -414,23 +411,21 @@ export function WorkspaceEntityCardList({
         )}
       />
 
-      {paging && (
-        <ListFooter
-          pagination={
-            <ListPagination
-              page={page}
-              param={paging.param}
-              aria-label={paging.label}
-            />
-          }
-        >
-          <Button variant="outline" asChild>
-            <Link href={routes.create}>
-              <Plus /> {paging.createLabel}
-            </Link>
-          </Button>
-        </ListFooter>
-      )}
+      <ListFooter
+        pagination={
+          <ListPagination
+            page={page}
+            param={paging.param}
+            aria-label={paging.label}
+          />
+        }
+      >
+        <Button variant="outline" asChild>
+          <Link href={routes.create}>
+            <Plus /> {paging.createLabel}
+          </Link>
+        </Button>
+      </ListFooter>
 
       <DeleteConfirmDialog
         open={deleteFlow.open}

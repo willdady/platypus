@@ -1601,10 +1601,10 @@ export const TOOL_RESULT_CLEARING_KEEP_RECENT = 4;
  * Tool-input clearing (ADR-0018 Notes, issue #1722): the core write tools
  * whose bulky input fields are cleared from what a model call receives, at
  * Tool-result clearing's threshold, once the call has succeeded. Each maps to
- * the fields cleared; identifying fields (`path`, `dashboardId`, …) stay.
+ * the fields cleared; identifying fields (`path`, …) stay.
  *
  * Safe because what was written is reproducible — the model can read the file
- * or widget back. Deny by default, and core only: no MCP or plugin tool joins,
+ * back. Deny by default, and core only: no MCP or plugin tool joins,
  * since nothing tells core that another tool's input is reproducible.
  */
 export const CLEARABLE_TOOL_INPUT_FIELDS: ReadonlyMap<
@@ -1613,7 +1613,6 @@ export const CLEARABLE_TOOL_INPUT_FIELDS: ReadonlyMap<
 > = new Map([
   ["fsWrite", ["content"]],
   ["fsEdit", ["oldString", "newString"]],
-  ["updateWidgetData", ["data"]],
 ]);
 
 /** How many of the most recent clearable write calls keep their input. */
@@ -3894,50 +3893,6 @@ export const a2aTokenCreateSchema = a2aTokenSchema.pick({ name: true }).extend({
     .literal(BEARER_TOKEN_EXPIRY_DAYS)
     .default(DEFAULT_BEARER_TOKEN_EXPIRY_DAYS),
 });
-
-// Dashboard
-
-export const rglLayoutItemSchema = z.object({
-  i: z.string(),
-  x: z.number().int().min(0),
-  y: z.number().int().min(0),
-  w: z.number().int().min(1),
-  h: z.number().int().min(1),
-});
-
-export type RglLayoutItem = z.infer<typeof rglLayoutItemSchema>;
-
-// Widget types, their data contracts and the schemas derived from them live in
-// their own module — the registry is the single source for what Widget types
-// exist. Re-exported here so `@platypus/schemas` stays one import specifier.
-export * from "./widget-registry.ts";
-
-export const dashboardSchema = z.object({
-  id: z.string(),
-  workspaceId: z.string(),
-  name: z.string().min(1).max(200),
-  description: z.string().max(500).nullable().optional(),
-  desktopLayout: z.array(rglLayoutItemSchema),
-  mobileLayout: z.array(rglLayoutItemSchema),
-  createdAt: z.date(),
-  updatedAt: z.date(),
-});
-
-export type Dashboard = z.infer<typeof dashboardSchema>;
-
-export const dashboardCreateSchema = dashboardSchema.pick({
-  name: true,
-  description: true,
-});
-
-export const dashboardUpdateSchema = partialWithoutDefaults(
-  dashboardSchema.pick({
-    name: true,
-    description: true,
-    desktopLayout: true,
-    mobileLayout: true,
-  }),
-);
 
 // --- Webhook event payloads --------------------------------------------------
 

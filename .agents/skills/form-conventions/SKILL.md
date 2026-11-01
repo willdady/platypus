@@ -14,7 +14,7 @@ the two applies falls out of the entity's shape in the route tree:
 | Shape             | The form is…                                       | On save    | Examples                                                                          |
 | ----------------- | -------------------------------------------------- | ---------- | --------------------------------------------------------------------------------- |
 | Collection member | the entity's page, reached from a list             | go to list | Agents, Blueprints, Skills, Triggers, MCP, Providers, Webhooks, Workspace Context |
-| Entity sub-page   | a `settings/` child of a page the entity owns      | stay       | Boards, Dashboards                                                                |
+| Entity sub-page   | a `settings/` child of a page the entity owns      | stay       | Boards                                                                            |
 | Singleton         | one per Workspace/Org/account, so there is no list | stay       | Sandbox, Organization, Workspace                                                  |
 | Dialog or inline  | not a page at all                                  | stay       | Members, Invitations, Global Context, everything in Chat                          |
 
@@ -91,7 +91,7 @@ The label names the outcome, so it follows from the destination:
 
 `Update` is reserved for the edit-then-leave case — it is the word for a save
 you are about to be carried away from. `Add` covers the in-place additions:
-`Add column`, `Add card`, `Add widget`.
+`Add column`, `Add card`.
 
 Let the form heading name the entity and keep the button to the bare verb
 (`Save`, not `Create board`). Prefer the bare verb over `Save changes` too. A
@@ -100,6 +100,6 @@ ASCII ellipsis: `Saving...` under `Save`, `Updating...` under `Update`.
 
 Unlike the destination rule, this one is ahead of the code. Most forms today
 label on `{id ? "Update" : "Save"}` alone, so a stay-in-place edit can still
-read `Update` (Sandbox, Organization, Workspace, Dashboard settings); #793
+read `Update` (Sandbox, Organization, Workspace); #793
 brings the existing buttons into line. Write new buttons to the rule above,
 and leave the stragglers to that issue.

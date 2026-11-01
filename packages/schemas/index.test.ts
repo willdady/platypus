@@ -76,9 +76,6 @@ import {
   kanbanCardUpdateSchema,
   kanbanCardCommentUpdateSchema,
   partialWithoutDefaults,
-  dashboardSchema,
-  dashboardCreateSchema,
-  dashboardUpdateSchema,
 } from "./index";
 
 describe("Organization Schema", () => {
@@ -2070,7 +2067,6 @@ describe("partial update schemas", () => {
     ["trigger", triggerUpdateSchema],
     ["kanbanCard", kanbanCardUpdateSchema],
     ["kanbanCardComment", kanbanCardCommentUpdateSchema],
-    ["dashboard", dashboardUpdateSchema],
   ])("%s update schema parses {} to {}", (_, schema) => {
     expect(schema.parse({})).toEqual({});
   });
@@ -2082,31 +2078,6 @@ describe("partial update schemas", () => {
     expect(schema.parse({ a: "x" })).toEqual({ a: "x" });
     expect(schema.parse({ b: 1 })).toEqual({ b: 1 });
     expect(schema.safeParse({ a: "" }).success).toBe(false);
-  });
-});
-
-describe("Dashboard name bounds", () => {
-  const dashboard = {
-    id: "d1",
-    workspaceId: "w1",
-    desktopLayout: [],
-    mobileLayout: [],
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  };
-
-  it.each([
-    [
-      "full",
-      (name: string) => dashboardSchema.safeParse({ ...dashboard, name }),
-    ],
-    ["create", (name: string) => dashboardCreateSchema.safeParse({ name })],
-    ["update", (name: string) => dashboardUpdateSchema.safeParse({ name })],
-  ])("%s schema accepts 1–200 chars and rejects outside", (_, parse) => {
-    expect(parse("a").success).toBe(true);
-    expect(parse("a".repeat(200)).success).toBe(true);
-    expect(parse("").success).toBe(false);
-    expect(parse("a".repeat(201)).success).toBe(false);
   });
 });
 

@@ -182,17 +182,6 @@ const eslintConfig = defineConfig([
       ],
     },
   },
-  // Widgets are being removed (#1430), so they keep their old style rather
-  // than being rewritten to these conventions. Delete this block with them.
-  {
-    files: ["components/widgets/**"],
-    rules: {
-      "no-restricted-syntax": ["error", RAW_WRITE_FETCH, HAND_BUILT_ORG_PATH],
-      "@typescript-eslint/consistent-type-definitions": "off",
-      "better-tailwindcss/enforce-shorthand-classes": "off",
-      "better-tailwindcss/no-restricted-classes": "off",
-    },
-  },
   // The frontend never compiles backend source: the Chat UI message contract
   // it shares with the backend lives in `@platypus/schemas` (#1505).
   {

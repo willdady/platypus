@@ -1,7 +1,7 @@
 // Building with Platypus section order. Audience: Workspace Owner.
 // Chat comes first — it is the screen everyone uses before they build anything.
 // Then the build sequence: the Agent, the capabilities you give it (Skills, tool
-// sets, MCP), the surfaces it works against (Triggers, Boards, Dashboards,
+// sets, MCP), the surfaces it works against (Triggers, Boards,
 // Notifications), and integrating outward (Webhooks, A2A endpoints). The worked example sits
 // last because it uses every form above it.
 const meta = {
@@ -13,7 +13,6 @@ const meta = {
   mcp: "MCP servers",
   triggers: "Triggers",
   boards: "Boards",
-  dashboards: "Dashboards",
   notifications: "Notifications",
   webhooks: "Webhooks",
   "a2a-endpoints": "A2A endpoints",

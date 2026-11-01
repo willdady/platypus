@@ -33,7 +33,6 @@ import {
   FolderIcon,
   GlobeIcon,
   KanbanSquareIcon,
-  LayoutDashboardIcon,
   SparklesIcon,
   TerminalIcon,
   ZapIcon,
@@ -136,11 +135,6 @@ const toolToToolSet: Record<string, string> = {
   // memory
   memorySearch: "memory",
   memoryGet: "memory",
-  // dashboards
-  listDashboards: "dashboards",
-  listWidgets: "dashboards",
-  getWidget: "dashboards",
-  updateWidgetData: "dashboards",
   // sandbox
   shellExec: "sandbox",
   fsRead: "sandbox",
@@ -187,7 +181,6 @@ const toolSetIcons: Record<string, LucideIcon> = {
   "web-fetch": GlobeIcon,
   notifications: BellIcon,
   memory: BrainIcon,
-  dashboards: LayoutDashboardIcon,
   sandbox: BoxIcon,
 };
 
