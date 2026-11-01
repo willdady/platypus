@@ -79,6 +79,14 @@ export const toolSetPoint = (
       );
     }
     if (
+      typeof contribution.description !== "string" ||
+      contribution.description.trim() === ""
+    ) {
+      throw new Error(
+        `Plugin "${pluginName}": tool set "${rawId}" must declare a non-empty "description".`,
+      );
+    }
+    if (
       typeof contribution.tools !== "function" &&
       (typeof contribution.tools !== "object" ||
         contribution.tools === null ||

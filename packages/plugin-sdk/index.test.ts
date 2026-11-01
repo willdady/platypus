@@ -13,6 +13,7 @@ import {
   type SandboxCallOptions,
   type ToolGateContribution,
   type ToolSetContribution,
+  type ToolSetContext,
   type WebBackendContribution,
 } from "./index.ts";
 
@@ -28,13 +29,63 @@ const silentLogger = (): PluginLogger => ({
 
 describe("@platypuschat/plugin-sdk", () => {
   it("pins the plugin API version", () => {
-    expect(PLUGIN_API_VERSION).toBe(3);
+    expect(PLUGIN_API_VERSION).toBe(4);
   });
 
   it("supports one previous major (N and N−1)", () => {
-    // At v3 the window is `[2, 3]`: a v2 plugin keeps loading on this core, and
-    // a v1 plugin no longer does.
-    expect(OLDEST_SUPPORTED_API_VERSION).toBe(2);
+    // At v4 the window is `[3, 4]`: a v3 plugin keeps loading on this core, and
+    // a v2 plugin no longer does.
+    expect(OLDEST_SUPPORTED_API_VERSION).toBe(3);
+  });
+
+  it("requires the context members core has always supplied", () => {
+    // Compile-time only: `pnpm typecheck` fails if either goes back to optional.
+    expectTypeOf<ToolSetContext["timezone"]>().toEqualTypeOf<string>();
+    expectTypeOf<ToolSetContext["sessionId"]>().toEqualTypeOf<string>();
+  });
+
+  it("requires a Tool set description", () => {
+    expectTypeOf<ToolSetContribution["description"]>().toEqualTypeOf<string>();
+  });
+
+  it("types the deploy-time config through the manifest", () => {
+    // `PlatypusPlugin<Config>` narrows `plugin.config` inside every contribution
+    // factory, so an author reads it without a cast.
+    const config = z.object({ region: z.string() });
+    const plugin: PlatypusPlugin<z.infer<typeof config>> = {
+      name: "@example/typed",
+      version: "0.1.0",
+      apiVersion: PLUGIN_API_VERSION,
+      configSchema: config,
+      contributes: {
+        toolSets: [
+          {
+            id: "typed",
+            name: "Typed",
+            category: "Test",
+            description: "Reads its deploy-time config without a cast",
+            tools: (_ctx, plugin) => {
+              expectTypeOf(plugin.config).toEqualTypeOf<{ region: string }>();
+              return {};
+            },
+          },
+        ],
+      },
+    };
+    expect(plugin.configSchema).toBe(config);
+  });
+
+  it("requires the schema that produces a named config type", () => {
+    // Compile-time only: naming a config type without its schema would type a
+    // block core never parsed.
+    // @ts-expect-error a named config type requires its configSchema
+    const missingSchema: PlatypusPlugin<{ region: string }> = {
+      name: "@example/untyped",
+      version: "0.1.0",
+      apiVersion: PLUGIN_API_VERSION,
+      contributes: { toolSets: [] },
+    };
+    expect(missingSchema.name).toBe("@example/untyped");
   });
 
   it("accepts a well-formed manifest with a static-map tool set", () => {
@@ -42,6 +93,7 @@ describe("@platypuschat/plugin-sdk", () => {
       id: "example",
       name: "Example",
       category: "Utilities",
+      description: "A static map of example tools",
       tools: {
         echo: tool({
           description: "Echo the input",
@@ -103,6 +155,7 @@ describe("@platypuschat/plugin-sdk", () => {
       id: "scoped",
       name: "Scoped",
       category: "Productivity",
+      description: "Reads the shared deploy-time block",
       tools: (_ctx, plugin) => {
         expect(plugin.credentials).toEqual({ apiToken: "tok" });
         return {};
@@ -115,6 +168,8 @@ describe("@platypuschat/plugin-sdk", () => {
         orgId: "o",
         frontendUrl: undefined,
         userId: "u",
+        timezone: "UTC",
+        sessionId: "chat-1",
       },
       shared,
     );
@@ -207,6 +262,7 @@ describe("@platypuschat/plugin-sdk", () => {
       id: "scoped",
       name: "Scoped",
       category: "Productivity",
+      description: "Logs through the block core supplies",
       // The shape an author writes from API v2 on: no chaining, because both
       // the block and its logger are required and core always supplies them.
       tools: (ctx, plugin) => {
@@ -222,6 +278,8 @@ describe("@platypuschat/plugin-sdk", () => {
         orgId: "o",
         frontendUrl: undefined,
         userId: "u",
+        timezone: "UTC",
+        sessionId: "chat-1",
       },
       shared,
     );
@@ -415,6 +473,7 @@ describe("@platypuschat/plugin-sdk", () => {
       id: "kanban",
       name: "Kanban",
       category: "Productivity",
+      description: "Registers a closer",
       tools: (ctx) => {
         ctx.registerCloser(() => {});
         return {};
@@ -429,6 +488,8 @@ describe("@platypuschat/plugin-sdk", () => {
           agentId: "a",
           userId: "u",
           frontendUrl: undefined,
+          timezone: "UTC",
+          sessionId: "chat-1",
           registerCloser: (close) => registered.push(close),
         },
         { config: undefined, credentials: undefined, logger: silentLogger() },

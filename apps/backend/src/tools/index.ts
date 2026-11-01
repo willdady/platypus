@@ -98,7 +98,8 @@ export type ToolSetRegistration = {
   id: string;
   name: string;
   category: string;
-  description?: string;
+  /** A sentence the Agent form shows for this set — required as of API v4. */
+  description: string;
   /**
    * This Tool set's model-facing Tools for one Chat turn — resolved, guarded,
    * and result-normalized. Never rejects: a Tool set that cannot serve this turn

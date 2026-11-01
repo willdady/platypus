@@ -3,6 +3,7 @@ import { requireAuth } from "../middleware/authentication.ts";
 import { requireOrgAccess } from "../middleware/authorization.ts";
 import { getSandboxBackends } from "../sandbox/index.ts";
 import { readAllowedDockerNetworks } from "../plugins/docker/backend.ts";
+import type { DockerPluginConfig } from "../plugins/docker/backend.ts";
 import {
   getPluginConfig,
   getSandboxBackendPlugin,
@@ -41,7 +42,9 @@ sandboxBackends.get(
   requireOrgAccess(["admin"]),
   (c) => {
     return c.json({
-      results: readAllowedDockerNetworks(getPluginConfig(DOCKER_PLUGIN)),
+      results: readAllowedDockerNetworks(
+        getPluginConfig<DockerPluginConfig>(DOCKER_PLUGIN),
+      ),
     });
   },
 );

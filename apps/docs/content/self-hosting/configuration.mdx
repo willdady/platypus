@@ -182,13 +182,14 @@ empty list unless it says otherwise, and silently runs without web-fetch.
 - **Boot is fail-loud.** A listed Plugin that can't be resolved, exports an
   invalid manifest, or declares a malformed Contribution aborts startup with a
   Plugin-named error. This includes a Tool set with no usable `id`, `name`,
-  `category`, or `tools`; a misconfigured Plugin never silently drops or invents
-  tools. Two Plugins whose Tool set ids collide also abort startup, as do two
-  Plugins declaring the same manifest `name` — the error names both package
-  specifiers, and the fix is to rename one of them in its manifest. So does a
-  third-party manifest `name`, or a Tool set's tool name, over its length cap;
-  the error names the Plugin, what was too long, the cap and the actual length,
-  and the fix belongs to whoever wrote the Plugin.
+  `category`, `description`, or `tools`, and a Plugin whose `apiVersion` falls
+  outside the supported window — currently major **3 and 4**. A misconfigured
+  Plugin never silently drops or invents tools. Two Plugins whose Tool set ids
+  collide also abort startup, as do two Plugins declaring the same manifest
+  `name` — the error names both package specifiers, and the fix is to rename one
+  of them in its manifest. So does a third-party manifest `name`, or a Tool set's
+  tool name, over its length cap; the error names the Plugin, what was too long,
+  the cap and the actual length, and the fix belongs to whoever wrote the Plugin.
 - **New gate-able core Plugins in a later release are not auto-enabled** — add
   them to your pinned list to opt in.
 - **After boot, a failing Plugin is a warning, not an outage.** A Tool set whose

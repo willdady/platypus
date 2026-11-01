@@ -53,6 +53,7 @@ describe("@platypus/tools-basic plugin manifest", () => {
       frontendUrl: undefined,
       userId: "user",
       timezone: "Asia/Tokyo",
+      sessionId: "chat-1",
       registerCloser: () => {},
     });
 

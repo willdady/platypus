@@ -109,7 +109,12 @@ describe("Tool Set Registry", () => {
         pluginName: "test-plugin",
         isCore: false,
         plugin: makePluginContext(),
-        contribution: { name, category: "Test", tools: {} },
+        contribution: {
+          name,
+          category: "Test",
+          description: `${name} tools`,
+          tools: {},
+        },
       });
 
     it("keys on the tool-set id, so a duplicate is refused", () => {
@@ -140,6 +145,8 @@ describe("composeToolSet", () => {
     agentId: "agent-1",
     userId: "user-1",
     frontendUrl: undefined,
+    timezone: "UTC",
+    sessionId: "chat-1",
     registerCloser: () => {},
   };
 
@@ -155,7 +162,12 @@ describe("composeToolSet", () => {
       pluginName,
       isCore,
       plugin: makePluginContext(),
-      contribution: { name: "Widgets", category: "Test", tools },
+      contribution: {
+        name: "Widgets",
+        category: "Test",
+        description: "Test set",
+        tools,
+      },
     });
 
   beforeEach(() => {
@@ -282,7 +294,12 @@ describe("composeToolSet", () => {
       pluginName: "acme",
       isCore: false,
       plugin,
-      contribution: { name: "Widgets", category: "Test", tools },
+      contribution: {
+        name: "Widgets",
+        category: "Test",
+        description: "Test set",
+        tools,
+      },
     }).buildTurnTools(ctx);
 
     // The registrar the factory meets is core's, re-bound to this Tool set's
@@ -316,6 +333,8 @@ describe("composeToolSet tool-name namespacing", () => {
     agentId: "agent-1",
     userId: "user-1",
     frontendUrl: undefined,
+    timezone: "UTC",
+    sessionId: "chat-1",
     registerCloser: () => {},
   };
 
@@ -330,7 +349,12 @@ describe("composeToolSet tool-name namespacing", () => {
       pluginName,
       isCore,
       plugin: makePluginContext(),
-      contribution: { name: "Widgets", category: "Test", tools },
+      contribution: {
+        name: "Widgets",
+        category: "Test",
+        description: "Test set",
+        tools,
+      },
     });
 
   beforeEach(() => {
@@ -558,6 +582,8 @@ describe("the sandbox tool set", () => {
     agentId: "agent-1",
     userId: "user-1",
     frontendUrl: undefined,
+    timezone: "UTC",
+    sessionId: "chat-1",
     registerCloser: () => {},
   };
   const shellExec = vi.fn();

@@ -72,7 +72,10 @@ const openDecisionModel = (
 
 // One model per plugin block, opened on the first call: the block is fixed
 // for the life of the process, and a gate sits on every tool call.
-const models = new WeakMap<PluginConfigContext, Experimental_DecisionModel>();
+const models = new WeakMap<
+  PluginConfigContext<DecisionGateConfig, DecisionGateCredentials>,
+  Experimental_DecisionModel
+>();
 
 /** Ask `model` whether `call` is destructive, and map its answer to a Verdict. */
 export const judgeToolCall = async (
@@ -111,24 +114,27 @@ export const judgeToolCall = async (
   return { verdict: "allow" };
 };
 
-const decisionModelGate: ToolGateContribution = {
+const decisionModelGate: ToolGateContribution<
+  DecisionGateConfig,
+  DecisionGateCredentials
+> = {
   id: "decision-model",
   name: "Decision model",
   evaluate: (call, plugin, { signal }) => {
-    const config = plugin.config as DecisionGateConfig;
+    const config = plugin.config;
     let model = models.get(plugin);
     if (!model) {
-      model = openDecisionModel(
-        config,
-        plugin.credentials as DecisionGateCredentials,
-      );
+      model = openDecisionModel(config, plugin.credentials);
       models.set(plugin, model);
     }
     return judgeToolCall(model, call, config, signal);
   },
 };
 
-export const plugin: PlatypusPlugin = {
+export const plugin: PlatypusPlugin<
+  DecisionGateConfig,
+  DecisionGateCredentials
+> = {
   name: "@platypus/decision-gate",
   version: "0.1.0",
   apiVersion: PLUGIN_API_VERSION,

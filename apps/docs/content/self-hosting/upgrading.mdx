@@ -58,6 +58,26 @@ instructions.
 To keep showing data your Agents produce, use a purpose-built dashboard tool such
 as Grafana or Metabase, and have the Agent write to the store it reads from.
 
+### The Plugin API is v4, and v2 Plugins no longer load
+
+Core speaks **Plugin API v4** and accepts **3 and 4** together. A third-party
+Plugin built for API v2 is refused at boot, with an error naming it and the
+supported window, so the backend does not start until that Plugin is updated.
+
+Update the Plugin to `@platypuschat/plugin-sdk` **3.x** and set its `apiVersion`
+to 4. On top of the number:
+
+- give every Tool set a `description`;
+- read `ctx.timezone` and `ctx.sessionId` directly — v4 makes both required, and
+  core has always supplied them;
+- declare the manifest's config types (`PlatypusPlugin<Config, Credentials>`) if
+  it was casting `plugin.config` or `plugin.credentials`.
+
+Nothing in your own deployment configuration changes. The core Plugins ship with
+this release, so a deployment listing only `@platypus/*` Plugins has nothing to
+do. See [Moving to API
+v4](/extending/plugin-api-and-config#moving-to-api-v4).
+
 ## Coming from 3.30
 
 ### The Docker Sandbox overlay is renamed

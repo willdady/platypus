@@ -180,11 +180,12 @@ export interface ComposeWebBackendOptions {
    */
   contribution: WebBackendContribution;
   /**
-   * The loader's namespaced discriminator, overriding `contribution.backend`.
-   * Omitted outside the loader (tests, core registrations), where the
-   * contribution's own bare id is already the effective one.
+   * The discriminator the backend registers under: the loader's namespaced id
+   * for a plugin contribution, or the contribution's own bare id for a core
+   * registration built outside the loader. Required, so a caller states the id
+   * rather than falling back to the contribution's.
    */
-  backend?: string;
+  backend: string;
   /**
    * The plugin's boot-resolved deploy-time config/credentials (ADR-0013).
    * Required, as the contribution-facing argument it is forwarded to has been
@@ -214,8 +215,8 @@ export interface ComposeWebBackendOptions {
 export const composeWebBackend = (
   options: ComposeWebBackendOptions,
 ): WebBackendRegistration => {
-  const { contribution, plugin, pluginName, resolveHostname } = options;
-  const backend = options.backend ?? contribution.backend;
+  const { contribution, backend, plugin, pluginName, resolveHostname } =
+    options;
   const timeoutMs = contribution.timeoutMs ?? DEFAULT_WEB_TIMEOUT_MS;
 
   // One line per executor call (ADR-0014 observability). `debug` when it worked,

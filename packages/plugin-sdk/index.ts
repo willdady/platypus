@@ -66,8 +66,33 @@ import type { z } from "zod";
  *
  * Migrating a v2 plugin: set `apiVersion` to 3 and drop any `options?.` guard. A
  * v1 plugin migrates through v2 first.
+ *
+ * ## What v4 changed
+ *
+ * v4 requires the members core has always supplied, and types the one block a
+ * plugin still had to cast:
+ *
+ * - {@link ToolSetContext.timezone} and {@link ToolSetContext.sessionId} are
+ *   required. Core has filled both on every turn since they arrived; they were
+ *   optional only so a plugin could still load on a core that predated them.
+ * - {@link ToolSetContribution.description} is required. Every Tool set in core
+ *   supplies one, and the Agent form shows it.
+ * - A plugin's deploy-time config is typed through its manifest.
+ *   {@link PlatypusPlugin} carries the output types of its `configSchema` /
+ *   `credentialsSchema`, and every contribution factory receives a
+ *   {@link PluginConfigContext} narrowed to them — so read `plugin.config`
+ *   without a cast. Core parsed and validated it once at boot.
+ *
+ * v2 leaves the window: the accepted range is `[3, 4]`, and a plugin declaring
+ * `apiVersion: 2` is rejected at boot.
+ *
+ * Migrating a v3 plugin: set `apiVersion` to 4, read `ctx.timezone` and
+ * `ctx.sessionId` unguarded, and — if yours declares a `configSchema` — pass its
+ * output type to `PlatypusPlugin<Config>` (and likewise a `credentialsSchema` to
+ * `PlatypusPlugin<Config, Credentials>`) to drop any `as` on `plugin.config` or
+ * `plugin.credentials`.
  */
-export const PLUGIN_API_VERSION = 3 as const;
+export const PLUGIN_API_VERSION = 4 as const;
 
 /**
  * The oldest plugin API major core still accepts — one below the current major
@@ -114,21 +139,19 @@ export interface ToolSetContext {
    * deployment `TIMEZONE`, else `UTC`. On a Trigger or A2A run that User is the
    * Workspace Owner. Read it to report or schedule times on their behalf.
    *
-   * Current core always supplies it. It is optional in the type only so a
-   * plugin built against this SDK still loads on an older core, which never
-   * passed it.
+   * **Required as of API v4** (see {@link PLUGIN_API_VERSION}), and core has
+   * always supplied it. Read `ctx.timezone` directly.
    */
-  timezone?: string;
+  timezone: string;
   /**
    * The Chat's id, or the Trigger run's id for a headless run — the session a
    * Provider Header's `${SESSION_ID}` placeholder resolves to. Stable across
    * every step and turn of that Chat, or across one Trigger run.
    *
-   * Core always supplies it, exactly as it supplies `timezone`; it is optional
-   * in the type only so a plugin built against this SDK still loads on an
-   * older core.
+   * **Required as of API v4** (see {@link PLUGIN_API_VERSION}), and core has
+   * always supplied it. Read `ctx.sessionId` directly.
    */
-  sessionId?: string;
+  sessionId: string;
   /**
    * Register something to close when this turn ends — see
    * {@link CloserRegistrar}.
@@ -184,6 +207,13 @@ export interface PluginLogger {
  *
  * `config` / `credentials` are `undefined` when the manifest declares no
  * corresponding schema (nothing to validate against).
+ *
+ * `TConfig` / `TCredentials` are the output types of the manifest's
+ * `configSchema` / `credentialsSchema`, carried through
+ * {@link PlatypusPlugin} to every contribution factory. Declare them on the
+ * manifest (`PlatypusPlugin<MyConfig, MyCredentials>`) and the block arrives
+ * narrowed — no cast, no re-parse. A manifest that declares neither leaves both
+ * `unknown`, which is the same shape this block has always had.
  */
 export interface PluginConfigContext<
   TConfig = unknown,
@@ -224,24 +254,39 @@ export interface PluginConfigContext<
  * cap is left out of that turn with a warning. Neither is truncated to fit.
  * Core plugins keep bare tool names, as they keep bare ids.
  */
-export type ToolSetTools =
+export type ToolSetTools<TConfig = unknown, TCredentials = unknown> =
   | Record<string, Tool>
   | ((
       ctx: ToolSetContext,
-      plugin: PluginConfigContext,
+      plugin: PluginConfigContext<TConfig, TCredentials>,
     ) => Record<string, Tool> | Promise<Record<string, Tool>>);
 
 /**
  * A single Tool set contribution — a named, categorised group of tools an Agent
  * can be granted. This is the payload core's internal `registerToolSet` accepts,
  * with the `id` it takes as its first argument folded in.
+ *
+ * `TConfig` / `TCredentials` are the plugin's deploy-time config and
+ * credentials, forwarded from {@link PlatypusPlugin} so a factory reads
+ * `plugin.config` already narrowed.
  */
-export interface ToolSetContribution {
+export interface ToolSetContribution<
+  TConfig = unknown,
+  TCredentials = unknown,
+> {
   id: string;
   name: string;
   category: string;
-  description?: string;
-  tools: ToolSetTools;
+  /**
+   * A sentence a Workspace Owner reads on the Agent form, describing what
+   * granting this set gives their Agent.
+   *
+   * **Required as of API v4** (see {@link PLUGIN_API_VERSION}). Every Tool set
+   * core contributes supplies one, and a set without one reads as an unexplained
+   * switch beside its neighbours.
+   */
+  description: string;
+  tools: ToolSetTools<TConfig, TCredentials>;
 }
 
 /**
@@ -459,8 +504,15 @@ export interface SandboxBackend {
  * factory with no way to say *why* it refused a value. A v1 factory migrates by
  * reading `plugin.config` where its argument used to be the config itself.
  */
-export type SandboxConfigSchema<TConfig = unknown> =
-  z.ZodType<TConfig> | ((plugin: PluginConfigContext) => z.ZodType<TConfig>);
+export type SandboxConfigSchema<
+  TConfig = unknown,
+  TPluginConfig = unknown,
+  TPluginCredentials = unknown,
+> =
+  | z.ZodType<TConfig>
+  | ((
+      plugin: PluginConfigContext<TPluginConfig, TPluginCredentials>,
+    ) => z.ZodType<TConfig>);
 
 /**
  * A single Sandbox-backend contribution — the payload core's internal
@@ -472,14 +524,19 @@ export type SandboxConfigSchema<TConfig = unknown> =
  * factory of the plugin's deploy-time block (resolved at load). The factory
  * receives the same {@link PluginConfigContext} `create()` does, and narrows
  * `config` / `credentials` itself — a plugin knows its own schemas.
+ *
+ * `TConfig` / `TCredentials` are the per-Workspace values; the trailing pair is
+ * the plugin's deploy-time block, forwarded from {@link PlatypusPlugin}.
  */
 export interface SandboxBackendContribution<
   TConfig = unknown,
   TCredentials = unknown,
+  TPluginConfig = unknown,
+  TPluginCredentials = unknown,
 > {
   backend: string;
   name: string;
-  configSchema: SandboxConfigSchema<TConfig>;
+  configSchema: SandboxConfigSchema<TConfig, TPluginConfig, TPluginCredentials>;
   credentialsSchema: z.ZodType<TCredentials>;
   /**
    * Instantiate the adapter. `config` / `credentials` are the per-Workspace
@@ -493,7 +550,7 @@ export interface SandboxBackendContribution<
   create(
     config: TConfig,
     credentials: TCredentials,
-    plugin: PluginConfigContext,
+    plugin: PluginConfigContext<TPluginConfig, TPluginCredentials>,
   ): SandboxBackend;
 }
 
@@ -628,7 +685,10 @@ export interface WebBackendExecutors {
  * **plugin-level** schemas via `PLATYPUS_PLUGIN_CONFIG_<NAME>`, boot-validated and
  * injected here as `plugin.credentials`.
  */
-export interface WebBackendContribution {
+export interface WebBackendContribution<
+  TPluginConfig = unknown,
+  TPluginCredentials = unknown,
+> {
   backend: string;
   name: string;
   /**
@@ -662,7 +722,7 @@ export interface WebBackendContribution {
    */
   createExecutors(
     ctx: WebBackendContext,
-    plugin: PluginConfigContext,
+    plugin: PluginConfigContext<TPluginConfig, TPluginCredentials>,
   ): WebBackendExecutors | Promise<WebBackendExecutors>;
 }
 
@@ -739,7 +799,10 @@ export interface ToolGateOptions {
  * counts as `ask`, which stops the call. With several gates the most
  * restrictive answer wins: `deny` over `ask` over `allow`.
  */
-export interface ToolGateContribution {
+export interface ToolGateContribution<
+  TPluginConfig = unknown,
+  TPluginCredentials = unknown,
+> {
   id: string;
   name: string;
   /**
@@ -755,7 +818,7 @@ export interface ToolGateContribution {
    */
   evaluate(
     call: ToolGateCall,
-    plugin: PluginConfigContext,
+    plugin: PluginConfigContext<TPluginConfig, TPluginCredentials>,
     options: ToolGateOptions,
   ): ToolGateVerdict | Promise<ToolGateVerdict>;
 }
@@ -764,13 +827,44 @@ export interface ToolGateContribution {
  * The `contributes` block: keyed by Extension-point type (core-owned, fixed).
  * Adding an Extension point (e.g. a messaging gateway) is a purely additive,
  * minor API bump — a new optional key here.
+ *
+ * `TConfig` / `TCredentials` are the plugin's deploy-time block, forwarded from
+ * {@link PlatypusPlugin} to every contribution type here.
  */
-export interface PluginContributions {
-  toolSets?: ToolSetContribution[];
-  sandboxBackends?: SandboxBackendContribution[];
-  webBackends?: WebBackendContribution[];
-  toolGates?: ToolGateContribution[];
+export interface PluginContributions<
+  TConfig = unknown,
+  TCredentials = unknown,
+> {
+  toolSets?: ToolSetContribution<TConfig, TCredentials>[];
+  sandboxBackends?: SandboxBackendContribution<
+    unknown,
+    unknown,
+    TConfig,
+    TCredentials
+  >[];
+  webBackends?: WebBackendContribution<TConfig, TCredentials>[];
+  toolGates?: ToolGateContribution<TConfig, TCredentials>[];
 }
+
+/**
+ * The deploy-time schema fields of a manifest. Naming a config type without the
+ * schema that produces it would type a block core never parsed, so a manifest
+ * that sets `TConfig` must declare `configSchema`; the same holds for
+ * `TCredentials` and `credentialsSchema`. A manifest that leaves a type at its
+ * default `unknown` may declare the schema, or omit it when it declares none.
+ *
+ * `configSchema` is deploy-time, Operator-owned non-secret config; core
+ * validates the Operator-supplied value against it at boot and hands every
+ * contribution factory the parsed result as {@link PluginConfigContext.config}.
+ * Its output type is `TConfig`. `credentialsSchema` is the secret half, typed as
+ * `TCredentials`.
+ */
+type PluginDeployTimeSchemas<TConfig, TCredentials> = (unknown extends TConfig
+  ? { configSchema?: z.ZodType<TConfig> }
+  : { configSchema: z.ZodType<TConfig> }) &
+  (unknown extends TCredentials
+    ? { credentialsSchema?: z.ZodType<TCredentials> }
+    : { credentialsSchema: z.ZodType<TCredentials> });
 
 /**
  * A Platypus plugin manifest. A plugin is a distributable bundle — one version,
@@ -781,9 +875,11 @@ export interface PluginContributions {
  * `configSchema` / `credentialsSchema` describe deploy-time, Operator-owned
  * config keyed by plugin name. Core validates the Operator-supplied values
  * against them at boot (fail-loud on mismatch) and injects the resolved
- * {@link PluginConfigContext} into every contribution factory.
+ * {@link PluginConfigContext} into every contribution factory. Their output
+ * types are the manifest's `TConfig` / `TCredentials`, and declaring one without
+ * the other is a type error.
  */
-export interface PlatypusPlugin {
+export type PlatypusPlugin<TConfig = unknown, TCredentials = unknown> = {
   /**
    * The plugin's identity — its config namespace and, for third-party plugins,
    * the prefix core prepends to every contribution id (`${name}.${id}`) and to
@@ -809,7 +905,5 @@ export interface PlatypusPlugin {
    * PLUGIN_API_VERSION]`; see {@link PLUGIN_API_VERSION} for the policy.
    */
   apiVersion: number;
-  configSchema?: z.ZodType;
-  credentialsSchema?: z.ZodType;
-  contributes: PluginContributions;
-}
+  contributes: PluginContributions<TConfig, TCredentials>;
+} & PluginDeployTimeSchemas<TConfig, TCredentials>;

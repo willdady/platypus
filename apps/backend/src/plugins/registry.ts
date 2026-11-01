@@ -47,9 +47,7 @@ export const setLoadedPlugins = (result: LoadPluginsResult): void => {
   loadedPlugins = result.plugins;
   owners = result.owners;
   pluginConfigs = new Map();
-  for (const p of result.plugins) {
-    if (p.config !== undefined) pluginConfigs.set(p.name, p.config);
-  }
+  for (const p of result.plugins) pluginConfigs.set(p.name, p.config);
 };
 
 /** The plugins loaded at boot, for the read-only `GET /plugins` catalog. */
@@ -77,6 +75,12 @@ export const getWebBackendPlugin = (backend: string): string | undefined =>
  * loaded or declares no `configSchema`. Lets a request handler read a plugin's
  * resolved config without re-parsing the environment — e.g. the Docker
  * network-allowlist endpoint (ADR-0005/0013). Read-only, boot-populated.
+ *
+ * `TConfig` is the output type of that plugin's manifest `configSchema`
+ * (`DockerPluginConfig`, say). The loader validated and parsed the value against
+ * that schema at boot, so this returns it as-is: there is no second parse, and
+ * no cast at the call site. Asking for a different shape than the manifest's own
+ * schema produces is a caller error, not something core can detect here.
  */
-export const getPluginConfig = (name: string): unknown =>
-  pluginConfigs.get(name);
+export const getPluginConfig = <TConfig>(name: string): TConfig | undefined =>
+  pluginConfigs.get(name) as TConfig | undefined;

@@ -122,7 +122,12 @@ const register = (
       id,
       pluginName,
       isCore,
-      contribution: { name: id, category: "Test", tools },
+      contribution: {
+        name: id,
+        category: "Test",
+        description: "Test set",
+        tools,
+      },
       plugin: PLUGIN,
     }),
   );

@@ -64,8 +64,8 @@ read it from the package you have installed. A signature pasted onto a docs page
 drifts silently; the one in your `node_modules` cannot.
 
 Every Contribution is validated before it is registered. A Tool set with a
-blank `id`, `name`, or `category`, or with `tools` that is neither a map nor a
-factory, aborts startup with an error naming the Plugin and the entry that
+blank `id`, `name`, `category`, `description`, or `tools` that is neither a map
+nor a factory, aborts startup with an error naming the Plugin and the entry that
 failed. The package types catch a missing field or a wrong type in TypeScript,
 but not a blank string; the load-time checks catch all three, and protect
 deployments that load JavaScript or a malformed package.

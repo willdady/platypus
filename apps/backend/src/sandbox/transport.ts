@@ -43,18 +43,19 @@ export interface SandboxExecOptions {
    * Fires when core has stopped waiting for this command — the turn was
    * cancelled, or the run hit a timeout.
    *
-   * Honour it where the command actually runs, and honour it from the *first*
-   * await: the per-command timer is armed only after the unbounded daemon or
-   * connection calls that precede it, so those are exactly where an abort has
-   * nothing else to recover it (issue #921).
+   * Core passes it on every tool call. Honour it where the command actually
+   * runs, and honour it from the *first* await: the per-command timer is armed
+   * only after the unbounded daemon or connection calls that precede it, so
+   * those are exactly where an abort has nothing else to recover it (issue
+   * #921).
    *
    * Reject when it fires, rather than resolving with an exit code — the command
-   * did not finish, core stopped listening. Optional: core races the whole tool
-   * call against the same signal, so a transport that ignores this still cannot
-   * hold the turn open; ignoring it only means the command runs on as an orphan
-   * until its own timeout, exactly as it does today.
+   * did not finish, core stopped listening. Honouring it is still the
+   * transport's choice: core races the whole tool call against the same signal,
+   * so a transport that ignores this cannot hold the turn open; ignoring it only
+   * means the command runs on as an orphan until its own timeout.
    */
-  signal?: AbortSignal;
+  signal: AbortSignal;
 }
 
 /**
@@ -233,12 +234,13 @@ export interface SandboxTransport {
    *
    * `signal` is the turn's: core already stops waiting when it fires, so it is
    * for a transport that can end the read itself rather than leave it running.
+   * Core passes it on every read; honouring it is the transport's choice.
    */
   readFile(
     ctx: SandboxContext,
     absPath: string,
     cap: number,
-    signal?: AbortSignal,
+    signal: AbortSignal,
   ): Promise<Buffer>;
 
   /**
