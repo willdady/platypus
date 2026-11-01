@@ -268,6 +268,7 @@ function TriggerForm({
     entity: "triggers",
     scope: { orgId, workspaceId },
     id: triggerId,
+    method: "PATCH",
     fromRecord: (trigger) => ({
       name: trigger.name,
       description: trigger.description || "",
@@ -282,7 +283,9 @@ function TriggerForm({
     onSeed: (trigger) => setTriggerType(trigger.type),
     retractableFields: RETRACTABLE_FIELDS,
     buildPayload: (data): unknown => ({
-      workspaceId,
+      // The route supplies the Workspace on create; an update does not carry
+      // scope at all.
+      ...(triggerId ? {} : { workspaceId }),
       agentId: data.agentId || defaultAgentId,
       name: data.name,
       description: data.description || undefined,

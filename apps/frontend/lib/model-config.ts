@@ -17,7 +17,7 @@ import {
  * (`classifyFile`) is shared with the backend
  * via @platypus/schemas so the two never drift; this
  * module adds the frontend-only view helpers over a provider's `modelIds`,
- * which may be the new per-model objects or a legacy `string[]`.
+ * which are per-model objects.
  */
 
 export type ModelConfigView = {
@@ -41,27 +41,19 @@ export type ModelConfigView = {
   reasoning?: ReasoningMap;
 };
 
-/** Normalize a provider's models to objects, tolerating the legacy `string[]`. */
+/** A provider's models, as the frontend's view helpers read them. */
 export function getModelConfigs(
   provider: Pick<Provider, "modelIds">,
 ): ModelConfigView[] {
-  return (
-    provider.modelIds as unknown as Array<
-      string | (Partial<ModelConfigView> & { id: string })
-    >
-  ).map((m) =>
-    typeof m === "string"
-      ? { id: m, passthroughFileTypes: [] }
-      : {
-          id: m.id,
-          alias: m.alias,
-          passthroughFileTypes: m.passthroughFileTypes ?? [],
-          maxExtractedTextChars: m.maxExtractedTextChars,
-          maxOutputTokens: m.maxOutputTokens,
-          contextWindow: m.contextWindow,
-          reasoning: m.reasoning,
-        },
-  );
+  return provider.modelIds.map((m) => ({
+    id: m.id,
+    alias: m.alias,
+    passthroughFileTypes: m.passthroughFileTypes,
+    maxExtractedTextChars: m.maxExtractedTextChars,
+    maxOutputTokens: m.maxOutputTokens,
+    contextWindow: m.contextWindow,
+    reasoning: m.reasoning,
+  }));
 }
 
 /**

@@ -206,11 +206,10 @@ describe("Workspace Routes", () => {
         organizationId: "org-2",
       });
 
-      expect(res.status).toBe(201);
-      expect(fake.tables.workspace.at(-1)).toMatchObject({
-        organizationId: "org-1",
-        ownerId: "user-1",
-      });
+      expect(res.status).toBe(400);
+      expect(fake.tables.workspace.map((w) => w.name)).not.toContain(
+        "Bound Workspace",
+      );
     });
   });
 
@@ -222,6 +221,8 @@ describe("Workspace Routes", () => {
       name: "OpenAI",
       providerType: "OpenAI",
       apiKey: "sk-test",
+      apiMode: "responses" as const,
+      searchSource: "native",
       modelIds: [{ id: "gpt-5" }],
       taskModelId: "gpt-5",
       memoryExtractionModelId: "gpt-5",

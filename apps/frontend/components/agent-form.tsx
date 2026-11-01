@@ -266,8 +266,6 @@ function AgentForm({
           : undefined) ?? data.modelId;
 
       return {
-        // Scope comes from the route, not the body; the org PUT ignores this.
-        workspaceId: orgScoped ? undefined : workspaceId,
         providerId: data.providerId,
         name: data.name,
         description: data.description,

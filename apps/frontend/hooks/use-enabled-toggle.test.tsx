@@ -65,7 +65,7 @@ describe("useEnabledToggle", () => {
       "http://test",
       "webhooks",
       { orgId: "o", workspaceId: "w" },
-      { id: "a", data: { enabled: false } },
+      { id: "a", method: "PATCH", data: { enabled: false } },
     );
 
     await act(async () => {

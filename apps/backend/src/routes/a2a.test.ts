@@ -608,7 +608,7 @@ const seedConversation = (
           apiKey: "sk-test",
           apiMode: "responses",
           searchSource: "native",
-          modelIds: ["gpt-test"],
+          modelIds: [{ id: "gpt-test", passthroughFileTypes: [] }],
           taskModelId: "gpt-test",
           memoryExtractionModelId: "gpt-test",
         },
@@ -1552,9 +1552,9 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
         workspaceId: "ws-1",
         isWorkspaceOwner: true,
       },
+      chatId: first.contextId,
       request: {
-        id: first.contextId,
-        workspaceId: "ws-1",
+        trigger: "submit",
         agentId: "agent-1",
         message: {
           id: "owner-msg",
@@ -5863,7 +5863,12 @@ describe("POST /a2a/:endpointId — cutting off access stops running work", () =
     ],
     [
       "the Org A2A gate closes",
-      () => setA2aAccess("org-1", { gate: "off" }, "admin-1"),
+      () =>
+        setA2aAccess(
+          "org-1",
+          { gate: "off", allowedWorkspaceIds: null },
+          "admin-1",
+        ),
     ],
     [
       "the Workspace is deselected",
@@ -6351,9 +6356,9 @@ describe("a Chat turn outside A2A", () => {
         workspaceId: "ws-1",
         isWorkspaceOwner: true,
       },
+      chatId: "ui-chat",
       request: {
-        id: "ui-chat",
-        workspaceId: "ws-1",
+        trigger: "submit",
         agentId: "agent-1",
         message: {
           id: "ui-msg",

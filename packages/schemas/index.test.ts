@@ -11,6 +11,7 @@ import {
   webhookEventScope,
   organizationSchema,
   organizationUpdateSchema,
+  kanbanBoardUpdateSchema,
   workspaceSchema,
   workspaceCreateSchema,
   agentSchema,
@@ -20,6 +21,7 @@ import {
   mcpCreateSchema,
   mcpUpdateSchema,
   mcpTestSchema,
+  mcpStoredTestSchema,
   slugifyMcpName,
   namespaceMcpToolName,
   MAX_PLUGIN_NAME_LENGTH,
@@ -32,7 +34,6 @@ import {
   attachmentSchema,
   nextTurnOccupancy,
   attachmentCreateSchema,
-  orgAttachmentCreateSchema,
   chatSubmitSchema,
   chatSchema,
   triggerRunSchema,
@@ -166,15 +167,13 @@ describe("Attachment Schema", () => {
     expect(result.success).toBe(false);
   });
 
-  it("org create schema requires a string workspaceId", () => {
-    const base = { resourceType: "mcp", resourceId: "res-1" };
+  it("rejects an unknown key on a create body", () => {
     expect(
-      orgAttachmentCreateSchema.safeParse({ ...base, workspaceId: "ws-1" })
-        .success,
-    ).toBe(true);
-    expect(orgAttachmentCreateSchema.safeParse(base).success).toBe(false);
-    expect(
-      orgAttachmentCreateSchema.safeParse({ ...base, workspaceId: [] }).success,
+      attachmentCreateSchema.safeParse({
+        resourceType: "mcp",
+        resourceId: "res-1",
+        workspaceId: "ws-1",
+      }).success,
     ).toBe(false);
   });
 });
@@ -216,13 +215,9 @@ describe("MCP Schema", () => {
 
   it.each([
     ["full", mcpSchema, { ...base, workspaceId: "ws-1" }],
-    [
-      "create",
-      mcpCreateSchema,
-      { name: "Test MCP", workspaceId: "ws-1", url: base.url },
-    ],
+    ["create", mcpCreateSchema, { name: "Test MCP", url: base.url }],
     ["update", mcpUpdateSchema, { name: "Test MCP", url: base.url }],
-    ["test", mcpTestSchema, { url: base.url }],
+    ["test", mcpTestSchema, { name: "Test MCP", url: base.url }],
   ] as const)(
     "requires a bearer token for Bearer auth on the %s schema",
     (_, schema, body) => {
@@ -238,11 +233,7 @@ describe("MCP Schema", () => {
   );
 
   it.each([
-    [
-      "create",
-      mcpCreateSchema,
-      { name: "Test MCP", workspaceId: "ws-1", url: base.url },
-    ],
+    ["create", mcpCreateSchema, { name: "Test MCP", url: base.url }],
     ["update", mcpUpdateSchema, { name: "Test MCP", url: base.url }],
   ] as const)(
     "trims a pasted OAuth client ID and secret on the %s schema",
@@ -260,15 +251,21 @@ describe("MCP Schema", () => {
     },
   );
 
-  it("requires the stored mcpId to test an OAuth MCP", () => {
-    const oauth = { url: base.url, authType: "OAuth" };
-    expect(mcpTestSchema.safeParse(oauth).success).toBe(false);
-    expect(mcpTestSchema.safeParse({ ...oauth, mcpId: "" }).success).toBe(
-      false,
-    );
-    expect(mcpTestSchema.safeParse({ ...oauth, mcpId: "mcp-1" }).success).toBe(
+  it("requires an anonymous MCP test to carry a name", () => {
+    const test = { url: base.url, authType: "None" as const };
+    expect(mcpTestSchema.safeParse(test).success).toBe(false);
+    expect(mcpTestSchema.safeParse({ ...test, name: "Test MCP" }).success).toBe(
       true,
     );
+  });
+
+  it("tests an OAuth MCP only on the stored, path-addressed schema", () => {
+    const oauth = { url: base.url, authType: "OAuth" as const };
+    expect(
+      mcpTestSchema.safeParse({ ...oauth, name: "Test MCP" }).success,
+    ).toBe(false);
+    // The stored schema can omit the name: the row supplies it.
+    expect(mcpStoredTestSchema.safeParse(oauth).success).toBe(true);
   });
 });
 
@@ -317,7 +314,6 @@ describe("MCP name slugification (issue #467)", () => {
 describe("MCP create/update schemas reject a name that slugifies to empty", () => {
   const createBase = {
     name: "!!!",
-    workspaceId: "ws-1",
     url: "https://mcp.example.com",
     authType: "None" as const,
   };
@@ -468,14 +464,14 @@ describe("Workspace Create Schema", () => {
 
   // The organization is a tenancy boundary, taken from the route rather than
   // the body. Pinned here so the field cannot drift back into the create
-  // contract: a body that names one is accepted, but the name is dropped.
-  it("drops an organizationId supplied in the payload", () => {
-    const result = workspaceCreateSchema.safeParse({
-      name: "Test Workspace",
-      organizationId: "org-2",
-    });
-    expect(result.success).toBe(true);
-    expect(result.data).not.toHaveProperty("organizationId");
+  // contract: a body that names one is a 400.
+  it("rejects an organizationId supplied in the payload", () => {
+    expect(
+      workspaceCreateSchema.safeParse({
+        name: "Test Workspace",
+        organizationId: "org-2",
+      }).success,
+    ).toBe(false);
   });
 });
 
@@ -582,8 +578,7 @@ describe("Chat Submit Schema", () => {
     ],
   };
   const baseSubmit = {
-    id: "chat-1",
-    workspaceId: "ws-1",
+    trigger: "submit" as const,
     message: userMessage,
     parentId: null,
     providerId: "p1",
@@ -591,7 +586,7 @@ describe("Chat Submit Schema", () => {
   };
   const { message: _, parentId: __, ...baseTurn } = baseSubmit;
 
-  it("should accept a new message and the id it follows", () => {
+  it("should accept a new message and the message it follows", () => {
     const result = chatSubmitSchema.safeParse({
       ...baseSubmit,
       parentId: "a1",
@@ -720,8 +715,7 @@ describe("isValidChatMaxSteps", () => {
 
   it("agrees with the request schema it is derived from", () => {
     const base = {
-      id: "chat-1",
-      workspaceId: "ws-1",
+      trigger: "submit" as const,
       message: {
         id: "u1",
         role: "user",
@@ -777,22 +771,23 @@ describe("isValidChatSampling", () => {
 
 describe("Provider Create Schema", () => {
   const baseProvider = {
-    organizationId: "org-123",
     name: "Test Provider",
     providerType: "OpenAI" as const,
     apiKey: "sk-test",
-    modelIds: ["gpt-4"],
+    apiMode: "responses" as const,
+    searchSource: SEARCH_SOURCE_NATIVE,
+    modelIds: [{ id: "gpt-4", passthroughFileTypes: [] }],
     taskModelId: "gpt-4",
     memoryExtractionModelId: "gpt-4",
   };
 
-  it("defaults searchSource to native when omitted", () => {
-    const result = providerCreateSchema.safeParse(baseProvider);
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data.searchSource).toBe(SEARCH_SOURCE_NATIVE);
-    }
-  });
+  it.each(["searchSource", "apiMode"] as const)(
+    "requires %s on create",
+    (field) => {
+      const { [field]: _, ...without } = baseProvider;
+      expect(providerCreateSchema.safeParse(without).success).toBe(false);
+    },
+  );
 
   it("preserves searchSource when explicitly set to none", () => {
     const result = providerCreateSchema.safeParse({
@@ -895,18 +890,15 @@ describe("Provider Create Schema", () => {
     }
   });
 
-  it("normalises an empty searchSource to none and bounds its length", () => {
-    // A form select's "None" option, or a pre-collapse row written by hand,
-    // could still submit `""`. Normalised rather than rejected, so the column
-    // holds one representation of "no search" and choosing None is not a 400.
-    const empty = providerUpdateSchema.safeParse({
-      ...baseProvider,
-      searchSource: "",
-    });
-    expect(empty.success).toBe(true);
-    if (empty.success) {
-      expect(empty.data.searchSource).toBe(SEARCH_SOURCE_NONE);
-    }
+  it("bounds searchSource and rejects the empty string", () => {
+    // The column holds one representation of "no search": SEARCH_SOURCE_NONE,
+    // never `""`.
+    expect(
+      providerCreateSchema.safeParse({
+        ...baseProvider,
+        searchSource: "",
+      }).success,
+    ).toBe(false);
 
     // Bounded because the value is free text that reaches a log line on every
     // searching turn; 200 is far above a namespaced plugin id.
@@ -925,21 +917,15 @@ describe("Provider Create Schema", () => {
   });
 
   // The pre-collapse `nativeSearchEnabled` / `webBackend` pair is gone from the
-  // request shape entirely, not aliased onto `searchSource`: the Provider API is
-  // reachable only with a session cookie, so its one writer is the Provider form
-  // shipped alongside it, and that always sends `searchSource`.
-  it("ignores the pre-collapse search fields rather than mapping them", () => {
-    const result = providerCreateSchema.safeParse({
-      ...baseProvider,
-      nativeSearchEnabled: false,
-      webBackend: "acme.searx",
-    });
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data.searchSource).toBe(SEARCH_SOURCE_NATIVE);
-      expect(result.data).not.toHaveProperty("nativeSearchEnabled");
-      expect(result.data).not.toHaveProperty("webBackend");
-    }
+  // request shape entirely; a body still carrying either is a 400.
+  it("rejects the pre-collapse search fields", () => {
+    expect(
+      providerCreateSchema.safeParse({
+        ...baseProvider,
+        nativeSearchEnabled: false,
+        webBackend: "acme.searx",
+      }).success,
+    ).toBe(false);
   });
 });
 
@@ -950,7 +936,9 @@ describe("Provider Schema", () => {
     name: "Test Provider",
     providerType: "OpenAI" as const,
     apiKey: "sk-test",
-    modelIds: ["gpt-4"],
+    apiMode: "responses" as const,
+    searchSource: SEARCH_SOURCE_NATIVE,
+    modelIds: [{ id: "gpt-4", passthroughFileTypes: [] }],
     taskModelId: "gpt-4",
     memoryExtractionModelId: "gpt-4",
     createdAt: new Date(),
@@ -1176,26 +1164,22 @@ describe("isPresentableUrl", () => {
 
 describe("Provider modelIds (per-model config)", () => {
   const base = {
-    organizationId: "org-123",
     name: "Test Provider",
     providerType: "OpenAI" as const,
     apiKey: "sk-test",
+    apiMode: "responses" as const,
+    searchSource: SEARCH_SOURCE_NATIVE,
     taskModelId: "gpt-4",
     memoryExtractionModelId: "gpt-4",
   };
 
-  it("coerces a legacy string[] to per-model objects with empty passthrough", () => {
-    const result = providerCreateSchema.safeParse({
-      ...base,
-      modelIds: ["gpt-4", "gpt-4o"],
-    });
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data.modelIds).toEqual([
-        { id: "gpt-4", passthroughFileTypes: [] },
-        { id: "gpt-4o", passthroughFileTypes: [] },
-      ]);
-    }
+  it("rejects a bare string[] model list", () => {
+    expect(
+      providerCreateSchema.safeParse({
+        ...base,
+        modelIds: ["gpt-4", "gpt-4o"],
+      }).success,
+    ).toBe(false);
   });
 
   it("accepts per-model objects and defaults passthroughFileTypes to []", () => {
@@ -1304,17 +1288,6 @@ describe("Provider modelIds (per-model config)", () => {
         modelIds: [{ id: "qwen", maxOutputTokens: 10_000_000 }],
       }).success,
     ).toBe(true);
-  });
-
-  it("survives the legacy string[] coercion as undefined", () => {
-    const result = providerCreateSchema.safeParse({
-      ...base,
-      modelIds: ["gpt-4"],
-    });
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data.modelIds[0].maxOutputTokens).toBeUndefined();
-    }
   });
 
   it("accepts a declared contextWindow", () => {
@@ -1427,6 +1400,40 @@ describe("Organization identityContext", () => {
       }).success,
     ).toBe(false);
   });
+
+  it("requires identityContext on the update schema", () => {
+    expect(
+      organizationUpdateSchema.safeParse({ name: "Acme Org" }).success,
+    ).toBe(false);
+    expect(
+      organizationUpdateSchema.safeParse({
+        name: "Acme Org",
+        identityContext: null,
+      }).success,
+    ).toBe(true);
+  });
+});
+
+describe("kanbanBoardUpdateSchema", () => {
+  const board = {
+    name: "Board",
+    description: null,
+    labels: [{ id: "label-1", name: "Bug", color: "#ef4444" }],
+  };
+
+  it("accepts every editable field", () => {
+    expect(kanbanBoardUpdateSchema.safeParse(board).success).toBe(true);
+  });
+
+  it.each(["name", "description", "labels"])(
+    "requires %s, so a partial replacement is rejected",
+    (key) => {
+      const partial: Record<string, unknown> = { ...board };
+      delete partial[key];
+
+      expect(kanbanBoardUpdateSchema.safeParse(partial).success).toBe(false);
+    },
+  );
 });
 
 describe("sandboxEnvSchema", () => {
@@ -1608,10 +1615,11 @@ describe("resolveExtractedTextCap", () => {
 
 describe("Model aliases (modelIds)", () => {
   const base = {
-    organizationId: "org-123",
     name: "Test Provider",
     providerType: "OpenAI" as const,
     apiKey: "sk-test",
+    apiMode: "responses" as const,
+    searchSource: SEARCH_SOURCE_NATIVE,
     taskModelId: "gpt-4",
     memoryExtractionModelId: "gpt-4",
   };
@@ -1678,10 +1686,11 @@ describe("Model aliases (modelIds)", () => {
 
 describe("Provider pointer-settings reject alias references", () => {
   const base = {
-    organizationId: "org-123",
     name: "Test Provider",
     providerType: "OpenAI" as const,
     apiKey: "sk-test",
+    apiMode: "responses" as const,
+    searchSource: SEARCH_SOURCE_NATIVE,
     modelIds: [{ id: "gpt-4", alias: "flagship" }],
     taskModelId: "gpt-4",
     memoryExtractionModelId: "gpt-4",
@@ -2259,8 +2268,6 @@ describe("sampling parameter bounds (#1144)", () => {
 
   it("rejects an out-of-range value on a Chat turn", () => {
     const turn = {
-      id: "c1",
-      workspaceId: "w1",
       agentId: "a1",
       trigger: "regenerate-message",
       messageId: "m1",

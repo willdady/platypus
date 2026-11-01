@@ -125,7 +125,6 @@ describe("MCP Routes", () => {
       name: "New MCP",
       url: "http://mcp.com",
       authType: "None",
-      workspaceId,
     };
 
     const post = (payload: unknown = createBody) =>
@@ -507,12 +506,16 @@ describe("MCP Routes", () => {
       mockSession();
       world();
 
-      const res = await probe({ url: "http://mcp.com", authType: "None" });
+      const res = await probe({
+        url: "http://mcp.com",
+        authType: "None",
+        name: "My Server",
+      });
 
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({
         success: true,
-        toolNames: ["tool1"],
+        toolNames: ["my_server__tool1"],
         invalidToolNames: [],
       });
     });
@@ -548,11 +551,10 @@ describe("MCP Routes", () => {
         },
       });
 
-      const res = await probe({
-        url: "http://mcp.com",
-        authType: "OAuth",
-        mcpId: "mcp-org",
-      });
+      const res = await app.request(
+        `${baseUrl}/mcp-org/test`,
+        json("POST", { url: "http://mcp.com", authType: "OAuth" }),
+      );
 
       expect(res.status).toBe(200);
       // Namespaced under the stored row's slug: the probe used the resolved MCP.
@@ -567,11 +569,10 @@ describe("MCP Routes", () => {
       mockSession();
       world({ rows: { mcp: [sharedMcp()], attachment: [] } });
 
-      const res = await probe({
-        url: "http://mcp.com",
-        authType: "OAuth",
-        mcpId: "mcp-org",
-      });
+      const res = await app.request(
+        `${baseUrl}/mcp-org/test`,
+        json("POST", { url: "http://mcp.com", authType: "OAuth" }),
+      );
 
       expect(res.status).toBe(404);
       expect(await res.json()).toEqual({ error: "MCP not found" });
@@ -678,6 +679,18 @@ describe("MCP Routes", () => {
       });
 
       expect(res.status).toBe(404);
+    });
+
+    it("rejects an unknown query key", async () => {
+      mockSession();
+      world({ rows: { mcp: [oauthMcp] } });
+
+      const res = await app.request(`${authorizeUrl}?force=true&foo=1`, {
+        method: "POST",
+      });
+
+      expect(res.status).toBe(400);
+      expect(mcpAuth).not.toHaveBeenCalled();
     });
   });
 

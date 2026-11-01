@@ -205,9 +205,6 @@ function McpForm({
     },
     retractableFields: RETRACTABLE_FIELDS,
     buildPayload: (data) => ({
-      // Scope discriminator — the backend routes also enforce this from the
-      // URL, but sending it keeps the create payload self-describing.
-      ...(workspaceId ? { workspaceId } : { organizationId: orgId }),
       name: data.name,
       url: data.url,
       headers: rowsToRecord(data.headerRows, undefined),
@@ -317,17 +314,18 @@ function McpForm({
         name: formData.name,
       };
 
-      // For OAuth, include mcpId so the backend can use stored tokens
-      if (formData.authType === "OAuth" && mcpId) {
-        payload.mcpId = mcpId;
-      }
+      // A stored MCP is addressed in the path, so its saved OAuth tokens and
+      // name are available; an unsaved one is the anonymous test.
+      const testUrl = mcpId
+        ? joinUrl(backendUrl, `${collectionUrl}/${mcpId}/test`)
+        : joinUrl(backendUrl, `${collectionUrl}/test`);
 
       const outcome = await writeAt<{
         success: boolean;
         toolNames?: string[];
         invalidToolNames?: string[];
         error?: string;
-      }>(joinUrl(backendUrl, `${collectionUrl}/test`), {
+      }>(testUrl, {
         method: "POST",
         data: payload,
       });

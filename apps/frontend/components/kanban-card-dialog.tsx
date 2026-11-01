@@ -957,7 +957,11 @@ export function KanbanCardDialog({
         backendUrl,
         commentsEntity,
         { orgId, workspaceId },
-        { id: commentId, data: { body: editingCommentBody.trim() } },
+        {
+          id: commentId,
+          method: "PATCH",
+          data: { body: editingCommentBody.trim() },
+        },
       );
       if (outcome.outcome !== "success") {
         toast.error(outcome.message);

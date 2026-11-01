@@ -19,6 +19,11 @@ export type WriteOptions<TData> = {
   readonly id?: string;
   /** Omit only when `id` is set and the write is a delete. */
   readonly data?: TData;
+  /**
+   * An update's verb: `PUT` replaces the resource wholesale (the default),
+   * `PATCH` sends a partial body.
+   */
+  readonly method?: "PUT" | "PATCH";
 };
 
 /**
@@ -286,16 +291,18 @@ export async function writeEntity<TResult = unknown, TData = unknown>(
   scope: Scope,
   options: WriteOptions<TData> = {},
 ): Promise<WriteOutcome<TResult>> {
-  const { id, data } = options;
-  const method: "POST" | "PUT" | "DELETE" =
-    id === undefined ? "POST" : data === undefined ? "DELETE" : "PUT";
+  const { id, data, method: updateMethod = "PUT" } = options;
+  const method: "POST" | "PUT" | "PATCH" | "DELETE" =
+    id === undefined ? "POST" : data === undefined ? "DELETE" : updateMethod;
 
   const path = scopedPath(entity, scope);
   const collectionUrl = joinUrl(backendUrl, path);
   const url =
     id === undefined ? collectionUrl : joinUrl(backendUrl, `${path}/${id}`);
   const revalidateKeys =
-    method === "PUT" ? [collectionUrl, url] : [collectionUrl];
+    method === "POST" || method === "DELETE"
+      ? [collectionUrl]
+      : [collectionUrl, url];
 
   return performWrite<TResult, TData>(url, method, data, revalidateKeys);
 }

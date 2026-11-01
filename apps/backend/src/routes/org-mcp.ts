@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { z } from "zod";
 import { validate } from "../validate.ts";
 import { db } from "../index.ts";
 import {
@@ -6,6 +7,7 @@ import {
   mcpListResponseSchema,
   mcpResponseSchema,
   mcpTestSchema,
+  mcpStoredTestSchema,
   mcpUpdateSchema,
 } from "@platypus/schemas";
 import { requireAuth } from "../middleware/authentication.ts";
@@ -19,7 +21,6 @@ import {
   listOrgScoped,
   orgScopedWhere,
   requireOrgScoped,
-  resolveOrgScoped,
 } from "../services/scoped-resource.ts";
 import type { Variables } from "../server.ts";
 import {
@@ -126,21 +127,14 @@ orgMcp.delete(
   },
 );
 
-/** Test an org-scoped MCP connection (admin only) */
+/** Test an unsaved org-scoped MCP connection (admin only) */
 orgMcp.post(
   "/test",
   requireAuth,
   requireOrgAccess(["admin"]),
   validate("json", mcpTestSchema),
   async (c) => {
-    const data = c.req.valid("json");
-    const { orgId } = orgScopeOf(c);
-
-    const storedMcp = data.mcpId
-      ? await resolveOrgScoped(db, "mcp", data.mcpId, orgId)
-      : null;
-
-    const result = await probeMcpConnection(data, storedMcp);
+    const result = await probeMcpConnection(c.req.valid("json"), null);
     if (!result.success) {
       return c.json({ error: result.error }, result.status);
     }
@@ -148,20 +142,48 @@ orgMcp.post(
   },
 );
 
+/** Test a stored org-scoped MCP connection, addressed by its id (admin only) */
+orgMcp.post(
+  "/:mcpId/test",
+  requireAuth,
+  requireOrgAccess(["admin"]),
+  validate("json", mcpStoredTestSchema),
+  async (c) => {
+    const { orgId } = orgScopeOf(c);
+    const storedMcp = await requireOrgScoped(
+      db,
+      "mcp",
+      c.req.param("mcpId"),
+      orgId,
+    );
+
+    const result = await probeMcpConnection(c.req.valid("json"), storedMcp);
+    if (!result.success) {
+      return c.json({ error: result.error }, result.status);
+    }
+    return c.json(result, 200);
+  },
+);
+
+const oauthAuthorizeQuerySchema = z.strictObject({
+  force: z.enum(["true", "false"]).optional(),
+});
+
 /** Initiate OAuth authorization for an org-scoped MCP (admin only) */
 orgMcp.post(
   "/:mcpId/oauth/authorize",
   requireAuth,
   requireOrgAccess(["admin"]),
+  validate("query", oauthAuthorizeQuerySchema),
   async (c) => {
     const { orgId } = orgScopeOf(c);
     const mcpId = c.req.param("mcpId");
 
     const mcpRecord = await requireOrgScoped(db, "mcp", mcpId, orgId);
 
-    const force = c.req.query("force") === "true";
+    const { force } = c.req.valid("query");
     const result = await authorizeMcpOAuth(db, mcpRecord, {
-      force,
+      force: force === "true",
       clearTokensWhere: orgScopedWhere("mcp", mcpId, orgId),
       userId: userOf(c).id,
     });

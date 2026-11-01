@@ -27,7 +27,7 @@ export const validate = <
  * default. Extend it with the list's own filters.
  */
 export const paginationQuerySchema = (defaultLimit: number) =>
-  z.object({
+  z.strictObject({
     limit: z.coerce.number().int().min(1).max(100).default(defaultLimit),
     offset: z.coerce.number().int().min(0).default(0),
   });

@@ -36,7 +36,6 @@ describe("Skill Routes", () => {
           name: "new-skill",
           description: "This is a long enough description for the skill.",
           body: "This is a long enough body for the skill to pass the validation requirements.",
-          workspaceId,
         }),
         headers: { "Content-Type": "application/json" },
       });
@@ -58,7 +57,6 @@ describe("Skill Routes", () => {
           name: "new-skill",
           description: "This is a long enough description for the skill.",
           body: "This is a long enough body for the skill to pass the validation requirements.",
-          workspaceId,
         }),
         headers: { "Content-Type": "application/json" },
       });
@@ -89,7 +87,6 @@ describe("Skill Routes", () => {
           name: "new-skill",
           description: "This is a long enough description for the skill.",
           body: "This is a long enough body for the skill to pass the validation requirements.",
-          workspaceId,
         }),
         headers: { "Content-Type": "application/json" },
       });

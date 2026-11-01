@@ -110,7 +110,10 @@ describe("OrgInboundTriggerAccess", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    expect(sentBody(fetchMock)).toEqual({ gate: "off" });
+    expect(sentBody(fetchMock)).toEqual({
+      gate: "off",
+      allowedWorkspaceIds: null,
+    });
   });
 });
 

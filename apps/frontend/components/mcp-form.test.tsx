@@ -228,7 +228,6 @@ describe("McpForm save payload", () => {
       "http://test/organizations/org1/workspaces/ws1/mcps/m1",
     );
     expect(savedBody(fetchMock)).toEqual({
-      workspaceId: "ws1",
       name: "Docs",
       url: "http://mcp.test",
       headers: { "X-Api": "1" },
@@ -261,7 +260,6 @@ describe("McpForm save payload", () => {
       "http://test/organizations/org1/mcps/m1",
     );
     expect(savedBody(fetchMock)).toEqual({
-      organizationId: "org1",
       name: "Docs",
       url: "http://mcp.test",
       authType: "OAuth",
@@ -325,7 +323,7 @@ describe("McpForm test connection", () => {
     expect(screen.getByText(/names are too long/)).toBeInTheDocument();
     expect(screen.getByText("docs_a_very_long_tool_name")).toBeInTheDocument();
     expect(fetchMock.mock.calls[0][0]).toBe(
-      "http://test/organizations/org1/workspaces/ws1/mcps/test",
+      "http://test/organizations/org1/workspaces/ws1/mcps/m1/test",
     );
     expect(savedBody(fetchMock)).toEqual({
       url: "http://mcp.test",

@@ -165,7 +165,7 @@ describe("A2aEndpointsList", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       "http://test/organizations/org1/workspaces/ws1/a2a-endpoints/ep-1",
       expect.objectContaining({
-        method: "PUT",
+        method: "PATCH",
         body: JSON.stringify({ enabled: true }),
       }),
     );

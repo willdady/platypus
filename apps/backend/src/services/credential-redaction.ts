@@ -170,7 +170,4 @@ export const providerReadModel = (
 ): ProviderResponse => ({
   ...redactProviderSecrets(row, { reveal: opts.reveal }),
   scope: opts.scope,
-  // Stored rows may still hold bare model ids; the schema accepts both shapes,
-  // and the form normalizes either into model objects.
-  modelIds: row.modelIds as ProviderResponse["modelIds"],
 });

@@ -47,9 +47,9 @@ type WorkspaceWithOrg = {
 
 const RETRACTABLE_FIELDS = ["content", "workspaceId"] as const;
 
-const INITIAL_DATA = {
+const INITIAL_DATA: { content: string; workspaceId: string | null } = {
   content: "",
-  workspaceId: "",
+  workspaceId: null,
 };
 
 /** An edit shows the fixed Organization and Workspace as plain text. */
@@ -105,7 +105,7 @@ export function WorkspaceContextForm({ contextId }: { contextId?: string }) {
     id: contextId,
     fromRecord: (context) => ({
       content: context.content,
-      workspaceId: context.workspaceId || "",
+      workspaceId: context.workspaceId,
     }),
     retractableFields: RETRACTABLE_FIELDS,
     // The Workspace is fixed once the context exists.
@@ -280,7 +280,7 @@ export function WorkspaceContextForm({ contextId }: { contextId?: string }) {
                   </div>
                 ) : (
                   <Select
-                    value={formData.workspaceId}
+                    value={formData.workspaceId ?? ""}
                     onValueChange={(value) => setField("workspaceId", value)}
                     disabled={workspacesLoading}
                   >

@@ -44,6 +44,7 @@ const tree = () => [
 const text = (id: string) => ({ type: "text", text: id });
 
 const submit = (overrides: Record<string, unknown> = {}) => ({
+  trigger: "submit" as const,
   message: { id: "u3", role: "user" as const, parts: [text("u3")] },
   parentId: "a2" as string | null,
   ...overrides,

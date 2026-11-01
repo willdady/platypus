@@ -157,10 +157,9 @@ function SkillForm({
       body: data.body,
       argumentHint: data.argumentHint || null,
       disableModelInvocation: data.disableModelInvocation,
-      // Scope and agent associations only apply to the workspace surface.
-      ...(workspaceId
-        ? { workspaceId, agentIds: selectedAgentIds }
-        : { organizationId: orgId }),
+      // Agent associations only apply to the workspace surface; scope comes
+      // from the route.
+      ...(workspaceId ? { agentIds: selectedAgentIds } : {}),
     }),
     onSuccess: () => router.push(returnPath),
     onError: toastGuidanceOrError,

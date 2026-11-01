@@ -3382,7 +3382,6 @@ describe("validateTurnAttachments", () => {
   // nothing must not receive the raw image.
   it.each([
     ["an empty declaration", [{ id: "gpt-4", passthroughFileTypes: [] }]],
-    ["a legacy bare-string entry", ["gpt-4"]],
   ])(
     "refuses an image for an Anthropic model with %s",
     async (_label, modelIds) => {

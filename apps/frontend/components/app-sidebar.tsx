@@ -252,8 +252,8 @@ export function AppSidebar() {
     entity: "chat",
     scope,
     id: renameChatId ?? undefined,
+    method: "PATCH",
     buildPayload: (data) => ({
-      workspaceId,
       ...data,
       isPinned: chats.find((chat) => chat.id === renameChatId)?.isPinned,
     }),

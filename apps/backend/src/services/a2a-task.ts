@@ -504,9 +504,9 @@ const startTurn = async (
   try {
     const response = await startChatTurn({
       scope,
+      chatId,
       request: {
-        id: chatId,
-        workspaceId: endpoint.workspaceId,
+        trigger: "submit",
         agentId: endpoint.agentId,
         message: { id: message.messageId, role: "user", parts },
         parentId,

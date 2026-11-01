@@ -159,7 +159,7 @@ const seed = () =>
           apiKey: "sk-test",
           apiMode: "responses",
           searchSource: "native",
-          modelIds: ["gpt-test"],
+          modelIds: [{ id: "gpt-test", passthroughFileTypes: [] }],
           taskModelId: "gpt-test",
           memoryExtractionModelId: "gpt-test",
         },

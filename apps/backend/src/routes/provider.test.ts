@@ -134,10 +134,11 @@ describe("Provider Routes", () => {
       name: "OpenAI",
       providerType: "OpenAI",
       apiKey: "sk-123",
-      modelIds: ["gpt-4"],
+      apiMode: "responses" as const,
+      searchSource: "native",
+      modelIds: [{ id: "gpt-4", passthroughFileTypes: [] }],
       taskModelId: "gpt-4",
       memoryExtractionModelId: "gpt-4",
-      workspaceId,
     };
 
     const post = (payload: unknown = createBody) =>
@@ -170,10 +171,9 @@ describe("Provider Routes", () => {
       expect(fake.tables.provider).toHaveLength(1);
     });
 
-    it("takes the scope from the route, ignoring any scope in the body", async () => {
-      // A workspace-surface create is always Workspace-scoped. Spreading the body
-      // let a caller name another Workspace, or set organizationId and mint a
-      // Shared Provider here — which only an Org Admin may do (ADR-0006/0007).
+    it("rejects any scope in the body", async () => {
+      // A workspace-surface create takes its scope from the route; naming one
+      // in the body is a 400 rather than a silently dropped field.
       mockSession();
       fake = world({ rows: { provider: [] } });
 
@@ -183,11 +183,8 @@ describe("Provider Routes", () => {
         organizationId: orgId,
       });
 
-      expect(res.status).toBe(201);
-      expect(fake.tables.provider[0]).toMatchObject({
-        workspaceId,
-        organizationId: null,
-      });
+      expect(res.status).toBe(400);
+      expect(fake.tables.provider).toHaveLength(0);
     });
 
     it("should return 409 if provider name already exists in workspace", async () => {
@@ -443,7 +440,9 @@ describe("Provider Routes", () => {
       name: "Renamed",
       providerType: "OpenAI",
       apiKey: "sk-123",
-      modelIds: ["gpt-4"],
+      apiMode: "responses" as const,
+      searchSource: "native",
+      modelIds: [{ id: "gpt-4", passthroughFileTypes: [] }],
       taskModelId: "gpt-4",
       memoryExtractionModelId: "gpt-4",
     };

@@ -18,6 +18,10 @@ describe("Organization Attachment (central sharing) Routes", () => {
 
   const orgId = "org-1";
   const baseUrl = `/organizations/${orgId}/attachments`;
+  /** The one attachment address: the Workspace names the path. */
+  const writeBaseFor = (workspaceId: string) =>
+    `/organizations/${orgId}/workspaces/${workspaceId}/attachments`;
+  const writeBase = writeBaseFor("ws-1");
   const createdAt = new Date("2026-01-01T00:00:00.000Z");
 
   /** Membership rows: the caller is an admin of `org-1` unless stated otherwise. */
@@ -154,15 +158,14 @@ describe("Organization Attachment (central sharing) Routes", () => {
     });
   });
 
-  describe("POST /", () => {
+  describe("POST / (workspace-addressed)", () => {
     const body = {
       resourceType: "agent",
       resourceId: "agent-1",
-      workspaceId: "ws-1",
     };
 
     const post = (payload: unknown = body) =>
-      app.request(baseUrl, {
+      app.request(writeBase, {
         method: "POST",
         body: JSON.stringify(payload),
         headers: { "Content-Type": "application/json" },
@@ -227,7 +230,11 @@ describe("Organization Attachment (central sharing) Routes", () => {
         agent: [sharedAgent],
       });
 
-      const res = await post({ ...body, workspaceId: "ws-elsewhere" });
+      const res = await app.request(writeBaseFor("ws-elsewhere"), {
+        method: "POST",
+        body: JSON.stringify(body),
+        headers: { "Content-Type": "application/json" },
+      });
       expect(res.status).toBe(404);
     });
 
@@ -254,10 +261,9 @@ describe("Organization Attachment (central sharing) Routes", () => {
 
     it.each([
       ["a non-string resourceId", { ...body, resourceId: {} }],
-      ["a non-string workspaceId", { ...body, workspaceId: [] }],
       ["a missing resourceId", { ...body, resourceId: undefined }],
-      ["a missing workspaceId", { ...body, workspaceId: undefined }],
       ["an invalid resourceType", { ...body, resourceType: "blueprint" }],
+      ["a scope in the body", { ...body, workspaceId: "ws-1" }],
     ])("400s %s", async (_, payload) => {
       mockSession();
       const fake = seed({
@@ -274,9 +280,12 @@ describe("Organization Attachment (central sharing) Routes", () => {
 
     it("400s a non-JSON body", async () => {
       mockSession();
-      seed({ organization_member: membership("admin") });
+      seed({
+        organization_member: membership("admin"),
+        workspace: workspaces,
+      });
 
-      const res = await app.request(baseUrl, {
+      const res = await app.request(writeBase, {
         method: "POST",
         body: "not json",
         headers: { "Content-Type": "application/json" },
@@ -293,8 +302,8 @@ describe("Organization Attachment (central sharing) Routes", () => {
     });
   });
 
-  describe("DELETE /:resourceType/:resourceId/:workspaceId", () => {
-    const delUrl = `${baseUrl}/agent/agent-1/ws-1`;
+  describe("DELETE /:resourceType/:resourceId (workspace-addressed)", () => {
+    const delUrl = `${writeBase}/agent/agent-1`;
 
     const attachments = [
       {
@@ -378,12 +387,11 @@ describe("Organization Attachment (central sharing) Routes", () => {
       expect((await app.request(delUrl, { method: "DELETE" })).status).toBe(
         200,
       );
-      const reattach = await app.request(baseUrl, {
+      const reattach = await app.request(writeBase, {
         method: "POST",
         body: JSON.stringify({
           resourceType: "agent",
           resourceId: "agent-1",
-          workspaceId: "ws-1",
         }),
         headers: { "Content-Type": "application/json" },
       });
@@ -425,9 +433,10 @@ describe("Organization Attachment (central sharing) Routes", () => {
         ],
       });
 
-      const res = await app.request(`${baseUrl}/agent/agent-1/ws-elsewhere`, {
-        method: "DELETE",
-      });
+      const res = await app.request(
+        `${writeBaseFor("ws-elsewhere")}/agent/agent-1`,
+        { method: "DELETE" },
+      );
       expect(res.status).toBe(404);
       expect(fake.tables.attachment).toHaveLength(1);
     });

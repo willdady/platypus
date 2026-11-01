@@ -25,7 +25,7 @@ import type {
   KanbanCardHistoryChange,
   KanbanCardPriority,
   KanbanLabel,
-  modelIdsSchema,
+  ModelConfig,
   OrgGate,
   OrgRole,
   PlatypusUIMessage,
@@ -159,12 +159,10 @@ export const provider = pgTable(
     // every run on this provider (and sub-agent runs resolved to it). Nullable
     // — existing providers are unchanged.
     securityGuardrails: t.text("security_guardrails"),
-    // Per-model config (see `modelConfigSchema` in @platypus/schemas). Typed
-    // as the schema's INPUT: legacy rows may still hold bare strings, or
-    // objects without `passthroughFileTypes`; the backend normalizes both
-    // shapes via `resolveProviderModels`, and migration 0047 backfills stored
-    // rows.
-    modelIds: t.jsonb().$type<z.input<typeof modelIdsSchema>>().notNull(),
+    // Per-model config (see `modelConfigSchema` in @platypus/schemas). Every
+    // row holds resolved objects; the string backfills (0047, 0091) already
+    // shipped, and a later migration asserts none remain.
+    modelIds: t.jsonb().$type<ModelConfig[]>().notNull(),
     taskModelId: t.text("task_model_id").notNull(),
     memoryExtractionModelId: t.text("memory_extraction_model_id").notNull(),
     embeddingModelId: t.text("embedding_model_id"),

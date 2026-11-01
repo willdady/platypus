@@ -220,7 +220,7 @@ describe("A2A endpoint routes", () => {
     it("updates the public name, description and enabled switch", async () => {
       const fake = seed();
 
-      const res = await send("/ep-1", "PUT", {
+      const res = await send("/ep-1", "PATCH", {
         name: "Renamed",
         description: "New public text",
         enabled: false,
@@ -264,7 +264,7 @@ describe("A2A endpoint routes", () => {
         ],
       });
 
-      const res = await send("/ep-1", "PUT", {
+      const res = await send("/ep-1", "PATCH", {
         includeMemories: true,
         extractMemories: true,
       });
@@ -280,12 +280,12 @@ describe("A2A endpoint routes", () => {
       });
     });
 
-    it("ignores an attempt to move the endpoint to another Agent", async () => {
+    it("rejects an attempt to move the endpoint to another Agent", async () => {
       const fake = seed();
 
-      const res = await send("/ep-1", "PUT", { agentId: "agent-shared" });
+      const res = await send("/ep-1", "PATCH", { agentId: "agent-shared" });
 
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(400);
       expect(fake.tables.a2a_endpoint[0].agentId).toBe("agent-1");
     });
 
@@ -293,7 +293,7 @@ describe("A2A endpoint routes", () => {
       seed({ endpoints: [endpoint({ workspaceId: "ws-2" })] });
 
       expect((await app.request(`${baseUrl}/ep-1`)).status).toBe(404);
-      expect((await send("/ep-1", "PUT", { name: "x" })).status).toBe(404);
+      expect((await send("/ep-1", "PATCH", { name: "x" })).status).toBe(404);
       expect((await send("/ep-1", "DELETE")).status).toBe(404);
     });
 
@@ -507,7 +507,7 @@ describe("A2A endpoint routes", () => {
       });
 
       expect((await send("", "POST", { agentId: "agent-1" })).status).toBe(403);
-      expect((await send("/ep-1", "PUT", { name: "x" })).status).toBe(403);
+      expect((await send("/ep-1", "PATCH", { name: "x" })).status).toBe(403);
       expect((await send("/ep-1", "DELETE")).status).toBe(403);
       expect((await send("/ep-1/tokens", "POST", { name: "x" })).status).toBe(
         403,
