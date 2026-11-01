@@ -52,10 +52,7 @@ import { oneRow } from "../db/one-row.ts";
 export type SkillRow = typeof skillTable.$inferSelect;
 
 /** The fields a create carries — every field but the id and its scope. */
-export type SkillCreateFields = Omit<
-  z.input<typeof skillCreateSchema>,
-  "organizationId" | "workspaceId"
->;
+export type SkillCreateFields = z.input<typeof skillCreateSchema>;
 
 /** The fields an update may carry — a partial edit of the same set. */
 export type SkillUpdateFields = z.infer<typeof skillUpdateSchema>;

@@ -121,8 +121,6 @@ describe("Reasoning controls on Agents and Chat turns (#1521)", () => {
 
   it("a Chat turn carries the three fields", () => {
     const parsed = chatSubmitSchema.parse({
-      id: "c1",
-      workspaceId: "w1",
       providerId: "p1",
       modelId: "m1",
       trigger: "regenerate-message",

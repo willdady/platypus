@@ -292,19 +292,21 @@ describe("Org A2A endpoint oversight routes", () => {
     expect(fake.tables.notification).toEqual([]);
   });
 
-  it.each(["", "?tokenCreatedAt=", "?tokenCreatedAt=yesterday"])(
-    "400s a token revoke that doesn't name the token (%s)",
-    async (query) => {
-      const fake = seed();
+  it.each([
+    "",
+    "?tokenCreatedAt=",
+    "?tokenCreatedAt=yesterday",
+    `?tokenCreatedAt=${issuedAt.toISOString()}&foo=1`,
+  ])("400s a token revoke that doesn't name the token (%s)", async (query) => {
+    const fake = seed();
 
-      const res = await app.request(`${baseUrl}/ep-1/tokens/tok-1${query}`, {
-        method: "DELETE",
-      });
+    const res = await app.request(`${baseUrl}/ep-1/tokens/tok-1${query}`, {
+      method: "DELETE",
+    });
 
-      expect(res.status).toBe(400);
-      expect(fake.tables.a2a_token).toHaveLength(2);
-    },
-  );
+    expect(res.status).toBe(400);
+    expect(fake.tables.a2a_token).toHaveLength(2);
+  });
 
   it.each([
     ["GET", ""],

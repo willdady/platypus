@@ -83,16 +83,6 @@ describe("orphanedAliasRepoints", () => {
       { alias: "fast", modelId: "gpt-3.5" },
     ]);
   });
-
-  it("tolerates a legacy string[] on either side", () => {
-    const legacy = ["gpt-4"];
-    expect(orphanedAliasRepoints(legacy, [model("gpt-4", "flagship")])).toEqual(
-      [],
-    );
-    expect(orphanedAliasRepoints([model("gpt-4", "flagship")], legacy)).toEqual(
-      [{ alias: "flagship", modelId: "gpt-4" }],
-    );
-  });
 });
 
 describe("deMigrateOrphanedAliases", () => {

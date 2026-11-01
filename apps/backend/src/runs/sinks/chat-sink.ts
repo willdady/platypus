@@ -165,7 +165,7 @@ export class ChatSink implements RunSink {
       }
       const now = new Date();
       const running = {
-        status: "running",
+        status: "running" as const,
         memorySnapshot: ctx.memorySnapshot ?? null,
         lastTurnAt: now,
         runHeartbeatAt: now,

@@ -192,7 +192,7 @@ const memoriesBlockFragment: Fragment = (ctx) => {
 
 const memoryToolsFragment: Fragment = (ctx) => {
   const hasMemoryTools =
-    ctx.agent?.toolSetIds?.includes(MEMORY_TOOLSET_ID) ?? false;
+    ctx.agent?.toolSetIds.includes(MEMORY_TOOLSET_ID) ?? false;
   if (!hasMemoryTools) return null;
 
   const tools = ctx.memorySearchAvailable
@@ -265,7 +265,7 @@ Do not try to delegate to them. If a request needs one, tell the user it is unav
 
 const sandboxFragment: Fragment = (ctx) => {
   const hasSandboxTools =
-    ctx.agent?.toolSetIds?.includes(SANDBOX_TOOLSET_ID) ?? false;
+    ctx.agent?.toolSetIds.includes(SANDBOX_TOOLSET_ID) ?? false;
   if (!hasSandboxTools) return null;
 
   return `## Sandbox

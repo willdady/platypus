@@ -1042,10 +1042,14 @@ describe("inbound triggers", () => {
       });
     });
 
-    it("keeps the switches when no list is sent", async () => {
+    it("keeps the switches when the list is null", async () => {
       const fake = seedAccess();
 
-      await setInboundTriggerAccess("org-1", { gate: "off" }, "admin-1");
+      await setInboundTriggerAccess(
+        "org-1",
+        { gate: "off", allowedWorkspaceIds: null },
+        "admin-1",
+      );
 
       expect(fake.tables.organization[0].inboundTriggerGate).toBe("off");
       expect(allowedOf(fake)).toEqual({

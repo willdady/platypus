@@ -43,6 +43,7 @@ import {
   SEARCH_SOURCE_NONE,
   type AliasRepoint,
   type Provider,
+  type ProviderResponse,
 } from "@platypus/schemas";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { cn } from "@/lib/utils";
@@ -235,10 +236,9 @@ function ProviderForm({
   /** Collect the Provider rather than save it (see `FormDraft`). */
   draft?: FormDraft;
 }) {
-  // Add scope to Provider type for this component
-  type ProviderWithScope = Serialized<Provider> & {
-    scope: "organization" | "workspace";
-  };
+  // The API's response shape already carries `scope`, so no intersection is
+  // needed to read a Provider that may be a Shared one.
+  type ProviderWithScope = Serialized<ProviderResponse>;
 
   const router = useRouter();
 
@@ -356,11 +356,6 @@ function ProviderForm({
 
   function buildPayload(data: ProviderFormData) {
     return {
-      // A draft's scope is the Workspace it will be created with.
-      ...(!draft && {
-        workspaceId: workspaceId || undefined,
-        organizationId: !workspaceId ? orgId : undefined,
-      }),
       name: data.name,
       providerType: data.providerType,
       apiKey: data.apiKey,

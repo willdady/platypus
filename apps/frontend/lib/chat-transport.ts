@@ -13,7 +13,6 @@ import type { PlatypusUIMessage } from "@platypus/schemas";
  * a `DefaultChatTransport` nested in the Chat component.
  */
 export function prepareChatTurnRequest({
-  id,
   messages,
   body,
   trigger,
@@ -33,7 +32,6 @@ export function prepareChatTurnRequest({
     return {
       body: {
         ...rest,
-        id,
         trigger: "respond-to-approvals",
         messageId: last.id,
         responses: last.parts.flatMap((part) =>
@@ -52,10 +50,13 @@ export function prepareChatTurnRequest({
   return {
     body: {
       ...rest,
-      id,
       ...(trigger === "regenerate-message"
         ? { trigger, messageId }
-        : { message: messages.at(-1), parentId }),
+        : {
+            trigger: "submit",
+            message: messages.at(-1),
+            parentId,
+          }),
     },
   };
 }

@@ -55,10 +55,7 @@ import { oneRow } from "../db/one-row.ts";
 export type ProviderRow = typeof providerTable.$inferSelect;
 
 /** The fields a create carries — every field but the id and its scope. */
-export type ProviderCreateFields = Omit<
-  z.infer<typeof providerCreateSchema>,
-  "organizationId" | "workspaceId"
->;
+export type ProviderCreateFields = z.infer<typeof providerCreateSchema>;
 
 /** The fields an update carries — providerUpdateSchema replaces the form wholesale. */
 export type ProviderUpdateFields = ProviderUpdateData;
@@ -78,16 +75,13 @@ export type ProviderScope =
   | { kind: "workspace"; ctx: ScopeContext }
   | { kind: "organization"; orgId: string };
 
-/** Dedupes `modelIds` when the write carries any; passes through otherwise. */
-const dedupeModels = <T extends { modelIds?: unknown }>(fields: T): T =>
-  fields.modelIds
-    ? {
-        ...fields,
-        modelIds: dedupeModelConfigs(
-          fields.modelIds as Parameters<typeof dedupeModelConfigs>[0],
-        ),
-      }
-    : fields;
+/** Dedupes the write's `modelIds`, which every create and update carries. */
+const dedupeModels = <T extends { modelIds: ProviderRow["modelIds"] }>(
+  fields: T,
+): T => ({
+  ...fields,
+  modelIds: dedupeModelConfigs(fields.modelIds),
+});
 
 /**
  * Creates a new Provider at the given scope. The scope comes from `scope`,

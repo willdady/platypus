@@ -10,7 +10,8 @@ export const RUN_CUT_SHORT_NOTICE =
   "Run cut short at the model's output limit.";
 
 /** The same for a run whose tool-calling loop hit its step ceiling. */
-export const RUN_STEP_LIMIT_NOTICE = "Run cut short at the step limit.";
+export const RUN_STEP_LIMIT_NOTICE =
+  "Run cut short at the step limit. Raise Max steps to let it finish.";
 
 /**
  * The muted warning row for a per-turn notice about how an answer was produced
@@ -36,11 +37,14 @@ export function TurnNotice({
   return (
     <div
       className={cn(
-        "flex items-center gap-1.5 text-muted-foreground text-xs",
+        // `items-start` keeps the icon on the first line once a notice wraps:
+        // the step-limit notices name their remedy in a second sentence, and a
+        // centred icon beside two lines reads as belonging to neither.
+        "flex items-start gap-1.5 text-muted-foreground text-xs",
         className,
       )}
     >
-      <TriangleAlertIcon className="size-3.5 shrink-0" />
+      <TriangleAlertIcon className="mt-0.5 size-3.5 shrink-0" />
       <span>{children}</span>
     </div>
   );

@@ -19,6 +19,7 @@ import {
 } from "../db/schema.ts";
 import type { RunStatus } from "../runs/types.ts";
 import type { ChatMessageMetadata } from "../types.ts";
+import type { ChatStatus } from "@platypus/schemas";
 import { a2aTextPart, replyArtifact } from "./a2a-parts.ts";
 import type { A2aCaller } from "./a2a-task.ts";
 
@@ -181,7 +182,7 @@ export type TaskStatus = {
  * the Chat is gone; the reply is read only for a Task with no end recorded.
  */
 export type TaskReading = TaskRow & {
-  chatStatus: string | null;
+  chatStatus: ChatStatus | null;
   leafId: string | null;
   firstReplyId: string | null;
 };
@@ -263,7 +264,8 @@ export const deriveStatus = (task: TaskReading): DerivedStatus => {
     };
   }
   return {
-    unrecordedEnd: END_OF_RUN[task.chatStatus as RunStatus] ?? "failed",
+    unrecordedEnd:
+      (task.chatStatus ? END_OF_RUN[task.chatStatus] : undefined) ?? "failed",
   };
 };
 

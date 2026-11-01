@@ -45,6 +45,66 @@ Two more things worth doing every time:
 
 ## Coming from 3.30
 
+### Some MCP servers must be signed in to again
+
+An MCP server using OAuth keeps the authorization server that issued its tokens,
+so a later token refresh can be checked against the same one. Platypus used to
+discover and record that server on the fly for servers authorized before it kept
+the record. That repair is gone in 4.0.
+
+If such a server is still connected, its stored token can no longer be
+refreshed: the MCP fails the same way an expired token does. Sign in to it again
+from its MCP page. A server authorized since Platypus started keeping the record
+is unaffected.
+
+### Kanban and Trigger write tools are split into create and update
+
+Each create-or-update tool is now two tools: a create that requires every field a
+new record needs, and an update that changes only the fields you pass.
+
+| Tool set      | Before          | After                            |
+| ------------- | --------------- | -------------------------------- |
+| Kanban Cards  | `upsertCard`    | `createCard`, `updateCard`       |
+| Kanban Cards  | `upsertComment` | `createComment`, `updateComment` |
+| Kanban Boards | `upsertBoard`   | `createBoard`, `updateBoard`     |
+| Kanban Boards | `upsertColumn`  | `createColumn`, `updateColumn`   |
+| Triggers      | `upsertTrigger` | `createTrigger`, `updateTrigger` |
+
+An Agent or Skill whose Instructions tell it to call one of the old tools no
+longer has it, so rewrite those Instructions to name the right half. Chats that
+already ran keep their record of the old names and still show them.
+
+### Stranded Trigger schedules are repaired on upgrade
+
+A Cron Trigger whose next run time was lost to the old scheduler is put back on
+its schedule automatically when the backend container starts; there is nothing
+to do. A Trigger whose cron expression no longer parses is left alone and named
+in the backend log, so you can fix or delete it.
+
+### Stored data the new schema forbids stops the upgrade
+
+Every Trigger's configuration is now checked against its type — its schedule,
+its events, or its inbound inputs — and a Trigger the upgrade cannot read
+faithfully stops the upgrade instead of being guessed at. Nothing is lost: the
+migration rolls back, so your database stays as it was. The backend log names
+the Trigger's id.
+
+Fix that Trigger before upgrading again. Either correct it in the UI on your
+current version, or delete it if you no longer need it. A Trigger whose
+configuration cannot be opened at all can be deleted with:
+
+```bash
+docker compose exec -T database psql -U postgres -d postgres \
+  -c "DELETE FROM \"trigger\" WHERE \"id\" = '<the id from the log>';"
+```
+
+The same rollback protects every other value the new schema rejects: a Chat
+status, Trigger type, Trigger run status or event type, Organization gate or
+member role outside its set, or a Provider, Agent, MCP or Skill holding both
+scopes (or neither). Those rows cannot be repaired automatically, so the log
+names the constraint that refused them; correct or remove the row on your
+current version, then upgrade again.
+
 ### Dashboards are removed
 
 The upgrade deletes every Dashboard and its widgets, and there is no export.
@@ -57,6 +117,116 @@ instructions.
 
 To keep showing data your Agents produce, use a purpose-built dashboard tool such
 as Grafana or Metabase, and have the Agent write to the store it reads from.
+
+### Deployment URLs are required, and sign-up is invitation-only
+
+Three settings that used to fall back silently must now be set, and the backend
+refuses to start without them, naming the one at fault:
+
+- **`DATABASE_URL`** — no fallback to node-postgres' `PG*` variables. Compose
+  sets this for you; a hand-rolled environment must set it.
+- **`BETTER_AUTH_URL`** — no fallback to `http://localhost:4001`. Compose
+  derives it from `BACKEND_URL`.
+- **`FRONTEND_URL`** — no fallback to `http://localhost:3001`. It must match the
+  URL people load the app from, so check `.env` before you upgrade.
+
+`REQUIRE_INVITATION_TO_SIGN_UP` now defaults to **true**: after the upgrade,
+accounts can only be created by redeeming an invitation link. If you meant to
+keep public sign-up open, set it to `false`. See
+[Who can create an account](/self-hosting/users-and-access#who-can-create-an-account).
+
+The example admin password no longer works in production. With
+`NODE_ENV=production`, which the published image sets, first boot refuses the
+well-known `admin@example.com` / `admin123` pair and exits, as it already did
+for any password under 8 characters. The shipped Compose `.example.env` now
+leaves `ADMIN_PASSWORD` empty, so set one before first boot. A deployment that
+has already seeded its admin is unaffected: the seed never runs again, so
+**change that account's password from the app** if it is still the example one.
+
+### An unsupported cookie topology stops the backend
+
+A backend and frontend on hosts no session cookie can cover — different parent
+domains — used to log an error and start anyway, leaving every server-rendered
+request unauthenticated. It now stops the backend at boot, naming both hostnames
+and `AUTH_COOKIE_DOMAIN`, and so does a malformed `AUTH_COOKIE_DOMAIN`. Put both
+services on one origin or on two subdomains of one parent domain; see
+[Supported topologies](/self-hosting/configuration#supported-topologies).
+
+### Session lifetimes are documented as fixed
+
+Session lifetimes were never configurable, and there is nothing to change; the
+lifetime and the revocation delay are now stated in
+[Sessions](/reference/backend-configuration#sessions) rather than left implicit.
+
+### The session read has a bound
+
+`/auth/get-session` is no longer exempt from rate limiting: it allows 300 reads
+per rolling 60 seconds, far above what reloading and tab-switching produce. Only
+a runaway client reaches it. If you put your own limit on that path at the
+proxy, keep it well above the number of reads a page load makes.
+
+### Plugin authors: `frontendUrl` is never undefined
+
+`ctx.frontendUrl` in the Plugin SDK is typed `string`, not `string | undefined`,
+because the backend cannot boot without `FRONTEND_URL`. Drop any
+`if (ctx.frontendUrl)` guard; it is always a frontend origin.
+
+### The Plugin API is v4, and v2 Plugins no longer load
+
+Core speaks **Plugin API v4** and accepts **3 and 4** together. A third-party
+Plugin built for API v2 is refused at boot, with an error naming it and the
+supported window, so the backend does not start until that Plugin is updated.
+
+Update the Plugin to `@platypuschat/plugin-sdk` **3.x** and set its `apiVersion`
+to 4. On top of the number:
+
+- give every Tool set a `description`;
+- read `ctx.timezone` and `ctx.sessionId` directly — v4 makes both required, and
+  core has always supplied them;
+- declare the manifest's config types (`PlatypusPlugin<Config, Credentials>`) if
+  it was casting `plugin.config` or `plugin.credentials`.
+
+Nothing in your own deployment configuration changes. The core Plugins ship with
+this release, so a deployment listing only `@platypus/*` Plugins has nothing to
+do. See [Moving to API
+v4](/extending/plugin-api-and-config#moving-to-api-v4).
+
+### The HTTP request contract is strict
+
+Anything that drives the backend API directly — a script, an integration, or a
+custom client — must now send exactly the fields each endpoint accepts:
+
+- An unknown query or body key is refused with a `400` and an issues list,
+  where it used to be silently dropped. Remove fields the API no longer
+  describes rather than leaving them in the payload.
+- A Chat turn is addressed in the path, as `POST …/chat/<chat-id>/turns`, and
+  its body names the Chat no longer. The body also carries `trigger`: `submit`,
+  `regenerate-message` or `respond-to-approvals`.
+- Creating an Agent, Skill, MCP or Provider names no scope. The Organization or
+  Workspace in the URL is the only scope; sending `organizationId` or
+  `workspaceId` in one of those create bodies is a `400`.
+- Creating a Context requires `workspaceId`, which is `null` for a global
+  Context. It is never an empty string.
+- Saving an Organization gate requires `allowedWorkspaceIds`: an array turns
+  the listed Workspaces on and the rest off, while `null` leaves every switch
+  as it is.
+- A Provider's `modelIds` holds model objects only, such as
+  `{"id": "gpt-4"}`. A bare string entry is a `400`.
+- Partial updates use `PATCH`; full replacements keep `PUT`. The endpoints
+  that changed from `PUT` to `PATCH` are Chat settings, Triggers, Kanban cards
+  and comments, Webhooks, and A2A endpoints.
+- Removing a member now requires a `workspaces` array. Send `[]` when the
+  member owns none.
+- MCP connection testing of a stored server is addressed by its id, as
+  `POST …/mcps/<mcp-id>/test`; the unsaved test at `POST …/mcps/test` requires
+  `name`.
+- `searchSource` and `apiMode` are required on Provider create and update.
+
+Attachments are managed through the Workspace's own endpoint only:
+`POST …/workspaces/<workspace-id>/attachments` with a `resourceType` and
+`resourceId`, and `DELETE …/workspaces/<workspace-id>/attachments/<resource-type>/<resource-id>`.
+The Organization attachment list still reads
+`GET …/attachments?resourceType=…&resourceId=…`.
 
 ## Coming from 3.30
 

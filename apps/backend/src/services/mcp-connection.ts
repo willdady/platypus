@@ -1,7 +1,7 @@
 import { auth as mcpAuth } from "@ai-sdk/mcp";
 import { isDeepStrictEqual } from "node:util";
 import { and, eq, type SQL } from "drizzle-orm";
-import type { mcpTestSchema } from "@platypus/schemas";
+import type { mcpStoredTestSchema } from "@platypus/schemas";
 import type { z } from "zod";
 import { db } from "../index.ts";
 import { mcp as mcpTable } from "../db/schema.ts";
@@ -53,7 +53,9 @@ import { withDeadline } from "../utils/abort-race.ts";
 
 type Database = typeof db;
 
-export type McpTestInput = z.infer<typeof mcpTestSchema>;
+// The stored test's shape: `name` is optional because the row supplies it.
+// The anonymous test's required `name` is assignable to it.
+export type McpTestInput = z.infer<typeof mcpStoredTestSchema>;
 
 export type McpProbeResult =
   | { success: true; toolNames: string[]; invalidToolNames: string[] }
@@ -76,8 +78,8 @@ const testedStoredConnection = (
 
 /**
  * Probes an MCP server and reports its (namespaced) tool names — the `/test`
- * route's whole job. `storedMcp` is the row a caller already resolved for
- * `data.mcpId` (`null` when there is none, or no such row is visible). Only an
+ * route's whole job. `storedMcp` is the row a stored test resolved from its
+ * path (`null` for the anonymous route, or no such row is visible). Only an
  * OAuth test connects with its stored credentials; a Bearer/None test uses
  * what it was sent. A success with the stored connection clears the row's
  * recorded fetch failure, so the next turn tries the server again (ADR-0031).
@@ -92,7 +94,7 @@ export const probeMcpConnection = async (
   let opening: ReturnType<typeof openMcpClient> | undefined;
 
   try {
-    if (data.authType === "OAuth" && data.mcpId) {
+    if (data.authType === "OAuth") {
       if (!storedMcp) {
         return { success: false, error: "MCP not found", status: 404 };
       }
@@ -146,11 +148,10 @@ export const probeMcpConnection = async (
 
     // Namespaced under the MCP's slug (issue #467), so this reports exactly
     // what a Chat turn will see.
-    const { toolNames, invalidToolNames } = await resolveMcpTestToolNames(
+    const { toolNames, invalidToolNames } = resolveMcpTestToolNames(
       rawToolNames,
       data.name,
-      data.mcpId,
-      () => Promise.resolve(storedMcp?.name),
+      storedMcp?.name,
     );
 
     return { success: true, toolNames, invalidToolNames };

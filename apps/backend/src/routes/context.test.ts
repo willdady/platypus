@@ -134,7 +134,7 @@ describe("Context Routes", () => {
   });
 
   describe("POST /", () => {
-    it("should create a global context (no workspaceId)", async () => {
+    it("should create a global context (null workspaceId)", async () => {
       mockSession({ id: userId, email: "test@example.com" });
 
       const now = new Date();
@@ -153,6 +153,7 @@ describe("Context Routes", () => {
         method: "POST",
         body: JSON.stringify({
           content: "New global context",
+          workspaceId: null,
         }),
         headers: { "Content-Type": "application/json" },
       });
@@ -249,7 +250,10 @@ describe("Context Routes", () => {
 
       const res = await app.request(baseUrl, {
         method: "POST",
-        body: JSON.stringify({ content: "Another global context" }),
+        body: JSON.stringify({
+          content: "Another global context",
+          workspaceId: null,
+        }),
         headers: { "Content-Type": "application/json" },
       });
 
@@ -343,7 +347,7 @@ describe("Context Routes", () => {
 
       const res = await app.request(baseUrl, {
         method: "POST",
-        body: JSON.stringify({ content: "Global" }),
+        body: JSON.stringify({ content: "Global", workspaceId: null }),
         headers: { "Content-Type": "application/json" },
       });
 

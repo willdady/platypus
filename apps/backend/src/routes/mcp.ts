@@ -1,10 +1,14 @@
 import { Hono } from "hono";
+import { z } from "zod";
 import { validate } from "../validate.ts";
 import { db } from "../index.ts";
 import {
   mcpCreateSchema,
-  mcpUpdateSchema,
+  mcpListResponseSchema,
+  mcpResponseSchema,
   mcpTestSchema,
+  mcpStoredTestSchema,
+  mcpUpdateSchema,
 } from "@platypus/schemas";
 import { requireAuth } from "../middleware/authentication.ts";
 import {
@@ -15,15 +19,11 @@ import {
   workspaceCredentialsVisible,
   workspaceScopeOf,
 } from "../middleware/authorization.ts";
-import {
-  mcpReadModel,
-  sanitizeMcpResponse,
-} from "../services/credential-redaction.ts";
+import { mcpReadModel } from "../services/credential-redaction.ts";
 import {
   listScoped,
   requireScoped,
   requireWorkspaceMutable,
-  resolveScoped,
   workspaceScopedWhere,
 } from "../services/scoped-resource.ts";
 import type { Variables } from "../server.ts";
@@ -39,6 +39,7 @@ import {
   probeMcpConnection,
 } from "../services/mcp-connection.ts";
 import { createMcp, deleteMcp, updateMcp } from "../services/mcp-write.ts";
+import { respond } from "../respond.ts";
 
 const mcp = new Hono<{ Variables: Variables }>();
 
@@ -58,7 +59,12 @@ mcp.post(
     // body carried, so a caller cannot name another Workspace, or mint a
     // Shared MCP from the Workspace surface (ADR-0006, ADR-0007).
     const row = await createMcp({ kind: "workspace", ctx: scope }, data);
-    return c.json(sanitizeMcpResponse(row), 201);
+    return respond(
+      c,
+      mcpResponseSchema,
+      mcpReadModel(row, { reveal: true, scope: "workspace" }),
+      201,
+    );
   },
 );
 
@@ -82,7 +88,7 @@ mcp.get(
       mcpReadModel(row, { reveal: reveal && scope === "workspace", scope }),
     );
 
-    return c.json({ results });
+    return respond(c, mcpListResponseSchema, { results });
   },
 );
 
@@ -97,7 +103,9 @@ mcp.get(
     const found = await requireScoped(db, "mcp", mcpId, workspaceScopeOf(c));
     // See the list route: redacted unless this caller may manage the MCP.
     const reveal = await workspaceCredentialsVisible(c, "mcp");
-    return c.json(
+    return respond(
+      c,
+      mcpResponseSchema,
       mcpReadModel(found.row, {
         reveal: reveal && found.scope === "workspace",
         scope: found.scope,
@@ -123,7 +131,12 @@ mcp.put(
     // surface (ADR-0007); `updateMcp` throws NotFound (→404) when the MCP is
     // not visible here, then Locked (→403) when it is org-scoped.
     const row = await updateMcp({ kind: "workspace", ctx: scope }, mcpId, data);
-    return c.json(sanitizeMcpResponse(row), 200);
+    return respond(
+      c,
+      mcpResponseSchema,
+      mcpReadModel(row, { reveal: true, scope: "workspace" }),
+      200,
+    );
   },
 );
 
@@ -148,10 +161,8 @@ mcp.delete(
 );
 
 /**
- * Test MCP connection (org-admin, or owner when delegated — ADR-0006).
- * Read-only, so an attached Shared MCP is resolved through the Scoped-resource
- * authority the same as any other visible row (see mcp-connection.ts's
- * docstring for the full rationale).
+ * Test an unsaved MCP connection (org-admin, or owner when delegated —
+ * ADR-0006). Nothing is stored, so the body must name the MCP.
  */
 mcp.post(
   "/test",
@@ -161,22 +172,42 @@ mcp.post(
   requireMcpConfigAccess,
   validate("json", mcpTestSchema),
   async (c) => {
-    const data = c.req.valid("json");
-    const scope = workspaceScopeOf(c);
-
-    let storedMcp = null;
-    if (data.mcpId) {
-      const found = await resolveScoped(db, "mcp", data.mcpId, scope);
-      storedMcp = found?.row ?? null;
-    }
-
-    const result = await probeMcpConnection(data, storedMcp);
+    const result = await probeMcpConnection(c.req.valid("json"), null);
     if (!result.success) {
       return c.json({ error: result.error }, result.status);
     }
     return c.json(result, 200);
   },
 );
+
+/**
+ * Test a stored MCP connection, addressed by its id (org-admin, or owner when
+ * delegated — ADR-0006). Read-only, so an attached Shared MCP is resolved
+ * through the Scoped-resource authority the same as any other visible row (see
+ * mcp-connection.ts's docstring for the full rationale).
+ */
+mcp.post(
+  "/:mcpId/test",
+  requireAuth,
+  requireOrgAccess(),
+  requireWorkspaceAccess,
+  requireMcpConfigAccess,
+  validate("json", mcpStoredTestSchema),
+  async (c) => {
+    const scope = workspaceScopeOf(c);
+    const { row } = await requireScoped(db, "mcp", c.req.param("mcpId"), scope);
+
+    const result = await probeMcpConnection(c.req.valid("json"), row);
+    if (!result.success) {
+      return c.json({ error: result.error }, result.status);
+    }
+    return c.json(result, 200);
+  },
+);
+
+const oauthAuthorizeQuerySchema = z.strictObject({
+  force: z.enum(["true", "false"]).optional(),
+});
 
 /**
  * Initiate OAuth authorization for an MCP (org-admin, or delegated owner).
@@ -190,6 +221,7 @@ mcp.post(
   requireOrgAccess(),
   requireWorkspaceAccess,
   requireMcpConfigAccess,
+  validate("query", oauthAuthorizeQuerySchema),
   async (c) => {
     const mcpId = c.req.param("mcpId");
     const scope = workspaceScopeOf(c);
@@ -201,9 +233,9 @@ mcp.post(
       scope,
     );
 
-    const force = c.req.query("force") === "true";
+    const { force } = c.req.valid("query");
     const result = await authorizeMcpOAuth(db, mcpRecord, {
-      force,
+      force: force === "true",
       clearTokensWhere: workspaceScopedWhere("mcp", mcpId, scope.workspaceId),
       userId: userOf(c).id,
     });

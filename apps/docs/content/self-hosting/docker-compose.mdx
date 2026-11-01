@@ -230,7 +230,7 @@ Edit `.env`. At minimum set:
   app (resource links in tool output, MCP OAuth redirects).
 
 The shipped `.example.env` sets all four URL-shaped values for `localhost`, so
-a laptop deployment works unedited.
+on a laptop only `ADMIN_PASSWORD` needs a value before the stack will start.
 
 If you serve the frontend and backend as two subdomains of one parent domain,
 also set `AUTH_COOKIE_DOMAIN` to that shared parent (e.g. `example.com`). Two
@@ -250,8 +250,8 @@ unauthenticated. See
 
 That is separate from the hostname topology above: all four can be right and
 the app still cannot authenticate server-side requests if the two origins are
-on unrelated hosts, which is why the backend checks and logs an error at
-startup.
+on unrelated hosts, which is why the backend checks the topology and refuses to
+start when no cookie can cover both.
 
 </Callout>
 
@@ -307,9 +307,10 @@ nothing. Manage users from the app after first boot.
   default in code**. With either unset the backend logs `... environment
   variable is required to seed the initial admin user` and exits non-zero
   without starting the HTTP server — it does not retry, because a missing
-  variable fails the same way every time. The shipped `.example.env` supplies
-  `admin@example.com` / `admin123`, but a deployment that doesn't start from
-  that file (Kubernetes, a hand-rolled env) gets nothing.
+  variable fails the same way every time. The shipped `.example.env` leaves
+  `ADMIN_PASSWORD` empty so a copied-and-forgotten deployment cannot start with
+  a known password; choose one before first boot. A deployment that doesn't
+  start from that file (Kubernetes, a hand-rolled env) must set both.
 </Callout>
 
 Nothing partial survives a failed seed. Configuration is checked before
@@ -350,10 +351,11 @@ docker compose up -d
 
 The installer generates a random password for `admin@example.com` unless you
 set `ADMIN_EMAIL` / `ADMIN_PASSWORD`. A manual install starts from the shipped
-`.example.env`, which supplies `admin@example.com` / `admin123`: **override
-these** by editing `.env` before first boot. Either way, the values in place at
-seed time are the ones that stick. Change the password from the in-app account
-settings after you first sign in.
+`.example.env`, which leaves `ADMIN_PASSWORD` empty: **set it** in `.env`
+before first boot. The old `admin@example.com` / `admin123` pair is refused in
+production, and any password under 8 characters is refused everywhere. Either
+way, the values in place at seed time are the ones that stick. Change the
+password from the in-app account settings after you first sign in.
 
 ## Health checks
 

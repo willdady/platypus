@@ -37,16 +37,18 @@ const provider = (over: Partial<ProviderRow>): ProviderRow =>
   });
 
 describe("resolveProviderModels", () => {
-  it("coerces a legacy string[] to objects that ingest nothing natively", () => {
-    // No Provider-type default (ADR-0039): migration 0091 backfills real rows.
+  it("returns the stored model objects unchanged", () => {
     const p = provider({
       providerType: "Anthropic",
       apiMode: "responses",
-      modelIds: ["claude-x", "claude-y"],
+      modelIds: [
+        { id: "claude-x", passthroughFileTypes: [] },
+        { id: "claude-y", passthroughFileTypes: ["image/*"] },
+      ],
     });
     expect(resolveProviderModels(p)).toEqual([
       { id: "claude-x", passthroughFileTypes: [] },
-      { id: "claude-y", passthroughFileTypes: [] },
+      { id: "claude-y", passthroughFileTypes: ["image/*"] },
     ]);
   });
 
@@ -94,13 +96,6 @@ describe("providerModelReferences", () => {
       "gpt-4o-mini",
     ]);
   });
-
-  it("lists ids for a legacy string[], which cannot carry aliases", () => {
-    const p = provider({
-      modelIds: ["a", "b"],
-    });
-    expect(providerModelReferences(p)).toEqual(["a", "b"]);
-  });
 });
 
 describe("passthroughFileTypesForModel", () => {
@@ -138,15 +133,6 @@ describe("maxExtractedTextCharsForModel", () => {
       DEFAULT_MAX_EXTRACTED_TEXT_CHARS,
     );
   });
-
-  it("survives a legacy string[] model list", () => {
-    const p = provider({
-      modelIds: ["legacy"],
-    });
-    expect(maxExtractedTextCharsForModel(p, concrete("legacy"))).toBe(
-      DEFAULT_MAX_EXTRACTED_TEXT_CHARS,
-    );
-  });
 });
 
 describe("maxOutputTokensForModel", () => {
@@ -169,13 +155,6 @@ describe("maxOutputTokensForModel", () => {
     expect(maxOutputTokensForModel(p, concrete("qwen"))).toBeUndefined();
     expect(maxOutputTokensForModel(p, concrete("ghost"))).toBeUndefined();
   });
-
-  it("survives a legacy string[] model list", () => {
-    const p = provider({
-      modelIds: ["legacy"],
-    });
-    expect(maxOutputTokensForModel(p, concrete("legacy"))).toBeUndefined();
-  });
 });
 
 describe("contextWindowForModel", () => {
@@ -196,13 +175,6 @@ describe("contextWindowForModel", () => {
     // window has no safe substitute — inventing one is what ADR-0018 forbids.
     expect(contextWindowForModel(p, concrete("qwen"))).toBeUndefined();
     expect(contextWindowForModel(p, concrete("ghost"))).toBeUndefined();
-  });
-
-  it("survives a legacy string[] model list", () => {
-    const p = provider({
-      modelIds: ["legacy"],
-    });
-    expect(contextWindowForModel(p, concrete("legacy"))).toBeUndefined();
   });
 
   it("reads each Provider's own declaration for the same model id", () => {
@@ -264,14 +236,6 @@ describe("resolveModelId", () => {
 
   it("never resolves an alias reference to a like-named concrete id", () => {
     expect(resolveModelId(p, "alias:gpt-4o-mini")).toBeUndefined();
-  });
-
-  it("resolves against a legacy string[] model list", () => {
-    const legacy = provider({
-      modelIds: ["legacy"],
-    });
-    expect(resolveModelId(legacy, "legacy")).toBe("legacy");
-    expect(resolveModelId(legacy, "alias:legacy")).toBeUndefined();
   });
 
   it("carries the aliased model's own capabilities", () => {

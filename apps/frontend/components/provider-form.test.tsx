@@ -159,12 +159,6 @@ describe("ProviderForm model cards", () => {
     expect(modelCard("qwen")).toHaveTextContent("Context window: 131,072");
   });
 
-  it("leaves a legacy string model loadable as a card", () => {
-    renderEditForm(["gpt-4o"] as unknown as Provider["modelIds"]);
-
-    expect(modelCard("gpt-4o")).toBeInTheDocument();
-  });
-
   it("shows No models yet. for an empty list", () => {
     renderEditForm([]);
 
@@ -359,8 +353,8 @@ describe("ProviderForm model dialog", () => {
   it("leaves the form clean after Save with nothing changed", () => {
     renderEditForm([
       { id: "gpt-4o", alias: "flagship", passthroughFileTypes: ["image/*"] },
-      "o3",
-    ] as unknown as Provider["modelIds"]);
+      { id: "o3", passthroughFileTypes: [] },
+    ]);
 
     for (const id of ["gpt-4o", "o3"]) {
       const dialog = openEditDialog(id);

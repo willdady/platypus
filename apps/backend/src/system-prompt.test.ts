@@ -26,7 +26,7 @@ const baseCtx = (): SystemPromptStableContext => ({
 const agentRecord = (
   overrides: Partial<{
     instructions: string | null;
-    toolSetIds: string[] | null;
+    toolSetIds: string[];
   }> = {},
 ): AgentRecord => ({
   id: "agent-1",
@@ -47,9 +47,9 @@ const agentRecord = (
   reasoningThinking: null,
   reasoningEffort: null,
   thinkingBudget: null,
-  toolSetIds: null,
-  skillIds: null,
-  subAgentIds: null,
+  toolSetIds: [],
+  skillIds: [],
+  subAgentIds: [],
   inputPlaceholder: null,
   avatarKey: null,
   createdAt: new Date(),
@@ -646,7 +646,7 @@ describe("renderSystemPrompt — sandbox fragment", () => {
   it("omits the sandbox block when the agent has no tool sets", () => {
     const out = renderSystemPrompt({
       ...baseCtx(),
-      agent: agentRecord({ toolSetIds: null }),
+      agent: agentRecord({ toolSetIds: [] }),
     });
     expect(out).not.toMatch(/## Sandbox/);
   });

@@ -43,8 +43,6 @@ describe("Invitation Routes", () => {
         method: "POST",
         body: JSON.stringify({
           email: "user@example.com",
-          workspaceId: "ws-1",
-          role: "editor",
         }),
         headers: { "Content-Type": "application/json" },
       });
@@ -372,8 +370,6 @@ describe("Invitation Routes", () => {
         method: "POST",
         body: JSON.stringify({
           email: "Admin@Example.COM",
-          workspaceId: "ws-1",
-          role: "editor",
         }),
         headers: { "Content-Type": "application/json" },
       });

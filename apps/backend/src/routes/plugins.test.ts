@@ -19,6 +19,7 @@ const LOADED: LoadedPlugin[] = [
     sandboxBackendIds: [],
     webBackendIds: [],
     toolGateIds: [],
+    config: undefined,
   },
   {
     name: "acme-sandbox",
@@ -28,6 +29,7 @@ const LOADED: LoadedPlugin[] = [
     sandboxBackendIds: ["acme-sandbox.sandbox"],
     webBackendIds: ["acme-sandbox.search"],
     toolGateIds: ["acme-sandbox.no-drop"],
+    config: undefined,
   },
 ];
 

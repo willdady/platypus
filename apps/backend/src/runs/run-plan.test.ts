@@ -10,6 +10,7 @@ import {
   CLEARED_TOOL_INPUT_MARKER,
   CLEARED_TOOL_RESULT_MARKER,
 } from "@platypus/schemas";
+import { ANSWER_STEP_INSTRUCTION } from "./answer-step.ts";
 import { logger } from "../logger.ts";
 import { createOverflowRecovery } from "./context-overflow-recovery.ts";
 
@@ -89,6 +90,7 @@ const invoke = (plan: RunPlan) =>
 /** The `prepareStep` override, as the SDK calls it. */
 type PrepareStep = (opts: {
   steps: Array<{ usage?: { inputTokens?: number } }>;
+  stepNumber: number;
   messages: ModelMessage[];
 }) => Promise<{ messages?: ModelMessage[] }>;
 
@@ -99,7 +101,7 @@ describe("buildModelInvocation prepareStep", () => {
   it("returns a messages override with the cache point on the final message even when nothing is cleared", async () => {
     const prepareStep = prepareStepOf(planOf({ contextWindow: 100 }));
     const messages = toolResultMessages(10);
-    const result = await prepareStep({ steps: [], messages });
+    const result = await prepareStep({ steps: [], stepNumber: 0, messages });
     const last = result.messages!.at(-1);
     expect(last?.providerOptions).toEqual(BEDROCK_CACHE_POINT);
   });
@@ -110,7 +112,7 @@ describe("buildModelInvocation prepareStep", () => {
       planOf({ contextWindow: 100, initialOccupancy: 90 }),
     );
     const messages = toolResultMessages(10);
-    const result = await prepareStep({ steps: [], messages });
+    const result = await prepareStep({ steps: [], stepNumber: 0, messages });
     const firstOutput = (
       result.messages![0] as {
         content: Array<{ output: { value: string } }>;
@@ -132,6 +134,7 @@ describe("buildModelInvocation prepareStep", () => {
       );
       const result = await prepareStep({
         steps: [{ usage: { inputTokens: lastStepInput } }],
+        stepNumber: 1,
         messages: toolResultMessages(10),
       });
       const firstOutput = (
@@ -159,6 +162,7 @@ describe("buildModelInvocation prepareStep", () => {
     );
     const result = await prepareStep({
       steps: [],
+      stepNumber: 0,
       messages: toolResultMessages(10),
     });
     const firstOutput = (
@@ -182,6 +186,7 @@ describe("buildModelInvocation prepareStep", () => {
       );
       const result = await prepareStep({
         steps: [],
+        stepNumber: 0,
         messages: toolResultMessages(10, "docs__search"),
       });
       expect(JSON.stringify(result.messages![0])).toContain(
@@ -194,7 +199,7 @@ describe("buildModelInvocation prepareStep", () => {
     const prepareStep = prepareStepOf(planOf({}));
     const messages = toolResultMessages(3);
     const snapshot = messages.map((m) => ({ ...m, content: [...m.content] }));
-    await prepareStep({ steps: [], messages });
+    await prepareStep({ steps: [], stepNumber: 0, messages });
     expect(messages).toEqual(snapshot);
     // Every original message object must be untouched — only the returned
     // array's final entry is a clone carrying the cache point.
@@ -212,7 +217,7 @@ describe("buildModelInvocation prepareStep", () => {
         },
       },
     ];
-    const result = await prepareStep({ steps: [], messages });
+    const result = await prepareStep({ steps: [], stepNumber: 0, messages });
     expect(result.messages!.at(-1)?.providerOptions).toEqual({
       anthropic: { thinking: { type: "enabled" } },
       ...BEDROCK_CACHE_POINT,
@@ -222,9 +227,110 @@ describe("buildModelInvocation prepareStep", () => {
   it("still lands the cache point when the Context window is undeclared (nothing cleared)", async () => {
     const prepareStep = prepareStepOf(planOf({ initialOccupancy: 1_000_000 }));
     const messages = toolResultMessages(10);
-    const result = await prepareStep({ steps: [], messages });
+    const result = await prepareStep({ steps: [], stepNumber: 0, messages });
     const last = result.messages!.at(-1);
     expect(last?.providerOptions).toEqual(BEDROCK_CACHE_POINT);
+  });
+});
+
+/**
+ * The Step ceiling's answer step (issue #1730), wired once here so every Drive
+ * inherits it: the last permitted step is told to answer rather than having its
+ * tools taken away.
+ */
+describe("buildModelInvocation final-step instruction", () => {
+  const isInstruction = (message: ModelMessage | undefined): boolean =>
+    message?.role === "user" && message.content === ANSWER_STEP_INSTRUCTION;
+
+  it("appends the instruction on the last allowed step and no earlier step", async () => {
+    const prepareStep = prepareStepOf(planOf({ maxSteps: 3 }));
+    const messages: ModelMessage[] = [{ role: "user", content: "hi" }];
+
+    for (const stepNumber of [0, 1]) {
+      const out = await prepareStep({ steps: [], stepNumber, messages });
+      expect(out.messages?.some(isInstruction)).toBe(false);
+    }
+
+    const last = await prepareStep({ steps: [], stepNumber: 2, messages });
+    expect(isInstruction(last.messages?.at(-1))).toBe(true);
+  });
+
+  it("puts the instruction on the only step when the ceiling is one", async () => {
+    const prepareStep = prepareStepOf(planOf({ maxSteps: 1 }));
+    const out = await prepareStep({
+      steps: [],
+      stepNumber: 0,
+      messages: [{ role: "user", content: "hi" }],
+    });
+
+    expect(isInstruction(out.messages?.at(-1))).toBe(true);
+  });
+
+  // The instruction rides the same pass as clearing and the cache point, and
+  // the point has to end up after it: Bedrock's trailing point names the last
+  // message of the request, which is now the instruction.
+  it("lands the Bedrock cache point on the instruction itself", async () => {
+    const prepareStep = prepareStepOf(planOf({ maxSteps: 1 }));
+    const out = await prepareStep({
+      steps: [],
+      stepNumber: 0,
+      messages: toolResultMessages(3),
+    });
+
+    const last = out.messages!.at(-1);
+    expect(isInstruction(last)).toBe(true);
+    expect(last?.providerOptions).toEqual(BEDROCK_CACHE_POINT);
+  });
+
+  // The point moves rather than accumulates: a conversation carrying one from
+  // an earlier step must end with exactly one point, on the instruction. A
+  // leftover mid-conversation point counts against Converse's checkpoint cap.
+  it("strips an earlier cache point so only the instruction carries one", async () => {
+    const cachePointOf = (message: ModelMessage | undefined) => {
+      const bedrock = (
+        message?.providerOptions as
+          { amazonBedrock?: { cachePoint?: { type: string } } } | undefined
+      )?.amazonBedrock;
+      return bedrock?.cachePoint;
+    };
+    const prepareStep = prepareStepOf(planOf({ maxSteps: 1 }));
+    const messages = toolResultMessages(4).map((message, index) =>
+      index === 1
+        ? { ...message, providerOptions: BEDROCK_CACHE_POINT }
+        : message,
+    );
+
+    const out = await prepareStep({ steps: [], stepNumber: 0, messages });
+    const carrying = out.messages!.filter(
+      (message) => cachePointOf(message) !== undefined,
+    );
+
+    expect(carrying).toHaveLength(1);
+    expect(carrying[0]).toBe(out.messages!.at(-1));
+    expect(cachePointOf(carrying[0])).toEqual(
+      BEDROCK_CACHE_POINT.amazonBedrock.cachePoint,
+    );
+    expect(cachePointOf(out.messages![1])).toBeUndefined();
+  });
+
+  // Deliberate: the tool set and tool choice are identical to every earlier
+  // step. Removing them would rewrite the cached `tools` prefix (ADR-0020) and
+  // on Bedrock drop every tool from a request whose history still holds calls.
+  it("changes no tool on the last step, and sends the plan's tools through", async () => {
+    const plan = planOf({
+      maxSteps: 1,
+      tools: { probe: {} as RunPlan["tools"][string] },
+    });
+    const out = await prepareStepOf(plan)({
+      steps: [],
+      stepNumber: 0,
+      messages: [{ role: "user", content: "hi" }],
+    });
+
+    // The override carries a conversation and nothing else, so there is no
+    // `activeTools`/`toolChoice` for the SDK to apply to this step.
+    expect(Object.keys(out)).toEqual(["messages"]);
+    expect(Object.keys(invoke(plan).tools)).toEqual(["probe"]);
   });
 });
 
@@ -288,6 +394,7 @@ describe("buildModelInvocation context-pressure evidence", () => {
       const prepareStep = prepareStepOf(planOf({ contextWindow: 100 }));
       await prepareStep({
         steps: [{ usage: { inputTokens: 85 } }],
+        stepNumber: 1,
         messages: [{ role: "user", content: "hi" }, ...messages],
       });
       expect(evidenceLines(spy)).toEqual([
@@ -308,6 +415,7 @@ describe("buildModelInvocation context-pressure evidence", () => {
     const prepareStep = prepareStepOf(planOf({ contextWindow }));
     await prepareStep({
       steps: [{ usage: { inputTokens } }],
+      stepNumber: 1,
       messages: [
         { role: "user", content: "hi" },
         ...toolResultMessages(results),
@@ -322,6 +430,7 @@ describe("buildModelInvocation context-pressure evidence", () => {
     const prepareStep = prepareStepOf(planOf({ contextWindow: 100 }));
     const result = await prepareStep({
       steps: [{ usage: { inputTokens: 85 } }],
+      stepNumber: 1,
       messages: [{ role: "user", content: "hi" }, ...fsWriteMessages(8)],
     });
     expect(evidenceLines(spy)).toEqual([]);

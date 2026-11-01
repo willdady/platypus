@@ -15,35 +15,17 @@ import type { ProviderRow } from "./provider-write.ts";
  * not inferred (see issue #328). A model's `passthroughFileTypes` lists the
  * media types it ingests natively; anything else is converted to text where
  * possible (Phase 2) or, until then, cleanly rejected. This module is the
- * single source of truth for turning a provider's stored models — which may be
- * the new per-model objects OR a legacy `string[]` — into resolved
+ * single source of truth for a provider's stored, already-resolved
  * `ModelConfig`s. There is no Provider-type default (ADR-0039).
  */
 
 /** All a model lookup reads of a Provider: its models, as stored. */
 type ProviderModels = Pick<ProviderRow, "modelIds">;
 
-/**
- * Normalize a provider's stored models into resolved `ModelConfig`s.
- *
- * Tolerates both shapes: a bare `string` entry, or an object with no
- * `passthroughFileTypes`, ingests nothing natively. Migration 0091 backfills
- * stored rows; dev `drizzle-kit push` skips it.
- */
+/** A provider's stored models, already in the one shape this module reads. */
 export const resolveProviderModels = (
   provider: ProviderModels,
-): ModelConfig[] =>
-  provider.modelIds.map((entry) => {
-    if (typeof entry === "string") {
-      return { id: entry, passthroughFileTypes: [] };
-    }
-    // Spread the stored entry so per-model metadata added later (e.g.
-    // `maxExtractedTextChars`) survives resolution without touching this.
-    return {
-      ...entry,
-      passthroughFileTypes: entry.passthroughFileTypes ?? [],
-    };
-  });
+): ModelConfig[] => provider.modelIds;
 
 /**
  * The list of model REFERENCES a caller should store, preserving order — the

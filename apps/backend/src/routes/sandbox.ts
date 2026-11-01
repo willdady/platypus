@@ -33,11 +33,15 @@ const requireSandboxAdmin = requireWorkspaceConfigAccess(null);
 
 const sandbox = new Hono<{ Variables: Variables }>();
 
-// Credentials are server-side only, to admins too. Stripping here is a quiet
-// improvement over the Provider/MCP routes which still return their secret
-// fields; revisit when those routes adopt a similar redaction pattern. In their
-// place `hasCredentials` says whether any are stored, so the settings form can
-// show a stored key instead of a blank field that looks lost. `transfer` says
+/** The one flag PUT and DELETE accept: skip the outgoing backend's teardown. */
+const forceQuerySchema = z.strictObject({
+  force: z.enum(["true", "false"]).optional(),
+});
+
+// Credentials are server-side only, to admins too. In their place
+// `hasCredentials` says whether any are stored, so the settings form can show a
+// stored key instead of a blank field that looks lost — the same
+// value-or-presence rule the Provider and MCP responses follow. `transfer` says
 // which file-transfer directions the backend offers (ADR-0027), so the UI
 // needn't attempt one to find out.
 //
@@ -118,13 +122,15 @@ sandbox.put(
   requireAuth,
   requireOrgAccess(),
   requireWorkspaceAccess,
+  validate("query", forceQuerySchema),
   validate("json", sandboxUpdateSchema),
   async (c) => {
     const { workspaceId } = workspaceScopeOf(c);
     const isAdmin = c.get("orgMembership")?.role === "admin";
+    const { force } = c.req.valid("query");
     const record = await updateSandbox(workspaceId, c.req.valid("json"), {
       isAdmin,
-      force: c.req.query("force") === "true",
+      force: force === "true",
     });
     // A non-admin owner gets adminEnv values redacted.
     return c.json(sanitizeSandboxResponse(record, isAdmin));
@@ -140,10 +146,12 @@ sandbox.delete(
   requireOrgAccess(),
   requireWorkspaceAccess,
   requireSandboxAdmin,
+  validate("query", forceQuerySchema),
   async (c) => {
     const { workspaceId } = workspaceScopeOf(c);
+    const { force } = c.req.valid("query");
     await deleteSandbox(workspaceId, {
-      force: c.req.query("force") === "true",
+      force: force === "true",
     });
     return c.json({ message: "Sandbox deleted" });
   },
@@ -164,7 +172,7 @@ sandbox.get(
   requireAuth,
   requireOrgAccess(),
   requireWorkspaceAccess,
-  validate("query", z.object({ path: relativePathSchema })),
+  validate("query", z.strictObject({ path: relativePathSchema })),
   async (c) => {
     const { workspaceId } = workspaceScopeOf(c);
     const { path } = c.req.valid("query");
@@ -204,7 +212,7 @@ sandbox.put(
   requireWorkspaceAccess,
   validate(
     "query",
-    z.object({
+    z.strictObject({
       path: relativePathSchema,
       overwrite: z.enum(["true", "false"]).optional(),
     }),

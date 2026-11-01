@@ -1,10 +1,14 @@
 import { Hono } from "hono";
+import { z } from "zod";
 import { validate } from "../validate.ts";
 import { db } from "../index.ts";
 import {
   mcpCreateSchema,
-  mcpUpdateSchema,
+  mcpListResponseSchema,
+  mcpResponseSchema,
   mcpTestSchema,
+  mcpStoredTestSchema,
+  mcpUpdateSchema,
 } from "@platypus/schemas";
 import { requireAuth } from "../middleware/authentication.ts";
 import {
@@ -17,7 +21,6 @@ import {
   listOrgScoped,
   orgScopedWhere,
   requireOrgScoped,
-  resolveOrgScoped,
 } from "../services/scoped-resource.ts";
 import type { Variables } from "../server.ts";
 import {
@@ -25,11 +28,9 @@ import {
   clearOAuthTokens,
   probeMcpConnection,
 } from "../services/mcp-connection.ts";
-import {
-  mcpReadModel,
-  sanitizeMcpResponse,
-} from "../services/credential-redaction.ts";
+import { mcpReadModel } from "../services/credential-redaction.ts";
 import { createMcp, deleteMcp, updateMcp } from "../services/mcp-write.ts";
+import { respond } from "../respond.ts";
 
 // Org-scoped MCPs are Shared resources (ADR-0007). They introduce credentials
 // and external reach, so all mutations are org-admin-only (ADR-0006) — there is
@@ -49,7 +50,12 @@ orgMcp.post(
     // A duplicate name surfaces as a Postgres unique violation, mapped to 409
     // by the central onError (ADR-0010).
     const row = await createMcp({ kind: "organization", orgId }, data);
-    return c.json(sanitizeMcpResponse(row), 201);
+    return respond(
+      c,
+      mcpResponseSchema,
+      mcpReadModel(row, { reveal: true, scope: "organization" }),
+      201,
+    );
   },
 );
 
@@ -60,8 +66,10 @@ orgMcp.get("/", requireAuth, requireOrgAccess(), async (c) => {
   // This route admits any Organization member — a Shared MCP has to be listable
   // to be granted. Only an Org Admin sees its request credentials (ADR-0006).
   const reveal = orgCredentialsVisible(c);
-  return c.json({
-    results: results.map((row) => mcpReadModel(row, { reveal })),
+  return respond(c, mcpListResponseSchema, {
+    results: results.map((row) =>
+      mcpReadModel(row, { reveal, scope: "organization" }),
+    ),
   });
 });
 
@@ -72,7 +80,11 @@ orgMcp.get("/:mcpId", requireAuth, requireOrgAccess(), async (c) => {
   const record = await requireOrgScoped(db, "mcp", mcpId, orgId);
   // See the list route: request credentials are Org-Admin-only (ADR-0006).
   const reveal = orgCredentialsVisible(c);
-  return c.json(mcpReadModel(record, { reveal }));
+  return respond(
+    c,
+    mcpResponseSchema,
+    mcpReadModel(record, { reveal, scope: "organization" }),
+  );
 });
 
 /** Update an org-scoped MCP by ID (admin only) */
@@ -89,7 +101,12 @@ orgMcp.put(
     // A duplicate name surfaces as a Postgres unique violation, mapped to 409
     // by the central onError (ADR-0010).
     const row = await updateMcp({ kind: "organization", orgId }, mcpId, data);
-    return c.json(sanitizeMcpResponse(row), 200);
+    return respond(
+      c,
+      mcpResponseSchema,
+      mcpReadModel(row, { reveal: true, scope: "organization" }),
+      200,
+    );
   },
 );
 
@@ -110,21 +127,14 @@ orgMcp.delete(
   },
 );
 
-/** Test an org-scoped MCP connection (admin only) */
+/** Test an unsaved org-scoped MCP connection (admin only) */
 orgMcp.post(
   "/test",
   requireAuth,
   requireOrgAccess(["admin"]),
   validate("json", mcpTestSchema),
   async (c) => {
-    const data = c.req.valid("json");
-    const { orgId } = orgScopeOf(c);
-
-    const storedMcp = data.mcpId
-      ? await resolveOrgScoped(db, "mcp", data.mcpId, orgId)
-      : null;
-
-    const result = await probeMcpConnection(data, storedMcp);
+    const result = await probeMcpConnection(c.req.valid("json"), null);
     if (!result.success) {
       return c.json({ error: result.error }, result.status);
     }
@@ -132,20 +142,48 @@ orgMcp.post(
   },
 );
 
+/** Test a stored org-scoped MCP connection, addressed by its id (admin only) */
+orgMcp.post(
+  "/:mcpId/test",
+  requireAuth,
+  requireOrgAccess(["admin"]),
+  validate("json", mcpStoredTestSchema),
+  async (c) => {
+    const { orgId } = orgScopeOf(c);
+    const storedMcp = await requireOrgScoped(
+      db,
+      "mcp",
+      c.req.param("mcpId"),
+      orgId,
+    );
+
+    const result = await probeMcpConnection(c.req.valid("json"), storedMcp);
+    if (!result.success) {
+      return c.json({ error: result.error }, result.status);
+    }
+    return c.json(result, 200);
+  },
+);
+
+const oauthAuthorizeQuerySchema = z.strictObject({
+  force: z.enum(["true", "false"]).optional(),
+});
+
 /** Initiate OAuth authorization for an org-scoped MCP (admin only) */
 orgMcp.post(
   "/:mcpId/oauth/authorize",
   requireAuth,
   requireOrgAccess(["admin"]),
+  validate("query", oauthAuthorizeQuerySchema),
   async (c) => {
     const { orgId } = orgScopeOf(c);
     const mcpId = c.req.param("mcpId");
 
     const mcpRecord = await requireOrgScoped(db, "mcp", mcpId, orgId);
 
-    const force = c.req.query("force") === "true";
+    const { force } = c.req.valid("query");
     const result = await authorizeMcpOAuth(db, mcpRecord, {
-      force,
+      force: force === "true",
       clearTokensWhere: orgScopedWhere("mcp", mcpId, orgId),
       userId: userOf(c).id,
     });

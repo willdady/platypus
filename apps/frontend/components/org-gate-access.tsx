@@ -3,7 +3,11 @@
 import { toast } from "sonner";
 import { useState } from "react";
 import { TriangleAlert } from "lucide-react";
-import type { OrgGate, OrgGateAccess as Access } from "@platypus/schemas";
+import {
+  orgGateSchema,
+  type OrgGate,
+  type OrgGateAccess as Access,
+} from "@platypus/schemas";
 import {
   Table,
   TableBody,
@@ -103,7 +107,9 @@ export function OrgGateAccess({
         method: "PUT",
         data: {
           gate,
-          ...(gate === "selected" ? { allowedWorkspaceIds: [...allowed] } : {}),
+          // null leaves every Workspace switch alone; [] would turn them all
+          // off, which is only right when the Admin deliberately deselects.
+          allowedWorkspaceIds: gate === "selected" ? [...allowed] : null,
         },
       }),
     // No field here renders a server error, so a rejection is toasted.
@@ -157,7 +163,10 @@ export function OrgGateAccess({
         label={copy.selectLabel}
         name={copy.selectName}
         value={gate}
-        onValueChange={(value) => setGate(value as OrgGate)}
+        onValueChange={(value) => {
+          const parsed = orgGateSchema.safeParse(value);
+          if (parsed.success) setGate(parsed.data);
+        }}
         disabled={isSaving}
         description={copy.selectDescription}
       >

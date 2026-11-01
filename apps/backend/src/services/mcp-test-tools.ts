@@ -48,14 +48,12 @@ export const namespaceMcpTestToolNames = (
  * the two routes only in which scoped-lookup helper it calls, so it is the
  * one thing each caller still supplies itself.
  */
-export const resolveMcpTestToolNames = async (
+export const resolveMcpTestToolNames = (
   rawToolNames: readonly string[],
   name: string | undefined,
-  mcpId: string | undefined,
-  fetchStoredName: (mcpId: string) => Promise<string | undefined>,
-): Promise<NamespacedTestToolNames> => {
-  const nameForSlug =
-    name ?? (mcpId ? await fetchStoredName(mcpId) : undefined);
+  storedName: string | undefined,
+): NamespacedTestToolNames => {
+  const nameForSlug = name ?? storedName;
   if (!nameForSlug) {
     return { toolNames: [...rawToolNames], invalidToolNames: [] };
   }

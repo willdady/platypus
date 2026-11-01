@@ -75,7 +75,7 @@ beforeEach(() => {
   authState.ownsWorkspace = true;
   fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
     const url = input.toString();
-    if (init?.method === "POST" && url === `${BASE}/chat`) {
+    if (init?.method === "POST" && url === `${BASE}/chat/${CHAT_ID}/turns`) {
       return Promise.resolve(sseResponse());
     }
     // A new Chat's row and the Workspace's Sandbox do not exist yet.
@@ -106,12 +106,10 @@ describe("Chat streaming", () => {
     const post = fetchMock.mock.calls.find(
       ([, init]) => (init as RequestInit | undefined)?.method === "POST",
     );
-    expect(post?.[0]).toBe(`${BASE}/chat`);
+    expect(post?.[0]).toBe(`${BASE}/chat/${CHAT_ID}/turns`);
     const body = JSON.parse((post?.[1] as RequestInit).body as string);
     expect(body).toMatchObject({
-      id: CHAT_ID,
-      orgId: "org1",
-      workspaceId: "ws1",
+      trigger: "submit",
       parentId: null,
       providerId: "p1",
       modelId: "m1",

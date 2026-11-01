@@ -125,9 +125,9 @@ describe("Agent Routes", () => {
       expect(fake.tables.agent ?? []).toEqual([]);
     });
 
-    it("should create a workspace-scoped agent, ignoring any scope in the body", async () => {
+    it("rejects any scope in the body", async () => {
       mockSession();
-      const fake = world();
+      const fake = world({ rows: { agent: [] } });
 
       const res = await send("POST", baseUrl, {
         ...createBody,
@@ -135,18 +135,8 @@ describe("Agent Routes", () => {
         organizationId: orgId,
       });
 
-      expect(res.status).toBe(201);
-      const body = (await res.json()) as { id: string };
-      expect(body).toEqual(
-        expect.objectContaining({ name: "New Agent", workspaceId }),
-      );
-      expect(fake.tables.agent).toEqual([
-        expect.objectContaining({
-          id: body.id,
-          workspaceId,
-          organizationId: null,
-        }),
-      ]);
+      expect(res.status).toBe(400);
+      expect(fake.tables.agent).toHaveLength(0);
     });
 
     it("creates an agent that references an attached Shared agent as a sub-agent", async () => {

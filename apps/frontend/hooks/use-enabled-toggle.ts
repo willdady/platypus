@@ -31,6 +31,8 @@ export function useEnabledToggle<
       () =>
         writeEntity(backendUrl, entity, scope, {
           id: item.id,
+          // Every entity this hook serves updates partially.
+          method: "PATCH",
           data: { enabled },
         }),
       mutate,

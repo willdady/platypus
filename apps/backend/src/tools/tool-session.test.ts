@@ -58,7 +58,7 @@ const scope: ToolSessionScope = {
   orgId: "org-1",
   workspaceId: "ws-1",
   userId: "user-1",
-  frontendUrl: undefined,
+  frontendUrl: "http://localhost:3000",
   timezone: "Australia/Melbourne",
   sessionId: "chat-1",
 };
@@ -139,7 +139,12 @@ const register = (
       id,
       pluginName,
       isCore,
-      contribution: { name: id, category: "Test", tools },
+      contribution: {
+        name: id,
+        category: "Test",
+        description: "Test set",
+        tools,
+      },
       plugin: PLUGIN,
     }),
   );
@@ -215,7 +220,7 @@ describe("openToolSession", () => {
         workspaceId: "ws-1",
         agentId: "agent-1",
         userId: "user-1",
-        frontendUrl: undefined,
+        frontendUrl: "http://localhost:3000",
         timezone: "Australia/Melbourne",
         sessionId: "chat-1",
         // The scope's fields, plus the one capability on the context.

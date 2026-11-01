@@ -109,7 +109,7 @@ export function setSecureContext(value: boolean) {
 export const composerProvider = {
   id: "provider-1",
   name: "OpenAI",
-  modelIds: ["gpt-4o"],
+  modelIds: [{ id: "gpt-4o", passthroughFileTypes: [] }],
 } as unknown as Serialized<Provider>;
 
 /** A persisted PDF attachment, as a stored message carries one. */

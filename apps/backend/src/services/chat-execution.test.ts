@@ -196,6 +196,7 @@ const baseInput = {
   user: { id: "user-1", name: "Test User" },
   messages: [],
   origin: "http://localhost:4000",
+  frontendUrl: "http://localhost:3000",
   // Fixed, not `new Date()`: the retrieval window is an input, so a test that
   // does not care about it must still not vary by when it ran.
   memoriesReferenceDate: new Date("2026-05-03T12:00:00Z"),
@@ -1702,6 +1703,7 @@ describe("chat-execution", () => {
               }),
               ...overrides,
             },
+            backend,
             pluginName: "@acme/searx",
             plugin: makePluginContext(),
           }),
@@ -1860,6 +1862,7 @@ describe("chat-execution", () => {
                 return { web_search: () => ({ query: "q", results: [] }) };
               },
             },
+            backend: "searx",
             pluginName: "@acme/searx",
             plugin: makePluginContext(),
           }),
@@ -2198,6 +2201,7 @@ describe("chat-execution", () => {
           contribution: {
             name: "Throwing test Tool set",
             category: "Test",
+            description: "Test tools",
             tools: vi
               .fn()
               .mockRejectedValue(new Error("tool-set factory failed")),
@@ -2216,6 +2220,7 @@ describe("chat-execution", () => {
           contribution: {
             name: "Working test Tool set",
             category: "Test",
+            description: "Test tools",
             tools: { stillHere: { description: "x" } as never },
           },
           plugin: makePluginContext(),
@@ -2262,6 +2267,7 @@ describe("chat-execution", () => {
           contribution: {
             name: "Hung test Tool set",
             category: "Test",
+            description: "Test tools",
             tools: () => new Promise<never>(() => {}),
           },
           plugin: makePluginContext(),
@@ -2306,6 +2312,7 @@ describe("chat-execution", () => {
           contribution: {
             name: "Memory",
             category: "Memory",
+            description: "Test tools",
             tools: (): Record<string, never> =>
               offerSearch
                 ? { memorySearch: stub, memoryGet: stub }
@@ -2409,6 +2416,7 @@ describe("chat-execution", () => {
             contribution: {
               name: "Sandbox",
               category: "Sandbox",
+              description: "Sandbox tools",
               tools: { fsDownload: stub, fsView: stub },
             },
             plugin: makePluginContext(),
@@ -2464,7 +2472,12 @@ describe("chat-execution", () => {
           id: toolSetId,
           pluginName: "test-plugin",
           isCore: true,
-          contribution: { name: "Probe", category: "Test", tools: factory },
+          contribution: {
+            name: "Probe",
+            category: "Test",
+            description: "Test tools",
+            tools: factory,
+          },
           plugin: makePluginContext(),
         }),
       );
@@ -2538,7 +2551,12 @@ describe("chat-execution", () => {
           id,
           pluginName: "acme",
           isCore: false,
-          contribution: { name: "Acme", category: "Test", tools },
+          contribution: {
+            name: "Acme",
+            category: "Test",
+            description: "Test tools",
+            tools,
+          },
           plugin: makePluginContext(),
         }),
       );
@@ -2563,6 +2581,7 @@ describe("chat-execution", () => {
               read_url: () => ({ content: "", url: "" }),
             }),
           },
+          backend: "searx-664",
           pluginName: "@acme/searx",
           plugin: makePluginContext(),
         }),
@@ -2964,6 +2983,7 @@ describe("chat-execution", () => {
               return { web_search: () => ({ query: "q", results: [] }) };
             },
           },
+          backend: "searx",
           pluginName: "@acme/searx",
           plugin: makePluginContext(),
         }),
@@ -3405,7 +3425,6 @@ describe("validateTurnAttachments", () => {
   // nothing must not receive the raw image.
   it.each([
     ["an empty declaration", [{ id: "gpt-4", passthroughFileTypes: [] }]],
-    ["a legacy bare-string entry", ["gpt-4"]],
   ])(
     "refuses an image for an Anthropic model with %s",
     async (_label, modelIds) => {

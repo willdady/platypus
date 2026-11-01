@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import {
   namespaceMcpTestToolNames,
   resolveMcpTestToolNames,
@@ -30,39 +30,26 @@ describe("namespaceMcpTestToolNames", () => {
 });
 
 describe("resolveMcpTestToolNames", () => {
-  it("namespaces under the given name, without consulting the stored name", async () => {
-    const fetchStoredName = vi.fn();
-    const result = await resolveMcpTestToolNames(
+  it("namespaces under the given name, without consulting the stored name", () => {
+    const result = resolveMcpTestToolNames(
       ["search"],
       "My Server",
-      "mcp-1",
-      fetchStoredName,
+      "Stored Name",
     );
     expect(result.toolNames).toEqual(["my_server__search"]);
-    expect(fetchStoredName).not.toHaveBeenCalled();
   });
 
-  it("falls back to the stored name when none is given but an mcpId is", async () => {
-    const fetchStoredName = vi.fn().mockResolvedValue("Stored Name");
-    const result = await resolveMcpTestToolNames(
+  it("falls back to the stored name when none is given", () => {
+    const result = resolveMcpTestToolNames(
       ["search"],
       undefined,
-      "mcp-1",
-      fetchStoredName,
+      "Stored Name",
     );
-    expect(fetchStoredName).toHaveBeenCalledWith("mcp-1");
     expect(result.toolNames).toEqual(["stored_name__search"]);
   });
 
-  it("leaves names unnamespaced when neither a name nor an mcpId is given", async () => {
-    const fetchStoredName = vi.fn();
-    const result = await resolveMcpTestToolNames(
-      ["search"],
-      undefined,
-      undefined,
-      fetchStoredName,
-    );
+  it("leaves names unnamespaced when neither a name nor a stored name is given", () => {
+    const result = resolveMcpTestToolNames(["search"], undefined, undefined);
     expect(result).toEqual({ toolNames: ["search"], invalidToolNames: [] });
-    expect(fetchStoredName).not.toHaveBeenCalled();
   });
 });

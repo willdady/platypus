@@ -54,6 +54,7 @@ import {
 } from "@platypus/schemas";
 import {
   gateAdmits,
+  triggerTypeSchema,
   TRIGGER_INSTRUCTION_MAX_LENGTH,
   TRIGGER_MAX_RUNS_TO_KEEP_MAX,
   TRIGGER_MAX_RUNS_TO_KEEP_MIN,
@@ -267,6 +268,7 @@ function TriggerForm({
     entity: "triggers",
     scope: { orgId, workspaceId },
     id: triggerId,
+    method: "PATCH",
     fromRecord: (trigger) => ({
       name: trigger.name,
       description: trigger.description || "",
@@ -281,7 +283,9 @@ function TriggerForm({
     onSeed: (trigger) => setTriggerType(trigger.type),
     retractableFields: RETRACTABLE_FIELDS,
     buildPayload: (data): unknown => ({
-      workspaceId,
+      // The route supplies the Workspace on create; an update does not carry
+      // scope at all.
+      ...(triggerId ? {} : { workspaceId }),
       agentId: data.agentId || defaultAgentId,
       name: data.name,
       description: data.description || undefined,
@@ -344,7 +348,10 @@ function TriggerForm({
             <FieldLabel htmlFor="trigger-type">Trigger Type</FieldLabel>
             <Select
               value={triggerType}
-              onValueChange={(value) => setTriggerType(value as TriggerType)}
+              onValueChange={(value) => {
+                const parsed = triggerTypeSchema.safeParse(value);
+                if (parsed.success) setTriggerType(parsed.data);
+              }}
               disabled={isSubmitting || !!triggerId}
             >
               <SelectTrigger

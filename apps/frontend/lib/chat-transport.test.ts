@@ -37,7 +37,7 @@ describe("prepareChatTurnRequest", () => {
 
     expect(body).toEqual({
       providerId: "p1",
-      id: CHAT_ID,
+      trigger: "submit",
       message: next,
       parentId: "a1",
     });
@@ -51,7 +51,7 @@ describe("prepareChatTurnRequest", () => {
 
     expect(body).toEqual({
       providerId: "p1",
-      id: CHAT_ID,
+      trigger: "submit",
       message: message("u2-edit", "q2"),
       parentId: "a1",
     });
@@ -72,7 +72,6 @@ describe("prepareChatTurnRequest", () => {
 
     expect(body).toEqual({
       providerId: "p1",
-      id: CHAT_ID,
       trigger: "regenerate-message",
       messageId: "a1",
     });
@@ -101,7 +100,6 @@ describe("prepareChatTurnRequest", () => {
 
     expect(body).toEqual({
       providerId: "p1",
-      id: CHAT_ID,
       trigger: "respond-to-approvals",
       messageId: "a1",
       responses: [

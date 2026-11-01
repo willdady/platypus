@@ -93,7 +93,7 @@ context.post(
     // says so. Reported as absent rather than refused: the caller supplied the
     // id, so the two answers must not be distinguishable.
     if (
-      data.workspaceId &&
+      data.workspaceId !== null &&
       !(await userMayUseWorkspace(db, user, data.workspaceId))
     ) {
       return c.json({ error: "Workspace not found" }, 404);
@@ -105,8 +105,7 @@ context.post(
         .values({
           id: nanoid(),
           userId: user.id,
-          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- an empty id is stored as null, not ""
-          workspaceId: data.workspaceId || null,
+          workspaceId: data.workspaceId,
           content: data.content,
         })
         .returning();

@@ -181,7 +181,7 @@ chat.get(
 );
 
 chat.post(
-  "/",
+  "/:chatId/turns",
   requireAuth,
   requireOrgAccess(),
   requireWorkspaceAccess,
@@ -192,6 +192,7 @@ chat.post(
     // A2A Chat whose endpoint leaves them out (see `startChatTurn`).
     return await startChatTurn({
       scope: workspaceScopeOf(c),
+      chatId: c.req.param("chatId"),
       request: c.req.valid("json"),
       includeMemories: true,
       origin: getOrigin(c),
@@ -337,7 +338,7 @@ chat.put(
   },
 );
 
-chat.put(
+chat.patch(
   "/:chatId",
   requireAuth,
   requireOrgAccess(),

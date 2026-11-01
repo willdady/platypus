@@ -7,6 +7,7 @@ import {
 } from "../db/schema.ts";
 import { ownedWhere } from "./workspace-resource.ts";
 import { agentRunner } from "../runs/agent-runner.ts";
+import { frontendBaseUrl } from "../base-urls.ts";
 import { ChatSink, type ChatSinkParams } from "../runs/sinks/chat-sink.ts";
 import type { RunInput } from "../runs/types.ts";
 import { chatTimeouts } from "../runs/chat-timeouts.ts";
@@ -23,7 +24,6 @@ import { currentTurnId, isA2aChat } from "./a2a-task-state.ts";
 import { endTurnIn, turnEnded } from "./a2a-task-lifecycle.ts";
 import { chatRunIsLive } from "../runs/chat-run-heartbeat.ts";
 import { withRunSource } from "../event-causation.ts";
-import { env } from "../env.ts";
 
 /**
  * Starts one Chat turn and returns its streaming response — the one path every
@@ -38,6 +38,8 @@ import { env } from "../env.ts";
  */
 export const startChatTurn = async (params: {
   scope: WorkspaceScope;
+  /** The Chat the turn runs in — addressed in the path, never the body. */
+  chatId: string;
   request: ChatSubmitData;
   includeMemories: boolean;
   origin: string;
@@ -50,6 +52,7 @@ export const startChatTurn = async (params: {
 }): Promise<Response> => {
   const {
     scope,
+    chatId,
     request,
     includeMemories: callerIncludesMemories,
     origin,
@@ -79,9 +82,7 @@ export const startChatTurn = async (params: {
       activeLeafId: chatTable.activeLeafId,
     })
     .from(chatTable)
-    .where(
-      ownedWhere("chat", { id: request.id, workspaceId: scope.workspaceId }),
-    )
+    .where(ownedWhere("chat", { id: chatId, workspaceId: scope.workspaceId }))
     .limit(1);
 
   // What the turn continues, from the server's own rows (ADR-0026). Refuses a
@@ -89,14 +90,14 @@ export const startChatTurn = async (params: {
   // cannot regenerate or have its approvals answered — before anything is
   // retrieved or written. A Chat still running refuses at the claim.
   const turn = await resolveTurn({
-    chatId: request.id,
+    chatId,
     owned: existingChat.length > 0,
     activeLeafId: existingChat[0]?.activeLeafId,
     request,
   });
 
   if (isA2aChat(existingChat[0])) {
-    await endDeadRun(request.id, existingChat[0]);
+    await endDeadRun(chatId, existingChat[0]);
   }
 
   const includeMemories =
@@ -154,10 +155,10 @@ export const startChatTurn = async (params: {
   // never re-resolves an id it was not asked about. Only a Chat turn has any:
   // a headless run's `RunInput` carries none, and the summariser then never
   // engages.
-  const chatSummaries = await loadChatSummaries(request.id);
+  const chatSummaries = await loadChatSummaries(chatId);
 
   const input: RunInput = {
-    runId: request.id,
+    runId: chatId,
     request,
     messages,
     chatSummaries,
@@ -188,13 +189,13 @@ export const startChatTurn = async (params: {
     // committed; one the terminal write missed is recorded then.
     onEnding: a2a
       ? async (tx, status) => {
-          if (turnId) await endTurnIn(tx, request.id, turnId, status);
+          if (turnId) await endTurnIn(tx, chatId, turnId, status);
         }
       : undefined,
     onEnded: (status) => {
       onEnded?.();
       if (a2a) {
-        void turnEnded({ chatId: request.id, turnId, status });
+        void turnEnded({ chatId, turnId, status });
       }
     },
   });
@@ -206,7 +207,7 @@ export const startChatTurn = async (params: {
   //
   // Everything this turn does, at any delegation depth, is from this Chat —
   // the source a Notification it posts records (#1229).
-  return await withRunSource({ kind: "chat", chatId: request.id }, () =>
+  return await withRunSource({ kind: "chat", chatId }, () =>
     agentRunner.stream({
       scope,
       input,
@@ -215,7 +216,7 @@ export const startChatTurn = async (params: {
         // No request signal is taken: chat runs continue server-side
         // regardless of the client connection, and are cancelled by run id.
         origin,
-        frontendUrl: env().FRONTEND_URL,
+        frontendUrl: frontendBaseUrl(),
         timeouts: chatTimeouts(),
       },
     }),

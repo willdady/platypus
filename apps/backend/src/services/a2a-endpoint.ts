@@ -18,7 +18,6 @@ import {
   type A2aEndpointUpdate,
   type OrgA2aEndpoint,
   type OrgGateAccessUpdate,
-  type OrgGate,
 } from "@platypus/schemas";
 import { db } from "../index.ts";
 import {
@@ -145,9 +144,9 @@ export const createA2aEndpoint = async (
         agentId: fields.agentId,
         name: fields.name ?? agent.row.name,
         description: fields.description ?? agent.row.description,
-        enabled: fields.enabled ?? true,
-        includeMemories: fields.includeMemories ?? false,
-        extractMemories: fields.extractMemories ?? false,
+        enabled: fields.enabled,
+        includeMemories: fields.includeMemories,
+        extractMemories: fields.extractMemories,
         createdAt: now,
         updatedAt: now,
       })
@@ -298,7 +297,7 @@ export const lookupA2aEndpoint = async (
     workspaceId: row.endpoint.workspaceId,
   });
   if (!row.endpoint.enabled) return notLive("disabled");
-  if (!gateAdmits(row.a2aGate as OrgGate, row.a2aAllowed)) {
+  if (!gateAdmits(row.a2aGate, row.a2aAllowed)) {
     return notLive("gate");
   }
   if (!ownerMayAct(row.owner)) return notLive("owner_left");

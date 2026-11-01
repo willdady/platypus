@@ -42,7 +42,11 @@ function ContextsPage() {
     entity: "users/me/contexts",
     scope: {},
     id: globalCtx?.id,
-    buildPayload: (data) => data,
+    // A global Context names no Workspace: `null` is the one way to say so.
+    // The Workspace is fixed once the row exists, so an update sends content
+    // alone.
+    buildPayload: (data) =>
+      globalCtx?.id ? data : { ...data, workspaceId: null },
     // No field to key it to: the backend's refusal is the message to show.
     conflictField: null,
     successMessage: "Global context saved",

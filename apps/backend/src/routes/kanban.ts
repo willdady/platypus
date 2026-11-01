@@ -271,7 +271,7 @@ kanban.post(
 );
 
 /** Update a card */
-kanban.put(
+kanban.patch(
   "/:boardId/cards/:cardId",
   requireAuth,
   requireOrgAccess(),
@@ -393,7 +393,7 @@ kanban.post(
 );
 
 /** Update a comment */
-kanban.put(
+kanban.patch(
   "/:boardId/cards/:cardId/comments/:commentId",
   requireAuth,
   requireOrgAccess(),

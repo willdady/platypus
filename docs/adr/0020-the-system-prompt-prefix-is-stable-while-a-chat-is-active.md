@@ -64,3 +64,15 @@ last-known tool listing is served for up to a day after its last successful
 fetch — so a flapping server stops discarding the System prompt this ADR
 stabilises. The tier is still rebuilt every turn, and Web-search and Sub-Agent
 membership are unchanged.
+
+## Amended by ADR-0042
+
+[ADR-0042](0042-the-last-permitted-step-is-told-to-answer.md) introduces the one
+tail message this ADR's "There is no tail channel" consequence did not foresee:
+on the last step a turn may take, a user-role instruction tells the model to
+answer from what it has gathered. It is the `{role: "system"}` tail this ADR
+records as throwing on Google and Bedrock, in the only form those two accept, and
+it is not the per-turn volatile context the consequence is about: it carries no
+Memories, no Workspace state and nothing a User authored, it is used on one model
+call and never persisted. The pinning this ADR is about is untouched, and the
+prefix in front of the instruction is the conversation as it already stood.

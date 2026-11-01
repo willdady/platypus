@@ -159,7 +159,7 @@ const seed = () =>
           apiKey: "sk-test",
           apiMode: "responses",
           searchSource: "native",
-          modelIds: ["gpt-test"],
+          modelIds: [{ id: "gpt-test", passthroughFileTypes: [] }],
           taskModelId: "gpt-test",
           memoryExtractionModelId: "gpt-test",
         },
@@ -172,6 +172,9 @@ const seed = () =>
           modelId: "gpt-test",
           name: "Helper",
           description: "Internal",
+          toolSetIds: [],
+          skillIds: [],
+          subAgentIds: [],
         },
       ],
       a2a_endpoint: [

@@ -45,7 +45,7 @@ import {
   TriangleAlert,
   UserRound,
 } from "lucide-react";
-import { type Skill, type Agent } from "@platypus/schemas";
+import { type SkillResponse, type Agent } from "@platypus/schemas";
 import { useScopedList } from "@/hooks/use-scoped-list";
 import { useSkillImportAllowed } from "@/hooks/use-skill-import-allowed";
 import Link from "next/link";
@@ -82,10 +82,9 @@ import {
 // The list serves two surfaces: a Workspace (workspaceId provided) where it
 // shows workspace-scoped Skills plus attached org-scoped Shared Skills as
 // locked cards, and the Organization settings surface (no workspaceId) where it
-// manages org-scoped Skills directly (ADR-0007).
-type SkillWithScope = Serialized<Skill> & {
-  scope?: "organization" | "workspace";
-};
+// manages org-scoped Skills directly (ADR-0007). The API's response shape
+// always carries `scope`.
+type SkillWithScope = Serialized<SkillResponse>;
 
 /** The value a Select carries for "no filter" — Radix rejects an empty one. */
 const ALL = "all";
@@ -254,7 +253,7 @@ export function SkillsList({
   });
 
   const getAgentsForSkill = (skillId: string) =>
-    agents.filter((agent) => agent.skillIds?.includes(skillId));
+    agents.filter((agent) => agent.skillIds.includes(skillId));
 
   const deleteFlow = useDeleteFlow<SkillWithScope>({
     mutate,
@@ -327,7 +326,7 @@ export function SkillsList({
   // `Command` list, so it is called directly rather than through `Command`.
   // Only agents that would narrow the list to something are worth offering.
   const agentOptions = agents.filter((agent) =>
-    skills.some((skill) => agent.skillIds?.includes(skill.id)),
+    skills.some((skill) => agent.skillIds.includes(skill.id)),
   );
 
   // A chosen agent that has since dropped out of the options (detached from

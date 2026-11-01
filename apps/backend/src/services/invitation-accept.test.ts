@@ -40,9 +40,9 @@ afterAll(() => pg.close());
 
 const invite = (id: string, email: string) =>
   pg.query(
-    `INSERT INTO "invitation" ("id", "email", "organization_id", "invited_by", "expires_at")
-       VALUES ($1, $2, 'org-1', 'admin', now() + interval '7 days')`,
-    [id, email],
+    `INSERT INTO "invitation" ("id", "email", "organization_id", "invited_by", "token", "expires_at")
+       VALUES ($1, $2, 'org-1', 'admin', $3, now() + interval '7 days')`,
+    [id, email, id],
   );
 
 describe("acceptInvitationForUser", () => {

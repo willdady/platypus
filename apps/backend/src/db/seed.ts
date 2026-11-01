@@ -17,7 +17,18 @@ export type SeedDatabase = typeof db;
 type SeedEnv = {
   ADMIN_EMAIL?: string;
   ADMIN_PASSWORD?: string;
+  NODE_ENV?: string;
 };
+
+/**
+ * The credential pair the deployment guides and the shipped example files used
+ * to provide. It is public knowledge, so a production deployment still holding
+ * it is one an attacker can sign into by trying the first thing they would try.
+ * Refused in production only: local development, the smoke test and the
+ * Playwright flow all seed with it on purpose.
+ */
+const WELL_KNOWN_ADMIN_EMAIL = "admin@example.com";
+const WELL_KNOWN_ADMIN_PASSWORD = "admin123";
 
 /**
  * Creates the admin User and returns its id. In production this is the
@@ -119,6 +130,18 @@ export const seedFirstBoot = async (
         : "environment variable is";
     throw new NonRetryableSeedError(
       `${names} ${isAre} required to seed the initial admin user. Set ${names} and restart.`,
+    );
+  }
+  // The published default must not work where anyone can reach it. Outside
+  // production it stays usable: CLAUDE.md, the smoke test and the Playwright
+  // flow all sign in with it.
+  if (
+    env.NODE_ENV === "production" &&
+    email.trim().toLowerCase() === WELL_KNOWN_ADMIN_EMAIL &&
+    password === WELL_KNOWN_ADMIN_PASSWORD
+  ) {
+    throw new NonRetryableSeedError(
+      `ADMIN_EMAIL / ADMIN_PASSWORD are the well-known example credentials, which a production deployment must not use. Set your own (ADMIN_PASSWORD must be at least ${MIN_ADMIN_PASSWORD_LENGTH} characters) and restart.`,
     );
   }
   if (password.length < MIN_ADMIN_PASSWORD_LENGTH) {

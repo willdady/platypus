@@ -381,7 +381,8 @@ export function TriggerList({
     <ListState variant="empty">No triggers yet.</ListState>
   ) : !triggers.length ? null : (
     <ListState variant="empty">
-      No {TRIGGER_TYPE_LABELS[typeFilter as TriggerType]} triggers to show.
+      No {typeFilter === ALL ? "matching" : TRIGGER_TYPE_LABELS[typeFilter]}{" "}
+      triggers to show.
     </ListState>
   );
 

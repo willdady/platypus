@@ -78,18 +78,30 @@ after a core upgrade; a genuinely breaking change is a windowed major bump. Boot
 is fail-loud: a plugin outside the supported window is rejected with a
 plugin-named error.
 
-**v3 is the current major**, and core supports 2 and 3 together; a v1 plugin is
-rejected at boot. v3 made the `{ signal }` argument on a Sandbox backend's five
-tool methods required, so read `options.signal` without a `?.`. Migrating a v2
-plugin: set `apiVersion` to 3 and drop any `options?.` guard. Dropping the guard
-while the manifest still says 2 is the trap — some cores that accept 2 never pass
-the argument, and the first unguarded read throws mid-turn.
+**v4 is the current major**, and core supports 3 and 4 together; a v2 plugin is
+rejected at boot. v4 requires what core has always supplied, and types the
+deploy-time block:
 
-A v1 plugin must move to 2 or later. v2 made required everything core had always
-supplied on every turn — `ctx.registerCloser`, `plugin.logger`, and the `plugin`
-argument on all three contribution factories — so none of them needs a `?.`. It
-also re-signed a Sandbox backend's `configSchema` **factory**: it receives the
-whole deploy-time block rather than the `config` half alone, so read
+- `ctx.timezone` and `ctx.sessionId` are required on a tool-set factory — read
+  them directly;
+- a Tool set's `description` is required;
+- declare `PlatypusPlugin<Config, Credentials>` (with the schemas that produce
+  them) and every contribution factory sees `plugin.config` /
+  `plugin.credentials` already narrowed, so no `as` and no re-parse.
+
+Migrating a v3 plugin: set `apiVersion` to 4, add any missing Tool-set
+`description`, and drop the `UTC` / `undefined` fallbacks. The `{ signal }`
+argument on a Sandbox backend's five tool methods has been required since v3.
+
+A v2 plugin must move to 4 before it loads again. The v3 step: the `{ signal }`
+argument on a Sandbox backend's five tool methods became required, so read
+`options.signal` without a `?.`.
+
+A v1 plugin must pass through v2 first. v2 made required everything core had
+always supplied on every turn — `ctx.registerCloser`, `plugin.logger`, and the
+`plugin` argument on all three contribution factories — so none of them needs a
+`?.`. It also re-signed a Sandbox backend's `configSchema` **factory**: it
+receives the whole deploy-time block rather than the `config` half alone, so read
 `plugin.config` where the argument used to be the config itself.
 
 ## What you can contribute
@@ -105,7 +117,9 @@ whole deploy-time block rather than the `config` half alone, so read
 
 Plugins may also declare deploy-time, Operator-owned `configSchema` /
 `credentialsSchema`, supplied via the plugin's own `PLATYPUS_PLUGIN_CONFIG_<NAME>`
-variable and validated at boot.
+variable and validated at boot. Their `z.infer` output types are the manifest's
+generics (`PlatypusPlugin<Config, Credentials>`), so every contribution factory
+reads `plugin.config` and `plugin.credentials` without a cast.
 
 ## Logging
 
@@ -168,13 +182,19 @@ those limits can actually be enforced.
 ```ts
 import type { PlatypusPlugin } from "@platypuschat/plugin-sdk";
 import { PLUGIN_API_VERSION } from "@platypuschat/plugin-sdk";
+import { z } from "zod";
 
-export const plugin: PlatypusPlugin = {
+// A backend's endpoint and API key are deploy-time plugin config, not
+// per-Provider settings. Its output type is the manifest's `TConfig`, so
+// `plugin.config` arrives narrowed in `createExecutors`.
+const configSchema = z.object({ endpoint: z.url() });
+type Config = z.infer<typeof configSchema>;
+
+export const plugin: PlatypusPlugin<Config> = {
   name: "acme-search",
   version: "0.1.0",
   apiVersion: PLUGIN_API_VERSION,
-  // A backend's endpoint and API key are deploy-time plugin config, not
-  // per-Provider settings — declare them with the plugin-level schemas.
+  configSchema,
   contributes: {
     webBackends: [
       {

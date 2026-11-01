@@ -175,73 +175,20 @@ describe("Chat Routes", () => {
       expect(await res.json()).toEqual({ results: mockChats, totalCount: 1 });
     });
 
-    it("should filter chats by single tag", async () => {
+    it("rejects an unknown query key instead of silently ignoring it", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
       ]); // requireWorkspaceAccess
-
-      const mockChats = [
-        { id: "chat-1", title: "Chat 1", tags: ["typescript"] },
-        { id: "chat-2", title: "Chat 2", tags: ["typescript", "react"] },
-      ];
-      mockDb.offset.mockResolvedValueOnce(mockChats);
-      mockDb.where
-        .mockReturnValueOnce(mockDb)
-        .mockReturnValueOnce(mockDb)
-        .mockReturnValueOnce(mockDb)
-        .mockResolvedValueOnce([{ totalCount: 2 }]);
 
       const res = await app.request(`${baseUrl}?tags=typescript`);
-      expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({ results: mockChats, totalCount: 2 });
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as { error: unknown };
+      expect(body.error).toBeTruthy();
     });
 
-    it("should filter chats by multiple tags (OR logic)", async () => {
-      mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
-
-      const mockChats = [
-        { id: "chat-1", title: "Chat 1", tags: ["typescript"] },
-        { id: "chat-2", title: "Chat 2", tags: ["react"] },
-        { id: "chat-3", title: "Chat 3", tags: ["typescript", "react"] },
-      ];
-      mockDb.offset.mockResolvedValueOnce(mockChats);
-      mockDb.where
-        .mockReturnValueOnce(mockDb)
-        .mockReturnValueOnce(mockDb)
-        .mockReturnValueOnce(mockDb)
-        .mockResolvedValueOnce([{ totalCount: 3 }]);
-
-      const res = await app.request(`${baseUrl}?tags=typescript,react`);
-      expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({ results: mockChats, totalCount: 3 });
-    });
-
-    it("should return empty array when tag filter has no matches", async () => {
-      mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
-
-      mockDb.offset.mockResolvedValueOnce([]);
-      mockDb.where
-        .mockReturnValueOnce(mockDb)
-        .mockReturnValueOnce(mockDb)
-        .mockReturnValueOnce(mockDb)
-        .mockResolvedValueOnce([{ totalCount: 0 }]);
-
-      const res = await app.request(`${baseUrl}?tags=nonexistent-tag`);
-      expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({ results: [], totalCount: 0 });
-    });
-
-    it("should return all chats when tags param is not provided (backward compatible)", async () => {
+    it("should return all chats when no filter is provided", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([
@@ -487,11 +434,10 @@ describe("Chat Routes", () => {
         dispose: vi.fn().mockResolvedValue(undefined),
       });
 
-      const res = await app.request(baseUrl, {
+      const res = await app.request(`${baseUrl}/chat-1/turns`, {
         method: "POST",
         body: JSON.stringify({
-          id: "chat-1",
-          workspaceId,
+          trigger: "submit",
           providerId: "p1",
           modelId: "m1",
           message: hello,
@@ -518,11 +464,10 @@ describe("Chat Routes", () => {
         new NotFoundError("Agent 'agent-1' not found"),
       );
 
-      const res = await app.request(baseUrl, {
+      const res = await app.request(`${baseUrl}/chat-2/turns`, {
         method: "POST",
         body: JSON.stringify({
-          id: "chat-2",
-          workspaceId,
+          trigger: "submit",
           agentId: "agent-1",
           message: hello,
           parentId: null,
@@ -550,11 +495,10 @@ describe("Chat Routes", () => {
         new ValidationError("Model id 'bogus' not enabled for provider 'p1'"),
       );
 
-      const res = await app.request(baseUrl, {
+      const res = await app.request(`${baseUrl}/chat-3/turns`, {
         method: "POST",
         body: JSON.stringify({
-          id: "chat-3",
-          workspaceId,
+          trigger: "submit",
           providerId: "p1",
           modelId: "bogus",
           message: hello,
@@ -583,11 +527,10 @@ describe("Chat Routes", () => {
       ]);
       mockValidateTurnAttachments.mockRejectedValueOnce(fileError);
 
-      const res = await app.request(baseUrl, {
+      const res = await app.request(`${baseUrl}/chat-4/turns`, {
         method: "POST",
         body: JSON.stringify({
-          id: "chat-4",
-          workspaceId,
+          trigger: "submit",
           providerId: "p1",
           modelId: "m1",
           message: hello,
@@ -626,11 +569,10 @@ describe("Chat Routes", () => {
       );
       mockPrepareChatTurn.mockResolvedValueOnce(validTurn);
 
-      await app.request(baseUrl, {
+      await app.request(`${baseUrl}/chat-a/turns`, {
         method: "POST",
         body: JSON.stringify({
-          id: "chat-a",
-          workspaceId,
+          trigger: "submit",
           providerId: "p1",
           modelId: "m1",
           message: hello,
@@ -679,11 +621,10 @@ describe("Chat Routes", () => {
 
       mockPrepareChatTurn.mockResolvedValueOnce(validTurn);
 
-      await app.request(baseUrl, {
+      await app.request(`${baseUrl}/chat-b/turns`, {
         method: "POST",
         body: JSON.stringify({
-          id: "chat-b",
-          workspaceId,
+          trigger: "submit",
           providerId: "p1",
           modelId: "m1",
           message: hello,
@@ -712,7 +653,7 @@ describe("Chat Routes", () => {
       mockDb.limit.mockResolvedValueOnce([]); // ADR-0020 row lookup (new chat)
       mockDb.orderBy.mockResolvedValueOnce([]); // the path it continues: none
       mockDb.limit.mockResolvedValueOnce([
-        { id: "agent-1", workspaceId, skillIds: ["skill-1"] },
+        { id: "agent-1", workspaceId, skillIds: ["skill-1"], toolSetIds: [] },
       ]); // the turn's Agent, for its assigned Skills
       mockDb.limit.mockResolvedValueOnce([
         {
@@ -730,11 +671,10 @@ describe("Chat Routes", () => {
       mockPrepareChatTurn.mockResolvedValueOnce(validTurn);
       freshStream();
 
-      const res = await app.request(baseUrl, {
+      const res = await app.request(`${baseUrl}/chat-cmd/turns`, {
         method: "POST",
         body: JSON.stringify({
-          id: "chat-cmd",
-          workspaceId,
+          trigger: "submit",
           agentId: "agent-1",
           message: {
             id: "u1",
@@ -780,7 +720,7 @@ describe("Chat Routes", () => {
       mockDb.limit.mockResolvedValueOnce([]);
       mockDb.orderBy.mockResolvedValueOnce([]); // the path it continues: none
       mockDb.limit.mockResolvedValueOnce([
-        { id: "agent-1", workspaceId, skillIds: ["skill-1"] },
+        { id: "agent-1", workspaceId, skillIds: ["skill-1"], toolSetIds: [] },
       ]);
       // No Skill of that name in either scope, and no Attachment either.
       mockDb.limit.mockResolvedValue([]);
@@ -788,11 +728,10 @@ describe("Chat Routes", () => {
       mockPrepareChatTurn.mockResolvedValueOnce(validTurn);
       freshStream();
 
-      const res = await app.request(baseUrl, {
+      const res = await app.request(`${baseUrl}/chat-typo/turns`, {
         method: "POST",
         body: JSON.stringify({
-          id: "chat-typo",
-          workspaceId,
+          trigger: "submit",
           agentId: "agent-1",
           message: {
             id: "u1",
@@ -1008,10 +947,9 @@ describe("Chat Routes", () => {
       mockDb.returning.mockResolvedValueOnce([mockChat]);
 
       const res = await app.request(`${baseUrl}/chat-1`, {
-        method: "PUT",
+        method: "PATCH",
         body: JSON.stringify({
           title: "Updated Title",
-          workspaceId,
           isPinned: true,
         }),
         headers: { "Content-Type": "application/json" },
@@ -1029,7 +967,7 @@ describe("Chat Routes", () => {
       mockDb.returning.mockResolvedValueOnce([{ id: "chat-1", title: "Hi" }]);
 
       const res = await app.request(`${baseUrl}/chat-1`, {
-        method: "PUT",
+        method: "PATCH",
         body: JSON.stringify({ isPinned: true }),
         headers: { "Content-Type": "application/json" },
       });
@@ -1059,12 +997,27 @@ describe("Chat Routes", () => {
       mockPrepareChatTurn.mockResolvedValueOnce(validTurn);
     };
 
-    const post = async (body: Record<string, unknown>) => {
+    it("no longer answers the body-addressed turn on the collection", async () => {
+      mockSession();
       const res = await app.request(baseUrl, {
         method: "POST",
         body: JSON.stringify({
-          id: "chat-1",
-          workspaceId,
+          trigger: "submit",
+          providerId: "p1",
+          modelId: "m1",
+          message: { id: "u1", role: "user", parts: [] },
+          parentId: null,
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+      expect(res.status).toBe(404);
+    });
+
+    const post = async (body: Record<string, unknown>) => {
+      const res = await app.request(`${baseUrl}/chat-1/turns`, {
+        method: "POST",
+        body: JSON.stringify({
+          trigger: "submit",
           providerId: "p1",
           modelId: "m1",
           ...body,
@@ -1097,7 +1050,13 @@ describe("Chat Routes", () => {
     const seedChat = (leaf = "a2") =>
       seedTenant({
         chat: [
-          { id: "chat-1", workspaceId, title: "Chat", activeLeafId: leaf },
+          {
+            id: "chat-1",
+            workspaceId,
+            title: "Chat",
+            activeLeafId: leaf,
+            runHeartbeatAt: new Date(),
+          },
         ],
         chat_message: [
           stored("u1", null, "user", 1),
@@ -1497,6 +1456,8 @@ describe("Chat Routes", () => {
               workspaceId,
               organizationId: null,
               skillIds: ["skill-1"],
+              toolSetIds: [],
+              subAgentIds: [],
             },
           ],
           skill: [
@@ -1832,7 +1793,13 @@ describe("Chat Routes", () => {
       const seedAlternatives = () =>
         seedTenant({
           chat: [
-            { id: "chat-1", workspaceId, title: "Chat", activeLeafId: "a2b" },
+            {
+              id: "chat-1",
+              workspaceId,
+              title: "Chat",
+              activeLeafId: "a2b",
+              runHeartbeatAt: new Date(),
+            },
           ],
           chat_message: [
             stored("u1", null, "user", 1),

@@ -252,8 +252,8 @@ export function AppSidebar() {
     entity: "chat",
     scope,
     id: renameChatId ?? undefined,
+    method: "PATCH",
     buildPayload: (data) => ({
-      workspaceId,
       ...data,
       isPinned: chats.find((chat) => chat.id === renameChatId)?.isPinned,
     }),
@@ -466,8 +466,7 @@ export function AppSidebar() {
                                 <p className="truncate">{chat.title}</p>
                               </Link>
                             </SidebarMenuButton>
-                            {(canChange ||
-                              (chat.tags && chat.tags.length > 0)) && (
+                            {(canChange || chat.tags.length > 0) && (
                               <DropdownMenu modal={false}>
                                 <DropdownMenuTrigger asChild>
                                   <SidebarMenuAction
@@ -503,7 +502,7 @@ export function AppSidebar() {
                                           setRenameChatId(chat.id);
                                           setRenameData({
                                             title: chat.title,
-                                            tags: chat.tags ?? [],
+                                            tags: chat.tags,
                                           });
                                           setRenameValidationErrors({});
                                         }}
@@ -519,7 +518,7 @@ export function AppSidebar() {
                                       </DropdownMenuItem>
                                     </>
                                   )}
-                                  {chat.tags && chat.tags.length > 0 && (
+                                  {chat.tags.length > 0 && (
                                     <>
                                       {canChange && <DropdownMenuSeparator />}
                                       <DropdownMenuGroup className="flex flex-wrap p-1 gap-1">

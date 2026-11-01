@@ -18,8 +18,8 @@ describe("@platypus/web-fetch plugin manifest", () => {
 
   it("declares a plugin-level configSchema (ignoreRobotsTxt, deploy-time)", () => {
     // Defaults to robots.txt-respecting when the Operator supplies nothing.
-    expect(plugin.configSchema?.parse({})).toEqual({ ignoreRobotsTxt: false });
-    expect(plugin.configSchema?.parse({ ignoreRobotsTxt: true })).toEqual({
+    expect(plugin.configSchema.parse({})).toEqual({ ignoreRobotsTxt: false });
+    expect(plugin.configSchema.parse({ ignoreRobotsTxt: true })).toEqual({
       ignoreRobotsTxt: true,
     });
   });
@@ -51,8 +51,10 @@ describe("@platypus/web-fetch plugin manifest", () => {
         workspaceId: "w",
         agentId: "a",
         orgId: "o",
-        frontendUrl: undefined,
+        frontendUrl: "http://localhost:3000",
         userId: "u",
+        timezone: "UTC",
+        sessionId: "chat-1",
         registerCloser: () => {},
       },
       undefined,

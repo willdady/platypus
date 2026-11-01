@@ -99,11 +99,11 @@ describe("@platypus/decision-gate", () => {
     [{ denyThreshold: 1.5 }, "a threshold above 1"],
     [{ denyThreshold: 0.5, askThreshold: 0.6 }, "an ask above the deny"],
   ] as Array<[unknown, string]>)("refuses config with %s (%s)", (config) => {
-    expect(plugin.configSchema?.safeParse(config).success).toBe(false);
+    expect(plugin.configSchema.safeParse(config).success).toBe(false);
   });
 
   it("defaults to the gateway", () => {
-    expect(plugin.configSchema?.parse({ denyThreshold: 0.9 })).toEqual({
+    expect(plugin.configSchema.parse({ denyThreshold: 0.9 })).toEqual({
       provider: "gateway",
       denyThreshold: 0.9,
     });

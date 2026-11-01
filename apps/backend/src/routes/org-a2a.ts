@@ -9,7 +9,12 @@ import {
   setA2aAccess,
 } from "../services/a2a-endpoint.ts";
 import { NotFoundError } from "../errors.ts";
-import { mountGateAccess, seenTokenCreatedAt } from "./org-gate-access.ts";
+import {
+  mountGateAccess,
+  seenTokenCreatedAt,
+  tokenCreatedAtQuerySchema,
+} from "./org-gate-access.ts";
+import { validate } from "../validate.ts";
 import type { Variables } from "../server.ts";
 
 /**
@@ -56,13 +61,14 @@ orgA2a.delete(
   "/endpoints/:endpointId/tokens/:tokenId",
   requireAuth,
   requireOrgAccess(["admin"]),
+  validate("query", tokenCreatedAtQuerySchema),
   async (c) => {
     const { orgId } = orgScopeOf(c);
     const found = await revokeOrgA2aToken(
       orgId,
       c.req.param("endpointId"),
       c.req.param("tokenId"),
-      seenTokenCreatedAt(c),
+      seenTokenCreatedAt(c.req.valid("query")),
     );
     if (!found) throw new NotFoundError("A2A token not found");
     return c.json({ message: "A2A token revoked" });

@@ -25,6 +25,26 @@ export const partialWithoutDefaults = <Shape extends z.ZodRawShape>(
     >;
   }>;
 
+/**
+ * Marks a schema that validates a REQUEST as strict: an unknown key is a 400
+ * rather than silently dropped. Applied only to the derived `*Create`,
+ * `*Update` and query schemas a route validates with — never to the base or
+ * record schemas they are `.pick()`ed from, which describe stored rows.
+ */
+export const strictRequest = <Shape extends z.ZodRawShape>(
+  schema: z.ZodObject<Shape>,
+): z.ZodObject<Shape> => schema.strict();
+
+// Scoped-resource responses (ADR-0007). A Provider, MCP, Agent or Skill lives at
+// exactly one scope; every response that returns one says which, so a caller
+// never has to infer it from the endpoint it called.
+export const resourceScopeSchema = z.enum(["workspace", "organization"]);
+export type ResourceScope = z.infer<typeof resourceScopeSchema>;
+
+// A secret the caller may not read: whether one is stored, never the value.
+export const secretPresenceSchema = z.object({ configured: z.boolean() });
+export type SecretPresence = z.infer<typeof secretPresenceSchema>;
+
 // Shared free-text bounds, exported so the forms' `maxLength` attributes read
 // the same source as the server rule.
 //
@@ -65,18 +85,19 @@ export const bearerTokenStatusSchema = z.enum([
 
 export type BearerTokenStatus = z.infer<typeof bearerTokenStatusSchema>;
 
+// Free-text organization identity / context, rendered EARLY in the system
+// prompt beside the workspace context as framing — NOT a security control
+// (see the provider `securityGuardrails` field for that). Length-bounded
+// against abuse; nullable so existing orgs are unchanged.
+const organizationIdentityContextSchema = z
+  .string()
+  .max(ORGANIZATION_IDENTITY_CONTEXT_MAX_LENGTH)
+  .nullable();
+
 export const organizationSchema = z.object({
   id: z.string(),
   name: z.string().min(3).max(30),
-  // Free-text organization identity / context, rendered EARLY in the system
-  // prompt beside the workspace context as framing — NOT a security control
-  // (see the provider `securityGuardrails` field for that). Length-bounded
-  // against abuse; nullable so existing orgs are unchanged.
-  identityContext: z
-    .string()
-    .max(ORGANIZATION_IDENTITY_CONTEXT_MAX_LENGTH)
-    .nullable()
-    .optional(),
+  identityContext: organizationIdentityContextSchema.optional(),
   // Which Workspaces may take calls on an Inbound Trigger (ADR-0030). `off`
   // by default; `selected` defers to each Workspace's
   // `inboundTriggersAllowed`. Settable only by an Org Admin.
@@ -95,26 +116,31 @@ export const organizationSchema = z.object({
 
 export type Organization = z.infer<typeof organizationSchema>;
 
-export const organizationCreateSchema = organizationSchema.pick({ name: true });
+export const organizationCreateSchema = strictRequest(
+  organizationSchema.pick({ name: true }),
+);
 
 // The Inbound Trigger gate is not here: it is saved with the per-Workspace
 // switches on the Organization's Inbound Triggers screen
 // (`orgGateAccessUpdateSchema`), so one place owns it.
-export const organizationUpdateSchema = organizationSchema.pick({
-  name: true,
-  identityContext: true,
-});
+// PUT replaces the whole Organization: `identityContext` is required (and
+// nullable), so omitting it is a 400 rather than leaving the stored value.
+export const organizationUpdateSchema = strictRequest(
+  organizationSchema.pick({ name: true }).extend({
+    identityContext: organizationIdentityContextSchema,
+  }),
+);
 
 /**
  * An Organization gate as an Org Admin saves it, for Inbound Triggers
  * (ADR-0030) or A2A endpoints (ADR-0032). `allowedWorkspaceIds` sets every
  * Workspace's own switch in the same write — on for those listed, off for the
  * rest — so switching to `selected` never refuses calls between two saves.
- * Omitted, the switches stay as they are.
+ * `null` leaves the switches as they are; `[]` turns them all off.
  */
-export const orgGateAccessUpdateSchema = z.object({
+export const orgGateAccessUpdateSchema = z.strictObject({
   gate: orgGateSchema,
-  allowedWorkspaceIds: z.array(z.string()).max(10_000).optional(),
+  allowedWorkspaceIds: z.array(z.string()).max(10_000).nullable(),
 });
 
 export type OrgGateAccessUpdate = z.infer<typeof orgGateAccessUpdateSchema>;
@@ -167,8 +193,7 @@ export const workspaceSchema = z.object({
     .number()
     .int()
     .min(WORKSPACE_MAX_DAILY_SUMMARIES_MIN)
-    .max(WORKSPACE_MAX_DAILY_SUMMARIES_MAX)
-    .optional(),
+    .max(WORKSPACE_MAX_DAILY_SUMMARIES_MAX),
   // Per-workspace delegation flags (ADR-0006). Settable only by an org admin
   // (enforced in the workspace route); when true the owner may self-manage the
   // respective resource.
@@ -192,23 +217,30 @@ export const workspaceSchema = z.object({
 
 export type Workspace = z.infer<typeof workspaceSchema>;
 
-export const workspaceUpdateSchema = workspaceSchema.pick({
-  name: true,
-  context: true,
-  taskModelProviderId: true,
-  memoryExtractionProviderId: true,
-  memoryEmbeddingProviderId: true,
-  maxDailySummaries: true,
-  providerSelfManagement: true,
-  mcpSelfManagement: true,
-  inboundTriggersAllowed: true,
-});
+export const workspaceUpdateSchema = strictRequest(
+  workspaceSchema
+    .pick({
+      name: true,
+      context: true,
+      taskModelProviderId: true,
+      memoryExtractionProviderId: true,
+      memoryEmbeddingProviderId: true,
+      maxDailySummaries: true,
+      providerSelfManagement: true,
+      mcpSelfManagement: true,
+      inboundTriggersAllowed: true,
+    })
+    // A read always carries the cap; an update may leave it alone.
+    .extend({
+      maxDailySummaries: workspaceSchema.shape.maxDailySummaries.optional(),
+    }),
+);
 
 /**
  * A Workspace transfer (ADR-0035): the member who becomes its Owner, and
  * whether its Chats and Memories go with it.
  */
-export const workspaceTransferSchema = z.object({
+export const workspaceTransferSchema = z.strictObject({
   newOwnerId: z.string().min(1),
   keepHistory: z.boolean(),
 });
@@ -322,8 +354,7 @@ export const chatSchema = z.object({
   isPinned: z.boolean(),
   tags: z
     .array(z.string().regex(kebabCaseRegex, "Tags must be kebab-case"))
-    .max(5, "A chat can have at most 5 tags")
-    .optional(),
+    .max(5, "A chat can have at most 5 tags"),
   agentId: z.string().optional(),
   providerId: z.string().optional(),
   modelId: z.string().optional(),
@@ -391,10 +422,10 @@ export const isValidChatSampling = (
   value: number | undefined,
 ): boolean => chatSchema.shape[field].safeParse(value).success;
 
+// The Chat is addressed in the path (`POST …/chat/:chatId/turns`), so the body
+// carries only the turn's generation settings and what it is doing.
 const chatTurnSchema = chatSchema
   .pick({
-    id: true,
-    workspaceId: true,
     instructions: true,
     temperature: true,
     topP: true,
@@ -412,10 +443,6 @@ const chatTurnSchema = chatSchema
     providerId: z.string().optional(),
     modelId: z.string().optional(),
     search: z.boolean().optional(),
-    // The server owns the Transcript (ADR-0026) and rebuilds it from its own
-    // rows. A client still sending its own is refused rather than
-    // half-honoured.
-    messages: z.never().optional(),
   });
 
 /**
@@ -460,37 +487,44 @@ export const formatFileSize = (bytes: number): string => {
  * AI SDK's `validateUIMessages`, which knows each part's shape.
  */
 export const chatSubmitSchema = z
-  .union([
-    chatTurnSchema.extend({
-      message: z.strictObject({
-        id: z.string().min(1),
-        role: z.literal("user"),
-        parts: z.array(
-          z.looseObject({
-            type: z.enum(["text", "file", "data-sandbox-upload"]),
-          }),
-        ),
-      }),
-      // Always stated, null for a Chat's first message: the server never
-      // guesses what a message follows.
-      parentId: z.string().nullable(),
-    }),
-    chatTurnSchema.extend({
-      trigger: z.literal("regenerate-message"),
-      messageId: z.string().min(1),
-    }),
-    chatTurnSchema.extend({
-      trigger: z.literal("respond-to-approvals"),
-      messageId: z.string().min(1),
-      responses: z
-        .array(
-          z.strictObject({
-            approvalId: z.string().min(1),
-            approved: z.boolean(),
-          }),
-        )
-        .min(1),
-    }),
+  .discriminatedUnion("trigger", [
+    chatTurnSchema
+      .extend({
+        trigger: z.literal("submit"),
+        message: z.strictObject({
+          id: z.string().min(1),
+          role: z.literal("user"),
+          parts: z.array(
+            z.looseObject({
+              type: z.enum(["text", "file", "data-sandbox-upload"]),
+            }),
+          ),
+        }),
+        // Always stated, null for a Chat's first message: the server never
+        // guesses what a message follows.
+        parentId: z.string().nullable(),
+      })
+      .strict(),
+    chatTurnSchema
+      .extend({
+        trigger: z.literal("regenerate-message"),
+        messageId: z.string().min(1),
+      })
+      .strict(),
+    chatTurnSchema
+      .extend({
+        trigger: z.literal("respond-to-approvals"),
+        messageId: z.string().min(1),
+        responses: z
+          .array(
+            z.strictObject({
+              approvalId: z.string().min(1),
+              approved: z.boolean(),
+            }),
+          )
+          .min(1),
+      })
+      .strict(),
   ])
   .refine(
     (data) => {
@@ -508,7 +542,7 @@ export const chatSubmitSchema = z
  * A switch between Alternatives: the message to show, which the Active path
  * then follows down to the newest message under it (ADR-0026).
  */
-export const chatActiveLeafSchema = z.object({
+export const chatActiveLeafSchema = z.strictObject({
   messageId: z.string().min(1),
 });
 
@@ -518,7 +552,7 @@ export const CHAT_COMPACT_INSTRUCTION_MAX_LENGTH = 2000;
  * A `/compact` request (issue #1111): the User's optional instruction steering
  * what the Transcript summary keeps.
  */
-export const chatCompactSchema = z.object({
+export const chatCompactSchema = z.strictObject({
   instruction: z
     .string()
     .trim()
@@ -527,13 +561,14 @@ export const chatCompactSchema = z.object({
     .optional(),
 });
 
-export const chatUpdateSchema = partialWithoutDefaults(
-  chatSchema.pick({
-    workspaceId: true,
-    title: true,
-    isPinned: true,
-    tags: true,
-  }),
+export const chatUpdateSchema = strictRequest(
+  partialWithoutDefaults(
+    chatSchema.pick({
+      title: true,
+      isPinned: true,
+      tags: true,
+    }),
+  ),
 );
 
 export type ChatSubmitData = z.infer<typeof chatSubmitSchema>;
@@ -553,11 +588,6 @@ export const chatListItemSchema = chatSchema.pick({
 });
 
 export type ChatListItem = z.infer<typeof chatListItemSchema>;
-
-export const chatListSchema = z.object({
-  results: z.array(chatListItemSchema),
-  totalCount: z.number(),
-});
 
 // Agent
 
@@ -654,7 +684,15 @@ export const agentBaseSchema = z.object({
   updatedAt: z.date(),
 });
 
-export const agentSchema = agentBaseSchema.refine(
+// The three id arrays are stored non-null with an `[]` default, so a read
+// always carries them. Creates and updates still leave them optional.
+const agentStoredIdArrays = {
+  toolSetIds: z.array(z.string()),
+  skillIds: z.array(z.string()),
+  subAgentIds: z.array(z.string()),
+};
+
+export const agentSchema = agentBaseSchema.extend(agentStoredIdArrays).refine(
   (data) => {
     const hasOrg = Boolean(data.organizationId);
     const hasWorkspace = Boolean(data.workspaceId);
@@ -669,50 +707,64 @@ export const agentSchema = agentBaseSchema.refine(
 
 export type Agent = z.infer<typeof agentSchema>;
 
-export const agentCreateSchema = agentBaseSchema.pick({
-  workspaceId: true,
-  providerId: true,
-  name: true,
-  description: true,
-  instructions: true,
-  modelId: true,
-  maxSteps: true,
-  temperature: true,
-  topP: true,
-  topK: true,
-  seed: true,
-  presencePenalty: true,
-  frequencyPenalty: true,
-  reasoningThinking: true,
-  reasoningEffort: true,
-  thinkingBudget: true,
-  toolSetIds: true,
-  skillIds: true,
-  subAgentIds: true,
-  inputPlaceholder: true,
+/**
+ * An Agent as a route returns one. `scope` is always present, including on the
+ * Organization surface where every row is Organization-scoped by construction.
+ */
+export const agentResponseSchema = agentBaseSchema.extend({
+  ...agentStoredIdArrays,
+  scope: resourceScopeSchema,
 });
 
-export const agentUpdateSchema = agentBaseSchema.pick({
-  providerId: true,
-  name: true,
-  description: true,
-  instructions: true,
-  modelId: true,
-  maxSteps: true,
-  temperature: true,
-  topP: true,
-  topK: true,
-  seed: true,
-  presencePenalty: true,
-  frequencyPenalty: true,
-  reasoningThinking: true,
-  reasoningEffort: true,
-  thinkingBudget: true,
-  toolSetIds: true,
-  skillIds: true,
-  subAgentIds: true,
-  inputPlaceholder: true,
-});
+export type AgentResponse = z.infer<typeof agentResponseSchema>;
+
+export const agentCreateSchema = strictRequest(
+  agentBaseSchema.pick({
+    providerId: true,
+    name: true,
+    description: true,
+    instructions: true,
+    modelId: true,
+    maxSteps: true,
+    temperature: true,
+    topP: true,
+    topK: true,
+    seed: true,
+    presencePenalty: true,
+    frequencyPenalty: true,
+    reasoningThinking: true,
+    reasoningEffort: true,
+    thinkingBudget: true,
+    toolSetIds: true,
+    skillIds: true,
+    subAgentIds: true,
+    inputPlaceholder: true,
+  }),
+);
+
+export const agentUpdateSchema = strictRequest(
+  agentBaseSchema.pick({
+    providerId: true,
+    name: true,
+    description: true,
+    instructions: true,
+    modelId: true,
+    maxSteps: true,
+    temperature: true,
+    topP: true,
+    topK: true,
+    seed: true,
+    presencePenalty: true,
+    frequencyPenalty: true,
+    reasoningThinking: true,
+    reasoningEffort: true,
+    thinkingBudget: true,
+    toolSetIds: true,
+    skillIds: true,
+    subAgentIds: true,
+    inputPlaceholder: true,
+  }),
+);
 
 // Skill
 
@@ -846,31 +898,45 @@ export const skillSchema = skillBaseSchema.refine(
 
 export type Skill = z.infer<typeof skillSchema>;
 
-export const skillCreateSchema = skillBaseSchema
-  .pick({
-    organizationId: true,
-    workspaceId: true,
-    name: true,
-    description: true,
-    body: true,
-    disableModelInvocation: true,
-    argumentHint: true,
-  })
-  .extend({
-    agentIds: z.array(z.string()).optional(),
-  });
+/**
+ * A Skill as a route returns one. `scope` is always present, including on the
+ * Organization surface where every row is Organization-scoped by construction.
+ * A single Skill's read may add its `agentIds`; lists do not.
+ */
+export const skillResponseSchema = skillBaseSchema.extend({
+  scope: resourceScopeSchema,
+  agentIds: z.array(z.string()).optional(),
+});
 
-export const skillUpdateSchema = skillBaseSchema
-  .pick({
-    name: true,
-    description: true,
-    body: true,
-    argumentHint: true,
-  })
-  .extend({
-    disableModelInvocation: z.boolean().optional(),
-    agentIds: z.array(z.string()).optional(),
-  });
+export type SkillResponse = z.infer<typeof skillResponseSchema>;
+
+export const skillCreateSchema = strictRequest(
+  skillBaseSchema
+    .pick({
+      name: true,
+      description: true,
+      body: true,
+      disableModelInvocation: true,
+      argumentHint: true,
+    })
+    .extend({
+      agentIds: z.array(z.string()).optional(),
+    }),
+);
+
+export const skillUpdateSchema = strictRequest(
+  skillBaseSchema
+    .pick({
+      name: true,
+      description: true,
+      body: true,
+      argumentHint: true,
+    })
+    .extend({
+      disableModelInvocation: z.boolean().optional(),
+      agentIds: z.array(z.string()).optional(),
+    }),
+);
 
 // Skill install from GitHub (ADR-0037)
 
@@ -926,7 +992,7 @@ export const githubSkillSourceSchema = z.object({
 export type GithubSkillSource = z.infer<typeof githubSkillSourceSchema>;
 
 /** A preview request: a GitHub URL or `<owner>/<repo>[/<path>][@<ref>]`. */
-export const skillGithubPreviewRequestSchema = z.object({
+export const skillGithubPreviewRequestSchema = z.strictObject({
   source: z.string().trim().min(1).max(2048),
 });
 
@@ -961,9 +1027,8 @@ export type SkillGithubPreview = z.infer<typeof skillGithubPreviewSchema>;
  * An install: the Skills to take from a preview, fetched at the commit the
  * preview resolved, never the ref, so they are exactly what was reviewed.
  */
-export const skillGithubInstallRequestSchema = githubSkillSourceSchema
-  .omit({ path: true })
-  .extend({
+export const skillGithubInstallRequestSchema = strictRequest(
+  githubSkillSourceSchema.omit({ path: true }).extend({
     commitSha: commitShaSchema,
     skillPaths: z
       .array(githubPathSchema)
@@ -973,7 +1038,8 @@ export const skillGithubInstallRequestSchema = githubSkillSourceSchema
         (paths) => new Set(paths).size === paths.length,
         "Skill paths must be unique",
       ),
-  });
+  }),
+);
 
 export type SkillGithubInstallRequest = z.infer<
   typeof skillGithubInstallRequestSchema
@@ -1032,7 +1098,7 @@ export type SkillGithubUpdateCheck = z.infer<
 >;
 
 /** An update: the commit the check resolved, never the ref, so it applies exactly what was reviewed. */
-export const skillGithubUpdateRequestSchema = z.object({
+export const skillGithubUpdateRequestSchema = z.strictObject({
   commitSha: commitShaSchema,
 });
 
@@ -1188,7 +1254,7 @@ const mcpBaseSchema = z.object({
   updatedAt: z.date(),
 });
 
-export const mcpOauthCallbackSchema = z.object({
+export const mcpOauthCallbackSchema = z.strictObject({
   code: z.string(),
   state: z.string(),
 });
@@ -1210,63 +1276,112 @@ export const mcpSchema = mcpBaseSchema
 
 export type MCP = z.infer<typeof mcpSchema>;
 
-export const mcpCreateSchema = mcpBaseSchema
-  .pick({
-    organizationId: true,
-    workspaceId: true,
-    name: true,
-    url: true,
-    headers: true,
-    authType: true,
-    bearerToken: true,
-    oauthClientId: true,
-    oauthClientSecret: true,
-    oauthRequestedScope: true,
-  })
-  .refine(mcpBearerTokenRefine.validator, mcpBearerTokenRefine.params)
-  .refine(mcpNameSlugifiesRefine.validator, mcpNameSlugifiesRefine.params);
+/**
+ * An MCP as stored: nullable scope columns and nullable optional fields, as the
+ * row resolves from Postgres. OAuth tokens and the cached tool listing are not
+ * part of it — no response carries them (see `mcpResponseSchema`).
+ */
+export const mcpRecordSchema = mcpBaseSchema.extend({
+  organizationId: z.string().nullish(),
+  workspaceId: z.string().nullish(),
+  url: z.url().nullish(),
+  headers: z.record(z.string(), z.string()).nullish(),
+  bearerToken: z.string().nullish(),
+  oauthClientId: z.string().nullish(),
+  oauthClientSecret: z.string().nullish(),
+  oauthRequestedScope: z.string().max(1024).nullish(),
+});
 
-export const mcpUpdateSchema = mcpBaseSchema
-  .pick({
-    name: true,
-    url: true,
-    headers: true,
-    authType: true,
-    bearerToken: true,
-    oauthClientId: true,
-    oauthClientSecret: true,
-    oauthRequestedScope: true,
-  })
-  .refine(mcpBearerTokenRefine.validator, mcpBearerTokenRefine.params)
-  .refine(mcpNameSlugifiesRefine.validator, mcpNameSlugifiesRefine.params);
+export type McpRecord = z.infer<typeof mcpRecordSchema>;
 
-export const mcpTestSchema = mcpBaseSchema
-  .pick({
-    url: true,
-    headers: true,
-    authType: true,
-    bearerToken: true,
-  })
+/**
+ * An MCP as a route returns one — one shape for every reader, writes included.
+ * Minted OAuth tokens never appear; `oauthAuthorized` reports whether the server
+ * is signed in. Operator-entered credentials are `bearerToken` / `headers` plus
+ * their presence indicators: a caller who may manage the MCP gets the values,
+ * every other caller gets the indicators alone. `scope` is always present.
+ */
+export const mcpResponseSchema = mcpRecordSchema
+  .omit({ oauthClientSecret: true })
   .extend({
-    mcpId: z.string().optional(),
-    // The form's current Name, so the test can report the namespaced tool
-    // names the MCP will actually contribute once saved (issue #467). Falls
-    // back to the stored MCP's name (via `mcpId`) when omitted.
-    name: z.string().optional(),
+    scope: resourceScopeSchema,
+    bearerToken: z.string().nullish(),
+    bearerTokenSet: secretPresenceSchema,
+    headers: z.record(z.string(), z.string()).nullish(),
+    headersSet: secretPresenceSchema,
+  });
+
+export type McpResponse = z.infer<typeof mcpResponseSchema>;
+
+/** The Workspace and Organization MCP lists. */
+export const mcpListResponseSchema = z.object({
+  results: z.array(mcpResponseSchema),
+});
+
+export const mcpCreateSchema = strictRequest(
+  mcpBaseSchema
+    .pick({
+      name: true,
+      url: true,
+      headers: true,
+      authType: true,
+      bearerToken: true,
+      oauthClientId: true,
+      oauthClientSecret: true,
+      oauthRequestedScope: true,
+    })
+    .refine(mcpBearerTokenRefine.validator, mcpBearerTokenRefine.params)
+    .refine(mcpNameSlugifiesRefine.validator, mcpNameSlugifiesRefine.params),
+);
+
+export const mcpUpdateSchema = strictRequest(
+  mcpBaseSchema
+    .pick({
+      name: true,
+      url: true,
+      headers: true,
+      authType: true,
+      bearerToken: true,
+      oauthClientId: true,
+      oauthClientSecret: true,
+      oauthRequestedScope: true,
+    })
+    .refine(mcpBearerTokenRefine.validator, mcpBearerTokenRefine.params)
+    .refine(mcpNameSlugifiesRefine.validator, mcpNameSlugifiesRefine.params),
+);
+
+const mcpTestBaseSchema = mcpBaseSchema
+  .pick({
+    url: true,
+    headers: true,
+    authType: true,
+    bearerToken: true,
   })
-  .refine(mcpBearerTokenRefine.validator, mcpBearerTokenRefine.params)
-  .refine(
-    (data) => {
-      if (data.authType === "OAuth") {
-        return data.mcpId && data.mcpId.length > 0;
-      }
-      return true;
-    },
-    {
-      message: "mcpId is required when auth type is OAuth",
-      path: ["mcpId"],
-    },
-  );
+  .refine(mcpBearerTokenRefine.validator, mcpBearerTokenRefine.params);
+
+/**
+ * Testing an unsaved MCP: nothing is stored to fall back on, so the form's
+ * Name is required to report the tool names the MCP will contribute once
+ * saved (issue #467). OAuth needs a stored row to hold its tokens, so this
+ * route refuses it — the stored test does that.
+ */
+export const mcpTestSchema = strictRequest(
+  mcpTestBaseSchema
+    .extend({ name: z.string().min(1) })
+    .refine((data) => data.authType !== "OAuth", {
+      message: "OAuth requires a saved MCP",
+      path: ["authType"],
+    }),
+);
+
+/**
+ * Testing a stored MCP, addressed by its id in the path. The body holds the
+ * form's unsaved edits; `name` is optional because the stored row supplies
+ * it.
+ */
+export const mcpStoredTestSchema = strictRequest(
+  mcpTestBaseSchema.extend({ name: z.string().optional() }),
+);
 
 // Attachment — the explicit link that surfaces an org-scoped Shared resource
 // inside a specific Workspace (ADR-0007 / #154). Polymorphic over resource type.
@@ -1292,14 +1407,21 @@ const attachmentBaseSchema = z.object({
 export const attachmentSchema = attachmentBaseSchema;
 export type Attachment = z.infer<typeof attachmentSchema>;
 
-export const attachmentCreateSchema = attachmentBaseSchema.pick({
-  resourceType: true,
-  resourceId: true,
-});
+export const attachmentCreateSchema = strictRequest(
+  attachmentBaseSchema.pick({
+    resourceType: true,
+    resourceId: true,
+  }),
+);
 
-// The Org surface names the target Workspace in the body rather than the path.
-export const orgAttachmentCreateSchema = attachmentCreateSchema.extend({
-  workspaceId: z.string(),
+/**
+ * Which Shared resource's attachments to list: the list filter is a query
+ * parameter pair, validated like every other list filter instead of
+ * hand-checked in the handler.
+ */
+export const attachmentListQuerySchema = z.strictObject({
+  resourceType: attachmentResourceTypeSchema,
+  resourceId: z.string().min(1),
 });
 
 // Blueprint — a named, Organization-scoped macro that, applied to a Workspace,
@@ -1350,28 +1472,32 @@ const blueprintBaseSchema = z.object({
 export const blueprintSchema = blueprintBaseSchema;
 export type Blueprint = z.infer<typeof blueprintSchema>;
 
-export const blueprintCreateSchema = blueprintBaseSchema.pick({
-  name: true,
-  description: true,
-  items: true,
-  taskModelProviderId: true,
-  memoryExtractionProviderId: true,
-  memoryEmbeddingProviderId: true,
-  context: true,
-});
+export const blueprintCreateSchema = strictRequest(
+  blueprintBaseSchema.pick({
+    name: true,
+    description: true,
+    items: true,
+    taskModelProviderId: true,
+    memoryExtractionProviderId: true,
+    memoryEmbeddingProviderId: true,
+    context: true,
+  }),
+);
 
-export const blueprintUpdateSchema = blueprintBaseSchema.pick({
-  name: true,
-  description: true,
-  items: true,
-  taskModelProviderId: true,
-  memoryExtractionProviderId: true,
-  memoryEmbeddingProviderId: true,
-  context: true,
-});
+export const blueprintUpdateSchema = strictRequest(
+  blueprintBaseSchema.pick({
+    name: true,
+    description: true,
+    items: true,
+    taskModelProviderId: true,
+    memoryExtractionProviderId: true,
+    memoryEmbeddingProviderId: true,
+    context: true,
+  }),
+);
 
 // Apply a Blueprint to an existing Workspace (admin only, ad-hoc re-apply).
-export const blueprintApplySchema = z.object({
+export const blueprintApplySchema = z.strictObject({
   workspaceId: z.string(),
 });
 
@@ -1511,14 +1637,16 @@ export const resolveModelReference = (
 };
 
 /** What a de-migration rewrote when an alias stopped existing (see ADR-0017). */
-export type AliasRepoint = {
+export const aliasRepointSchema = z.object({
   /** The alias name that no longer exists. */
-  alias: string;
+  alias: z.string(),
   /** The concrete id its references were rewritten to. */
-  modelId: string;
-  agents: number;
-  chats: number;
-};
+  modelId: z.string(),
+  agents: z.number().int().nonnegative(),
+  chats: z.number().int().nonnegative(),
+});
+
+export type AliasRepoint = z.infer<typeof aliasRepointSchema>;
 
 /**
  * A Provider pointer-setting: always a concrete model id, never an alias.
@@ -1987,29 +2115,19 @@ export const modelConfigSchema = z.object({
 
 export type ModelConfig = z.infer<typeof modelConfigSchema>;
 
-// Provider `modelIds` payload schema. Accepts the new per-model objects and,
-// for backward compatibility with clients/rows predating per-model config, a
-// bare `string[]`; bare strings coerce to objects with an empty
-// `passthroughFileTypes`, which ingest nothing natively (ADR-0039).
+// Provider `modelIds`: per-model config objects only. A bare string is a 400
+// — the stored column and the request body share this shape (ADR-0039).
 export const modelIdsSchema = z
-  .array(z.union([z.string().min(1), modelConfigSchema]))
+  .array(modelConfigSchema)
   .min(1, "At least one model is required")
-  .transform((items) =>
-    items.map((item) =>
-      typeof item === "string"
-        ? { id: item, passthroughFileTypes: [] as string[] }
-        : item,
-    ),
-  )
   // Aliases and concrete ids share one flat namespace per Provider. Because the
   // `alias:` prefix is hidden in the UI, an alias named after a real model id
   // would render a second, identical-looking picker option pointing somewhere
   // else entirely. Compared case-insensitively (the maintainer's call on #386):
   // two options differing only in case read as duplicates to a human.
   //
-  // A whole-array invariant, so it cannot live on `modelConfigSchema`, and it
-  // sits after the `.transform()` so it sees normalized objects — which also
-  // means the provider form and the API validation get it for free.
+  // A whole-array invariant, so it cannot live on `modelConfigSchema`. The
+  // provider form and the API validation get it for free.
   //
   // Only alias-vs-alias and alias-vs-id are checked. Duplicate concrete ids
   // stay legal here and are collapsed by `dedupeModelConfigs` on the route, as
@@ -2304,6 +2422,12 @@ const providerHeadersSchema = z
     },
   );
 
+// Shared by the create shape and the stored record so the two cannot drift.
+const providerSecurityGuardrailsSchema = z
+  .string()
+  .max(PROVIDER_SECURITY_GUARDRAILS_MAX_LENGTH);
+const embeddingDimensionsSchema = z.number().int().min(256).max(4096);
+
 const providerBaseSchema = z.object({
   id: z.string(),
   organizationId: z.string().optional(),
@@ -2326,7 +2450,7 @@ const providerBaseSchema = z.object({
   extraBody: z.record(z.string(), z.unknown()).optional(),
   organization: z.string().optional(),
   project: z.string().optional(),
-  apiMode: providerApiModeSchema.default("responses"),
+  apiMode: providerApiModeSchema,
   // Which of "no search" / this provider's own tool / a plugin Web-search
   // backend serves the chat search toggle (ADR-0014). Replaces the old
   // `nativeSearchEnabled` + `webBackend` pair — a switch and
@@ -2337,19 +2461,11 @@ const providerBaseSchema = z.object({
   // a backend-runtime concern, and a stale id degrades to no search tools
   // plus a warn-log rather than blocking the form.
   //
-  // Defaults to `SEARCH_SOURCE_NATIVE` — the old defaults (`nativeSearchEnabled:
-  // true`, no `webBackend`) resolved to native whenever the provider was
-  // capable, so a brand-new Provider keeps that behaviour.
-  //
   // Length-bounded because the value is free text that reaches a log line on
   // every searching turn; 200 is far above a namespaced plugin id
-  // (`@scope/name.backend`). `""` normalises to `SEARCH_SOURCE_NONE` so the
-  // column holds one representation of "no search", not two.
-  searchSource: z
-    .string()
-    .max(200)
-    .default(SEARCH_SOURCE_NATIVE)
-    .transform((value) => (value === "" ? SEARCH_SOURCE_NONE : value)),
+  // (`@scope/name.backend`). Required, and one representation of "no search":
+  // `SEARCH_SOURCE_NONE`, never the empty string.
+  searchSource: z.string().min(1).max(200),
   // Free-text system-prompt security directives appended LAST (recency) to
   // every run on this provider — including sub-agent runs resolved to this
   // provider. Provider-scoped because guard strength is a property of the model
@@ -2357,11 +2473,7 @@ const providerBaseSchema = z.object({
   // ones. Append-only and non-suppressible — the escape hatch is to point the
   // agent at a different provider. A prompt-level FLOOR, not a guarantee.
   // Length-bounded against abuse; nullable so existing providers are unchanged.
-  securityGuardrails: z
-    .string()
-    .max(PROVIDER_SECURITY_GUARDRAILS_MAX_LENGTH)
-    .nullable()
-    .optional(),
+  securityGuardrails: providerSecurityGuardrailsSchema.nullable().optional(),
   modelIds: modelIdsSchema,
   // The three pointer-settings hold a concrete model id and never an alias —
   // enforced on the FIELD, not in a `providerSchema.refine`, because
@@ -2371,13 +2483,7 @@ const providerBaseSchema = z.object({
   taskModelId: pointerModelIdSchema,
   memoryExtractionModelId: pointerModelIdSchema,
   embeddingModelId: pointerModelIdSchema.nullable().optional(),
-  embeddingDimensions: z
-    .number()
-    .int()
-    .min(256)
-    .max(4096)
-    .nullable()
-    .optional(),
+  embeddingDimensions: embeddingDimensionsSchema.nullable().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -2409,6 +2515,58 @@ export const providerSchema = providerBaseSchema
   );
 
 export type Provider = z.infer<typeof providerSchema>;
+
+/**
+ * A Provider as stored: the create shape with the columns a saved row always
+ * resolves, where "unset" is a stored `null` rather than a missing key. Kept
+ * apart from {@link providerCreateSchema} so a response can be checked against
+ * what the database actually returns.
+ */
+export const providerRecordSchema = providerBaseSchema.extend({
+  organizationId: z.string().nullish(),
+  workspaceId: z.string().nullish(),
+  region: z.string().nullish(),
+  baseUrl: z.string().nullish(),
+  headers: providerHeadersSchema.nullish(),
+  extraBody: z.record(z.string(), z.unknown()).nullish(),
+  organization: z.string().nullish(),
+  project: z.string().nullish(),
+  securityGuardrails: providerSecurityGuardrailsSchema.nullish(),
+  embeddingModelId: pointerModelIdSchema.nullish(),
+  embeddingDimensions: embeddingDimensionsSchema.nullish(),
+});
+
+export type ProviderRecord = z.infer<typeof providerRecordSchema>;
+
+/**
+ * A Provider as a route returns one — one shape for every reader.
+ *
+ * The credential fields are `apiKey` / `headers` plus their presence
+ * indicators: a caller who may manage the Provider gets the values, every other
+ * caller gets the indicators alone. `scope` is always present, including on the
+ * Organization surface where every row is Organization-scoped by construction.
+ */
+export const providerResponseSchema = providerRecordSchema
+  .omit({ apiKey: true, headers: true })
+  .extend({
+    scope: resourceScopeSchema,
+    apiKey: z.string().optional(),
+    apiKeySet: secretPresenceSchema,
+    headers: providerHeadersSchema.nullish(),
+    headersSet: secretPresenceSchema,
+  });
+
+export type ProviderResponse = z.infer<typeof providerResponseSchema>;
+
+/** The Workspace and Organization Provider lists. */
+export const providerListResponseSchema = z.object({
+  results: z.array(providerResponseSchema),
+});
+
+/** A Provider update, which reports any alias references it rewrote. */
+export const providerUpdateResponseSchema = providerResponseSchema.extend({
+  aliasRepoints: z.array(aliasRepointSchema),
+});
 
 /**
  * Whether a provider can search the web on its own, with no Web-search backend
@@ -2576,27 +2734,27 @@ export const WEB_TOOL_KNOWN_NATIVE_SEARCH_NAMES: ReadonlySet<string> = new Set([
   "google_search",
 ]);
 
-export const providerCreateSchema = providerBaseSchema.pick({
-  organizationId: true,
-  workspaceId: true,
-  name: true,
-  providerType: true,
-  apiKey: true,
-  region: true,
-  baseUrl: true,
-  headers: true,
-  extraBody: true,
-  organization: true,
-  project: true,
-  apiMode: true,
-  searchSource: true,
-  securityGuardrails: true,
-  modelIds: true,
-  taskModelId: true,
-  memoryExtractionModelId: true,
-  embeddingModelId: true,
-  embeddingDimensions: true,
-});
+export const providerCreateSchema = strictRequest(
+  providerBaseSchema.pick({
+    name: true,
+    providerType: true,
+    apiKey: true,
+    region: true,
+    baseUrl: true,
+    headers: true,
+    extraBody: true,
+    organization: true,
+    project: true,
+    apiMode: true,
+    searchSource: true,
+    securityGuardrails: true,
+    modelIds: true,
+    taskModelId: true,
+    memoryExtractionModelId: true,
+    embeddingModelId: true,
+    embeddingDimensions: true,
+  }),
+);
 
 // Sandbox
 
@@ -2654,45 +2812,49 @@ export const sandboxSchema = sandboxBaseSchema
 
 export type Sandbox = z.infer<typeof sandboxSchema>;
 
-export const sandboxCreateSchema = sandboxBaseSchema.pick({
-  workspaceId: true,
-  name: true,
-  backend: true,
-  config: true,
-  credentials: true,
-  adminEnv: true,
-  userEnv: true,
-});
+export const sandboxCreateSchema = strictRequest(
+  sandboxBaseSchema.pick({
+    workspaceId: true,
+    name: true,
+    backend: true,
+    config: true,
+    credentials: true,
+    adminEnv: true,
+    userEnv: true,
+  }),
+);
 
 // Declared after the Provider and Sandbox schemas it nests.
-export const workspaceCreateSchema = workspaceSchema
-  .pick({
-    name: true,
-    context: true,
-  })
-  .extend({
-    // ownerId is admin-assignable (ADR-0008). When omitted, the create handler
-    // defaults the owner to the calling admin.
-    ownerId: z.string().optional(),
-    // Optional resources created with the Workspace in one transaction, so a
-    // Workspace can be provisioned ready to use in a single write. Their scope
-    // is the new Workspace, never the body.
-    provider: providerCreateSchema
-      .omit({ organizationId: true, workspaceId: true })
-      .optional(),
-    // Shared Providers of this Organization to attach (ADR-0007).
-    sharedProviderIds: z.array(z.string()).optional(),
-    sandbox: sandboxCreateSchema.omit({ workspaceId: true }).optional(),
-  });
+export const workspaceCreateSchema = strictRequest(
+  workspaceSchema
+    .pick({
+      name: true,
+      context: true,
+    })
+    .extend({
+      // ownerId is admin-assignable (ADR-0008). When omitted, the create
+      // handler defaults the owner to the calling admin.
+      ownerId: z.string().optional(),
+      // Optional resources created with the Workspace in one transaction, so a
+      // Workspace can be provisioned ready to use in a single write. Their
+      // scope is the new Workspace, never the body.
+      provider: providerCreateSchema.optional(),
+      // Shared Providers of this Organization to attach (ADR-0007).
+      sharedProviderIds: z.array(z.string()).optional(),
+      sandbox: sandboxCreateSchema.omit({ workspaceId: true }).optional(),
+    }),
+);
 
-export const sandboxUpdateSchema = sandboxBaseSchema.pick({
-  name: true,
-  backend: true,
-  config: true,
-  credentials: true,
-  adminEnv: true,
-  userEnv: true,
-});
+export const sandboxUpdateSchema = strictRequest(
+  sandboxBaseSchema.pick({
+    name: true,
+    backend: true,
+    config: true,
+    credentials: true,
+    adminEnv: true,
+    userEnv: true,
+  }),
+);
 
 // Invitation
 
@@ -2723,21 +2885,22 @@ export const invitationSchema = z.object({
   // accept (ADR-0009). Stored in the invitation_blueprint junction; surfaced
   // here in `position` order on reads.
   blueprintIds: z.array(z.string()).optional(),
-  // Redemption token minted with the invitation (ADR-0019, #549). Nullable
-  // only at the column level for pre-existing rows a backfill migration
-  // hasn't reached yet; every invitation created through the API has one.
-  token: z.string().nullable().optional(),
+  // Redemption token minted with the invitation (ADR-0019, #549). Every
+  // invitation has one; the column is NOT NULL.
+  token: z.string(),
   expiresAt: z.date(),
   createdAt: z.date(),
 });
 
 export type Invitation = z.infer<typeof invitationSchema>;
 
-export const invitationCreateSchema = invitationSchema.pick({
-  email: true,
-  workspaceName: true,
-  blueprintIds: true,
-});
+export const invitationCreateSchema = strictRequest(
+  invitationSchema.pick({
+    email: true,
+    workspaceName: true,
+    blueprintIds: true,
+  }),
+);
 
 export const invitationListItemSchema = invitationSchema.extend({
   organizationName: z.string().optional(),
@@ -2762,7 +2925,7 @@ export type InvitationLinkResolution = z.infer<
 // Body of the unauthenticated invitation-link registration endpoint
 // (#549, ADR-0019). The email is deliberately absent: it comes only from
 // the token server-side, matching the frontend's non-editable email field.
-export const invitationRedemptionRegisterSchema = z.object({
+export const invitationRedemptionRegisterSchema = z.strictObject({
   name: z.string().min(1),
   password: z.string().min(8),
 });
@@ -2794,42 +2957,50 @@ export const signUpAvailabilitySchema = z.object({
 
 export type SignUpAvailability = z.infer<typeof signUpAvailabilitySchema>;
 
-export const providerUpdateSchema = providerBaseSchema.pick({
-  name: true,
-  providerType: true,
-  apiKey: true,
-  region: true,
-  baseUrl: true,
-  headers: true,
-  extraBody: true,
-  organization: true,
-  project: true,
-  apiMode: true,
-  searchSource: true,
-  securityGuardrails: true,
-  modelIds: true,
-  taskModelId: true,
-  memoryExtractionModelId: true,
-  embeddingModelId: true,
-  embeddingDimensions: true,
-});
+export const providerUpdateSchema = strictRequest(
+  providerBaseSchema.pick({
+    name: true,
+    providerType: true,
+    apiKey: true,
+    region: true,
+    baseUrl: true,
+    headers: true,
+    extraBody: true,
+    organization: true,
+    project: true,
+    apiMode: true,
+    searchSource: true,
+    securityGuardrails: true,
+    modelIds: true,
+    taskModelId: true,
+    memoryExtractionModelId: true,
+    embeddingModelId: true,
+    embeddingDimensions: true,
+  }),
+);
 
 export type ProviderUpdateData = z.infer<typeof providerUpdateSchema>;
 
 // Organization Member
 
+export const orgRoleSchema = z.enum(["admin", "member"]);
+
+export type OrgRole = z.infer<typeof orgRoleSchema>;
+
 export const organizationMemberSchema = z.object({
   id: z.string(),
   organizationId: z.string(),
   userId: z.string(),
-  role: z.enum(["admin", "member"]),
+  role: orgRoleSchema,
   createdAt: z.date(),
   updatedAt: z.date(),
 });
 
-export const organizationMemberUpdateSchema = organizationMemberSchema.pick({
-  role: true,
-});
+export const organizationMemberUpdateSchema = strictRequest(
+  organizationMemberSchema.pick({
+    role: true,
+  }),
+);
 
 /**
  * What Remove from Org does with one Workspace the member owns: transfer it
@@ -2847,9 +3018,13 @@ export type MemberWorkspaceDecision = z.infer<
   typeof memberWorkspaceDecisionSchema
 >;
 
-/** Remove from Org: one decision for each Workspace the member owns. */
-export const organizationMemberRemoveSchema = z.object({
-  workspaces: z.array(memberWorkspaceDecisionSchema).default([]),
+/**
+ * Remove from Org: one decision for each Workspace the member owns. The array
+ * is required — `[]` states "owns none", while a missing key is a 400 rather
+ * than a guess.
+ */
+export const organizationMemberRemoveSchema = z.strictObject({
+  workspaces: z.array(memberWorkspaceDecisionSchema),
 });
 
 export const organizationMemberWithUserSchema = organizationMemberSchema.extend(
@@ -2873,16 +3048,14 @@ export const orgMemberListItemSchema = organizationMemberWithUserSchema.extend({
 
 export type OrgMemberListItem = z.infer<typeof orgMemberListItemSchema>;
 
-export const orgMemberListSchema = z.object({
-  results: z.array(orgMemberListItemSchema),
-});
-
 // Context
 
 export const contextSchema = z.object({
   id: z.string(),
   userId: z.string(),
-  workspaceId: z.string().nullable().optional(),
+  // Required and nullable: a null Workspace means the Organization-wide
+  // context. The empty string is never a second way to say the same thing.
+  workspaceId: z.string().min(1).nullable(),
   content: z.string().min(0).max(1000),
   createdAt: z.date(),
   updatedAt: z.date(),
@@ -2890,14 +3063,18 @@ export const contextSchema = z.object({
 
 export type Context = z.infer<typeof contextSchema>;
 
-export const contextCreateSchema = contextSchema.pick({
-  workspaceId: true,
-  content: true,
-});
+export const contextCreateSchema = strictRequest(
+  contextSchema.pick({
+    workspaceId: true,
+    content: true,
+  }),
+);
 
-export const contextUpdateSchema = contextSchema.pick({
-  content: true,
-});
+export const contextUpdateSchema = strictRequest(
+  contextSchema.pick({
+    content: true,
+  }),
+);
 
 // Memory Daily Summary
 
@@ -3185,41 +3362,49 @@ const triggerCreateBaseSchema = triggerBaseSchema.pick({
  * it first.
  */
 export const triggerCreateSchema = z.discriminatedUnion("type", [
-  triggerCreateBaseSchema.extend({
-    type: z.literal("cron"),
-    config: cronTriggerConfigSchema,
-  }),
-  triggerCreateBaseSchema.extend({
-    type: z.literal("event"),
-    config: eventTriggerConfigSchema,
-  }),
-  triggerCreateBaseSchema.extend({
-    type: z.literal("inbound"),
-    config: inboundTriggerConfigSchema,
-    // `false` creates it with no token, for the Owner to issue later.
-    // Omitted, the create issues one and returns it once.
-    issueToken: z.boolean().optional(),
-  }),
+  triggerCreateBaseSchema
+    .extend({
+      type: z.literal("cron"),
+      config: cronTriggerConfigSchema,
+    })
+    .strict(),
+  triggerCreateBaseSchema
+    .extend({
+      type: z.literal("event"),
+      config: eventTriggerConfigSchema,
+    })
+    .strict(),
+  triggerCreateBaseSchema
+    .extend({
+      type: z.literal("inbound"),
+      config: inboundTriggerConfigSchema,
+      // `false` creates it with no token, for the Owner to issue later.
+      // Omitted, the create issues one and returns it once.
+      issueToken: z.boolean().optional(),
+    })
+    .strict(),
 ]);
 
-export const triggerUpdateSchema = partialWithoutDefaults(
-  triggerBaseSchema
-    .pick({
-      name: true,
-      description: true,
-      instruction: true,
-      agentId: true,
-      enabled: true,
-      maxRunsToKeep: true,
-      search: true,
-      includeMemories: true,
-    })
-    .extend({ type: triggerTypeSchema }),
-).extend({
-  // An update may omit `type`, so only the stored Trigger settles which
-  // schema its config must meet: the backend validates it against that.
-  config: z.record(z.string(), z.unknown()).optional(),
-});
+export const triggerUpdateSchema = strictRequest(
+  partialWithoutDefaults(
+    triggerBaseSchema
+      .pick({
+        name: true,
+        description: true,
+        instruction: true,
+        agentId: true,
+        enabled: true,
+        maxRunsToKeep: true,
+        search: true,
+        includeMemories: true,
+      })
+      .extend({ type: triggerTypeSchema }),
+  ).extend({
+    // An update may omit `type`, so only the stored Trigger settles which
+    // schema its config must meet: the backend validates it against that.
+    config: z.record(z.string(), z.unknown()).optional(),
+  }),
+);
 
 // Trigger Run
 
@@ -3378,10 +3563,6 @@ export const triggerRunSchema = z.object({
   createdAt: z.date(),
 });
 
-export const triggerRunListSchema = z.object({
-  results: z.array(triggerRunSchema),
-});
-
 /**
  * A run as the workspace-wide Trigger runs list returns it: the run plus the
  * name of the Trigger it belongs to. The list mixes runs from every Trigger, so
@@ -3463,7 +3644,7 @@ export type RunEventError = z.infer<typeof runEventErrorSchema>;
  *
  * `startedAt` is an absolute wall-clock instant in epoch milliseconds, so it
  * lines up with backend logs and a delegate's events need no rebasing;
- * `durationMs` comes from a monotonic clock and is absent while the event is
+ * `durationMs` comes from a monotonic clock and is null while the event is
  * still open. `parentEventId` is null for an event of the root run and the id
  * of the `delegate` event for an event of that delegate's run. `seq` is the
  * run's monotonic insertion order, kept for incremental polling; display order
@@ -3475,18 +3656,18 @@ export const runEventSchema = z.object({
   parentEventId: z.string().nullable(),
   seq: z.number().int().nonnegative(),
   type: runEventTypeSchema,
-  toolName: z.string().nullable().optional(),
+  toolName: z.string().nullable(),
   startedAt: z.number().int().nonnegative(),
-  durationMs: z.number().int().nonnegative().nullable().optional(),
+  durationMs: z.number().int().nonnegative().nullable(),
   status: runEventStatusSchema,
-  error: runEventErrorSchema.nullable().optional(),
+  error: runEventErrorSchema.nullable(),
   /**
    * Set when the run hit its event ceiling while this event was open, so
    * children it would have had were dropped. Marked on the node — not only on
    * the run — so a delegate whose children were dropped does not render as a
    * delegate that did nothing.
    */
-  childrenTruncated: z.boolean().optional(),
+  childrenTruncated: z.boolean(),
 });
 
 export type RunEvent = z.infer<typeof runEventSchema>;
@@ -3584,11 +3765,13 @@ export type KanbanLabel = z.infer<typeof kanbanLabelSchema>;
 
 // Kanban Board
 
+const kanbanBoardDescriptionSchema = z.string().max(500).nullable();
+
 export const kanbanBoardSchema = z.object({
   id: z.string(),
   workspaceId: z.string(),
   name: z.string().min(1).max(100),
-  description: z.string().max(500).nullable().optional(),
+  description: kanbanBoardDescriptionSchema.optional(),
   labels: z.array(kanbanLabelSchema).default([]),
   createdAt: z.date(),
   updatedAt: z.date(),
@@ -3596,23 +3779,29 @@ export const kanbanBoardSchema = z.object({
 
 export type KanbanBoard = z.infer<typeof kanbanBoardSchema>;
 
-export const kanbanBoardCreateSchema = kanbanBoardSchema.pick({
-  name: true,
-  description: true,
-  labels: true,
-});
-
-// `labels` is optional on update (rather than defaulting to `[]`) so an update
-// that only touches the name or description leaves the board's labels — and the
-// cards referencing them — alone.
-export const kanbanBoardUpdateSchema = kanbanBoardSchema
-  .pick({
+export const kanbanBoardCreateSchema = strictRequest(
+  kanbanBoardSchema.pick({
     name: true,
     description: true,
-  })
-  .extend({
-    labels: z.array(kanbanLabelSchema).optional(),
-  });
+    labels: true,
+  }),
+);
+
+// PUT replaces the whole board: every editable field is required, so an
+// omitted one is a 400 rather than leaving its stored value. `labels` is
+// deliberately not defaulted here for the same reason.
+export const kanbanBoardUpdateSchema = strictRequest(
+  kanbanBoardSchema
+    .pick({
+      name: true,
+      description: true,
+      labels: true,
+    })
+    .extend({
+      description: kanbanBoardDescriptionSchema,
+      labels: z.array(kanbanLabelSchema),
+    }),
+);
 
 // Kanban Column
 
@@ -3627,15 +3816,19 @@ export const kanbanColumnSchema = z.object({
 
 export type KanbanColumn = z.infer<typeof kanbanColumnSchema>;
 
-export const kanbanColumnCreateSchema = kanbanColumnSchema.pick({
-  name: true,
-});
+export const kanbanColumnCreateSchema = strictRequest(
+  kanbanColumnSchema.pick({
+    name: true,
+  }),
+);
 
-export const kanbanColumnUpdateSchema = kanbanColumnSchema.pick({
-  name: true,
-});
+export const kanbanColumnUpdateSchema = strictRequest(
+  kanbanColumnSchema.pick({
+    name: true,
+  }),
+);
 
-export const kanbanColumnReorderSchema = z.object({
+export const kanbanColumnReorderSchema = z.strictObject({
   columnIds: z.array(z.string()).min(1),
 });
 
@@ -3705,27 +3898,31 @@ export const kanbanCardSchema = z.object({
 
 export type KanbanCard = z.infer<typeof kanbanCardSchema>;
 
-export const kanbanCardCreateSchema = kanbanCardSchema.pick({
-  title: true,
-  body: true,
-  labelIds: true,
-  assignees: true,
-  dueDate: true,
-  priority: true,
-});
-
-export const kanbanCardUpdateSchema = partialWithoutDefaults(
+export const kanbanCardCreateSchema = strictRequest(
   kanbanCardSchema.pick({
     title: true,
     body: true,
-    dueDate: true,
     labelIds: true,
     assignees: true,
+    dueDate: true,
     priority: true,
   }),
 );
 
-export const kanbanCardMoveSchema = z.object({
+export const kanbanCardUpdateSchema = strictRequest(
+  partialWithoutDefaults(
+    kanbanCardSchema.pick({
+      title: true,
+      body: true,
+      dueDate: true,
+      labelIds: true,
+      assignees: true,
+      priority: true,
+    }),
+  ),
+);
+
+export const kanbanCardMoveSchema = z.strictObject({
   columnId: z.string(),
   afterCardId: z.string().nullable(),
   /**
@@ -3749,12 +3946,14 @@ export const kanbanCardCommentSchema = z.object({
   updatedAt: z.date(),
 });
 
-export const kanbanCardCommentCreateSchema = kanbanCardCommentSchema.pick({
-  body: true,
-});
+export const kanbanCardCommentCreateSchema = strictRequest(
+  kanbanCardCommentSchema.pick({
+    body: true,
+  }),
+);
 
-export const kanbanCardCommentUpdateSchema = partialWithoutDefaults(
-  kanbanCardCommentSchema.pick({ body: true }),
+export const kanbanCardCommentUpdateSchema = strictRequest(
+  partialWithoutDefaults(kanbanCardCommentSchema.pick({ body: true })),
 );
 
 export type KanbanCardComment = z.infer<typeof kanbanCardCommentSchema>;
@@ -3879,28 +4078,33 @@ export const webhookSchema = z.object({
 
 export type Webhook = z.infer<typeof webhookSchema>;
 
-export const webhookCreateSchema = z.object({
+// One shape for both writes. A create fills the two defaults here, so the
+// handler has no fallback of its own; an update is the same shape with every
+// key optional, so a PATCH touches exactly what it sends.
+const webhookWriteSchema = z.object({
   name: z.string().min(1).max(100),
   url: z.url().refine((url) => url.startsWith("https://"), {
     message: "Webhook URL must use HTTPS",
   }),
   headers: z.record(z.string(), z.string()).nullable().optional(),
-  enabled: z.boolean().optional(),
-  events: z.array(webhookEventSchema).min(1).optional(),
+  enabled: z.boolean(),
+  events: z.array(webhookEventSchema).min(1),
 });
 
-export const webhookUpdateSchema = z.object({
-  name: z.string().min(1).max(100).optional(),
-  url: z
-    .url()
-    .refine((url) => url.startsWith("https://"), {
-      message: "Webhook URL must use HTTPS",
-    })
-    .optional(),
-  headers: z.record(z.string(), z.string()).nullable().optional(),
-  enabled: z.boolean().optional(),
-  events: z.array(webhookEventSchema).min(1).optional(),
-});
+export const webhookCreateSchema = strictRequest(
+  webhookWriteSchema.extend({
+    headers: z.record(z.string(), z.string()).nullable().default(null),
+    enabled: z.boolean().default(true),
+    // Every event the schema knows, not a hand-kept list: one here once
+    // missed `card.moved`.
+    events: z
+      .array(webhookEventSchema)
+      .min(1)
+      .default([...webhookEventSchema.options]),
+  }),
+);
+
+export const webhookUpdateSchema = strictRequest(webhookWriteSchema.partial());
 
 // A2A endpoint (ADR-0032): one Agent made reachable over A2A from one
 // Workspace, under its own unguessable URL. The public name and description
@@ -3930,33 +4134,43 @@ export type A2aEndpoint = z.infer<typeof a2aEndpointSchema>;
 export const a2aInterfaceUrl = (backendUrl: string, endpointId: string) =>
   `${backendUrl.replace(/\/+$/, "")}/a2a/${endpointId}`;
 
-// Name and description are optional on create: omitted, they are copied from
-// the Agent.
-export const a2aEndpointCreateSchema = a2aEndpointSchema
-  .pick({
-    agentId: true,
-    enabled: true,
-    name: true,
-    description: true,
-    includeMemories: true,
-    extractMemories: true,
-  })
-  .partial()
-  .required({ agentId: true });
+// Name and description are optional on create: omitted, the SERVICE copies
+// them from the Agent, which is the only source that knows the Agent. The
+// three switches are static defaults, so they live here.
+export const a2aEndpointCreateSchema = strictRequest(
+  a2aEndpointSchema
+    .pick({
+      agentId: true,
+      enabled: true,
+      name: true,
+      description: true,
+      includeMemories: true,
+      extractMemories: true,
+    })
+    .partial()
+    .required({ agentId: true })
+    .extend({
+      enabled: z.boolean().default(true),
+      includeMemories: z.boolean().default(false),
+      extractMemories: z.boolean().default(false),
+    }),
+);
 
 export type A2aEndpointCreate = z.infer<typeof a2aEndpointCreateSchema>;
 
 // The Agent is fixed once the endpoint exists: its URL and tokens were handed
 // out for that Agent.
-export const a2aEndpointUpdateSchema = a2aEndpointSchema
-  .pick({
-    name: true,
-    description: true,
-    enabled: true,
-    includeMemories: true,
-    extractMemories: true,
-  })
-  .partial();
+export const a2aEndpointUpdateSchema = strictRequest(
+  a2aEndpointSchema
+    .pick({
+      name: true,
+      description: true,
+      enabled: true,
+      includeMemories: true,
+      extractMemories: true,
+    })
+    .partial(),
+);
 
 export type A2aEndpointUpdate = z.infer<typeof a2aEndpointUpdateSchema>;
 
@@ -4011,11 +4225,13 @@ export const orgA2aEndpointSchema = a2aEndpointSchema
 
 export type OrgA2aEndpoint = z.infer<typeof orgA2aEndpointSchema>;
 
-export const a2aTokenCreateSchema = a2aTokenSchema.pick({ name: true }).extend({
-  expiryDays: z
-    .literal(BEARER_TOKEN_EXPIRY_DAYS)
-    .default(DEFAULT_BEARER_TOKEN_EXPIRY_DAYS),
-});
+export const a2aTokenCreateSchema = strictRequest(
+  a2aTokenSchema.pick({ name: true }).extend({
+    expiryDays: z
+      .literal(BEARER_TOKEN_EXPIRY_DAYS)
+      .default(DEFAULT_BEARER_TOKEN_EXPIRY_DAYS),
+  }),
+);
 
 // --- Webhook event payloads --------------------------------------------------
 

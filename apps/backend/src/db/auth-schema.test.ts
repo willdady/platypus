@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { getTableColumns } from "drizzle-orm";
 import { getSchema } from "better-auth/db";
-import { authPlugins } from "../auth-plugins.ts";
+import { authPlugins, authUserFieldOverrides } from "../auth-plugins.ts";
 import * as authSchema from "./auth-schema.ts";
 
 /**
@@ -15,7 +15,10 @@ import * as authSchema from "./auth-schema.ts";
  * list: the same drift fails here instead of at a developer's next sign-in.
  */
 describe("the Drizzle auth schema covers what better-auth expects", () => {
-  const expected = getSchema({ plugins: authPlugins });
+  const expected = getSchema({
+    plugins: authPlugins,
+    user: { additionalFields: authUserFieldOverrides },
+  });
 
   const drizzleFieldsFor = (table: string) => {
     const drizzleTable = (authSchema as Record<string, unknown>)[table];
@@ -43,5 +46,11 @@ describe("the Drizzle auth schema covers what better-auth expects", () => {
 
   it("carries the admin plugin's impersonatedBy on session", () => {
     expect(drizzleFieldsFor("session")).toContain("impersonatedBy");
+  });
+
+  it("makes the admin plugin's banned field required, so regeneration keeps NOT NULL", () => {
+    expect(expected.user.fields.banned.required).toBe(true);
+    const banned = getTableColumns(authSchema.user).banned;
+    expect(banned.notNull).toBe(true);
   });
 });

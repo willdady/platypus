@@ -1,4 +1,5 @@
-import type { Context, Hono } from "hono";
+import type { Hono } from "hono";
+import { z } from "zod";
 import { validate } from "../validate.ts";
 import {
   orgGateAccessUpdateSchema,
@@ -10,7 +11,6 @@ import {
   requireOrgAccess,
   userOf,
 } from "../middleware/authorization.ts";
-import { ValidationError } from "../errors.ts";
 import type { Variables } from "../server.ts";
 
 /**
@@ -53,12 +53,9 @@ export const mountGateAccess = <T>(
  * The `tokenCreatedAt` an Org Admin's revoke names: when the token they saw
  * was issued, as the list reported it, so one issued since is refused.
  */
-export const seenTokenCreatedAt = (c: Context): Date => {
-  const seen = new Date(c.req.query("tokenCreatedAt") ?? "");
-  if (Number.isNaN(seen.getTime())) {
-    throw new ValidationError(
-      "tokenCreatedAt must name the token to revoke, as the list reported it.",
-    );
-  }
-  return seen;
-};
+export const tokenCreatedAtQuerySchema = z.strictObject({
+  tokenCreatedAt: z.iso.datetime(),
+});
+
+export const seenTokenCreatedAt = (query: { tokenCreatedAt: string }): Date =>
+  new Date(query.tokenCreatedAt);

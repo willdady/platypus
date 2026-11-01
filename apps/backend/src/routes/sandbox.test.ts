@@ -265,6 +265,28 @@ describe("Sandbox Routes", () => {
       expect(body.name).toBe("Renamed");
     });
 
+    it("rejects an unknown query key", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
+
+      const res = await app.request(`${baseUrl}?foo=1`, {
+        method: "PUT",
+        body: JSON.stringify({
+          name: "Renamed",
+          backend: "docker",
+          config: {},
+          credentials: {},
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(400);
+      expect(mockDb.update).not.toHaveBeenCalled();
+    });
+
     it("returns 502 when changing backend and the previous adapter's destroy() fails", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
@@ -452,6 +474,19 @@ describe("Sandbox Routes", () => {
       });
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ message: "Sandbox deleted" });
+    });
+
+    it("rejects an unknown query key", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
+
+      const res = await app.request(`${baseUrl}?foo=1`, { method: "DELETE" });
+
+      expect(res.status).toBe(400);
+      expect(mockDb.delete).not.toHaveBeenCalled();
     });
 
     it("names the owning plugin on the force-delete leak warning", async () => {
@@ -755,7 +790,7 @@ describe("Sandbox Routes", () => {
       asAdmin(method === "PUT" ? stored : undefined);
 
       const res = await send(method, {
-        workspaceId,
+        ...(method === "POST" ? { workspaceId } : {}),
         name: "Creds backend",
         backend: CREDS_BACKEND,
         ...over,

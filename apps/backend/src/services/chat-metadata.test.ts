@@ -71,7 +71,7 @@ const provider = {
   id: "p1",
   providerType: "OpenAI",
   taskModelId: "task-model",
-  modelIds: ["task-model"],
+  modelIds: [{ id: "task-model", passthroughFileTypes: [] }],
   workspaceId: "ws-1",
   organizationId: null,
 };

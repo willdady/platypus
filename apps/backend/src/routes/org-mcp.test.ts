@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
+  insertTimestamps,
   mockSession,
   resetMockDb,
   seedDb,
@@ -37,7 +38,6 @@ describe("Organization MCP Routes", () => {
     name: "Org MCP",
     url: "http://mcp.com",
     authType: "None",
-    organizationId: orgId,
   };
 
   /** A Shared MCP of `org-1`, carrying every stored credential. */
@@ -55,6 +55,8 @@ describe("Organization MCP Routes", () => {
     oauthClientSecret: "client-secret",
     organizationId: orgId,
     workspaceId: null,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    updatedAt: new Date("2026-01-01T00:00:00.000Z"),
     ...over,
   });
 
@@ -84,7 +86,10 @@ describe("Organization MCP Routes", () => {
         ],
         ...rows,
       },
-      { unique: { mcp: [uniqueNameOrg] } },
+      {
+        unique: { mcp: [uniqueNameOrg] },
+        defaults: { mcp: insertTimestamps() },
+      },
     );
 
   const uniqueNameOrg = {
@@ -117,6 +122,8 @@ describe("Organization MCP Routes", () => {
         organizationId: orgId,
         workspaceId: null,
         authType: "None",
+        scope: "organization",
+        bearerTokenSet: { configured: false },
       });
       expect(fake.tables.mcp).toHaveLength(4);
     });
@@ -176,6 +183,9 @@ describe("Organization MCP Routes", () => {
 
       expect(status).toBe(200);
       expect(results.map((r) => r.id)).toEqual(["mcp-1"]);
+      expect(results).toEqual([
+        expect.objectContaining({ scope: "organization" }),
+      ]);
     });
 
     it("redacts request credentials and never returns OAuth tokens to a member", async () => {
@@ -252,7 +262,12 @@ describe("Organization MCP Routes", () => {
 
       expect(res.status).toBe(200);
       const body = (await res.json()) as Row;
-      expect(body).toMatchObject({ id: "mcp-1", name: "Renamed MCP" });
+      expect(body).toMatchObject({
+        id: "mcp-1",
+        name: "Renamed MCP",
+        scope: "organization",
+        bearerTokenSet: { configured: true },
+      });
       expect(body).not.toHaveProperty("oauthAccessToken");
       expect(namesOf(fake)).toEqual(["Renamed MCP", "Org MCP", "Org MCP"]);
     });
@@ -378,12 +393,16 @@ describe("Organization MCP Routes", () => {
       mockSession();
       world("admin");
 
-      const res = await probe({ url: "http://mcp.com", authType: "None" });
+      const res = await probe({
+        url: "http://mcp.com",
+        authType: "None",
+        name: "Org MCP",
+      });
 
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({
         success: true,
-        toolNames: ["tool1"],
+        toolNames: ["org_mcp__tool1"],
         invalidToolNames: [],
       });
     });
@@ -392,11 +411,10 @@ describe("Organization MCP Routes", () => {
       mockSession();
       world("admin");
 
-      const res = await probe({
-        url: "http://mcp.com",
-        authType: "OAuth",
-        mcpId: "mcp-1",
-      });
+      const res = await app.request(
+        `${baseUrl}/mcp-1/test`,
+        json("POST", { url: "http://mcp.com", authType: "OAuth" }),
+      );
 
       expect(res.status).toBe(200);
       expect(await res.json()).toMatchObject({ success: true });
@@ -406,11 +424,10 @@ describe("Organization MCP Routes", () => {
       mockSession();
       world("admin");
 
-      const res = await probe({
-        url: "http://mcp.com",
-        authType: "OAuth",
-        mcpId: "mcp-other-org",
-      });
+      const res = await app.request(
+        `${baseUrl}/mcp-other-org/test`,
+        json("POST", { url: "http://mcp.com", authType: "OAuth" }),
+      );
 
       expect(res.status).toBe(404);
       expect(await res.json()).toEqual({ error: "MCP not found" });
@@ -478,6 +495,16 @@ describe("Organization MCP Routes", () => {
 
       const res = await authorize("mcp-1");
       expect(res.status).toBe(403);
+      expect(mcpAuth).not.toHaveBeenCalled();
+    });
+
+    it("rejects an unknown query key", async () => {
+      mockSession();
+      world("admin");
+
+      const res = await authorize("mcp-1", "?force=true&foo=1");
+
+      expect(res.status).toBe(400);
       expect(mcpAuth).not.toHaveBeenCalled();
     });
   });

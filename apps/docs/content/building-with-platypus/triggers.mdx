@@ -764,10 +764,13 @@ Worth checking before rewriting the Instruction.
 
 A run can also stop early for the other reason: it ran out of _steps_ rather
 than room to write. A run that reaches its Agent's **Max steps** — see
-[Tune generation](/building-with-platypus/agents#tune-generation) — stops with
+[Tune generation](/building-with-platypus/agents#tune-generation) — is told on
+its last permitted step to answer from what it has gathered, so a run that has
+been fetching all along usually ends with something to read. That step counts as
+one of the allowed steps. If the run calls a tool again instead, it stops with
 work outstanding and still ends _Success_, because it did what it was allowed to
 do. It carries a muted line on **Trigger runs** reading **Run cut short at the
-step limit.**
+step limit. Raise Max steps to let it finish.**
 
 The step count in the run's stats (such as `25 steps`) is the count it reached,
 so a run history where every run stops at the same number is the shape to look

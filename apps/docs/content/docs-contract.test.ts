@@ -2190,6 +2190,44 @@ const BACKEND_CONSTANTS = [
     ],
     cost: "A Workspace Owner checking whether a token is still in use reads its last-used time as fresher than it is.",
   },
+  {
+    source: "apps/backend/src/auth.ts",
+    name: "SESSION_LIFETIME_DAYS",
+    phrase: (days: number) => `expires ${days} days after it was last used`,
+    files: ["reference/backend-configuration.mdx"],
+    cost: "An Operator sizing a session or a revocation window plans around the wrong lifetime.",
+  },
+  {
+    source: "apps/backend/src/auth.ts",
+    name: "SESSION_REFRESH_AGE_HOURS",
+    phrase: (hours: number) => `per ${hours} hours`,
+    files: ["reference/backend-configuration.mdx"],
+    cost: "An Operator believes a revoked session or changed password stops working sooner than it does.",
+  },
+  {
+    source: "apps/backend/src/auth.ts",
+    name: "SESSION_COOKIE_CACHE_MINUTES",
+    phrase: (minutes: number) => `${minutes}-minute cookie cache`,
+    files: [
+      "reference/backend-configuration.mdx",
+      "self-hosting/users-and-access.mdx",
+    ],
+    cost: "A reader takes the cache for a second lifetime bound it is not.",
+  },
+  {
+    source: "apps/backend/src/auth.ts",
+    name: "SESSION_READ_WINDOW_SECONDS",
+    phrase: (seconds: number) => `rolling ${seconds} seconds`,
+    files: ["self-hosting/production.mdx", "self-hosting/upgrading.mdx"],
+    cost: "An Operator sizes a proxy limit for `/auth/get-session` against a bound the backend does not use.",
+  },
+  {
+    source: "apps/backend/src/auth.ts",
+    name: "SESSION_READ_MAX",
+    phrase: (max: number) => `${max} reads per rolling`,
+    files: ["self-hosting/production.mdx", "self-hosting/upgrading.mdx"],
+    cost: "An Operator sizes a proxy limit for `/auth/get-session` against a bound the backend does not use.",
+  },
 ] as const;
 
 describe("backend constants the concept pages quote", () => {
@@ -2691,7 +2729,13 @@ const UNPINNED_NUMBERS: (PagePhrase & { reason: string })[] = [
   {
     file: "self-hosting/users-and-access.mdx",
     phrase: "7 days",
-    reason: "session expiresIn in the auth config; accurate, not yet pinned",
+    reason:
+      "SESSION_LIFETIME_DAYS, pinned on the backend reference page; restated here",
+  },
+  {
+    file: "self-hosting/upgrading.mdx",
+    phrase: "8 characters",
+    reason: "MIN_ADMIN_PASSWORD_LENGTH; accurate, not yet pinned",
   },
 ];
 

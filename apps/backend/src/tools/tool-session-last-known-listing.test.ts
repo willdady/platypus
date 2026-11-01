@@ -106,7 +106,7 @@ const scope: ToolSessionScope = {
   orgId: "org-1",
   workspaceId: "ws-1",
   userId: "user-1",
-  frontendUrl: undefined,
+  frontendUrl: "http://localhost:3000",
   timezone: "UTC",
   sessionId: "chat-1",
 };

@@ -97,20 +97,8 @@ const offlineMcpClient = (): Promise<MCPClient> => {
  */
 export type ToolSessionScope = Omit<
   ToolSetContext,
-  "agentId" | "registerCloser" | "timezone" | "sessionId"
-> & {
-  /**
-   * Required here though optional on the SDK's context: optional there only so
-   * a plugin tolerates an older core, and core always fills it in.
-   */
-  timezone: string;
-  /**
-   * Likewise required: every Provider request happens inside a Chat or a
-   * Trigger run, so a session always has one to resolve Header placeholders
-   * from, and a caller without one is a type error.
-   */
-  sessionId: string;
-};
+  "agentId" | "registerCloser"
+>;
 
 /**
  * A registrar for a caller that must register a closer before the session it
@@ -246,7 +234,7 @@ const lazyMcpTools = async (
 /** The Agent a session resolves Tool sets for — the parent, or one delegate. */
 export type ToolSessionAgent = {
   id: string;
-  toolSetIds?: readonly string[] | null;
+  toolSetIds: readonly string[];
 };
 
 /**
@@ -849,7 +837,7 @@ export const openToolSession = async (
     // `tools(context, plugin)` and is never shown the accumulated map — so only
     // the merge below stays ordered.
     const resolutions = await Promise.all(
-      (agent.toolSetIds ?? [])
+      agent.toolSetIds
         .filter((toolSetId) => !withheldToolSetIds.includes(toolSetId))
         .map((toolSetId) => resolveSafely(toolSetId, context)),
     );

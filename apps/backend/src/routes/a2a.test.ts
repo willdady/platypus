@@ -226,6 +226,7 @@ const registerMemoryToolSet = () => {
       contribution: {
         name: "Memory",
         category: "Memory",
+        description: "Call the Memory tool under test",
         tools: () => ({
           memorySearch: memoryTool("Search Memories"),
           memoryGet: memoryTool("Get a Memory"),
@@ -311,6 +312,7 @@ const seed = ({
         description: "Internal: uses the CRM tools",
         toolSetIds: ["crm"],
         skillIds: ["refunds"],
+        subAgentIds: [],
       },
     ],
     a2a_endpoint: [
@@ -606,7 +608,7 @@ const seedConversation = (
           apiKey: "sk-test",
           apiMode: "responses",
           searchSource: "native",
-          modelIds: ["gpt-test"],
+          modelIds: [{ id: "gpt-test", passthroughFileTypes: [] }],
           taskModelId: "gpt-test",
           memoryExtractionModelId: "gpt-test",
         },
@@ -619,6 +621,9 @@ const seedConversation = (
           modelId: "gpt-test",
           name: "Helper",
           description: "Internal",
+          toolSetIds: [],
+          skillIds: [],
+          subAgentIds: [],
         },
         {
           id: "agent-2",
@@ -627,6 +632,9 @@ const seedConversation = (
           modelId: "gpt-test",
           name: "Other",
           description: "Other",
+          toolSetIds: [],
+          skillIds: [],
+          subAgentIds: [],
         },
       ],
       a2a_endpoint: [
@@ -1544,9 +1552,9 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
         workspaceId: "ws-1",
         isWorkspaceOwner: true,
       },
+      chatId: first.contextId,
       request: {
-        id: first.contextId,
-        workspaceId: "ws-1",
+        trigger: "submit",
         agentId: "agent-1",
         message: {
           id: "owner-msg",
@@ -2260,6 +2268,7 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
             activeLeafId: "reply-a",
             a2aTokenId: "tok-1",
             lastTurnAt: hourAgo,
+            runHeartbeatAt: hourAgo,
             updatedAt: hourAgo,
           },
         ],
@@ -3547,6 +3556,7 @@ describe("POST /a2a/:endpointId — push notifications", () => {
           status: "running",
           activeLeafId: "msg-a",
           lastTurnAt: hourAgo,
+          runHeartbeatAt: hourAgo,
           updatedAt: hourAgo,
         },
       ],
@@ -5853,7 +5863,12 @@ describe("POST /a2a/:endpointId — cutting off access stops running work", () =
     ],
     [
       "the Org A2A gate closes",
-      () => setA2aAccess("org-1", { gate: "off" }, "admin-1"),
+      () =>
+        setA2aAccess(
+          "org-1",
+          { gate: "off", allowedWorkspaceIds: null },
+          "admin-1",
+        ),
     ],
     [
       "the Workspace is deselected",
@@ -6341,9 +6356,9 @@ describe("a Chat turn outside A2A", () => {
         workspaceId: "ws-1",
         isWorkspaceOwner: true,
       },
+      chatId: "ui-chat",
       request: {
-        id: "ui-chat",
-        workspaceId: "ws-1",
+        trigger: "submit",
         agentId: "agent-1",
         message: {
           id: "ui-msg",

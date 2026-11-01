@@ -48,13 +48,16 @@ export const dockerPluginConfigSchema = z
   })
   .strict();
 
+export type DockerPluginConfig = z.infer<typeof dockerPluginConfigSchema>;
+
 // Read the Operator network allowlist out of @platypus/docker's boot-resolved
-// plugin config. Defensive-parses so a caller can pass the raw registry value;
-// an absent/invalid block yields `[]` (default-deny). Feeds the admin
+// plugin config. The loader has already parsed it against
+// {@link dockerPluginConfigSchema}, so this only reads the field. Feeds the admin
 // multi-select endpoint (GET .../sandbox/networks).
-export function readAllowedDockerNetworks(pluginConfig: unknown): string[] {
-  const parsed = dockerPluginConfigSchema.safeParse(pluginConfig ?? {});
-  return parsed.success ? parsed.data.allowedNetworks : [];
+export function readAllowedDockerNetworks(
+  pluginConfig: DockerPluginConfig | undefined,
+): string[] {
+  return pluginConfig?.allowedNetworks ?? [];
 }
 
 // A single ExtraHosts entry: `hostname:target` where target is `host-gateway`,
@@ -85,15 +88,13 @@ export type DockerSandboxConfig = z.infer<typeof dockerSandboxConfigBase>;
 // Operator's `allowedNetworks` from the plugin config injected at load, so an
 // out-of-allowlist `networks` entry is rejected at config-save time (ADR-0005).
 // The loader resolves this against the boot-validated plugin block into a
-// concrete schema before core's static safeParse consumers see it. `config`
-// arrives as `unknown` (the SDK's opaque plugin-config shape); we re-validate it
-// through the plugin schema so the factory is self-contained and defensively
-// defaults to an empty allowlist (default-deny).
-export const dockerSandboxConfigSchema = (plugin: PluginConfigContext) => {
-  const { allowedNetworks } = dockerPluginConfigSchema.parse(
-    plugin.config ?? {},
-  );
-  const allowed = new Set(allowedNetworks);
+// concrete schema before core's static safeParse consumers see it. `plugin.config`
+// is already the schema's output, typed through the manifest, so no re-parse is
+// needed here.
+export const dockerSandboxConfigSchema = (
+  plugin: PluginConfigContext<DockerPluginConfig>,
+) => {
+  const allowed = new Set(plugin.config.allowedNetworks);
   return dockerSandboxConfigBase.superRefine((cfg, ctx) => {
     for (const n of cfg.networks) {
       if (!allowed.has(n)) {
@@ -684,7 +685,7 @@ class DockerSandboxTransport implements SandboxTransport {
     ctx: SandboxContext,
     absPath: string,
     cap: number,
-    signal?: AbortSignal,
+    signal: AbortSignal,
   ): Promise<Buffer> {
     const container = await this.ensureContainer(ctx);
     const res = await runExec(

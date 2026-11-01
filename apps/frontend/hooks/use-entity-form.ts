@@ -51,6 +51,8 @@ export type UseEntityFormOptions<
   scope: Scope;
   /** Absent when creating. */
   id?: string;
+  /** The update verb; `PUT` (the default) replaces, `PATCH` sends a partial. */
+  method?: "PUT" | "PATCH";
   /**
    * Maps the loaded record onto the form's values. Given with an `id`, the
    * hook reads `${entity}/${id}` under `scope` and seeds `formData` from it
@@ -198,6 +200,7 @@ export function useEntityForm<
   entity,
   scope,
   id,
+  method = "PUT",
   fromRecord,
   onSeed,
   sideState,
@@ -318,6 +321,7 @@ export function useEntityForm<
           ? await write(formData)
           : await writeEntity<TResult>(backendUrl, entity, scope, {
               id,
+              method,
               data: buildPayload?.(formData),
             });
 
@@ -356,6 +360,7 @@ export function useEntityForm<
       entity,
       scope,
       id,
+      method,
       formData,
       sideState,
       buildPayload,

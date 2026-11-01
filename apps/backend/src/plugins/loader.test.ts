@@ -81,6 +81,7 @@ const toolSet = (id: string): ToolSetContribution => ({
   id,
   name: id,
   category: "Test",
+  description: `${id} tools`,
   tools: {},
 });
 
@@ -237,7 +238,7 @@ describe("loadPlugins — apiVersion compatibility window (N and N−1)", () => 
       }),
     ).rejects.toThrow(
       new RegExp(
-        `@ancient/plugin.*targets API v${OLDEST_SUPPORTED_API_VERSION - 1}, below the oldest core supports`,
+        `@ancient/plugin.*targets API v${OLDEST_SUPPORTED_API_VERSION - 1}, below the oldest core supports.*Core supports v${OLDEST_SUPPORTED_API_VERSION}–v${PLUGIN_API_VERSION}`,
         "s",
       ),
     );
@@ -431,22 +432,50 @@ describe("loadPlugins", () => {
   it.each([
     [
       "a missing category",
-      { id: "broken", name: "Broken", tools: {} },
+      { id: "broken", name: "Broken", description: "Test", tools: {} },
       /@platypus\/bad.*tool set "broken".*non-empty "category"/s,
     ],
     [
       "a whitespace-only category",
-      { id: "broken", name: "Broken", category: "   ", tools: {} },
+      {
+        id: "broken",
+        name: "Broken",
+        category: "   ",
+        description: "Test",
+        tools: {},
+      },
       /@platypus\/bad.*tool set "broken".*non-empty "category"/s,
     ],
     [
+      "a missing description",
+      { id: "broken", name: "Broken", category: "Test", tools: {} },
+      /@platypus\/bad.*tool set "broken".*non-empty "description"/s,
+    ],
+    [
+      "a whitespace-only description",
+      {
+        id: "broken",
+        name: "Broken",
+        category: "Test",
+        description: "   ",
+        tools: {},
+      },
+      /@platypus\/bad.*tool set "broken".*non-empty "description"/s,
+    ],
+    [
       "missing tools",
-      { id: "broken", name: "Broken", category: "Test" },
+      { id: "broken", name: "Broken", category: "Test", description: "Test" },
       /@platypus\/bad.*tool set "broken".*"tools" object or function/s,
     ],
     [
       "an array tools",
-      { id: "broken", name: "Broken", category: "Test", tools: [] },
+      {
+        id: "broken",
+        name: "Broken",
+        category: "Test",
+        description: "Test",
+        tools: [],
+      },
       /@platypus\/bad.*tool set "broken".*"tools" object or function/s,
     ],
   ])(
@@ -1154,6 +1183,7 @@ describe("loadPlugins — deploy-time plugin config injection", () => {
           id: "managed",
           name: "Managed",
           category: "Test",
+          description: "Managed tools",
           tools: (_ctx, plugin) => {
             seen.toolSet = plugin;
             return {};
@@ -1211,8 +1241,10 @@ describe("loadPlugins — deploy-time plugin config injection", () => {
         workspaceId: "w",
         agentId: "a",
         orgId: "o",
-        frontendUrl: undefined,
+        frontendUrl: "http://localhost:3000",
         userId: "u",
+        timezone: "UTC",
+        sessionId: "chat-1",
         registerCloser: () => {},
       },
       undefined,
@@ -1265,8 +1297,10 @@ describe("loadPlugins — deploy-time plugin config injection", () => {
         workspaceId: "w",
         agentId: "a",
         orgId: "o",
-        frontendUrl: undefined,
+        frontendUrl: "http://localhost:3000",
         userId: "u",
+        timezone: "UTC",
+        sessionId: "chat-1",
         registerCloser: () => {},
       },
       undefined,
@@ -1338,6 +1372,7 @@ describe("loadPlugins — deploy-time plugin config injection", () => {
                   id: "plain",
                   name: "Plain",
                   category: "Test",
+                  description: "Plain tools",
                   tools: (_ctx, plugin) => {
                     seenPlugin = plugin;
                     return {};
@@ -1357,8 +1392,10 @@ describe("loadPlugins — deploy-time plugin config injection", () => {
         workspaceId: "w",
         agentId: "a",
         orgId: "o",
-        frontendUrl: undefined,
+        frontendUrl: "http://localhost:3000",
         userId: "u",
+        timezone: "UTC",
+        sessionId: "chat-1",
         registerCloser: () => {},
       },
       undefined,
@@ -1389,6 +1426,7 @@ describe("loadPlugins — plugin logger injection", () => {
           id: "tools",
           name: "Tools",
           category: "Test",
+          description: "Logging tools",
           tools: (_ctx, plugin) => {
             seen.toolSet = plugin;
             plugin.logger.info({ point: "toolSet" }, "resolving tools");
@@ -1454,8 +1492,10 @@ describe("loadPlugins — plugin logger injection", () => {
         workspaceId: "w",
         agentId: "a",
         orgId: "o",
-        frontendUrl: undefined,
+        frontendUrl: "http://localhost:3000",
         userId: "u",
+        timezone: "UTC",
+        sessionId: "chat-1",
         registerCloser: () => {},
       },
       undefined,
@@ -1579,8 +1619,10 @@ describe("loadPlugins — example third-party plugin", () => {
         workspaceId: "w",
         agentId: "a",
         orgId: "o",
-        frontendUrl: undefined,
+        frontendUrl: "http://localhost:3000",
         userId: "u",
+        timezone: "UTC",
+        sessionId: "chat-1",
         registerCloser: () => {},
       },
       undefined,
@@ -1740,7 +1782,7 @@ describe("loadPlugins — deploy-time config targeting (ADR-0013)", () => {
               apiVersion: PLUGIN_API_VERSION,
               configSchema: z.object({ region: z.string() }),
               contributes: { toolSets: [toolSet("w")] },
-            } satisfies PlatypusPlugin,
+            } satisfies PlatypusPlugin<{ region: string }>,
           }),
         register: () => {},
         env: { PLATYPUS_PLUGIN_CONFIG_WIDGETS: '{"config":{"region":"eu"}}' },
@@ -1754,7 +1796,9 @@ describe("loadPlugins — per-plugin config vars (PLATYPUS_PLUGIN_CONFIG_<NAME>)
     vi.unstubAllEnvs();
   });
 
-  const cloudSandbox: PlatypusPlugin = {
+  // Spread, not re-annotated: a manifest typed with its own config is not
+  // assignable to one left at the SDK's default `unknown`.
+  const cloudSandbox = {
     ...examplePlugin,
     name: "cloud-sandbox",
   };
@@ -2200,8 +2244,10 @@ describe("loadPlugins — example third-party npm package (end to end)", () => {
         workspaceId: "ws-1",
         agentId: "agent-1",
         orgId: "org-1",
-        frontendUrl: undefined,
+        frontendUrl: "http://localhost:3000",
         userId: "user-1",
+        timezone: "UTC",
+        sessionId: "chat-1",
         registerCloser: () => {},
       },
       undefined,
@@ -2246,8 +2292,10 @@ describe("loadPlugins — example third-party npm package (end to end)", () => {
         workspaceId: "ws-1",
         agentId: "agent-1",
         orgId: "org-1",
-        frontendUrl: undefined,
+        frontendUrl: "http://localhost:3000",
         userId: "user-1",
+        timezone: "UTC",
+        sessionId: "chat-1",
         registerCloser: () => {},
       },
       undefined,

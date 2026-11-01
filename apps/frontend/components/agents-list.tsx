@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import {
   type Agent,
+  type AgentResponse,
   type Provider,
   type ToolSet,
   type Skill,
@@ -71,10 +72,8 @@ import { orgRoutes, workspaceRoutes } from "@/lib/routes";
 
 // The Agent is shown either in a Workspace, where it may be a workspace-scoped
 // Agent or an attached org-scoped (Shared) Agent rendered with an Organization
-// badge (ADR-0007). The backend tags each row with its scope.
-type AgentWithScope = Serialized<Agent> & {
-  scope?: "organization" | "workspace";
-};
+// badge (ADR-0007). The API's response shape always carries `scope`.
+type AgentWithScope = Serialized<AgentResponse>;
 
 // The card's New chat + menu sit beside the content from `xl`, and wrap to a
 // full-width row under it (indented past the avatar) below that.
@@ -192,22 +191,22 @@ export function AgentsList({
   const canPin = canPinAgent(ownsWorkspace);
   const canClone = canCreateAgent(ownsWorkspace);
 
-  const getToolSetNames = (toolSetIds: string[] | undefined) => {
-    if (!toolSetIds?.length) return [];
+  const getToolSetNames = (toolSetIds: string[]) => {
+    if (toolSetIds.length === 0) return [];
     return toolSetIds
       .map((id) => toolSets.find((ts) => ts.id === id)?.name)
       .filter(Boolean) as string[];
   };
 
-  const getSkillNames = (skillIds: string[] | undefined) => {
-    if (!skillIds?.length) return [];
+  const getSkillNames = (skillIds: string[]) => {
+    if (skillIds.length === 0) return [];
     return skillIds
       .map((id) => skills.find((s) => s.id === id)?.name)
       .filter(Boolean) as string[];
   };
 
-  const getSubAgentNames = (subAgentIds: string[] | undefined) => {
-    if (!subAgentIds?.length) return [];
+  const getSubAgentNames = (subAgentIds: string[]) => {
+    if (subAgentIds.length === 0) return [];
     return subAgentIds
       .map((id) => agents.find((a) => a.id === id)?.name)
       .filter(Boolean) as string[];
@@ -219,7 +218,7 @@ export function AgentsList({
     delete: (agent, url) => writeEntity(url, "agents", scope, { id: agent.id }),
   });
 
-  const handleDeleteClick = (agent: Serialized<Agent>) => {
+  const handleDeleteClick = (agent: AgentWithScope) => {
     deleteFlow.request(agent);
   };
 

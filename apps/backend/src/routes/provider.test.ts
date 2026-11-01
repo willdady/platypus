@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
+  insertTimestamps,
   mockSession,
   resetMockDb,
   seedDb,
@@ -79,6 +80,7 @@ describe("Provider Routes", () => {
             },
           ],
         },
+        defaults: { provider: insertTimestamps() },
       },
     );
   };
@@ -91,7 +93,13 @@ describe("Provider Routes", () => {
     apiKey: "sk-secret",
     organizationId: null,
     workspaceId,
+    apiMode: "responses",
+    searchSource: "native",
     modelIds: [{ id: "gpt-4" }],
+    taskModelId: "gpt-4",
+    memoryExtractionModelId: "gpt-4",
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    updatedAt: new Date("2026-01-01T00:00:00.000Z"),
     ...over,
   });
 
@@ -103,7 +111,13 @@ describe("Provider Routes", () => {
     apiKey: "sk-org",
     organizationId: orgId,
     workspaceId: null,
+    apiMode: "responses",
+    searchSource: "native",
     modelIds: [{ id: "gpt-4" }],
+    taskModelId: "gpt-4",
+    memoryExtractionModelId: "gpt-4",
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    updatedAt: new Date("2026-01-01T00:00:00.000Z"),
     ...over,
   });
 
@@ -120,10 +134,11 @@ describe("Provider Routes", () => {
       name: "OpenAI",
       providerType: "OpenAI",
       apiKey: "sk-123",
-      modelIds: ["gpt-4"],
+      apiMode: "responses" as const,
+      searchSource: "native",
+      modelIds: [{ id: "gpt-4", passthroughFileTypes: [] }],
       taskModelId: "gpt-4",
       memoryExtractionModelId: "gpt-4",
-      workspaceId,
     };
 
     const post = (payload: unknown = createBody) =>
@@ -141,15 +156,24 @@ describe("Provider Routes", () => {
 
       expect(res.status).toBe(201);
       expect(await res.json()).toEqual(
-        expect.objectContaining({ name: "OpenAI", providerType: "OpenAI" }),
+        expect.objectContaining({
+          name: "OpenAI",
+          providerType: "OpenAI",
+          // A write response is the same shape as a read: the caller may manage
+          // this Provider, so the credential and its presence indicator both
+          // come back, tagged with the scope the route created it at.
+          apiKey: "sk-123",
+          apiKeySet: { configured: true },
+          headersSet: { configured: false },
+          scope: "workspace",
+        }),
       );
       expect(fake.tables.provider).toHaveLength(1);
     });
 
-    it("takes the scope from the route, ignoring any scope in the body", async () => {
-      // A workspace-surface create is always Workspace-scoped. Spreading the body
-      // let a caller name another Workspace, or set organizationId and mint a
-      // Shared Provider here — which only an Org Admin may do (ADR-0006/0007).
+    it("rejects any scope in the body", async () => {
+      // A workspace-surface create takes its scope from the route; naming one
+      // in the body is a 400 rather than a silently dropped field.
       mockSession();
       fake = world({ rows: { provider: [] } });
 
@@ -159,11 +183,8 @@ describe("Provider Routes", () => {
         organizationId: orgId,
       });
 
-      expect(res.status).toBe(201);
-      expect(fake.tables.provider[0]).toMatchObject({
-        workspaceId,
-        organizationId: null,
-      });
+      expect(res.status).toBe(400);
+      expect(fake.tables.provider).toHaveLength(0);
     });
 
     it("should return 409 if provider name already exists in workspace", async () => {
@@ -419,7 +440,9 @@ describe("Provider Routes", () => {
       name: "Renamed",
       providerType: "OpenAI",
       apiKey: "sk-123",
-      modelIds: ["gpt-4"],
+      apiMode: "responses" as const,
+      searchSource: "native",
+      modelIds: [{ id: "gpt-4", passthroughFileTypes: [] }],
       taskModelId: "gpt-4",
       memoryExtractionModelId: "gpt-4",
     };
@@ -445,6 +468,9 @@ describe("Provider Routes", () => {
           id: "p1",
           name: "Renamed",
           aliasRepoints: [],
+          scope: "workspace",
+          apiKey: "sk-123",
+          apiKeySet: { configured: true },
         }),
       );
       expect(fake.tables.provider[0]).toMatchObject({ name: "Renamed" });

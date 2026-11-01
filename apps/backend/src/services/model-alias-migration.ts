@@ -30,17 +30,14 @@ import type { ProviderRow } from "./provider-write.ts";
 /** An orphaned alias and the concrete id its references fall back to. */
 type OrphanedAlias = Pick<AliasRepoint, "alias" | "modelId">;
 
-/** A Provider's models as stored, legacy bare strings included. */
+/** A Provider's models as stored. */
 type StoredModels = ProviderRow["modelIds"];
 
-/** Tolerates the legacy bare-`string[]` shape on either side of the diff. */
 const aliasEntries = (
   models: StoredModels,
 ): Array<{ alias: string; id: string }> =>
   models.flatMap((entry) =>
-    typeof entry === "string" || !entry.alias || !entry.id
-      ? []
-      : [{ alias: entry.alias, id: entry.id }],
+    !entry.alias || !entry.id ? [] : [{ alias: entry.alias, id: entry.id }],
   );
 
 /**
@@ -64,9 +61,7 @@ export const orphanedAliasRepoints = (
   const survivingNames = new Set(
     aliasEntries(next).map((entry) => entry.alias.toLowerCase()),
   );
-  const survivingIds = new Set(
-    next.map((entry) => (typeof entry === "string" ? entry : entry.id)),
-  );
+  const survivingIds = new Set(next.map((entry) => entry.id));
 
   return aliasEntries(previous).flatMap(({ alias, id }) =>
     survivingNames.has(alias.toLowerCase()) || !survivingIds.has(id)

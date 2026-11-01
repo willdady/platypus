@@ -1,3 +1,5 @@
+import { z } from "zod";
+import { logger } from "../logger.ts";
 import { notify, onNotification } from "./notify-listener.ts";
 import { runRegistry } from "./run-registry.ts";
 import type { RunId } from "./types.ts";
@@ -24,20 +26,45 @@ export const cancelRun = async (
   await notify(CHANNEL, JSON.stringify({ runId, ...options }));
 };
 
-type Cancel = { runId: RunId; startedBefore?: number };
-
 /**
- * A cancel as `cancelRun` sends it, or undefined for anything else: the
- * handler runs inside the listener's connection, so a payload it cannot read
- * is dropped rather than thrown.
+ * The wire format of a cancel. Deliberately the whole of it: `cancelRun`
+ * writes exactly these keys, so a payload carrying another — a field from a
+ * version this instance does not know — is refused rather than half-read.
  */
-const parseCancel = (payload: string): Cancel | undefined => {
+const cancelSchema = z
+  .object({
+    runId: z.string().min(1),
+    startedBefore: z.number().optional(),
+  })
+  .strict();
+
+type Cancel = z.infer<typeof cancelSchema>;
+
+/** The payload as JSON, or undefined when it does not parse. */
+const readJson = (payload: string): unknown => {
   try {
-    const cancel = JSON.parse(payload) as Partial<Cancel> | null;
-    return typeof cancel?.runId === "string" ? (cancel as Cancel) : undefined;
+    return JSON.parse(payload);
   } catch {
     return undefined;
   }
+};
+
+/**
+ * A cancel as `cancelRun` sends it, or undefined for anything else. The
+ * handler runs inside the listener's connection, so a payload it cannot read
+ * is logged and dropped rather than thrown — one bad notification must not
+ * take the channel down.
+ */
+const parseCancel = (payload: string): Cancel | undefined => {
+  const result = cancelSchema.safeParse(readJson(payload));
+  if (!result.success) {
+    logger.warn(
+      { payload, issues: result.error.issues },
+      "Dropped a run_cancel payload in an unknown shape",
+    );
+    return undefined;
+  }
+  return result.data;
 };
 
 // A cancel sent while this instance's listener is down is missed; the run's

@@ -2,12 +2,17 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mockNanoid } from "../test-setup.ts";
 import { resetMockDb, seedDb, type Row, type Store } from "../test-utils.ts";
 
-vi.mock("../utils/cron.ts", () => ({
-  validateCronExpression: vi.fn((expr: string) => {
+vi.mock("../utils/cron.ts", () => {
+  const validateCronExpression = vi.fn((expr: string) => {
     if (expr === "invalid") return null;
     return new Date("2026-01-01T10:00:00Z");
-  }),
-}));
+  });
+  return {
+    validateCronExpression,
+    nextCronRunAt: (config: { cronExpression: string }) =>
+      validateCronExpression(config.cronExpression),
+  };
+});
 
 mockNanoid.mockReturnValue("trig-new");
 
@@ -362,21 +367,6 @@ describe("trigger module", () => {
         includeMemories: true,
         updatedAt: expect.any(Date) as unknown,
       });
-    });
-
-    it("refuses to update a stored row of an unknown type unless the update names one", async () => {
-      const fake = world({
-        trigger: [triggerRow({ type: "webhook", name: "Legacy" })],
-      });
-
-      await expect(
-        updateTrigger(ctx, "trig-1", { name: "Renamed" }, asTool),
-      ).rejects.toThrow(
-        new ValidationError(
-          "Invalid trigger type. Must be 'cron', 'event' or 'inbound'.",
-        ),
-      );
-      expect(fake.tables.trigger[0].name).toBe("Legacy");
     });
 
     it("recomputes nextRunAt when a cron trigger's config changes", async () => {
@@ -1054,7 +1044,7 @@ describe("trigger module", () => {
       );
     });
 
-    it("answers a malformed stored config with a ValidationError, not a crash", async () => {
+    it("reports a malformed stored config by naming the pair, not reading it as no inputs", async () => {
       world({
         trigger: [
           triggerRow({
@@ -1066,7 +1056,7 @@ describe("trigger module", () => {
       });
 
       await expect(regenerateTriggerToken(ctx, "trig-1")).rejects.toThrow(
-        ValidationError,
+        /Trigger 'trig-1' has a malformed 'inbound' type\/config pair/,
       );
     });
 

@@ -703,7 +703,7 @@ describe("KanbanBoard transport", () => {
     }[] = [
       {
         name: "save",
-        method: "PUT",
+        method: "PATCH",
         perform: async () => {
           fireEvent.click(screen.getByText("A card"));
           fireEvent.click(await screen.findByRole("button", { name: "Save" }));
@@ -782,7 +782,7 @@ describe("KanbanBoard transport", () => {
         expect(updateUrl).toBe(
           "http://test/organizations/org1/workspaces/ws1/boards/board-1/cards/card-1",
         );
-        expect(update.method).toBe("PUT");
+        expect(update.method).toBe("PATCH");
         expect(moveUrl).toBe(
           "http://test/organizations/org1/workspaces/ws1/boards/board-1/cards/card-1/move",
         );

@@ -91,7 +91,12 @@ vi.mock("@daytonaio/sdk", () => ({
   SandboxState: { STARTED: "started", STARTING: "starting" },
 }));
 
-import { createDaytonaSandboxBackend } from "./backend.ts";
+import {
+  createDaytonaSandboxBackend,
+  daytonaPluginConfigSchema,
+  type DaytonaPluginConfig,
+  type DaytonaPluginCredentials,
+} from "./backend.ts";
 import { makeFakePluginLogger } from "../../test-utils.ts";
 import type { SandboxContext } from "../../sandbox/types.ts";
 
@@ -103,11 +108,13 @@ const ctx: SandboxContext = {
 const callOptions = { signal: new AbortController().signal };
 
 const makeBackend = (
-  config: Record<string, unknown> = {},
-  credentials: Record<string, unknown> = {},
+  config: Partial<DaytonaPluginConfig> = {},
+  credentials: Partial<DaytonaPluginCredentials> = {},
 ) =>
   createDaytonaSandboxBackend({
-    config,
+    // Parse as the loader does at boot: the adapter now receives the schema's
+    // output, so an invalid block fails here exactly as it would at startup.
+    config: daytonaPluginConfigSchema.parse(config),
     credentials: { apiKey: "dtn_test", ...credentials },
     logger: makeFakePluginLogger(),
   });

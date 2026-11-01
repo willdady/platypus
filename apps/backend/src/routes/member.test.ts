@@ -229,13 +229,22 @@ describe("Member Routes", () => {
     it("removes a member from the organization", async () => {
       const fake = world([membership("m1", "u1", "member")]);
 
-      const res = await send("DELETE", "m1");
+      const res = await send("DELETE", "m1", { workspaces: [] });
 
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({
         message: "Member removed from organization",
       });
       expect(ids(fake)).toEqual(["m-self", "m-other"]);
+    });
+
+    it("400s when the body omits workspaces", async () => {
+      const fake = world([membership("m1", "u1", "member")]);
+
+      const res = await send("DELETE", "m1");
+
+      expect(res.status).toBe(400);
+      expect(ids(fake)).toContain("m1");
     });
 
     it("refuses to remove a member without a decision for each Workspace they own", async () => {
@@ -267,7 +276,7 @@ describe("Member Routes", () => {
     it("removes an admin while another admin remains", async () => {
       const fake = world([membership("m1", "u1", "admin")]);
 
-      const res = await send("DELETE", "m1");
+      const res = await send("DELETE", "m1", { workspaces: [] });
 
       expect(res.status).toBe(200);
       expect(ids(fake)).not.toContain("m1");
@@ -276,7 +285,7 @@ describe("Member Routes", () => {
     it("returns 404 for a member of another organization", async () => {
       const fake = world();
 
-      const res = await send("DELETE", "m-other");
+      const res = await send("DELETE", "m-other", { workspaces: [] });
 
       expect(res.status).toBe(404);
       expect(ids(fake)).toContain("m-other");
@@ -285,7 +294,7 @@ describe("Member Routes", () => {
     it("refuses to remove yourself", async () => {
       const fake = world([membership("m1", "u1", "admin")]);
 
-      const res = await send("DELETE", "m-self");
+      const res = await send("DELETE", "m-self", { workspaces: [] });
 
       expect(res.status).toBe(400);
       expect(await res.json()).toEqual({
@@ -303,7 +312,7 @@ describe("Member Routes", () => {
         ],
       });
 
-      const res = await send("DELETE", "m1");
+      const res = await send("DELETE", "m1", { workspaces: [] });
 
       expect(res.status).toBe(409);
       expect(await res.json()).toEqual({

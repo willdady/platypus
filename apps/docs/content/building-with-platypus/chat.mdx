@@ -399,10 +399,17 @@ that uses tools works in steps: each tool the model calls, and each reply it
 writes after getting the result back, is one step. A turn only gets so many of
 them, and reaching that number stops the turn wherever it had got to.
 
-The reply then ends without an answer — often with a Tool row and nothing after
-it. A muted line appears under the message reading **Response cut short at the
-step limit.** Like the marker above, it is stored with the message and is still
-there when you reload the Chat.
+On the last step it is allowed, the model is told the turn is about to end and
+asked to answer from what it has gathered, so a turn that has been researching
+usually ends with an answer rather than a dangling Tool row. That step counts as
+one of the allowed steps — the turn still makes at most **Max steps** calls.
+
+If it calls a tool again instead, the turn ends there. The reply then ends
+without an answer — often with a Tool row and nothing after it — and a muted line
+appears under the message reading
+**Response cut short at the step limit. Raise Max steps to let it finish.** Like
+the marker above, it is stored with the message and is still there when you
+reload the Chat.
 
 The two markers name different limits. **Output limit** means the model ran out
 of room to write the reply it was writing; **step limit** means it ran out of
@@ -410,8 +417,9 @@ steps before the work was done. For a Chat that uses an Agent, the number of
 steps is that Agent's **Max steps** — see
 [Tune generation](/building-with-platypus/agents#tune-generation). For a Chat
 that picks a Provider and model directly, it is **Max steps** in Chat Settings,
-described below. Asking for less in one message, so fewer tool calls are
-needed, is the other way to stay under it.
+described below. Raising that number gives the next turn more room; asking for
+less in one message, so fewer tool calls are needed, is the other way to stay
+under it.
 
 ## How full the conversation is
 

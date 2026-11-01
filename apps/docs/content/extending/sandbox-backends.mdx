@@ -154,10 +154,10 @@ transcript as though it had.
   billed sandbox minute for an answer nobody will read.
 </Callout>
 
-From `apiVersion: 3` the argument is required, so read `options.signal`
-without a `?.`. An adapter written before it existed declares two parameters,
-still satisfies `SandboxBackend`, and still works — Platypus passes the third
-argument regardless and your method ignores it.
+From `apiVersion: 3` on the argument is required, so read `options.signal`
+without a `?.` — v4 keeps it required. An adapter written before it existed
+declares two parameters, still satisfies `SandboxBackend`, and still works —
+Platypus passes the third argument regardless and your method ignores it.
 
 `AbortSignal` is a platform global rather than something the SDK declares, so a
 `tsconfig.json` with `"lib": ["esnext"]` and no `@types/node` reports `Cannot
@@ -178,7 +178,9 @@ Add an entry to `contributes.sandboxBackends`. A
   deploy-time block, when the allowed shape depends on what the Operator
   configured. Read the allowed shape off `plugin.config`; `plugin.credentials`
   and `plugin.logger` are there too, so the factory can say why it refused a
-  value.
+  value. Declare `PlatypusPlugin<Config, Credentials>` on the manifest, alongside
+  the schemas that produce them, and both arrive narrowed — core parsed them once
+  at boot, so there is no cast and nothing to re-parse.
 - **`credentialsSchema`** — a Zod schema for the secret per-Workspace material
   (API tokens, private keys).
 - **`create`** — returns your adapter, given the validated per-Workspace config

@@ -35,7 +35,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useState, useEffect, useRef } from "react";
 import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
 import { useRouter } from "next/navigation";
-import { type MCP } from "@platypus/schemas";
+import { type MCP, type McpResponse } from "@platypus/schemas";
 import { joinUrl } from "@/lib/utils";
 import { scopedPath, writeAt, type Serialized } from "@/lib/api-write";
 import { toastGuidanceOrError } from "@/lib/apply-write-outcome";
@@ -55,10 +55,9 @@ import {
 } from "@/lib/constants";
 import { orgRoutes, workspaceRoutes } from "@/lib/routes";
 
-type McpRecord = Serialized<MCP> & {
-  oauthAuthorized?: boolean;
-  headers?: Record<string, string>;
-};
+// The API's response shape already carries the OAuth state, the request
+// credentials' optional values, and the scope.
+type McpResponseView = Serialized<McpResponse>;
 
 type McpFormData = Omit<
   MCP,
@@ -174,7 +173,7 @@ function McpForm({
   } = useEntityForm<
     McpFormData,
     { id: string; oauthClientId?: string | null },
-    McpRecord
+    McpResponseView
   >({
     initialData: {
       name: "",
@@ -206,9 +205,6 @@ function McpForm({
     },
     retractableFields: RETRACTABLE_FIELDS,
     buildPayload: (data) => ({
-      // Scope discriminator — the backend routes also enforce this from the
-      // URL, but sending it keeps the create payload self-describing.
-      ...(workspaceId ? { workspaceId } : { organizationId: orgId }),
       name: data.name,
       url: data.url,
       headers: rowsToRecord(data.headerRows, undefined),
@@ -318,17 +314,18 @@ function McpForm({
         name: formData.name,
       };
 
-      // For OAuth, include mcpId so the backend can use stored tokens
-      if (formData.authType === "OAuth" && mcpId) {
-        payload.mcpId = mcpId;
-      }
+      // A stored MCP is addressed in the path, so its saved OAuth tokens and
+      // name are available; an unsaved one is the anonymous test.
+      const testUrl = mcpId
+        ? joinUrl(backendUrl, `${collectionUrl}/${mcpId}/test`)
+        : joinUrl(backendUrl, `${collectionUrl}/test`);
 
       const outcome = await writeAt<{
         success: boolean;
         toolNames?: string[];
         invalidToolNames?: string[];
         error?: string;
-      }>(joinUrl(backendUrl, `${collectionUrl}/test`), {
+      }>(testUrl, {
         method: "POST",
         data: payload,
       });

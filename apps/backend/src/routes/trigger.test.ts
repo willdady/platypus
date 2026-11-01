@@ -8,11 +8,14 @@ import {
 } from "../test-utils.ts";
 
 const { mockValidateCronExpression } = vi.hoisted(() => ({
-  mockValidateCronExpression: vi.fn(),
+  mockValidateCronExpression:
+    vi.fn<(cronExpression: string, timezone: string) => Date | null>(),
 }));
 
 vi.mock("../utils/cron.ts", () => ({
   validateCronExpression: mockValidateCronExpression,
+  nextCronRunAt: (config: { cronExpression: string; timezone: string }) =>
+    mockValidateCronExpression(config.cronExpression, config.timezone),
 }));
 
 mockNanoid.mockReturnValue("trig-new");
@@ -126,6 +129,14 @@ describe("Trigger Routes", () => {
           lastRunStartedAt: "2026-01-02T09:00:00.000Z",
         },
       ]);
+    });
+
+    it("rejects an unknown query key", async () => {
+      stubAuthLookups();
+
+      const res = await app.request(`${baseUrl}?includeFired=true&foo=1`);
+
+      expect(res.status).toBe(400);
     });
 
     it("never returns an Inbound Trigger's token hash", async () => {
@@ -401,7 +412,7 @@ describe("Trigger Routes", () => {
       ]);
 
       const res = await app.request(`${baseUrl}/trig-1`, {
-        method: "PUT",
+        method: "PATCH",
         body: JSON.stringify({
           name: "Updated",
           config: {
@@ -422,7 +433,7 @@ describe("Trigger Routes", () => {
       mockDb.limit.mockResolvedValueOnce([]); // existing not found
 
       const res = await app.request(`${baseUrl}/trig-missing`, {
-        method: "PUT",
+        method: "PATCH",
         body: JSON.stringify({ name: "x" }),
         headers: { "Content-Type": "application/json" },
       });
@@ -436,7 +447,7 @@ describe("Trigger Routes", () => {
         .mockResolvedValueOnce([]); // new agent not found
 
       const res = await app.request(`${baseUrl}/trig-1`, {
-        method: "PUT",
+        method: "PATCH",
         body: JSON.stringify({ agentId: "agent-other" }),
         headers: { "Content-Type": "application/json" },
       });
@@ -453,7 +464,7 @@ describe("Trigger Routes", () => {
         .mockResolvedValueOnce([]); // new agent not found
 
       const res = await app.request(`${baseUrl}/trig-missing`, {
-        method: "PUT",
+        method: "PATCH",
         body: JSON.stringify({ agentId: "agent-other" }),
         headers: { "Content-Type": "application/json" },
       });
@@ -477,7 +488,7 @@ describe("Trigger Routes", () => {
       ]);
 
       const res = await app.request(`${baseUrl}/trig-2`, {
-        method: "PUT",
+        method: "PATCH",
         body: JSON.stringify({ config: newConfig }),
         headers: { "Content-Type": "application/json" },
       });
@@ -496,7 +507,7 @@ describe("Trigger Routes", () => {
       ]);
 
       const res = await app.request(`${baseUrl}/trig-1`, {
-        method: "PUT",
+        method: "PATCH",
         body: JSON.stringify({
           type: "event",
           config: { events: ["card.created"] },
@@ -523,7 +534,7 @@ describe("Trigger Routes", () => {
       ]);
 
       const res = await app.request(`${baseUrl}/trig-1`, {
-        method: "PUT",
+        method: "PATCH",
         body: JSON.stringify({ enabled: false }),
         headers: { "Content-Type": "application/json" },
       });
@@ -546,7 +557,7 @@ describe("Trigger Routes", () => {
       ]);
 
       const res = await app.request(`${baseUrl}/trig-1`, {
-        method: "PUT",
+        method: "PATCH",
         body: JSON.stringify({ includeMemories: true }),
         headers: { "Content-Type": "application/json" },
       });

@@ -109,9 +109,13 @@ const findMessage = async (chatId: string, id: string) => {
   return row;
 };
 
-/** What a `POST /chat` asks for, beside the turn's generation settings. */
+/**
+ * What a `POST …/chat/:chatId/turns` asks for, beside the turn's generation
+ * settings.
+ */
 export type TurnTarget =
   | {
+      trigger: "submit";
       message: { id: string; role: "user"; parts: unknown[] };
       parentId: string | null;
     }
@@ -244,7 +248,7 @@ export const resolveTurn = async ({
   activeLeafId?: string | null;
   request: TurnTarget;
 }): Promise<ResolvedTurn> => {
-  if ("trigger" in request && request.trigger === "respond-to-approvals") {
+  if (request.trigger === "respond-to-approvals") {
     const target = owned
       ? await findMessage(chatId, request.messageId)
       : undefined;
@@ -285,7 +289,7 @@ export const resolveTurn = async ({
     };
   }
 
-  if ("trigger" in request) {
+  if (request.trigger === "regenerate-message") {
     const target = owned
       ? await findMessage(chatId, request.messageId)
       : undefined;

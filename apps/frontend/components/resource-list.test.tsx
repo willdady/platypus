@@ -359,13 +359,12 @@ describe.each(RESOURCES)(
 
         await waitFor(() =>
           expect(fetchMock).toHaveBeenCalledWith(
-            "http://test/organizations/org1/attachments",
+            "http://test/organizations/org1/workspaces/ws1/attachments",
             expect.objectContaining({
               method: "POST",
               body: JSON.stringify({
                 resourceType,
                 resourceId: item.id,
-                workspaceId: "ws1",
               }),
             }),
           ),

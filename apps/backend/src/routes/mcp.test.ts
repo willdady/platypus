@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
+  insertTimestamps,
   mockSession,
   resetMockDb,
   seedDb,
@@ -48,28 +49,31 @@ describe("MCP Routes", () => {
     } = {},
   ): FakeDb => {
     const { role = "admin", mcpSelfManagement = false, rows = {} } = options;
-    return seedDb({
-      organization_member: [
-        { id: "m1", userId: "user-1", organizationId: orgId, role },
-      ],
-      workspace: [
-        {
-          id: workspaceId,
-          name: "Alpha",
-          organizationId: orgId,
-          ownerId: "user-1",
-          mcpSelfManagement,
-        },
-        {
-          id: "ws-2",
-          name: "Beta",
-          organizationId: orgId,
-          ownerId: "user-1",
-          mcpSelfManagement,
-        },
-      ],
-      ...rows,
-    });
+    return seedDb(
+      {
+        organization_member: [
+          { id: "m1", userId: "user-1", organizationId: orgId, role },
+        ],
+        workspace: [
+          {
+            id: workspaceId,
+            name: "Alpha",
+            organizationId: orgId,
+            ownerId: "user-1",
+            mcpSelfManagement,
+          },
+          {
+            id: "ws-2",
+            name: "Beta",
+            organizationId: orgId,
+            ownerId: "user-1",
+            mcpSelfManagement,
+          },
+        ],
+        ...rows,
+      },
+      { defaults: { mcp: insertTimestamps() } },
+    );
   };
 
   /** An MCP owned by this Workspace. */
@@ -81,6 +85,8 @@ describe("MCP Routes", () => {
     authType: "None",
     organizationId: null,
     workspaceId,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    updatedAt: new Date("2026-01-01T00:00:00.000Z"),
     ...over,
   });
 
@@ -93,6 +99,8 @@ describe("MCP Routes", () => {
     authType: "None",
     organizationId: orgId,
     workspaceId: null,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    updatedAt: new Date("2026-01-01T00:00:00.000Z"),
     ...over,
   });
 
@@ -117,7 +125,6 @@ describe("MCP Routes", () => {
       name: "New MCP",
       url: "http://mcp.com",
       authType: "None",
-      workspaceId,
     };
 
     const post = (payload: unknown = createBody) =>
@@ -131,7 +138,13 @@ describe("MCP Routes", () => {
 
       expect(res.status).toBe(201);
       expect(await res.json()).toEqual(
-        expect.objectContaining({ name: "New MCP", url: "http://mcp.com" }),
+        expect.objectContaining({
+          name: "New MCP",
+          url: "http://mcp.com",
+          scope: "workspace",
+          bearerTokenSet: { configured: false },
+          headersSet: { configured: false },
+        }),
       );
       expect(fake.tables.mcp).toEqual([
         expect.objectContaining({
@@ -388,7 +401,13 @@ describe("MCP Routes", () => {
       const res = await put("mcp-1");
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual(
-        expect.objectContaining({ id: "mcp-1", name: "Renamed" }),
+        expect.objectContaining({
+          id: "mcp-1",
+          name: "Renamed",
+          scope: "workspace",
+          bearerTokenSet: { configured: false },
+          headersSet: { configured: false },
+        }),
       );
       expect(fake.tables.mcp[0]).toMatchObject({
         name: "Renamed",
@@ -487,12 +506,16 @@ describe("MCP Routes", () => {
       mockSession();
       world();
 
-      const res = await probe({ url: "http://mcp.com", authType: "None" });
+      const res = await probe({
+        url: "http://mcp.com",
+        authType: "None",
+        name: "My Server",
+      });
 
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({
         success: true,
-        toolNames: ["tool1"],
+        toolNames: ["my_server__tool1"],
         invalidToolNames: [],
       });
     });
@@ -528,11 +551,10 @@ describe("MCP Routes", () => {
         },
       });
 
-      const res = await probe({
-        url: "http://mcp.com",
-        authType: "OAuth",
-        mcpId: "mcp-org",
-      });
+      const res = await app.request(
+        `${baseUrl}/mcp-org/test`,
+        json("POST", { url: "http://mcp.com", authType: "OAuth" }),
+      );
 
       expect(res.status).toBe(200);
       // Namespaced under the stored row's slug: the probe used the resolved MCP.
@@ -547,11 +569,10 @@ describe("MCP Routes", () => {
       mockSession();
       world({ rows: { mcp: [sharedMcp()], attachment: [] } });
 
-      const res = await probe({
-        url: "http://mcp.com",
-        authType: "OAuth",
-        mcpId: "mcp-org",
-      });
+      const res = await app.request(
+        `${baseUrl}/mcp-org/test`,
+        json("POST", { url: "http://mcp.com", authType: "OAuth" }),
+      );
 
       expect(res.status).toBe(404);
       expect(await res.json()).toEqual({ error: "MCP not found" });
@@ -658,6 +679,18 @@ describe("MCP Routes", () => {
       });
 
       expect(res.status).toBe(404);
+    });
+
+    it("rejects an unknown query key", async () => {
+      mockSession();
+      world({ rows: { mcp: [oauthMcp] } });
+
+      const res = await app.request(`${authorizeUrl}?force=true&foo=1`, {
+        method: "POST",
+      });
+
+      expect(res.status).toBe(400);
+      expect(mcpAuth).not.toHaveBeenCalled();
     });
   });
 
