@@ -192,6 +192,7 @@ const baseWorkspace = {
 const baseInput = {
   orgId: "org-1",
   workspaceId: "ws-1",
+  sessionId: "chat-1",
   user: { id: "user-1", name: "Test User" },
   messages: [],
   origin: "http://localhost:4000",
@@ -206,6 +207,35 @@ describe("chat-execution", () => {
   });
 
   describe("prepareChatTurn", () => {
+    it("resolves a Provider Header placeholder from the turn's session id", async () => {
+      const provider = {
+        ...baseProvider,
+        apiMode: "responses" as const,
+        headers: { "x-session": "sess-${SESSION_ID}" },
+      };
+      const queries = createInMemoryChatTurnQueries({
+        workspaces: [baseWorkspace],
+        agents: [baseAgent],
+        providers: [provider],
+      });
+
+      const turn = await prepareChatTurn(
+        {
+          ...baseInput,
+          sessionId: "chat-42",
+          request: { agentId: baseAgent.id },
+        },
+        queries,
+      );
+
+      const [config] = mockCreateOpenAI.creator.mock.calls[0] as unknown as [
+        { headers: Record<string, string> },
+      ];
+      expect(config.headers).toEqual({ "x-session": "sess-chat-42" });
+
+      await turn.dispose();
+    });
+
     it("Agent selection produces resolved IDs and a system prompt that surfaces the Agent's Skills", async () => {
       const agentWithSkill = { ...baseAgent, skillIds: ["skill-1"] };
       const queries = createInMemoryChatTurnQueries({
@@ -690,6 +720,49 @@ describe("chat-execution", () => {
       expect(turn.stream.system).toContain("Research Agent");
       expect(turn.stream.system).toContain("Shared Agent");
       expect(turn.stream.system).not.toContain("## Unavailable Sub-Agents");
+    });
+
+    it("resolves a delegated sub-agent's Provider headers with the parent Chat's session id", async () => {
+      const subProvider = {
+        ...baseProvider,
+        id: "p-sub",
+        apiKey: "sk-sub",
+        apiMode: "responses" as const,
+        headers: { "x-session": "sess-${SESSION_ID}" },
+      };
+      const subAgent = {
+        ...baseAgent,
+        id: "sub-plan",
+        name: "Research Agent",
+        providerId: "p-sub",
+      };
+      const parent = { ...baseAgent, subAgentIds: ["sub-plan"] };
+
+      const queries = createInMemoryChatTurnQueries({
+        workspaces: [baseWorkspace],
+        agents: [parent, subAgent],
+        providers: [baseProvider, subProvider],
+      });
+
+      const turn = await prepareChatTurn(
+        {
+          ...baseInput,
+          sessionId: "chat-42",
+          request: { agentId: parent.id },
+        },
+        queries,
+      );
+
+      const subAgentConfig = (
+        mockCreateOpenAI.creator.mock.calls as unknown as [
+          { apiKey: string; headers: Record<string, string> },
+        ][]
+      )
+        .map(([config]) => config)
+        .find((config) => config.apiKey === "sk-sub");
+      expect(subAgentConfig?.headers).toEqual({ "x-session": "sess-chat-42" });
+
+      await turn.dispose();
     });
 
     // A parent with MCP-backed delegates used to connect to — and warn about —
@@ -1520,6 +1593,7 @@ describe("chat-execution", () => {
               request: { providerId: baseProvider.id, modelId: "alias:vision" },
               orgId: "org-1",
               workspaceId: "ws-1",
+              sessionId: "chat-1",
             },
             queries,
           ),
@@ -3209,6 +3283,7 @@ describe("validateTurnAttachments", () => {
           messages: [fileMessage("application/zip", "bundle.zip")],
           orgId: "org-1",
           workspaceId: "ws-1",
+          sessionId: "chat-1",
         },
         queries(),
       ),
@@ -3234,6 +3309,7 @@ describe("validateTurnAttachments", () => {
           ],
           orgId: "org-1",
           workspaceId: "ws-1",
+          sessionId: "chat-1",
         },
         queries(),
       ),
@@ -3254,6 +3330,7 @@ describe("validateTurnAttachments", () => {
           ],
           orgId: "org-1",
           workspaceId: "ws-1",
+          sessionId: "chat-1",
         },
         queries(),
       ),
@@ -3271,6 +3348,7 @@ describe("validateTurnAttachments", () => {
           ],
           orgId: "org-1",
           workspaceId: "ws-1",
+          sessionId: "chat-1",
         },
         queries(),
       ),
@@ -3292,6 +3370,7 @@ describe("validateTurnAttachments", () => {
             messages: [fileMessage("image/png", "a.png")],
             orgId: "org-1",
             workspaceId: "ws-1",
+            sessionId: "chat-1",
           },
           queries({
             providerType: "Anthropic",
@@ -3313,6 +3392,7 @@ describe("validateTurnAttachments", () => {
           messages: [fileMessage("application/zip", "bundle.zip")],
           orgId: "org-1",
           workspaceId: "ws-1",
+          sessionId: "chat-1",
         },
         queries(),
       ),
@@ -3333,6 +3413,7 @@ describe("validateTurnAttachments", () => {
           ],
           orgId: "org-1",
           workspaceId: "ws-1",
+          sessionId: "chat-1",
         },
         queries(),
       ),

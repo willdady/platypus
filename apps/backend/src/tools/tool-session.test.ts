@@ -59,6 +59,7 @@ const scope: ToolSessionScope = {
   userId: "user-1",
   frontendUrl: undefined,
   timezone: "Australia/Melbourne",
+  sessionId: "chat-1",
 };
 
 /** The Agent a session resolves for, with the ids it was granted. */
@@ -199,6 +200,7 @@ describe("openToolSession", () => {
         userId: "user-1",
         frontendUrl: undefined,
         timezone: "Australia/Melbourne",
+        sessionId: "chat-1",
         // The scope's fields, plus the one capability on the context.
         registerCloser: expect.any(Function) as unknown,
       },

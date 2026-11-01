@@ -31,6 +31,7 @@ import {
   MAX_TITLE_FAILURES,
   toKebabCase,
 } from "./chat-metadata.ts";
+import { openProvider } from "./provider.ts";
 import type { PlatypusUIMessage } from "../types.ts";
 
 const userMessage: PlatypusUIMessage = {
@@ -124,6 +125,11 @@ describe("generateChatMetadata", () => {
     const result = await generateChatMetadata(params);
 
     expect(result).toEqual(updated);
+    // Titling is a Provider call inside the Chat, so its Header placeholder
+    // resolves to the Chat's id.
+    expect(openProvider).toHaveBeenCalledWith(provider, {
+      sessionId: "chat-1",
+    });
     // Not the Chat's memory snapshot, which titling never reads.
     expect(Object.keys(mockDb.select.mock.calls[0][0] as object)).not.toContain(
       "memorySnapshot",

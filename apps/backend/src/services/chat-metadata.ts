@@ -160,7 +160,7 @@ export const generateChatMetadata = async (
   `);
   const existingTags = existingTagsResult.rows.map((row) => row.tag as string);
 
-  const model = openProvider(provider).languageModel(
+  const model = openProvider(provider, { sessionId: chatId }).languageModel(
     pointerSettingModelId(provider.taskModelId),
   );
 

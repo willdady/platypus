@@ -117,6 +117,19 @@ A Provider also carries the models used for **Memory** (extraction and
 embeddings), so background memory features have a model to call. Like
 `taskModelId`, both name a real model id and reject a Model alias.
 
+### Header placeholders
+
+A custom header's **value** can carry a placeholder, replaced on every request
+with a value from the work being done. The only one is `${SESSION_ID}`:
+
+| Placeholder     | Replaced with                                                                                                                                                                                                                                                                        |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `${SESSION_ID}` | The **Chat**'s id, for anything done in that Chat — its turns, the Sub-Agents they delegate to, its title, its Memories and its Transcript summary. For a headless **Trigger** run, that run's id instead, so a Chat keeps one session upstream and each Trigger run starts its own. |
+
+A value may contain the placeholder more than once, and header _names_ are never
+substituted. A `$` not followed by `{` is sent as written. Any other `${…}` token
+is rejected when the Provider is saved.
+
 <Callout type="info">
   The distinction between a **chat turn** (running the selected Agent/model to
   reply to a user) and a **one-shot Provider execution** (like title generation,

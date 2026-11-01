@@ -765,6 +765,7 @@ const resolveSummariserModel = async (
   source: SummariserSource,
   orgId: string,
   workspaceId: string,
+  sessionId: string,
   queries: TranscriptSummaryQueries,
 ): Promise<{
   model: LanguageModel;
@@ -787,7 +788,7 @@ const resolveSummariserModel = async (
       : { providerId: source.providerId, modelId: source.modelId };
   const { plan, resolvedModelId } = await resolveGenerationPlan(
     generation,
-    { orgId, workspaceId },
+    { orgId, workspaceId, sessionId },
     queries,
   );
   return {
@@ -1032,6 +1033,7 @@ export const afterTurn = (args: {
       source,
       orgId,
       workspaceId,
+      chatId,
       drizzleTranscriptSummaryQueries,
     );
     return takeFromReading({
@@ -1089,6 +1091,7 @@ export const compactTranscript = async (args: {
       source,
       orgId,
       workspaceId,
+      chatId,
       drizzleTranscriptSummaryQueries,
     );
     return takeTranscriptSummary({

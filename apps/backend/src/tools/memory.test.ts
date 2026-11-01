@@ -51,7 +51,7 @@ const mockEmbeddingConfig = (
   if (provider) mockDb.limit.mockResolvedValueOnce([provider]);
 };
 
-const createTools = () => createMemoryTools(workspaceId, userId);
+const createTools = () => createMemoryTools(workspaceId, userId, "chat-1");
 
 describe("createMemoryTools", () => {
   let tools: Awaited<ReturnType<typeof createMemoryTools>>;
@@ -161,6 +161,7 @@ describe("createMemoryTools", () => {
         EMBEDDING_PROVIDER,
         "text-embedding-3-small",
         "meeting notes",
+        "chat-1",
         // The turn's signal, so a cancelled turn stops the embedding call.
         signal,
       );

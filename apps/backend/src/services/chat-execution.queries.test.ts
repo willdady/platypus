@@ -131,6 +131,7 @@ const turnFor = (agentId: string, overrides: Record<string, unknown> = {}) =>
     orgId: "org-1",
     workspaceId: "ws-1",
     user: { id: "user-1", name: "Test User" },
+    sessionId: "chat-1",
     messages: [],
     origin: "http://localhost:4000",
     request: { agentId },

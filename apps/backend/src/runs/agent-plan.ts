@@ -64,9 +64,13 @@ export type GenerationSource =
 /**
  * Where a generation plan resolves — the half of a `WorkspaceScope` a
  * data-access lookup actually reads (the currency `WorkspaceScope`-derived
- * types share since commit b8c3a3f).
+ * types share since commit b8c3a3f), plus the request-scoped session id a
+ * Provider Header placeholder resolves from.
  */
-export type GenerationPlanScope = ScopeContext;
+export type GenerationPlanScope = ScopeContext & {
+  /** The Chat's id, or the Trigger run's id for a headless run. */
+  sessionId: string;
+};
 
 /**
  * The data-access surface `resolveGenerationPlan` depends on — a single
@@ -181,7 +185,9 @@ export const resolveGenerationPlan = async (
     );
   }
 
-  const model = openProvider(provider).languageModel(resolvedModelId);
+  const model = openProvider(provider, {
+    sessionId: scope.sessionId,
+  }).languageModel(resolvedModelId);
   const maxOutputTokens = maxOutputTokensForModel(provider, resolvedModelId);
   const contextWindow = contextWindowForModel(provider, resolvedModelId);
   const sampling = resolveSamplingSettings(samplingSource);
