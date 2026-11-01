@@ -244,6 +244,37 @@ describe("buildModelInvocation final-step instruction", () => {
     expect(last?.providerOptions).toEqual(BEDROCK_CACHE_POINT);
   });
 
+  // The point moves rather than accumulates: a conversation carrying one from
+  // an earlier step must end with exactly one point, on the instruction. A
+  // leftover mid-conversation point counts against Converse's checkpoint cap.
+  it("strips an earlier cache point so only the instruction carries one", async () => {
+    const cachePointOf = (message: ModelMessage | undefined) => {
+      const bedrock = (
+        message?.providerOptions as
+          { amazonBedrock?: { cachePoint?: { type: string } } } | undefined
+      )?.amazonBedrock;
+      return bedrock?.cachePoint;
+    };
+    const prepareStep = prepareStepOf(planOf({ maxSteps: 1 }));
+    const messages = toolResultMessages(4).map((message, index) =>
+      index === 1
+        ? { ...message, providerOptions: BEDROCK_CACHE_POINT }
+        : message,
+    );
+
+    const out = await prepareStep({ steps: [], stepNumber: 0, messages });
+    const carrying = out.messages!.filter(
+      (message) => cachePointOf(message) !== undefined,
+    );
+
+    expect(carrying).toHaveLength(1);
+    expect(carrying[0]).toBe(out.messages!.at(-1));
+    expect(cachePointOf(carrying[0])).toEqual(
+      BEDROCK_CACHE_POINT.amazonBedrock.cachePoint,
+    );
+    expect(cachePointOf(out.messages![1])).toBeUndefined();
+  });
+
   // Deliberate: the tool set and tool choice are identical to every earlier
   // step. Removing them would rewrite the cached `tools` prefix (ADR-0020) and
   // on Bedrock drop every tool from a request whose history still holds calls.

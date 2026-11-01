@@ -93,9 +93,9 @@ export const CUT_SHORT_NOTICE =
  * steps while the model was still working, so the reply is whatever it had
  * produced by then — often nothing after the last tool row. The model was told
  * on its last step to answer from what it had (issue #1730), so this means it
- * called a tool again instead, or had nothing left to say. **Max steps** is the
- * remedy on every turn that shows it: an Agent has the field, and a direct Chat
- * has the same setting in Chat Settings.
+ * called a tool again instead. **Max steps** is the remedy on every turn that
+ * shows it: an Agent has the field, and a direct Chat has the same setting in
+ * Chat Settings.
  */
 export const STEP_LIMIT_NOTICE =
   "Response cut short at the step limit. Raise Max steps to let it finish.";

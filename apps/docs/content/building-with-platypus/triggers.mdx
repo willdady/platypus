@@ -770,9 +770,7 @@ been fetching all along usually ends with something to read. That step counts as
 one of the allowed steps. If the run calls a tool again instead, it stops with
 work outstanding and still ends _Success_, because it did what it was allowed to
 do. It carries a muted line on **Trigger runs** reading **Run cut short at the
-step limit. Raise Max steps to let it finish.** That line also appears when the
-answer step ends without writing anything, so a run that stops at its ceiling
-never reads as a finished, empty reply.
+step limit. Raise Max steps to let it finish.**
 
 The step count in the run's stats (such as `25 steps`) is the count it reached,
 so a run history where every run stops at the same number is the shape to look

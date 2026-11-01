@@ -1138,26 +1138,6 @@ describe("the Step ceiling's answer step", () => {
       if (shape === "trigger") expect(result.text).toBe("answered");
     },
   );
-
-  // The fallback: a model that stops on the answer step without writing
-  // anything is still a turn cut off at its ceiling, and must not read as a
-  // finished, silent reply.
-  it.each(["chat", "delegate", "trigger"] as const)(
-    "records the cutoff when the %s's answer step writes nothing",
-    async (shape) => {
-      const plan = toolLoopPlan(
-        recordingModel([], (step) => (step < 2 ? toolStep(step) : stopStep())),
-      );
-
-      const result = await runShape(shape, plan);
-
-      expect(result.stoppedAtStepLimit).toBe(true);
-      expect(result.stats).toMatchObject({ stoppedAtStepLimit: true });
-      if (result.messages) {
-        expect(result.messages.at(-1)?.metadata?.stoppedAtStepLimit).toBe(true);
-      }
-    },
-  );
 });
 
 /** Drain a UI message stream branch into an array of its chunks. */

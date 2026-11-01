@@ -153,8 +153,8 @@ export type StreamedDriveResult = {
   failure?: string;
   /** The terminal finish hit the model's output ceiling. */
   truncated: boolean;
-  /** The model loop was stopped at its step ceiling with no answer: the model
-   *  was still asking to continue, or its answer step wrote nothing. */
+  /** The model loop was stopped at its step ceiling with the model still asking
+   *  to continue, so the answer is whatever it had produced by then. */
   stoppedAtStepLimit: boolean;
 };
 
@@ -347,8 +347,8 @@ type ModelLoopOutcome = {
   failure?: string;
   /** The terminal finish hit the model's output ceiling. */
   truncated: boolean;
-  /** The loop was stopped at its step ceiling with no answer: the model was
-   *  still asking to continue, or its answer step wrote nothing. */
+  /** The loop was stopped at its step ceiling with the model still asking to
+   *  continue, so the answer is whatever it had produced by then. */
   stoppedAtStepLimit: boolean;
   /** The answer the loop produced. */
   text: string;

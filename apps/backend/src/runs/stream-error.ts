@@ -40,28 +40,14 @@ const intendedToContinue = (finishReason: string | undefined): boolean =>
   finishReason === "tool-calls";
 
 /**
- * The model ended its step normally rather than asking to continue.
+ * The whole two-part rule for "the step ceiling stopped this loop", in one
+ * place: the model asked to continue, and the turn had no steps left to give it.
  *
- * The Step ceiling's **answer step** (issue #1730) writes nothing in the case
- * this names: the loop reached its last allowed call, the model stopped of its
- * own accord, and the turn is unanswered. A Provider that ended some other way —
- * an error, a content filter — is a different stop and is not one of these.
- */
-const endedWithoutAnswer = (finishReason: string | undefined): boolean =>
-  finishReason === "stop";
-
-/**
- * The whole rule for "the step ceiling stopped this loop", in one place: the
- * turn had no steps left to give, and either the model asked to continue or its
- * last permitted call — the one told to answer — wrote nothing.
- *
- * Both halves are required and neither is sufficient. The step count alone
- * flags a turn whose last allowed step happened to be its answer, which was
- * never cut short. The finish reason alone mislabels any other stop condition
- * that halts a tool loop — a no-progress abort ends on the same reason, below
- * the ceiling. Silence on the last step only counts where the loop reached the
- * ceiling and ended normally; a Provider that errored or filtered has a stop of
- * its own.
+ * Both halves are required and neither is sufficient. The finish reason alone
+ * mislabels any other stop condition that halts a tool loop — a no-progress
+ * abort ends on the same reason, below the ceiling. The step count alone flags a
+ * turn whose last allowed step happened to be its answer, which was never cut
+ * short.
  *
  * Stated once because both drive shapes reach it through the same metadata
  * extractor, which counts the per-step finish parts it sees. A rule written
@@ -75,17 +61,11 @@ export const stoppedAtStepCeiling = ({
   finishReason,
   steps,
   stepCeiling,
-  answerStepWroteText,
 }: {
   finishReason: string | undefined;
   steps: number;
   stepCeiling: number;
-  /** Whether the last permitted step wrote any prose. */
-  answerStepWroteText: boolean;
-}): boolean =>
-  steps >= stepCeiling &&
-  (intendedToContinue(finishReason) ||
-    (!answerStepWroteText && endedWithoutAnswer(finishReason)));
+}): boolean => steps >= stepCeiling && intendedToContinue(finishReason);
 
 const describeValidationFailure = (error: InvalidToolInputError): string => {
   const issues = findIssues(error.cause);

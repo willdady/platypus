@@ -115,14 +115,6 @@ export const createMessageMetadata = ({
   // finish parts this extractor already sees: the terminal finish carries no
   // step count of its own, and the run's own tally is not in scope here.
   let steps = 0;
-  // Whether the step currently being folded has written any prose, and whether
-  // the one before it did. The Step ceiling's answer step (issue #1730) is the
-  // last permitted call, so at the terminal finish the second says whether that
-  // call — the one told to answer — wrote anything. It is consulted only when
-  // the terminal finish is a normal stop; an aborted or errored run settles
-  // through its own path and never reaches the step-ceiling rule.
-  let stepWroteText = false;
-  let lastStepWroteText = false;
   // The running Token usage sum (issue #354) — folded across every step that
   // reported one, as opposed to `contextOccupancy`'s last-value replacement
   // right beside it. Its cached-input read and write counts are a breakdown of
@@ -139,11 +131,6 @@ export const createMessageMetadata = ({
   }: {
     part: TextStreamPart<ToolSet>;
   }): ChatMessageMetadata | undefined => {
-    // Any prose in the step being folded: the answer step's silence is read at
-    // the terminal finish below (issue #1730).
-    if (part.type === "text-delta" && part.text.trim() !== "") {
-      stepWroteText = true;
-    }
     if (part.type === "start") {
       const meta: ChatMessageMetadata = {};
       if (agentId) meta.agentId = agentId;
@@ -167,10 +154,6 @@ export const createMessageMetadata = ({
     // of magnitude higher than any single step's count.
     if (part.type === "finish-step") {
       steps += 1;
-      // The step that just finished is now the last one seen; the next step
-      // starts with no text of its own.
-      lastStepWroteText = stepWroteText;
-      stepWroteText = false;
       const meta: ChatMessageMetadata = {};
       const { inputTokens, outputTokens } = part.usage;
 
@@ -284,7 +267,6 @@ export const createMessageMetadata = ({
           finishReason: part.finishReason,
           steps,
           stepCeiling,
-          answerStepWroteText: lastStepWroteText,
         })
       ) {
         return { stoppedAtStepLimit: true };

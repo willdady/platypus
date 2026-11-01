@@ -289,8 +289,9 @@ export const buildModelInvocation = (
       maxSteps: plan.maxSteps,
     });
     // Always a `messages` override, never an empty object: Tool-result
-    // clearing (above) and the trailing cache point (below) both act on this
-    // array and both must survive a single pass. The cache point is attached
+    // clearing and Tool-input clearing (above), the answer-step instruction
+    // (above), and the trailing cache point (below) all act on this array and
+    // all must survive a single pass. The cache point is attached
     // to the final message here rather than at the call level because Bedrock
     // has no automatic mode — its point must follow the end of the conversation
     // as it grows, which only this per-step seam can track.

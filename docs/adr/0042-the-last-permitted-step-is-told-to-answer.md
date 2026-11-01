@@ -56,17 +56,13 @@ instruction on the only call, and no turn makes `maxSteps + 1` calls.
   every Provider type.
 - **A model that ignores it still cuts off visibly.** It calls a tool, the loop
   stops after that step, `stoppedAtStepLimit` is recorded and the "cut short at
-  the step limit" notice is shown exactly as before. A model that stops on the
-  answer step without writing anything is recorded the same way: the ceiling was
-  reached and the turn is unanswered, and the notice is the fallback rather than
-  a silent empty reply.
+  the step limit" notice is shown exactly as before.
 - **The terminal status does not change.** A **Trigger run** that reaches its
-  ceiling is still `succeeded`, including when the answer step writes nothing.
-  That is the counterpart of #1690 rather than a contradiction of it: an empty
-  **Trigger run** at the **Output ceiling** is a reply the Provider broke off
-  with nothing written, while a step-ceiling stop spent exactly the budget the
-  Operator set and did the work it was allowed to do. Both are told to the
-  reader; only the first is a failure.
+  ceiling is still `succeeded`. That is the counterpart of #1690 rather than a
+  contradiction of it: an empty **Trigger run** at the **Output ceiling** is a
+  reply the Provider broke off with nothing written, while a step-ceiling stop
+  spent exactly the budget the Operator set and did the work it was allowed to
+  do. Both are told to the reader; only the first is a failure.
 - **The notices now name the remedy**, not just the fact: "Raise Max steps to
   let it finish." The field exists in every shape — an Agent's, a Sub-Agent's
   own, and a direct Chat's setting.
