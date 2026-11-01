@@ -16,6 +16,7 @@ import {
   FIRED_ONE_OFF_TTL_DAYS,
   getTrigger as getTriggerService,
   listTriggers as listTriggersService,
+  narrowTriggerConfig,
   toPublicTrigger,
   updateTrigger,
 } from "../services/trigger.ts";
@@ -104,23 +105,26 @@ export function createTriggerTools(
         enabledOnly,
         includeFired: true,
       });
-      const triggers = rows.map((row) => ({
-        id: row.id,
-        name: row.name,
-        description: row.description,
-        agentId: row.agentId,
-        type: row.type,
-        enabled: row.enabled,
-        ...(row.type === "cron" && {
-          isOneOff: (row.config as CronTriggerConfig).isOneOff === true,
-        }),
-        nextRunAt: row.nextRunAt,
-        lastRunAt: row.lastRunAt,
-        firedAt: row.firedAt,
-        lastRunStatus: row.lastRunStatus,
-        lastRunStartedAt: row.lastRunStartedAt,
-        createdAt: row.createdAt,
-      }));
+      const triggers = rows.map((row) => {
+        const typed = narrowTriggerConfig(row);
+        return {
+          id: row.id,
+          name: row.name,
+          description: row.description,
+          agentId: row.agentId,
+          type: row.type,
+          enabled: row.enabled,
+          ...(typed.type === "cron" && {
+            isOneOff: typed.config.isOneOff === true,
+          }),
+          nextRunAt: row.nextRunAt,
+          lastRunAt: row.lastRunAt,
+          firedAt: row.firedAt,
+          lastRunStatus: row.lastRunStatus,
+          lastRunStartedAt: row.lastRunStartedAt,
+          createdAt: row.createdAt,
+        };
+      });
 
       return { triggers, count: triggers.length };
     },

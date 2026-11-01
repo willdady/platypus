@@ -137,10 +137,7 @@ export const announceTriggerRunsEnded = async (
     for (const run of runs) {
       const trigger = byId.get(run.triggerId);
       if (!trigger) continue;
-      const payload = terminalEvent(run, {
-        ...trigger,
-        type: trigger.type as TriggerType,
-      });
+      const payload = terminalEvent(run, trigger);
       if (!payload) continue;
       dispatchWebhookEvent(
         trigger.organizationId,

@@ -227,23 +227,14 @@ describe("recoverStuckChats", () => {
     // rather than fragments of it is what makes this a real test: it fails
     // if the comparison flips direction (a `>` would sweep every live turn
     // and spare every dead one), if the anchor moves off the heartbeat, or if
-    // the `running` guard is dropped. A row with no heartbeat yet falls back
-    // to `last_turn_at`, then `updated_at`, each reached only when the one
-    // before it is NULL.
+    // the `running` guard is dropped.
     const { sql: text, params } = render(captured.where);
     expect(text).toBe(
-      `("chat"."status" = $1 and ("chat"."run_heartbeat_at" < $2 or ` +
-        `("chat"."run_heartbeat_at" is null and ("chat"."last_turn_at" < $3 or ` +
-        `("chat"."last_turn_at" is null and "chat"."updated_at" < $4)))))`,
+      `("chat"."status" = $1 and "chat"."run_heartbeat_at" < $2)`,
     );
     // 12:00 − one minute: four missed 15-second heartbeats, whatever the
     // Chat per-run timeout.
-    expect(params).toEqual([
-      "running",
-      "2026-08-30T11:59:00.000Z",
-      "2026-08-30T11:59:00.000Z",
-      "2026-08-30T11:59:00.000Z",
-    ]);
+    expect(params).toEqual(["running", "2026-08-30T11:59:00.000Z"]);
   });
 
   it("does not wait out a long Chat per-run timeout", async () => {

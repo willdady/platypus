@@ -172,6 +172,9 @@ const seed = () =>
           modelId: "gpt-test",
           name: "Helper",
           description: "Internal",
+          toolSetIds: [],
+          skillIds: [],
+          subAgentIds: [],
         },
       ],
       a2a_endpoint: [

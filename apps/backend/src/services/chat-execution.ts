@@ -747,7 +747,7 @@ export const prepareChatTurn = async (
         agent && !memoryTools
           ? {
               ...agent,
-              toolSetIds: (agent.toolSetIds ?? []).filter(
+              toolSetIds: agent.toolSetIds.filter(
                 (id) => id !== MEMORY_TOOLSET_ID,
               ),
             }
@@ -788,7 +788,7 @@ export const prepareChatTurn = async (
         orgId,
         workspaceId,
         permittedSkillIds,
-        (agent?.toolSetIds ?? []).includes(SANDBOX_TOOLSET_ID),
+        agent?.toolSetIds.includes(SANDBOX_TOOLSET_ID) ?? false,
       );
       tools[READ_SKILL_FILE_TOOL_NAME] = createReadSkillFileTool(
         orgId,
@@ -1104,7 +1104,7 @@ const loadSkills = async (
   skills: Array<Pick<Skill, "name" | "description">>;
   permittedSkillIds: string[];
 }> => {
-  if (!agent?.skillIds || agent.skillIds.length === 0) {
+  if (!agent || agent.skillIds.length === 0) {
     return { skills: [], permittedSkillIds: [] };
   }
   return queries.getSkillsByIds(agent.skillIds, orgId, workspaceId);
@@ -1129,7 +1129,7 @@ const loadSubAgents = async (
   unavailableSubAgents: SubAgentFailure[];
   subAgentTools: Record<string, Tool>;
 }> => {
-  if (!agent?.subAgentIds || agent.subAgentIds.length === 0) {
+  if (!agent || agent.subAgentIds.length === 0) {
     return {
       subAgents: [],
       unavailableSubAgents: [],

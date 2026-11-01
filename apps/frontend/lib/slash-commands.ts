@@ -50,10 +50,10 @@ export type SlashCommandPickerProps = {
  */
 export function skillsForAgent<T extends { id: string }>(
   skills: T[],
-  skillIds: string[] | undefined,
+  skillIds: string[],
 ): T[] {
   const byId = new Map(skills.map((skill) => [skill.id, skill]));
-  return (skillIds ?? []).flatMap((id) => {
+  return skillIds.flatMap((id) => {
     const skill = byId.get(id);
     return skill ? [skill] : [];
   });

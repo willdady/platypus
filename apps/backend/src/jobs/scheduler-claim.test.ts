@@ -41,7 +41,11 @@ const { processDueTriggers, reapFiredOneOffTriggers, recoverStuckTriggers } =
 
 const NOW = new Date("2026-08-30T12:00:30.000Z");
 const minutesAgo = (m: number) => new Date(NOW.getTime() - m * 60_000);
-const hourly = { cronExpression: "0 * * * *", timezone: "UTC" };
+const hourly = {
+  cronExpression: "0 * * * *",
+  timezone: "UTC",
+  isOneOff: false,
+};
 
 let pg: PGlite;
 let db: ReturnType<typeof drizzle>;
@@ -195,7 +199,11 @@ describe("processDueTriggers", () => {
 
   it("runs a Trigger that waited for a slot once, scheduling from the claim", async () => {
     await seedTrigger("late", {
-      config: { cronExpression: "*/5 * * * *", timezone: "UTC" },
+      config: {
+        cronExpression: "*/5 * * * *",
+        timezone: "UTC",
+        isOneOff: false,
+      },
       nextRunAt: minutesAgo(20),
     });
 
@@ -241,7 +249,11 @@ describe("processDueTriggers", () => {
 
   it("leaves a recurring Trigger whose next slot cannot be computed unclaimed", async () => {
     await seedTrigger("bad", {
-      config: { cronExpression: "not a cron", timezone: "UTC" },
+      config: {
+        cronExpression: "not a cron",
+        timezone: "UTC",
+        isOneOff: false,
+      },
     });
 
     await processDueTriggers();

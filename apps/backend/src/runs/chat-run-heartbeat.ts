@@ -1,5 +1,6 @@
-import { and, isNull, lt, or } from "drizzle-orm";
+import { lt } from "drizzle-orm";
 import { chat as chatTable } from "../db/schema.ts";
+import type { ChatStatus } from "@platypus/schemas";
 
 /**
  * A Chat's run heartbeat (#1297).
@@ -12,9 +13,6 @@ import { chat as chatTable } from "../db/schema.ts";
  * a `running` Chat whose stamp is older than {@link RUN_HEARTBEAT_STALE_MS}
  * holds no run: the next claim takes it, the chat routes do not refuse on it,
  * and the recovery sweep marks it failed.
- *
- * A row that has run only before the column existed has no stamp, and is
- * judged on its turn's start instead (`last_turn_at`, else `updated_at`).
  */
 export const RUN_HEARTBEAT_INTERVAL_MS = 15_000;
 
@@ -26,34 +24,15 @@ export const runHeartbeatCutoff = (now: number = Date.now()): Date =>
   new Date(now - RUN_HEARTBEAT_STALE_MS);
 
 /**
- * SQL: the Chat's last sign of a live run is older than `cutoff`. Says nothing
- * about the status: pair it with one.
+ * SQL: the Chat's heartbeat is older than `cutoff`. Says nothing about the
+ * status: pair it with one.
  */
 export const chatRunStale = (cutoff: Date) =>
-  or(
-    lt(chatTable.runHeartbeatAt, cutoff),
-    and(
-      isNull(chatTable.runHeartbeatAt),
-      or(
-        lt(chatTable.lastTurnAt, cutoff),
-        and(isNull(chatTable.lastTurnAt), lt(chatTable.updatedAt, cutoff)),
-      ),
-    ),
-  );
+  lt(chatTable.runHeartbeatAt, cutoff);
 
 /** Whether a Chat row is held by a live run: `running`, with a fresh beat. */
 export const chatRunIsLive = (
-  chat: {
-    status: string;
-    runHeartbeatAt?: Date | null;
-    lastTurnAt?: Date | null;
-    updatedAt?: Date | null;
-  },
+  chat: { status: ChatStatus; runHeartbeatAt: Date },
   now: number = Date.now(),
-): boolean => {
-  if (chat.status !== "running") return false;
-  const lastSign = chat.runHeartbeatAt ?? chat.lastTurnAt ?? chat.updatedAt;
-  // No timestamp at all reads as live, as the SQL reads it: nothing proves
-  // the run dead.
-  return !lastSign || lastSign >= runHeartbeatCutoff(now);
-};
+): boolean =>
+  chat.status === "running" && chat.runHeartbeatAt >= runHeartbeatCutoff(now);

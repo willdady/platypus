@@ -69,7 +69,7 @@ export type SuperAdminOrgMembership = {
  * - admin: Can manage the organization and all workspaces within it
  * - member: Regular member who creates and owns their own workspaces
  */
-export type OrgRole = "admin" | "member";
+export type { OrgRole } from "@platypus/schemas";
 
 /**
  * Hono context variables available throughout the request lifecycle.

@@ -246,7 +246,7 @@ const lazyMcpTools = async (
 /** The Agent a session resolves Tool sets for — the parent, or one delegate. */
 export type ToolSessionAgent = {
   id: string;
-  toolSetIds?: readonly string[] | null;
+  toolSetIds: readonly string[];
 };
 
 /**
@@ -849,7 +849,7 @@ export const openToolSession = async (
     // `tools(context, plugin)` and is never shown the accumulated map — so only
     // the merge below stays ordered.
     const resolutions = await Promise.all(
-      (agent.toolSetIds ?? [])
+      agent.toolSetIds
         .filter((toolSetId) => !withheldToolSetIds.includes(toolSetId))
         .map((toolSetId) => resolveSafely(toolSetId, context)),
     );

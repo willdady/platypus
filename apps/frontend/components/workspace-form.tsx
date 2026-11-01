@@ -175,8 +175,7 @@ function WorkspaceForm({ orgId, workspaceId }: WorkspaceFormProps) {
       taskModelProviderId: workspace.taskModelProviderId || null,
       memoryExtractionProviderId: workspace.memoryExtractionProviderId || null,
       memoryEmbeddingProviderId: workspace.memoryEmbeddingProviderId || null,
-      maxDailySummaries:
-        workspace.maxDailySummaries ?? DEFAULT_WORKSPACE_MAX_DAILY_SUMMARIES,
+      maxDailySummaries: workspace.maxDailySummaries,
       providerSelfManagement: workspace.providerSelfManagement ?? false,
       mcpSelfManagement: workspace.mcpSelfManagement ?? false,
       inboundTriggersAllowed: workspace.inboundTriggersAllowed ?? false,

@@ -242,9 +242,9 @@ function AgentForm({
       reasoningThinking: agent.reasoningThinking ?? undefined,
       reasoningEffort: agent.reasoningEffort ?? undefined,
       thinkingBudget: agent.thinkingBudget ?? undefined,
-      toolSetIds: agent.toolSetIds || [],
-      skillIds: agent.skillIds || [],
-      subAgentIds: agent.subAgentIds || [],
+      toolSetIds: agent.toolSetIds,
+      skillIds: agent.skillIds,
+      subAgentIds: agent.subAgentIds,
     }),
     sideState: { avatarFile, avatarDeleted },
     onSeed: (agent) => {

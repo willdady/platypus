@@ -3,7 +3,11 @@
 import { toast } from "sonner";
 import { useState } from "react";
 import { TriangleAlert } from "lucide-react";
-import type { OrgGate, OrgGateAccess as Access } from "@platypus/schemas";
+import {
+  orgGateSchema,
+  type OrgGate,
+  type OrgGateAccess as Access,
+} from "@platypus/schemas";
 import {
   Table,
   TableBody,
@@ -157,7 +161,10 @@ export function OrgGateAccess({
         label={copy.selectLabel}
         name={copy.selectName}
         value={gate}
-        onValueChange={(value) => setGate(value as OrgGate)}
+        onValueChange={(value) => {
+          const parsed = orgGateSchema.safeParse(value);
+          if (parsed.success) setGate(parsed.data);
+        }}
         disabled={isSaving}
         description={copy.selectDescription}
       >

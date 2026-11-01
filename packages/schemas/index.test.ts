@@ -435,6 +435,7 @@ describe("Workspace Schema", () => {
       organizationId: "123",
       ownerId: "user-1",
       name: "Test Workspace",
+      maxDailySummaries: 90,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -517,6 +518,9 @@ describe("Agent Schema", () => {
     name: "Test Agent",
     description: "A test agent",
     modelId: "gpt-4",
+    toolSetIds: [],
+    skillIds: [],
+    subAgentIds: [],
     createdAt: new Date(),
     updatedAt: new Date(),
   };

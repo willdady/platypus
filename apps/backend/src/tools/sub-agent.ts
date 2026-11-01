@@ -663,7 +663,7 @@ export const createDelegateTools = async <
     name: string;
     description?: string | null;
     instructions?: string | null;
-    toolSetIds?: string[] | null;
+    toolSetIds: string[];
   },
 >(
   subAgents: T[],
@@ -713,7 +713,7 @@ export const createDelegateTools = async <
       // Memoized so a delegate called twice in one turn resolves them once.
       let toolsPromise: Promise<LoadedSubAgentTools> | undefined;
       const loadTools = () =>
-        (toolsPromise ??= loadToolsFn(subAgent.id, subAgent.toolSetIds ?? []));
+        (toolsPromise ??= loadToolsFn(subAgent.id, subAgent.toolSetIds));
 
       delegates.push(
         createSubAgentDelegate({

@@ -90,8 +90,8 @@ const drizzleSlashCommandQueries: SlashCommandQueries = {
     });
     if (!found) return null;
     return {
-      skillIds: found.row.skillIds ?? [],
-      toolSetIds: found.row.toolSetIds ?? [],
+      skillIds: found.row.skillIds,
+      toolSetIds: found.row.toolSetIds,
     };
   },
 

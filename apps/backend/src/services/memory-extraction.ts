@@ -379,7 +379,7 @@ const processChat = async (
   }
 
   // Prune old summaries exceeding maxDailySummaries
-  const maxSummaries = workspace.maxDailySummaries ?? 90;
+  const maxSummaries = workspace.maxDailySummaries;
   const pruneResult = await db.execute(sql`
     DELETE FROM memory_daily_summary
     WHERE id IN (
