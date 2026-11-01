@@ -120,11 +120,11 @@ describe("@platypus/decision-gate", () => {
       pluginNames: [plugin.name],
       register: () => {},
       registerGate: (gate) => gates.push(gate),
-      pluginConfig: {
-        [plugin.name]: {
+      env: {
+        PLATYPUS_PLUGIN_CONFIG_DECISION_GATE: JSON.stringify({
           config: { denyThreshold: 0.9 },
           credentials: { apiKey: "k" },
-        },
+        }),
       },
     });
 

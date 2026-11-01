@@ -64,3 +64,10 @@ The "one config namespace" above was carried by a single `PLATYPUS_PLUGIN_CONFIG
 ## Update (2026-11-01): `dashboards` tool set removed
 
 Dashboards were removed in 4.0.0 (#1430), taking the `dashboards` tool set out of `@platypus/tools-platform`. The grouping rule above is unchanged.
+
+## Update (2026-11-01): combined config variable removed
+
+[#1046](https://github.com/willdady/platypus/issues/1046) removes the combined `PLATYPUS_PLUGIN_CONFIG` in 4.0.0, as the per-plugin config update above scheduled. Deploy-time config now comes only from `PLATYPUS_PLUGIN_CONFIG_<NAME>`, so the "never merged" rule has nothing left to guard and is gone with it.
+
+- **Still set aborts boot.** The loader does not read the combined variable, and a non-empty value stops boot with an error naming the per-plugin replacement. Ignoring it would have booted every plugin it configured without its credentials, the quiet misconfiguration the fail-loud posture exists to catch. An empty value is treated as unset, the same as an empty per-plugin variable.
+- **No collision with the prefix.** The per-plugin prefix is `PLATYPUS_PLUGIN_CONFIG_`, trailing underscore included, so the bare name is never read as a per-plugin variable.

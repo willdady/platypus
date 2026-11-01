@@ -33,7 +33,11 @@ const baseProvider = makeProviderRow({
   memoryExtractionModelId: "gpt-4",
 });
 
-const scope = { orgId: "org-1", workspaceId: "ws-1" };
+const scope = {
+  orgId: "org-1",
+  workspaceId: "ws-1",
+  sessionId: "chat-1",
+};
 
 const queriesWith = (providers: ProviderRow[]): GenerationPlanQueries => ({
   getProvider: (id, orgId, workspaceId) =>

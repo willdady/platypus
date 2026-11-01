@@ -38,7 +38,7 @@ const requestBody = async (p: ProviderRow): Promise<string> => {
       return Promise.resolve(new Response("{}", { status: 500 }));
     }),
   );
-  const model = openProvider(p).languageModel(
+  const model = openProvider(p, { sessionId: "chat-1" }).languageModel(
     "model-1" as ConcreteModelId,
   ) as LanguageModelV4;
   await Promise.resolve(

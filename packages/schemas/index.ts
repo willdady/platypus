@@ -2145,6 +2145,42 @@ export const SEARCH_SOURCE_NATIVE = "native";
 // The bound the Provider form's `maxLength` attribute reads.
 export const PROVIDER_SECURITY_GUARDRAILS_MAX_LENGTH = 8000;
 
+/**
+ * The only placeholder a Provider custom Header **value** may contain. Every
+ * occurrence is replaced, on every request, with the Chat's id — or, for a
+ * headless Trigger run, that run's id — so an upstream can route by a stable
+ * per-session value. Header names are never substituted.
+ */
+export const SESSION_ID_HEADER_PLACEHOLDER = "${SESSION_ID}";
+
+/**
+ * Whether every `${` in a header value opens exactly the allowed placeholder.
+ * A `$` not followed by `{` is ordinary text, so a price like `costs $5` is
+ * untouched; a `${` that never closes, or a differently named token, is not.
+ */
+const headerValuePlaceholdersValid = (value: string): boolean => {
+  let cursor = value.indexOf("${");
+  while (cursor !== -1) {
+    if (!value.startsWith(SESSION_ID_HEADER_PLACEHOLDER, cursor)) return false;
+    cursor = value.indexOf("${", cursor + SESSION_ID_HEADER_PLACEHOLDER.length);
+  }
+  return true;
+};
+
+/**
+ * Validated on the field rather than in a schema-level `.refine` so
+ * `providerCreateSchema` / `providerUpdateSchema` — `.pick()`ed off this base —
+ * get it at both Organization and Workspace scope.
+ */
+const providerHeadersSchema = z
+  .record(z.string(), z.string())
+  .refine(
+    (headers) => Object.values(headers).every(headerValuePlaceholdersValid),
+    {
+      message: `Header values may only use the ${SESSION_ID_HEADER_PLACEHOLDER} placeholder`,
+    },
+  );
+
 const providerBaseSchema = z.object({
   id: z.string(),
   organizationId: z.string().optional(),
@@ -2163,7 +2199,7 @@ const providerBaseSchema = z.object({
     .regex(/^[a-z]{2}-[a-z]+-\d+$/, "Invalid AWS region format")
     .optional(),
   baseUrl: z.string().optional(),
-  headers: z.record(z.string(), z.string()).optional(),
+  headers: providerHeadersSchema.optional(),
   extraBody: z.record(z.string(), z.unknown()).optional(),
   organization: z.string().optional(),
   project: z.string().optional(),

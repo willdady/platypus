@@ -21,7 +21,7 @@ describe("@platypus/docker plugin manifest", () => {
   });
 
   it("declares a plugin-level configSchema for the operator allowlist", () => {
-    // The network allowlist moved onto PLATYPUS_PLUGIN_CONFIG (ADR-0013), so the
+    // The network allowlist moved onto plugin config (ADR-0013), so the
     // manifest now declares a plugin-level configSchema. No credentialsSchema —
     // Docker has no plugin-level secrets.
     expect(plugin.credentialsSchema).toBeUndefined();
@@ -68,8 +68,8 @@ describe("@platypus/docker plugin manifest", () => {
     ).toBe(false);
   });
 
-  it("honours a PLATYPUS_PLUGIN_CONFIG allowlist end to end", async () => {
-    // Full chain through the real builtin plugin: PLATYPUS_PLUGIN_CONFIG →
+  it("honours a PLATYPUS_PLUGIN_CONFIG_DOCKER allowlist end to end", async () => {
+    // Full chain through the real builtin plugin: PLATYPUS_PLUGIN_CONFIG_DOCKER →
     // boot-resolved plugin config → per-Workspace configSchema (save-time
     // validation) and the registry-backed /networks source. Uses a capturing
     // registerSandbox so this second load doesn't collide with the module-global
@@ -78,8 +78,9 @@ describe("@platypus/docker plugin manifest", () => {
     const loaded = await loadPlugins({
       pluginNames: ["@platypus/docker"],
       registerSandbox: (c) => captured.push(c),
-      pluginConfig: {
-        "@platypus/docker": { config: { allowedNetworks: ["shared"] } },
+      env: {
+        PLATYPUS_PLUGIN_CONFIG_DOCKER:
+          '{"config":{"allowedNetworks":["shared"]}}',
       },
     });
 

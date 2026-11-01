@@ -284,7 +284,9 @@ const processChat = async (
   );
 
   // Create the model
-  const model = openProvider(extractionProvider).languageModel(modelId);
+  const model = openProvider(extractionProvider, {
+    sessionId: chat.id,
+  }).languageModel(modelId);
 
   // Call the LLM for summary generation
   let result;
@@ -333,6 +335,7 @@ const processChat = async (
         embeddingProvider,
         pointerSettingModelId(embeddingProvider.embeddingModelId),
         updatedSummary,
+        chat.id,
       );
     } catch (error) {
       const message = errorMessage(error);

@@ -108,13 +108,17 @@ const baseProvider = makeProviderRow({
   memoryExtractionModelId: "gpt-4",
 });
 
+/** Opens a Provider for a request whose session id is not what the test is about. */
+const open = (provider: ProviderRow) =>
+  openProvider(provider, { sessionId: "session-1" });
+
 describe("openProvider", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it("opens an OpenAI SDK client with provider config", () => {
-    openProvider(baseProvider).languageModel(concrete("gpt-4"));
+    open(baseProvider).languageModel(concrete("gpt-4"));
     expect(mockCreateOpenAI.creator).toHaveBeenCalledWith({
       baseURL: undefined,
       apiKey: "sk-test",
@@ -127,7 +131,7 @@ describe("openProvider", () => {
   it("routes chat-completions language model through openai-compatible", () => {
     // apiMode "chat" (self-hosted vLLM/SGLang/etc.) must use the compatible
     // provider so `reasoning_content` is surfaced as reasoning parts.
-    openProvider({
+    open({
       ...baseProvider,
       apiMode: "chat",
       name: "vLLM Local",
@@ -149,7 +153,7 @@ describe("openProvider", () => {
     // baseUrl is optional, so a real-OpenAI provider in chat mode arrives with
     // it empty. The compatible client must still target OpenAI rather than an
     // empty URL.
-    openProvider({
+    open({
       ...baseProvider,
       apiMode: "chat",
       baseUrl: null,
@@ -160,7 +164,7 @@ describe("openProvider", () => {
   });
 
   it("uses the OpenAI Responses model when apiMode is responses", () => {
-    openProvider({
+    open({
       ...baseProvider,
       apiMode: "responses",
     }).languageModel(concrete("gpt-4"));
@@ -170,7 +174,7 @@ describe("openProvider", () => {
 
   describe("OpenRouter app attribution", () => {
     const openRouter = (headers?: Record<string, string>) => {
-      openProvider({
+      open({
         ...baseProvider,
         providerType: "OpenRouter" as const,
         headers: headers ?? null,
@@ -285,7 +289,7 @@ describe("openProvider", () => {
     ["Google", () => mockCreateGoogleGenerativeAI.creator],
     ["Anthropic", () => mockCreateAnthropic.creator],
   ])("does not add attribution headers for %s", (providerType, creator) => {
-    openProvider({
+    open({
       ...baseProvider,
       providerType: providerType as ProviderRow["providerType"],
       apiMode: "responses",
@@ -297,7 +301,7 @@ describe("openProvider", () => {
 
   it("throws for unknown provider type", () => {
     expect(() =>
-      openProvider({
+      open({
         ...baseProvider,
         providerType: "Unknown" as ProviderRow["providerType"],
       }),
@@ -354,7 +358,7 @@ describe("openProvider", () => {
   ] as const)(
     "wires every $providerType slot to its own SDK",
     ({ providerType, sdk, config, embedding, search }) => {
-      const opened = openProvider({
+      const opened = open({
         ...baseProvider,
         providerType,
         apiMode: "responses",
@@ -379,4 +383,86 @@ describe("openProvider", () => {
       expect(Object.hasOwn(opened, "searchTools")).toBe(!!search);
     },
   );
+
+  describe("Header placeholders", () => {
+    const sessionHeaders = () => {
+      const [config] = mockCreateOpenAI.creator.mock.calls[0] as unknown as [
+        { headers: Record<string, string> },
+      ];
+      return config.headers;
+    };
+
+    it.each([
+      ["a Chat turn", "chat-42"],
+      ["a Trigger run", "run-abc"],
+    ])(
+      "replaces ${SESSION_ID} with the session id of %s",
+      (_label, sessionId) => {
+        openProvider(
+          {
+            ...baseProvider,
+            headers: { "x-opencode-session": "sess-${SESSION_ID}" },
+          },
+          { sessionId },
+        ).languageModel(concrete("gpt-4"));
+
+        expect(sessionHeaders()).toEqual({
+          "x-opencode-session": `sess-${sessionId}`,
+        });
+      },
+    );
+
+    it("replaces every occurrence and leaves header names untouched", () => {
+      openProvider(
+        {
+          ...baseProvider,
+          headers: {
+            "${SESSION_ID}": "name-stays-${SESSION_ID}",
+            "x-cost": "$5 for ${SESSION_ID}/${SESSION_ID}",
+          },
+        },
+        { sessionId: "chat-42" },
+      ).languageModel(concrete("gpt-4"));
+
+      expect(sessionHeaders()).toEqual({
+        "${SESSION_ID}": "name-stays-chat-42",
+        "x-cost": "$5 for chat-42/chat-42",
+      });
+    });
+
+    it("substitutes before OpenRouter's attribution defaults are merged", () => {
+      openProvider(
+        {
+          ...baseProvider,
+          providerType: "OpenRouter",
+          headers: { "x-session": "sess-${SESSION_ID}" },
+        },
+        { sessionId: "chat-42" },
+      ).languageModel(concrete("model-1"));
+
+      const [config] = mockCreateOpenRouter.creator.mock
+        .calls[0] as unknown as [{ headers: Record<string, string> }];
+      expect(config.headers).toEqual({
+        "HTTP-Referer": "https://github.com/willdady/platypus",
+        "X-OpenRouter-Title": "Platypus",
+        "X-OpenRouter-Categories": "personal-agent,general-chat",
+        "x-session": "sess-chat-42",
+      });
+    });
+
+    it("sends strings with no placeholder exactly as stored", () => {
+      openProvider(
+        {
+          ...baseProvider,
+          headers: { "x-cost": "$5", "x-plain": "plain" },
+        },
+        { sessionId: "chat-42" },
+      ).languageModel(concrete("gpt-4"));
+
+      expect(sessionHeaders()).toEqual({
+        "x-cost": "$5",
+        "x-plain": "plain",
+      });
+    });
+  });
 });

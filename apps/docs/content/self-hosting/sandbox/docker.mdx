@@ -30,20 +30,21 @@ Because the socket mount grants root, the adapter is **off by default** and gate
 1. Plugin enablement. The adapter ships as the core Plugin `@platypus/docker`,
    which has to be in `PLATYPUS_PLUGINS`. Without it the `"docker"` backend type
    isn't registered at all (so you can't create un-runnable Sandbox rows).
-2. An opt-in compose overlay, `compose.sandbox.yaml`, which adds the socket mount
-   and lists the Plugin.
+2. An opt-in compose overlay, `compose.docker-sandbox.yaml`, which adds the
+   socket mount and adds `@platypus/docker` to the `PLATYPUS_PLUGINS` list from
+   your `.env`.
 
 Enable it by composing the overlay alongside the default stack:
 
 ```bash
-docker compose -f compose.yaml -f compose.sandbox.yaml up
+docker compose -f compose.yaml -f compose.docker-sandbox.yaml up
 ```
 
 <Callout type="warning">
-  **The overlay replaces `PLATYPUS_PLUGINS`; it does not merge.** Whatever list
-  you put in `.env` is discarded, silently. Edit the list **inside
-  `compose.sandbox.yaml`** to your deployment's complete gate-able set — see
-  [Configuration → Plugins](/self-hosting/configuration#plugins).
+  **Don't also list `@platypus/docker` in `.env`.** The overlay adds it for you,
+  so listing it yourself names it twice and boot aborts. The rest of your `.env`
+  list keeps loading — see [Configuration →
+  Plugins](/self-hosting/configuration#plugins).
 </Callout>
 
 ## Socket permissions

@@ -97,13 +97,19 @@ const offlineMcpClient = (): Promise<MCPClient> => {
  */
 export type ToolSessionScope = Omit<
   ToolSetContext,
-  "agentId" | "registerCloser" | "timezone"
+  "agentId" | "registerCloser" | "timezone" | "sessionId"
 > & {
   /**
    * Required here though optional on the SDK's context: optional there only so
    * a plugin tolerates an older core, and core always fills it in.
    */
   timezone: string;
+  /**
+   * Likewise required: every Provider request happens inside a Chat or a
+   * Trigger run, so a session always has one to resolve Header placeholders
+   * from, and a caller without one is a type error.
+   */
+  sessionId: string;
 };
 
 /**

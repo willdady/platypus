@@ -262,7 +262,7 @@ describe("Reasoning map wire shape", () => {
       });
       const { plan } = await resolveGenerationPlan(
         { providerId: "p1", modelId: "m", ...choice },
-        { orgId: "org-1", workspaceId: "ws-1" },
+        { orgId: "org-1", workspaceId: "ws-1", sessionId: "chat-1" },
         { getProvider: () => Promise.resolve(provider) },
       );
       const result = await generateText({
@@ -425,7 +425,7 @@ describe("Reasoning map wire shape", () => {
     });
     const { plan } = await resolveGenerationPlan(
       { providerId: "p1", modelId: "m" },
-      { orgId: "org-1", workspaceId: "ws-1" },
+      { orgId: "org-1", workspaceId: "ws-1", sessionId: "chat-1" },
       { getProvider: () => Promise.resolve(provider) },
     );
     expect(plan.providerOptions).toBeUndefined();
@@ -495,7 +495,7 @@ describe("native Reasoning wire shape", () => {
       });
       const { plan } = await resolveGenerationPlan(
         { providerId: "p1", modelId: vendor.modelId, ...choice },
-        { orgId: "org-1", workspaceId: "ws-1" },
+        { orgId: "org-1", workspaceId: "ws-1", sessionId: "chat-1" },
         { getProvider: () => Promise.resolve(provider) },
       );
       await generateText({
@@ -621,7 +621,7 @@ describe("native Reasoning wire shape", () => {
     });
     const { plan } = await resolveGenerationPlan(
       { providerId: "p1", modelId: "m", reasoningEffort: "high" },
-      { orgId: "org-1", workspaceId: "ws-1" },
+      { orgId: "org-1", workspaceId: "ws-1", sessionId: "chat-1" },
       { getProvider: () => Promise.resolve(provider) },
     );
     expect(plan.reasoning).toBeUndefined();

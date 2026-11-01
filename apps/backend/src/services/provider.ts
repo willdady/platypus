@@ -11,7 +11,10 @@ import {
   type Tool,
 } from "ai";
 import { toolResultFilesMiddleware } from "./tool-result-files.ts";
-import type { ConcreteModelId } from "@platypus/schemas";
+import {
+  SESSION_ID_HEADER_PLACEHOLDER,
+  type ConcreteModelId,
+} from "@platypus/schemas";
 import type { ProviderRow } from "./provider-write.ts";
 
 /**
@@ -49,6 +52,40 @@ const ATTRIBUTION_NAMES = Object.keys(OPENROUTER_ATTRIBUTION_HEADERS).map(
 );
 
 /**
+ * What a Provider request is made for, so a Header value can carry a
+ * request-scoped placeholder. Every Provider request happens inside a Chat or
+ * a headless Trigger run, so a value always exists; `sessionId` is required
+ * rather than optional to make a caller without one a type error.
+ */
+export type ProviderRequestContext = {
+  /** The Chat's id, or the Trigger run's id for a headless run. */
+  sessionId: string;
+};
+
+/**
+ * A Provider's custom headers with every `${SESSION_ID}` in a **value**
+ * replaced. Names are never substituted. A `$` not followed by `{` is sent as
+ * written, and Providers with no placeholder are passed through unchanged.
+ *
+ * `headers` is stored as jsonb and cast, not parsed, on read — a value can be a
+ * non-string at runtime despite the type, so only strings are substituted.
+ */
+const resolveSessionHeaders = (
+  headers: Record<string, string> | null | undefined,
+  { sessionId }: ProviderRequestContext,
+): Record<string, string> | undefined => {
+  if (!headers) return undefined;
+  return Object.fromEntries(
+    Object.entries(headers).map(([name, value]) => [
+      name,
+      typeof value === "string"
+        ? value.replaceAll(SESSION_ID_HEADER_PLACEHOLDER, sessionId)
+        : value,
+    ]),
+  );
+};
+
+/**
  * Apply the attribution defaults to a Provider's own headers, all or nothing.
  * The three headers describe one app, so mixing them across two apps names
  * neither: the Platypus title on an operator's referer titles *their* app page
@@ -64,7 +101,7 @@ const ATTRIBUTION_NAMES = Object.keys(OPENROUTER_ATTRIBUTION_HEADERS).map(
  * cannot attribute. The Provider's unrelated headers are untouched either way.
  */
 const withOpenRouterAttribution = (
-  headers: Record<string, string> | null,
+  headers: Record<string, string> | null | undefined,
 ): Record<string, string> => {
   const own = headers ?? {};
   const isAttribution = (key: string) =>
@@ -114,13 +151,17 @@ export const compatProviderOptionsName = (
   provider: Pick<ProviderRow, "name">,
 ): string => provider.name.replace(/\..*/s, "").trim();
 
-export const openProvider = (provider: ProviderRow): OpenedProvider => {
+export const openProvider = (
+  provider: ProviderRow,
+  request: ProviderRequestContext,
+): OpenedProvider => {
+  const headers = resolveSessionHeaders(provider.headers, request);
   switch (provider.providerType) {
     case "OpenAI": {
       const sdk = createOpenAI({
         baseURL: provider.baseUrl ?? undefined,
         apiKey: provider.apiKey,
-        headers: provider.headers ?? undefined,
+        headers,
         organization: provider.organization ?? undefined,
         project: provider.project ?? undefined,
       });
@@ -147,7 +188,7 @@ export const openProvider = (provider: ProviderRow): OpenedProvider => {
             // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- see above
             baseURL: provider.baseUrl || "https://api.openai.com/v1",
             apiKey: provider.apiKey,
-            headers: provider.headers ?? undefined,
+            headers,
             // Request `stream_options.include_usage` so streamed responses carry
             // token usage. Without it the compatible provider omits stream_options
             // and servers (vLLM/SGLang/…) return no usage on the streaming path,
@@ -171,7 +212,7 @@ export const openProvider = (provider: ProviderRow): OpenedProvider => {
       const sdk = createOpenRouter({
         baseURL: provider.baseUrl ?? undefined,
         apiKey: provider.apiKey,
-        headers: withOpenRouterAttribution(provider.headers),
+        headers: withOpenRouterAttribution(headers),
         extraBody: provider.extraBody ?? undefined,
       });
       return {
@@ -185,7 +226,7 @@ export const openProvider = (provider: ProviderRow): OpenedProvider => {
         baseURL: provider.baseUrl ?? undefined,
         region: provider.region ?? undefined,
         apiKey: provider.apiKey,
-        headers: provider.headers ?? undefined,
+        headers,
       });
       return {
         languageModel: (id) => sdk(id),
@@ -196,7 +237,7 @@ export const openProvider = (provider: ProviderRow): OpenedProvider => {
       const sdk = createGoogleGenerativeAI({
         baseURL: provider.baseUrl ?? undefined,
         apiKey: provider.apiKey,
-        headers: provider.headers ?? undefined,
+        headers,
       });
       return {
         languageModel: (id) => sdk(id),
@@ -208,7 +249,7 @@ export const openProvider = (provider: ProviderRow): OpenedProvider => {
       const sdk = createAnthropic({
         baseURL: provider.baseUrl ?? undefined,
         apiKey: provider.apiKey,
-        headers: provider.headers ?? undefined,
+        headers,
       });
       return {
         languageModel: (id) => sdk(id),

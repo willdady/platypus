@@ -107,6 +107,7 @@ const scope: ToolSessionScope = {
   userId: "user-1",
   frontendUrl: undefined,
   timezone: "UTC",
+  sessionId: "chat-1",
 };
 const agent = { id: "agent-1", toolSetIds: ["mcp-1"] };
 

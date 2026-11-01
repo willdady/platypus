@@ -25,12 +25,9 @@ import {
 } from "../tool-gates/index.ts";
 import {
   loadPlugins,
-  parsePluginConfig,
   parsePluginList,
-  type PluginConfigMap,
   type PluginLoggerParent,
 } from "./loader.ts";
-import { mockLogger } from "../test-setup.ts";
 import { plugin as examplePlugin } from "./example-cloud-sandbox.test-fixtures.ts";
 import {
   registerToolSet,
@@ -150,6 +147,8 @@ const sandboxBackend = (backend: string): SandboxBackendContribution => ({
 describe("parsePluginList", () => {
   it("splits, trims, and drops blank entries", () => {
     expect(parsePluginList("a, b ,, c")).toEqual(["a", "b", "c"]);
+    // The Docker Sandbox overlay appends to a possibly-unset .env list.
+    expect(parsePluginList(",@platypus/docker")).toEqual(["@platypus/docker"]);
   });
 
   it("returns an empty list for unset or empty input", () => {
@@ -722,7 +721,9 @@ describe("loadPlugins — sandbox backends", () => {
         }),
       register,
       registerSandbox,
-      pluginConfig: { fenced: { config: { allowed: ["ok"] } } },
+      env: {
+        PLATYPUS_PLUGIN_CONFIG_FENCED: '{"config":{"allowed":["ok"]}}',
+      },
     });
 
     const [registered] = calls;
@@ -980,11 +981,11 @@ describe("loadPlugins — web-search backends", () => {
         }),
       register,
       registerWeb,
-      pluginConfig: {
-        acme: {
+      env: {
+        PLATYPUS_PLUGIN_CONFIG_ACME: JSON.stringify({
           config: { endpoint: "https://searx.internal" },
           credentials: { apiKey: "sk-test" },
-        },
+        }),
       },
     });
 
@@ -1026,7 +1027,7 @@ const toolGate = (id: string): ToolGateContribution => ({
 
 const loadGates = (
   plugins: Record<string, PlatypusPlugin>,
-  pluginConfig?: PluginConfigMap,
+  env?: Record<string, string>,
 ) => {
   const calls: ToolGateRegistration[] = [];
   const result = loadPlugins({
@@ -1035,7 +1036,7 @@ const loadGates = (
     importPlugin: (name) => Promise.resolve({ plugin: plugins[name] }),
     register: () => {},
     registerGate: (registration) => calls.push(registration),
-    pluginConfig,
+    env,
   });
   return { result, calls };
 };
@@ -1109,7 +1110,7 @@ describe("loadPlugins — tool gates", () => {
           credentialsSchema: z.object({ apiKey: z.string() }),
         },
       },
-      { acme: { credentials: { apiKey: "sk-test" } } },
+      { PLATYPUS_PLUGIN_CONFIG_ACME: '{"credentials":{"apiKey":"sk-test"}}' },
     );
     await result;
     const call = {
@@ -1132,57 +1133,6 @@ describe("loadPlugins — tool gates", () => {
       },
       options,
     );
-  });
-});
-
-describe("parsePluginConfig", () => {
-  it("returns an empty map for unset or empty input", () => {
-    expect(parsePluginConfig(undefined)).toEqual({});
-    expect(parsePluginConfig("")).toEqual({});
-    expect(parsePluginConfig("   ")).toEqual({});
-  });
-
-  it("parses a JSON object keyed by plugin name", () => {
-    const raw = JSON.stringify({
-      "@acme/daytona": {
-        config: { region: "eu" },
-        credentials: { apiToken: "secret" },
-      },
-    });
-    expect(parsePluginConfig(raw)).toEqual({
-      "@acme/daytona": {
-        config: { region: "eu" },
-        credentials: { apiToken: "secret" },
-      },
-    });
-  });
-
-  it("tolerates entries that omit config or credentials", () => {
-    const raw = JSON.stringify({ "@acme/one": { config: { a: 1 } } });
-    expect(parsePluginConfig(raw)).toEqual({
-      "@acme/one": { config: { a: 1 }, credentials: undefined },
-    });
-  });
-
-  it("throws (fail-loud) on malformed JSON", () => {
-    expect(() => parsePluginConfig("{not json")).toThrow(
-      /PLATYPUS_PLUGIN_CONFIG is not valid JSON/,
-    );
-  });
-
-  it("throws (fail-loud) when the root is not an object", () => {
-    expect(() => parsePluginConfig("[]")).toThrow(
-      /must be a JSON object keyed by plugin name/,
-    );
-    expect(() => parsePluginConfig('"x"')).toThrow(
-      /must be a JSON object keyed by plugin name/,
-    );
-  });
-
-  it("throws (fail-loud) when an entry is not an object", () => {
-    expect(() =>
-      parsePluginConfig(JSON.stringify({ "@acme/bad": "token" })),
-    ).toThrow(/@acme\/bad.*must be an object/s);
   });
 });
 
@@ -1246,11 +1196,11 @@ describe("loadPlugins — deploy-time plugin config injection", () => {
         Promise.resolve({ plugin: configuredManifest("acmecloud", seen) }),
       register,
       registerSandbox,
-      pluginConfig: {
-        acmecloud: {
+      env: {
+        PLATYPUS_PLUGIN_CONFIG_ACMECLOUD: JSON.stringify({
           config: { region: "eu" },
           credentials: { apiToken: "tok_123" },
-        },
+        }),
       },
     });
 
@@ -1298,11 +1248,11 @@ describe("loadPlugins — deploy-time plugin config injection", () => {
         Promise.resolve({ plugin: configuredManifest("acmecloud", seen) }),
       register,
       registerSandbox: (c) => sandboxCalls.push(c),
-      pluginConfig: {
-        acmecloud: {
+      env: {
+        PLATYPUS_PLUGIN_CONFIG_ACMECLOUD: JSON.stringify({
           config: { region: "eu" },
           credentials: { apiToken: "tok_123" },
-        },
+        }),
       },
     });
 
@@ -1330,12 +1280,12 @@ describe("loadPlugins — deploy-time plugin config injection", () => {
           Promise.resolve({ plugin: configuredManifest("acmecloud", {}) }),
         register: () => {},
         registerSandbox: () => {},
-        pluginConfig: {
-          acmecloud: {
+        env: {
+          PLATYPUS_PLUGIN_CONFIG_ACMECLOUD: JSON.stringify({
             config: { region: "eu" },
             // apiToken missing → credentialsSchema rejects.
             credentials: {},
-          },
+          }),
         },
       }),
     ).rejects.toThrow(/acmecloud.*credentials failed validation/s);
@@ -1350,12 +1300,12 @@ describe("loadPlugins — deploy-time plugin config injection", () => {
           Promise.resolve({ plugin: configuredManifest("acmecloud", {}) }),
         register: () => {},
         registerSandbox: () => {},
-        pluginConfig: {
-          acmecloud: {
+        env: {
+          PLATYPUS_PLUGIN_CONFIG_ACMECLOUD: JSON.stringify({
             // region missing → configSchema rejects.
             config: {},
             credentials: { apiToken: "tok_123" },
-          },
+          }),
         },
       }),
     ).rejects.toThrow(/acmecloud.*config failed validation/s);
@@ -1580,11 +1530,11 @@ describe("loadPlugins — example third-party plugin", () => {
         registered[id] = registration;
       },
       registerSandbox: (c) => sandboxCalls.push(c),
-      pluginConfig: {
-        "example-cloud-sandbox": {
+      env: {
+        PLATYPUS_PLUGIN_CONFIG_EXAMPLE_CLOUD_SANDBOX: JSON.stringify({
           config: { region: "ap" },
           credentials: { apiToken: "dtn_shared_token" },
-        },
+        }),
       },
     });
 
@@ -1634,8 +1584,9 @@ describe("loadPlugins — example third-party plugin", () => {
         importPlugin: () => Promise.resolve({ plugin: examplePlugin }),
         register: () => {},
         registerSandbox: () => {},
-        pluginConfig: {
-          "example-cloud-sandbox": { config: { region: "ap" } },
+        env: {
+          PLATYPUS_PLUGIN_CONFIG_EXAMPLE_CLOUD_SANDBOX:
+            '{"config":{"region":"ap"}}',
         },
       }),
     ).rejects.toThrow(/example-cloud-sandbox.*credentials failed validation/s);
@@ -1755,23 +1706,6 @@ describe("loadPlugins — always-on core set (ADR-0013 amendment)", () => {
 });
 
 describe("loadPlugins — deploy-time config targeting (ADR-0013)", () => {
-  it("aborts (fail-loud) when a config entry matches no loaded plugin", async () => {
-    await expect(
-      loadPlugins({
-        pluginNames: ["@third/party"],
-        builtinPlugins: {},
-        importPlugin: () =>
-          Promise.resolve({ plugin: manifest("acme", [toolSet("custom")]) }),
-        register: () => {},
-        pluginConfig: {
-          // Keyed by a name no loaded plugin carries — a typo or a missing
-          // plugin. Silently dropping it would hide a real misconfiguration.
-          "acme-typo": { credentials: { apiToken: "x" } },
-        },
-      }),
-    ).rejects.toThrow(/PLATYPUS_PLUGIN_CONFIG.*"acme-typo".*no loaded plugin/s);
-  });
-
   it("accepts a config entry keyed by the manifest name (not the list specifier)", async () => {
     // The list entry is the import specifier; config is keyed by manifest name.
     await expect(
@@ -1789,7 +1723,7 @@ describe("loadPlugins — deploy-time config targeting (ADR-0013)", () => {
             } satisfies PlatypusPlugin,
           }),
         register: () => {},
-        pluginConfig: { widgets: { config: { region: "eu" } } },
+        env: { PLATYPUS_PLUGIN_CONFIG_WIDGETS: '{"config":{"region":"eu"}}' },
       }),
     ).resolves.toBeDefined();
   });
@@ -1805,7 +1739,7 @@ describe("loadPlugins — per-plugin config vars (PLATYPUS_PLUGIN_CONFIG_<NAME>)
     name: "cloud-sandbox",
   };
 
-  const loadCloudSandbox = (pluginConfig?: PluginConfigMap) => {
+  const loadCloudSandbox = () => {
     const sandboxCalls: SandboxBackendRegistration[] = [];
     const result = loadPlugins({
       pluginNames: ["@acme/cloud-sandbox"],
@@ -1813,7 +1747,6 @@ describe("loadPlugins — per-plugin config vars (PLATYPUS_PLUGIN_CONFIG_<NAME>)
       importPlugin: () => Promise.resolve({ plugin: cloudSandbox }),
       register: () => {},
       registerSandbox: (c) => sandboxCalls.push(c),
-      pluginConfig,
     });
     return { result, sandboxCalls };
   };
@@ -1835,7 +1768,7 @@ describe("loadPlugins — per-plugin config vars (PLATYPUS_PLUGIN_CONFIG_<NAME>)
     expect(backend.region).toBe("us");
   });
 
-  it("enforces the plugin's schemas exactly as the combined var does", async () => {
+  it("enforces the plugin's schemas", async () => {
     vi.stubEnv("PLATYPUS_PLUGIN_CONFIG_CLOUD_SANDBOX", '{"credentials":{}}');
     await expect(loadCloudSandbox().result).rejects.toThrow(
       /cloud-sandbox.*credentials failed validation/s,
@@ -1870,20 +1803,6 @@ describe("loadPlugins — per-plugin config vars (PLATYPUS_PLUGIN_CONFIG_<NAME>)
     );
   });
 
-  it("aborts (fail-loud) when one plugin is configured in both its own var and the combined var", async () => {
-    vi.stubEnv(
-      "PLATYPUS_PLUGIN_CONFIG_CLOUD_SANDBOX",
-      '{"credentials":{"apiToken":"x"}}',
-    );
-    await expect(
-      loadCloudSandbox({
-        "cloud-sandbox": { credentials: { apiToken: "y" } },
-      }).result,
-    ).rejects.toThrow(
-      /"cloud-sandbox".*PLATYPUS_PLUGIN_CONFIG_CLOUD_SANDBOX.*PLATYPUS_PLUGIN_CONFIG/s,
-    );
-  });
-
   it("aborts (fail-loud) when two loaded plugins map to the same var", async () => {
     // A core name drops its `@platypus/` scope, so core `@platypus/widgets` and a
     // third-party `widgets` both land on PLATYPUS_PLUGIN_CONFIG_WIDGETS.
@@ -1899,41 +1818,35 @@ describe("loadPlugins — per-plugin config vars (PLATYPUS_PLUGIN_CONFIG_<NAME>)
         importPlugin: () =>
           Promise.resolve({ plugin: manifest("widgets", [toolSet("b")]) }),
         register: () => {},
-        pluginConfig: {},
+        env: {},
       }),
     ).rejects.toThrow(
       /"@platypus\/widgets".*"widgets".*PLATYPUS_PLUGIN_CONFIG_WIDGETS/s,
     );
   });
 
-  it("warns once that the combined var is deprecated whenever it is set", async () => {
+  it("aborts (fail-loud) while the removed combined PLATYPUS_PLUGIN_CONFIG is set", async () => {
+    // Set alongside a valid per-plugin var: the bare name is not read as one.
     vi.stubEnv(
       "PLATYPUS_PLUGIN_CONFIG",
       '{"cloud-sandbox":{"credentials":{"apiToken":"x"}}}',
     );
-    const { result, sandboxCalls } = loadCloudSandbox();
-    await result;
-
-    // Behaviour is otherwise unchanged: the combined entry still configures it.
-    const backend = sandboxCalls[0].create({}, {}) as unknown as {
-      apiToken: string;
-    };
-    expect(backend.apiToken).toBe("x");
-    expect(mockLogger.warn).toHaveBeenCalledTimes(1);
-    expect(mockLogger.warn).toHaveBeenCalledWith(
-      expect.stringMatching(
-        /PLATYPUS_PLUGIN_CONFIG is deprecated.*next major release.*PLATYPUS_PLUGIN_CONFIG_<NAME>/s,
-      ),
-    );
-  });
-
-  it("does not warn when the combined var is unset", async () => {
     vi.stubEnv(
       "PLATYPUS_PLUGIN_CONFIG_CLOUD_SANDBOX",
       '{"credentials":{"apiToken":"x"}}',
     );
-    await loadCloudSandbox().result;
-    expect(mockLogger.warn).not.toHaveBeenCalled();
+    await expect(loadCloudSandbox().result).rejects.toThrow(
+      /PLATYPUS_PLUGIN_CONFIG is no longer supported.*PLATYPUS_PLUGIN_CONFIG_<NAME>/s,
+    );
+  });
+
+  it("treats an empty combined var as unset", async () => {
+    vi.stubEnv("PLATYPUS_PLUGIN_CONFIG", "");
+    vi.stubEnv(
+      "PLATYPUS_PLUGIN_CONFIG_CLOUD_SANDBOX",
+      '{"credentials":{"apiToken":"x"}}',
+    );
+    await expect(loadCloudSandbox().result).resolves.toBeDefined();
   });
 });
 
@@ -2100,7 +2013,9 @@ describe("loadPlugins — manifest name uniqueness (ADR-0013)", () => {
         builtinPlugins: {},
         importPlugin: (name) => Promise.resolve({ plugin: modules[name] }),
         register,
-        pluginConfig: { acme: { credentials: { token: "secret" } } },
+        env: {
+          PLATYPUS_PLUGIN_CONFIG_ACME: '{"credentials":{"token":"secret"}}',
+        },
       }),
     ).rejects.toThrow(/"acme".*"@acme\/pkg".*"@fork\/acme-pkg"/s);
   });
