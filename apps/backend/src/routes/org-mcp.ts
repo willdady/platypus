@@ -170,7 +170,9 @@ orgMcp.post(
     const mcpId = c.req.param("mcpId");
 
     await requireOrgScoped(db, "mcp", mcpId, orgId);
-    await clearOAuthTokens(db, orgScopedWhere("mcp", mcpId, orgId));
+    await clearOAuthTokens(db, orgScopedWhere("mcp", mcpId, orgId), {
+      dropRegisteredClient: false,
+    });
 
     return c.json({ message: "OAuth authorization revoked" });
   },

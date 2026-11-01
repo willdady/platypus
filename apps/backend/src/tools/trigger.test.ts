@@ -189,18 +189,26 @@ describe("createTriggerTools", () => {
         trigger: { id: "t9", tokenStatus: "none" },
         url: "http://localhost:3000/org-1/workspace/ws-1/triggers/t9",
       });
-      expect(createTrigger).toHaveBeenCalledWith(ctx, {
-        agentId: "a1",
-        type: "cron",
-        name: "Daily",
-        description: "Runs every day",
-        instruction: "Run daily",
-        enabled: undefined,
-        maxRunsToKeep: undefined,
-        search: undefined,
-        includeMemories: true,
-        config: { cronExpression: "0 9 * * *", timezone },
-      });
+      expect(createTrigger).toHaveBeenCalledWith(
+        ctx,
+        {
+          agentId: "a1",
+          type: "cron",
+          name: "Daily",
+          description: "Runs every day",
+          instruction: "Run daily",
+          enabled: true,
+          maxRunsToKeep: 10,
+          search: false,
+          includeMemories: true,
+          config: {
+            cronExpression: "0 9 * * *",
+            timezone,
+            isOneOff: false,
+          },
+        },
+        { allowInbound: false },
+      );
     });
 
     it("creates a One-off and echoes its next run in UTC and in its timezone", async () => {
@@ -238,7 +246,20 @@ describe("createTriggerTools", () => {
             isOneOff: true,
           },
         }),
+        { allowInbound: false },
       );
+    });
+
+    it("refuses an event create with no events before reaching the Trigger module", async () => {
+      const result = (await callTool(tools.upsertTrigger, {
+        ...cronCreate,
+        type: "event",
+        config: {},
+      })) as { success: boolean; error: string };
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("config.events");
+      expect(createTrigger).not.toHaveBeenCalled();
     });
 
     it.each(["name", "agentId", "instruction", "type", "config"] as const)(
@@ -281,6 +302,7 @@ describe("createTriggerTools", () => {
           agentId: undefined,
           config: undefined,
         }),
+        { allowInbound: false },
       );
       expect(createTrigger).not.toHaveBeenCalled();
     });
@@ -333,7 +355,9 @@ describe("createTriggerTools", () => {
       expect(
         await callTool(tools.deleteTrigger, { triggerId: "t1", label: "x" }),
       ).toEqual({ success: true });
-      expect(deleteTrigger).toHaveBeenCalledWith(ctx, "t1");
+      expect(deleteTrigger).toHaveBeenCalledWith(ctx, "t1", {
+        allowInbound: false,
+      });
     });
 
     it("returns an error when nothing was deleted", async () => {
@@ -356,7 +380,9 @@ describe("createTriggerTools", () => {
         error: "Inbound triggers can only be deleted in the UI",
       });
       // The tool never opts in to reaching Inbound Triggers.
-      expect(deleteTrigger).toHaveBeenCalledWith(ctx, "t1");
+      expect(deleteTrigger).toHaveBeenCalledWith(ctx, "t1", {
+        allowInbound: false,
+      });
     });
   });
 });

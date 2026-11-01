@@ -95,6 +95,7 @@ import {
   FETCH_FAILURE_SKIP_WINDOW_MS,
   LAST_KNOWN_LISTING_MAX_AGE_MS,
   openToolSession,
+  type ToolSessionOptions,
   type ToolSessionScope,
 } from "./tool-session.ts";
 import { callTool as call } from "../test-utils.ts";
@@ -109,6 +110,22 @@ const scope: ToolSessionScope = {
   timezone: "UTC",
   sessionId: "chat-1",
 };
+
+/**
+ * Opens a session with the options a test that has no opinion about them wants:
+ * nothing withheld, and no User watching.
+ */
+const openSession = (
+  sessionScope: ToolSessionScope,
+  sessionAgent: Parameters<typeof openToolSession>[1],
+  queries: Parameters<typeof openToolSession>[2],
+  options: Partial<ToolSessionOptions> = {},
+): ReturnType<typeof openToolSession> =>
+  openToolSession(sessionScope, sessionAgent, queries, {
+    withheldToolSetIds: [],
+    interactive: false,
+    ...options,
+  });
 const agent = { id: "agent-1", toolSetIds: ["mcp-1"] };
 
 // Keys deliberately out of alphabetical order: `jsonb` would re-sort them.
@@ -224,12 +241,12 @@ describe("openToolSession — Last-known tool listing (#635)", () => {
 
   it("serves the stored listing when the fetch fails, byte-identical on the wire", async () => {
     const { queries } = store();
-    const live = await openToolSession(scope, agent, queries);
+    const live = await openSession(scope, agent, queries);
     const liveWire = await wireTools(live.tools);
     await live.dispose();
 
     server.up = false;
-    const stale = await openToolSession(scope, agent, queries);
+    const stale = await openSession(scope, agent, queries);
 
     expect(Object.keys(stale.tools)).toEqual(["flaky__search", "flaky__write"]);
     expect(await wireTools(stale.tools)).toBe(liveWire);
@@ -242,10 +259,10 @@ describe("openToolSession — Last-known tool listing (#635)", () => {
   // reach it is a failed tool call, not an unloaded Tool set (#1184).
   it("does not list an MCP served from its stored listing as unloaded", async () => {
     const { queries } = store();
-    await (await openToolSession(scope, agent, queries)).dispose();
+    await (await openSession(scope, agent, queries)).dispose();
 
     server.up = false;
-    const stale = await openToolSession(scope, agent, queries);
+    const stale = await openSession(scope, agent, queries);
 
     expect(stale.unloadedToolSets).toEqual([]);
     await stale.dispose();
@@ -255,13 +272,13 @@ describe("openToolSession — Last-known tool listing (#635)", () => {
   // like any other, not one that holds the turn open (#1135).
   it("serves the stored listing when the server connects but never answers, and closes that connection", async () => {
     const { queries } = store();
-    await (await openToolSession(scope, agent, queries)).dispose();
+    await (await openSession(scope, agent, queries)).dispose();
     const closedBefore = server.closed;
 
     server.listHangs = true;
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     try {
-      const opening = openToolSession(scope, agent, queries);
+      const opening = openSession(scope, agent, queries);
       await vi.advanceTimersByTimeAsync(TOOL_SET_RESOLVE_TIMEOUT_MS);
       const session = await opening;
 
@@ -278,38 +295,38 @@ describe("openToolSession — Last-known tool listing (#635)", () => {
 
   it("drops the MCP's tools when the stored listing is a day old", async () => {
     const { queries, age } = store();
-    await (await openToolSession(scope, agent, queries)).dispose();
+    await (await openSession(scope, agent, queries)).dispose();
     age(LAST_KNOWN_LISTING_MAX_AGE_MS);
 
     server.up = false;
-    const session = await openToolSession(scope, agent, queries);
+    const session = await openSession(scope, agent, queries);
     expect(session.tools).toEqual({});
   });
 
   it("serves a listing just inside the day", async () => {
     const { queries, age } = store();
-    await (await openToolSession(scope, agent, queries)).dispose();
+    await (await openSession(scope, agent, queries)).dispose();
     age(LAST_KNOWN_LISTING_MAX_AGE_MS - 60_000);
 
     server.up = false;
-    const session = await openToolSession(scope, agent, queries);
+    const session = await openSession(scope, agent, queries);
     expect(Object.keys(session.tools)).toHaveLength(2);
   });
 
   it("drops the MCP's tools when nothing was ever stored", async () => {
     const { queries } = store();
     server.up = false;
-    const session = await openToolSession(scope, agent, queries);
+    const session = await openSession(scope, agent, queries);
     expect(session.tools).toEqual({});
     expect(queries.saveMcpToolListing).not.toHaveBeenCalled();
   });
 
   it("fails a stale tool's call as unreachable while down, runs it once back, and closes the lazy client on dispose", async () => {
     const { queries } = store();
-    await (await openToolSession(scope, agent, queries)).dispose();
+    await (await openSession(scope, agent, queries)).dispose();
 
     server.up = false;
-    const session = await openToolSession(scope, agent, queries);
+    const session = await openSession(scope, agent, queries);
     await expect(
       call(session.tools.flaky__write, { body: "x" }),
     ).rejects.toThrow("MCP server 'Flaky MCP' is unreachable");
@@ -334,10 +351,10 @@ describe("openToolSession — Last-known tool listing (#635)", () => {
   // until the step timer kills it (#1135).
   it("fails a stale tool's call when the server connects but never answers, and connects afresh on the next call", async () => {
     const { queries } = store();
-    await (await openToolSession(scope, agent, queries)).dispose();
+    await (await openSession(scope, agent, queries)).dispose();
 
     server.up = false;
-    const session = await openToolSession(scope, agent, queries);
+    const session = await openSession(scope, agent, queries);
 
     server.up = true;
     server.initializeHangs = true;
@@ -365,11 +382,11 @@ describe("openToolSession — Last-known tool listing (#635)", () => {
 
   it("does not wait on a stale tool's connect once the run is cancelled", async () => {
     const { queries } = store();
-    await (await openToolSession(scope, agent, queries)).dispose();
+    await (await openSession(scope, agent, queries)).dispose();
 
     server.up = false;
     const run = new AbortController();
-    const session = await openToolSession(scope, agent, queries, {
+    const session = await openSession(scope, agent, queries, {
       signal: run.signal,
     });
 
@@ -385,14 +402,14 @@ describe("openToolSession — Last-known tool listing (#635)", () => {
 
   it("writes the listing only when it changes", async () => {
     const { queries } = store();
-    await (await openToolSession(scope, agent, queries)).dispose();
+    await (await openSession(scope, agent, queries)).dispose();
     expect(queries.saveMcpToolListing).toHaveBeenCalledTimes(1);
 
-    await (await openToolSession(scope, agent, queries)).dispose();
+    await (await openSession(scope, agent, queries)).dispose();
     expect(queries.saveMcpToolListing).toHaveBeenCalledTimes(1);
 
     server.tools = [TOOLS[0]];
-    await (await openToolSession(scope, agent, queries)).dispose();
+    await (await openSession(scope, agent, queries)).dispose();
     expect(queries.saveMcpToolListing).toHaveBeenCalledTimes(2);
     expect(queries.saveMcpToolListing).toHaveBeenLastCalledWith(
       "mcp-1",
@@ -405,25 +422,25 @@ describe("openToolSession — Last-known tool listing (#635)", () => {
 
   it("refreshes an unchanged listing's fetched-at once it is an hour old, so a stable server keeps its grace", async () => {
     const { queries, age } = store();
-    await (await openToolSession(scope, agent, queries)).dispose();
+    await (await openSession(scope, agent, queries)).dispose();
     age(HOUR - 60_000);
-    await (await openToolSession(scope, agent, queries)).dispose();
+    await (await openSession(scope, agent, queries)).dispose();
     expect(queries.saveMcpToolListing).toHaveBeenCalledTimes(1);
 
     age(23 * HOUR);
-    await (await openToolSession(scope, agent, queries)).dispose();
+    await (await openSession(scope, agent, queries)).dispose();
     expect(queries.saveMcpToolListing).toHaveBeenCalledTimes(2);
 
     // A day after the first fetch, but minutes after the refresh.
     server.up = false;
-    const session = await openToolSession(scope, agent, queries);
+    const session = await openSession(scope, agent, queries);
     expect(Object.keys(session.tools)).toHaveLength(2);
   });
 
   it("still serves live tools when saving the listing fails", async () => {
     const { queries } = store();
     queries.saveMcpToolListing.mockRejectedValueOnce(new Error("db down"));
-    const session = await openToolSession(scope, agent, queries);
+    const session = await openSession(scope, agent, queries);
     expect(Object.keys(session.tools)).toHaveLength(2);
     await session.dispose();
   });
@@ -452,11 +469,11 @@ describe("openToolSession — Last-known tool listing (#635)", () => {
       "drops the MCP's tools despite a stored listing on %s, and says it needs re-authorising",
       async (_label, failure) => {
         const { queries } = store();
-        await (await openToolSession(scope, agent, queries)).dispose();
+        await (await openSession(scope, agent, queries)).dispose();
         const warn = vi.spyOn(logger, "warn");
         try {
           server.rejectWith = failure();
-          const session = await openToolSession(scope, agent, queries);
+          const session = await openSession(scope, agent, queries);
 
           expect(session.tools).toEqual({});
           expect(session.unloadedToolSets).toEqual([
@@ -475,11 +492,11 @@ describe("openToolSession — Last-known tool listing (#635)", () => {
 
     it("still serves the stored listing and logs unreachable on a non-auth failure", async () => {
       const { queries } = store();
-      await (await openToolSession(scope, agent, queries)).dispose();
+      await (await openSession(scope, agent, queries)).dispose();
       const warn = vi.spyOn(logger, "warn");
       try {
         server.rejectWith = httpStatusError(500);
-        const session = await openToolSession(scope, agent, queries);
+        const session = await openSession(scope, agent, queries);
 
         expect(Object.keys(session.tools)).toHaveLength(2);
         expect(warn.mock.calls.map((c) => String(c[1]))).toContain(
@@ -492,13 +509,13 @@ describe("openToolSession — Last-known tool listing (#635)", () => {
 
     it("keeps the stored listing after an auth failure", async () => {
       const { queries } = store();
-      await (await openToolSession(scope, agent, queries)).dispose();
+      await (await openSession(scope, agent, queries)).dispose();
       server.rejectWith = new UnauthorizedError();
-      await openToolSession(scope, agent, queries);
+      await openSession(scope, agent, queries);
 
       server.rejectWith = null;
       server.up = false;
-      const session = await openToolSession(scope, agent, queries);
+      const session = await openSession(scope, agent, queries);
       expect(Object.keys(session.tools)).toHaveLength(2);
       expect(queries.saveMcpToolListing).toHaveBeenCalledTimes(1);
     });
@@ -507,9 +524,9 @@ describe("openToolSession — Last-known tool listing (#635)", () => {
       "fails a stale tool's call as needing re-authorising on %s",
       async (_label, failure) => {
         const { queries } = store();
-        await (await openToolSession(scope, agent, queries)).dispose();
+        await (await openSession(scope, agent, queries)).dispose();
         server.up = false;
-        const session = await openToolSession(scope, agent, queries);
+        const session = await openSession(scope, agent, queries);
 
         server.rejectWith = failure();
         await expect(
@@ -542,7 +559,7 @@ describe("openToolSession — Last-known tool listing (#635)", () => {
     ])("records the failure on %s", async (_label, fail) => {
       const { queries, row } = store();
       fail();
-      await openToolSession(scope, agent, queries);
+      await openSession(scope, agent, queries);
       expect(row().lastFetchFailedAt).toBeInstanceOf(Date);
     });
 
@@ -551,7 +568,7 @@ describe("openToolSession — Last-known tool listing (#635)", () => {
       server.initializeHangs = true;
       vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
       try {
-        const opening = openToolSession(scope, agent, queries);
+        const opening = openSession(scope, agent, queries);
         await vi.advanceTimersByTimeAsync(TOOL_SET_RESOLVE_TIMEOUT_MS);
         const session = await opening;
         // No listing to fall back to, so its tools are dropped.
@@ -566,18 +583,18 @@ describe("openToolSession — Last-known tool listing (#635)", () => {
     // it, flapping the prefix ADR-0029 exists to protect.
     it("clears rather than records on an auth failure, since its listing is never served", async () => {
       const { queries, row, failedAgo } = store();
-      await (await openToolSession(scope, agent, queries)).dispose();
+      await (await openSession(scope, agent, queries)).dispose();
       failedAgo(FETCH_FAILURE_SKIP_WINDOW_MS);
 
       server.rejectWith = new UnauthorizedError();
-      const session = await openToolSession(scope, agent, queries);
+      const session = await openSession(scope, agent, queries);
       expect(session.tools).toEqual({});
       expect(row().lastFetchFailedAt).toBeNull();
     });
 
     it("serves the listing without a connect attempt inside the window, byte-identical on the wire", async () => {
       const { queries, failedAgo } = store();
-      const live = await openToolSession(scope, agent, queries);
+      const live = await openSession(scope, agent, queries);
       const liveWire = await wireTools(live.tools);
       await live.dispose();
 
@@ -585,7 +602,7 @@ describe("openToolSession — Last-known tool listing (#635)", () => {
       const attempts = server.attempts;
       const warn = vi.spyOn(logger, "warn");
       try {
-        const stale = await openToolSession(scope, agent, queries);
+        const stale = await openSession(scope, agent, queries);
         expect(server.attempts).toBe(attempts);
         expect(Object.keys(stale.tools)).toEqual([
           "flaky__search",
@@ -605,7 +622,7 @@ describe("openToolSession — Last-known tool listing (#635)", () => {
     it("fetches anyway inside the window when nothing was ever stored", async () => {
       const { queries, failedAgo } = store();
       failedAgo(1_000);
-      const session = await openToolSession(scope, agent, queries);
+      const session = await openSession(scope, agent, queries);
       expect(server.attempts).toBe(1);
       expect(Object.keys(session.tools)).toHaveLength(2);
       await session.dispose();
@@ -613,42 +630,42 @@ describe("openToolSession — Last-known tool listing (#635)", () => {
 
     it("fetches anyway inside the window when the stored listing is a day old", async () => {
       const { queries, age, failedAgo } = store();
-      await (await openToolSession(scope, agent, queries)).dispose();
+      await (await openSession(scope, agent, queries)).dispose();
       age(LAST_KNOWN_LISTING_MAX_AGE_MS);
       failedAgo(1_000);
-      await (await openToolSession(scope, agent, queries)).dispose();
+      await (await openSession(scope, agent, queries)).dispose();
       expect(server.attempts).toBe(2);
     });
 
     it("fetches again once the window has passed, and clears the failure when it succeeds", async () => {
       const { queries, row, failedAgo } = store();
-      await (await openToolSession(scope, agent, queries)).dispose();
+      await (await openSession(scope, agent, queries)).dispose();
       failedAgo(FETCH_FAILURE_SKIP_WINDOW_MS);
-      await (await openToolSession(scope, agent, queries)).dispose();
+      await (await openSession(scope, agent, queries)).dispose();
       expect(server.attempts).toBe(2);
       expect(row().lastFetchFailedAt).toBeNull();
     });
 
     it("does not write on a successful fetch when nothing had failed", async () => {
       const { queries } = store();
-      await (await openToolSession(scope, agent, queries)).dispose();
+      await (await openSession(scope, agent, queries)).dispose();
       expect(queries.setMcpFetchFailedAt).not.toHaveBeenCalled();
     });
 
     it("still serves the turn when recording the failure fails", async () => {
       const { queries } = store();
-      await (await openToolSession(scope, agent, queries)).dispose();
+      await (await openSession(scope, agent, queries)).dispose();
       queries.setMcpFetchFailedAt.mockRejectedValueOnce(new Error("db down"));
       server.up = false;
-      const session = await openToolSession(scope, agent, queries);
+      const session = await openSession(scope, agent, queries);
       expect(Object.keys(session.tools)).toHaveLength(2);
     });
 
     it("records a stale tool's failed lazy connect, and clears it when one succeeds", async () => {
       const { queries, row, failedAgo } = store();
-      await (await openToolSession(scope, agent, queries)).dispose();
+      await (await openSession(scope, agent, queries)).dispose();
       failedAgo(1_000);
-      const session = await openToolSession(scope, agent, queries);
+      const session = await openSession(scope, agent, queries);
 
       server.up = false;
       const before = row().lastFetchFailedAt!;
@@ -667,9 +684,9 @@ describe("openToolSession — Last-known tool listing (#635)", () => {
 
     it("bounds a stale tool's lazy connect by the open timeout", async () => {
       const { queries, row, failedAgo } = store();
-      await (await openToolSession(scope, agent, queries)).dispose();
+      await (await openSession(scope, agent, queries)).dispose();
       failedAgo(1_000);
-      const session = await openToolSession(scope, agent, queries);
+      const session = await openSession(scope, agent, queries);
       queries.setMcpFetchFailedAt.mockClear();
 
       server.initializeHangs = true;
