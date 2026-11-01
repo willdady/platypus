@@ -10,7 +10,7 @@ import {
 
 /**
  * A before/after measurement of what batched clearing buys the Provider's
- * cached prompt prefix, on a simulated long tool-using turn.
+ * cached prompt prefix, on simulated long tool-using turns.
  *
  * The quantity measured is what a cache miss costs: for every step after the
  * first, how many already-sent messages changed, and the characters from the
@@ -29,7 +29,7 @@ import {
 
 /** Occupancy is simulated at four characters per token; the rule never assumes it. */
 const CHARS_PER_TOKEN = 4;
-const STEPS = 60;
+const DEFAULT_STEPS = 60;
 
 const POLICY: ClearingPolicy = DEFAULT_CLEARING_POLICY;
 
@@ -57,57 +57,60 @@ type Measurement = {
   changedEarlierMessages: number;
   invalidatedChars: number;
   maxInvalidatedChars: number;
+  /** The largest occupancy a step READ, before clearing had a chance to run. */
+  maxOccupancy: number;
 };
 
-/** The rule before this change: clear everything past keep-recent once engaged. */
-const oldRule = (
+type Rule = (
   messages: ModelMessage[],
   occupancy: number,
   window: number,
-): ModelMessage[] => {
+) => ModelMessage[];
+
+/** The rule before this change: clear everything past keep-recent once engaged. */
+const oldRule: Rule = (messages, occupancy, window) => {
   if (occupancy / window < POLICY.thresholdFraction) return messages;
   return clearStaleToolResults(messages, POLICY);
 };
 
 /** The shipped rule. */
-const newRule = (
-  messages: ModelMessage[],
-  occupancy: number,
-  window: number,
-): ModelMessage[] =>
+const newRule: Rule = (messages, occupancy, window) =>
   applyToolResultClearing(
     messages,
     { occupancy, contextWindow: window },
     POLICY,
   );
 
-const measure = (input: {
+type Scenario = {
   basePromptChars: number;
   resultChars: number;
   window: number;
-  rule: (
-    messages: ModelMessage[],
-    occupancy: number,
-    window: number,
-  ) => ModelMessage[];
-}): Measurement => {
+  steps?: number;
+};
+
+const simulate = (
+  scenario: Scenario,
+  rule: Rule,
+): { measurement: Measurement; prompts: ModelMessage[][] } => {
   // `prepareStep`'s override carries forward, markers included.
   let working: ModelMessage[] = [
-    { role: "user", content: "u".repeat(input.basePromptChars) },
+    { role: "user", content: "u".repeat(scenario.basePromptChars) },
   ];
   let previous: ModelMessage[] | undefined;
+  const prompts: ModelMessage[][] = [];
   const measurement: Measurement = {
     steps: 0,
     stepsWithEarlierChange: 0,
     changedEarlierMessages: 0,
     invalidatedChars: 0,
     maxInvalidatedChars: 0,
+    maxOccupancy: 0,
   };
 
-  for (let step = 1; step <= STEPS; step += 1) {
+  for (let step = 1; step <= (scenario.steps ?? DEFAULT_STEPS); step += 1) {
     working = [
       ...working,
-      toolResultMessage(`t${step}`, "x".repeat(input.resultChars)),
+      toolResultMessage(`t${step}`, "x".repeat(scenario.resultChars)),
     ];
     // What the vendor reports for the call about to be made: the whole working
     // conversation, markers included.
@@ -115,8 +118,10 @@ const measure = (input: {
       working.reduce((total, message) => total + messageChars(message), 0) /
         CHARS_PER_TOKEN,
     );
-    const sent = input.rule(working, occupancy, input.window);
+    measurement.maxOccupancy = Math.max(measurement.maxOccupancy, occupancy);
+    const sent = rule(working, occupancy, scenario.window);
     measurement.steps += 1;
+    prompts.push(sent);
 
     if (previous !== undefined) {
       const overlap = Math.min(previous.length, sent.length);
@@ -143,8 +148,11 @@ const measure = (input: {
     previous = sent;
     working = sent;
   }
-  return measurement;
+  return { measurement, prompts };
 };
+
+const measure = (scenario: Scenario, rule: Rule): Measurement =>
+  simulate(scenario, rule).measurement;
 
 /**
  * The regime the issue describes: four recent results plus the rest of the
@@ -165,13 +173,46 @@ const ROOMY = {
   window: 200_000,
 };
 
+/**
+ * A turn where clearing everything past keep-recent would drop well below the
+ * 0.5 target. The target stops earlier, so it keeps more context live — and
+ * when the boundary does move, more of the suffix is live content that has to
+ * be re-read. Recorded below as the cost the creep-regime win is bought with.
+ */
+const MID = {
+  basePromptChars: 300_000,
+  resultChars: 6_000,
+  window: 200_000,
+};
+
+/**
+ * A small 8K-token window with 1K-token results: four protected results plus
+ * the prompt already exceed the trigger, so the batch floor alone would wait
+ * and let the call grow past the window. The urgent fraction must take a
+ * partial batch instead.
+ */
+const SMALL_URGENT = {
+  basePromptChars: 8_000,
+  resultChars: 4_000,
+  window: 8_000,
+  steps: 40,
+};
+
+/** The same small window with 500-token results, where batching has room. */
+const SMALL_ROOMY = {
+  basePromptChars: 8_000,
+  resultChars: 2_000,
+  window: 8_000,
+  steps: 60,
+};
+
 describe("Tool-result clearing — cached prompt prefix measurement", () => {
-  const creepOld = measure({ ...CREEP, rule: oldRule });
-  const creepNew = measure({ ...CREEP, rule: newRule });
+  const creepOld = measure(CREEP, oldRule);
+  const creepNew = measure(CREEP, newRule);
 
   it("stops moving the survivor boundary on most steps in the creep regime", () => {
-    // Recorded from this simulation; a change to the trigger, target or
-    // minimum batch moves these and should update them deliberately.
+    // Recorded from this simulation; a change to the trigger, target, minimum
+    // batch or urgent fraction moves these and should update them deliberately.
     expect({ before: creepOld, after: creepNew }).toMatchObject({
       before: {
         steps: 60,
@@ -202,9 +243,47 @@ describe("Tool-result clearing — cached prompt prefix measurement", () => {
     );
   });
 
-  it("does not regress a turn that already had room to clear", () => {
-    expect(measure({ ...ROOMY, rule: newRule })).toMatchObject(
-      measure({ ...ROOMY, rule: oldRule }),
+  it("sends byte-identical prompts on a turn that already had room to clear", () => {
+    // The control: same inputs, both rules step by step. This is stronger than
+    // comparing aggregate metrics, which could hide a different set of changes.
+    const before = simulate(ROOMY, oldRule).prompts.map((p) =>
+      JSON.stringify(p),
     );
+    const after = simulate(ROOMY, newRule).prompts.map((p) =>
+      JSON.stringify(p),
+    );
+    expect(after).toEqual(before);
+  });
+
+  it("records the cost where clearing everything would go well below the target", () => {
+    const before = measure(MID, oldRule);
+    const after = measure(MID, newRule);
+    // One invalidation either way in this window, but the target leaves more
+    // live content, so the suffix re-read on that invalidation is larger. This
+    // is the trade the creep-regime win is bought with, not a hidden win.
+    expect(after.stepsWithEarlierChange).toBe(before.stepsWithEarlierChange);
+    expect(after.invalidatedChars).toBeGreaterThan(before.invalidatedChars);
+  });
+
+  it("does not push a small window past where the old rule took it", () => {
+    // Without the safety valve the batch floor waits for four live results
+    // and reads 9,000 tokens on an 8,000-token window before clearing. With
+    // it, the rule takes a partial batch when one more item would overflow,
+    // so it stays at or below what the old per-step rule did.
+    const before = measure(SMALL_URGENT, oldRule);
+    const after = measure(SMALL_URGENT, newRule);
+    expect(after.maxOccupancy).toBeLessThanOrEqual(before.maxOccupancy);
+    // It still clears; the point is that it clears a partial batch rather than
+    // holding back.
+    expect(after.stepsWithEarlierChange).toBeGreaterThan(0);
+  });
+
+  it("batches on a small window when there is room", () => {
+    const before = measure(SMALL_ROOMY, oldRule);
+    const after = measure(SMALL_ROOMY, newRule);
+    expect(after.stepsWithEarlierChange).toBeLessThan(
+      before.stepsWithEarlierChange,
+    );
+    expect(after.invalidatedChars).toBeLessThan(before.invalidatedChars);
   });
 });

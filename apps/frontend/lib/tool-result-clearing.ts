@@ -90,9 +90,14 @@ function clearableToolNamesOf(
 
 /**
  * Observed size of what a completed UI message sends: text, and each tool
- * part's input and output. The backend measures the same three things from
- * `ModelMessage` parts, so a batch decision made here matches the next turn's
- * first model call.
+ * part's input and output (or error text). The backend measures the same three
+ * things from `ModelMessage` parts, so a batch decision made here matches the
+ * next turn's first model call for the Transcript this mirror renders.
+ *
+ * A Transcript summary narrows what the backend sends — the covered messages
+ * are replaced by the summary text — while this mirror only sees the stored
+ * Transcript. With a summary in place the chosen batch can therefore differ;
+ * the divider, not this mirror, is what marks the covered messages.
  */
 function observedConversationSize(
   messages: readonly PlatypusUIMessage[],
@@ -101,12 +106,13 @@ function observedConversationSize(
   for (const message of messages) {
     for (const part of message.parts ?? []) {
       if (isToolLikePart(part)) {
-        total += observedValueSize(part.input);
-        if (part.state === "output-available") {
-          total += observedValueSize(part.output);
-        } else if (part.errorText !== undefined) {
-          total += part.errorText.length;
+        // A call still streaming its input has no complete input for the
+        // backend to have measured either; counting a partial one here would
+        // size the two mirrors differently.
+        if (part.state !== "input-streaming") {
+          total += observedValueSize(part.input);
         }
+        if (isComplete(part)) total += partOutputSize(part);
         continue;
       }
       if (part.type === "text") total += part.text.length;
@@ -115,13 +121,19 @@ function observedConversationSize(
   return total;
 }
 
+/** Whether a tool part has finished, successfully or not. */
+function isComplete(part: ToolLikePart): boolean {
+  return part.state.startsWith("output-");
+}
+
+/** Observed size of a completed tool part's payload, error text included. */
+function partOutputSize(part: ToolLikePart): number {
+  return observedValueSize(part.output ?? part.errorText);
+}
 /** Characters clearing this result would stop sending, net of its marker. */
 function freedResultSize(part: ToolLikePart): number {
-  if (part.state !== "output-available") return 0;
-  return reclaimedCharacters(
-    observedValueSize(part.output),
-    CLEARED_TOOL_RESULT_MARKER,
-  );
+  if (!isComplete(part)) return 0;
+  return reclaimedCharacters(partOutputSize(part), CLEARED_TOOL_RESULT_MARKER);
 }
 
 /** Characters clearing this call's input would stop sending, net of its marker. */
@@ -145,7 +157,8 @@ function freedInputSize(part: ToolLikePart): number {
 
 /**
  * The `toolCallId`s of tool results this session's Chat meter would report as
- * cleared: clearable, output-available, and enough of the oldest such results
+ * cleared: clearable, complete (a failed read is still a read result the
+ * backend clears), and enough of the oldest such results
  * to bring occupancy back to `TOOL_RESULT_CLEARING_TARGET` once the shared
  * threshold has engaged — the same batch the backend would clear on the next
  * turn's first call.
@@ -171,7 +184,7 @@ export function clearedToolCallIds(
   for (const message of messages) {
     for (const part of message.parts ?? []) {
       if (!isToolLikePart(part)) continue;
-      if (part.state !== "output-available") continue;
+      if (!isComplete(part)) continue;
       if (!clearableToolNames.has(toolNameOf(part))) continue;
       clearable.push(part);
     }

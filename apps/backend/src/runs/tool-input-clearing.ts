@@ -13,6 +13,7 @@ import {
 import {
   observedConversationSize,
   type ClearingPolicy,
+  type ClearingReading,
   type OccupancyReading,
 } from "./tool-result-clearing.ts";
 
@@ -142,11 +143,7 @@ const clearableCalls = (messages: ModelMessage[]): ClearableCall[] => {
  */
 export const clearToolInputsToTarget = (
   messages: ModelMessage[],
-  reading: {
-    occupancy: number;
-    contextWindow: number;
-    conversationSize?: number;
-  },
+  reading: ClearingReading,
   policy: ClearingPolicy = DEFAULT_INPUT_CLEARING_POLICY,
 ): ModelMessage[] => {
   const calls = clearableCalls(messages);

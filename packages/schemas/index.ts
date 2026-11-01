@@ -1620,10 +1620,11 @@ export const TOOL_INPUT_CLEARING_KEEP_RECENT = 4;
 
 /**
  * The fraction of the declared Context window a clearing pass clears down to,
- * once Tool-result clearing's 0.7 trigger has engaged (ADR-0041's trigger/target
- * hysteresis). Well below the trigger so the pass clears a batch large enough
- * for several later steps to run without changing an earlier message, which is
- * what keeps the Provider's cached prompt prefix valid.
+ * once the 0.7 trigger has engaged (ADR-0041's trigger/target hysteresis).
+ * Well below the trigger so the pass clears a batch large enough for several
+ * later steps to run without changing an earlier message, which is what keeps
+ * the Provider's cached prompt prefix valid. Shared by Tool-result clearing,
+ * Tool-input clearing and both frontend mirrors, like the trigger above it.
  *
  * A fraction rather than a count of results: the same rule must mean the same
  * thing on a 16K window and a 1M one, and it has to survive the Operator
@@ -1634,11 +1635,11 @@ export const TOOL_RESULT_CLEARING_TARGET = 0.5;
 
 /**
  * The smallest number of clearable results a pass clears once it engages —
- * `clear_at_least` in Anthropic's terms. Clearing invalidates the cached
- * prefix from the oldest changed result onward, so a pass that clears one
- * result at a time pays that cost on every step while moving the boundary by
- * one: the exact creep `TOOL_RESULT_CLEARING_TARGET` exists to stop. Waiting
- * for a batch makes the invalidation worth it.
+ * our stand-in for Anthropic's `clear_at_least`, which is a token amount. We
+ * cannot count tokens locally (ADR-0018), so the floor is a count: clearing
+ * invalidates the cached prefix from the oldest changed result onward, and a
+ * pass that clears one result at a time pays that cost on every step while
+ * moving the boundary by one.
  *
  * The target still decides *how far* a pass clears; this is the floor that
  * decides *when* a partial pass is worth doing at all. Shared by result
@@ -1707,6 +1708,12 @@ export const observedValueSize = (value: unknown): number => {
  * `minBatch`. When the target is reachable with fewer, the floor still clears
  * that many, so a pass never does less work than the floor.
  *
+ * That wait has a safety valve, derived rather than configured: if one more
+ * item the size of the largest live one would push occupancy past the declared
+ * window, the pass takes the partial batch now. On a window small enough that
+ * the protected tail is already near it, batching must yield to not
+ * overflowing the model.
+ *
  * The returned number is a prefix length, not a count of live items: it
  * includes any already-cleared (or marker-sized) no-ops in front of the batch,
  * because clearing is oldest-first and callers slice the same prefix.
@@ -1761,7 +1768,15 @@ export const clearingPrefixLength = (input: {
     liveNeeded += 1;
   }
   const targetReachable = freed >= sizeToFree;
-  if (!targetReachable && live < minBatch) return 0;
+  if (!targetReachable && live < minBatch) {
+    const largestLive = input.itemSizes
+      .slice(leadingNoOps, candidates)
+      .reduce((largest, size) => Math.max(largest, size), 0);
+    const withOneMore =
+      (input.occupancy * (input.conversationSize + largestLive)) /
+      input.conversationSize;
+    if (withOneMore < input.contextWindow) return 0;
+  }
   const clearLive = Math.max(liveNeeded, Math.min(minBatch, live));
   return leadingNoOps + clearLive;
 };

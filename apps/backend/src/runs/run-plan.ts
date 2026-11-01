@@ -249,11 +249,20 @@ export const buildModelInvocation = (
     // to both passes. Input clearing runs after result clearing, and measuring
     // the already-shrunk conversation again would let the two size their
     // batches from different pictures — as would the frontend mirror, which
-    // only ever has the one Transcript.
+    // only ever has the one Transcript. Measured only once clearing can engage:
+    // below the trigger nothing sizes anything, and serialising every tool
+    // input on every step is not free.
+    const clearingEngaged =
+      occupancy !== undefined &&
+      plan.contextWindow !== undefined &&
+      occupancy / plan.contextWindow >=
+        DEFAULT_CLEARING_POLICY.thresholdFraction;
     const reading = {
       occupancy,
       contextWindow: plan.contextWindow,
-      conversationSize: observedConversationSize(messages),
+      ...(clearingEngaged
+        ? { conversationSize: observedConversationSize(messages) }
+        : {}),
     };
     // Tool-input clearing (issue #1722) runs after result clearing and before
     // the cache point; both return `messages` itself when they change nothing.

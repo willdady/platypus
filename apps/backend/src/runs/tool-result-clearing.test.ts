@@ -327,9 +327,8 @@ describe("observedConversationSize", () => {
       toolResultMessage("read_url", "t1", "hello"),
     ];
 
-    expect(observedConversationSize(messages)).toBe(
-      3 + JSON.stringify({ url: "https://example.com" }).length + 5,
-    );
+    // "abc" (3) + `{"url":"https://example.com"}` (29) + "hello" (5).
+    expect(observedConversationSize(messages)).toBe(37);
   });
 });
 

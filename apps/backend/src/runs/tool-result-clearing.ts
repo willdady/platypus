@@ -161,8 +161,9 @@ export const observedConversationSize = (messages: ModelMessage[]): number => {
 /**
  * Characters a pass would stop sending by clearing this result, net of the
  * marker that replaces it. Zero once it is already cleared, and zero for a
- * payload no larger than the marker — clearing that would grow the prompt
- * without freeing anything.
+ * payload no larger than the marker: the batch count does not treat it as
+ * progress, though it may still ride along inside a cleared prefix because
+ * clearing is oldest-first.
  */
 const freedResultSize = (
   messages: ModelMessage[],
@@ -259,11 +260,7 @@ export const clearStaleToolResults = (
  */
 export const clearToolResultsToTarget = (
   messages: ModelMessage[],
-  reading: {
-    occupancy: number;
-    contextWindow: number;
-    conversationSize?: number;
-  },
+  reading: ClearingReading,
   policy: ClearingPolicy = DEFAULT_CLEARING_POLICY,
   isReadOnlyTool: (toolName: string) => boolean = NEVER_READ_ONLY,
 ): ModelMessage[] => {
@@ -297,6 +294,12 @@ export type OccupancyReading = {
    */
   conversationSize?: number;
 };
+
+/** A reading with the two figures a pass cannot run without. */
+export type ClearingReading = Required<
+  Pick<OccupancyReading, "occupancy" | "contextWindow">
+> &
+  Pick<OccupancyReading, "conversationSize">;
 
 /**
  * The gated entry point: clears stale allowlisted tool results only once

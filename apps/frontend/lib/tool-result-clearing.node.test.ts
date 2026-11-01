@@ -62,15 +62,33 @@ describe("clearedToolCallIds", () => {
   });
 
   it("waits for a batch when only a couple of results are stale", () => {
-    const messages = Array.from({ length: 6 }, (_, i) =>
-      toolResultMessage("read_url", `t${i}`),
-    );
+    // A large non-clearable prompt makes the target out of reach with only two
+    // stale results; one more 500-character result would not overflow a
+    // 100-token window, so the pass waits.
+    const bigText = {
+      id: "u-big",
+      role: "user",
+      parts: [{ type: "text", text: "y".repeat(9_000) }],
+    } as unknown as PlatypusUIMessage;
+    const messages = [
+      bigText,
+      ...Array.from({ length: 6 }, (_, i) => ({
+        ...toolResultMessage("read_url", `t${i}`),
+        parts: [
+          {
+            type: "tool-read_url",
+            toolCallId: `t${i}`,
+            state: "output-available",
+            input: {},
+            output: "x".repeat(500),
+          },
+        ],
+      })),
+    ] as unknown as PlatypusUIMessage[];
     const result = clearedToolCallIds(messages, {
       occupancy: 95,
       contextWindow: 100,
     });
-    // TOOL_RESULT_CLEARING_KEEP_RECENT is 4 and the batch floor is 4, so two
-    // stale results are not worth the cache invalidation yet.
     expect(result).toEqual(new Set());
   });
 
@@ -84,6 +102,28 @@ describe("clearedToolCallIds", () => {
     });
     // Six are stale by count; clearing to the 0.5 target needs five of the
     // 5,000-character results, so the last five stay live.
+    expect(result).toEqual(new Set(["t0", "t1", "t2", "t3", "t4"]));
+  });
+
+  it("marks a failed read's result as cleared, as the backend does", () => {
+    // Result clearing is about the tool, not the outcome: an allowlisted read
+    // that errored is still a disposable result the backend clears.
+    const messages = Array.from({ length: 10 }, (_, i) => ({
+      ...toolResultMessage("read_url", `t${i}`),
+      parts: [
+        {
+          type: "tool-read_url",
+          toolCallId: `t${i}`,
+          state: "output-error",
+          input: {},
+          errorText: "x".repeat(5_000),
+        },
+      ],
+    })) as unknown as PlatypusUIMessage[];
+    const result = clearedToolCallIds(messages, {
+      occupancy: 95,
+      contextWindow: 100,
+    });
     expect(result).toEqual(new Set(["t0", "t1", "t2", "t3", "t4"]));
   });
 
@@ -211,11 +251,9 @@ describe("clearedInputToolCallIds", () => {
   it("marks a target-sized batch of writes rather than every stale one", () => {
     const messages = Array.from({ length: 12 }, (_, i) => write(`w${i}`));
     const cleared = clearedInputToolCallIds(messages, ABOVE);
-    // Eight are stale by count; the target stops the batch before the end.
-    expect(cleared.size).toBeGreaterThan(1);
-    expect(cleared.size).toBeLessThan(8);
-    expect(messages.slice(0, cleared.size).map((m) => m.id)).toEqual(
-      [...cleared].map((id) => `m-${id}`),
+    // Eight are stale by count; the target stops the batch after seven.
+    expect(cleared).toEqual(
+      new Set(["w0", "w1", "w2", "w3", "w4", "w5", "w6"]),
     );
   });
 

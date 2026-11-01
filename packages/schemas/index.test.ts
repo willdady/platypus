@@ -1869,6 +1869,28 @@ describe("clearingPrefixLength", () => {
       ).toBe(0);
     });
 
+    it("takes a partial batch when one more item would overflow the window", () => {
+      // Same wait state, but one more 1,500-character item would take the
+      // reading from 700 to ~805 tokens on an 800-token window. Safety wins.
+      expect(
+        clearingPrefixLength({
+          ...outOfReach,
+          contextWindow: 800,
+          itemSizes: [1_500, 1_500],
+          keepRecent: 0,
+        }),
+      ).toBe(2);
+      // Smaller items leave room for another, so the wait stands.
+      expect(
+        clearingPrefixLength({
+          ...outOfReach,
+          contextWindow: 800,
+          itemSizes: [1_000, 1_000],
+          keepRecent: 0,
+        }),
+      ).toBe(0);
+    });
+
     it("clears once the floor is live", () => {
       expect(
         clearingPrefixLength({
