@@ -8,6 +8,7 @@ import {
   dockerPluginConfigSchema,
   dockerSandboxConfigSchema,
   dockerSandboxCredentialsSchema,
+  type DockerPluginConfig,
   type DockerSandboxConfig,
   type DockerSandboxCredentials,
 } from "./backend.ts";
@@ -20,7 +21,8 @@ import {
 // unprefixed core id "docker", so existing `sandbox` rows resolve unchanged.
 const dockerBackend: SandboxBackendContribution<
   DockerSandboxConfig,
-  DockerSandboxCredentials
+  DockerSandboxCredentials,
+  DockerPluginConfig
 > = {
   backend: "docker",
   name: "Local Docker",
@@ -37,7 +39,7 @@ const dockerBackend: SandboxBackendContribution<
     createDockerSandboxBackend(config, credentials, plugin),
 };
 
-export const plugin: PlatypusPlugin = {
+export const plugin: PlatypusPlugin<DockerPluginConfig> = {
   name: "@platypus/docker",
   version: "0.1.0",
   apiVersion: PLUGIN_API_VERSION,

@@ -113,7 +113,7 @@ const servedStorageKey = (
  */
 export const resolvableStorageKeyFromUrl = (
   url: string,
-  origin?: string,
+  origin: string,
 ): { key: string; valid: boolean } | undefined => {
   if (isDataUrl(url)) {
     return undefined;

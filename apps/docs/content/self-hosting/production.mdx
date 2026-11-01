@@ -35,9 +35,10 @@ you pick hostnames.
 Nothing about the reverse proxy restricts _who_ may reach the app. Whether a
 stranger who reaches it can create an account is a separate switch,
 [`REQUIRE_INVITATION_TO_SIGN_UP`](/self-hosting/users-and-access#who-can-create-an-account),
-off by default. If you leave sign-up open, the proxy is also where you put an IP
-allowlist, a VPN requirement, or SSO-aware auth if the set of people who may hold
-an account is narrower than "anyone who can route to it".
+on by default: an account needs an invitation link unless you explicitly open
+sign-up. If you do open it, the proxy is also where you put an IP allowlist, a
+VPN requirement, or SSO-aware auth if the set of people who may hold an account
+is narrower than "anyone who can route to it".
 
 ## Put a rate limiter in front
 
@@ -49,7 +50,10 @@ authentication library throttles `/auth/` per client address:
 - `/auth/request-password-reset`, `/auth/forget-password/*`,
   `/auth/send-verification-email`, `/auth/email-otp/send-verification-otp` and
   `/auth/email-otp/request-password-reset` — **3 requests per 60 seconds**.
-- `/auth/get-session` — not limited.
+- `/auth/get-session` — **300 reads per rolling 60 seconds**. It is read on
+  every page load and again whenever a tab regains focus, so its bound is far
+  above what a person produces; it exists so a runaway client cannot poll
+  forever.
 - The rest of `/auth/` — **100 requests per 10 seconds**.
 
 It reads the client address from a single-value `X-Forwarded-For` header. If
@@ -77,8 +81,8 @@ middleware and every cloud load balancer can express it.
   Do not put that limit on all of `/auth/`. The app reads the session from
   `/auth/get-session` on every page load and again whenever a tab regains focus,
   so a ten-a-minute ceiling there shows "Couldn't load" on a reload for no
-  reason the person can see. The backend's own limiter leaves that path alone
-  for the same reason. Limit the paths above, not the prefix.
+  reason the person can see. The backend gives that path its own much larger
+  bound for the same reason. Limit the paths above, not the prefix.
 </Callout>
 
 ## Choose hostnames that let the cookie work
@@ -103,10 +107,10 @@ both origins share, so only these layouts actually work:
 
 <Callout type="warning">
   Two subdomains of one parent domain only work when `AUTH_COOKIE_DOMAIN` names
-  that parent. Without it the cookie is host-only and server-rendered
-  requests arrive unauthenticated. The backend still starts, so watch for the
-  startup error naming both hostnames — otherwise the app signs you in and
-  then silently serves degraded pages.
+  that parent. Without it the cookie is host-only and server-rendered requests
+  arrive unauthenticated. The backend refuses to start on that topology,
+  naming both hostnames and `AUTH_COOKIE_DOMAIN`, rather than signing you in
+  and then silently serving degraded pages.
 
 A partial edit of the URL variables is a different failure: the browser's own
 requests break, so **sign-in appears to succeed and then silently fails**.
@@ -199,10 +203,10 @@ behind in the bucket.
 - `ALLOWED_ORIGINS`, `BACKEND_URL` and `FRONTEND_URL` matching those hostnames.
 - `BETTER_AUTH_SECRET` a real random value, not the placeholder.
 - `ADMIN_PASSWORD` changed from whatever seeded the first admin.
-- `REQUIRE_INVITATION_TO_SIGN_UP=true`, unless you mean for anyone who can
-  reach the frontend to be able to register.
-- A rate limit at the proxy on sign-in, password changes and invitation links
-  — Platypus has none of its own.
+- Sign-up left at its default, invitation-only, unless you mean for anyone
+  who can reach the frontend to be able to register.
+- A rate limit at the proxy on sign-in, password changes and invitation links.
+  The backend's own limits above are thin and depend on your proxy.
 - `pg_dump` on a schedule, and once more immediately before any upgrade.
 - Image tags pinned in a `compose.override.yaml`, not `:latest`.
 - `STORAGE_BACKEND=s3` if more than one backend replica.

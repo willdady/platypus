@@ -5,6 +5,7 @@ import {
 } from "ai";
 import type { InferUIMessageChunk, ModelMessage } from "ai";
 import {
+  drizzleChatTurnQueries,
   prepareChatTurn,
   validateTurnAttachments,
   type ChatTurn,
@@ -32,7 +33,7 @@ import type {
 
 export type StreamOptions = {
   origin: string;
-  frontendUrl?: string;
+  frontendUrl: string;
   /**
    * Override per-step / per-run timeouts for this run. The HTTP request
    * abort signal is intentionally NOT accepted — Chat runs continue to
@@ -42,7 +43,7 @@ export type StreamOptions = {
 };
 
 export type GenerateOptions = {
-  frontendUrl?: string;
+  frontendUrl: string;
   timeouts?: RunTimeouts;
 };
 
@@ -160,7 +161,7 @@ export class AgentRunner {
     scope: WorkspaceScope,
     input: RunInput,
     origin: string | undefined,
-    frontendUrl: string | undefined,
+    frontendUrl: string,
     timeouts: RunTimeouts | undefined,
     onActivity: (event: ToolActivityEvent) => void,
     signal: AbortSignal,
@@ -170,29 +171,32 @@ export class AgentRunner {
     // know. `runId` is the run's own identity, not the turn's, so it is the
     // single field held back (issue #837).
     const { runId, ...turnRequest } = input;
-    return prepareChatTurn({
-      ...turnRequest,
-      orgId: scope.orgId,
-      workspaceId: scope.workspaceId,
-      user: userFromScope(scope),
-      // The run's own identity is the Provider Header placeholder's session:
-      // a Chat's run id is the chat id; a Trigger run's is that run's id.
-      sessionId: runId,
-      origin,
-      frontendUrl,
-      runMode: scope.principal.kind === "user" ? "interactive" : "headless",
-      a2aClientName:
-        scope.principal.kind === "a2a" ? scope.principal.name : undefined,
-      onActivity,
-      // Sub-agent delegate tools built for this turn register their own runs
-      // as children of this one, so they need to know whose child they are and
-      // what bounds this run was started under, and report their Token usage
-      // back into this run's.
-      run: { runId, scope, timeouts, setDelegateUsage },
-      // A cancelled run, or one its step timer has already killed, stops
-      // waiting on a Tool set or MCP server that has not answered (#1135).
-      signal,
-    });
+    return prepareChatTurn(
+      {
+        ...turnRequest,
+        orgId: scope.orgId,
+        workspaceId: scope.workspaceId,
+        user: userFromScope(scope),
+        // The run's own identity is the Provider Header placeholder's session:
+        // a Chat's run id is the chat id; a Trigger run's is that run's id.
+        sessionId: runId,
+        origin,
+        frontendUrl,
+        runMode: scope.principal.kind === "user" ? "interactive" : "headless",
+        a2aClientName:
+          scope.principal.kind === "a2a" ? scope.principal.name : undefined,
+        onActivity,
+        // Sub-agent delegate tools built for this turn register their own runs
+        // as children of this one, so they need to know whose child they are and
+        // what bounds this run was started under, and report their Token usage
+        // back into this run's.
+        run: { runId, scope, timeouts, setDelegateUsage },
+        // A cancelled run, or one its step timer has already killed, stops
+        // waiting on a Tool set or MCP server that has not answered (#1135).
+        signal,
+      },
+      drizzleChatTurnQueries,
+    );
   }
 
   /**
@@ -210,7 +214,7 @@ export class AgentRunner {
     input: RunInput;
     sink: RunSink;
     origin?: string;
-    frontendUrl?: string;
+    frontendUrl: string;
     timeouts?: RunTimeouts;
     /** The run's Run event recorder, for a headless run that keeps one. */
     events?: RunEventRecorder;
@@ -236,13 +240,16 @@ export class AgentRunner {
     // never brick the chat. Runs only when the turn has file parts; throws
     // `FileValidationError`, which the central `onError` (ADR-0010) maps to a
     // 400.
-    await validateTurnAttachments({
-      request: input.request,
-      messages: input.messages,
-      orgId: scope.orgId,
-      workspaceId: scope.workspaceId,
-      sessionId: input.runId,
-    });
+    await validateTurnAttachments(
+      {
+        request: input.request,
+        messages: input.messages,
+        orgId: scope.orgId,
+        workspaceId: scope.workspaceId,
+        sessionId: input.runId,
+      },
+      drizzleChatTurnQueries,
+    );
 
     const state: RunState = {
       messages: input.messages,
@@ -518,10 +525,10 @@ export class AgentRunner {
     scope: WorkspaceScope;
     input: RunInput;
     sink: RunSink;
-    options?: GenerateOptions;
+    options: GenerateOptions;
   }): Promise<GenerateResult> {
     const { input } = params;
-    const options = params.options ?? {};
+    const options = params.options;
     // One Run event recorder per headless run (#647): the sink is handed it at
     // start and flushes it on its own cadence; the drive fills it, and routes
     // it down to any Sub-Agent the run delegates to.

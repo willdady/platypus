@@ -247,7 +247,9 @@ key and endpoint come from **deploy-time Plugin config**.
 That config block is one block per Plugin, but it is handed to you alongside the
 request context on every turn, so you can serve different Organizations
 different upstreams. Key your own config by `orgId` or `workspaceId` and choose
-inside the factory:
+inside the factory. Declare the schema and its output type on the manifest —
+`configSchema` plus `PlatypusPlugin<z.infer<typeof configSchema>>` — and
+`plugin.config` arrives narrowed, with no cast:
 
 ```bash
 PLATYPUS_PLUGIN_CONFIG_ACME_SEARCH={"config":{"endpoints":{"<org-id>":"https://searx.dmz.internal","default":"https://searx.internal"}}}

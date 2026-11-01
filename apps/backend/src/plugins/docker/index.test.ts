@@ -26,9 +26,9 @@ describe("@platypus/docker plugin manifest", () => {
     // Docker has no plugin-level secrets.
     expect(plugin.credentialsSchema).toBeUndefined();
     // It defaults allowedNetworks to [] (default-deny) and is strict.
-    const parsed = plugin.configSchema!.parse({});
+    const parsed = plugin.configSchema.parse({});
     expect(parsed).toEqual({ allowedNetworks: [] });
-    expect(plugin.configSchema!.safeParse({ unknownKey: 1 }).success).toBe(
+    expect(plugin.configSchema.safeParse({ unknownKey: 1 }).success).toBe(
       false,
     );
   });

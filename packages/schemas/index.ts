@@ -3451,7 +3451,7 @@ export type RunEventError = z.infer<typeof runEventErrorSchema>;
  *
  * `startedAt` is an absolute wall-clock instant in epoch milliseconds, so it
  * lines up with backend logs and a delegate's events need no rebasing;
- * `durationMs` comes from a monotonic clock and is absent while the event is
+ * `durationMs` comes from a monotonic clock and is null while the event is
  * still open. `parentEventId` is null for an event of the root run and the id
  * of the `delegate` event for an event of that delegate's run. `seq` is the
  * run's monotonic insertion order, kept for incremental polling; display order
@@ -3463,18 +3463,18 @@ export const runEventSchema = z.object({
   parentEventId: z.string().nullable(),
   seq: z.number().int().nonnegative(),
   type: runEventTypeSchema,
-  toolName: z.string().nullable().optional(),
+  toolName: z.string().nullable(),
   startedAt: z.number().int().nonnegative(),
-  durationMs: z.number().int().nonnegative().nullable().optional(),
+  durationMs: z.number().int().nonnegative().nullable(),
   status: runEventStatusSchema,
-  error: runEventErrorSchema.nullable().optional(),
+  error: runEventErrorSchema.nullable(),
   /**
    * Set when the run hit its event ceiling while this event was open, so
    * children it would have had were dropped. Marked on the node — not only on
    * the run — so a delegate whose children were dropped does not render as a
    * delegate that did nothing.
    */
-  childrenTruncated: z.boolean().optional(),
+  childrenTruncated: z.boolean(),
 });
 
 export type RunEvent = z.infer<typeof runEventSchema>;

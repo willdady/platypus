@@ -18,6 +18,7 @@ import {
 import { normalizeToolResults } from "../services/tool-result.ts";
 import { logger } from "../logger.ts";
 import {
+  DEFAULT_MAX_EXTRACTED_TEXT_CHARS,
   MAX_PLUGIN_TOOL_NAME_LENGTH,
   namespaceToolName,
   TOOL_NAME_PATTERN,
@@ -98,7 +99,8 @@ export type ToolSetRegistration = {
   id: string;
   name: string;
   category: string;
-  description?: string;
+  /** A sentence the Agent form shows for this set — required as of API v4. */
+  description: string;
   /**
    * This Tool set's model-facing Tools for one Chat turn — resolved, guarded,
    * and result-normalized. Never rejects: a Tool set that cannot serve this turn
@@ -112,14 +114,14 @@ export type ToolSetRegistration = {
   buildTurnTools: (
     context: CoreToolSetContext,
     /** The run's own abort, so a cancelled turn stops waiting on the factory. */
-    signal?: AbortSignal,
+    signal: AbortSignal | undefined,
     /**
      * Told when the factory threw, timed out or returned no tool map — the
      * faults behind an empty result — so the run can record this Tool set as
      * unloaded (#1184). Not called for a factory that served no tools on
      * purpose, nor for one abandoned because the run was cancelled.
      */
-    onFactoryFailed?: () => void,
+    onFactoryFailed: () => void,
   ) => Promise<Record<string, Tool>>;
   /**
    * The contribution's tools when it declared them as a static map, for the
@@ -404,8 +406,8 @@ export const composeToolSet = (
 
   const buildTurnTools = async (
     context: CoreToolSetContext,
-    signal?: AbortSignal,
-    onFactoryFailed?: () => void,
+    signal: AbortSignal | undefined,
+    onFactoryFailed: () => void,
   ): Promise<Record<string, Tool>> => {
     let resolved: unknown = tools;
     if (typeof tools === "function") {
@@ -438,7 +440,7 @@ export const composeToolSet = (
               ? "Tool set factory abandoned because the turn was cancelled"
               : "Tool set factory threw; serving none of its tools this turn",
         );
-        if (!(cause instanceof CallerAbortedError)) onFactoryFailed?.();
+        if (!(cause instanceof CallerAbortedError)) onFactoryFailed();
         return {};
       }
     }
@@ -451,7 +453,7 @@ export const composeToolSet = (
         { plugin: pluginName, toolSet: id },
         "Tool set resolved to no tool map; serving none of its tools this turn",
       );
-      onFactoryFailed?.();
+      onFactoryFailed();
       return {};
     }
 
@@ -533,19 +535,22 @@ const modelFileReading = async (
   agentId: string,
   scope: { orgId: string; workspaceId: string },
 ): Promise<ModelFileReading> => {
-  const none = { passthroughFileTypes: [] };
+  const noFileReading = {
+    passthroughFileTypes: [],
+    maxExtractedTextChars: DEFAULT_MAX_EXTRACTED_TEXT_CHARS,
+  };
   const agent = await resolveScoped(db, "agent", agentId, scope);
-  if (!agent) return none;
+  if (!agent) return noFileReading;
   const found = await resolveScoped(
     db,
     "provider",
     agent.row.providerId,
     scope,
   );
-  if (!found) return none;
+  if (!found) return noFileReading;
   const provider = found.row;
   const modelId = resolveModelId(provider, agent.row.modelId);
-  if (!modelId) return none;
+  if (!modelId) return noFileReading;
   return {
     passthroughFileTypes: passthroughFileTypesForModel(provider, modelId),
     maxExtractedTextChars: maxExtractedTextCharsForModel(provider, modelId),

@@ -81,6 +81,7 @@ const toolSet = (id: string): ToolSetContribution => ({
   id,
   name: id,
   category: "Test",
+  description: `${id} tools`,
   tools: {},
 });
 
@@ -237,7 +238,7 @@ describe("loadPlugins — apiVersion compatibility window (N and N−1)", () => 
       }),
     ).rejects.toThrow(
       new RegExp(
-        `@ancient/plugin.*targets API v${OLDEST_SUPPORTED_API_VERSION - 1}, below the oldest core supports`,
+        `@ancient/plugin.*targets API v${OLDEST_SUPPORTED_API_VERSION - 1}, below the oldest core supports.*Core supports v${OLDEST_SUPPORTED_API_VERSION}–v${PLUGIN_API_VERSION}`,
         "s",
       ),
     );
@@ -431,22 +432,50 @@ describe("loadPlugins", () => {
   it.each([
     [
       "a missing category",
-      { id: "broken", name: "Broken", tools: {} },
+      { id: "broken", name: "Broken", description: "Test", tools: {} },
       /@platypus\/bad.*tool set "broken".*non-empty "category"/s,
     ],
     [
       "a whitespace-only category",
-      { id: "broken", name: "Broken", category: "   ", tools: {} },
+      {
+        id: "broken",
+        name: "Broken",
+        category: "   ",
+        description: "Test",
+        tools: {},
+      },
       /@platypus\/bad.*tool set "broken".*non-empty "category"/s,
     ],
     [
+      "a missing description",
+      { id: "broken", name: "Broken", category: "Test", tools: {} },
+      /@platypus\/bad.*tool set "broken".*non-empty "description"/s,
+    ],
+    [
+      "a whitespace-only description",
+      {
+        id: "broken",
+        name: "Broken",
+        category: "Test",
+        description: "   ",
+        tools: {},
+      },
+      /@platypus\/bad.*tool set "broken".*non-empty "description"/s,
+    ],
+    [
       "missing tools",
-      { id: "broken", name: "Broken", category: "Test" },
+      { id: "broken", name: "Broken", category: "Test", description: "Test" },
       /@platypus\/bad.*tool set "broken".*"tools" object or function/s,
     ],
     [
       "an array tools",
-      { id: "broken", name: "Broken", category: "Test", tools: [] },
+      {
+        id: "broken",
+        name: "Broken",
+        category: "Test",
+        description: "Test",
+        tools: [],
+      },
       /@platypus\/bad.*tool set "broken".*"tools" object or function/s,
     ],
   ])(
@@ -1154,6 +1183,7 @@ describe("loadPlugins — deploy-time plugin config injection", () => {
           id: "managed",
           name: "Managed",
           category: "Test",
+          description: "Managed tools",
           tools: (_ctx, plugin) => {
             seen.toolSet = plugin;
             return {};
@@ -1206,14 +1236,20 @@ describe("loadPlugins — deploy-time plugin config injection", () => {
 
     // Tool-set factory: invoked as core would at Chat-turn time, with ctx only.
     // Third-party ids are namespaced, so the registry key is prefixed.
-    await registered["acmecloud.managed"].buildTurnTools({
-      workspaceId: "w",
-      agentId: "a",
-      orgId: "o",
-      frontendUrl: undefined,
-      userId: "u",
-      registerCloser: () => {},
-    });
+    await registered["acmecloud.managed"].buildTurnTools(
+      {
+        workspaceId: "w",
+        agentId: "a",
+        orgId: "o",
+        frontendUrl: "http://localhost:3000",
+        userId: "u",
+        timezone: "UTC",
+        sessionId: "chat-1",
+        registerCloser: () => {},
+      },
+      undefined,
+      () => {},
+    );
 
     // Sandbox create(): invoked as core would, with the per-Workspace values.
     sandboxCalls[0].create({}, {});
@@ -1256,14 +1292,20 @@ describe("loadPlugins — deploy-time plugin config injection", () => {
       },
     });
 
-    await registered["acmecloud.managed"].buildTurnTools({
-      workspaceId: "w",
-      agentId: "a",
-      orgId: "o",
-      frontendUrl: undefined,
-      userId: "u",
-      registerCloser: () => {},
-    });
+    await registered["acmecloud.managed"].buildTurnTools(
+      {
+        workspaceId: "w",
+        agentId: "a",
+        orgId: "o",
+        frontendUrl: "http://localhost:3000",
+        userId: "u",
+        timezone: "UTC",
+        sessionId: "chat-1",
+        registerCloser: () => {},
+      },
+      undefined,
+      () => {},
+    );
     sandboxCalls[0].create({}, {});
 
     // The two contributions must be handed the *same* resolved block — one
@@ -1330,6 +1372,7 @@ describe("loadPlugins — deploy-time plugin config injection", () => {
                   id: "plain",
                   name: "Plain",
                   category: "Test",
+                  description: "Plain tools",
                   tools: (_ctx, plugin) => {
                     seenPlugin = plugin;
                     return {};
@@ -1344,14 +1387,20 @@ describe("loadPlugins — deploy-time plugin config injection", () => {
       },
     });
 
-    await registered["noschema.plain"].buildTurnTools({
-      workspaceId: "w",
-      agentId: "a",
-      orgId: "o",
-      frontendUrl: undefined,
-      userId: "u",
-      registerCloser: () => {},
-    });
+    await registered["noschema.plain"].buildTurnTools(
+      {
+        workspaceId: "w",
+        agentId: "a",
+        orgId: "o",
+        frontendUrl: "http://localhost:3000",
+        userId: "u",
+        timezone: "UTC",
+        sessionId: "chat-1",
+        registerCloser: () => {},
+      },
+      undefined,
+      () => {},
+    );
 
     expect(seenPlugin).toEqual({
       config: undefined,
@@ -1377,6 +1426,7 @@ describe("loadPlugins — plugin logger injection", () => {
           id: "tools",
           name: "Tools",
           category: "Test",
+          description: "Logging tools",
           tools: (_ctx, plugin) => {
             seen.toolSet = plugin;
             plugin.logger.info({ point: "toolSet" }, "resolving tools");
@@ -1437,14 +1487,20 @@ describe("loadPlugins — plugin logger injection", () => {
       baseLogger: opts.baseLogger,
     });
 
-    await registered[`${opts.pluginName}.tools`].buildTurnTools({
-      workspaceId: "w",
-      agentId: "a",
-      orgId: "o",
-      frontendUrl: undefined,
-      userId: "u",
-      registerCloser: () => {},
-    });
+    await registered[`${opts.pluginName}.tools`].buildTurnTools(
+      {
+        workspaceId: "w",
+        agentId: "a",
+        orgId: "o",
+        frontendUrl: "http://localhost:3000",
+        userId: "u",
+        timezone: "UTC",
+        sessionId: "chat-1",
+        registerCloser: () => {},
+      },
+      undefined,
+      () => {},
+    );
     sandboxCalls[0].create({}, {});
     await webCalls[0].buildTurnTools({
       orgId: "o",
@@ -1558,14 +1614,20 @@ describe("loadPlugins — example third-party plugin", () => {
     // Management tool set: its tool description reflects the SAME token/region.
     const tools = (await registered[
       "example-cloud-sandbox.management"
-    ].buildTurnTools({
-      workspaceId: "w",
-      agentId: "a",
-      orgId: "o",
-      frontendUrl: undefined,
-      userId: "u",
-      registerCloser: () => {},
-    })) as unknown as Record<
+    ].buildTurnTools(
+      {
+        workspaceId: "w",
+        agentId: "a",
+        orgId: "o",
+        frontendUrl: "http://localhost:3000",
+        userId: "u",
+        timezone: "UTC",
+        sessionId: "chat-1",
+        registerCloser: () => {},
+      },
+      undefined,
+      () => {},
+    )) as unknown as Record<
       string,
       { execute: (i: unknown) => Promise<string> }
     >;
@@ -1720,7 +1782,7 @@ describe("loadPlugins — deploy-time config targeting (ADR-0013)", () => {
               apiVersion: PLUGIN_API_VERSION,
               configSchema: z.object({ region: z.string() }),
               contributes: { toolSets: [toolSet("w")] },
-            } satisfies PlatypusPlugin,
+            } satisfies PlatypusPlugin<{ region: string }>,
           }),
         register: () => {},
         env: { PLATYPUS_PLUGIN_CONFIG_WIDGETS: '{"config":{"region":"eu"}}' },
@@ -1734,7 +1796,9 @@ describe("loadPlugins — per-plugin config vars (PLATYPUS_PLUGIN_CONFIG_<NAME>)
     vi.unstubAllEnvs();
   });
 
-  const cloudSandbox: PlatypusPlugin = {
+  // Spread, not re-annotated: a manifest typed with its own config is not
+  // assignable to one left at the SDK's default `unknown`.
+  const cloudSandbox = {
     ...examplePlugin,
     name: "cloud-sandbox",
   };
@@ -2175,14 +2239,20 @@ describe("loadPlugins — example third-party npm package (end to end)", () => {
     expect(set.category).toBe("Examples");
     expect(getToolSet("greeting")).toBeUndefined();
 
-    const tools = await set.buildTurnTools({
-      workspaceId: "ws-1",
-      agentId: "agent-1",
-      orgId: "org-1",
-      frontendUrl: undefined,
-      userId: "user-1",
-      registerCloser: () => {},
-    });
+    const tools = await set.buildTurnTools(
+      {
+        workspaceId: "ws-1",
+        agentId: "agent-1",
+        orgId: "org-1",
+        frontendUrl: "http://localhost:3000",
+        userId: "user-1",
+        timezone: "UTC",
+        sessionId: "chat-1",
+        registerCloser: () => {},
+      },
+      undefined,
+      () => {},
+    );
     // The author writes `greet`; the model is offered `example__greet`
     // (issue #664). The bare name is gone, so core's own turn tools have nothing
     // of this plugin's left to overwrite.
@@ -2217,14 +2287,20 @@ describe("loadPlugins — example third-party npm package (end to end)", () => {
       baseLogger,
     });
 
-    await calls[0].registration.buildTurnTools({
-      workspaceId: "ws-1",
-      agentId: "agent-1",
-      orgId: "org-1",
-      frontendUrl: undefined,
-      userId: "user-1",
-      registerCloser: () => {},
-    });
+    await calls[0].registration.buildTurnTools(
+      {
+        workspaceId: "ws-1",
+        agentId: "agent-1",
+        orgId: "org-1",
+        frontendUrl: "http://localhost:3000",
+        userId: "user-1",
+        timezone: "UTC",
+        sessionId: "chat-1",
+        registerCloser: () => {},
+      },
+      undefined,
+      () => {},
+    );
 
     expect(lines).toEqual([]);
   });

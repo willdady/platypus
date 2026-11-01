@@ -7,6 +7,8 @@ import {
   withAdvisoryLock,
 } from "../src/db/advisory-lock.ts";
 import { databaseConfig } from "../src/db/connection-config.ts";
+import { backfillTriggerNextRunAt } from "../src/db/backfill-trigger-next-run.ts";
+import { databaseUrl } from "../src/env.ts";
 import { logger } from "../src/logger.ts";
 
 const { Pool } = pg;
@@ -16,7 +18,10 @@ const { Pool } = pg;
 const MIGRATIONS_FOLDER = fileURLToPath(new URL("../drizzle", import.meta.url));
 
 async function runMigrations() {
-  const pool = new Pool(databaseConfig(process.env.DATABASE_URL));
+  // Through the same validation the server applies to `DATABASE_URL`, so the
+  // migrate step cannot fall back to node-postgres' `PG*` variables or run
+  // against a URL the server would have refused.
+  const pool = new Pool(databaseConfig(databaseUrl()));
 
   // An idle client dropped mid-migration (e.g. the one holding the lock) would
   // otherwise crash the process with an unhandled 'error' event.
@@ -39,6 +44,17 @@ async function runMigrations() {
         await db.execute("CREATE EXTENSION IF NOT EXISTS vector");
 
         await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
+
+        // A data step the SQL migrations cannot express: a stranded Cron
+        // Trigger's next run is a cron expression in its own timezone. Runs
+        // after the schema is current, and finds nothing on a healthy database.
+        const { scheduled, skipped } = await backfillTriggerNextRunAt(db);
+        if (scheduled > 0 || skipped > 0) {
+          logger.info(
+            { scheduled, skipped },
+            "Rescheduled Cron Triggers left without a next run",
+          );
+        }
       },
       { wait: true },
     );

@@ -1,5 +1,3 @@
-import type { PlatypusPlugin } from "@platypuschat/plugin-sdk";
-
 // The static built-in map IS the core allowlist (ADR-0013): membership here —
 // resolved from the trusted bundle, not the package-scope string — decides which
 // plugin names are treated as core. Core plugins are internal backend modules
@@ -8,9 +6,15 @@ import type { PlatypusPlugin } from "@platypuschat/plugin-sdk";
 // `@platypus/*` names are logical ids, not published packages. Third-party
 // plugins are absent from this map and resolve via dynamic `import()` in the
 // loader.
+//
+// The value is `{ plugin: unknown }` rather than a `PlatypusPlugin`: a manifest
+// is generic over its deploy-time config, and a plugin that types its config is
+// not assignable to one left at the default `unknown`. Every module below
+// annotates its own `plugin` export, which is where that check belongs; this map
+// only resolves the module, as it does for a third-party import.
 export const BUILTIN_PLUGINS: Record<
   string,
-  () => Promise<{ plugin: PlatypusPlugin }>
+  () => Promise<{ plugin: unknown }>
 > = {
   "@platypus/tools-basic": () => import("./tools-basic/index.ts"),
   "@platypus/web-fetch": () => import("./web-fetch/index.ts"),

@@ -36,10 +36,21 @@ const loadAdvancedOptions = async (): Promise<AdvancedOptions> =>
  * endpoints the fence leaves open does not depend on the hash, and scrypt
  * costs seconds per test.
  */
-const runnableAuth = async () => {
+const runnableAuth = async ({ rateLimited = false } = {}) => {
   const { options } = await loadAuth();
   return betterAuth({
     ...options,
+    // The limiter is off outside production, so a test that exercises it turns
+    // it on around the composed rules rather than replacing them.
+    ...(rateLimited
+      ? {
+          rateLimit: {
+            ...options.rateLimit,
+            enabled: true,
+            storage: "memory" as const,
+          },
+        }
+      : {}),
     emailAndPassword: {
       ...options.emailAndPassword,
       password: {
@@ -135,13 +146,13 @@ describe("REQUIRE_INVITATION_TO_SIGN_UP", () => {
     ((await loadAuth()).options as EmailAndPasswordOptions).emailAndPassword
       ?.disableSignUp;
 
-  it("leaves public sign-up open when unset", async () => {
-    expect(await disableSignUp()).toBe(false);
+  it("closes public sign-up when unset", async () => {
+    expect(await disableSignUp()).toBe(true);
   });
 
-  it("closes public sign-up when set to true", async () => {
-    process.env.REQUIRE_INVITATION_TO_SIGN_UP = "true";
-    expect(await disableSignUp()).toBe(true);
+  it("opens public sign-up only when explicitly disabled", async () => {
+    process.env.REQUIRE_INVITATION_TO_SIGN_UP = "false";
+    expect(await disableSignUp()).toBe(false);
   });
 
   describe("with sign-up closed", () => {
@@ -218,12 +229,64 @@ describe("REQUIRE_INVITATION_TO_SIGN_UP", () => {
     });
   });
 
-  it("leaves the public sign-up endpoint working when unset", async () => {
+  it("leaves the public sign-up endpoint working when explicitly opened", async () => {
+    process.env.REQUIRE_INVITATION_TO_SIGN_UP = "false";
     const auth = await runnableAuth();
 
     const result = await auth.api.signUpEmail({ body: INVITEE });
 
     expect(result.user.email).toBe(INVITEE.email);
+  });
+});
+
+/**
+ * `/get-session`'s bound (#1761). The composed options run for real with the
+ * limiter switched on, because the failure this guards against was a page
+ * reload getting a 429: the path is read on every load and again whenever a
+ * tab regains focus. A reload's handful of reads must pass; a client that
+ * never stops must still be cut off.
+ */
+describe("/get-session rate limit", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    process.env.BETTER_AUTH_URL = "http://localhost:4001";
+    process.env.FRONTEND_URL = "http://localhost:3001";
+    process.env.BETTER_AUTH_SECRET = "a-test-secret-that-is-at-least-32-chars";
+  });
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+  });
+
+  const readSession = async (auth: Awaited<ReturnType<typeof runnableAuth>>) =>
+    (await auth.handler(new Request("http://localhost:4001/auth/get-session")))
+      .status;
+
+  it("gives the path a stated limit instead of a blanket exemption", async () => {
+    const { options } = await loadAuth();
+
+    expect(options.rateLimit.customRules["/get-session"]).toEqual({
+      window: 60,
+      max: 300,
+    });
+  });
+
+  it("never rate-limits a normal round of page reloads", async () => {
+    const auth = await runnableAuth({ rateLimited: true });
+
+    // 40 reloads, each reading the session three times: more than a person
+    // switching tabs produces in a minute, and still nowhere near the bound.
+    for (let i = 0; i < 120; i++) {
+      expect(await readSession(auth)).toBe(200);
+    }
+  });
+
+  it("cuts off a client that keeps reading past the bound", async () => {
+    const auth = await runnableAuth({ rateLimited: true });
+
+    for (let i = 0; i < 300; i++) await readSession(auth);
+
+    expect(await readSession(auth)).toBe(429);
   });
 });
 
@@ -234,7 +297,8 @@ describe("User timezone", () => {
     process.env.FRONTEND_URL = "http://localhost:3001";
     process.env.BETTER_AUTH_SECRET = "a-test-secret-that-is-at-least-32-chars";
     delete process.env.AUTH_COOKIE_DOMAIN;
-    delete process.env.REQUIRE_INVITATION_TO_SIGN_UP;
+    // These tests mint their accounts through public sign-up.
+    process.env.REQUIRE_INVITATION_TO_SIGN_UP = "false";
   });
 
   afterEach(() => {

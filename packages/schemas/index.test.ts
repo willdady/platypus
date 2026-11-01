@@ -73,6 +73,7 @@ import {
   webhookCreateSchema,
   webhookUpdateSchema,
   triggerRunStatsSchema,
+  runEventSchema,
   triggerRunStatusSchema,
   TRIGGER_RUN_STATUS_LABELS,
   triggerUpdateSchema,
@@ -2262,6 +2263,37 @@ describe("sampling parameter bounds (#1144)", () => {
       false,
     );
   });
+});
+
+describe("runEventSchema", () => {
+  const event = {
+    id: "rev-1",
+    runId: "run-1",
+    parentEventId: null,
+    seq: 0,
+    type: "tool-call",
+    toolName: "search",
+    startedAt: 1_700_000_000_000,
+    durationMs: 250,
+    status: "completed",
+    error: null,
+    childrenTruncated: false,
+  };
+
+  it("accepts an event the recorder wrote", () => {
+    expect(runEventSchema.safeParse(event).success).toBe(true);
+  });
+
+  // The recorder writes all four on every event, and the sink used to fill in
+  // a default for each. v4 requires them, so an older or hand-written payload
+  // fails here rather than silently rendering as an open, nameless event.
+  it.each(["toolName", "durationMs", "error", "childrenTruncated"] as const)(
+    "rejects an event missing %s",
+    (field) => {
+      const { [field]: _omitted, ...rest } = event;
+      expect(runEventSchema.safeParse(rest).success).toBe(false);
+    },
+  );
 });
 
 describe("unchecked payload fields (#1630)", () => {

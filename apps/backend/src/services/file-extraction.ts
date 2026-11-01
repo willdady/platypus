@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import {
   extractableDocumentFormat,
-  resolveExtractedTextCap,
   type ExtractableDocumentFormat,
   type FileMetadata,
 } from "@platypus/schemas";
@@ -128,7 +127,7 @@ const remember = (key: string, value: string | null): void => {
 export const extractDocumentText = async (
   bytes: Uint8Array,
   file: FileMetadata,
-  options: { maxChars?: number } = {},
+  options: { maxChars: number },
 ): Promise<ExtractionResult> => {
   const format = extractableDocumentFormat(file);
   if (!format) return { status: "unextractable" };
@@ -162,7 +161,7 @@ export const extractDocumentText = async (
 
   if (text === null) return { status: "unextractable" };
 
-  const maxChars = resolveExtractedTextCap(options.maxChars);
+  const maxChars = options.maxChars;
   return {
     status: "ok",
     text: text.length > maxChars ? text.slice(0, maxChars) : text,

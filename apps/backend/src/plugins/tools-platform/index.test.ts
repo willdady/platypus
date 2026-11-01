@@ -46,6 +46,7 @@ const ctx: ToolSetContext = {
   orgId: "org-1",
   frontendUrl: "http://localhost:3000",
   userId: "u-1",
+  timezone: "UTC",
   sessionId: "chat-1",
   registerCloser: () => {},
 };
@@ -92,7 +93,11 @@ describe("@platypus/tools-platform — loaded into the core registry", () => {
 
   it("resolves each tool set to a non-empty tool map at chat-turn time", async () => {
     for (const id of EXPECTED_IDS) {
-      const tools = await getToolSet(id)!.buildTurnTools(ctx);
+      const tools = await getToolSet(id)!.buildTurnTools(
+        ctx,
+        undefined,
+        () => {},
+      );
       expect(Object.keys(tools).length).toBeGreaterThan(0);
     }
   });
@@ -109,8 +114,16 @@ describe("@platypus/tools-platform — loaded into the core registry", () => {
   });
 
   it("shares listBoards and getBoardState between the two Kanban sets", async () => {
-    const cards = await getToolSet("kanban")!.buildTurnTools(ctx);
-    const boards = await getToolSet("kanban-boards")!.buildTurnTools(ctx);
+    const cards = await getToolSet("kanban")!.buildTurnTools(
+      ctx,
+      undefined,
+      () => {},
+    );
+    const boards = await getToolSet("kanban-boards")!.buildTurnTools(
+      ctx,
+      undefined,
+      () => {},
+    );
     const shared = Object.keys(cards).filter((name) => name in boards);
     expect(shared.sort()).toEqual(["getBoardState", "listBoards"]);
     // Marked shared, so a turn granting both claims each once, unreported.
@@ -120,14 +133,18 @@ describe("@platypus/tools-platform — loaded into the core registry", () => {
   });
 
   it("resolves the read/write agent-management split tools as before", async () => {
-    const discoveryTools =
-      await getToolSet("agent-discovery")!.buildTurnTools(ctx);
+    const discoveryTools = await getToolSet("agent-discovery")!.buildTurnTools(
+      ctx,
+      undefined,
+      () => {},
+    );
     expect(Object.keys(discoveryTools).sort()).toEqual(
       ["getAgent", "listAgents", "listModelProviders", "listToolSets"].sort(),
     );
 
-    const managementTools =
-      await getToolSet("agent-management")!.buildTurnTools(ctx);
+    const managementTools = await getToolSet(
+      "agent-management",
+    )!.buildTurnTools(ctx, undefined, () => {});
     expect(Object.keys(managementTools).sort()).toEqual(
       ["createAgent", "deleteAgent", "updateAgent"].sort(),
     );

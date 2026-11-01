@@ -457,11 +457,11 @@ export const makeFakePluginLogger = (): FakePluginLogger => ({
  * default to `undefined` — what a manifest declaring no schema resolves to — and
  * the logger is a spy, so a test can assert on what the contribution wrote.
  */
-export const makePluginContext = (
-  over: Partial<PluginConfigContext> = {},
-): PluginConfigContext => ({
-  config: undefined,
-  credentials: undefined,
+export const makePluginContext = <TConfig = unknown, TCredentials = unknown>(
+  over: Partial<PluginConfigContext<TConfig, TCredentials>> = {},
+): PluginConfigContext<TConfig, TCredentials> => ({
+  config: undefined as TConfig,
+  credentials: undefined as TCredentials,
   logger: makeFakePluginLogger(),
   ...over,
 });

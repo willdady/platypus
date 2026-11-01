@@ -45,13 +45,14 @@ export interface LoadedPlugin {
   toolGateIds: string[];
   /**
    * The plugin's boot-resolved, Operator-owned deploy-time **config** (never
-   * credentials), or `undefined` when the manifest declares no `configSchema`.
-   * Carried so the registry can serve it to request handlers that need a
-   * plugin's resolved config without re-parsing the environment — e.g. the
-   * Docker network-allowlist endpoint (ADR-0005/0013). The read-only `GET
-   * /plugins` catalog cherry-picks fields and never exposes this.
+   * credentials) — present on every loaded plugin, and `undefined` when the
+   * manifest declares no `configSchema`. Carried so the registry can serve it to
+   * request handlers that need a plugin's resolved config without re-parsing the
+   * environment — e.g. the Docker network-allowlist endpoint (ADR-0005/0013).
+   * The read-only `GET /plugins` catalog cherry-picks fields and never exposes
+   * this.
    */
-  config?: unknown;
+  config: unknown;
 }
 
 /**

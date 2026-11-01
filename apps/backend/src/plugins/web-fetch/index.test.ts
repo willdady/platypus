@@ -18,8 +18,8 @@ describe("@platypus/web-fetch plugin manifest", () => {
 
   it("declares a plugin-level configSchema (ignoreRobotsTxt, deploy-time)", () => {
     // Defaults to robots.txt-respecting when the Operator supplies nothing.
-    expect(plugin.configSchema?.parse({})).toEqual({ ignoreRobotsTxt: false });
-    expect(plugin.configSchema?.parse({ ignoreRobotsTxt: true })).toEqual({
+    expect(plugin.configSchema.parse({})).toEqual({ ignoreRobotsTxt: false });
+    expect(plugin.configSchema.parse({ ignoreRobotsTxt: true })).toEqual({
       ignoreRobotsTxt: true,
     });
   });
@@ -46,14 +46,20 @@ describe("@platypus/web-fetch plugin manifest", () => {
     expect(set.category).toBe("Web");
     // The loader binds the plugin config into the composed builder; resolving it
     // (as a Chat turn would) yields the fetchUrl tool.
-    const tools = await set.buildTurnTools({
-      workspaceId: "w",
-      agentId: "a",
-      orgId: "o",
-      frontendUrl: undefined,
-      userId: "u",
-      registerCloser: () => {},
-    });
+    const tools = await set.buildTurnTools(
+      {
+        workspaceId: "w",
+        agentId: "a",
+        orgId: "o",
+        frontendUrl: "http://localhost:3000",
+        userId: "u",
+        timezone: "UTC",
+        sessionId: "chat-1",
+        registerCloser: () => {},
+      },
+      undefined,
+      () => {},
+    );
     expect(tools).toHaveProperty("fetchUrl");
   });
 });

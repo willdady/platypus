@@ -31,9 +31,11 @@ const examplePluginCredentialsSchema = z
   .object({ apiToken: z.string().min(1) })
   .strict();
 
+type ExampleConfig = z.infer<typeof examplePluginConfigSchema>;
+type ExampleCredentials = z.infer<typeof examplePluginCredentialsSchema>;
 type ExamplePluginContext = PluginConfigContext<
-  z.infer<typeof examplePluginConfigSchema>,
-  z.infer<typeof examplePluginCredentialsSchema>
+  ExampleConfig,
+  ExampleCredentials
 >;
 
 // A stub Sandbox backend that closes over the shared deploy-time credentials.
@@ -78,24 +80,31 @@ class ExampleSandboxBackend implements SandboxBackend {
 // Contribution 1 — a Sandbox backend. Its create() ignores the per-Workspace
 // config/credentials (an empty schema here) and instead authenticates with the
 // deploy-time plugin credentials handed in as the third argument.
-const exampleSandboxBackend: SandboxBackendContribution = {
+const exampleSandboxBackend: SandboxBackendContribution<
+  unknown,
+  unknown,
+  ExampleConfig,
+  ExampleCredentials
+> = {
   backend: "sandbox",
   name: "Example Cloud Sandbox",
   configSchema: z.object({}).strict(),
   credentialsSchema: z.object({}).strict(),
-  create: (_config, _credentials, plugin) =>
-    new ExampleSandboxBackend(plugin as ExamplePluginContext),
+  create: (_config, _credentials, plugin) => new ExampleSandboxBackend(plugin),
 };
 
 // Contribution 2 — a management Tool set. Its factory reads the SAME shared
 // credential block (the second argument) to talk to the vendor's control API.
-const exampleManagementToolSet: ToolSetContribution = {
+const exampleManagementToolSet: ToolSetContribution<
+  ExampleConfig,
+  ExampleCredentials
+> = {
   id: "management",
   name: "Example Management",
   category: "Sandbox",
   description: "Manage Example Cloud sandboxes for this workspace",
   tools: (_ctx, plugin) => {
-    const { credentials, config } = plugin as ExamplePluginContext;
+    const { credentials, config } = plugin;
     return {
       listSandboxes: tool({
         description: "List sandboxes in the configured region",
@@ -110,7 +119,7 @@ const exampleManagementToolSet: ToolSetContribution = {
   },
 };
 
-export const plugin: PlatypusPlugin = {
+export const plugin: PlatypusPlugin<ExampleConfig, ExampleCredentials> = {
   // A third-party manifest name is a url-safe slug of at most 24 characters (it
   // becomes the contribution-id prefix, and the namespace on every tool name
   // this plugin contributes), distinct from the npm package specifier an

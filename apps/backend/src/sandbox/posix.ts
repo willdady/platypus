@@ -191,7 +191,7 @@ const readForTool = async (
   tool: string,
   rootDir: string,
   path: string,
-  signal: AbortSignal | undefined,
+  signal: AbortSignal,
   cap = MAX_READ_BYTES,
 ): Promise<Buffer> => {
   try {

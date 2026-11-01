@@ -44,20 +44,36 @@ const commaList = z
   .transform((v) => v.split(",").map((entry) => entry.trim()))
   .pipe(z.array(z.string().min(1, "must not contain an empty entry")));
 
+/** A deployment setting with no safe default: absent stops boot. */
+const requiredUrl = (protocol?: RegExp) =>
+  z
+    .string({ error: "is required" })
+    .pipe(protocol ? z.url({ protocol }) : z.url());
+
+/**
+ * The database connection string: required, and a Postgres URL rather than
+ * whatever scheme a typo produced. Shared with `databaseUrl()` so the
+ * migration runner checks the same thing the server does.
+ */
+const databaseUrlSchema = requiredUrl(/^postgres(ql)?$/);
+
 const envSchema = z
   .object({
     PORT: z.coerce.number().int().min(1).max(65535).default(DEFAULT_PORT),
     ALLOWED_ORIGINS: z.string({ error: "is required" }).pipe(commaList),
-    // Unset falls back to the standard `PG*` variables (`databaseConfig`).
-    DATABASE_URL: z.string().optional(),
+    // No fallback to the standard `PG*` variables: a deployment that forgets
+    // this must not silently connect to whatever the environment points at.
+    DATABASE_URL: databaseUrlSchema,
     // Connection pool size; the pool is built explicitly in `src/index.ts`.
     DATABASE_POOL_MAX: positiveInt(DEFAULT_DATABASE_POOL_MAX),
-    // Their development defaults live in `base-urls.ts`.
-    BETTER_AUTH_URL: z.url().optional(),
-    FRONTEND_URL: z.url().optional(),
+    // The browser-facing origins. Every link the backend builds and every
+    // redirect it issues is derived from these, so there is no safe default.
+    BETTER_AUTH_URL: requiredUrl(),
+    FRONTEND_URL: requiredUrl(),
     AUTH_COOKIE_DOMAIN: z.string().optional(),
     INVITATION_EXPIRY_DAYS: positiveInt(DEFAULT_INVITATION_EXPIRY_DAYS),
-    REQUIRE_INVITATION_TO_SIGN_UP: boolean(false),
+    // Invitation-only admission unless the Operator opens sign-up.
+    REQUIRE_INVITATION_TO_SIGN_UP: boolean(true),
     TIMEZONE: timezoneSchema.default("UTC"),
     MEMORY_EXTRACTION_INTERVAL_MS: positiveInt(
       DEFAULT_MEMORY_EXTRACTION_INTERVAL_MS,
@@ -136,6 +152,22 @@ export const parseEnv = (source: NodeJS.ProcessEnv = process.env): Env => {
     (issue) => `${issue.path.join(".")}: ${issue.message}`,
   );
   throw new Error(`Invalid environment variables: ${problems.join("; ")}`);
+};
+
+/**
+ * The validated `DATABASE_URL` on its own, for a caller that needs no other
+ * setting — the migration runner, which otherwise runs before the server's own
+ * environment check. An unset or malformed value throws the way `parseEnv` does.
+ */
+export const databaseUrl = (
+  source: NodeJS.ProcessEnv = process.env,
+): string => {
+  const result = databaseUrlSchema.safeParse(source.DATABASE_URL?.trim());
+  if (!result.success) {
+    const message = result.error.issues[0]?.message ?? "is invalid";
+    throw new Error(`Invalid environment variables: DATABASE_URL: ${message}`);
+  }
+  return result.data;
 };
 
 /**

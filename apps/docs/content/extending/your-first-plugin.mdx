@@ -29,6 +29,7 @@ export const plugin: PlatypusPlugin = {
         id: "greeting", // bare — core prefixes it to `example.greeting`
         name: "Greeting",
         category: "Examples",
+        description: "A tiny example tool set contributed by a plugin",
         tools: (ctx, plugin) => {
           // Core's logger, already tagged with `example`
           plugin.logger.debug({ workspaceId: ctx.workspaceId }, "Resolving");

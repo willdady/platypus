@@ -39,7 +39,7 @@ orgProvider.post(
     const { orgId } = orgScopeOf(c);
     const data = c.req.valid("json");
 
-    const row = await createProvider({ kind: "organization", orgId }, data);
+    const row = await createProvider({ kind: "organization", orgId }, data, db);
     return respond(
       c,
       providerResponseSchema,

@@ -119,32 +119,80 @@ The practical consequence for you: a two-argument `create` keeps working after
 core started passing a third argument, and a single-argument factory keeps working
 after core started passing a second. Consume the new argument when you want it.
 
-## Moving to API v3
+## Moving to API v4
 
-v3 is the current major, and core supports **2 and 3** together. A v1 Plugin no
-longer loads: boot stops with an error naming your Plugin and the oldest version
-core supports.
+v4 is the current major, and core supports **3 and 4** together. A v2 Plugin no
+longer loads: boot stops with an error naming your Plugin, the version it targets
+and the window core supports.
 
-v3 does one thing: the `{ signal }` argument on a
+v4 requires what core has always supplied, and types the deploy-time block you
+were narrowing by hand:
+
+- **`ctx.timezone` and `ctx.sessionId` are required** on a
+  [Tool set](/extending/tool-sets#static-map-or-factory) factory. Both have been
+  filled on every turn since they arrived, so read them directly — drop the `UTC`
+  fallback and the `undefined` check.
+- **A Tool set's `description` is required.** It is the sentence a Workspace
+  Owner reads on the Agent form beside the switch that grants the set.
+- **Your manifest can type its deploy-time config.** Declare
+  `PlatypusPlugin<Config>` — and `PlatypusPlugin<Config, Credentials>` when you
+  also declare a `credentialsSchema` — taking each type from its schema with
+  `z.infer`. Every contribution factory then sees `plugin.config` and
+  `plugin.credentials` already narrowed, so the `as` assertions go. Naming a
+  type without declaring the schema that produces it is a type error: core has
+  to have parsed the block you are being handed.
+
+  ```ts
+  const configSchema = z.object({ region: z.string() });
+  type Config = z.infer<typeof configSchema>;
+
+  export const plugin: PlatypusPlugin<Config> = {
+    name: "acme",
+    version: "1.0.0",
+    apiVersion: PLUGIN_API_VERSION,
+    configSchema,
+    contributes: {
+      toolSets: [
+        {
+          id: "search",
+          name: "Acme Search",
+          category: "Search",
+          description: "Search the Acme index",
+          tools: (_ctx, plugin) => createTools(plugin.config.region),
+        },
+      ],
+    },
+  };
+  ```
+
+  A manifest that declares neither schema leaves both `unknown`, exactly as
+  before.
+
+Set your `apiVersion` to 4. A v3 Plugin that already gives every Tool set a
+`description` has nothing else to change: the `{ signal }` argument on a
 [Sandbox backend's](/extending/sandbox-backends#the-signal-your-tool-methods-get)
-five tool methods is now **required** rather than optional. Set your
-`apiVersion` to 3 and drop any `options?.` guard — read `options.signal`
-directly. An adapter that never reads the argument needs no change beyond the
-number.
+five tool methods became required at v3 and stays required.
 
 <Callout type="warning">
-  Dropping the guard while your manifest still says 2 is the trap. Platypus 3.0
-  to 3.7.3 accept 2 but never pass the argument, so a self-hoster on one of them
-  loads your Plugin and the first unguarded `options.signal` throws inside
-  somebody's Chat turn. Raising the number is what makes that core refuse the
-  Plugin at boot instead.
+  Leaving your manifest at 3 while dropping the guards is the trap for
+  `timezone` and `sessionId`: a v3 Plugin loads on this core, which does supply
+  both — but the types it was built against still say optional, so nothing
+  checks your code. Raise the number and let `pnpm typecheck` tell you what is
+  missing. A Tool set with no `description` is refused at boot whatever the
+  number says.
 </Callout>
 
-## Moving from API v1
+## Moving from API v2 or earlier
 
-A v1 Plugin must move to 2 or later before it loads again. What v2 changed:
-everything core had always supplied on every turn became **required** rather
-than optional, so drop the guards on these:
+A v2 Plugin must move to 4 before it loads again. The v3 step is one change: the
+`{ signal }` argument on a
+[Sandbox backend's](/extending/sandbox-backends#the-signal-your-tool-methods-get)
+five tool methods became required, so read `options.signal` without a `?.`. Then
+apply the v4 changes above.
+
+A v1 Plugin must pass through v2 first. What v2 changed: everything core had
+always supplied on every turn became **required** rather than optional, so drop
+the guards on these:
 
 - `ctx.registerCloser(close)` — register something to close when the turn ends,
   on a [Tool set](/extending/tool-sets#releasing-what-a-factory-opened) or a
@@ -178,6 +226,12 @@ injects the resolved block into **every one** of your contributions:
 
 You can ignore the argument in all three. What you cannot do is receive nothing:
 core always passes it.
+
+The same block is **typed by your manifest**. Declare
+`PlatypusPlugin<Config, Credentials>` and the schemas' `z.infer` types flow into
+every factory, so `plugin.config` and `plugin.credentials` arrive narrowed. Core
+parsed and validated them once at boot; there is nothing left to re-parse and no
+`as` to write.
 
 **One block is shared** across all of a Plugin's contributions and all tenants.
 That is deliberate, and it is the mechanism that lets a Plugin's Sandbox backend
