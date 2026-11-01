@@ -10,8 +10,8 @@ import { env } from "./env.ts";
  * whether to offer Sign up. It governs sign-up only: Organization membership
  * and Workspace access are untouched by it.
  *
- * Default off, so an upgrading deployment's admission posture is unchanged
- * until the Operator opts in.
+ * Default on: a fresh deployment admits accounts only by Invitation unless the
+ * Operator explicitly opens sign-up (`REQUIRE_INVITATION_TO_SIGN_UP=false`).
  */
 export const requireInvitationToSignUp = (): boolean =>
   env().REQUIRE_INVITATION_TO_SIGN_UP;

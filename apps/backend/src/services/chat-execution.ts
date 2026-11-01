@@ -212,7 +212,8 @@ export type PrepareChatTurnInput = TurnRequest & {
    * sub-agents) whose messages contain no file references.
    */
   origin?: string;
-  frontendUrl?: string;
+  /** `FRONTEND_URL` (`frontendBaseUrl()`), for resource links in tool output. */
+  frontendUrl: string;
   /**
    * Headless callers (triggers, sub-agents) pass "headless" so the system
    * prompt reframes the user line and surfaces the agent's own identity.

@@ -32,7 +32,7 @@ const MODEL_ID_DESCRIPTION =
 export function createAgentManagementTools(
   workspaceId: string,
   orgId: string,
-  frontendUrl: string | undefined,
+  frontendUrl: string,
 ): Record<string, Tool> {
   const ctx: ScopeContext = { orgId, workspaceId };
   const scope = { kind: "workspace" as const, ctx };
@@ -107,7 +107,7 @@ export function createAgentManagementTools(
         workspaceId,
         `agents/${result.row.id}`,
       );
-      return { ...rest, ...(url && { url }) };
+      return { ...rest, url };
     },
   });
 
@@ -161,7 +161,7 @@ export function createAgentManagementTools(
           workspaceId,
           `agents/${agentId}`,
         );
-        return { ...rest, ...(url && { url }) };
+        return { ...rest, url };
       }),
   });
 

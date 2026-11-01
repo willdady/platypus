@@ -28,7 +28,7 @@ import type { ScopeContext } from "../scope.ts";
 export function createTriggerTools(
   workspaceId: string,
   orgId: string,
-  frontendUrl: string | undefined,
+  frontendUrl: string,
   /** The acting User's effective timezone (`ToolSetContext.timezone`). */
   timezone: string,
 ): Record<string, Tool> {
@@ -297,7 +297,7 @@ export function createTriggerTools(
             success: true,
             trigger: toPublicTrigger(record),
             ...describeNextRun(record),
-            ...(url && { url }),
+            url,
           };
         } catch (error) {
           return toToolError(error);
@@ -363,7 +363,7 @@ export function createTriggerTools(
           success: true,
           trigger: toPublicTrigger(record),
           ...describeNextRun(record),
-          ...(url && { url }),
+          url,
         };
       } catch (error) {
         return toToolError(error);

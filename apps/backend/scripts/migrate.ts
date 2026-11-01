@@ -7,6 +7,7 @@ import {
   withAdvisoryLock,
 } from "../src/db/advisory-lock.ts";
 import { databaseConfig } from "../src/db/connection-config.ts";
+import { databaseUrl } from "../src/env.ts";
 import { logger } from "../src/logger.ts";
 
 const { Pool } = pg;
@@ -16,7 +17,10 @@ const { Pool } = pg;
 const MIGRATIONS_FOLDER = fileURLToPath(new URL("../drizzle", import.meta.url));
 
 async function runMigrations() {
-  const pool = new Pool(databaseConfig(process.env.DATABASE_URL));
+  // Through the same validation the server applies to `DATABASE_URL`, so the
+  // migrate step cannot fall back to node-postgres' `PG*` variables or run
+  // against a URL the server would have refused.
+  const pool = new Pool(databaseConfig(databaseUrl()));
 
   // An idle client dropped mid-migration (e.g. the one holding the lock) would
   // otherwise crash the process with an unhandled 'error' event.

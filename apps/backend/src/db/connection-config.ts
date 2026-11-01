@@ -36,10 +36,11 @@ export const POOL_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS = 60_000;
  * appended to any the URL or `PGOPTIONS` already sets, because node-postgres
  * lets a URL's own `options` replace a separately configured one.
  *
- * Without a URL, node-postgres connects by its `PG*` environment defaults.
+ * The URL is required: `env.ts` refuses to boot without `DATABASE_URL`, so
+ * there is no fall-through to node-postgres' `PG*` environment defaults.
  */
-export const databaseConfig = (url: string | undefined): PoolConfig => {
-  const config: PoolConfig = url ? parseIntoClientConfig(url) : {};
+export const databaseConfig = (url: string): PoolConfig => {
+  const config: PoolConfig = parseIntoClientConfig(url);
   const options = config.options ?? process.env.PGOPTIONS;
   return {
     ...config,
@@ -54,10 +55,7 @@ export const databaseConfig = (url: string | undefined): PoolConfig => {
  * left — and so a Postgres restart is logged by the pool's `error` listener
  * instead of crashing the process.
  */
-export const buildPoolConfig = (
-  url: string | undefined,
-  max: number,
-): PoolConfig => ({
+export const buildPoolConfig = (url: string, max: number): PoolConfig => ({
   ...databaseConfig(url),
   max,
   connectionTimeoutMillis: POOL_CONNECTION_TIMEOUT_MS,

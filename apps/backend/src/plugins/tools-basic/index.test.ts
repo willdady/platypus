@@ -50,7 +50,7 @@ describe("@platypus/tools-basic plugin manifest", () => {
       workspaceId: "ws",
       agentId: "agent",
       orgId: "org",
-      frontendUrl: undefined,
+      frontendUrl: "http://localhost:3000",
       userId: "user",
       timezone: "Asia/Tokyo",
       registerCloser: () => {},

@@ -51,7 +51,7 @@ describe("@platypus/web-fetch plugin manifest", () => {
         workspaceId: "w",
         agentId: "a",
         orgId: "o",
-        frontendUrl: undefined,
+        frontendUrl: "http://localhost:3000",
         userId: "u",
         registerCloser: () => {},
       },

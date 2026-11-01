@@ -34,7 +34,7 @@ import { asToolResult, createBoardReadTools } from "./kanban.ts";
 export function createKanbanBoardTools(
   workspaceId: string,
   orgId: string,
-  frontendUrl: string | undefined,
+  frontendUrl: string,
 ): Record<string, Tool> {
   const scope: KanbanScope = { orgId, workspaceId };
 
@@ -46,7 +46,7 @@ export function createKanbanBoardTools(
       workspaceId,
       `boards/${board.id}`,
     );
-    return { ...board, ...(url && { url }) };
+    return { ...board, url };
   };
 
   const { listBoards, getBoardState } = createBoardReadTools(

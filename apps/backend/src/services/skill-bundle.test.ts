@@ -448,7 +448,11 @@ describe("Skill writes outside the bundle", () => {
     await pg.exec(
       `INSERT INTO "attachment" ("id", "workspace_id", "resource_type", "resource_id") VALUES ('a-1', 'ws-1', 'skill', '${row.id}')`,
     );
-    const tools = createSkillManagementTools("ws-1", "org-1", undefined);
+    const tools = createSkillManagementTools(
+      "ws-1",
+      "org-1",
+      "http://localhost:3000",
+    );
 
     expect(
       await callTool(tools.upsertSkill, {
@@ -477,7 +481,11 @@ describe("Skill writes outside the bundle", () => {
 
   it("the deleteSkill Tool removes the Skill's stored files", async () => {
     const row = await importSkillBundle(wsScope, pdfZip());
-    const tools = createSkillManagementTools("ws-1", "org-1", undefined);
+    const tools = createSkillManagementTools(
+      "ws-1",
+      "org-1",
+      "http://localhost:3000",
+    );
     expect(await callTool(tools.deleteSkill, { name: "pdf" })).toEqual({
       success: true,
     });

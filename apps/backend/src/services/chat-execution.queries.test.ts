@@ -135,6 +135,7 @@ const turnFor = (agentId: string, overrides: Record<string, unknown> = {}) =>
       sessionId: "chat-1",
       messages: [],
       origin: "http://localhost:4000",
+      frontendUrl: "http://localhost:3000",
       request: { agentId },
       // Pinned so no memory retrieval runs; memories are not what this pins.
       memorySnapshot: "",
