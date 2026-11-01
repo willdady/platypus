@@ -150,6 +150,8 @@ const sandboxBackend = (backend: string): SandboxBackendContribution => ({
 describe("parsePluginList", () => {
   it("splits, trims, and drops blank entries", () => {
     expect(parsePluginList("a, b ,, c")).toEqual(["a", "b", "c"]);
+    // The Docker Sandbox overlay appends to a possibly-unset .env list.
+    expect(parsePluginList(",@platypus/docker")).toEqual(["@platypus/docker"]);
   });
 
   it("returns an empty list for unset or empty input", () => {

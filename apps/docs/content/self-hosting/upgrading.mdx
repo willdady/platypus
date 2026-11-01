@@ -50,6 +50,25 @@ Dashboard and its widgets, and Agents lose the **Dashboards** Tool set. Move
 anything you want to keep before you upgrade; see
 [Dashboards](/building-with-platypus/dashboards).
 
+## Coming from 3.30
+
+### The Docker Sandbox overlay is renamed
+
+The overlay that enables the Docker Sandbox is now `compose.docker-sandbox.yaml`;
+`compose.sandbox.yaml` is gone. If you run it:
+
+1. Change `-f compose.sandbox.yaml` to `-f compose.docker-sandbox.yaml` in your
+   `docker compose` commands, and in any script or systemd unit that names the
+   old file.
+2. Remove `@platypus/docker` from `PLATYPUS_PLUGINS` in `.env`. The overlay now
+   adds it to your `.env` list instead of replacing that list, so listing it
+   there as well names it twice, and the backend stops at boot because a Plugin
+   is listed more than once.
+3. If you edited the Plugin list inside the old overlay, move those Plugins to
+   `PLATYPUS_PLUGINS` in `.env`. The new overlay keeps no list of its own.
+
+See [Docker adapter](/self-hosting/sandbox/docker#enabling-it).
+
 ## Coming from 3.29
 
 `/compact` is now a built-in Chat command, so `compact` is no longer a valid
@@ -165,9 +184,9 @@ All three are inert in 2.x. Delete them from your environment.
 ### Migration checklist
 
 1. **Keep web-fetch.** Add `@platypus/web-fetch` to `PLATYPUS_PLUGINS`.
-2. **If you ran the Docker sandbox** (`PLATYPUS_SANDBOX_DOCKER_ENABLED=true`): add
-   `@platypus/docker` to `PLATYPUS_PLUGINS`. The `compose.sandbox.yaml` overlay
-   requirement is unchanged.
+2. **If you ran the Docker sandbox** (`PLATYPUS_SANDBOX_DOCKER_ENABLED=true`):
+   keep composing the overlay, now named `compose.docker-sandbox.yaml`. It adds
+   `@platypus/docker` to `PLATYPUS_PLUGINS` for you, so don't list it in `.env`.
 3. **If you set `PLATYPUS_SANDBOX_DOCKER_ALLOWED_NETWORKS`:** move the value into
    `config.allowedNetworks` on `@platypus/docker` in `PLATYPUS_PLUGIN_CONFIG`. The
    old comma-separated list becomes a JSON array of strings.
