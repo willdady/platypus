@@ -89,7 +89,7 @@ trigger.post(
 );
 
 /** Update a trigger */
-trigger.put(
+trigger.patch(
   "/:triggerId",
   requireAuth,
   requireOrgAccess(),

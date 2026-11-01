@@ -39,7 +39,7 @@ describe("app error responses", () => {
 
     const res = await app.request("/users/me/contexts", {
       method: "POST",
-      body: JSON.stringify({ content: 42 }),
+      body: JSON.stringify({ content: 42, workspaceId: null }),
       headers: { "Content-Type": "application/json" },
     });
 
@@ -62,7 +62,7 @@ describe("app error responses", () => {
 
     const res = await app.request("/users/me/contexts", {
       method: "POST",
-      body: JSON.stringify({ content: "Hello" }),
+      body: JSON.stringify({ content: "Hello", workspaceId: null }),
       headers: { "Content-Type": "application/json" },
     });
 

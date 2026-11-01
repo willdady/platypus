@@ -19,11 +19,7 @@ import {
 import { NotFoundError, ValidationError } from "../errors.ts";
 import { checkEgress } from "../utils/egress-guard.ts";
 import { logger } from "../logger.ts";
-import {
-  webhookCreateSchema,
-  webhookEventSchema,
-  webhookUpdateSchema,
-} from "@platypus/schemas";
+import { webhookCreateSchema, webhookUpdateSchema } from "@platypus/schemas";
 import type { Variables } from "../server.ts";
 
 const webhook = new Hono<{ Variables: Variables }>();
@@ -75,13 +71,7 @@ webhook.post(
   validate("json", webhookCreateSchema),
   async (c) => {
     const { workspaceId } = workspaceScopeOf(c);
-    const body = c.req.valid("json" as never) as {
-      name: string;
-      url: string;
-      headers?: Record<string, string> | null;
-      enabled?: boolean;
-      events?: string[];
-    };
+    const body = c.req.valid("json");
 
     await assertDeliverable(body.url);
 
@@ -92,11 +82,9 @@ webhook.post(
       name: body.name,
       url: body.url,
       signingSecret: generateSigningSecret(),
-      headers: body.headers ?? null,
-      enabled: body.enabled ?? true,
-      // Every event the schema knows, not a hand-kept list: one here once
-      // missed `card.moved`.
-      events: body.events ?? webhookEventSchema.options,
+      headers: body.headers,
+      enabled: body.enabled,
+      events: body.events,
       createdAt: now,
       updatedAt: now,
     };
@@ -125,8 +113,8 @@ webhook.get(
   },
 );
 
-/** PUT /:webhookId — Update webhook */
-webhook.put(
+/** PATCH /:webhookId — Update webhook */
+webhook.patch(
   "/:webhookId",
   requireAuth,
   requireOrgAccess(),
@@ -135,30 +123,15 @@ webhook.put(
   async (c) => {
     const { workspaceId } = workspaceScopeOf(c);
     const webhookId = c.req.param("webhookId");
-    const body = c.req.valid("json" as never) as {
-      name?: string;
-      url?: string;
-      headers?: Record<string, string> | null;
-      enabled?: boolean;
-      events?: string[];
-    };
+    const body = c.req.valid("json");
 
     if (body.url !== undefined) await assertDeliverable(body.url);
-
-    const updateData: Record<string, unknown> = {
-      updatedAt: new Date(),
-    };
-    if (body.name !== undefined) updateData.name = body.name;
-    if (body.url !== undefined) updateData.url = body.url;
-    if (body.headers !== undefined) updateData.headers = body.headers;
-    if (body.enabled !== undefined) updateData.enabled = body.enabled;
-    if (body.events !== undefined) updateData.events = body.events;
 
     const result = await updateOwned(
       db,
       "webhook",
       { id: webhookId, workspaceId },
-      updateData,
+      { ...body, updatedAt: new Date() },
     );
 
     if (!result) {

@@ -144,7 +144,10 @@ describe("ContextsPage saving the global context", () => {
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe("http://test/users/me/contexts");
     expect(init).toMatchObject({ method: "POST" });
-    expect(JSON.parse(init.body)).toEqual({ content: "first" });
+    expect(JSON.parse(init.body)).toEqual({
+      content: "first",
+      workspaceId: null,
+    });
   });
 
   it.each([

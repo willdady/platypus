@@ -103,7 +103,9 @@ export function OrgGateAccess({
         method: "PUT",
         data: {
           gate,
-          ...(gate === "selected" ? { allowedWorkspaceIds: [...allowed] } : {}),
+          // null leaves every Workspace switch alone; [] would turn them all
+          // off, which is only right when the Admin deliberately deselects.
+          allowedWorkspaceIds: gate === "selected" ? [...allowed] : null,
         },
       }),
     // No field here renders a server error, so a rejection is toasted.

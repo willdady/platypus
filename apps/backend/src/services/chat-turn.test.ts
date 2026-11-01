@@ -61,9 +61,9 @@ const scope: WorkspaceScope = {
 const start = (includeMemories: boolean) =>
   startChatTurn({
     scope,
+    chatId: "chat-1",
     request: {
-      id: "chat-1",
-      workspaceId: "w1",
+      trigger: "submit",
       message: { id: "m1", role: "user", parts: [] },
       parentId: null,
     },

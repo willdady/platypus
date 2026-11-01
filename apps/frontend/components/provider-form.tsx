@@ -356,11 +356,6 @@ function ProviderForm({
 
   function buildPayload(data: ProviderFormData) {
     return {
-      // A draft's scope is the Workspace it will be created with.
-      ...(!draft && {
-        workspaceId: workspaceId || undefined,
-        organizationId: !workspaceId ? orgId : undefined,
-      }),
       name: data.name,
       providerType: data.providerType,
       apiKey: data.apiKey,

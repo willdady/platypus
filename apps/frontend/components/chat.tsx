@@ -164,21 +164,20 @@ export function Chat({
   // Fetch skills
   const { results: skills } = useScopedList<Skill>("skills", scope);
 
-  // The per-turn body rides each call (`useChatTurn` builds it) and wins the
-  // SDK's shallow merge over this one, so the transport carries only what
-  // never changes for the Chat (issue #971). Built once per Workspace, not on
-  // every render — which, while a reply streams, is every chunk.
+  // The Chat is addressed in the path and each turn's body rides its own call
+  // (`useChatTurn` builds it), so the transport carries no scope and no body.
+  // Built once per Workspace, not on every render — which, while a reply
+  // streams, is every chunk.
   const transport = useMemo(
     () =>
       new DefaultChatTransport<PlatypusUIMessage>({
-        api: scopedUrl(backendUrl || "", "chat", scope),
-        body: { orgId, workspaceId },
+        api: scopedUrl(backendUrl || "", `chat/${chatId}/turns`, scope),
         credentials: "include",
         // The server owns the Transcript (ADR-0026); `prepareChatTurnRequest`
         // shapes each turn's body. See `lib/chat-transport.ts`.
         prepareSendMessagesRequest: prepareChatTurnRequest,
       }),
-    [backendUrl, orgId, workspaceId, scope],
+    [backendUrl, chatId, scope],
   );
 
   const {

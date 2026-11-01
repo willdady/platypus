@@ -5,6 +5,7 @@ import {
   mcpCreateSchema,
   mcpUpdateSchema,
   mcpTestSchema,
+  mcpStoredTestSchema,
 } from "@platypus/schemas";
 import { requireAuth } from "../middleware/authentication.ts";
 import {
@@ -23,7 +24,6 @@ import {
   listScoped,
   requireScoped,
   requireWorkspaceMutable,
-  resolveScoped,
   workspaceScopedWhere,
 } from "../services/scoped-resource.ts";
 import type { Variables } from "../server.ts";
@@ -148,10 +148,8 @@ mcp.delete(
 );
 
 /**
- * Test MCP connection (org-admin, or owner when delegated — ADR-0006).
- * Read-only, so an attached Shared MCP is resolved through the Scoped-resource
- * authority the same as any other visible row (see mcp-connection.ts's
- * docstring for the full rationale).
+ * Test an unsaved MCP connection (org-admin, or owner when delegated —
+ * ADR-0006). Nothing is stored, so the body must name the MCP.
  */
 mcp.post(
   "/test",
@@ -161,16 +159,32 @@ mcp.post(
   requireMcpConfigAccess,
   validate("json", mcpTestSchema),
   async (c) => {
-    const data = c.req.valid("json");
-    const scope = workspaceScopeOf(c);
-
-    let storedMcp = null;
-    if (data.mcpId) {
-      const found = await resolveScoped(db, "mcp", data.mcpId, scope);
-      storedMcp = found?.row ?? null;
+    const result = await probeMcpConnection(c.req.valid("json"), null);
+    if (!result.success) {
+      return c.json({ error: result.error }, result.status);
     }
+    return c.json(result, 200);
+  },
+);
 
-    const result = await probeMcpConnection(data, storedMcp);
+/**
+ * Test a stored MCP connection, addressed by its id (org-admin, or owner when
+ * delegated — ADR-0006). Read-only, so an attached Shared MCP is resolved
+ * through the Scoped-resource authority the same as any other visible row (see
+ * mcp-connection.ts's docstring for the full rationale).
+ */
+mcp.post(
+  "/:mcpId/test",
+  requireAuth,
+  requireOrgAccess(),
+  requireWorkspaceAccess,
+  requireMcpConfigAccess,
+  validate("json", mcpStoredTestSchema),
+  async (c) => {
+    const scope = workspaceScopeOf(c);
+    const { row } = await requireScoped(db, "mcp", c.req.param("mcpId"), scope);
+
+    const result = await probeMcpConnection(c.req.valid("json"), row);
     if (!result.success) {
       return c.json({ error: result.error }, result.status);
     }

@@ -5,6 +5,7 @@ import {
   mcpCreateSchema,
   mcpUpdateSchema,
   mcpTestSchema,
+  mcpStoredTestSchema,
 } from "@platypus/schemas";
 import { requireAuth } from "../middleware/authentication.ts";
 import {
@@ -17,7 +18,6 @@ import {
   listOrgScoped,
   orgScopedWhere,
   requireOrgScoped,
-  resolveOrgScoped,
 } from "../services/scoped-resource.ts";
 import type { Variables } from "../server.ts";
 import {
@@ -110,21 +110,37 @@ orgMcp.delete(
   },
 );
 
-/** Test an org-scoped MCP connection (admin only) */
+/** Test an unsaved org-scoped MCP connection (admin only) */
 orgMcp.post(
   "/test",
   requireAuth,
   requireOrgAccess(["admin"]),
   validate("json", mcpTestSchema),
   async (c) => {
-    const data = c.req.valid("json");
+    const result = await probeMcpConnection(c.req.valid("json"), null);
+    if (!result.success) {
+      return c.json({ error: result.error }, result.status);
+    }
+    return c.json(result, 200);
+  },
+);
+
+/** Test a stored org-scoped MCP connection, addressed by its id (admin only) */
+orgMcp.post(
+  "/:mcpId/test",
+  requireAuth,
+  requireOrgAccess(["admin"]),
+  validate("json", mcpStoredTestSchema),
+  async (c) => {
     const { orgId } = orgScopeOf(c);
+    const storedMcp = await requireOrgScoped(
+      db,
+      "mcp",
+      c.req.param("mcpId"),
+      orgId,
+    );
 
-    const storedMcp = data.mcpId
-      ? await resolveOrgScoped(db, "mcp", data.mcpId, orgId)
-      : null;
-
-    const result = await probeMcpConnection(data, storedMcp);
+    const result = await probeMcpConnection(c.req.valid("json"), storedMcp);
     if (!result.success) {
       return c.json({ error: result.error }, result.status);
     }

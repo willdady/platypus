@@ -58,6 +58,43 @@ instructions.
 To keep showing data your Agents produce, use a purpose-built dashboard tool such
 as Grafana or Metabase, and have the Agent write to the store it reads from.
 
+### The HTTP request contract is strict
+
+Anything that drives the backend API directly — a script, an integration, or a
+custom client — must now send exactly the fields each endpoint accepts:
+
+- An unknown query or body key is refused with a `400` and an issues list,
+  where it used to be silently dropped. Remove fields the API no longer
+  describes rather than leaving them in the payload.
+- A Chat turn is addressed in the path, as `POST …/chat/<chat-id>/turns`, and
+  its body names the Chat no longer. The body also carries `trigger`: `submit`,
+  `regenerate-message` or `respond-to-approvals`.
+- Creating an Agent, Skill, MCP or Provider names no scope. The Organization or
+  Workspace in the URL is the only scope; sending `organizationId` or
+  `workspaceId` in one of those create bodies is a `400`.
+- Creating a Context requires `workspaceId`, which is `null` for a global
+  Context. It is never an empty string.
+- Saving an Organization gate requires `allowedWorkspaceIds`: an array turns
+  the listed Workspaces on and the rest off, while `null` leaves every switch
+  as it is.
+- A Provider's `modelIds` holds model objects only, such as
+  `{"id": "gpt-4"}`. A bare string entry is a `400`.
+- Partial updates use `PATCH`; full replacements keep `PUT`. The endpoints
+  that changed from `PUT` to `PATCH` are Chat settings, Triggers, Kanban cards
+  and comments, Webhooks, and A2A endpoints.
+- Removing a member now requires a `workspaces` array. Send `[]` when the
+  member owns none.
+- MCP connection testing of a stored server is addressed by its id, as
+  `POST …/mcps/<mcp-id>/test`; the unsaved test at `POST …/mcps/test` requires
+  `name`.
+- `searchSource` and `apiMode` are required on Provider create and update.
+
+Attachments are managed through the Workspace's own endpoint only:
+`POST …/workspaces/<workspace-id>/attachments` with a `resourceType` and
+`resourceId`, and `DELETE …/workspaces/<workspace-id>/attachments/<resource-type>/<resource-id>`.
+The Organization attachment list still reads
+`GET …/attachments?resourceType=…&resourceId=…`.
+
 ## Coming from 3.30
 
 ### The Docker Sandbox overlay is renamed

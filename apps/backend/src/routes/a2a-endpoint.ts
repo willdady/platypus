@@ -58,7 +58,7 @@ a2aEndpoint.post(
   },
 );
 
-a2aEndpoint.put(
+a2aEndpoint.patch(
   "/:endpointId",
   ...owner,
   validate("json", a2aEndpointUpdateSchema),

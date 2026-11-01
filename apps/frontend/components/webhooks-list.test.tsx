@@ -140,7 +140,7 @@ describe("WebhooksList", () => {
     expect(menuItemLabels()).toEqual(["Edit", "Enable", "Delete"]);
   });
 
-  it("PUTs the flipped enabled flag and revalidates on success", async () => {
+  it("PATCHes the flipped enabled flag and revalidates on success", async () => {
     const fetchMock = stubAcceptedSave();
     mockScopedSWR({ webhooks: [webhook] }, { strict: true });
     await renderList(
@@ -152,7 +152,7 @@ describe("WebhooksList", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       "http://test/organizations/org1/workspaces/ws1/webhooks/wh1",
       expect.objectContaining({
-        method: "PUT",
+        method: "PATCH",
         body: JSON.stringify({ enabled: false }),
       }),
     );

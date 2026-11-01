@@ -82,6 +82,7 @@ function A2aEndpointForm({
     entity: "a2a-endpoints",
     scope,
     id: endpointId,
+    method: "PATCH",
     fromRecord: (record) => ({
       agentId: record.agentId,
       name: record.name,

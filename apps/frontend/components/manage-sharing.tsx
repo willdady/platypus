@@ -220,19 +220,23 @@ export function ManageAttachmentsDialog({
     setBusyId(workspaceId);
     setError(null);
     try {
+      // One attachment address: the Workspace names the path, so the body
+      // carries only which Shared resource.
       const outcome = isAttached
         ? await writeAt(
-            scopedUrl(
-              backendUrl,
-              `attachments/${resourceType}/${resourceId}/${workspaceId}`,
-              { orgId },
-            ),
+            scopedUrl(backendUrl, `attachments/${resourceType}/${resourceId}`, {
+              orgId,
+              workspaceId,
+            }),
             { method: "DELETE" },
           )
-        : await writeAt(scopedUrl(backendUrl, "attachments", { orgId }), {
-            method: "POST",
-            data: { resourceType, resourceId, workspaceId },
-          });
+        : await writeAt(
+            scopedUrl(backendUrl, "attachments", { orgId, workspaceId }),
+            {
+              method: "POST",
+              data: { resourceType, resourceId },
+            },
+          );
       if (outcome.outcome !== "success") {
         setError(outcome.message);
         return;

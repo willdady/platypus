@@ -40,10 +40,7 @@ import { oneRow } from "../db/one-row.ts";
 export type McpRow = typeof mcpTable.$inferSelect;
 
 /** The fields a create carries — every field but the id and its scope. */
-export type McpCreateFields = Omit<
-  z.infer<typeof mcpCreateSchema>,
-  "organizationId" | "workspaceId"
->;
+export type McpCreateFields = z.infer<typeof mcpCreateSchema>;
 
 /** The fields an update carries — mcpUpdateSchema replaces the form wholesale. */
 export type McpUpdateFields = z.infer<typeof mcpUpdateSchema>;

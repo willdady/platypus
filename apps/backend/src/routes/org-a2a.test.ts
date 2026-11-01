@@ -187,10 +187,14 @@ describe("Org A2A gate routes", () => {
     };
     const notFound = { status: 404, body: { error: "Not Found" } };
 
-    expect((await put({ gate: "all" })).status).toBe(200);
+    expect((await put({ gate: "all", allowedWorkspaceIds: null })).status).toBe(
+      200,
+    );
     expect(await getTask()).toEqual(completed);
 
-    expect((await put({ gate: "off" })).status).toBe(200);
+    expect((await put({ gate: "off", allowedWorkspaceIds: null })).status).toBe(
+      200,
+    );
     expect(await getTask()).toEqual(notFound);
     expect(
       await call("SendMessage", {
@@ -211,7 +215,9 @@ describe("Org A2A gate routes", () => {
       tasks: fake.tables.a2a_task,
     }).toEqual(before);
 
-    expect((await put({ gate: "all" })).status).toBe(200);
+    expect((await put({ gate: "all", allowedWorkspaceIds: null })).status).toBe(
+      200,
+    );
     expect(await getTask()).toEqual(completed);
   });
 

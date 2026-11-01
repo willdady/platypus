@@ -644,7 +644,7 @@ describe("Kanban Routes", () => {
     });
   });
 
-  describe("PUT /:boardId/cards/:cardId", () => {
+  describe("PATCH /:boardId/cards/:cardId", () => {
     it("keeps the labels, assignees and priority an update does not mention", async () => {
       const fake = boardWorld({
         cards: [
@@ -668,7 +668,7 @@ describe("Kanban Routes", () => {
 
       const res = await app.request(
         `${baseUrl}/${boardId}/cards/card-1`,
-        json("PUT", { title: "Renamed" }),
+        json("PATCH", { title: "Renamed" }),
       );
 
       expect(res.status).toBe(200);
@@ -704,7 +704,7 @@ describe("Kanban Routes", () => {
       mockDb.limit.mockResolvedValueOnce([]); // the history trim's subquery
 
       const res = await app.request(`${baseUrl}/${boardId}/cards/card-1`, {
-        method: "PUT",
+        method: "PATCH",
         body: JSON.stringify({ title: "Updated Card" }),
         headers: { "Content-Type": "application/json" },
       });
@@ -722,7 +722,7 @@ describe("Kanban Routes", () => {
       mockDb.limit.mockResolvedValueOnce([]); // card guard — not found
 
       const res = await app.request(`${baseUrl}/${boardId}/cards/card-1`, {
-        method: "PUT",
+        method: "PATCH",
         body: JSON.stringify({ title: "Updated Card" }),
         headers: { "Content-Type": "application/json" },
       });
@@ -764,7 +764,7 @@ describe("Kanban Routes", () => {
         mockDb.limit.mockResolvedValueOnce([]); // the history trim's subquery
 
         const res = await app.request(`${baseUrl}/${boardId}/cards/card-1`, {
-          method: "PUT",
+          method: "PATCH",
           body: JSON.stringify({ labelIds: ["lbl-b", "lbl-a"] }),
           headers: { "Content-Type": "application/json" },
         });
@@ -799,7 +799,7 @@ describe("Kanban Routes", () => {
         mockDb.limit.mockResolvedValueOnce([]); // the history trim's subquery
 
         const res = await app.request(`${baseUrl}/${boardId}/cards/card-1`, {
-          method: "PUT",
+          method: "PATCH",
           body: JSON.stringify({
             title: "Retitled",
             priority: "high",
@@ -839,7 +839,7 @@ describe("Kanban Routes", () => {
         mockDb.limit.mockResolvedValueOnce([]); // the history trim's subquery
 
         const res = await app.request(`${baseUrl}/${boardId}/cards/card-1`, {
-          method: "PUT",
+          method: "PATCH",
           body: JSON.stringify({ labelIds: ["lbl-deleted"] }),
           headers: { "Content-Type": "application/json" },
         });
@@ -873,7 +873,7 @@ describe("Kanban Routes", () => {
         mockDb.where.mockResolvedValueOnce([]); // super admin lookup — not found
 
         const res = await app.request(`${baseUrl}/${boardId}/cards/card-1`, {
-          method: "PUT",
+          method: "PATCH",
           body: JSON.stringify({
             assignees: [{ type: "user", id: "nonexistent" }],
           }),
@@ -918,7 +918,7 @@ describe("Kanban Routes", () => {
         mockDb.returning.mockResolvedValueOnce([mockCard]);
 
         const res = await app.request(`${baseUrl}/${boardId}/cards/card-1`, {
-          method: "PUT",
+          method: "PATCH",
           body: JSON.stringify({
             assignees: [{ type: "user", id: "admin-user" }],
           }),
@@ -973,7 +973,7 @@ describe("Kanban Routes", () => {
         mockDb.returning.mockResolvedValueOnce([mockCard]);
 
         const res = await app.request(`${baseUrl}/${boardId}/cards/card-1`, {
-          method: "PUT",
+          method: "PATCH",
           body: JSON.stringify({
             assignees: [{ type: "agent", id: "shared-agent" }],
           }),
@@ -1005,7 +1005,7 @@ describe("Kanban Routes", () => {
         mockDb.where.mockResolvedValueOnce([]); // no attached org-scoped match
 
         const res = await app.request(`${baseUrl}/${boardId}/cards/card-1`, {
-          method: "PUT",
+          method: "PATCH",
           body: JSON.stringify({
             assignees: [{ type: "agent", id: "someone-elses-agent" }],
           }),
@@ -1051,7 +1051,7 @@ describe("Kanban Routes", () => {
         mockDb.returning.mockResolvedValueOnce([mockCard]);
 
         const res = await app.request(`${baseUrl}/${boardId}/cards/card-1`, {
-          method: "PUT",
+          method: "PATCH",
           body: JSON.stringify({
             assignees: [{ type: "user", id: "user-1" }],
           }),
@@ -1492,7 +1492,7 @@ describe("Kanban Routes", () => {
     it("should return 401 if not authenticated", async () => {
       mockNoSession();
       const res = await app.request(`${commentsUrl}/${commentId}`, {
-        method: "PUT",
+        method: "PATCH",
         body: JSON.stringify({ body: "Updated" }),
         headers: { "Content-Type": "application/json" },
       });
@@ -1513,7 +1513,7 @@ describe("Kanban Routes", () => {
       mockDb.returning.mockResolvedValueOnce([updatedComment]); // update
 
       const res = await app.request(`${commentsUrl}/${commentId}`, {
-        method: "PUT",
+        method: "PATCH",
         body: JSON.stringify({ body: "Updated" }),
         headers: { "Content-Type": "application/json" },
       });
@@ -1530,7 +1530,7 @@ describe("Kanban Routes", () => {
       mockDb.limit.mockResolvedValueOnce([]); // ownership check - not found
 
       const res = await app.request(`${commentsUrl}/${commentId}`, {
-        method: "PUT",
+        method: "PATCH",
         body: JSON.stringify({ body: "Updated" }),
         headers: { "Content-Type": "application/json" },
       });
@@ -1548,7 +1548,7 @@ describe("Kanban Routes", () => {
       ]); // comment lookup — on the same board, but another card
 
       const res = await app.request(`${commentsUrl}/${commentId}`, {
-        method: "PUT",
+        method: "PATCH",
         body: JSON.stringify({ body: "Updated" }),
         headers: { "Content-Type": "application/json" },
       });
@@ -1571,7 +1571,7 @@ describe("Kanban Routes", () => {
       ]); // ownership check - owned by different user
 
       const res = await app.request(`${commentsUrl}/${commentId}`, {
-        method: "PUT",
+        method: "PATCH",
         body: JSON.stringify({ body: "Updated" }),
         headers: { "Content-Type": "application/json" },
       });
@@ -1599,7 +1599,7 @@ describe("Kanban Routes", () => {
       mockDb.returning.mockResolvedValueOnce([updatedComment]); // update
 
       const res = await app.request(`${commentsUrl}/${commentId}`, {
-        method: "PUT",
+        method: "PATCH",
         body: JSON.stringify({ body: "Admin edit" }),
         headers: { "Content-Type": "application/json" },
       });

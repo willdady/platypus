@@ -241,7 +241,7 @@ describe("TriggerList clone", () => {
 });
 
 describe("TriggerList toggle enabled", () => {
-  it("PUTs the flipped enabled flag and revalidates on success", async () => {
+  it("PATCHes the flipped enabled flag and revalidates on success", async () => {
     const fetchMock = stubAcceptedSave();
 
     await renderTriggers([cronTrigger], "Disable");
@@ -250,7 +250,7 @@ describe("TriggerList toggle enabled", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       "http://test/organizations/org1/workspaces/ws1/triggers/t1",
       expect.objectContaining({
-        method: "PUT",
+        method: "PATCH",
         body: JSON.stringify({ enabled: false }),
       }),
     );

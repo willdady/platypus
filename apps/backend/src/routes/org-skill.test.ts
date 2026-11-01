@@ -25,7 +25,6 @@ describe("Organization Skill Routes", () => {
     name: "org-skill",
     description: "This is a long enough description for the skill.",
     body: "This is a long enough body for the skill to pass the validation requirements.",
-    organizationId: orgId,
   };
 
   describe("POST /", () => {

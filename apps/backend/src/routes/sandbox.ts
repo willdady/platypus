@@ -164,7 +164,7 @@ sandbox.get(
   requireAuth,
   requireOrgAccess(),
   requireWorkspaceAccess,
-  validate("query", z.object({ path: relativePathSchema })),
+  validate("query", z.strictObject({ path: relativePathSchema })),
   async (c) => {
     const { workspaceId } = workspaceScopeOf(c);
     const { path } = c.req.valid("query");
@@ -204,7 +204,7 @@ sandbox.put(
   requireWorkspaceAccess,
   validate(
     "query",
-    z.object({
+    z.strictObject({
       path: relativePathSchema,
       overwrite: z.enum(["true", "false"]).optional(),
     }),

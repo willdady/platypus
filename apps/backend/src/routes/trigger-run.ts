@@ -42,7 +42,7 @@ const listQuerySchema = paginationQuerySchema(50).extend({
  * number, for the detail page's incremental poll. Absent means the whole
  * timeline.
  */
-const detailQuerySchema = z.object({
+const detailQuerySchema = z.strictObject({
   sinceSeq: z.coerce.number().int().min(0).optional(),
 });
 

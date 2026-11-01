@@ -238,7 +238,7 @@ describe("Webhook Routes", () => {
     });
   });
 
-  describe("PUT /:webhookId", () => {
+  describe("PATCH /:webhookId", () => {
     it("should update webhook", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
@@ -260,7 +260,7 @@ describe("Webhook Routes", () => {
       ]);
 
       const res = await app.request(`${baseUrl}/wh-1`, {
-        method: "PUT",
+        method: "PATCH",
         body: JSON.stringify({
           name: "Updated Webhook",
           url: "https://new-url.com/webhook",
@@ -285,7 +285,7 @@ describe("Webhook Routes", () => {
       mockDb.returning.mockResolvedValueOnce([]);
 
       const res = await app.request(`${baseUrl}/nonexistent`, {
-        method: "PUT",
+        method: "PATCH",
         body: JSON.stringify({
           url: "https://new-url.com/webhook",
         }),
@@ -304,7 +304,7 @@ describe("Webhook Routes", () => {
       mockCheckEgress.mockResolvedValueOnce(blocked);
 
       const res = await app.request(`${baseUrl}/wh-1`, {
-        method: "PUT",
+        method: "PATCH",
         body: JSON.stringify({ url: "https://internal.example/webhook" }),
         headers: { "Content-Type": "application/json" },
       });

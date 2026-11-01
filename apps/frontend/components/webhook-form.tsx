@@ -178,6 +178,7 @@ function WebhookForm({ orgId, workspaceId, webhookId }: WebhookFormProps) {
     entity: "webhooks",
     scope: { orgId, workspaceId },
     id: webhookId,
+    method: "PATCH",
     fromRecord: (webhook) => ({
       name: webhook.name,
       url: webhook.url,

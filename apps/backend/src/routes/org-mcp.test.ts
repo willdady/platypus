@@ -37,7 +37,6 @@ describe("Organization MCP Routes", () => {
     name: "Org MCP",
     url: "http://mcp.com",
     authType: "None",
-    organizationId: orgId,
   };
 
   /** A Shared MCP of `org-1`, carrying every stored credential. */
@@ -378,12 +377,16 @@ describe("Organization MCP Routes", () => {
       mockSession();
       world("admin");
 
-      const res = await probe({ url: "http://mcp.com", authType: "None" });
+      const res = await probe({
+        url: "http://mcp.com",
+        authType: "None",
+        name: "Org MCP",
+      });
 
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({
         success: true,
-        toolNames: ["tool1"],
+        toolNames: ["org_mcp__tool1"],
         invalidToolNames: [],
       });
     });
@@ -392,11 +395,10 @@ describe("Organization MCP Routes", () => {
       mockSession();
       world("admin");
 
-      const res = await probe({
-        url: "http://mcp.com",
-        authType: "OAuth",
-        mcpId: "mcp-1",
-      });
+      const res = await app.request(
+        `${baseUrl}/mcp-1/test`,
+        json("POST", { url: "http://mcp.com", authType: "OAuth" }),
+      );
 
       expect(res.status).toBe(200);
       expect(await res.json()).toMatchObject({ success: true });
@@ -406,11 +408,10 @@ describe("Organization MCP Routes", () => {
       mockSession();
       world("admin");
 
-      const res = await probe({
-        url: "http://mcp.com",
-        authType: "OAuth",
-        mcpId: "mcp-other-org",
-      });
+      const res = await app.request(
+        `${baseUrl}/mcp-other-org/test`,
+        json("POST", { url: "http://mcp.com", authType: "OAuth" }),
+      );
 
       expect(res.status).toBe(404);
       expect(await res.json()).toEqual({ error: "MCP not found" });

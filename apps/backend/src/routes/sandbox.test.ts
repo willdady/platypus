@@ -755,7 +755,7 @@ describe("Sandbox Routes", () => {
       asAdmin(method === "PUT" ? stored : undefined);
 
       const res = await send(method, {
-        workspaceId,
+        ...(method === "POST" ? { workspaceId } : {}),
         name: "Creds backend",
         backend: CREDS_BACKEND,
         ...over,

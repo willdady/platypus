@@ -78,7 +78,11 @@ describe("createAgentDiscoveryTools", () => {
     it("lists only this workspace's providers and the Shared ones attached here", async () => {
       // An unattached Shared Provider cannot resolve at Chat-turn time, so
       // offering it would only produce an Agent that cannot run.
-      seedDb(seedScoped("provider", () => ({ modelIds: ["model-a"] })));
+      seedDb(
+        seedScoped("provider", () => ({
+          modelIds: [{ id: "model-a", passthroughFileTypes: [] }],
+        })),
+      );
 
       expect(await callTool(tools.listModelProviders, {})).toEqual([
         { id: "provider-mine", name: "provider-mine", modelIds: ["model-a"] },

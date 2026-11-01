@@ -83,10 +83,11 @@ describe("Organization Provider Routes", () => {
       name: "New OpenAI",
       providerType: "OpenAI",
       apiKey: "sk-123",
-      modelIds: ["gpt-4"],
+      apiMode: "responses" as const,
+      searchSource: "native",
+      modelIds: [{ id: "gpt-4", passthroughFileTypes: [] }],
       taskModelId: "gpt-4",
       memoryExtractionModelId: "gpt-4",
-      organizationId: orgId,
     };
 
     it("should create org provider if org admin", async () => {
@@ -213,7 +214,9 @@ describe("Organization Provider Routes", () => {
       name: "Renamed",
       providerType: "OpenAI",
       apiKey: "sk-123",
-      modelIds: ["gpt-4"],
+      apiMode: "responses" as const,
+      searchSource: "native",
+      modelIds: [{ id: "gpt-4", passthroughFileTypes: [] }],
       taskModelId: "gpt-4",
       memoryExtractionModelId: "gpt-4",
     };

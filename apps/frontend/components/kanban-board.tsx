@@ -272,7 +272,7 @@ export function KanbanBoard({
         backendUrl,
         `${boardPath}/cards`,
         scope,
-        { id: cardId, data: updateData },
+        { id: cardId, method: "PATCH", data: updateData },
       );
       if (updateOutcome.outcome !== "success") {
         toast.error(updateOutcome.message);

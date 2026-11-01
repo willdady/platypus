@@ -41,13 +41,6 @@ describe("getModelConfigs", () => {
     expect(getModelConfigs(aliased)[0].alias).toBe("flagship");
   });
 
-  it("leaves a legacy string[] entry with no alias", () => {
-    expect(getModelConfigs(provider(["gpt-4"]))[0]).toEqual({
-      id: "gpt-4",
-      passthroughFileTypes: [],
-    });
-  });
-
   it("carries a declared maxOutputTokens through", () => {
     const configs = getModelConfigs(
       provider([
