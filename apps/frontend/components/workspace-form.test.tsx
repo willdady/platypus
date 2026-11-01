@@ -32,6 +32,7 @@ const RESEARCH = {
   ownerId: "u1",
   name: "Research",
   context: "",
+  maxDailySummaries: 90,
 };
 
 function save() {

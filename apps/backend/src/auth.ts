@@ -1,6 +1,6 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { authPlugins } from "./auth-plugins.ts";
+import { authPlugins, authUserFieldOverrides } from "./auth-plugins.ts";
 import { requireInvitationToSignUp } from "./sign-up.ts";
 import { db } from "./index.ts";
 import { backendBaseUrl } from "./base-urls.ts";
@@ -65,6 +65,7 @@ export const auth = betterAuth({
   },
   user: {
     additionalFields: {
+      ...authUserFieldOverrides,
       // The User timezone: an IANA name, or null when unset
       timezone: {
         type: "string",

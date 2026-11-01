@@ -47,8 +47,8 @@ describe("invitation.invited_by", () => {
       INSERT INTO "user" ("id", "name", "email", "email_verified", "created_at", "updated_at")
         VALUES ('inviter', 'Admin', 'admin@example.com', true, now(), now());
       INSERT INTO "organization" ("id", "name") VALUES ('org-1', 'Acme');
-      INSERT INTO "invitation" ("id", "email", "organization_id", "invited_by", "expires_at")
-        VALUES ('inv-1', 'jane@example.com', 'org-1', 'inviter', now() + interval '7 days');
+      INSERT INTO "invitation" ("id", "email", "organization_id", "invited_by", "token", "expires_at")
+        VALUES ('inv-1', 'jane@example.com', 'org-1', 'inviter', 'tok-1', now() + interval '7 days');
       DELETE FROM "user" WHERE "id" = 'inviter';
     `);
     const { rows } = await pg.query<{ invited_by: string | null }>(

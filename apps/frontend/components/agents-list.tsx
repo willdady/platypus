@@ -191,22 +191,22 @@ export function AgentsList({
   const canPin = canPinAgent(ownsWorkspace);
   const canClone = canCreateAgent(ownsWorkspace);
 
-  const getToolSetNames = (toolSetIds: string[] | undefined) => {
-    if (!toolSetIds?.length) return [];
+  const getToolSetNames = (toolSetIds: string[]) => {
+    if (toolSetIds.length === 0) return [];
     return toolSetIds
       .map((id) => toolSets.find((ts) => ts.id === id)?.name)
       .filter(Boolean) as string[];
   };
 
-  const getSkillNames = (skillIds: string[] | undefined) => {
-    if (!skillIds?.length) return [];
+  const getSkillNames = (skillIds: string[]) => {
+    if (skillIds.length === 0) return [];
     return skillIds
       .map((id) => skills.find((s) => s.id === id)?.name)
       .filter(Boolean) as string[];
   };
 
-  const getSubAgentNames = (subAgentIds: string[] | undefined) => {
-    if (!subAgentIds?.length) return [];
+  const getSubAgentNames = (subAgentIds: string[]) => {
+    if (subAgentIds.length === 0) return [];
     return subAgentIds
       .map((id) => agents.find((a) => a.id === id)?.name)
       .filter(Boolean) as string[];

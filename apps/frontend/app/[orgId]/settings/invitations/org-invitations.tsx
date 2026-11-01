@@ -191,13 +191,13 @@ function OrgInvitationsPage() {
                     {formatDate(invite.expiresAt)}
                   </TableCell>
                   <TableCell className="text-right">
-                    {invite.status === "pending" && invite.token && (
+                    {invite.status === "pending" && (
                       <Button
                         variant="ghost"
                         size="icon"
                         aria-label="Copy invitation link"
                         title="Copy invitation link"
-                        onClick={() => handleCopyLink(invite.token!)}
+                        onClick={() => handleCopyLink(invite.token)}
                       >
                         <Copy />
                       </Button>

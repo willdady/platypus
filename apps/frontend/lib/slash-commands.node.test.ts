@@ -103,7 +103,6 @@ describe("skillsForAgent", () => {
   });
 
   it("offers nothing for an Agent with no assignment", () => {
-    expect(skillsForAgent(skills, undefined)).toEqual([]);
     expect(skillsForAgent(skills, [])).toEqual([]);
   });
 });

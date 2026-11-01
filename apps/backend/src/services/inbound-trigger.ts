@@ -205,7 +205,7 @@ export const loadInboundTarget = async (
     trigger: row.trigger,
     organizationId: row.organization.id,
     workspaceId: row.workspace.id,
-    gate: row.organization.inboundTriggerGate as OrgGate,
+    gate: row.organization.inboundTriggerGate,
     workspaceAllowed: row.workspace.inboundTriggersAllowed,
     ownerMayAct: ownerMayAct({
       membershipId: row.organization_member?.id,

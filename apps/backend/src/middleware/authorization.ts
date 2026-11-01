@@ -242,7 +242,7 @@ export const resolveOrgMembership = async (
     return { allowed: false, reason: "not-a-member" };
   }
 
-  if (requiredRoles && !requiredRoles.includes(membership.role as OrgRole)) {
+  if (requiredRoles && !requiredRoles.includes(membership.role)) {
     return { allowed: false, reason: "insufficient-role" };
   }
 

@@ -130,9 +130,9 @@ const allOf = (...conditions: (SQL | undefined)[]): SQL => {
 };
 
 /**
- * {@link isSharedRow} as SQL: at this Organization, and at no Workspace. The one
- * place that condition is written — every query in this module, read or write,
- * composes it.
+ * The **Shared resource** predicate as SQL: at this Organization, and at no
+ * Workspace. The one place that condition is written — every query in this
+ * module, read or write, composes it.
  */
 const sharedWhere = (table: ScopedTable, orgId: string): SQL =>
   allOf(eq(table.organizationId, orgId), isNull(table.workspaceId));
@@ -188,22 +188,19 @@ export const orgScopedWhereIn = (
 };
 
 /**
- * Whether a row is a **Shared resource** of this Organization: org-scoped, and at
- * no Workspace. The two scope columns are mutually exclusive by a Zod refinement
- * on write, not by a database constraint, so "has this organizationId" is not on
- * its own enough — a row holding both belongs to its Workspace and must not reach
- * another one on the strength of the org column. Absent rows are not Shared, so a
- * dangling id fails this too. {@link sharedWhere} is the same rule as SQL, for
- * the rows this module has yet to fetch.
+ * Whether a row is a **Shared resource** of this Organization: its
+ * `organizationId` matches. The scope `CHECK` keeps `workspaceId` null whenever
+ * `organizationId` is set, so there is no second column to consult. Absent rows
+ * are not Shared, so a dangling id fails this too. {@link sharedWhere} is the
+ * same rule as SQL, for the rows this module has yet to fetch.
  *
  * Exported because the Promotion guard (`findNonSharedReferences`) asks the same
  * question of rows it fetched itself.
  */
 export const isSharedRow = (
-  row:
-    { organizationId: string | null; workspaceId: string | null } | undefined,
+  row: { organizationId: string | null } | undefined,
   orgId: string,
-): boolean => !!row && row.organizationId === orgId && !row.workspaceId;
+): boolean => !!row && row.organizationId === orgId;
 
 /** Whether this Workspace holds an Attachment for the given Shared resource. */
 const isAttached = async (
@@ -256,9 +253,7 @@ export const resolveScoped = async <T extends ScopedResourceType>(
   const row = rows[0] as RowOf[T] | undefined;
   if (!row) return null;
 
-  // Classified by which scope the row actually carries, not by elimination: a row
-  // holding both columns would otherwise fall through to "workspace" and be
-  // visible here on the strength of its organizationId alone.
+  // Classified by which scope the row carries.
   if (row.workspaceId === ctx.workspaceId) {
     return { row, scope: "workspace" };
   }
@@ -304,9 +299,8 @@ export const resolveScopedByName = async <T extends ScopedResourceType>(
   const workspaceRow = workspaceRows[0] as RowOf[T] | undefined;
   if (workspaceRow) return { row: workspaceRow, scope: "workspace" };
 
-  // Only a genuinely Shared row answers here: a row carrying both scope columns
-  // belongs to its Workspace and must not reach another one through that
-  // Workspace's Attachment (see {@link sharedWhere}).
+  // Only a genuinely Shared row answers here: the predicate requires its
+  // `workspaceId` to be null.
   const orgRows = await database
     .select()
     .from(table)
@@ -345,9 +339,9 @@ export const listScoped = async <T extends ScopedResourceType>(
     );
 
   // Shared rows appear in a Workspace only where attached (ADR-0007) — gate by
-  // an inner join on the Attachment table. Only genuinely Shared rows qualify:
-  // one carrying both scope columns belongs to its Workspace and must not reach
-  // another one through that Workspace's Attachment (see {@link sharedWhere}).
+  // an inner join on the Attachment table. The shared predicate requires the
+  // row's `workspaceId` to be null, so an attached Workspace-scoped row is
+  // never picked up here.
   const attachedRows = await database
     .select()
     .from(table)

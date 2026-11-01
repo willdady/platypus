@@ -81,6 +81,30 @@ its schedule automatically when the backend container starts; there is nothing
 to do. A Trigger whose cron expression no longer parses is left alone and named
 in the backend log, so you can fix or delete it.
 
+### Stored data the new schema forbids stops the upgrade
+
+Every Trigger's configuration is now checked against its type — its schedule,
+its events, or its inbound inputs — and a Trigger the upgrade cannot read
+faithfully stops the upgrade instead of being guessed at. Nothing is lost: the
+migration rolls back, so your database stays as it was. The backend log names
+the Trigger's id.
+
+Fix that Trigger before upgrading again. Either correct it in the UI on your
+current version, or delete it if you no longer need it. A Trigger whose
+configuration cannot be opened at all can be deleted with:
+
+```bash
+docker compose exec -T database psql -U postgres -d postgres \
+  -c "DELETE FROM \"trigger\" WHERE \"id\" = '<the id from the log>';"
+```
+
+The same rollback protects every other value the new schema rejects: a Chat
+status, Trigger type, Trigger run status or event type, Organization gate or
+member role outside its set, or a Provider, Agent, MCP or Skill holding both
+scopes (or neither). Those rows cannot be repaired automatically, so the log
+names the constraint that refused them; correct or remove the row on your
+current version, then upgrade again.
+
 ### Dashboards are removed
 
 The upgrade deletes every Dashboard and its widgets, and there is no export.

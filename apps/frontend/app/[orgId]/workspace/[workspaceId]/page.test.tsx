@@ -60,6 +60,9 @@ describe("Workspace home", () => {
       description: "desc",
       scope: "workspace",
       isPinned,
+      toolSetIds: [],
+      skillIds: [],
+      subAgentIds: [],
     });
     mockScopedSWR({
       "/agents": [agent("a1", "Triage", false), agent("a2", "Writer", true)],
@@ -82,7 +85,15 @@ describe("Workspace home", () => {
   it("shows no Pinned group when no agent is pinned", async () => {
     mockScopedSWR({
       "/agents": [
-        { id: "a1", name: "Triage", description: "desc", isPinned: false },
+        {
+          id: "a1",
+          name: "Triage",
+          description: "desc",
+          isPinned: false,
+          toolSetIds: [],
+          skillIds: [],
+          subAgentIds: [],
+        },
       ],
       "/providers": [{ id: "p1", name: "OpenAI" }],
       ...workspaceRead,

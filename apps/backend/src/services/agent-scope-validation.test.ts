@@ -31,12 +31,6 @@ const rowsFor = (prefix: string): Row[] => [
     organizationId: "org-2",
     workspaceId: null,
   },
-  {
-    id: `dual-${prefix}`,
-    name: `Dual ${prefix}`,
-    organizationId: orgId,
-    workspaceId: "ws-1",
-  },
 ];
 
 describe("findNonSharedReferences (no-cascade rule)", () => {
@@ -61,7 +55,7 @@ describe("findNonSharedReferences (no-cascade rule)", () => {
     expect(blockers).toEqual([]);
   });
 
-  it.each(["ws", "foreign", "dual"])(
+  it.each(["ws", "foreign"])(
     "flags every %s reference as a blocker, named by its row",
     async (kind) => {
       const blockers = await findNonSharedReferences(orgId, {
@@ -71,7 +65,7 @@ describe("findNonSharedReferences (no-cascade rule)", () => {
         toolSetIds: [`${kind}-m`],
       });
 
-      const name = { ws: "WS", foreign: "Foreign", dual: "Dual" }[kind];
+      const name = { ws: "WS", foreign: "Foreign" }[kind];
       expect(blockers).toEqual([
         { type: "provider", id: `${kind}-p`, name: `${name} p` },
         { type: "skill", id: `${kind}-s`, name: `${name} s` },

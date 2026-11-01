@@ -28,7 +28,7 @@ export const ownerStandingColumns = {
 export type OwnerStanding = {
   membershipId: string | null | undefined;
   role: string | null | undefined;
-  banned: boolean | null | undefined;
+  banned: boolean;
   banExpires: Date | null | undefined;
 };
 
@@ -37,7 +37,7 @@ export const isBanned = (
   user: Pick<OwnerStanding, "banned" | "banExpires">,
   now: Date = new Date(),
 ): boolean =>
-  !!user.banned &&
+  user.banned &&
   (!user.banExpires || user.banExpires.getTime() > now.getTime());
 
 /**

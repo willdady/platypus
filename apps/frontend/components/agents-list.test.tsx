@@ -38,6 +38,9 @@ const orgAgent: AgentWithScope = {
   name: "Shared Agent",
   description: "desc",
   scope: "organization",
+  toolSetIds: [],
+  skillIds: [],
+  subAgentIds: [],
 } as unknown as AgentWithScope;
 
 const workspaceAgent: AgentWithScope = {
@@ -45,6 +48,9 @@ const workspaceAgent: AgentWithScope = {
   name: "Workspace Agent",
   description: "desc",
   scope: "workspace",
+  toolSetIds: [],
+  skillIds: [],
+  subAgentIds: [],
 } as unknown as AgentWithScope;
 
 const provider: Provider = { id: "p1", name: "OpenAI" } as unknown as Provider;
@@ -202,6 +208,9 @@ describe("AgentsList pinning", () => {
       description: "desc",
       scope: "workspace",
       isPinned,
+      toolSetIds: [],
+      skillIds: [],
+      subAgentIds: [],
     }) as unknown as AgentWithScope;
 
   const namesIn = (list: string) =>
@@ -529,6 +538,9 @@ describe("AgentsList paging", () => {
       description: "desc",
       scope: "workspace",
       isPinned,
+      toolSetIds: [],
+      skillIds: [],
+      subAgentIds: [],
     }) as unknown as AgentWithScope;
   const namesIn = (list: string) =>
     within(screen.getByRole("list", { name: list }))

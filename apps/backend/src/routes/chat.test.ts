@@ -712,7 +712,7 @@ describe("Chat Routes", () => {
       mockDb.limit.mockResolvedValueOnce([]); // ADR-0020 row lookup (new chat)
       mockDb.orderBy.mockResolvedValueOnce([]); // the path it continues: none
       mockDb.limit.mockResolvedValueOnce([
-        { id: "agent-1", workspaceId, skillIds: ["skill-1"] },
+        { id: "agent-1", workspaceId, skillIds: ["skill-1"], toolSetIds: [] },
       ]); // the turn's Agent, for its assigned Skills
       mockDb.limit.mockResolvedValueOnce([
         {
@@ -780,7 +780,7 @@ describe("Chat Routes", () => {
       mockDb.limit.mockResolvedValueOnce([]);
       mockDb.orderBy.mockResolvedValueOnce([]); // the path it continues: none
       mockDb.limit.mockResolvedValueOnce([
-        { id: "agent-1", workspaceId, skillIds: ["skill-1"] },
+        { id: "agent-1", workspaceId, skillIds: ["skill-1"], toolSetIds: [] },
       ]);
       // No Skill of that name in either scope, and no Attachment either.
       mockDb.limit.mockResolvedValue([]);
@@ -1097,7 +1097,13 @@ describe("Chat Routes", () => {
     const seedChat = (leaf = "a2") =>
       seedTenant({
         chat: [
-          { id: "chat-1", workspaceId, title: "Chat", activeLeafId: leaf },
+          {
+            id: "chat-1",
+            workspaceId,
+            title: "Chat",
+            activeLeafId: leaf,
+            runHeartbeatAt: new Date(),
+          },
         ],
         chat_message: [
           stored("u1", null, "user", 1),
@@ -1497,6 +1503,8 @@ describe("Chat Routes", () => {
               workspaceId,
               organizationId: null,
               skillIds: ["skill-1"],
+              toolSetIds: [],
+              subAgentIds: [],
             },
           ],
           skill: [
@@ -1832,7 +1840,13 @@ describe("Chat Routes", () => {
       const seedAlternatives = () =>
         seedTenant({
           chat: [
-            { id: "chat-1", workspaceId, title: "Chat", activeLeafId: "a2b" },
+            {
+              id: "chat-1",
+              workspaceId,
+              title: "Chat",
+              activeLeafId: "a2b",
+              runHeartbeatAt: new Date(),
+            },
           ],
           chat_message: [
             stored("u1", null, "user", 1),

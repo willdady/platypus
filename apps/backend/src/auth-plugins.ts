@@ -13,3 +13,18 @@ import { admin } from "better-auth/plugins";
 const adminPlugin = admin();
 
 export const authPlugins = [adminPlugin] as [typeof adminPlugin];
+
+/**
+ * User fields this backend overrides on top of what a plugin declares.
+ * better-auth applies `user.additionalFields` after plugin fields, so these
+ * win — including in `better-auth generate`, which is why the generated
+ * schema keeps `banned` `NOT NULL`. The admin plugin declares it optional.
+ */
+export const authUserFieldOverrides = {
+  banned: {
+    type: "boolean",
+    required: true,
+    defaultValue: false,
+    input: false,
+  },
+} as const;

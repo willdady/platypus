@@ -503,6 +503,9 @@ describe("AgentForm Skills search", () => {
       modelId: "gpt-4o",
       maxSteps: 5,
       scope: "organization",
+      toolSetIds: [],
+      skillIds: [],
+      subAgentIds: [],
     });
     render(
       <AgentForm

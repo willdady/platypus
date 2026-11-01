@@ -177,8 +177,7 @@ export const workspaceSchema = z.object({
     .number()
     .int()
     .min(WORKSPACE_MAX_DAILY_SUMMARIES_MIN)
-    .max(WORKSPACE_MAX_DAILY_SUMMARIES_MAX)
-    .optional(),
+    .max(WORKSPACE_MAX_DAILY_SUMMARIES_MAX),
   // Per-workspace delegation flags (ADR-0006). Settable only by an org admin
   // (enforced in the workspace route); when true the owner may self-manage the
   // respective resource.
@@ -202,17 +201,22 @@ export const workspaceSchema = z.object({
 
 export type Workspace = z.infer<typeof workspaceSchema>;
 
-export const workspaceUpdateSchema = workspaceSchema.pick({
-  name: true,
-  context: true,
-  taskModelProviderId: true,
-  memoryExtractionProviderId: true,
-  memoryEmbeddingProviderId: true,
-  maxDailySummaries: true,
-  providerSelfManagement: true,
-  mcpSelfManagement: true,
-  inboundTriggersAllowed: true,
-});
+export const workspaceUpdateSchema = workspaceSchema
+  .pick({
+    name: true,
+    context: true,
+    taskModelProviderId: true,
+    memoryExtractionProviderId: true,
+    memoryEmbeddingProviderId: true,
+    maxDailySummaries: true,
+    providerSelfManagement: true,
+    mcpSelfManagement: true,
+    inboundTriggersAllowed: true,
+  })
+  // A read always carries the cap; an update may leave it alone.
+  .extend({
+    maxDailySummaries: workspaceSchema.shape.maxDailySummaries.optional(),
+  });
 
 /**
  * A Workspace transfer (ADR-0035): the member who becomes its Owner, and
@@ -332,8 +336,7 @@ export const chatSchema = z.object({
   isPinned: z.boolean(),
   tags: z
     .array(z.string().regex(kebabCaseRegex, "Tags must be kebab-case"))
-    .max(5, "A chat can have at most 5 tags")
-    .optional(),
+    .max(5, "A chat can have at most 5 tags"),
   agentId: z.string().optional(),
   providerId: z.string().optional(),
   modelId: z.string().optional(),
@@ -659,7 +662,15 @@ export const agentBaseSchema = z.object({
   updatedAt: z.date(),
 });
 
-export const agentSchema = agentBaseSchema.refine(
+// The three id arrays are stored non-null with an `[]` default, so a read
+// always carries them. Creates and updates still leave them optional.
+const agentStoredIdArrays = {
+  toolSetIds: z.array(z.string()),
+  skillIds: z.array(z.string()),
+  subAgentIds: z.array(z.string()),
+};
+
+export const agentSchema = agentBaseSchema.extend(agentStoredIdArrays).refine(
   (data) => {
     const hasOrg = Boolean(data.organizationId);
     const hasWorkspace = Boolean(data.workspaceId);
@@ -679,6 +690,7 @@ export type Agent = z.infer<typeof agentSchema>;
  * Organization surface where every row is Organization-scoped by construction.
  */
 export const agentResponseSchema = agentBaseSchema.extend({
+  ...agentStoredIdArrays,
   scope: resourceScopeSchema,
 });
 
@@ -2719,10 +2731,9 @@ export const invitationSchema = z.object({
   // accept (ADR-0009). Stored in the invitation_blueprint junction; surfaced
   // here in `position` order on reads.
   blueprintIds: z.array(z.string()).optional(),
-  // Redemption token minted with the invitation (ADR-0019, #549). Nullable
-  // only at the column level for pre-existing rows a backfill migration
-  // hasn't reached yet; every invitation created through the API has one.
-  token: z.string().nullable().optional(),
+  // Redemption token minted with the invitation (ADR-0019, #549). Every
+  // invitation has one; the column is NOT NULL.
+  token: z.string(),
   expiresAt: z.date(),
   createdAt: z.date(),
 });
@@ -2814,11 +2825,15 @@ export type ProviderUpdateData = z.infer<typeof providerUpdateSchema>;
 
 // Organization Member
 
+export const orgRoleSchema = z.enum(["admin", "member"]);
+
+export type OrgRole = z.infer<typeof orgRoleSchema>;
+
 export const organizationMemberSchema = z.object({
   id: z.string(),
   organizationId: z.string(),
   userId: z.string(),
-  role: z.enum(["admin", "member"]),
+  role: orgRoleSchema,
   createdAt: z.date(),
   updatedAt: z.date(),
 });

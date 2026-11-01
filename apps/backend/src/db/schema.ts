@@ -6,6 +6,7 @@ import {
   customType,
   foreignKey,
   primaryKey,
+  check,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
@@ -17,20 +18,28 @@ import type { z } from "zod";
 import type {
   AttachmentResourceType,
   ChatMessageMetadata,
+  ChatStatus,
+  EventTriggerEvent,
   EventTriggerEventPayload,
   KanbanCardAssignee,
   KanbanCardHistoryChange,
   KanbanCardPriority,
   KanbanLabel,
   modelIdsSchema,
+  OrgGate,
+  OrgRole,
   PlatypusUIMessage,
   Provider,
   providerApiModeSchema,
   ReasoningEffort,
   RunEventError,
+  RunEventStatus,
+  RunEventType,
   TranscriptSummaryStats,
   TriggerRunStats,
+  TriggerRunStatus,
   triggerSchema,
+  TriggerType,
   UnloadedToolSet,
 } from "@platypus/schemas";
 import type {
@@ -57,26 +66,51 @@ const unboundVector = customType<{
   },
 });
 
-export const organization = pgTable("organization", (t) => ({
-  id: t.text("id").primaryKey(),
-  name: t.text("name").notNull(),
-  // Free-text org identity / context, rendered early in the system prompt as
-  // framing (not a security control). Nullable — existing orgs are unchanged.
-  identityContext: t.text("identity_context"),
-  // Which Workspaces may take Inbound Trigger calls (ADR-0030): "off" |
-  // "all" | "selected". Checked on every call, so changing it takes effect
-  // on the next one. Settable only by an Org Admin.
-  inboundTriggerGate: t.text("inbound_trigger_gate").notNull().default("off"),
-  // Which Workspaces may have A2A endpoints (ADR-0032), in the same shape as
-  // the Inbound Trigger gate and separate from it. Checked on every call.
-  a2aGate: t.text("a2a_gate").notNull().default("off"),
-  // Which Workspaces may import Skill bundles — zip import, Replace bundle and
-  // GitHub install (ADR-0037). "all" by default, so zip import keeps working;
-  // Organization-scope imports are never gated.
-  skillImportGate: t.text("skill_import_gate").notNull().default("all"),
-  createdAt: t.timestamp("created_at").notNull().defaultNow(),
-  updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
-}));
+export const organization = pgTable(
+  "organization",
+  (t) => ({
+    id: t.text("id").primaryKey(),
+    name: t.text("name").notNull(),
+    // Free-text org identity / context, rendered early in the system prompt as
+    // framing (not a security control). Nullable — existing orgs are unchanged.
+    identityContext: t.text("identity_context"),
+    // Which Workspaces may take Inbound Trigger calls (ADR-0030): "off" |
+    // "all" | "selected". Checked on every call, so changing it takes effect
+    // on the next one. Settable only by an Org Admin.
+    inboundTriggerGate: t
+      .text("inbound_trigger_gate")
+      .$type<OrgGate>()
+      .notNull()
+      .default("off"),
+    // Which Workspaces may have A2A endpoints (ADR-0032), in the same shape as
+    // the Inbound Trigger gate and separate from it. Checked on every call.
+    a2aGate: t.text("a2a_gate").$type<OrgGate>().notNull().default("off"),
+    // Which Workspaces may import Skill bundles — zip import, Replace bundle and
+    // GitHub install (ADR-0037). "all" by default, so zip import keeps working;
+    // Organization-scope imports are never gated.
+    skillImportGate: t
+      .text("skill_import_gate")
+      .$type<OrgGate>()
+      .notNull()
+      .default("all"),
+    createdAt: t.timestamp("created_at").notNull().defaultNow(),
+    updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
+  }),
+  (t) => [
+    check(
+      "organization_inbound_trigger_gate_allowed",
+      sql`${t.inboundTriggerGate} in ('off', 'all', 'selected')`,
+    ),
+    check(
+      "organization_a2a_gate_allowed",
+      sql`${t.a2aGate} in ('off', 'all', 'selected')`,
+    ),
+    check(
+      "organization_skill_import_gate_allowed",
+      sql`${t.skillImportGate} in ('off', 'all', 'selected')`,
+    ),
+  ],
+);
 
 // Provider defined before workspace to avoid circular reference with task_model_provider_id.
 export const provider = pgTable(
@@ -139,6 +173,10 @@ export const provider = pgTable(
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
   }),
   (t) => [
+    check(
+      "provider_scope_exclusive",
+      sql`(${t.organizationId} is null) <> (${t.workspaceId} is null)`,
+    ),
     index("idx_provider_workspace_id").on(t.workspaceId),
     index("idx_provider_organization_id").on(t.organizationId),
     unique("unique_provider_name_org").on(t.organizationId, t.name),
@@ -179,7 +217,7 @@ export const workspace = pgTable(
     memoryEmbeddingProviderId: t
       .text("memory_embedding_provider_id")
       .references(() => provider.id, { onDelete: "set null" }),
-    maxDailySummaries: t.integer("max_daily_summaries").default(90),
+    maxDailySummaries: t.integer("max_daily_summaries").notNull().default(90),
 
     // Per-workspace delegation flags (ADR-0006). When true, the workspace
     // owner may self-manage the respective credential/reach-bearing resource
@@ -241,9 +279,9 @@ export const chat = pgTable(
     activeLeafId: t.text("active_leaf_id"),
     // Run lifecycle status. Existing rows backfill to "succeeded" — every
     // chat row pre-status was the result of a completed run.
-    status: t.text("status").notNull().default("succeeded"),
+    status: t.text("status").$type<ChatStatus>().notNull().default("succeeded"),
     isPinned: t.boolean("is_pinned").notNull().default(false),
-    tags: t.jsonb("tags").$type<string[]>().default([]),
+    tags: t.jsonb("tags").$type<string[]>().notNull().default([]),
     // How many titling attempts failed while the Chat was still Untitled.
     // Titling stops once it reaches its bound, so a Chat whose model keeps
     // producing an unusable title is not re-sent after every turn (#1618).
@@ -304,9 +342,9 @@ export const chat = pgTable(
     // When the instance running this Chat's turn last said it is still alive
     // (`runs/chat-run-heartbeat.ts`). A `running` Chat whose heartbeat has
     // gone stale lost its run to a crash or a deploy: the next claim takes it,
-    // and the recovery sweep marks it failed. Null on a Chat that has never
-    // run since the column was added.
-    runHeartbeatAt: t.timestamp("run_heartbeat_at"),
+    // and the recovery sweep marks it failed. Defaulted so a Chat that has
+    // never run still carries a stamp.
+    runHeartbeatAt: t.timestamp("run_heartbeat_at").notNull().defaultNow(),
 
     // The A2A token whose client started this Chat (ADR-0032), so a retried
     // message finds its Chat. Null for a Chat started in the UI.
@@ -326,6 +364,10 @@ export const chat = pgTable(
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
   }),
   (t) => [
+    check(
+      "chat_status_allowed",
+      sql`${t.status} in ('running', 'succeeded', 'failed', 'cancelled')`,
+    ),
     // The Chat list: one Workspace's Chats, pinned first, newest first, a
     // page at a time. Its leading column also serves every by-Workspace read.
     // Nulls first, as a plain `DESC` sorts them, so the order matches.
@@ -461,7 +503,7 @@ export const agent = pgTable(
     // An Agent is scoped to either an Organization or a Workspace (mutually
     // exclusive), mirroring the dual-scope shape of `provider`/`mcp`/`skill`.
     // Org-scoped Agents are Shared resources managed by Org Admins (ADR-0007);
-    // the XOR is enforced in the Zod schema and by the routes/Promote action.
+    // the database enforces the XOR.
     organizationId: t
       .text("organization_id")
       .references(() => organization.id, {
@@ -493,15 +535,23 @@ export const agent = pgTable(
     reasoningThinking: t.boolean("reasoning_thinking"),
     reasoningEffort: t.text("reasoning_effort").$type<ReasoningEffort>(),
     thinkingBudget: t.integer("thinking_budget"),
-    toolSetIds: t.jsonb("tool_set_ids").$type<string[]>().default([]), // Array of tool set ids
-    skillIds: t.jsonb("skill_ids").$type<string[]>().default([]), // Array of skill ids
-    subAgentIds: t.jsonb("sub_agent_ids").$type<string[]>().default([]), // Array of sub-agent ids
+    toolSetIds: t.jsonb("tool_set_ids").$type<string[]>().notNull().default([]), // Array of tool set ids
+    skillIds: t.jsonb("skill_ids").$type<string[]>().notNull().default([]), // Array of skill ids
+    subAgentIds: t
+      .jsonb("sub_agent_ids")
+      .$type<string[]>()
+      .notNull()
+      .default([]), // Array of sub-agent ids
     inputPlaceholder: t.text("input_placeholder"),
     avatarKey: t.text("avatar_key"),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
   }),
   (t) => [
+    check(
+      "agent_scope_exclusive",
+      sql`(${t.organizationId} is null) <> (${t.workspaceId} is null)`,
+    ),
     index("idx_agent_workspace_id").on(t.workspaceId),
     index("idx_agent_organization_id").on(t.organizationId),
     index("idx_agent_provider_id").on(t.providerId),
@@ -517,8 +567,8 @@ export const mcp = pgTable(
     id: t.text("id").primaryKey(),
     // An MCP is scoped to either an Organization or a Workspace (mutually
     // exclusive), mirroring the dual-scope shape of `provider`. Org-scoped MCPs
-    // are Shared resources managed by Org Admins (ADR-0007); the XOR is enforced
-    // in the Zod schema and by the create routes.
+    // are Shared resources managed by Org Admins (ADR-0007); the database
+    // enforces the XOR.
     organizationId: t
       .text("organization_id")
       .references(() => organization.id, {
@@ -575,6 +625,10 @@ export const mcp = pgTable(
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
   }),
   (t) => [
+    check(
+      "mcp_scope_exclusive",
+      sql`(${t.organizationId} is null) <> (${t.workspaceId} is null)`,
+    ),
     index("idx_mcp_workspace_id").on(t.workspaceId),
     index("idx_mcp_organization_id").on(t.organizationId),
     unique("unique_mcp_name_org").on(t.organizationId, t.name),
@@ -803,11 +857,15 @@ export const organizationMember = pgTable(
       .text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    role: t.text("role").notNull().default("member"), // admin | member
+    role: t.text("role").$type<OrgRole>().notNull().default("member"),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
   }),
   (t) => [
+    check(
+      "organization_member_role_allowed",
+      sql`${t.role} in ('admin', 'member')`,
+    ),
     index("idx_org_member_org_id").on(t.organizationId),
     index("idx_org_member_user_id").on(t.userId),
     unique("unique_org_member_org_user").on(t.organizationId, t.userId),
@@ -838,11 +896,8 @@ export const invitation = pgTable(
     // resolve and redeem the invitation via its link rather than only after
     // they already hold an account with the invited address. Plaintext and re-copyable by design (ADR-0019): there
     // is no rotation action, and Platypus has no email to re-send a
-    // show-once secret through. Every insert sets this explicitly (the
-    // create handler mints it, same as `id`); it stays nullable at the
-    // column level only so backfilling pre-existing rows is a plain data
-    // migration rather than a multi-step NOT NULL dance.
-    token: t.text("token"),
+    // show-once secret through.
+    token: t.text("token").notNull(),
     expiresAt: t.timestamp("expires_at").notNull(),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
   }),
@@ -895,8 +950,8 @@ export const skill = pgTable(
     id: t.text("id").primaryKey(),
     // A Skill is scoped to either an Organization or a Workspace (mutually
     // exclusive), mirroring the dual-scope shape of `provider`/`mcp`. Org-scoped
-    // Skills are Shared resources managed by Org Admins (ADR-0007); the XOR is
-    // enforced in the Zod schema and by the create routes.
+    // Skills are Shared resources managed by Org Admins (ADR-0007); the
+    // database enforces the XOR.
     organizationId: t
       .text("organization_id")
       .references(() => organization.id, {
@@ -944,6 +999,10 @@ export const skill = pgTable(
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
   }),
   (t) => [
+    check(
+      "skill_scope_exclusive",
+      sql`(${t.organizationId} is null) <> (${t.workspaceId} is null)`,
+    ),
     index("idx_skill_workspace_id").on(t.workspaceId),
     index("idx_skill_organization_id").on(t.organizationId),
     unique("unique_skill_name_workspace").on(t.workspaceId, t.name),
@@ -1049,7 +1108,7 @@ export const trigger = pgTable(
       .text("agent_id")
       .notNull()
       .references(() => agent.id, { onDelete: "restrict" }),
-    type: t.text("type").notNull(), // "cron" | "event" | "inbound"
+    type: t.text("type").$type<TriggerType>().notNull(), // "cron" | "event" | "inbound"
     name: t.text("name").notNull(),
     description: t.text("description"),
     instruction: t.text("instruction").notNull(),
@@ -1061,11 +1120,13 @@ export const trigger = pgTable(
     // activity unrelated to it. Existing Triggers stop composing the
     // `<memories>` block when this column lands — the intended outcome.
     includeMemories: t.boolean("include_memories").notNull().default(false),
-    // The schema's INPUT: a row written before a config field existed lacks
-    // it, and reads parse through `narrowTriggerConfig`, which fills defaults.
+    // The validated shape. The repair migration fills the fields each type
+    // gained and refuses a config it cannot make valid; reads still narrow
+    // `type`/`config` together through `narrowTriggerConfig`, which reports a
+    // pair the upgrade could not repair.
     config: t
       .jsonb("config")
-      .$type<z.input<typeof triggerSchema>["config"]>()
+      .$type<z.infer<typeof triggerSchema>["config"]>()
       .notNull(),
     lastRunAt: t.timestamp("last_run_at"),
     nextRunAt: t.timestamp("next_run_at"),
@@ -1093,6 +1154,10 @@ export const trigger = pgTable(
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
   }),
   (t) => [
+    check(
+      "trigger_type_allowed",
+      sql`${t.type} in ('cron', 'event', 'inbound')`,
+    ),
     index("idx_trigger_workspace_id").on(t.workspaceId),
     index("idx_trigger_next_run_at").on(t.nextRunAt),
     index("idx_trigger_type").on(t.type),
@@ -1109,8 +1174,12 @@ export const triggerRun = pgTable(
       .notNull()
       .references(() => trigger.id, { onDelete: "cascade" }),
     // pending | running | success | failed | cancelled | suppressed
-    status: t.text("status").notNull().default("pending"),
-    eventType: t.text("event_type"),
+    status: t
+      .text("status")
+      .$type<TriggerRunStatus>()
+      .notNull()
+      .default("pending"),
+    eventType: t.text("event_type").$type<EventTriggerEvent>(),
     // An Event Trigger's event payload, or an Inbound Trigger call's inputs.
     eventData: t
       .jsonb("event_data")
@@ -1151,6 +1220,14 @@ export const triggerRun = pgTable(
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
   }),
   (t) => [
+    check(
+      "trigger_run_status_allowed",
+      sql`${t.status} in ('pending', 'running', 'success', 'failed', 'cancelled', 'suppressed')`,
+    ),
+    check(
+      "trigger_run_event_type_allowed",
+      sql`${t.eventType} is null or ${t.eventType} in ('notification.created', 'notification.updated', 'notification.read', 'notification.dismissed', 'card.created', 'card.updated', 'card.moved', 'card.deleted')`,
+    ),
     index("idx_trigger_run_trigger_id").on(t.triggerId),
     index("idx_trigger_run_started_at").on(t.startedAt),
     // The scheduler's every-minute checks for a Trigger's unfinished run.
@@ -1294,8 +1371,7 @@ export const triggerRunEvent = pgTable(
     // Monotonic insertion order within the run, for incremental polling.
     // Display order is `startedAt`, so parallel tool calls read as overlapping.
     seq: t.integer("seq").notNull(),
-    // tool-call | tool-input | reasoning | text | delegate
-    type: t.text("type").notNull(),
+    type: t.text("type").$type<RunEventType>().notNull(),
     toolName: t.text("tool_name"),
     // An absolute wall-clock instant in epoch milliseconds — not an offset from
     // the run's start, so it correlates with logs and a delegate's events need
@@ -1305,14 +1381,21 @@ export const triggerRunEvent = pgTable(
     // reads. Null while the event is open — and for ever on an event the
     // stuck-run sweep closed, whose end nobody saw.
     durationMs: t.integer("duration_ms"),
-    // running | completed | error | cancelled
-    status: t.text("status").notNull(),
+    status: t.text("status").$type<RunEventStatus>().notNull(),
     // `{ message, truncated, originalBytes }` — the one content a Run event
     // carries, capped at 1 KB on a character boundary. Null unless it failed.
     error: t.jsonb("error").$type<RunEventError>(),
     childrenTruncated: t.boolean("children_truncated").notNull().default(false),
   }),
   (t) => [
+    check(
+      "trigger_run_event_type_allowed",
+      sql`${t.type} in ('tool-call', 'tool-input', 'reasoning', 'text', 'delegate')`,
+    ),
+    check(
+      "trigger_run_event_status_allowed",
+      sql`${t.status} in ('running', 'completed', 'error', 'cancelled')`,
+    ),
     // The detail read: one run's events, incrementally past a sequence number.
     index("idx_trigger_run_event_run_id_seq").on(t.runId, t.seq),
     // Retention's cascade looks up each deleted event's children.
