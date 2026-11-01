@@ -1758,7 +1758,7 @@ export const TOOL_INPUT_CLEARING_KEEP_RECENT = 4;
  * One constant for both Tool-result and Tool-input clearing, and both
  * frontend mirrors, so the four boundaries move together.
  */
-export const TOOL_RESULT_CLEARING_BATCH = 4;
+export const TOOL_CLEARING_BATCH = 4;
 
 /**
  * What a cleared Tool result's content becomes in what the model is sent.

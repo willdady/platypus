@@ -24,7 +24,8 @@ import {
   type KanbanScope,
 } from "../services/kanban-shared.ts";
 import { buildResourceUrl } from "../utils/resource-url.ts";
-import { asToolResult, createBoardReadTools } from "./kanban.ts";
+import { createBoardReadTools } from "./kanban.ts";
+import { asToolResult } from "./tool-result.ts";
 
 /**
  * The Agent-facing surface over board and column structure — the Kanban Boards

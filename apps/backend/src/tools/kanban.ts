@@ -1,7 +1,6 @@
 import { tool, type Tool } from "ai";
 import { z } from "zod";
 import { db } from "../index.ts";
-import { ConflictError, NotFoundError, ValidationError } from "../errors.ts";
 import {
   bulkUpdateCards,
   copyCard,
@@ -28,6 +27,7 @@ import type { KanbanContext, KanbanScope } from "../services/kanban-shared.ts";
 import { buildResourceUrl } from "../utils/resource-url.ts";
 import { createListAgentsTool } from "./agent-discovery.ts";
 import { shareTool } from "./index.ts";
+import { asToolResult } from "./tool-result.ts";
 
 /**
  * The Agent-facing surface over the Kanban modules (`services/kanban-*`): each
@@ -416,31 +416,6 @@ export function createKanbanTools(
     updateComment: updateCommentTool,
     deleteComment,
   };
-}
-
-/** What a Tool returns when the module refuses the write. */
-type ErrorResult = { error: string };
-
-/**
- * Turns the module's typed failures into the `{ error }` payload a Tool
- * result carries — a Tool reports a problem back to the model rather than
- * throwing it into the run.
- */
-export async function asToolResult<T>(
-  run: () => Promise<T>,
-): Promise<T | ErrorResult> {
-  try {
-    return await run();
-  } catch (error) {
-    if (
-      error instanceof NotFoundError ||
-      error instanceof ValidationError ||
-      error instanceof ConflictError
-    ) {
-      return { error: error.message };
-    }
-    throw error;
-  }
 }
 
 /**

@@ -257,9 +257,9 @@ describe("createTriggerTools", () => {
         ...cronCreate,
         type: "event",
         config: {},
-      })) as { success: boolean; error: string };
+      })) as { error: string };
 
-      expect(result.success).toBe(false);
+      expect(result).not.toHaveProperty("success");
       expect(result.error).toContain("config.events");
       expect(createTrigger).not.toHaveBeenCalled();
     });
@@ -355,7 +355,6 @@ describe("createTriggerTools", () => {
         vi.mocked(service).mockRejectedValueOnce(error);
 
         expect(await callTool(pick(tools), input)).toEqual({
-          success: false,
           error: message,
         });
       });
@@ -398,7 +397,6 @@ describe("createTriggerTools", () => {
       expect(
         await callTool(tools.deleteTrigger, { triggerId: "t1", label: "x" }),
       ).toEqual({
-        success: false,
         error: "Inbound triggers can only be deleted in the UI",
       });
       // The tool never opts in to reaching Inbound Triggers.

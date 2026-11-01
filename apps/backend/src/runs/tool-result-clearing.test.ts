@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   CLEARED_TOOL_RESULT_MARKER,
-  TOOL_RESULT_CLEARING_BATCH,
+  TOOL_CLEARING_BATCH,
 } from "@platypus/schemas";
 import type { ModelMessage } from "ai";
 import {
@@ -30,7 +30,7 @@ const toolResultMessage = (
 const POLICY: ClearingPolicy = {
   thresholdFraction: 0.7,
   keepRecent: 4,
-  batchSize: TOOL_RESULT_CLEARING_BATCH,
+  batchSize: TOOL_CLEARING_BATCH,
 };
 
 /** The summary pass and any other caller clearing everything it is given. */

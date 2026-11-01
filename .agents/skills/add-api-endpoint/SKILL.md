@@ -59,7 +59,7 @@ Pick the narrowest that admits the callers you intend:
 | `requireOrgAccess(["admin"])`        | members holding one of the named Organization roles       |
 | `requireWorkspaceAccess`             | callers permitted in the Workspace in the path            |
 | `requireWorkspaceOwner`              | the Workspace's Owner                                     |
-| `requireWorkspaceConfigAccess()`     | credential- or reach-bearing Workspace config, admin-only |
+| `requireWorkspaceConfigAccess(null)` | credential- or reach-bearing Workspace config, admin-only |
 | `requireWorkspaceConfigAccess(flag)` | the same, plus the Owner when that Workspace flag is set  |
 | `requireSuperAdmin`                  | platform operators only                                   |
 

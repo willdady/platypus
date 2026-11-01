@@ -84,7 +84,7 @@ import {
 // locked cards, and the Organization settings surface (no workspaceId) where it
 // manages org-scoped Skills directly (ADR-0007). The API's response shape
 // always carries `scope`.
-type SkillWithScope = Serialized<SkillResponse>;
+type SerializedSkill = Serialized<SkillResponse>;
 
 /** The value a Select carries for "no filter" — Radix rejects an empty one. */
 const ALL = "all";
@@ -93,7 +93,7 @@ const UNATTACHED = "unattached";
 /** Skills per page on the Workspace home. */
 const SKILLS_PAGE_SIZE = 8;
 
-function UserInvocableBadge({ skill }: { skill: SkillWithScope }) {
+function UserInvocableBadge({ skill }: { skill: SerializedSkill }) {
   if (!skill.disableModelInvocation) return null;
 
   return (
@@ -185,7 +185,7 @@ export function SkillsList({
   workspaceId?: string;
 }) {
   const { actor } = useAuth();
-  const [skillToManage, setSkillToManage] = useState<SkillWithScope | null>(
+  const [skillToManage, setSkillToManage] = useState<SerializedSkill | null>(
     null,
   );
   const searchParams = useSearchParams();
@@ -223,7 +223,7 @@ export function SkillsList({
     error,
     isLoading,
     mutate,
-  } = useScopedList<SkillWithScope>("skills", scope);
+  } = useScopedList<SerializedSkill>("skills", scope);
 
   // Agent associations are a workspace concern; only fetched on that surface.
   const { results: agents } = useScopedList<Agent>(
@@ -240,13 +240,13 @@ export function SkillsList({
   const canManageOrg = canManageOrgSharedResource(actor);
   const importAllowed = useSkillImportAllowed(scope);
 
-  const orgSkillDetach = useSharedDetach<SkillWithScope>({
+  const orgSkillDetach = useSharedDetach<SerializedSkill>({
     resourceType: "skill",
     scope,
     mutate,
   });
 
-  const promote = usePromoteShared<SkillWithScope>({
+  const promote = usePromoteShared<SerializedSkill>({
     entity: "skills",
     scope,
     mutate,
@@ -255,7 +255,7 @@ export function SkillsList({
   const getAgentsForSkill = (skillId: string) =>
     agents.filter((agent) => agent.skillIds.includes(skillId));
 
-  const deleteFlow = useDeleteFlow<SkillWithScope>({
+  const deleteFlow = useDeleteFlow<SerializedSkill>({
     mutate,
     guidanceOnForbidden: true,
     delete: (skill, url) => writeEntity(url, "skills", scope, { id: skill.id }),
@@ -265,21 +265,21 @@ export function SkillsList({
   // (ADR-0007); the guard explains the blocker up front instead of offering a
   // Delete button that is guaranteed to fail. Inside a Workspace there is
   // nothing to check — the row is either private or a locked Shared card.
-  const deleteGuard = useSharedDeleteGuard<SkillWithScope>({
+  const deleteGuard = useSharedDeleteGuard<SerializedSkill>({
     resourceType: "skill",
     scope,
     onAllowed: deleteFlow.request,
   });
 
-  const handleDeleteClick = (skill: SkillWithScope) =>
+  const handleDeleteClick = (skill: SerializedSkill) =>
     workspaceId ? deleteFlow.request(skill) : deleteGuard.request(skill);
 
   // Org-scoped (Shared) Skills are locked inside a Workspace: they can only
   // be edited from the organization settings surface (ADR-0007).
-  const isSharedInWorkspace = (skill: SkillWithScope) =>
+  const isSharedInWorkspace = (skill: SerializedSkill) =>
     Boolean(workspaceId) && skill.scope === "organization";
 
-  const renderMenu = (skill: SkillWithScope) => {
+  const renderMenu = (skill: SerializedSkill) => {
     if (isSharedInWorkspace(skill)) {
       // Like a Shared Agent: Detach is named in the menu rather than behind
       // the card's own click, and only an Org Admin gets one.
@@ -339,7 +339,7 @@ export function SkillsList({
       : ALL;
 
   const query = nameFilter.trim();
-  const matchesAgent = (skill: SkillWithScope) => {
+  const matchesAgent = (skill: SerializedSkill) => {
     if (activeAgentFilter === ALL) return true;
     const skillAgents = getAgentsForSkill(skill.id);
     return activeAgentFilter === UNATTACHED

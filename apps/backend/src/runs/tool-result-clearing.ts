@@ -4,7 +4,7 @@ import {
   CLEARED_TOOL_RESULT_MARKER,
   clearingEngaged,
   clearingPrefixLength,
-  TOOL_RESULT_CLEARING_BATCH,
+  TOOL_CLEARING_BATCH,
   TOOL_RESULT_CLEARING_KEEP_RECENT,
   TOOL_RESULT_CLEARING_THRESHOLD,
   type ContextOccupancyReading,
@@ -49,7 +49,7 @@ export type ClearingPolicy = {
   keepRecent: number;
   /**
    * How many clearable results a pass moves the boundary by
-   * (`clear_at_least`). See `TOOL_RESULT_CLEARING_BATCH`.
+   * (`clear_at_least`). See `TOOL_CLEARING_BATCH`.
    */
   batchSize: number;
 };
@@ -57,7 +57,7 @@ export type ClearingPolicy = {
 export const DEFAULT_CLEARING_POLICY: ClearingPolicy = {
   thresholdFraction: TOOL_RESULT_CLEARING_THRESHOLD,
   keepRecent: TOOL_RESULT_CLEARING_KEEP_RECENT,
-  batchSize: TOOL_RESULT_CLEARING_BATCH,
+  batchSize: TOOL_CLEARING_BATCH,
 };
 
 /** Never treats a tool as read-only. The default for a caller with no MCP hints to consult. */

@@ -194,6 +194,39 @@ BEGIN
   END IF;
 END $$;--> statement-breakpoint
 
+-- Name the first row each constraint below would refuse, so the Operator can
+-- fix or delete it; the constraint error alone names no row.
+DO $$
+DECLARE
+  c record;
+  bad_id text;
+BEGIN
+  FOR c IN SELECT * FROM (VALUES
+    ('trigger', $c$"type" in ('cron', 'event', 'inbound')$c$, 'type'),
+    ('chat', $c$"status" in ('running', 'succeeded', 'failed', 'cancelled')$c$, 'status'),
+    ('trigger_run', $c$"status" in ('pending', 'running', 'success', 'failed', 'cancelled', 'suppressed')$c$, 'status'),
+    ('trigger_run', $c$"event_type" is null or "event_type" in ('notification.created', 'notification.updated', 'notification.read', 'notification.dismissed', 'card.created', 'card.updated', 'card.moved', 'card.deleted')$c$, 'event_type'),
+    ('trigger_run_event', $c$"type" in ('tool-call', 'tool-input', 'reasoning', 'text', 'delegate')$c$, 'type'),
+    ('trigger_run_event', $c$"status" in ('running', 'completed', 'error', 'cancelled')$c$, 'status'),
+    ('organization', $c$"inbound_trigger_gate" in ('off', 'all', 'selected')$c$, 'inbound_trigger_gate'),
+    ('organization', $c$"a2a_gate" in ('off', 'all', 'selected')$c$, 'a2a_gate'),
+    ('organization', $c$"skill_import_gate" in ('off', 'all', 'selected')$c$, 'skill_import_gate'),
+    ('organization_member', $c$"role" in ('admin', 'member')$c$, 'role'),
+    ('provider', $c$("organization_id" is null) <> ("workspace_id" is null)$c$, 'scope'),
+    ('agent', $c$("organization_id" is null) <> ("workspace_id" is null)$c$, 'scope'),
+    ('mcp', $c$("organization_id" is null) <> ("workspace_id" is null)$c$, 'scope'),
+    ('skill', $c$("organization_id" is null) <> ("workspace_id" is null)$c$, 'scope')
+  ) AS checks(tbl, allowed, field) LOOP
+    EXECUTE format('SELECT "id" FROM %I WHERE NOT (%s) LIMIT 1', c.tbl, c.allowed)
+      INTO bad_id;
+    IF bad_id IS NOT NULL THEN
+      RAISE EXCEPTION 'schema hardening: % % has a % outside the allowed set; fix or delete it, then upgrade again',
+        c.tbl, bad_id, c.field;
+    END IF;
+  END LOOP;
+END
+$$;--> statement-breakpoint
+
 -- A closed set of Trigger types, and the closed sets the other string columns
 -- were already casting to.
 ALTER TABLE "trigger" DROP CONSTRAINT IF EXISTS "trigger_type_allowed", ADD CONSTRAINT "trigger_type_allowed" CHECK ("trigger"."type" in ('cron', 'event', 'inbound'));--> statement-breakpoint

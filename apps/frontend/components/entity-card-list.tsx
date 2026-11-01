@@ -1,8 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
-import { useSearchParams } from "next/navigation";
-import { defaultFilter } from "cmdk";
+import { type ReactNode } from "react";
 import {
   Item,
   ItemTitle,
@@ -10,28 +8,11 @@ import {
   ItemDescription,
   ItemContent,
 } from "@/components/ui/item";
-import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { ListError, ListState } from "@/components/list-state";
-import { CardGridSkeleton, LoadingRegion } from "@/components/list-skeletons";
-import { RowActionsMenu } from "@/components/row-actions-menu";
+import { ListError } from "@/components/list-state";
+import { LoadingRegion } from "@/components/list-skeletons";
 import { OrganizationBadge } from "@/components/organization-badge";
-import { SearchInput } from "@/components/search-input";
-import {
-  GhostCards,
-  ListFooter,
-  ListPagination,
-  NO_GHOSTS,
-  pageOf,
-  type Page,
-} from "@/components/list-pagination";
-import { Button } from "@/components/ui/button";
-import { Plus } from "lucide-react";
+import { GhostCards, NO_GHOSTS, type Page } from "@/components/list-pagination";
 import Link from "next/link";
-import { useScopedList } from "@/hooks/use-scoped-list";
-import { writeEntity } from "@/lib/api-write";
-import { useDeleteFlow } from "@/hooks/use-delete-flow";
-import { workspaceRoutes } from "@/lib/routes";
-import { replaceSearchParam } from "@/lib/search-params";
 import { cn } from "@/lib/utils";
 
 /** The card fields every entity card shows. */
@@ -279,173 +260,6 @@ export function EntityCardList<T extends EntityCard>({
           aria-label={label}
         />
       )}
-    </>
-  );
-}
-
-export type WorkspaceEntityCardListConfig = {
-  /** Collection entity as the API spells it, and the key to its routes. */
-  readonly entity: "boards";
-  /** The URL param holding the name search: "boardQuery". */
-  readonly queryParam: "boardQuery";
-  readonly labels: {
-    /** Delete confirmation title: "Delete Board". */
-    readonly deleteTitle: string;
-    /** The entity named mid-sentence: "board". */
-    readonly deleteNoun: string;
-    /** What deleting it takes with it: "and all of its data.". */
-    readonly deleteTail: string;
-    /** The phrase the user types to confirm: "delete board". */
-    readonly confirmPhrase: string;
-  };
-  /**
-   * Pages the list and draws its footer row: Create on the left, pagination
-   * on the right.
-   */
-  readonly paging: {
-    /** The URL param holding the page: "boardsPage". */
-    readonly param: string;
-    readonly pageSize: number;
-    /** Names the pagination control: "Boards pages". */
-    readonly label: string;
-    /** The footer's Create link: "Create board". */
-    readonly createLabel: string;
-  };
-};
-
-/**
- * The workspace's sorted card list of a named entity (Boards). Each card links to its detail page and carries the
- * same edit/delete menu; the entity noun, search param, delete copy, and
- * confirmation phrase are the parameters.
- */
-export function WorkspaceEntityCardList({
-  orgId,
-  workspaceId,
-  config,
-}: {
-  orgId: string;
-  workspaceId: string;
-  config: WorkspaceEntityCardListConfig;
-}) {
-  const {
-    results: rows,
-    error,
-    isLoading,
-    mutate,
-  } = useScopedList<EntityCard>(config.entity, { orgId, workspaceId });
-
-  const searchParams = useSearchParams();
-  // The input reads local state, seeded from the URL: the URL write below
-  // lands a render later, and an input bound straight to it drops keystrokes.
-  const [nameFilter, setNameFilterState] = useState(
-    () => searchParams.get(config.queryParam) ?? "",
-  );
-  // An empty search leaves its param out. A new search starts on page 1.
-  const setNameFilter = (value: string) => {
-    setNameFilterState(value);
-    replaceSearchParam(config.queryParam, value.trim() || null);
-    replaceSearchParam(config.paging.param, null);
-  };
-
-  const routes = workspaceRoutes(orgId, workspaceId)[config.entity];
-
-  const query = nameFilter.trim();
-  // The Command palette's own scorer, applied to the name.
-  const cards = [...rows]
-    .sort((a, b) => a.name.localeCompare(b.name))
-    .filter((card) => !query || defaultFilter(card.name, query) > 0);
-  const { paging } = config;
-  const page = pageOf(searchParams.get(paging.param), cards, paging.pageSize);
-
-  const deleteFlow = useDeleteFlow<EntityCard>({
-    mutate,
-    delete: (card, backendUrl) =>
-      writeEntity(
-        backendUrl,
-        config.entity,
-        { orgId, workspaceId },
-        {
-          id: card.id,
-        },
-      ),
-  });
-
-  return (
-    <>
-      {/* Nothing to filter, no controls. */}
-      {rows.length > 0 && (
-        <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2">
-          <SearchInput
-            placeholder={`Search ${config.entity}…`}
-            aria-label={`Search ${config.entity}`}
-            value={nameFilter}
-            onValueChange={setNameFilter}
-            className="w-full sm:w-64"
-          />
-        </div>
-      )}
-      <EntityCardList
-        items={page.items}
-        ghosts={page}
-        isLoading={isLoading}
-        error={error}
-        subject={config.entity}
-        onRetry={() => void mutate()}
-        skeleton={<CardGridSkeleton descriptionLines={1} />}
-        empty={
-          <ListState variant="empty">
-            {rows.length
-              ? `No ${config.entity} match your filters.`
-              : `No ${config.entity} yet.`}
-          </ListState>
-        }
-        // Nothing follows the description, so one line is all it reserves.
-        descriptionLines={1}
-        href={(card) => routes.detail(card.id)}
-        menu={(card) => (
-          <RowActionsMenu
-            name={card.name}
-            edit={{ href: routes.settings(card.id) }}
-            remove={{ onSelect: () => deleteFlow.request(card) }}
-          />
-        )}
-      />
-
-      <ListFooter
-        pagination={
-          <ListPagination
-            page={page}
-            param={paging.param}
-            aria-label={paging.label}
-          />
-        }
-      >
-        <Button variant="outline" asChild>
-          <Link href={routes.create}>
-            <Plus /> {paging.createLabel}
-          </Link>
-        </Button>
-      </ListFooter>
-
-      <DeleteConfirmDialog
-        open={deleteFlow.open}
-        onOpenChange={(open) => !open && deleteFlow.close()}
-        title={config.labels.deleteTitle}
-        description={
-          <>
-            This action cannot be undone. This will permanently delete the{" "}
-            {config.labels.deleteNoun}{" "}
-            <span className="font-semibold">
-              {deleteFlow.target?.name ?? ""}
-            </span>{" "}
-            {config.labels.deleteTail}
-          </>
-        }
-        confirmPhrase={config.labels.confirmPhrase}
-        onConfirm={deleteFlow.confirm}
-        loading={deleteFlow.deleting}
-        error={deleteFlow.error}
-      />
     </>
   );
 }

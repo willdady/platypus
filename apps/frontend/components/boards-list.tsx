@@ -1,30 +1,45 @@
 "use client";
 
+import { useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { defaultFilter } from "cmdk";
+import { Plus } from "lucide-react";
+import Link from "next/link";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { EntityCardList } from "@/components/entity-card-list";
+import { ListState } from "@/components/list-state";
+import { CardGridSkeleton } from "@/components/list-skeletons";
 import {
-  WorkspaceEntityCardList,
-  type WorkspaceEntityCardListConfig,
-} from "./entity-card-list";
+  ListFooter,
+  ListPagination,
+  pageOf,
+} from "@/components/list-pagination";
+import { RowActionsMenu } from "@/components/row-actions-menu";
+import { SearchInput } from "@/components/search-input";
+import { Button } from "@/components/ui/button";
+import { useDeleteFlow } from "@/hooks/use-delete-flow";
+import { useScopedList } from "@/hooks/use-scoped-list";
+import { writeEntity } from "@/lib/api-write";
+import { workspaceRoutes } from "@/lib/routes";
+import { replaceSearchParam } from "@/lib/search-params";
 
 /** Boards per page on the Workspace home. */
 const BOARDS_PAGE_SIZE = 8;
+/** The URL param holding the name search. */
+const QUERY_PARAM = "boardQuery";
+/** The URL param holding the page. */
+const PAGE_PARAM = "boardsPage";
 
-const boardsConfig: WorkspaceEntityCardListConfig = {
-  entity: "boards",
-  queryParam: "boardQuery",
-  labels: {
-    deleteTitle: "Delete Board",
-    deleteNoun: "board",
-    deleteTail: "and all of its data.",
-    confirmPhrase: "delete board",
-  },
-  paging: {
-    param: "boardsPage",
-    pageSize: BOARDS_PAGE_SIZE,
-    label: "Boards pages",
-    createLabel: "Create board",
-  },
+type BoardCard = {
+  readonly id: string;
+  readonly name: string;
+  readonly description?: string | null;
 };
 
+/**
+ * The Workspace's Boards, sorted by name and searchable. Each card links to
+ * its Board and carries the edit/delete menu.
+ */
 export function BoardsList({
   orgId,
   workspaceId,
@@ -32,11 +47,121 @@ export function BoardsList({
   orgId: string;
   workspaceId: string;
 }) {
+  const {
+    results: rows,
+    error,
+    isLoading,
+    mutate,
+  } = useScopedList<BoardCard>("boards", { orgId, workspaceId });
+
+  const searchParams = useSearchParams();
+  // The input reads local state, seeded from the URL: the URL write below
+  // lands a render later, and an input bound straight to it drops keystrokes.
+  const [nameFilter, setNameFilterState] = useState(
+    () => searchParams.get(QUERY_PARAM) ?? "",
+  );
+  // An empty search leaves its param out. A new search starts on page 1.
+  const setNameFilter = (value: string) => {
+    setNameFilterState(value);
+    replaceSearchParam(QUERY_PARAM, value.trim() || null);
+    replaceSearchParam(PAGE_PARAM, null);
+  };
+
+  const routes = workspaceRoutes(orgId, workspaceId).boards;
+
+  const query = nameFilter.trim();
+  // The Command palette's own scorer, applied to the name.
+  const cards = [...rows]
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .filter((card) => !query || defaultFilter(card.name, query) > 0);
+  const page = pageOf(searchParams.get(PAGE_PARAM), cards, BOARDS_PAGE_SIZE);
+
+  const deleteFlow = useDeleteFlow<BoardCard>({
+    mutate,
+    delete: (card, backendUrl) =>
+      writeEntity(
+        backendUrl,
+        "boards",
+        { orgId, workspaceId },
+        {
+          id: card.id,
+        },
+      ),
+  });
+
   return (
-    <WorkspaceEntityCardList
-      orgId={orgId}
-      workspaceId={workspaceId}
-      config={boardsConfig}
-    />
+    <>
+      {/* Nothing to filter, no controls. */}
+      {rows.length > 0 && (
+        <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+          <SearchInput
+            placeholder={"Search boards…"}
+            aria-label={"Search boards"}
+            value={nameFilter}
+            onValueChange={setNameFilter}
+            className="w-full sm:w-64"
+          />
+        </div>
+      )}
+      <EntityCardList
+        items={page.items}
+        ghosts={page}
+        isLoading={isLoading}
+        error={error}
+        subject="boards"
+        onRetry={() => void mutate()}
+        skeleton={<CardGridSkeleton descriptionLines={1} />}
+        empty={
+          <ListState variant="empty">
+            {rows.length ? "No boards match your filters." : "No boards yet."}
+          </ListState>
+        }
+        // Nothing follows the description, so one line is all it reserves.
+        descriptionLines={1}
+        href={(card) => routes.detail(card.id)}
+        menu={(card) => (
+          <RowActionsMenu
+            name={card.name}
+            edit={{ href: routes.settings(card.id) }}
+            remove={{ onSelect: () => deleteFlow.request(card) }}
+          />
+        )}
+      />
+
+      <ListFooter
+        pagination={
+          <ListPagination
+            page={page}
+            param={PAGE_PARAM}
+            aria-label="Boards pages"
+          />
+        }
+      >
+        <Button variant="outline" asChild>
+          <Link href={routes.create}>
+            <Plus /> Create board
+          </Link>
+        </Button>
+      </ListFooter>
+
+      <DeleteConfirmDialog
+        open={deleteFlow.open}
+        onOpenChange={(open) => !open && deleteFlow.close()}
+        title="Delete Board"
+        description={
+          <>
+            This action cannot be undone. This will permanently delete the board{" "}
+            <span className="font-semibold">
+              {deleteFlow.target?.name ?? ""}
+            </span>{" "}
+            and all of its data.
+          </>
+        }
+        confirmPhrase="delete board"
+        onConfirm={deleteFlow.confirm}
+        loading={deleteFlow.deleting}
+        error={deleteFlow.error}
+      />
+    </>
   );
 }

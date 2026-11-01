@@ -39,7 +39,7 @@ describe("0101 model-config assertion", () => {
   });
 
   it("refuses a bare string entry", async () => {
-    await expect(run(["gpt-4"])).rejects.toThrow(/not resolved/);
+    await expect(run(["gpt-4"])).rejects.toThrow(/for provider\(s\) p1;/);
   });
 
   it("refuses an object the earlier backfill never completed", async () => {
