@@ -73,8 +73,7 @@ is signed with it so you can verify the request really came from Platypus — se
 
 The create form does **not** show it. Saving returns you to the Webhooks list;
 open the Webhook again and the **Signing Secret** field appears, with buttons to
-reveal, copy, and **Regenerate** it. The secret was generated at save time — a
-create form that showed you nothing hasn't failed.
+reveal, copy, and **Regenerate** it.
 
 **Regenerate** invalidates the current secret immediately, so a receiver still
 verifying with the old one rejects every delivery until you update it.
@@ -456,8 +455,8 @@ Read those in [run history](/building-with-platypus/triggers#review-run-history)
 When the server is stopped cleanly, it cancels the runs it is holding, so they
 end `cancelled`; the `trigger_run.cancelled` event is usually lost as the process
 exits. A run that was still going when the server crashed is failed only once it
-is a little older than the run timeout, with `errorMessage` set to
-`Server restarted during execution`, and sends `trigger_run.failed` then — not
+is a little older than the run timeout, with an `errorMessage` saying the
+server restarted, and sends `trigger_run.failed` then — not
 when the server comes back up. A run whose Trigger is deleted while it is
 running sends nothing.
 
