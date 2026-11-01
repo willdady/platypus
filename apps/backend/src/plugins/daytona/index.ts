@@ -9,6 +9,8 @@ import {
   daytonaPluginCredentialsSchema,
   daytonaSandboxConfigSchema,
   daytonaSandboxCredentialsSchema,
+  type DaytonaPluginConfig,
+  type DaytonaPluginCredentials,
   type DaytonaSandboxConfig,
   type DaytonaSandboxCredentials,
 } from "./backend.ts";
@@ -19,7 +21,9 @@ import {
 // in PLATYPUS_PLUGIN_CONFIG_DAYTONA.
 const daytonaBackend: SandboxBackendContribution<
   DaytonaSandboxConfig,
-  DaytonaSandboxCredentials
+  DaytonaSandboxCredentials,
+  DaytonaPluginConfig,
+  DaytonaPluginCredentials
 > = {
   backend: "daytona",
   name: "Daytona",
@@ -31,7 +35,10 @@ const daytonaBackend: SandboxBackendContribution<
     createDaytonaSandboxBackend(plugin),
 };
 
-export const plugin: PlatypusPlugin = {
+export const plugin: PlatypusPlugin<
+  DaytonaPluginConfig,
+  DaytonaPluginCredentials
+> = {
   name: "@platypus/daytona",
   version: "0.1.0",
   apiVersion: PLUGIN_API_VERSION,

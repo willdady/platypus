@@ -51,8 +51,8 @@ export const plugin: PlatypusPlugin = {
         category: "Automation",
         description:
           "Manage triggers (cron schedules, one-off runs and event-based) including listing agents, creating, editing, and viewing triggers, and getting the current time",
-        // Core always fills `timezone`; it is optional only in the SDK type
-        tools: ({ workspaceId, orgId, frontendUrl, timezone = "UTC" }) =>
+        // Core always fills `timezone` (required as of API v4)
+        tools: ({ workspaceId, orgId, frontendUrl, timezone }) =>
           createTriggerTools(workspaceId, orgId, frontendUrl, timezone),
       },
       {
@@ -95,16 +95,9 @@ export const plugin: PlatypusPlugin = {
         name: "Memory",
         category: "Memory",
         description: "Look up memories from past conversations",
-        tools: ({ workspaceId, userId, sessionId }) => {
-          // Core always supplies one. A missing id is a programming error, so
-          // fail loudly rather than silently withholding Memory from the model.
-          if (sessionId === undefined) {
-            throw new Error(
-              "The Memory Tool set needs the turn's session id to embed searches",
-            );
-          }
-          return createMemoryTools(workspaceId, userId, sessionId);
-        },
+        // `sessionId` is required as of API v4, and every turn has one.
+        tools: ({ workspaceId, userId, sessionId }) =>
+          createMemoryTools(workspaceId, userId, sessionId),
       },
     ],
   },

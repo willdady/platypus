@@ -40,8 +40,8 @@ describe("@platypus/exa plugin", () => {
   });
 
   it("requires an apiKey credential", () => {
-    expect(plugin.credentialsSchema?.safeParse({}).success).toBe(false);
-    expect(plugin.credentialsSchema?.safeParse({ apiKey: "k" }).success).toBe(
+    expect(plugin.credentialsSchema.safeParse({}).success).toBe(false);
+    expect(plugin.credentialsSchema.safeParse({ apiKey: "k" }).success).toBe(
       true,
     );
   });
