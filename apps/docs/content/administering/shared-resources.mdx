@@ -20,10 +20,11 @@ There are two routes up, and which one you have depends on the type.
 **Agents and Skills** are promoted. In the Workspace that has the resource, open
 its three-dot menu and choose **Promote to organization**. It re-scopes to the
 Organization, attaches itself back to the Workspace it came from, and from then on
-is editable only from **Organization settings**.
+is editable only from **Organization settings**. Promoting is the only way to
+get a Shared Agent: **Organization settings → Agents** has no create button.
 
 A Skill can also start at Organization scope: **Organization settings → Skills**
-offers **Create skill**, import, and **Install from GitHub**.
+offers **Create skill**, **Import zip**, and **Install from GitHub**.
 
 **MCP servers and Providers** have no Promote action. Create them at Organization
 scope in the first place: **Organization settings → MCP Servers → Add MCP server**, or
@@ -32,8 +33,7 @@ scope in the first place: **Organization settings → MCP Servers → Add MCP se
 <Callout type="warning">
   A Workspace-scoped MCP or Provider can't be moved to Organization scope. There
   is no action that lifts one, so if you want to share it you recreate it at
-  Organization scope and delete the original. Hunting the Workspace list for a
-  Promote button on a Provider is time you won't get back.
+  Organization scope and delete the original.
 </Callout>
 
 <Callout type="info">
@@ -66,7 +66,9 @@ or **Attach shared provider**. Each opens an **Attach a shared** dialog listing
 the Organization's available resources of that type.
 
 To undo one, use **Detach** inside the Workspace, or untick the Workspace in
-**Manage attachments**.
+**Manage attachments**. Detaching a Shared Agent also deletes the Workspace's
+[A2A endpoints](/building-with-platypus/a2a-endpoints#deleting) for it and
+[unpins](/building-with-platypus/agents#pin-an-agent) it.
 
 An Attachment governs more than what shows up in a list. A Workspace reaches a
 Shared resource only where one exists, background work included: a Trigger can

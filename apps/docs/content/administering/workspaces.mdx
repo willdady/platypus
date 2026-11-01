@@ -9,13 +9,13 @@ import { Callout } from "nextra/components";
 
 Most of what makes a Workspace behave the way it does is one form:
 **Workspace settings**, opened from **Workspace** in the gear menu at the top
-right of any page in the Workspace. It is shorter than it looks — a name, some text, three
-Provider dropdowns and a number, plus three switches only an Org Admin sees.
+right of any page in the Workspace: a name, some text, three Provider
+dropdowns and a number, plus three switches only an Org Admin sees.
 
 ## Creating a Workspace
 
 **Add workspace**, from the Organization page or the Workspace switcher in the
-sidebar. Only an Org Admin can create one. It takes three steps, and **Back**
+sidebar on Workspace home or a Chat. Only an Org Admin can create one. It takes three steps, and **Back**
 keeps what you entered; nothing is created until **Save** on the last one.
 
 1. **Workspace**
@@ -115,8 +115,9 @@ only Org Admins may configure that resource in this Workspace.
 </Callout>
 
 The switches only cover **Workspace-scoped** resources. An owner can never edit a
-Shared one, and never touch the Sandbox — that stays admin-only whatever these
-say.
+Shared one. On the Sandbox they can rename it and set their own environment
+variables; creating or deleting it, and its backend, configuration and
+credentials, stay admin-only whatever these say.
 
 ## Allow Inbound Triggers
 
@@ -179,7 +180,7 @@ assignees and card history are left as they were.
 including each member's own **Workspace Context** for it. Shared resources are
 only detached, not deleted. Its Sandbox is torn down too. With the Docker or
 Daytona backend that deletes the Sandbox and its storage, so any files an Agent
-left in `/workspace` are gone. With SSH the host is left alone.
+left in the Sandbox are gone. With SSH the host is left alone.
 It is not recoverable from inside the product — only from a database backup.
 
 ## Where to next
