@@ -31,6 +31,10 @@ import {
   skillUpdateSchema,
   attachmentSchema,
   nextTurnOccupancy,
+  clearingPrefixLength,
+  TOOL_RESULT_CLEARING_MIN_BATCH,
+  TOOL_RESULT_CLEARING_TARGET,
+  TOOL_RESULT_CLEARING_THRESHOLD,
   attachmentCreateSchema,
   orgAttachmentCreateSchema,
   chatSubmitSchema,
@@ -1762,6 +1766,138 @@ describe("triggerRunStatusSchema", () => {
     expect(Object.keys(TRIGGER_RUN_STATUS_LABELS).sort()).toEqual(
       [...triggerRunStatusSchema.options].sort(),
     );
+  });
+});
+
+describe("clearingPrefixLength", () => {
+  const base = {
+    itemSizes: [1_000, 1_000, 1_000, 1_000],
+    conversationSize: 10_000,
+    keepRecent: 0,
+    occupancy: 700,
+    contextWindow: 1_000,
+    targetFraction: 0.5,
+  };
+
+  it("clears enough of the oldest items to reach the target fraction", () => {
+    // 700 -> 500 of a 1,000-token window must free 200/700 of what is sent.
+    // 10,000 observed characters x 200/700 = 2,857, so three 1,000-char items
+    // reach it and a fourth would overshoot.
+    expect(clearingPrefixLength(base)).toBe(3);
+  });
+
+  it("rounds up past the target rather than stopping short", () => {
+    // Three 700-char items free 2,100, short of 2,857; with only three
+    // candidates the pass clears every one rather than stopping early.
+    expect(clearingPrefixLength({ ...base, itemSizes: [700, 700, 700] })).toBe(
+      3,
+    );
+    expect(
+      clearingPrefixLength({ ...base, itemSizes: [800, 800, 800, 800] }),
+    ).toBe(4);
+  });
+
+  it("never clears into the keep-recent window", () => {
+    expect(clearingPrefixLength({ ...base, keepRecent: 2 })).toBe(2);
+    expect(clearingPrefixLength({ ...base, keepRecent: 3 })).toBe(1);
+    expect(clearingPrefixLength({ ...base, keepRecent: 4 })).toBe(0);
+  });
+
+  it("clears every candidate when the target is out of reach", () => {
+    expect(
+      clearingPrefixLength({
+        ...base,
+        itemSizes: [10, 10, 10, 10, 10, 10],
+        keepRecent: 2,
+      }),
+    ).toBe(4);
+  });
+
+  it("clears nothing when nothing would free space", () => {
+    expect(
+      clearingPrefixLength({
+        ...base,
+        itemSizes: [0, 0, 0],
+      }),
+    ).toBe(0);
+  });
+
+  it("clears nothing when occupancy is already at or below the target", () => {
+    expect(clearingPrefixLength({ ...base, occupancy: 500 })).toBe(0);
+    expect(clearingPrefixLength({ ...base, occupancy: 400 })).toBe(0);
+  });
+
+  it("keeps the target strictly below the trigger and the floor positive", () => {
+    // The gap between the two is the headroom the batched pass buys; a target
+    // at or above the trigger would re-engage on the very next step.
+    expect(TOOL_RESULT_CLEARING_TARGET).toBeLessThan(
+      TOOL_RESULT_CLEARING_THRESHOLD,
+    );
+    expect(TOOL_RESULT_CLEARING_MIN_BATCH).toBeGreaterThan(0);
+  });
+
+  it("clears nothing without a measured conversation or occupancy", () => {
+    expect(clearingPrefixLength({ ...base, conversationSize: 0 })).toBe(0);
+    expect(clearingPrefixLength({ ...base, occupancy: 0 })).toBe(0);
+  });
+
+  describe("with a minimum batch", () => {
+    const outOfReach = {
+      ...base,
+      conversationSize: 10_000,
+      occupancy: 700,
+      targetFraction: 0.5,
+      minBatch: 4,
+    };
+
+    it("clears the floor even when the target needs fewer", () => {
+      // Six 5,000-character items; the target needs two, the floor clears four.
+      expect(
+        clearingPrefixLength({
+          ...outOfReach,
+          itemSizes: [5_000, 5_000, 5_000, 5_000, 5_000, 5_000],
+        }),
+      ).toBe(4);
+    });
+
+    it("waits while fewer than the floor are live and the target is out of reach", () => {
+      expect(
+        clearingPrefixLength({
+          ...outOfReach,
+          itemSizes: [100, 100, 100],
+        }),
+      ).toBe(0);
+    });
+
+    it("clears once the floor is live", () => {
+      expect(
+        clearingPrefixLength({
+          ...outOfReach,
+          itemSizes: [100, 100, 100, 100],
+        }),
+      ).toBe(4);
+    });
+
+    it("counts live items past an already-cleared prefix, not the no-ops", () => {
+      // Two leading zeros are already cleared; three live items are still
+      // short of the floor.
+      expect(
+        clearingPrefixLength({
+          ...outOfReach,
+          itemSizes: [0, 0, 100, 100, 100],
+          keepRecent: 0,
+        }),
+      ).toBe(0);
+      // A fourth live item makes the batch, and the leading no-ops ride along
+      // in the returned prefix index.
+      expect(
+        clearingPrefixLength({
+          ...outOfReach,
+          itemSizes: [0, 0, 100, 100, 100, 100],
+          keepRecent: 0,
+        }),
+      ).toBe(6);
+    });
   });
 });
 

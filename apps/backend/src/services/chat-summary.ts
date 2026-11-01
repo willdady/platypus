@@ -743,7 +743,7 @@ const clearedModelMessages = async (
     await convertToModelMessages(messages, { ignoreIncompleteToolCalls: true }),
     // keepRecent 0: the pass's only limit is its own window, and every
     // clearable result in the range is older than the tail the pass protects.
-    { thresholdFraction: 0, keepRecent: 0 },
+    { keepRecent: 0 },
     (toolName) => readOnlyToolNames?.has(toolName) ?? false,
   );
 

@@ -1,10 +1,12 @@
 import { describe, it, expect } from "vitest";
+import { CLEARED_TOOL_RESULT_MARKER } from "@platypus/schemas";
 import type { ModelMessage } from "ai";
 import {
   applyToolResultClearing,
   clearStaleToolResults,
-  CLEARED_TOOL_RESULT_MARKER,
+  clearToolResultsToTarget,
   isClearableToolName,
+  observedConversationSize,
   type ClearingPolicy,
 } from "./tool-result-clearing.ts";
 
@@ -29,7 +31,39 @@ const userMessage = (text: string): ModelMessage => ({
   content: text,
 });
 
-const POLICY: ClearingPolicy = { thresholdFraction: 0.7, keepRecent: 2 };
+const POLICY: ClearingPolicy = {
+  thresholdFraction: 0.7,
+  targetFraction: 0.5,
+  keepRecent: 2,
+  minBatch: 4,
+};
+
+/**
+ * A result big enough that clearing it frees substantially more than the
+ * marker replacing it. Tiny fixtures hide the whole point of a target rule:
+ * clearing a 7-character result frees nothing, so it is deliberately not
+ * cleared.
+ */
+const bigResult = (toolCallId: string, size = 5_000): ModelMessage =>
+  toolResultMessage("read_url", toolCallId, "x".repeat(size));
+
+const outputs = (result: ModelMessage[]) =>
+  result
+    .filter((m) => m.role === "tool")
+    .map(
+      (m) =>
+        (m as { content: Array<{ toolCallId: string; output: unknown }> })
+          .content[0],
+    );
+
+const clearedIds = (result: ModelMessage[]): string[] =>
+  outputs(result)
+    .filter(
+      (part) =>
+        JSON.stringify(part.output) ===
+        JSON.stringify({ type: "text", value: CLEARED_TOOL_RESULT_MARKER }),
+    )
+    .map((part) => part.toolCallId);
 
 describe("isClearableToolName", () => {
   it.each(["web_search", "read_url", "fetchUrl", "fsRead", "fsList"])(
@@ -84,23 +118,24 @@ describe("clearStaleToolResults", () => {
 
     const result = clearStaleToolResults(messages, POLICY);
 
-    const contents = result
-      .filter((m) => m.role === "tool")
-      .map((m) => (m as { content: unknown[] }).content[0]);
-    expect(contents).toEqual([
-      expect.objectContaining({
-        toolCallId: "t1",
-        output: { type: "text", value: CLEARED_TOOL_RESULT_MARKER },
-      }),
-      expect.objectContaining({
-        toolCallId: "t2",
-        output: { type: "text", value: "page two content" },
-      }),
-      expect.objectContaining({
-        toolCallId: "t3",
-        output: { type: "text", value: "page three content" },
-      }),
+    expect(outputs(result).map((part) => part.output)).toEqual([
+      { type: "text", value: CLEARED_TOOL_RESULT_MARKER },
+      { type: "text", value: "page two content" },
+      { type: "text", value: "page three content" },
     ]);
+  });
+
+  it("clears everything past keep-recent however small, so the summary pass leaves nothing live", () => {
+    // The summary pass calls this with `keepRecent: 0`; it must not adopt the
+    // gated rule's "only clear what frees space" posture, because its window is
+    // the pass's own input and every clearable result in it is surplus.
+    const messages = ["a", "b", "c", "d"].map((id) =>
+      toolResultMessage("read_url", id, "tiny"),
+    );
+
+    expect(
+      clearedIds(clearStaleToolResults(messages, { keepRecent: 0 })),
+    ).toEqual(["a", "b", "c", "d"]);
   });
 
   it("keeps the tool call name and id on a cleared result — only content changes", () => {
@@ -146,17 +181,7 @@ describe("clearStaleToolResults", () => {
     ];
 
     const result = clearStaleToolResults(messages, POLICY, () => true);
-    const contents = result
-      .filter((m) => m.role === "tool")
-      .map((m) => (m as { content: unknown[] }).content[0]);
-    expect(contents).toEqual([
-      expect.objectContaining({
-        toolCallId: "t1",
-        output: { type: "text", value: CLEARED_TOOL_RESULT_MARKER },
-      }),
-      expect.objectContaining({ toolCallId: "t2" }),
-      expect.objectContaining({ toolCallId: "t3" }),
-    ]);
+    expect(clearedIds(result)).toEqual(["t1"]);
   });
 
   it("never clears an MCP tool's results when the resolver reports it not read-only", () => {
@@ -180,11 +205,9 @@ describe("clearStaleToolResults", () => {
     ];
 
     const result = clearStaleToolResults(messages, POLICY);
-    const readUrlOutputs = result
-      .filter((m) => m.role === "tool")
-      .map((m) => (m as { content: Array<Record<string, unknown>> }).content[0])
-      .filter((p) => p.toolName === "read_url")
-      .map((p) => p.output);
+    const readUrlOutputs = outputs(result)
+      .filter((part) => part.toolCallId.startsWith("t"))
+      .map((part) => part.output);
 
     expect(readUrlOutputs).toEqual([
       { type: "text", value: CLEARED_TOOL_RESULT_MARKER },
@@ -194,12 +217,126 @@ describe("clearStaleToolResults", () => {
   });
 });
 
+describe("clearToolResultsToTarget", () => {
+  const reading = { occupancy: 700, contextWindow: 1_000 };
+
+  it("clears a batch down to the target fraction rather than every stale result", () => {
+    // 50,000 observed characters, 700 of a 1,000-token window: reaching 500
+    // means freeing 200/700 of what is sent (about 14,286 characters). Three
+    // 5,000-character results would do it; the four-result batch floor clears
+    // one more, and the remaining four stale ones stay so the boundary does not
+    // have to move again for several steps.
+    const messages = Array.from({ length: 10 }, (_, i) => bigResult(`t${i}`));
+
+    const result = clearToolResultsToTarget(messages, reading, POLICY);
+
+    expect(clearedIds(result)).toEqual(["t0", "t1", "t2", "t3"]);
+    // Every surviving message is the same object, not a rebuilt equal one.
+    result.slice(4).forEach((message, index) => {
+      expect(message).toBe(messages[index + 4]);
+    });
+  });
+
+  it("clears every candidate when the target is out of reach", () => {
+    const messages = Array.from({ length: 10 }, (_, i) =>
+      bigResult(`t${i}`, 160),
+    );
+
+    expect(
+      clearedIds(clearToolResultsToTarget(messages, reading, POLICY)),
+    ).toEqual(["t0", "t1", "t2", "t3", "t4", "t5", "t6", "t7"]);
+  });
+
+  it("clears nothing for results no larger than the marker", () => {
+    const messages = Array.from({ length: 10 }, (_, i) =>
+      bigResult(`t${i}`, 100),
+    );
+
+    expect(clearToolResultsToTarget(messages, reading, POLICY)).toBe(messages);
+  });
+
+  it("never clears into the keep-recent window", () => {
+    const messages = Array.from({ length: 10 }, (_, i) => bigResult(`t${i}`));
+
+    // Four are protected, so the batch stops before them however large it is.
+    expect(
+      clearedIds(
+        clearToolResultsToTarget(messages, reading, {
+          ...POLICY,
+          keepRecent: 4,
+        }),
+      ),
+    ).toEqual(["t0", "t1", "t2", "t3"]);
+  });
+
+  it("leaves the prefix byte-identical across the steps the target buys", () => {
+    // One pass at the trigger, then appends that stay below the trigger: the
+    // cached prefix survives because no earlier message changes.
+    const messages = Array.from({ length: 10 }, (_, i) => bigResult(`t${i}`));
+    const pass = clearToolResultsToTarget(messages, reading, POLICY);
+    const grown = [...pass, bigResult("t10"), bigResult("t11")];
+
+    expect(
+      applyToolResultClearing(
+        grown,
+        { occupancy: 660, contextWindow: 1_000 },
+        POLICY,
+      ),
+    ).toBe(grown);
+  });
+
+  it("moves the boundary again only at the next trigger, leaving cleared results untouched", () => {
+    const messages = Array.from({ length: 10 }, (_, i) => bigResult(`t${i}`));
+    const pass = clearToolResultsToTarget(messages, reading, POLICY);
+    const grown = [...pass, bigResult("t10"), bigResult("t11")];
+
+    const next = applyToolResultClearing(grown, reading, POLICY);
+
+    // The four cleared results keep their exact objects; the next batch starts
+    // after them.
+    expect(next[0]).toBe(pass[0]);
+    expect(next[3]).toBe(pass[3]);
+    expect(clearedIds(next)).toEqual([
+      "t0",
+      "t1",
+      "t2",
+      "t3",
+      "t4",
+      "t5",
+      "t6",
+      "t7",
+    ]);
+  });
+});
+
+describe("observedConversationSize", () => {
+  it("measures text, tool-call inputs and tool-result payloads", () => {
+    const messages: ModelMessage[] = [
+      userMessage("abc"),
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "t1",
+            toolName: "read_url",
+            input: { url: "https://example.com" },
+          },
+        ],
+      },
+      toolResultMessage("read_url", "t1", "hello"),
+    ];
+
+    expect(observedConversationSize(messages)).toBe(
+      3 + JSON.stringify({ url: "https://example.com" }).length + 5,
+    );
+  });
+});
+
 describe("applyToolResultClearing", () => {
-  const messages: ModelMessage[] = [
-    toolResultMessage("read_url", "t1", "content"),
-    toolResultMessage("read_url", "t2", "content"),
-    toolResultMessage("read_url", "t3", "content"),
-  ];
+  const messages: ModelMessage[] = Array.from({ length: 8 }, (_, i) =>
+    bigResult(`t${i}`),
+  );
 
   // Below the threshold — or with either figure unknown, however high the
   // other reads — the messages go out byte-identical.
@@ -226,12 +363,38 @@ describe("applyToolResultClearing", () => {
     },
   );
 
+  it("clears a batch, not one result, once the target rule applies", () => {
+    const many = Array.from({ length: 10 }, (_, i) => bigResult(`t${i}`));
+
+    expect(
+      clearedIds(
+        applyToolResultClearing(
+          many,
+          { occupancy: 700, contextWindow: 1_000 },
+          { ...POLICY, keepRecent: 4 },
+        ),
+      ),
+    ).toEqual(["t0", "t1", "t2", "t3"]);
+  });
+
+  it("waits for a batch rather than clearing one result at a time", () => {
+    // Only one result has become stale, and clearing it cannot reach the
+    // target: the pass holds off so the same boundary does not move again on
+    // the next step.
+    const oneStale = Array.from({ length: 5 }, (_, i) => bigResult(`t${i}`));
+    expect(
+      clearToolResultsToTarget(
+        oneStale,
+        { occupancy: 700, contextWindow: 1_000 },
+        { ...POLICY, keepRecent: 4 },
+      ),
+    ).toBe(oneStale);
+  });
+
   it("passes isReadOnlyTool through to the underlying clearing pass", () => {
-    const mcpMessages: ModelMessage[] = [
-      toolResultMessage("docs__search", "t1", "content"),
-      toolResultMessage("docs__search", "t2", "content"),
-      toolResultMessage("docs__search", "t3", "content"),
-    ];
+    const mcpMessages: ModelMessage[] = Array.from({ length: 8 }, (_, i) =>
+      toolResultMessage("docs__search", `t${i}`, "x".repeat(5_000)),
+    );
 
     const result = applyToolResultClearing(
       mcpMessages,
@@ -240,5 +403,16 @@ describe("applyToolResultClearing", () => {
       () => true,
     );
     expect(JSON.stringify(result[0])).toContain(CLEARED_TOOL_RESULT_MARKER);
+  });
+
+  it("returns the same array once every stale result is cleared", () => {
+    const clearedAll = clearStaleToolResults(messages, { keepRecent: 0 });
+    expect(
+      applyToolResultClearing(
+        clearedAll,
+        { occupancy: 95, contextWindow: 100 },
+        POLICY,
+      ),
+    ).toBe(clearedAll);
   });
 });

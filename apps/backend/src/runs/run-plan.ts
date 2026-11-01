@@ -11,6 +11,7 @@ import type { NoProgressDetector } from "./no-progress.ts";
 import {
   applyToolResultClearing,
   DEFAULT_CLEARING_POLICY,
+  observedConversationSize,
 } from "./tool-result-clearing.ts";
 import { applyToolInputClearing } from "./tool-input-clearing.ts";
 import { stepOccupancy, type UsageModel } from "./run-stats.ts";
@@ -243,7 +244,17 @@ export const buildModelInvocation = (
       steps.length > 0
         ? stepOccupancy(steps[steps.length - 1]?.usage)
         : plan.initialOccupancy;
-    const reading = { occupancy, contextWindow: plan.contextWindow };
+    // The vendor's last reading is the gate; the observed character count is
+    // measured once, from the messages as this step received them, and handed
+    // to both passes. Input clearing runs after result clearing, and measuring
+    // the already-shrunk conversation again would let the two size their
+    // batches from different pictures — as would the frontend mirror, which
+    // only ever has the one Transcript.
+    const reading = {
+      occupancy,
+      contextWindow: plan.contextWindow,
+      conversationSize: observedConversationSize(messages),
+    };
     // Tool-input clearing (issue #1722) runs after result clearing and before
     // the cache point; both return `messages` itself when they change nothing.
     const cleared = applyToolInputClearing(

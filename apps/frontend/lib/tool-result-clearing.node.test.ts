@@ -10,6 +10,10 @@ import {
  * clearable by default — the shape the backend now reports for the core
  * allowlist and an MCP tool alike (ADR-0021, issue #626). Pass
  * `clearable: false` for a tool no message ever reports.
+ *
+ * The output is deliberately large: clearing replaces it with a fixed marker,
+ * and a result no larger than that marker frees nothing, so a tiny fixture
+ * would exercise the "clear nothing" branch rather than the batching rule.
  */
 function toolResultMessage(
   toolName: string,
@@ -25,7 +29,7 @@ function toolResultMessage(
         toolCallId,
         state: "output-available",
         input: {},
-        output: { ok: true },
+        output: "x".repeat(5_000),
       },
     ],
     metadata: clearable ? { readOnlyToolNames: [toolName] } : undefined,
@@ -57,7 +61,7 @@ describe("clearedToolCallIds", () => {
     ).toEqual(new Set());
   });
 
-  it("marks all but the shared keep-recent count as cleared, at threshold", () => {
+  it("waits for a batch when only a couple of results are stale", () => {
     const messages = Array.from({ length: 6 }, (_, i) =>
       toolResultMessage("read_url", `t${i}`),
     );
@@ -65,8 +69,22 @@ describe("clearedToolCallIds", () => {
       occupancy: 95,
       contextWindow: 100,
     });
-    // TOOL_RESULT_CLEARING_KEEP_RECENT is 4, so the first two are stale.
-    expect(result).toEqual(new Set(["t0", "t1"]));
+    // TOOL_RESULT_CLEARING_KEEP_RECENT is 4 and the batch floor is 4, so two
+    // stale results are not worth the cache invalidation yet.
+    expect(result).toEqual(new Set());
+  });
+
+  it("marks a target-sized batch rather than every stale result", () => {
+    const messages = Array.from({ length: 10 }, (_, i) =>
+      toolResultMessage("read_url", `t${i}`),
+    );
+    const result = clearedToolCallIds(messages, {
+      occupancy: 95,
+      contextWindow: 100,
+    });
+    // Six are stale by count; clearing to the 0.5 target needs five of the
+    // 5,000-character results, so the last five stay live.
+    expect(result).toEqual(new Set(["t0", "t1", "t2", "t3", "t4"]));
   });
 
   it("never marks a tool's result as cleared when no message reports it clearable", () => {
@@ -84,33 +102,36 @@ describe("clearedToolCallIds", () => {
   // is — reported by name, not looked up against a name list this module no
   // longer holds.
   it("marks an MCP tool's result as cleared when its metadata reports it clearable", () => {
-    const messages = Array.from({ length: 6 }, (_, i) =>
+    const messages = Array.from({ length: 10 }, (_, i) =>
       toolResultMessage("docs_search__search", `t${i}`),
     );
     const result = clearedToolCallIds(messages, {
       occupancy: 95,
       contextWindow: 100,
     });
-    expect(result).toEqual(new Set(["t0", "t1"]));
+    expect(result).toEqual(new Set(["t0", "t1", "t2", "t3", "t4"]));
   });
 
   it("unions clearable names reported across different messages", () => {
     // Only the LAST message's metadata reports `docs_search__search` as
-    // clearable; the earlier five carry no metadata of their own. The client
+    // clearable; the earlier ones carry no metadata of their own. The client
     // holds no clearability policy of its own — it unions whatever the whole
     // Transcript has reported by the time it reads it, so the earlier calls
     // still count.
-    const messages: PlatypusUIMessage[] = Array.from({ length: 6 }, (_, i) => ({
-      ...toolResultMessage("docs_search__search", `t${i}`),
-      metadata: undefined,
-    }));
-    messages[5] = toolResultMessage("docs_search__search", "t5");
+    const messages: PlatypusUIMessage[] = Array.from(
+      { length: 10 },
+      (_, i) => ({
+        ...toolResultMessage("docs_search__search", `t${i}`),
+        metadata: undefined,
+      }),
+    );
+    messages[9] = toolResultMessage("docs_search__search", "t9");
 
     const result = clearedToolCallIds(messages, {
       occupancy: 95,
       contextWindow: 100,
     });
-    expect(result).toEqual(new Set(["t0", "t1"]));
+    expect(result).toEqual(new Set(["t0", "t1", "t2", "t3", "t4"]));
   });
 
   // The transcript memo compares this Set by identity, so "nothing is cleared"
@@ -179,7 +200,7 @@ describe("clearedInputToolCallIds", () => {
           type: `tool-${toolName}`,
           toolCallId,
           state,
-          input: { path: "f", content: "c", mode: "create" },
+          input: { path: "f", content: "c".repeat(1_400), mode: "create" },
           output,
         },
       ],
@@ -187,10 +208,14 @@ describe("clearedInputToolCallIds", () => {
 
   const ABOVE = { occupancy: 95, contextWindow: 100 };
 
-  it("marks successful allowlisted writes past the 4 most recent", () => {
-    const messages = Array.from({ length: 6 }, (_, i) => write(`w${i}`));
-    expect(clearedInputToolCallIds(messages, ABOVE)).toEqual(
-      new Set(["w0", "w1"]),
+  it("marks a target-sized batch of writes rather than every stale one", () => {
+    const messages = Array.from({ length: 12 }, (_, i) => write(`w${i}`));
+    const cleared = clearedInputToolCallIds(messages, ABOVE);
+    // Eight are stale by count; the target stops the batch before the end.
+    expect(cleared.size).toBeGreaterThan(1);
+    expect(cleared.size).toBeLessThan(8);
+    expect(messages.slice(0, cleared.size).map((m) => m.id)).toEqual(
+      [...cleared].map((id) => `m-${id}`),
     );
   });
 

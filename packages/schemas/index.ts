@@ -1619,6 +1619,165 @@ export const CLEARABLE_TOOL_INPUT_FIELDS: ReadonlyMap<
 export const TOOL_INPUT_CLEARING_KEEP_RECENT = 4;
 
 /**
+ * The fraction of the declared Context window a clearing pass clears down to,
+ * once Tool-result clearing's 0.7 trigger has engaged (ADR-0041's trigger/target
+ * hysteresis). Well below the trigger so the pass clears a batch large enough
+ * for several later steps to run without changing an earlier message, which is
+ * what keeps the Provider's cached prompt prefix valid.
+ *
+ * A fraction rather than a count of results: the same rule must mean the same
+ * thing on a 16K window and a 1M one, and it has to survive the Operator
+ * changing the declared window. A fixed "clear N more" would be a different
+ * amount of relief on every model.
+ */
+export const TOOL_RESULT_CLEARING_TARGET = 0.5;
+
+/**
+ * The smallest number of clearable results a pass clears once it engages —
+ * `clear_at_least` in Anthropic's terms. Clearing invalidates the cached
+ * prefix from the oldest changed result onward, so a pass that clears one
+ * result at a time pays that cost on every step while moving the boundary by
+ * one: the exact creep `TOOL_RESULT_CLEARING_TARGET` exists to stop. Waiting
+ * for a batch makes the invalidation worth it.
+ *
+ * The target still decides *how far* a pass clears; this is the floor that
+ * decides *when* a partial pass is worth doing at all. Shared by result
+ * clearing, input clearing and both frontend mirrors.
+ */
+export const TOOL_RESULT_CLEARING_MIN_BATCH = 4;
+
+/**
+ * What a cleared Tool result's content becomes in what the model is sent.
+ * Deliberately says nothing about re-running the tool: a model told to call it
+ * again would spend steps re-fetching what it was just told to forget, and that
+ * holds regardless of whether the tool happens to be one core has affirmative
+ * reason to believe only reads (issue #626) — the marker's audience is the
+ * model, not an Operator deciding what is safe to clear.
+ *
+ * Shared with the frontend mirror, which needs the marker's length to size a
+ * clearing batch from the characters it would stop sending.
+ */
+export const CLEARED_TOOL_RESULT_MARKER =
+  "[Tool result cleared: this content was removed from what was sent to the model to free up space in its context window. It is no longer available here.]";
+
+/**
+ * What a cleared Tool input field becomes. Unlike the result marker this
+ * points at reading back: the write succeeded, so its effect is still there to
+ * read, which is exactly why its input is safe to drop.
+ */
+export const CLEARED_TOOL_INPUT_MARKER =
+  "[Tool input cleared: this content was removed from what was sent to the model to free up space in its context window. The call succeeded; read the file back to see its current state.]";
+
+/**
+ * Observed size, in characters, of a value as the model receives it.
+ * `undefined` and anything JSON cannot represent count as nothing rather than
+ * throwing.
+ *
+ * An observation, never a measurement of tokens: it exists so clearing can
+ * size a batch from the payloads it is about to drop (ADR-0018 still refuses a
+ * local token count, and this never gates anything).
+ */
+export const observedValueSize = (value: unknown): number => {
+  if (value === undefined) return 0;
+  if (typeof value === "string") return value.length;
+  if (typeof value === "function" || typeof value === "symbol") return 0;
+  try {
+    return JSON.stringify(value).length;
+  } catch {
+    return 0;
+  }
+};
+
+/**
+ * How many of the oldest clearable items a pass removes to take occupancy from
+ * the current reading down to `targetFraction` of the window.
+ *
+ * `itemSizes` are the observed characters each item would stop being sent if
+ * cleared, oldest first; `conversationSize` is the observed characters of
+ * everything the call sends. Their ratio is the only sizing available without
+ * tokenising locally, which ADR-0018 refuses: a pass assumes an item's share of
+ * occupancy is its share of the observed conversation, so it frees roughly
+ * `conversationSize * (occupancy - target) / occupancy` characters.
+ *
+ * `minBatch` is the `clear_at_least` floor: a pass that cannot reach the target
+ * and has fewer than that many live items waits instead, because the cache
+ * invalidation it causes is only worth paying once it moves the boundary far
+ * enough. When the target is already out of reach, waiting is the difference
+ * between moving the boundary by one on every step and moving it in batches of
+ * `minBatch`. When the target is reachable with fewer, the floor still clears
+ * that many, so a pass never does less work than the floor.
+ *
+ * The returned number is a prefix length, not a count of live items: it
+ * includes any already-cleared (or marker-sized) no-ops in front of the batch,
+ * because clearing is oldest-first and callers slice the same prefix.
+ *
+ * This chooses a batch size, never a gate: whether clearing runs at all is
+ * decided from the vendor-reported occupancy by each caller. An imprecise
+ * target can only clear too much or too little in one pass; the next reading,
+ * taken with the pass's result in place, corrects it.
+ *
+ * Shared by Tool-result clearing, Tool-input clearing and both frontend
+ * mirrors, so the four cannot round a batch differently (ADR-0018 Notes record
+ * a past divergence between the backend gate and its mirror).
+ */
+export const clearingPrefixLength = (input: {
+  itemSizes: readonly number[];
+  conversationSize: number;
+  keepRecent: number;
+  occupancy: number;
+  contextWindow: number;
+  targetFraction: number;
+  minBatch?: number;
+}): number => {
+  const candidates = Math.max(0, input.itemSizes.length - input.keepRecent);
+  if (candidates === 0) return 0;
+  if (input.occupancy <= 0 || input.conversationSize <= 0) return 0;
+
+  const tokensToFree =
+    input.occupancy - input.targetFraction * input.contextWindow;
+  if (tokensToFree <= 0) return 0;
+
+  const sizeToFree = (input.conversationSize * tokensToFree) / input.occupancy;
+  const minBatch = Math.max(1, input.minBatch ?? 1);
+
+  // An already-cleared item, or a live one no larger than the marker replacing
+  // it, frees nothing and is always a leading run: passes clear oldest-first,
+  // so anything already handled sits in front. Skipping it makes the batch
+  // floor count real work rather than no-ops.
+  let leadingNoOps = 0;
+  while (
+    leadingNoOps < candidates &&
+    (input.itemSizes[leadingNoOps] ?? 0) <= 0
+  ) {
+    leadingNoOps += 1;
+  }
+  const live = candidates - leadingNoOps;
+  if (live === 0) return 0;
+
+  let freed = 0;
+  let liveNeeded = 0;
+  while (liveNeeded < live && freed < sizeToFree) {
+    freed += Math.max(0, input.itemSizes[leadingNoOps + liveNeeded] ?? 0);
+    liveNeeded += 1;
+  }
+  const targetReachable = freed >= sizeToFree;
+  if (!targetReachable && live < minBatch) return 0;
+  const clearLive = Math.max(liveNeeded, Math.min(minBatch, live));
+  return leadingNoOps + clearLive;
+};
+
+/**
+ * Characters a payload stops sending when clearing replaces it with `marker`,
+ * never negative: a payload no larger than the marker frees nothing. The one
+ * place the marker overhead is subtracted, so backend result clearing, backend
+ * input clearing and both frontend mirrors cannot round it differently.
+ */
+export const reclaimedCharacters = (
+  payloadSize: number,
+  marker: string,
+): number => Math.max(0, payloadSize - marker.length);
+
+/**
  * Transcript summarising (ADR-0041, issue #1716): a durable **Transcript
  * summary** of a Chat's older Transcript, sent to the model in place of the
  * messages it covers.

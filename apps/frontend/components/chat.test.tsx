@@ -1480,32 +1480,32 @@ describe("transcript stability", () => {
       modelId: "m1",
       messages: [],
     });
-    const toolResults = ["t0", "t1", "t2", "t3", "t4", "t5"].map(
-      (toolCallId) =>
+    const toolResults = Array.from({ length: 10 }, (_, index) => index).map(
+      (index) =>
         ({
-          id: `a-${toolCallId}`,
+          id: `a-t${index}`,
           role: "assistant",
           parts: [
             {
               type: "tool-read_url",
-              toolCallId,
+              toolCallId: `t${index}`,
               state: "output-available",
               input: {},
-              output: {},
+              output: "x".repeat(5_000),
             },
           ],
           metadata: {
             readOnlyToolNames: ["read_url"],
-            // 700/1000 is at the clearing threshold; keep-recent is 4, so t0
-            // and t1 are stale.
-            contextOccupancy: { inputTokens: 700, outputTokens: 0 },
+            // 950/1000 is past the clearing threshold; the four newest stay
+            // and the batch clears five of the six stale ones.
+            contextOccupancy: { inputTokens: 950, outputTokens: 0 },
           },
         }) as unknown as PlatypusUIMessage,
     );
     harness.turn.messages = [...toolResults, message("a-last", "an answer")];
     const view = renderChat();
     const first = harness.lastChatMessageProps!.staleToolCallIds;
-    expect(first?.size).toBe(2);
+    expect(first?.size).toBe(5);
 
     harness.turn.messages = [
       ...toolResults,

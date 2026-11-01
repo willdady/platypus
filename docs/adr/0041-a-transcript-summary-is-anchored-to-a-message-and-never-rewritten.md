@@ -54,8 +54,8 @@ Compaction fires at one fraction of the declared **Context window** and leaves a
 clearly smaller tail: the trigger is 0.8 and the kept tail four turns, shrinking
 to one turn when the reading that triggered it already ran with a summary in
 place. **Tool-result clearing** keeps its own lower trigger (0.7) so the cheaper
-mechanism always gets the first try, and may adopt the same trigger/target shape
-later under this ADR rather than a new one.
+mechanism always gets the first try, and has adopted the same trigger/target
+shape under this ADR (see the amendment below) rather than a new one.
 
 **Both passes are off the response path, with a backstop that is not.** After a
 turn whose final **Projected occupancy** crossed the trigger, a summary is
@@ -125,7 +125,7 @@ survives.
 | The general in-call trim (R2 of #1263)                | Overflow is caught at the summary pass, which is the seam a general retry plugs into. **At most one retry per step, whichever strategy takes it** is the rule this ADR sets. |
 | Summarising older steps inside a long tool-using turn | This ADR's hysteresis rule is stated generally, so an in-turn pass adopts it under the same decision rather than a new one.                                                  |
 | An ingestion cap for MCP results and `fetchUrl`       | One wording and one shape for "too large; request less" is used by the summary pass's overflow retry, so the cap and the recovery path teach the model one pattern.          |
-| Batch clearing for cache hits (`clear_at_least`)      | Trigger/target hysteresis is stated here as the rule for any context reduction, so clearing can adopt it later under this ADR.                                               |
+| Batch clearing for cache hits (`clear_at_least`)      | **Adopted** (#1731): clearing now uses the trigger/target hysteresis stated above. See the amendment below.                                                                  |
 
 ## Amendment: an overflow takes a summary (#1717)
 
@@ -137,6 +137,27 @@ starts as the failed turn ends, and a next message waits for it at the
 backstop. A Regenerate's path no longer holds the failed reply, so it reads the
 summary only once the pass has landed. The R3 overflow retry (replace the last tool step's results, retry once)
 is the "one retry per step" seam this ADR's deferred R2 row names.
+
+## Amendment: clearing adopts the trigger/target shape (#1731)
+
+The deferred `clear_at_least` row above is now built, under this ADR's rule
+rather than a new decision. **Tool-result clearing** and **Tool-input clearing**
+keep their 0.7 trigger. Once a pass engages it clears down to 0.5 of the
+declared window, and it clears at least four live results when that many are
+available. A pass that cannot reach the target and has fewer than four live
+results waits for the next ones instead of moving the survivor boundary by one
+on every step. Every step that moves the boundary changes an earlier message,
+which invalidates the Provider's cached prompt prefix from that message onward;
+the gap between trigger and target is the headroom later steps grow into before
+the next invalidation.
+
+The target is a fraction of the window, not a count, so the same rule means the
+same thing on a 16K window and a 1M one. The batch is sized from the observed
+characters of the results being cleared, never from a local token count: the
+vendor-reported occupancy still decides _whether_ a pass runs, and ADR-0018
+still refuses an estimate of occupancy. `keepRecent` is unchanged and still
+protects the newest four results or writes; the summary pass's unconditional
+clear is unchanged too, because its input has no window of its own to protect.
 
 ## Notes
 

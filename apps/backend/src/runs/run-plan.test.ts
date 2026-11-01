@@ -6,8 +6,10 @@ import {
   REQUEST_LEVEL_CACHE_DIRECTIVE,
   type RunPlan,
 } from "./run-plan.ts";
-import { CLEARED_TOOL_RESULT_MARKER } from "./tool-result-clearing.ts";
-import { CLEARED_TOOL_INPUT_MARKER } from "./tool-input-clearing.ts";
+import {
+  CLEARED_TOOL_INPUT_MARKER,
+  CLEARED_TOOL_RESULT_MARKER,
+} from "@platypus/schemas";
 import { logger } from "../logger.ts";
 import { createOverflowRecovery } from "./context-overflow-recovery.ts";
 
@@ -37,7 +39,12 @@ const toolResultMessages = (n: number, toolName = "read_url"): ModelMessage[] =>
         type: "tool-result" as const,
         toolCallId: `t${i}`,
         toolName,
-        output: { type: "text" as const, value: `content ${i}` },
+        // Big enough that clearing frees more than the marker replacing it, so
+        // the target rule actually engages.
+        output: {
+          type: "text" as const,
+          value: `content ${i} ${"x".repeat(5_000)}`,
+        },
       },
     ],
   }));
@@ -52,7 +59,11 @@ const fsWriteMessages = (n: number): ModelMessage[] =>
           type: "tool-call",
           toolCallId: `w${i}`,
           toolName: "fsWrite",
-          input: { path: `f${i}`, content: `body ${i}`, mode: "create" },
+          input: {
+            path: `f${i}`,
+            content: `body ${i} ${"x".repeat(1_400)}`,
+            mode: "create",
+          },
         },
       ],
     },
@@ -285,7 +296,7 @@ describe("buildModelInvocation context-pressure evidence", () => {
     const prepareStep = prepareStepOf(planOf({ contextWindow: 100 }));
     const result = await prepareStep({
       steps: [{ usage: { inputTokens: 85 } }],
-      messages: [{ role: "user", content: "hi" }, ...fsWriteMessages(5)],
+      messages: [{ role: "user", content: "hi" }, ...fsWriteMessages(8)],
     });
     expect(evidenceLines(spy)).toEqual([]);
     expect(JSON.stringify(result.messages)).toContain(

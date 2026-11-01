@@ -17,7 +17,7 @@ import {
 } from "./drive.ts";
 import { RunEventRecorder } from "./run-events.ts";
 import type { RunStatus } from "./types.ts";
-import { CLEARED_TOOL_RESULT_MARKER } from "./tool-result-clearing.ts";
+import { CLEARED_TOOL_RESULT_MARKER } from "@platypus/schemas";
 import type { ModelMessage } from "ai";
 import {
   currentCausingAgents,
@@ -1008,7 +1008,10 @@ describe("Tool-result clearing inheritance", () => {
           type: "tool-result" as const,
           toolCallId: `t${i}`,
           toolName: "read_url",
-          output: { type: "text" as const, value: `page ${i} content` },
+          output: {
+            type: "text" as const,
+            value: `page ${i} content ${"x".repeat(5_000)}`,
+          },
         },
       ],
     }));

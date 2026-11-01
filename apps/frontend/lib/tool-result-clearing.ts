@@ -1,7 +1,14 @@
 import {
   CLEARABLE_TOOL_INPUT_FIELDS,
+  CLEARED_TOOL_INPUT_MARKER,
+  CLEARED_TOOL_RESULT_MARKER,
+  clearingPrefixLength,
+  observedValueSize,
+  reclaimedCharacters,
   TOOL_INPUT_CLEARING_KEEP_RECENT,
   TOOL_RESULT_CLEARING_KEEP_RECENT,
+  TOOL_RESULT_CLEARING_MIN_BATCH,
+  TOOL_RESULT_CLEARING_TARGET,
   TOOL_RESULT_CLEARING_THRESHOLD,
   type PlatypusUIMessage,
 } from "@platypus/schemas";
@@ -10,13 +17,18 @@ import { isToolUIPart } from "ai";
 /**
  * The client-side mirror of Tool-result clearing's "which results are stale"
  * rule (ADR-0018 Notes, `apps/backend/src/runs/tool-result-clearing.ts`, issue
- * #524) — derived, never persisted, so it can never drift into a stored lie
- * about a message that a later turn changes the answer for.
+ * #524; ADR-0041) — derived, never persisted, so it can never drift into a
+ * stored lie about a message that a later turn changes the answer for.
  *
- * Shares its threshold and keep-recent constants with the backend via
- * `@platypus/schemas`, so this and the actual clearing decision can't silently
- * disagree on those; only the "what was sent" mechanics differ, because this
- * reads UI messages rather than `ModelMessage[]`.
+ * Shares its threshold, target, keep-recent constants and batch arithmetic
+ * with the backend via `@platypus/schemas`, so this and the actual clearing
+ * decision can't silently disagree on those; only the "what was sent"
+ * mechanics differ, because this reads UI messages rather than
+ * `ModelMessage[]`.
+ *
+ * The batch is sized from observed characters, matching the backend's
+ * measurement of what it would stop sending: text, tool-call inputs and
+ * tool-result payloads, with reasoning and file parts left out on both sides.
  *
  * Holds no clearability policy of its own (ADR-0021, issue #626): an MCP
  * tool's clearability is only knowable by connecting to it, which only the
@@ -25,19 +37,6 @@ import { isToolUIPart } from "ai";
  * assistant message in the Transcript — the turn's clearable Tool names among
  * the ones it actually called.
  */
-
-/** Every clearable Tool name any assistant message in `messages` has reported. */
-function clearableToolNamesOf(
-  messages: readonly PlatypusUIMessage[],
-): ReadonlySet<string> {
-  const names = new Set<string>();
-  for (const message of messages) {
-    for (const name of message.metadata?.readOnlyToolNames ?? []) {
-      names.add(name);
-    }
-  }
-  return names;
-}
 
 /**
  * The one "nothing is cleared" answer. The Transcript memo compares this value
@@ -52,7 +51,9 @@ type ToolLikePart = {
   toolCallId: string;
   state: string;
   toolName?: string;
+  input?: unknown;
   output?: unknown;
+  errorText?: string;
 };
 
 function isToolLikePart(part: unknown): part is ToolLikePart {
@@ -74,11 +75,80 @@ function toolNameOf(part: ToolLikePart): string {
       : "";
 }
 
+/** Every clearable Tool name any assistant message in `messages` has reported. */
+function clearableToolNamesOf(
+  messages: readonly PlatypusUIMessage[],
+): ReadonlySet<string> {
+  const names = new Set<string>();
+  for (const message of messages) {
+    for (const name of message.metadata?.readOnlyToolNames ?? []) {
+      names.add(name);
+    }
+  }
+  return names;
+}
+
+/**
+ * Observed size of what a completed UI message sends: text, and each tool
+ * part's input and output. The backend measures the same three things from
+ * `ModelMessage` parts, so a batch decision made here matches the next turn's
+ * first model call.
+ */
+function observedConversationSize(
+  messages: readonly PlatypusUIMessage[],
+): number {
+  let total = 0;
+  for (const message of messages) {
+    for (const part of message.parts ?? []) {
+      if (isToolLikePart(part)) {
+        total += observedValueSize(part.input);
+        if (part.state === "output-available") {
+          total += observedValueSize(part.output);
+        } else if (part.errorText !== undefined) {
+          total += part.errorText.length;
+        }
+        continue;
+      }
+      if (part.type === "text") total += part.text.length;
+    }
+  }
+  return total;
+}
+
+/** Characters clearing this result would stop sending, net of its marker. */
+function freedResultSize(part: ToolLikePart): number {
+  if (part.state !== "output-available") return 0;
+  return reclaimedCharacters(
+    observedValueSize(part.output),
+    CLEARED_TOOL_RESULT_MARKER,
+  );
+}
+
+/** Characters clearing this call's input would stop sending, net of its marker. */
+function freedInputSize(part: ToolLikePart): number {
+  if (part.state !== "output-available") return 0;
+  const fields = CLEARABLE_TOOL_INPUT_FIELDS.get(toolNameOf(part));
+  if (fields === undefined) return 0;
+  if (typeof part.input !== "object" || part.input === null) return 0;
+  const record = part.input as Record<string, unknown>;
+  let freed = 0;
+  for (const field of fields) {
+    const value = record[field];
+    if (value === undefined || value === CLEARED_TOOL_INPUT_MARKER) continue;
+    freed += reclaimedCharacters(
+      observedValueSize(value),
+      CLEARED_TOOL_INPUT_MARKER,
+    );
+  }
+  return freed;
+}
+
 /**
  * The `toolCallId`s of tool results this session's Chat meter would report as
- * cleared: clearable, output-available, and NOT among the most recent
- * `TOOL_RESULT_CLEARING_KEEP_RECENT` such results, given the Context occupancy
- * reading is at or above the shared threshold.
+ * cleared: clearable, output-available, and enough of the oldest such results
+ * to bring occupancy back to `TOOL_RESULT_CLEARING_TARGET` once the shared
+ * threshold has engaged — the same batch the backend would clear on the next
+ * turn's first call.
  *
  * Returns an empty set — clears nothing visually — the same way clearing
  * itself does nothing when occupancy or the Context window is unknown, and the
@@ -97,25 +167,27 @@ export function clearedToolCallIds(
   }
 
   const clearableToolNames = clearableToolNamesOf(messages);
-
-  const clearableIds: string[] = [];
+  const clearable: ToolLikePart[] = [];
   for (const message of messages) {
     for (const part of message.parts ?? []) {
       if (!isToolLikePart(part)) continue;
       if (part.state !== "output-available") continue;
       if (!clearableToolNames.has(toolNameOf(part))) continue;
-      clearableIds.push(part.toolCallId);
+      clearable.push(part);
     }
   }
 
-  const staleCount = Math.max(
-    0,
-    clearableIds.length - TOOL_RESULT_CLEARING_KEEP_RECENT,
-  );
-  if (staleCount === 0) {
-    return NOTHING_CLEARED;
-  }
-  return new Set(clearableIds.slice(0, staleCount));
+  const count = clearingPrefixLength({
+    itemSizes: clearable.map(freedResultSize),
+    conversationSize: observedConversationSize(messages),
+    keepRecent: TOOL_RESULT_CLEARING_KEEP_RECENT,
+    occupancy,
+    contextWindow,
+    targetFraction: TOOL_RESULT_CLEARING_TARGET,
+    minBatch: TOOL_RESULT_CLEARING_MIN_BATCH,
+  });
+  if (count === 0) return NOTHING_CLEARED;
+  return new Set(clearable.slice(0, count).map((part) => part.toolCallId));
 }
 
 /**
@@ -124,6 +196,10 @@ export function clearedToolCallIds(
  * successful calls to a core write tool whose input the NEXT model call would
  * no longer receive in full. Unlike results, the allowlist is core-only, so it
  * is read straight from `@platypus/schemas`.
+ *
+ * Same trigger/target batch as result clearing, so the two mechanisms move
+ * their boundaries together and neither churns the cached prefix on every
+ * step.
  *
  * Returns the same empty set whenever nothing is cleared, as above.
  */
@@ -139,7 +215,7 @@ export function clearedInputToolCallIds(
     return NOTHING_CLEARED;
   }
 
-  const clearableIds: string[] = [];
+  const clearable: ToolLikePart[] = [];
   for (const message of messages) {
     for (const part of message.parts ?? []) {
       if (!isToolLikePart(part)) continue;
@@ -150,16 +226,19 @@ export function clearedInputToolCallIds(
       if (typeof output === "object" && output !== null && "error" in output) {
         continue;
       }
-      clearableIds.push(part.toolCallId);
+      clearable.push(part);
     }
   }
 
-  const staleCount = Math.max(
-    0,
-    clearableIds.length - TOOL_INPUT_CLEARING_KEEP_RECENT,
-  );
-  if (staleCount === 0) {
-    return NOTHING_CLEARED;
-  }
-  return new Set(clearableIds.slice(0, staleCount));
+  const count = clearingPrefixLength({
+    itemSizes: clearable.map(freedInputSize),
+    conversationSize: observedConversationSize(messages),
+    keepRecent: TOOL_INPUT_CLEARING_KEEP_RECENT,
+    occupancy,
+    contextWindow,
+    targetFraction: TOOL_RESULT_CLEARING_TARGET,
+    minBatch: TOOL_RESULT_CLEARING_MIN_BATCH,
+  });
+  if (count === 0) return NOTHING_CLEARED;
+  return new Set(clearable.slice(0, count).map((part) => part.toolCallId));
 }
