@@ -32,7 +32,7 @@ if [ "$(id -u)" = "0" ]; then
       chown -R platypus:platypus "$dir"
     fi
   done
-  # The compose.sandbox.yaml overlay bind-mounts the host's Docker socket for
+  # The compose.docker-sandbox.yaml overlay bind-mounts the host's Docker socket for
   # the @platypus/docker Sandbox adapter. Like /data it keeps its host identity
   # — typically root:docker, mode 0660 — and the host's `docker` group has no
   # fixed gid, so no group baked into the image can be relied on to match it.
