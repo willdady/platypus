@@ -18,7 +18,8 @@ are three types:
   a CI pipeline, calls it over HTTP with the Trigger's token. See
   [Inbound Triggers](#inbound-triggers).
 
-You'll find Triggers in the **Triggers** section of your Workspace. The list
+You'll find Triggers in the **Triggers** section of the Workspace home, which
+starts collapsed until you expand it. The list
 shows every type; pick **Cron**, **Event** or **Inbound** in the menu above it,
 which reads **All types** by default, to see only that type. A long list is
 split into pages; use the arrows under the list to move between them.
@@ -38,7 +39,8 @@ event by name.
 
 ### Open the Trigger form
 
-In your Workspace, go to the **Triggers** section and click **Create trigger**.
+On the Workspace home, expand the **Triggers** section and click **Create
+trigger**, or choose **New trigger** from the command menu.
 
 ### Pick the type and Agent
 
@@ -551,8 +553,7 @@ best-effort and can be lost.
 
 ## Review run history
 
-**Trigger runs** is one page per Workspace, not a tab inside the Trigger
-editor. Open it from **Trigger runs** in the Triggers section of the Workspace
+**Trigger runs** is one page per Workspace. Open it from **Trigger runs** in the Triggers section of the Workspace
 home page, or from the command menu. Recent runs from every Trigger in the
 Workspace are there, newest first, each row naming the Trigger it came from.
 Click a row to open that run. To edit its Trigger, choose **Edit trigger** from
@@ -561,8 +562,8 @@ the row's three-dot menu. Older runs are pruned per Trigger, keeping at least it
 
 To see whether a Trigger is failing, you don't need this page: every Trigger in
 the Workspace home list shows a **Last run** line with how long ago its newest
-run started, followed by an icon for that run's status: green for success, red
-for a failure or a _Suppressed_ firing. Hover the time for the exact date, or the icon for the status. A Trigger that
+run started, followed by an icon for that run's status. Hover the time for the
+exact date, or the icon for the status. A Trigger that
 has never run shows **Last run: Never**. The list refreshes when you return to the
 tab, so a _Running_ status there can lag behind the run.
 
@@ -570,12 +571,12 @@ Trigger runs is for history and detail: "what fired here recently?" and "why
 did that run fail?". Two filters narrow it, and both live in the address bar, so a
 filtered view survives a refresh and can be sent to a colleague as a link:
 
-- **Trigger** — all Triggers, or one of them. Clicking a Trigger's card on the
+- The Trigger menu — **All triggers**, or one of them. Clicking a Trigger's card on the
   Workspace home, or **View runs** beside the title of the **Edit Trigger** page,
   opens the page already filtered to it. To change the Trigger instead, choose
   **Edit** from the card's three-dot menu.
-- **Status** — all, or one of Pending, Running, Success, Failed, Cancelled,
-  Suppressed.
+- The status menu — **All statuses**, or one of Pending, Running, Success,
+  Failed, Cancelled, Suppressed.
 
 **Load more** fetches the next batch of runs, and goes away at the end of the
 list. The list refreshes while the tab is in front of you, so a run can be
@@ -733,8 +734,8 @@ being a member of the Organization, but not while banned.
 A member who owns Workspaces can't be removed from the Organization until each
 one is transferred to a new Owner or deleted.
 [Transferring a Workspace](/administering/workspaces#transferring-a-workspace)
-switches off every Trigger in it, revokes every Inbound token, and cancels any
-accepted Inbound call still waiting to start. The new Owner switches back on the
+switches off every Trigger in it, revokes every Inbound token, and cancels every
+Trigger run still waiting or under way. The new Owner switches back on the
 Triggers they want and issues new tokens; until then, nothing runs as them.
 
 ## When a run stops early

@@ -63,7 +63,8 @@ the rest of the message:
 Each row shows the Skill's name and its **Argument hint** where the author wrote
 one. The list is every Skill attached to the Agent,
 including any marked **User-invocable only** — that setting hides a Skill from
-the model, not from you. An Agent with no Skills attached says so instead.
+the model, not from you. `/compact` joins the list once the Chat has a reply,
+so before then an Agent with no Skills opens no list at all.
 
 Send it and the Skill's instructions are loaded before the Agent starts writing.
 The reply carries a **Loading skill** row above it — the same row you see when
@@ -91,7 +92,7 @@ of the text, and the resubmitted turn loads the Skill again.
 </Callout>
 
 With a Provider and model picked directly rather than an Agent, the list offers
-only `/compact` — Skills belong to an Agent.
+only `/compact`, and only once the Chat has a reply — Skills belong to an Agent.
 
 ## Attaching files
 
@@ -236,9 +237,9 @@ going quiet.
   **A browser only grants a microphone over a secure connection.** Reach your
   instance at a plain `http://` address — a LAN IP such as
   `http://192.168.1.20:3000` — and the microphone is refused before a word is
-  heard, whatever permission you granted, and pressing the button says _"Voice
-  input needs a secure connection."_ Serve the frontend over HTTPS, or open it
-  at `http://localhost`, which browsers treat as secure.
+  heard, whatever permission you granted, and pressing the button tells you it
+  needs a secure connection. Serve the frontend over HTTPS, or open it at
+  `http://localhost`, which browsers treat as secure.
 </Callout>
 
 ## Diagrams
@@ -290,10 +291,10 @@ number on the page and the first one to look at on a slow turn.
 
 <Callout type="warning">
   **A row with no time is not a Tool that took no time.** A Tool that really
-  was instant reads `<1ms`; a blank means there is no measurement at all. Three
+  was instant reads `<1ms`; a blank means there is no measurement at all. Two
   rows are blank by nature: a search the Provider ran inside its own service,
-  the **Loading skill** row, which has nothing to open, and Chats from before
-  your deployment was upgraded. A blank never means "still running" — the status
+  and the **Loading skill** row, which has nothing to open. A blank never means
+  "still running" — the status
   is what tells you that.
 </Callout>
 
@@ -395,8 +396,8 @@ time, so you don't have to hit the limit once to learn it exists.
 ### When the reply runs out of steps instead
 
 There is a second way a reply can stop early, and it looks different. A turn
-that uses tools works in steps: each tool the model calls, and each reply it
-writes after getting the result back, is one step. A turn only gets so many of
+that uses tools works in steps: each call to the model is one step, whether it
+asks for tools — one or several at once — or writes the reply. A turn only gets so many of
 them, and reaching that number stops the turn wherever it had got to.
 
 On the last step it is allowed, the model is told the turn is about to end and
@@ -638,8 +639,8 @@ Each message's actions sit beneath it:
 
 The actions are hidden on a reply that is still streaming, and **Regenerate**
 and the arrows on the rest of the Chat wait until it finishes. **Delete**
-stays clickable, but until then it is refused with **A reply is still being
-written in this Chat** — in another tab too. **Edit**,
+stays clickable, but it is refused until the reply finishes — in another tab
+too. **Edit**,
 **Delete**, **Regenerate** and the arrows are absent entirely if you cannot send
 messages in this Chat — see [Sharing a Chat](#sharing-a-chat). **Copy** stays.
 
@@ -842,16 +843,16 @@ edit, or **Regenerate**.
 <Callout type="warning">
   **A Chat can refuse a message even though you never opened its settings.** A
   value saved before the current ranges applied stays on the Chat, and every
-  send fails with a message such as **Temperature in Chat Settings must be at
-  least 0.** Open **Chat Settings** — the field is marked — and correct or clear
-  it.
+  send fails, naming the field and the range it must be in. Open **Chat
+  Settings** — the field is marked — and correct or clear it.
 </Callout>
 
 <Callout type="warning">
   **With an Agent selected there is no settings button.** A Chat does not
   override an Agent's Instructions, sampling parameters or Reasoning controls
   for one conversation — the Agent's own settings win, including its **Max
-  steps**, and the info button shows you what they are. If you want different
+  steps**. The info button shows its Instructions, **Max steps** and sampling
+  parameters, and **Edit agent** there opens the Agent. If you want different
   behaviour, edit the Agent, or copy it and edit the copy. Looking for the gear
   on an Agent-backed Chat and concluding it's a bug is the usual confusion here.
 </Callout>

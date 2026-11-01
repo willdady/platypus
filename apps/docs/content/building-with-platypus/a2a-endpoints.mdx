@@ -143,7 +143,7 @@ cache the card for up to five minutes, so a change to the Name or Description
 can take that long to reach it.
 
 An endpoint that is disabled or deleted, in a Workspace the Organization doesn't
-allow, or whose Workspace Owner has been banned answers
+allow, or whose Workspace Owner has left the Organization or been banned answers
 **Not Found**, exactly like one that never existed. A Super Admin who owns the
 Workspace keeps its endpoints answering without being a member of the
 Organization, but not while banned. A ban with an expiry stops counting once it
@@ -244,9 +244,6 @@ learns one out of your Chats.
   the same note Inbound Trigger inputs carry: the values come from the caller
   and are data, not instructions. A message with a file part is refused with an
   error rather than sent without it.
-
-The Agent is told the conversation arrives over A2A from the client the token
-is named after, and that the caller may not be you.
 
 A client can stop a Task it no longer needs with
 [`CancelTask`](#cancelling-a-task).
@@ -438,7 +435,7 @@ Memories** off.
 - Transferring the Workspace to a new Owner deletes every token on its
   endpoints and stops their clients' work at once.
 - Running Tasks on an endpoint deleted with its Agent or with a detached
-  Shared Agent, or whose Workspace Owner is banned, are canceled within a few
+  Shared Agent, or whose Workspace Owner has left or is banned, are canceled within a few
   seconds rather than at once.
 - A Chat stays when its endpoint or token is deleted, still labelled with the
   token's name. No client can reach it or its Tasks over A2A again, not even
