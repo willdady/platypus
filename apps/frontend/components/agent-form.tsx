@@ -50,6 +50,7 @@ import {
   TOP_P_MIN,
   type ToolSet,
   type Agent,
+  type AgentResponse,
   type Provider,
   type Skill,
 } from "@platypus/schemas";
@@ -205,11 +206,7 @@ function AgentForm({
     setFloatField,
     clearErrors,
     submit,
-  } = useEntityForm<
-    AgentFormData,
-    Agent,
-    Agent & { scope?: "organization" | "workspace" }
-  >({
+  } = useEntityForm<AgentFormData, Agent, AgentResponse>({
     initialData: {
       name: "",
       description: "",
