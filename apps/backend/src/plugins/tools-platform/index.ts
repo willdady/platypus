@@ -104,8 +104,16 @@ export const plugin: PlatypusPlugin = {
         name: "Memory",
         category: "Memory",
         description: "Look up memories from past conversations",
-        tools: ({ workspaceId, userId }) =>
-          createMemoryTools(workspaceId, userId),
+        tools: ({ workspaceId, userId, sessionId }) => {
+          // Core always supplies one. A missing id is a programming error, so
+          // fail loudly rather than silently withholding Memory from the model.
+          if (sessionId === undefined) {
+            throw new Error(
+              "The Memory Tool set needs the turn's session id to embed searches",
+            );
+          }
+          return createMemoryTools(workspaceId, userId, sessionId);
+        },
       },
     ],
   },

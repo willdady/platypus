@@ -621,6 +621,24 @@ describe("afterTurn", () => {
     source: { providerId: "p1", modelId: "m1" },
   } as const;
 
+  it("resolves the summariser with the Chat's session id", async () => {
+    seedSummaryTable();
+
+    afterTurn({
+      chatId: "chat-1",
+      ...direct,
+      path: overflowing(fiveTurns()),
+    });
+
+    await vi.waitFor(() =>
+      expect(mockResolveGenerationPlan).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ sessionId: "chat-1" }),
+        expect.anything(),
+      ),
+    );
+  });
+
   it("takes exactly one summary when the final occupancy crosses 0.8", async () => {
     const fake = seedSummaryTable();
 

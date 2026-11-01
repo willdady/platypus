@@ -799,6 +799,49 @@ describe("Provider Create Schema", () => {
     }
   });
 
+  it("accepts ${SESSION_ID} and a bare $ in a header value", () => {
+    expect(
+      providerCreateSchema.safeParse({
+        ...baseProvider,
+        headers: {
+          "x-session": "sess-${SESSION_ID}-${SESSION_ID}",
+          "x-price": "costs $5",
+        },
+      }).success,
+    ).toBe(true);
+  });
+
+  it.each(["create", "update"] as const)(
+    "rejects an unknown placeholder in a header value on %s",
+    (variant) => {
+      const schema =
+        variant === "create" ? providerCreateSchema : providerUpdateSchema;
+      for (const value of [
+        "sess-${CHAT_ID}",
+        "sess-${}",
+        "sess-${SESSION_ID",
+      ]) {
+        expect(
+          schema.safeParse({
+            ...baseProvider,
+            headers: { "x-session": value },
+          }).success,
+        ).toBe(false);
+      }
+    },
+  );
+
+  it("leaves header names alone when validating placeholders", () => {
+    // Only values are substituted, so a name carrying a dollar sign is sent
+    // as written rather than rejected as a placeholder.
+    expect(
+      providerCreateSchema.safeParse({
+        ...baseProvider,
+        headers: { "${SESSION_ID}": "plain" },
+      }).success,
+    ).toBe(true);
+  });
+
   it("accepts securityGuardrails when omitted or null", () => {
     expect(providerCreateSchema.safeParse(baseProvider).success).toBe(true);
     expect(

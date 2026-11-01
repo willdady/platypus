@@ -175,6 +175,9 @@ export class AgentRunner {
       orgId: scope.orgId,
       workspaceId: scope.workspaceId,
       user: userFromScope(scope),
+      // The run's own identity is the Provider Header placeholder's session:
+      // a Chat's run id is the chat id; a Trigger run's is that run's id.
+      sessionId: runId,
       origin,
       frontendUrl,
       runMode: scope.principal.kind === "user" ? "interactive" : "headless",
@@ -238,6 +241,7 @@ export class AgentRunner {
       messages: input.messages,
       orgId: scope.orgId,
       workspaceId: scope.workspaceId,
+      sessionId: input.runId,
     });
 
     const state: RunState = {

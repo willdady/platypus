@@ -45,6 +45,7 @@ const loadEmbeddingConfig = async (workspaceId: string) => {
 export const createMemoryTools = async (
   workspaceId: string,
   userId: string,
+  sessionId: string,
 ): Promise<Record<string, Tool>> => {
   // Resolved once per turn. Without an embedding Provider memorySearch could
   // only return an error, so it is left out rather than offered (#1059), and
@@ -111,6 +112,7 @@ export const createMemoryTools = async (
           embedding.provider,
           pointerSettingModelId(embedding.modelId),
           query,
+          sessionId,
           abortSignal,
         );
 

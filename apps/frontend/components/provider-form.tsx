@@ -863,7 +863,7 @@ function ProviderForm({
                 } as React.ChangeEvent<HTMLTextAreaElement>)
               }
               disabled={isSubmitting || isReadOnly}
-              description="Optional headers as JSON object."
+              description="Optional headers as JSON object. Use ${SESSION_ID} in a value to send the Chat's id, or the Trigger run's id for a headless run."
               error={headersError || validationErrors.headers}
             />
 

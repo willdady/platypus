@@ -120,6 +120,16 @@ export interface ToolSetContext {
    */
   timezone?: string;
   /**
+   * The Chat's id, or the Trigger run's id for a headless run — the session a
+   * Provider Header's `${SESSION_ID}` placeholder resolves to. Stable across
+   * every step and turn of that Chat, or across one Trigger run.
+   *
+   * Core always supplies it, exactly as it supplies `timezone`; it is optional
+   * in the type only so a plugin built against this SDK still loads on an
+   * older core.
+   */
+  sessionId?: string;
+  /**
    * Register something to close when this turn ends — see
    * {@link CloserRegistrar}.
    *
