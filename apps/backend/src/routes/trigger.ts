@@ -34,6 +34,7 @@ trigger.get(
   requireWorkspaceAccess,
   async (c) => {
     const results = await listTriggers(workspaceScopeOf(c), {
+      enabledOnly: false,
       includeFired: c.req.query("includeFired") === "true",
     });
     return c.json({ results: results.map(toPublicTrigger) });

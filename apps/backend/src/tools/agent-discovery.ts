@@ -45,7 +45,7 @@ export function createListAgentsTool(ctx: ScopeContext): Tool {
 export function createAgentDiscoveryTools(
   workspaceId: string,
   orgId: string,
-  frontendUrl: string | undefined,
+  frontendUrl: string,
 ): Record<string, Tool> {
   const ctx: ScopeContext = { orgId, workspaceId };
 
@@ -121,7 +121,7 @@ export function createAgentDiscoveryTools(
         `agents/${agentId}`,
       );
 
-      return { ...rest, scope: found.scope, ...(url && { url }) };
+      return { ...rest, scope: found.scope, url };
     },
   });
 

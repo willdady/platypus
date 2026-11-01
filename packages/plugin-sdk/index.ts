@@ -132,7 +132,13 @@ export interface ToolSetContext {
   workspaceId: string;
   agentId: string;
   orgId: string;
-  frontendUrl: string | undefined;
+  /**
+   * The browser-facing frontend origin, for links back into the web app.
+   *
+   * Always supplied: core refuses to boot without `FRONTEND_URL`, so there is
+   * no deployment where this is absent.
+   */
+  frontendUrl: string;
   userId: string;
   /**
    * The acting User's effective IANA timezone: their profile timezone, else the

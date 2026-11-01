@@ -336,15 +336,15 @@ export type ToolSessionOptions = {
    * its parent was withheld. Withholds whole Tool sets; `interactive` below
    * withholds a single tool.
    */
-  withheldToolSetIds?: readonly string[];
+  withheldToolSetIds: readonly string[];
   /**
-   * Whether a User watches this session's Agent: an interactive Chat turn.
-   * Absent means no — a Trigger run's Chat is never rendered. Gates the
-   * {@link DOWNLOAD_TOOL_NAME}. A nested session is never interactive,
-   * whatever its parent: a delegate's tool calls reach the User only as its
-   * activity list, and their results go back to the parent model (#1608).
+   * Whether a User watches this session's Agent: an interactive Chat turn. A
+   * Trigger run's Chat is never rendered. Gates the {@link DOWNLOAD_TOOL_NAME}.
+   * A nested session is never interactive, whatever its parent: a delegate's
+   * tool calls reach the User only as its activity list, and their results go
+   * back to the parent model (#1608).
    */
-  interactive?: boolean;
+  interactive: boolean;
 };
 
 /**
@@ -372,9 +372,9 @@ export const openToolSession = async (
   scope: ToolSessionScope,
   agent: ToolSessionAgent | undefined,
   queries: ToolSessionQueries,
-  options: ToolSessionOptions = {},
+  options: ToolSessionOptions,
 ): Promise<ToolSession> => {
-  const { signal, withheldToolSetIds = [], interactive = false } = options;
+  const { signal, withheldToolSetIds, interactive } = options;
   const tools: Record<string, Tool> = {};
   // Tool name -> where it came from. Read by the merge below to report the
   // names an arriving Tool set is about to take, and the reason this is a Map

@@ -41,6 +41,10 @@ frontend reaches the backend by two different paths:
 These have to agree. If the browser loads the app from one origin but
 `BETTER_AUTH_URL` points somewhere else, sign-in cookies won't stick.
 
+`BETTER_AUTH_URL` and `FRONTEND_URL` are required: the backend refuses to start
+when either is unset or malformed, naming the variable, rather than falling back
+to localhost and serving a deployment whose links and auth redirects are wrong.
+
 <Callout type="warning">
   **Treat `ALLOWED_ORIGINS`, `FRONTEND_URL` and `BACKEND_URL` as one set that
   changes together** (plus `BETTER_AUTH_URL`, which compose derives from
@@ -64,7 +68,7 @@ The session cookie is issued by the backend and has to be sent back to it on req
 - **One origin behind a reverse proxy** — the frontend at `/` and the backend under a path such as `/api` on the same host. The browser holds one cookie covering both, so no extra configuration is needed.
 - **Two subdomains of one parent domain** — e.g. `app.example.com` and `api.example.com`. Set `AUTH_COOKIE_DOMAIN` to the shared parent (`example.com`) so the session cookie is issued for it and every subdomain sends it. Without the variable the cookie is host-only and server-rendered requests arrive unauthenticated.
 
-Two hosts with **different parent domains** — e.g. `app.example.com` and `api.example.net` — are **not supported**. No cookie can cover both, and there is no service-to-service credential for internal calls. The backend starts anyway, but every server-rendered request reaches it unauthenticated; it logs an error at startup naming both hostnames and `AUTH_COOKIE_DOMAIN`, so check the backend's first log lines if pages render signed out.
+Two hosts with **different parent domains** — e.g. `app.example.com` and `api.example.net` — are **not supported**. No cookie can cover both, and there is no service-to-service credential for internal calls. The backend refuses to start on that topology, naming both hostnames and `AUTH_COOKIE_DOMAIN`; a malformed `AUTH_COOKIE_DOMAIN` stops it the same way.
 
 ### CORS / trusted origins
 
@@ -79,8 +83,10 @@ than serving with permissive CORS. Set it even on a single-origin deployment.
 
 ## Database
 
-`DATABASE_URL` is the PostgreSQL connection string. In compose it points at the
-bundled `database` service. The database must be PostgreSQL 17 with the
+`DATABASE_URL` is the PostgreSQL connection string, starting `postgres://` or
+`postgresql://`. It is required, with no fallback to node-postgres' `PG*`
+variables: an unset or malformed value stops the backend at boot. In compose it
+points at the bundled `database` service. The database must be PostgreSQL 17 with the
 `pgvector` extension available (the backend enables the extension on startup);
 embeddings for [Memory](/concepts/memory-and-context) are stored as vectors, so
 `pgvector` is not optional. PostgreSQL 18 is not supported.
@@ -110,9 +116,14 @@ at `/auth/*` on the backend. The essentials:
   See [what first boot creates](/self-hosting/docker-compose#what-first-boot-creates)
   for the seeding rule and the recovery path.
 - **`REQUIRE_INVITATION_TO_SIGN_UP`** — `true` closes public sign-up, so an
-  account can only be created by redeeming an invitation link. Off by default.
-  The two modes and what the invitee sees are in
+  account can only be created by redeeming an invitation link. On by default:
+  set it to `false` to open public sign-up. The two modes and what the invitee
+  sees are in
   [Users & access](/self-hosting/users-and-access#who-can-create-an-account).
+
+Session lifetimes are fixed and are not environment variables; see
+[Sessions](/reference/backend-configuration#sessions) for the lifetime and the
+revocation delay.
 
 The deeper model — Providers, the role ladder, and the default admin — lives in
 [Providers & authentication](/self-hosting/providers-and-auth).

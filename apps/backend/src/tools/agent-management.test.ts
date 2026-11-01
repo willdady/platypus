@@ -68,16 +68,6 @@ describe("createAgentManagementTools", () => {
       );
     });
 
-    it("omits the link when no frontend URL is configured", async () => {
-      tools = createAgentManagementTools(workspaceId, orgId, undefined);
-      vi.mocked(createAgentRow).mockResolvedValueOnce(row());
-
-      expect(await callTool(tools.createAgent, createInput)).toEqual({
-        id: "a1",
-        name: "Agent",
-      });
-    });
-
     it("returns a rejected write as-is", async () => {
       vi.mocked(createAgentRow).mockResolvedValueOnce({
         error: "Circular dependency detected",

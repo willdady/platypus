@@ -285,13 +285,6 @@ describe("recoverStuckChats", () => {
  * predicate, so the predicate is what is pinned.
  */
 describe("recoverStuckTriggers", () => {
-  const cronTrigger = (config: Record<string, unknown>) => ({
-    id: "t1",
-    name: "Nightly",
-    type: "cron",
-    config,
-  });
-
   beforeEach(() => {
     vi.clearAllMocks();
     delete process.env.TRIGGER_PER_RUN_TIMEOUT_MS;
@@ -392,50 +385,6 @@ describe("recoverStuckTriggers", () => {
     await recoverStuckTriggers();
 
     expect(mockAnnounce).not.toHaveBeenCalled();
-  });
-
-  it("reschedules every enabled cron Trigger left with a NULL nextRunAt and no running run", async () => {
-    const { updates, selects } = captureUpdates(
-      [],
-      [cronTrigger({ cronExpression: "0 * * * *", timezone: "UTC" })],
-    );
-
-    await recoverStuckTriggers();
-
-    // Not only the orphans' own Triggers: a claim never writes NULL any more,
-    // so a NULL with no live run behind it is a stranded row, not a peer's
-    // claim.
-    const unscheduled = (type: number, enabled: number) =>
-      `("trigger"."type" = $${type} and "trigger"."enabled" = $${enabled} and ` +
-      `"trigger"."next_run_at" is null and not exists (select 1 from ` +
-      `"trigger_run" where "trigger_run"."trigger_id" = "trigger"."id" and ` +
-      `"trigger_run"."status" = 'running'))`;
-    const { sql: text, params } = render(selects[0]);
-    expect(text).toBe(unscheduled(1, 2));
-    expect(params).toEqual(["cron", true]);
-
-    const reschedule = updates[1];
-    expect(reschedule.table).toBe(triggerTable);
-    expect(reschedule.set.nextRunAt).toEqual(
-      new Date("2026-08-30T13:00:00.000Z"),
-    );
-    // Rechecked at write time, so an edit or a claim in between wins.
-    expect(render(reschedule.where).sql).toBe(
-      `("trigger"."id" = $1 and ${unscheduled(2, 3)})`,
-    );
-  });
-
-  it.each([
-    ["a one-off Trigger", { cronExpression: "0 * * * *", isOneOff: true }, 0],
-    ["a malformed config", { cronExpression: "" }, 1],
-    ["an unparseable cron expression", { cronExpression: "not a cron" }, 1],
-  ])("leaves %s unscheduled", async (_label, config, errors) => {
-    const { updates } = captureUpdates([], [cronTrigger(config)]);
-
-    await recoverStuckTriggers();
-
-    expect(updates.map((c) => c.table)).toEqual([triggerRunTable]);
-    expect(mockLogger.error).toHaveBeenCalledTimes(errors);
   });
 });
 

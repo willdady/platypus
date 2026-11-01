@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import type { Mock } from "vitest";
 import type { ToolExecuteFunction } from "ai";
+import { DEFAULT_MAX_EXTRACTED_TEXT_CHARS } from "@platypus/schemas";
 import { createSandboxTools } from "./tools.ts";
 import type { SandboxBackend, SandboxContext } from "./types.ts";
 
@@ -31,6 +32,13 @@ function callExecute(
     }),
   );
 }
+
+/** No model capabilities resolved: nothing reads natively, the default cap. */
+const noFileReading = () =>
+  Promise.resolve({
+    passthroughFileTypes: [],
+    maxExtractedTextChars: DEFAULT_MAX_EXTRACTED_TEXT_CHARS,
+  });
 
 const ctx: SandboxContext = {
   orgId: "org-1",
@@ -73,7 +81,7 @@ function makeBackend(): { backend: SandboxBackend; mocks: BackendMocks } {
 describe("createSandboxTools", () => {
   it("returns the five fixed-core tools", () => {
     const { backend } = makeBackend();
-    const tools = createSandboxTools(backend, ctx);
+    const tools = createSandboxTools(backend, ctx, {}, noFileReading);
     expect(Object.keys(tools).sort()).toEqual([
       "fsEdit",
       "fsList",
@@ -85,7 +93,7 @@ describe("createSandboxTools", () => {
 
   it("delegates shellExec to the backend with the sandbox context", async () => {
     const { backend, mocks } = makeBackend();
-    const tools = createSandboxTools(backend, ctx);
+    const tools = createSandboxTools(backend, ctx, {}, noFileReading);
     const result = await callExecute(tools, "shellExec", { command: "ls" });
     expect(mocks.shellExec).toHaveBeenCalledWith(
       ctx,
@@ -99,7 +107,7 @@ describe("createSandboxTools", () => {
 
   it("delegates fsRead to the backend with the sandbox context", async () => {
     const { backend, mocks } = makeBackend();
-    const tools = createSandboxTools(backend, ctx);
+    const tools = createSandboxTools(backend, ctx, {}, noFileReading);
     const result = await callExecute(tools, "fsRead", { path: "README.md" });
     expect(mocks.fsRead).toHaveBeenCalledWith(
       ctx,
@@ -113,7 +121,7 @@ describe("createSandboxTools", () => {
 
   it("delegates fsWrite to the backend with the sandbox context", async () => {
     const { backend, mocks } = makeBackend();
-    const tools = createSandboxTools(backend, ctx);
+    const tools = createSandboxTools(backend, ctx, {}, noFileReading);
     await callExecute(tools, "fsWrite", {
       path: "a.txt",
       content: "hi",
@@ -128,7 +136,7 @@ describe("createSandboxTools", () => {
 
   it("delegates fsEdit to the backend with the sandbox context", async () => {
     const { backend, mocks } = makeBackend();
-    const tools = createSandboxTools(backend, ctx);
+    const tools = createSandboxTools(backend, ctx, {}, noFileReading);
     await callExecute(tools, "fsEdit", {
       path: "a.txt",
       oldString: "foo",
@@ -143,7 +151,7 @@ describe("createSandboxTools", () => {
 
   it("delegates fsList to the backend with the sandbox context", async () => {
     const { backend, mocks } = makeBackend();
-    const tools = createSandboxTools(backend, ctx);
+    const tools = createSandboxTools(backend, ctx, {}, noFileReading);
     await callExecute(tools, "fsList", { recursive: true });
     expect(mocks.fsList).toHaveBeenCalledWith(
       ctx,
@@ -156,7 +164,7 @@ describe("createSandboxTools", () => {
 
   it("does not touch input when workspace env is empty", async () => {
     const { backend, mocks } = makeBackend();
-    const tools = createSandboxTools(backend, ctx, {});
+    const tools = createSandboxTools(backend, ctx, {}, noFileReading);
     await callExecute(tools, "shellExec", { command: "ls", env: { A: "1" } });
     expect(mocks.shellExec).toHaveBeenCalledWith(
       ctx,
@@ -167,10 +175,15 @@ describe("createSandboxTools", () => {
 
   it("merges workspace env on top of input.env (workspace wins on collision)", async () => {
     const { backend, mocks } = makeBackend();
-    const tools = createSandboxTools(backend, ctx, {
-      OPENAI_API_KEY: "sk-real",
-      NODE_ENV: "production",
-    });
+    const tools = createSandboxTools(
+      backend,
+      ctx,
+      {
+        OPENAI_API_KEY: "sk-real",
+        NODE_ENV: "production",
+      },
+      noFileReading,
+    );
     await callExecute(tools, "shellExec", {
       command: "node script.js",
       env: { OPENAI_API_KEY: "sk-spoof", FOO: "bar" },
@@ -191,7 +204,12 @@ describe("createSandboxTools", () => {
 
   it("injects workspace env when input has no env field", async () => {
     const { backend, mocks } = makeBackend();
-    const tools = createSandboxTools(backend, ctx, { GITHUB_TOKEN: "ghp-x" });
+    const tools = createSandboxTools(
+      backend,
+      ctx,
+      { GITHUB_TOKEN: "ghp-x" },
+      noFileReading,
+    );
     await callExecute(tools, "shellExec", { command: "gh repo list" });
     expect(mocks.shellExec).toHaveBeenCalledWith(
       ctx,
@@ -201,7 +219,7 @@ describe("createSandboxTools", () => {
   });
   it("hands the backend the run's signal alongside the context", async () => {
     const { backend, mocks } = makeBackend();
-    const tools = createSandboxTools(backend, ctx);
+    const tools = createSandboxTools(backend, ctx, {}, noFileReading);
     const controller = new AbortController();
 
     await callExecute(tools, "fsRead", { path: "a.txt" }, controller.signal);
@@ -227,7 +245,7 @@ describe("createSandboxTools", () => {
         }),
     } as unknown as SandboxBackend;
 
-    const tools = createSandboxTools(backend, ctx);
+    const tools = createSandboxTools(backend, ctx, {}, noFileReading);
     const result = await callExecute(
       tools,
       "shellExec",
@@ -243,7 +261,7 @@ describe("createSandboxTools", () => {
   // arrives without it still hands the adapter a signal — one that never fires.
   it("hands the backend a never-firing signal when the SDK supplies none", async () => {
     const { backend, mocks } = makeBackend();
-    const tools = createSandboxTools(backend, ctx);
+    const tools = createSandboxTools(backend, ctx, {}, noFileReading);
 
     await callExecute(tools, "fsList", { recursive: true }, null);
 
@@ -267,7 +285,7 @@ describe("createSandboxTools", () => {
       shellExec: () => new Promise<never>(() => {}),
     } as unknown as SandboxBackend;
 
-    const tools = createSandboxTools(backend, ctx);
+    const tools = createSandboxTools(backend, ctx, {}, noFileReading);
     const controller = new AbortController();
     const inflight = callExecute(
       tools,
@@ -283,7 +301,7 @@ describe("createSandboxTools", () => {
 
   it("does not call the backend at all when the signal has already aborted", async () => {
     const { backend, mocks } = makeBackend();
-    const tools = createSandboxTools(backend, ctx);
+    const tools = createSandboxTools(backend, ctx, {}, noFileReading);
     const controller = new AbortController();
     controller.abort();
 
@@ -306,12 +324,12 @@ describe("fsDownload", () => {
   };
 
   it("is offered only when the backend implements fsReadBytes", () => {
-    expect(createSandboxTools(makeBackend().backend, ctx)).not.toHaveProperty(
-      "fsDownload",
-    );
-    expect(createSandboxTools(withReadBytes().backend, ctx)).toHaveProperty(
-      "fsDownload",
-    );
+    expect(
+      createSandboxTools(makeBackend().backend, ctx, {}, noFileReading),
+    ).not.toHaveProperty("fsDownload");
+    expect(
+      createSandboxTools(withReadBytes().backend, ctx, {}, noFileReading),
+    ).toHaveProperty("fsDownload");
   });
 
   it("returns the path and size, and no URL, without reading the bytes", async () => {
@@ -321,7 +339,7 @@ describe("fsDownload", () => {
       truncated: false,
     });
     const result = await callExecute(
-      createSandboxTools(backend, ctx),
+      createSandboxTools(backend, ctx, {}, noFileReading),
       "fsDownload",
       { path: "out/report.pdf" },
     );
@@ -338,9 +356,13 @@ describe("fsDownload", () => {
   it("errors on a missing path", async () => {
     const { backend } = withReadBytes();
     await expect(
-      callExecute(createSandboxTools(backend, ctx), "fsDownload", {
-        path: "nope.txt",
-      }),
+      callExecute(
+        createSandboxTools(backend, ctx, {}, noFileReading),
+        "fsDownload",
+        {
+          path: "nope.txt",
+        },
+      ),
     ).rejects.toThrow(/no such file.*nope\.txt/i);
   });
 
@@ -351,9 +373,13 @@ describe("fsDownload", () => {
       truncated: false,
     });
     await expect(
-      callExecute(createSandboxTools(backend, ctx), "fsDownload", {
-        path: "out",
-      }),
+      callExecute(
+        createSandboxTools(backend, ctx, {}, noFileReading),
+        "fsDownload",
+        {
+          path: "out",
+        },
+      ),
     ).rejects.toThrow(/directory/i);
   });
 
@@ -364,9 +390,13 @@ describe("fsDownload", () => {
       truncated: false,
     });
     await expect(
-      callExecute(createSandboxTools(backend, ctx), "fsDownload", {
-        path: "big.bin",
-      }),
+      callExecute(
+        createSandboxTools(backend, ctx, {}, noFileReading),
+        "fsDownload",
+        {
+          path: "big.bin",
+        },
+      ),
     ).rejects.toThrow(/25 MiB/);
   });
 });
@@ -392,7 +422,10 @@ describe("fsView", () => {
     const fsReadBytes = vi.fn().mockResolvedValue(file.bytes);
     const backend = { ...mocks, fsReadBytes } as unknown as SandboxBackend;
     const tools = createSandboxTools(backend, ctx, {}, () =>
-      Promise.resolve({ passthroughFileTypes: fileTypes }),
+      Promise.resolve({
+        passthroughFileTypes: fileTypes,
+        maxExtractedTextChars: DEFAULT_MAX_EXTRACTED_TEXT_CHARS,
+      }),
     );
     return { tools, mocks, fsReadBytes };
   };
@@ -412,9 +445,9 @@ describe("fsView", () => {
   };
 
   it("is offered only when the backend implements fsReadBytes", () => {
-    expect(createSandboxTools(makeBackend().backend, ctx)).not.toHaveProperty(
-      "fsView",
-    );
+    expect(
+      createSandboxTools(makeBackend().backend, ctx, {}, noFileReading),
+    ).not.toHaveProperty("fsView");
     expect(viewing({ path: "a.png", bytes: PNG }).tools).toHaveProperty(
       "fsView",
     );

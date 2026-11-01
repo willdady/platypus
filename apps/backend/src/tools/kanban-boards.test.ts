@@ -27,9 +27,11 @@ describe("createKanbanBoardTools", () => {
     expect(Object.keys(tools)).toEqual([
       "listBoards",
       "getBoardState",
-      "upsertBoard",
+      "createBoard",
+      "updateBoard",
       "deleteBoard",
-      "upsertColumn",
+      "createColumn",
+      "updateColumn",
       "deleteColumn",
       "reorderColumns",
     ]);
@@ -79,11 +81,11 @@ describe("createKanbanBoardTools", () => {
       ],
     });
 
-  describe("upsertBoard", () => {
+  describe("createBoard", () => {
     it("creates a board with the default columns and a link to it", async () => {
       const db = seedBoards();
 
-      const board = (await callOkTool(tools.upsertBoard, {
+      const board = (await callOkTool(tools.createBoard, {
         label: "Sprint",
         name: "Sprint",
         description: "This sprint",
@@ -110,17 +112,19 @@ describe("createKanbanBoardTools", () => {
       ).toEqual(["To Do", "In Progress", "Done"]);
     });
 
-    it("refuses to create without a name", async () => {
-      expect(await callTool(tools.upsertBoard, { label: "x" })).toEqual({
-        error: "name is required when creating a new board",
-      });
+    it("refuses to build without a name", () => {
+      // The AI SDK validates input against this schema before `execute` runs.
+      expect(
+        (tools.createBoard.inputSchema as z.ZodType).safeParse({ label: "x" })
+          .success,
+      ).toBe(false);
     });
 
     it("renames and re-labels a board, pruning dropped labels off its cards", async () => {
       const db = seedBoards();
 
       expect(
-        await callOkTool(tools.upsertBoard, {
+        await callOkTool(tools.updateBoard, {
           boardId: "b1",
           label: "Roadmap",
           name: "Roadmap 2027",
@@ -139,7 +143,7 @@ describe("createKanbanBoardTools", () => {
       const db = seedBoards();
 
       expect(
-        await callTool(tools.upsertBoard, {
+        await callTool(tools.updateBoard, {
           boardId: "b-other",
           label: "Theirs",
           name: "Mine now",
@@ -150,7 +154,7 @@ describe("createKanbanBoardTools", () => {
 
     it("refuses a label colour the routes would refuse", () => {
       // The AI SDK validates input against this schema before `execute` runs.
-      const schema = tools.upsertBoard.inputSchema as z.ZodType;
+      const schema = tools.createBoard.inputSchema as z.ZodType;
       expect(
         schema.safeParse({
           label: "x",
@@ -204,12 +208,12 @@ describe("createKanbanBoardTools", () => {
     });
   });
 
-  describe("upsertColumn", () => {
+  describe("createColumn", () => {
     it("appends a new column to the end of the board", async () => {
       const db = seedBoards();
 
       expect(
-        await callOkTool(tools.upsertColumn, {
+        await callOkTool(tools.createColumn, {
           boardId: "b1",
           label: "Review",
           name: "Review",
@@ -218,11 +222,22 @@ describe("createKanbanBoardTools", () => {
       expect(db.tables.kanban_column).toHaveLength(4);
     });
 
+    it("refuses to build without a boardId", () => {
+      expect(
+        (tools.createColumn.inputSchema as z.ZodType).safeParse({
+          label: "Review",
+          name: "Review",
+        }).success,
+      ).toBe(false);
+    });
+  });
+
+  describe("updateColumn", () => {
     it("renames a column", async () => {
       seedBoards();
 
       expect(
-        await callOkTool(tools.upsertColumn, {
+        await callOkTool(tools.updateColumn, {
           boardId: "b1",
           columnId: "col-2",
           label: "Shipped",
@@ -235,7 +250,7 @@ describe("createKanbanBoardTools", () => {
       seedBoards();
 
       expect(
-        await callTool(tools.upsertColumn, {
+        await callTool(tools.createColumn, {
           boardId: "b1",
           label: "Done",
           name: "Done",
@@ -247,7 +262,7 @@ describe("createKanbanBoardTools", () => {
       const db = seedBoards();
 
       expect(
-        await callTool(tools.upsertColumn, {
+        await callTool(tools.createColumn, {
           boardId: "b-other",
           label: "x",
           name: "x",

@@ -10,7 +10,7 @@ const CTX: ToolSetContext = {
   workspaceId: "ws-1",
   agentId: "agent-1",
   orgId: "org-1",
-  frontendUrl: undefined,
+  frontendUrl: "http://localhost:3000",
   userId: "user-1",
   timezone: "UTC",
   sessionId: "chat-1",

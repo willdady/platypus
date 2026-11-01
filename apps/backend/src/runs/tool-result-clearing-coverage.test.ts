@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeAll, vi } from "vitest";
 import type { ToolSetContext } from "@platypuschat/plugin-sdk";
-import { CLEARABLE_TOOL_INPUT_FIELDS } from "@platypus/schemas";
+import {
+  CLEARABLE_TOOL_INPUT_FIELDS,
+  DEFAULT_MAX_EXTRACTED_TEXT_CHARS,
+} from "@platypus/schemas";
 import { isClearableToolName } from "./tool-result-clearing.ts";
 import { createWebFetchTools } from "../tools/fetch.ts";
 import { createSandboxTools } from "../sandbox/tools.ts";
@@ -98,7 +101,11 @@ beforeAll(async () => {
     // `sandbox` needs a live Sandbox row to resolve; see the doc comment
     // above. Its real names are added separately below.
     if (registration.id === SANDBOX_TOOLSET_ID) continue;
-    const tools = await registration.buildTurnTools(STUB_CONTEXT);
+    const tools = await registration.buildTurnTools(
+      STUB_CONTEXT,
+      undefined,
+      () => {},
+    );
     Object.keys(tools).forEach((n) => names.add(n));
   }
 
@@ -107,9 +114,14 @@ beforeAll(async () => {
   // With `fsReadBytes`, so the two tools gated on it are enumerated too.
   const stubBackend = { fsReadBytes: () => {} } as unknown as SandboxBackend;
   const stubCtx = {} as unknown as SandboxContext;
-  Object.keys(createSandboxTools(stubBackend, stubCtx)).forEach((n) =>
-    names.add(n),
-  );
+  Object.keys(
+    createSandboxTools(stubBackend, stubCtx, {}, () =>
+      Promise.resolve({
+        passthroughFileTypes: [],
+        maxExtractedTextChars: DEFAULT_MAX_EXTRACTED_TEXT_CHARS,
+      }),
+    ),
+  ).forEach((n) => names.add(n));
 
   // `@platypus/web-fetch` also registers through `getToolSets()` above (it's
   // in `CORE_PLUGIN_NAMES`), so no separate call is needed here — kept as
@@ -180,18 +192,23 @@ const EXPECTED_CLEARABLE: Record<string, boolean> = {
   getTrigger: false,
   deleteTrigger: false,
   getCard: false,
-  upsertCard: false,
+  createCard: false,
+  updateCard: false,
   copyCard: false,
   bulkEditCards: false,
   listComments: false,
-  upsertComment: false,
+  createComment: false,
+  updateComment: false,
   deleteComment: false,
-  upsertBoard: false,
+  createBoard: false,
+  updateBoard: false,
   deleteBoard: false,
-  upsertColumn: false,
+  createColumn: false,
+  updateColumn: false,
   deleteColumn: false,
   reorderColumns: false,
-  upsertTrigger: false,
+  createTrigger: false,
+  updateTrigger: false,
   listAgents: false,
   getAgent: false,
   listModelProviders: false,

@@ -4,7 +4,6 @@ import {
   count,
   eq,
   isNotNull,
-  isNull,
   lt,
   lte,
   not,
@@ -289,23 +288,13 @@ export function stuckPendingTriggerCutoff(): Date {
 /**
  * Periodic recovery for state left behind by a server crash mid-execution.
  *
- * Two failure modes:
- *
- * 1. `TriggerSink.onStart` writes a `trigger_run` row with status `running`.
- *    A crash leaves that row dangling, which clutters the UI and gives no
- *    indication the run failed. Its Run events (#647) dangle with it: whatever
- *    was open when the process died is still `running`, so the sweep closes
- *    them with the run's terminal status — as errors, with no duration, since
- *    nobody saw them end. The detail page renders that as an unknown duration
- *    rather than a bar drawn to "now".
- *
- * 2. A recurring cron Trigger with `nextRunAt = NULL` is invisible to the
- *    scheduler's `nextRunAt <= NOW()`, so it never fires again. The claim now
- *    writes the next schedule rather than NULL, but rows stranded by the old
- *    NULL claim remain, so every enabled recurring cron Trigger with a NULL
- *    `nextRunAt` and no `running` run is put back on its cadence. One with a
- *    `running` run is left alone; it is repaired once that run ends or is
- *    failed below.
+ * `TriggerSink.onStart` writes a `trigger_run` row with status `running`. A
+ * crash leaves that row dangling, which clutters the UI and gives no
+ * indication the run failed. Its Run events (#647) dangle with it: whatever
+ * was open when the process died is still `running`, so the sweep closes them
+ * with the run's terminal status — as errors, with no duration, since nobody
+ * saw them end. The detail page renders that as an unknown duration rather
+ * than a bar drawn to "now".
  *
  * Critical horizontal-scaling note: a `running` row may still be a peer
  * instance's live work — a Trigger run executes in the process that started
@@ -371,39 +360,6 @@ export async function recoverStuckTriggers(): Promise<void> {
     // keeps two sweeps from racing; a late finish on a swept row writes and
     // announces nothing, because the sink's write matches only a live row.
     void announceTriggerRunsEnded(orphaned);
-  }
-
-  const unscheduled = and(
-    eq(triggerTable.type, "cron"),
-    eq(triggerTable.enabled, true),
-    isNull(triggerTable.nextRunAt),
-    not(hasRunningRun),
-  );
-  const stuck = await db.select().from(triggerTable).where(unscheduled);
-
-  for (const job of stuck) {
-    const config = cronConfigOrNull(job);
-    if (!config || config.isOneOff) continue;
-    const nextRunAt = nextCronRunAt(config);
-    if (!nextRunAt) {
-      logger.error(
-        { triggerId: job.id, cronExpression: config.cronExpression },
-        "Failed to recompute nextRunAt during recovery (invalid cron expression?)",
-      );
-      continue;
-    }
-    await db
-      .update(triggerTable)
-      .set({ nextRunAt, updatedAt: new Date() })
-      .where(and(eq(triggerTable.id, job.id), unscheduled));
-    logger.warn(
-      {
-        triggerId: job.id,
-        name: job.name,
-        nextRunAt: nextRunAt.toISOString(),
-      },
-      "Recovered cron trigger with NULL nextRunAt",
-    );
   }
 }
 

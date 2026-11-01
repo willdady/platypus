@@ -34,7 +34,7 @@ import { asToolResult, createBoardReadTools } from "./kanban.ts";
 export function createKanbanBoardTools(
   workspaceId: string,
   orgId: string,
-  frontendUrl: string | undefined,
+  frontendUrl: string,
 ): Record<string, Tool> {
   const scope: KanbanScope = { orgId, workspaceId };
 
@@ -46,7 +46,7 @@ export function createKanbanBoardTools(
       workspaceId,
       `boards/${board.id}`,
     );
-    return { ...board, ...(url && { url }) };
+    return { ...board, url };
   };
 
   const { listBoards, getBoardState } = createBoardReadTools(
@@ -54,59 +54,73 @@ export function createKanbanBoardTools(
     frontendUrl,
   );
 
-  const upsertBoard = tool({
-    description:
-      "Create a new kanban board or update an existing one. If boardId is provided, updates that board; otherwise creates a new board (requires name) with To Do, In Progress and Done columns. Setting labels replaces the board's labels; cards lose any label dropped.",
-    inputSchema: z.object({
-      boardId: z
-        .string()
-        .optional()
-        .describe(
-          "The board ID to update. If not provided, a new board will be created.",
-        ),
-      label: z.string().describe("The board name (for display purposes)"),
-      name: kanbanBoardSchema.shape.name
-        .optional()
-        .describe("The board name (required when creating a new board)"),
-      description: kanbanBoardSchema.shape.description.describe(
-        "The board description, or null to clear it",
+  /** The board fields a write may set, without the create-only `name`. */
+  const boardFields = {
+    description: kanbanBoardSchema.shape.description.describe(
+      "The board description, or null to clear it",
+    ),
+    labels: z
+      .array(
+        kanbanLabelSchema.extend({
+          id: z
+            .string()
+            .optional()
+            .describe(
+              "Keep an existing label's ID to keep it on its cards; omit for a new label",
+            ),
+        }),
+      )
+      .optional()
+      .describe(
+        "The board's full set of labels, replacing the current set. Omit to leave labels unchanged.",
       ),
-      labels: z
-        .array(
-          kanbanLabelSchema.extend({
-            id: z
-              .string()
-              .optional()
-              .describe(
-                "Keep an existing label's ID to keep it on its cards; omit for a new label",
-              ),
+  };
+
+  type BoardLabels = NonNullable<z.infer<typeof boardFields.labels>>;
+
+  /** Board labels as the module stores them: an omitted id becomes a new one. */
+  const withLabelIds = (labels: BoardLabels | undefined) =>
+    labels?.map(({ id = nanoid(), ...l }) => ({ id, ...l }));
+
+  const createBoardTool = tool({
+    description:
+      "Create a kanban board with To Do, In Progress and Done columns. Requires name; every other field is optional.",
+    inputSchema: z.object({
+      label: z.string().describe("The board name (for display purposes)"),
+      name: kanbanBoardSchema.shape.name.describe("The board name"),
+      ...boardFields,
+    }),
+    execute: async ({ name, label: _label, labels, ...fields }) =>
+      asToolResult(async () =>
+        withBoardUrl(
+          await createBoard(db, scope, {
+            ...fields,
+            ...(labels && { labels: withLabelIds(labels) }),
+            name,
           }),
-        )
-        .optional()
-        .describe(
-          "The board's full set of labels, replacing the current set. Omit to leave labels unchanged.",
         ),
+      ),
+  });
+
+  const updateBoardTool = tool({
+    description:
+      "Update a kanban board. Only the fields provided are changed; setting labels replaces the board's labels, and cards lose any label dropped.",
+    inputSchema: z.object({
+      boardId: z.string().describe("The board ID to update"),
+      label: z.string().describe("The board name (for display purposes)"),
+      name: kanbanBoardSchema.shape.name.optional().describe("The new name"),
+      ...boardFields,
     }),
     execute: async ({ boardId, name, label: _label, labels, ...fields }) =>
-      asToolResult(async () => {
-        const input = {
-          ...fields,
-          ...(name !== undefined && { name }),
-          ...(labels && {
-            labels: labels.map(({ id = nanoid(), ...l }) => ({ id, ...l })),
+      asToolResult(async () =>
+        withBoardUrl(
+          await updateBoard(db, scope, boardId, {
+            ...fields,
+            ...(name !== undefined && { name }),
+            ...(labels && { labels: withLabelIds(labels) }),
           }),
-        };
-
-        if (boardId) {
-          return withBoardUrl(await updateBoard(db, scope, boardId, input));
-        }
-
-        if (name === undefined) {
-          return { error: "name is required when creating a new board" };
-        }
-
-        return withBoardUrl(await createBoard(db, scope, { ...input, name }));
-      }),
+        ),
+      ),
   });
 
   const deleteBoardTool = tool({
@@ -136,28 +150,31 @@ export function createKanbanBoardTools(
       }),
   });
 
-  const upsertColumn = tool({
-    description:
-      "Add a column to a kanban board or rename one. If columnId is provided, renames that column; otherwise adds a new column to the end of the board.",
+  const createColumnTool = tool({
+    description: "Add a column to the end of a kanban board.",
     inputSchema: z.object({
       boardId: z.string().describe("The ID of the board the column is on"),
-      columnId: z
-        .string()
-        .optional()
-        .describe(
-          "The column ID to rename. If not provided, a new column will be added.",
-        ),
       label: z.string().describe("The column name (for display purposes)"),
       name: kanbanColumnSchema.shape.name.describe(
         "The column name, unique on its board",
       ),
     }),
-    execute: async ({ boardId, columnId, name }) =>
-      asToolResult(() =>
-        columnId
-          ? renameColumn(db, scope, boardId, columnId, { name })
-          : createColumn(db, scope, boardId, { name }),
+    execute: async ({ boardId, name }) =>
+      asToolResult(() => createColumn(db, scope, boardId, { name })),
+  });
+
+  const updateColumnTool = tool({
+    description: "Rename a column on a kanban board.",
+    inputSchema: z.object({
+      boardId: z.string().describe("The ID of the board the column is on"),
+      columnId: z.string().describe("The column ID to rename"),
+      label: z.string().describe("The column name (for display purposes)"),
+      name: kanbanColumnSchema.shape.name.describe(
+        "The column's new name, unique on its board",
       ),
+    }),
+    execute: async ({ boardId, columnId, name }) =>
+      asToolResult(() => renameColumn(db, scope, boardId, columnId, { name })),
   });
 
   const deleteColumnTool = tool({
@@ -196,9 +213,11 @@ export function createKanbanBoardTools(
   return {
     listBoards,
     getBoardState,
-    upsertBoard,
+    createBoard: createBoardTool,
+    updateBoard: updateBoardTool,
     deleteBoard: deleteBoardTool,
-    upsertColumn,
+    createColumn: createColumnTool,
+    updateColumn: updateColumnTool,
     deleteColumn: deleteColumnTool,
     reorderColumns: reorderColumnsTool,
   };

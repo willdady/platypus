@@ -144,7 +144,7 @@ describe("composeToolSet", () => {
     workspaceId: "ws-1",
     agentId: "agent-1",
     userId: "user-1",
-    frontendUrl: undefined,
+    frontendUrl: "http://localhost:3000",
     timezone: "UTC",
     sessionId: "chat-1",
     registerCloser: () => {},
@@ -179,7 +179,9 @@ describe("composeToolSet", () => {
       throw new Error("no API key");
     });
 
-    await expect(registration.buildTurnTools(ctx)).resolves.toEqual({});
+    await expect(
+      registration.buildTurnTools(ctx, undefined, () => {}),
+    ).resolves.toEqual({});
     expect(logger.warn).toHaveBeenCalledWith(
       expect.objectContaining({ plugin: "acme", toolSet: "acme.widgets" }),
       expect.stringContaining("Tool set factory threw"),
@@ -196,9 +198,9 @@ describe("composeToolSet", () => {
       return { widget: { description: "w" } as unknown as Tool };
     });
 
-    await expect(registration.buildTurnTools(ctx)).resolves.toHaveProperty(
-      "acme__widget",
-    );
+    await expect(
+      registration.buildTurnTools(ctx, undefined, () => {}),
+    ).resolves.toHaveProperty("acme__widget");
     expect(logger.warn).not.toHaveBeenCalled();
   });
 
@@ -207,7 +209,9 @@ describe("composeToolSet", () => {
       () => "oops" as unknown as Record<string, Tool>,
     );
 
-    await expect(registration.buildTurnTools(ctx)).resolves.toEqual({});
+    await expect(
+      registration.buildTurnTools(ctx, undefined, () => {}),
+    ).resolves.toEqual({});
     expect(logger.warn).toHaveBeenCalledWith(
       expect.objectContaining({ plugin: "acme", toolSet: "acme.widgets" }),
       expect.stringContaining("no tool map"),
@@ -266,7 +270,7 @@ describe("composeToolSet", () => {
       now: { execute: () => ({ at: createdAt }) } as unknown as Tool,
     });
 
-    const tools = await registration.buildTurnTools(ctx);
+    const tools = await registration.buildTurnTools(ctx, undefined, () => {});
     const exec = (name: string) =>
       (
         tools[namespaceToolName("acme", name)] as unknown as {
@@ -282,7 +286,11 @@ describe("composeToolSet", () => {
 
   it("leaves a tool with no execute function alone", async () => {
     const bare = { description: "no execute" } as unknown as Tool;
-    const tools = await compose({ bare }).buildTurnTools(ctx);
+    const tools = await compose({ bare }).buildTurnTools(
+      ctx,
+      undefined,
+      () => {},
+    );
     expect(tools.acme__bare).toBe(bare);
   });
 
@@ -300,7 +308,7 @@ describe("composeToolSet", () => {
         description: "Test set",
         tools,
       },
-    }).buildTurnTools(ctx);
+    }).buildTurnTools(ctx, undefined, () => {});
 
     // The registrar the factory meets is core's, re-bound to this Tool set's
     // attribution, so it is matched as any function rather than by identity.
@@ -332,7 +340,7 @@ describe("composeToolSet tool-name namespacing", () => {
     workspaceId: "ws-1",
     agentId: "agent-1",
     userId: "user-1",
-    frontendUrl: undefined,
+    frontendUrl: "http://localhost:3000",
     timezone: "UTC",
     sessionId: "chat-1",
     registerCloser: () => {},
@@ -365,7 +373,7 @@ describe("composeToolSet tool-name namespacing", () => {
     const tools = await compose({
       createIssue: stub("a"),
       listIssues: stub("b"),
-    }).buildTurnTools(ctx);
+    }).buildTurnTools(ctx, undefined, () => {});
 
     expect(Object.keys(tools).sort()).toEqual([
       "acme__createIssue",
@@ -377,7 +385,7 @@ describe("composeToolSet tool-name namespacing", () => {
     const tools = await compose(
       { convertWeight: stub("a") },
       { pluginName: CORE_BUILTIN_OWNER, isCore: true },
-    ).buildTurnTools(ctx);
+    ).buildTurnTools(ctx, undefined, () => {});
 
     expect(Object.keys(tools)).toEqual(["convertWeight"]);
   });
@@ -385,7 +393,11 @@ describe("composeToolSet tool-name namespacing", () => {
   it("namespaces on every turn, whether or not anything collides", async () => {
     // Nothing claimed, nothing contested — the name still changes, so it never
     // depends on the order an Agent's Tool sets happen to sit in.
-    const tools = await compose({ createIssue: stub("a") }).buildTurnTools(ctx);
+    const tools = await compose({ createIssue: stub("a") }).buildTurnTools(
+      ctx,
+      undefined,
+      () => {},
+    );
     expect(tools).toHaveProperty("acme__createIssue");
     expect(logger.warn).not.toHaveBeenCalled();
   });
@@ -393,7 +405,7 @@ describe("composeToolSet tool-name namespacing", () => {
   it("keeps a Tool set's own web_search rather than losing it to core's", async () => {
     const tools = await compose({
       [WEB_SEARCH_TOOL_NAME]: stub("the plugin's own search"),
-    }).buildTurnTools(ctx);
+    }).buildTurnTools(ctx, undefined, () => {});
 
     // What the Web-search stage would later assign is `web_search`; this is not
     // it, so the plain assignment has nothing of the Tool set's to overwrite.
@@ -403,17 +415,21 @@ describe("composeToolSet tool-name namespacing", () => {
   it("prefixes a name that already contains the separator, rather than stripping it", async () => {
     const tools = await compose({
       github__pull: stub("a"),
-    }).buildTurnTools(ctx);
+    }).buildTurnTools(ctx, undefined, () => {});
 
     expect(Object.keys(tools)).toEqual(["acme__github__pull"]);
   });
 
   it("gives two plugins contributing one tool name distinct names, dropping neither", async () => {
-    const first = await compose({ createIssue: stub("a") }).buildTurnTools(ctx);
+    const first = await compose({ createIssue: stub("a") }).buildTurnTools(
+      ctx,
+      undefined,
+      () => {},
+    );
     const second = await compose(
       { createIssue: stub("b") },
       { pluginName: "globex" },
-    ).buildTurnTools(ctx);
+    ).buildTurnTools(ctx, undefined, () => {});
 
     expect(Object.keys(first)).toEqual(["acme__createIssue"]);
     expect(Object.keys(second)).toEqual(["globex__createIssue"]);
@@ -447,7 +463,7 @@ describe("composeToolSet tool-name namespacing", () => {
       const tools = await compose(() => ({
         [overCap]: stub("a"),
         createIssue: stub("b"),
-      })).buildTurnTools(ctx);
+      })).buildTurnTools(ctx, undefined, () => {});
 
       // Never truncated to fit: two long names from one set could truncate onto
       // each other and reintroduce the collision invisibly.
@@ -468,7 +484,7 @@ describe("composeToolSet tool-name namespacing", () => {
       const tools = await compose(
         { [overCap]: stub("a") },
         { pluginName: CORE_BUILTIN_OWNER, isCore: true },
-      ).buildTurnTools(ctx);
+      ).buildTurnTools(ctx, undefined, () => {});
       expect(Object.keys(tools)).toEqual([overCap]);
     });
   });
@@ -495,7 +511,7 @@ describe("composeToolSet tool-name namespacing", () => {
     it("reports a factory-resolved one without claiming the cap was the reason", async () => {
       const tools = await compose(() => ({
         "has.a.dot": stub("a"),
-      })).buildTurnTools(ctx);
+      })).buildTurnTools(ctx, undefined, () => {});
 
       expect(tools).toEqual({});
       expect(logger.warn).toHaveBeenCalledWith(
@@ -558,15 +574,15 @@ describe("composeToolSet tool-name namespacing", () => {
           isCore: true,
         },
       );
-      await expect(registration.buildTurnTools(ctx)).resolves.toHaveProperty(
-        LOAD_SKILL_TOOL_NAME,
-      );
+      await expect(
+        registration.buildTurnTools(ctx, undefined, () => {}),
+      ).resolves.toHaveProperty(LOAD_SKILL_TOOL_NAME);
     });
 
     it("lets a third-party Tool set declare one, because it can no longer produce it bare", async () => {
       const tools = await compose({
         [LOAD_SKILL_TOOL_NAME]: stub("a"),
-      }).buildTurnTools(ctx);
+      }).buildTurnTools(ctx, undefined, () => {});
       expect(Object.keys(tools)).toEqual([`acme__${LOAD_SKILL_TOOL_NAME}`]);
     });
   });
@@ -581,7 +597,7 @@ describe("the sandbox tool set", () => {
     workspaceId: "ws-1",
     agentId: "agent-1",
     userId: "user-1",
-    frontendUrl: undefined,
+    frontendUrl: "http://localhost:3000",
     timezone: "UTC",
     sessionId: "chat-1",
     registerCloser: () => {},
@@ -600,7 +616,8 @@ describe("the sandbox tool set", () => {
     ...over,
   });
 
-  const build = () => getToolSet(SANDBOX_TOOLSET_ID)!.buildTurnTools(turn);
+  const build = () =>
+    getToolSet(SANDBOX_TOOLSET_ID)!.buildTurnTools(turn, undefined, () => {});
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -676,10 +693,14 @@ describe("the sandbox tool set", () => {
     } as unknown as SandboxBackend);
     const closers: (() => Promise<void> | void)[] = [];
 
-    await getToolSet(SANDBOX_TOOLSET_ID)!.buildTurnTools({
-      ...turn,
-      registerCloser: (fn) => closers.push(fn),
-    });
+    await getToolSet(SANDBOX_TOOLSET_ID)!.buildTurnTools(
+      {
+        ...turn,
+        registerCloser: (fn) => closers.push(fn),
+      },
+      undefined,
+      () => {},
+    );
     expect(close).not.toHaveBeenCalled();
 
     for (const fn of closers) await fn();

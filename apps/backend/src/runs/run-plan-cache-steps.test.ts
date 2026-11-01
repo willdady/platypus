@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { ModelMessage } from "ai";
+import { createOverflowRecovery } from "./context-overflow-recovery.ts";
 import { buildModelInvocation, type RunPlan } from "./run-plan.ts";
 
 /**
@@ -25,6 +26,7 @@ const plan = (): RunPlan => ({
 const invocation = () =>
   buildModelInvocation(plan(), {
     abortSignal: new AbortController().signal,
+    overflowRecovery: createOverflowRecovery(),
   }) as unknown as {
     prepareStep: (args: {
       steps: unknown[];

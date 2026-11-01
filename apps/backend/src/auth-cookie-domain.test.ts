@@ -274,30 +274,46 @@ describe("resolveAuthCookieDomain", () => {
     expect(resolveAuthCookieDomain()).toBe("example.com");
   });
 
-  it("reports a topology that cannot authenticate SSR requests, and starts anyway", () => {
+  /**
+   * Runs `resolveAuthCookieDomain` with `process.exit` captured, so the fatal
+   * path can be asserted without ending the test process.
+   */
+  const refuseToStart = (): { message: string } => {
+    const exit = vi
+      .spyOn(process, "exit")
+      .mockImplementation((code?: string | number | null): never => {
+        throw new Error(`process.exit(${code})`);
+      });
+    const fatal = vi.spyOn(logger, "fatal").mockImplementation(() => {});
+
+    expect(() => resolveAuthCookieDomain()).toThrow("process.exit(1)");
+    expect(exit).toHaveBeenCalledWith(1);
+
+    const [, message] = fatal.mock.calls[0] as [unknown, string];
+    exit.mockRestore();
+    fatal.mockRestore();
+    return { message };
+  };
+
+  it("refuses to start on a topology that cannot authenticate SSR requests", () => {
     process.env.BETTER_AUTH_URL = "https://api.example.com";
     process.env.FRONTEND_URL = "https://app.other.com";
     process.env.AUTH_COOKIE_DOMAIN = "example.com";
-    const error = vi.spyOn(logger, "error").mockImplementation(() => {});
 
-    // Startup continues: an upgrade onto an unsupported topology degrades the
-    // way it did before this check existed, rather than failing to boot.
-    expect(resolveAuthCookieDomain()).toBeUndefined();
+    const { message } = refuseToStart();
 
-    const [message] = error.mock.calls[0] as [string];
     expect(message).toContain("AUTH_COOKIE_DOMAIN");
     expect(message).toContain("api.example.com");
     expect(message).toContain("app.other.com");
-    error.mockRestore();
   });
 
-  it("drops an unusable cookie domain rather than scoping cookies to it", () => {
+  it("refuses to start on an unusable AUTH_COOKIE_DOMAIN rather than dropping it", () => {
     process.env.BETTER_AUTH_URL = "https://api.example.com";
     process.env.FRONTEND_URL = "https://app.example.com";
     process.env.AUTH_COOKIE_DOMAIN = "https://example.com";
-    const error = vi.spyOn(logger, "error").mockImplementation(() => {});
 
-    expect(resolveAuthCookieDomain()).toBeUndefined();
-    error.mockRestore();
+    const { message } = refuseToStart();
+
+    expect(message).toContain("AUTH_COOKIE_DOMAIN");
   });
 });
