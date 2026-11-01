@@ -1,5 +1,49 @@
 # Changelog
 
+## [4.0.0](https://github.com/willdady/platypus/compare/v3.30.0...v4.0.0) (2026-11-01)
+
+
+### ⚠ BREAKING CHANGES
+
+* **backend:** Clients, scripts and integrations must remove unknown fields from requests, send Chat turns to POST …/chat/:chatId/turns with a trigger and no id/workspaceId/messages, stop sending organizationId or workspaceId on Agent/Skill/MCP/Provider creates, send modelIds as objects rather than bare strings, use PATCH for Chat/Trigger/Kanban card and comment/Webhook/A2A endpoint updates, send a workspaces array when removing a member, use POST …/mcps/:mcpId/test for a stored MCP test, address attachment writes through the Workspace route, and send searchSource and apiMode on Provider writes. A deployment whose provider.modelIds still holds strings or unresolved objects fails migration 0101 until migrations 0047 and 0091 have been applied.
+* **backend:** The upgrade backfills and then constrains existing data, so restoring the previous image tag does not undo it; take a database backup first. A Trigger whose stored config cannot be repaired stops the migration and names its id. `invitation.token`, `chat.run_heartbeat_at`, `chat.tags`, the Agent id arrays, `workspace.max_daily_summaries` and `user.banned` are now NOT NULL, and the database rejects a Provider, Agent, MCP or Skill holding both or neither scope, and any value outside the Chat status, Trigger type, Trigger run status/event type, Organization gate or member role sets.
+* **backend:** Provider, MCP, Agent and Skill responses now always include `scope` (Organization rows included), Provider/MCP write routes return the read shape rather than the raw row, `apiKeySet`/`headersSet`/`bearerTokenSet` are always present, and `oauthClientSecret` is never returned.
+* **plugin-sdk:** Plugin API v4 drops v2, so a third-party Plugin declaring `apiVersion: 2` is refused at boot and must move to the SDK's v4 types; `ToolSetContext.timezone`, `ToolSetContext.sessionId` and `ToolSetContribution.description` are required (the first two were always supplied, and every core Tool set already had a description), and `@platypuschat/plugin-sdk` major-bumps to 3.0.0.
+* **backend:** The Kanban Cards, Kanban Boards and Triggers Tool sets no longer expose `upsertCard`, `upsertComment`, `upsertBoard`, `upsertColumn` or `upsertTrigger`; they expose `createCard`/`updateCard`, `createComment`/`updateComment`, `createBoard`/`updateBoard`, `createColumn`/`updateColumn` and `createTrigger`/`updateTrigger` instead, so an Agent or Skill whose instructions name an old tool must be rewritten. An MCP server authorized before Platypus recorded its OAuth authorization server can no longer refresh and must be signed in to again.
+* **backend:** A deployment must now set DATABASE_URL, BETTER_AUTH_URL and FRONTEND_URL, or the backend refuses to boot naming the missing variable; there is no fallback to node-postgres' PG* variables or to localhost. REQUIRE_INVITATION_TO_SIGN_UP now defaults to true, so a fresh deployment admits accounts only by Invitation unless the Operator sets it to false. With NODE_ENV=production first boot refuses the well-known admin@example.com / admin123 pair, and the shipped Compose .example.env leaves ADMIN_PASSWORD empty. An unsupported auth cookie topology, including a malformed AUTH_COOKIE_DOMAIN, is now a startup failure rather than a logged warning. The Plugin SDK's ToolSetContext.frontendUrl is typed string, so plugin authors can drop their undefined checks.
+* Dashboards, widgets and the Dashboards Tool set are removed. Upgrading deletes every Dashboard and its widgets, with no export, and removes the listDashboards, listWidgets and updateWidgetData tools from every Agent. Rewrite Agent or Skill instructions that call them, and use a purpose-built dashboard tool such as Grafana or Metabase instead.
+* compose.sandbox.yaml is renamed to compose.docker-sandbox.yaml, and the overlay now appends @platypus/docker to PLATYPUS_PLUGINS from .env instead of replacing the list. Change -f compose.sandbox.yaml to -f compose.docker-sandbox.yaml in commands, scripts and systemd units, remove @platypus/docker from PLATYPUS_PLUGINS in .env (boot fails on a Plugin listed twice), and move any Plugins you added inside the old overlay into .env.
+* **backend:** PLATYPUS_PLUGIN_CONFIG is removed, and the backend refuses to start while it is set. Move each key of its JSON object into its own PLATYPUS_PLUGIN_CONFIG_<NAME> variable (the Plugin name without @platypus/, uppercased, with - as _, e.g. PLATYPUS_PLUGIN_CONFIG_DOCKER) holding that key's value, then unset PLATYPUS_PLUGIN_CONFIG.
+
+### Features
+
+* **backend:** answer when an Agent turn hits the Step ceiling ([#1789](https://github.com/willdady/platypus/issues/1789)) ([bc7261c](https://github.com/willdady/platypus/commit/bc7261c086a28cc89fce372c2606b9d5cdcadabc)), closes [#1730](https://github.com/willdady/platypus/issues/1730)
+* **backend:** clear tool results in batches so the cached prompt prefix survives ([#1790](https://github.com/willdady/platypus/issues/1790)) ([716734f](https://github.com/willdady/platypus/commit/716734f32b0997e8667b801c3a7d3017bab7da73)), closes [#1731](https://github.com/willdady/platypus/issues/1731)
+* **backend:** enforce schema nullability, enums and scope in the database ([#1787](https://github.com/willdady/platypus/issues/1787)) ([9b34d0e](https://github.com/willdady/platypus/commit/9b34d0e8066c2ed36fb08d58befa4cc2612631c3)), closes [#1770](https://github.com/willdady/platypus/issues/1770)
+* **backend:** make scoped response contracts explicit ([#1786](https://github.com/willdady/platypus/issues/1786)) ([198ac01](https://github.com/willdady/platypus/commit/198ac01e6f6626c42d0633e28dfc0ca4dad56fc1)), closes [#1767](https://github.com/willdady/platypus/issues/1767)
+* **backend:** remove run-time and tool compatibility debt ([#1784](https://github.com/willdady/platypus/issues/1784)) ([3c4cac8](https://github.com/willdady/platypus/commit/3c4cac8afac13dc8893de6166bc30afd4e0aef79)), closes [#1777](https://github.com/willdady/platypus/issues/1777)
+* **backend:** remove the combined PLATYPUS_PLUGIN_CONFIG variable ([#1760](https://github.com/willdady/platypus/issues/1760)) ([27cbf31](https://github.com/willdady/platypus/commit/27cbf310e07f0f147b0991450a4471713b59bfd6))
+* **backend:** require deployment URLs and close first-boot defaults ([#1783](https://github.com/willdady/platypus/issues/1783)) ([dea77b7](https://github.com/willdady/platypus/commit/dea77b755a8d657b4a75f4f1ad0fa58c774df6af)), closes [#1761](https://github.com/willdady/platypus/issues/1761)
+* **backend:** substitute ${SESSION_ID} in Provider header values ([#1757](https://github.com/willdady/platypus/issues/1757)) ([244220a](https://github.com/willdady/platypus/commit/244220a516ff9e1d72e9a2cea1a381c93a7be38f))
+* **backend:** unify and tighten the HTTP request contract ([#1788](https://github.com/willdady/platypus/issues/1788)) ([a82b427](https://github.com/willdady/platypus/commit/a82b4274dd3e4d3fdc1998cbe52f5c49c6d6e42c)), closes [#1763](https://github.com/willdady/platypus/issues/1763)
+* **frontend:** show the sidebar only on Workspace home and Chat ([#1792](https://github.com/willdady/platypus/issues/1792)) ([32c82b8](https://github.com/willdady/platypus/commit/32c82b817c833d05ab0374e35a080c2afcd0d4dd))
+* **plugin-sdk:** require the members core supplies and type plugin config ([#1785](https://github.com/willdady/platypus/issues/1785)) ([e87a7f9](https://github.com/willdady/platypus/commit/e87a7f98e970f10101cab6980c210ffed1a2b0bf)), closes [#1774](https://github.com/willdady/platypus/issues/1774)
+* remove Dashboards and widgets ([#1758](https://github.com/willdady/platypus/issues/1758)) ([76a49ca](https://github.com/willdady/platypus/commit/76a49ca08da93e8462fdcfacad5d25fdcbf385da))
+
+
+### Bug Fixes
+
+* **backend:** name the row an upgrade migration refuses ([#1797](https://github.com/willdady/platypus/issues/1797)) ([ee47f17](https://github.com/willdady/platypus/commit/ee47f17220e7fdb6a4568d01286bc2c82e1180c9))
+* **docs:** correct administering against the current product ([#1796](https://github.com/willdady/platypus/issues/1796)) ([7815487](https://github.com/willdady/platypus/commit/7815487a52e895281d48a0f7daa1ef893a87bea7))
+* **docs:** correct building-with-platypus against the current product ([#1793](https://github.com/willdady/platypus/issues/1793)) ([a57ecdd](https://github.com/willdady/platypus/commit/a57ecddacec1d9ceda5e25ab8a011e9682eac4e3))
+* **docs:** correct concepts against the current product ([#1795](https://github.com/willdady/platypus/issues/1795)) ([d20a27f](https://github.com/willdady/platypus/commit/d20a27f7070742e99ac2dc5df463bdd890546f3a))
+* **frontend:** space sidebarless Workspace screens below the header ([#1794](https://github.com/willdady/platypus/issues/1794)) ([00a865d](https://github.com/willdady/platypus/commit/00a865dc5b4693e91038d348e73a79de6121408b))
+
+
+### Miscellaneous Chores
+
+* rename compose.sandbox.yaml to compose.docker-sandbox.yaml ([#1759](https://github.com/willdady/platypus/issues/1759)) ([e4a14df](https://github.com/willdady/platypus/commit/e4a14df9f38da9334b67ad40602cb8cc380d257c))
+
 ## [3.30.0](https://github.com/willdady/platypus/compare/v3.29.0...v3.30.0) (2026-10-31)
 
 
