@@ -42,7 +42,7 @@ dropdowns](/administering/workspaces#the-three-provider-dropdowns).
 
 ### What the model sees
 
-Once Memory is on, the summaries from the past **2 days** are injected into
+Once Memory is on, today's summary and those from the previous **2 days** are injected into
 **every** Chat turn in that Workspace, for every Agent, whether or not the Agent
 has the **Memory** Tool set. It is not opt-in per Agent and there is no way to
 exclude one Agent from it. The one exception is an
@@ -85,7 +85,9 @@ run](/building-with-platypus/triggers#memories-in-a-run).
 ### What Memory is built from
 
 Memory is extracted from the text of your Chats, and only that. Attached files,
-tool results and Trigger runs are never remembered. Of a message's
+tool results and Trigger runs are never remembered. An
+[A2A](/building-with-platypus/a2a-endpoints#memories) Chat is read only when its
+endpoint has **Extract Memories** on. Of a message's
 Alternatives, only the one on screen is read — but anything extracted before
 you switched away from it stays remembered.
 
@@ -93,10 +95,11 @@ you switched away from it stays remembered.
   There is no screen for viewing, editing, or deleting Memories, and deleting a
   Chat does not remove what was already extracted from it. Asking the assistant
   to forget something only changes today's summary. Short of deleting the
-  Workspace, the only thing that deletes summaries is the Workspace's [Memory
-  Summary Retention](/administering/workspaces#memory-summary-retention), which
-  keeps only the newest daily summaries. Treat anything you say in a Workspace
-  with Memory on as something it may keep.
+  Workspace, or transferring it with **Keep history** off, the only thing that
+  deletes summaries is the Workspace's [Memory Summary
+  Retention](/administering/workspaces#memory-summary-retention), which keeps
+  only the newest daily summaries. Treat anything you say in a Workspace with
+  Memory on as something it may keep.
 </Callout>
 
 ## Context

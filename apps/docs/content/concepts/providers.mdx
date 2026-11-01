@@ -51,8 +51,9 @@ A Provider lives at one of two levels:
 
 Stored credentials — the API key and any custom headers — are readable only by
 someone who can manage the Provider. Everyone else still sees the Provider and
-can select its models; the credential fields come back empty, flagged only as
-set or unset.
+can select its models, but opens it read-only with **API Key** and **Headers**
+empty. A Shared Provider's credentials are hidden inside every Workspace, Org
+Admins included; an Org Admin reads them from the Organization.
 
 **Why this matters to you:** the models you can pick on a Chat or an Agent come
 from the Providers available in your Workspace. If a model you expect isn't
@@ -96,6 +97,12 @@ conversation to the model it started on.
   each name a real model id, and they don't resolve aliases: typing `flagship`
   there saves, is sent to the vendor as if it were a model id, and the job
   fails.
+</Callout>
+
+<Callout type="warning">
+  Changing a Provider's **Embedding Model ID** or **Embedding Dimensions**
+  invalidates the memory embeddings of every Workspace using it. Semantic memory
+  search is unavailable there until summaries are re-embedded.
 </Callout>
 
 Once a model has an alias, the picker offers the alias and not the underlying
@@ -143,8 +150,8 @@ File part follows from that:
 **Why this matters to you:** attaching a PDF to a small self-hosted model still
 works, but the model is reading a text rendering of it, not the document. The
 Chat warns you when the model you've selected can't read a File part natively,
-and refuses up front rather than failing mid-turn. Org Admins configure the
-per-model types — see [Self-Hosting → Providers &
+and refuses up front rather than failing mid-turn. Whoever manages the Provider
+sets the per-model types — see [Self-Hosting → Providers &
 authentication](/self-hosting/providers-and-auth).
 
 ## Web search
