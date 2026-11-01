@@ -8,7 +8,8 @@ import {
 } from "../test-utils.ts";
 
 const { mockValidateCronExpression } = vi.hoisted(() => ({
-  mockValidateCronExpression: vi.fn(),
+  mockValidateCronExpression:
+    vi.fn<(cronExpression: string, timezone: string) => Date | null>(),
 }));
 
 vi.mock("../utils/cron.ts", () => ({
