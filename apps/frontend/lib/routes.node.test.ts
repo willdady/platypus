@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import {
   appRoutes,
   invitationLink,
+  isWorkspaceSidebarRoute,
   orgRoutes,
   signInDestination,
   signInReturningTo,
@@ -305,5 +306,27 @@ describe("sign-in next", () => {
     "http://[",
   ])("goes home for %j", (next) => {
     expect(signInDestination(`?next=${encodeURIComponent(next)}`)).toBe("/");
+  });
+});
+
+// Must agree with the `(sidebar)` / `(plain)` route groups under a Workspace.
+describe("isWorkspaceSidebarRoute", () => {
+  const routes = workspaceRoutes("org1", "ws1");
+
+  it.each([routes.root, routes.chat.root, routes.chat.detail("c1")])(
+    "draws the sidebar on %s",
+    (pathname) => {
+      expect(isWorkspaceSidebarRoute(pathname)).toBe(true);
+    },
+  );
+
+  it.each([
+    routes.agents.create,
+    routes.boards.settings("b1"),
+    `${routes.triggers.detail("t1")}/runs`,
+    routes.settings.mcp,
+    "/org1",
+  ])("draws no sidebar on %s", (pathname) => {
+    expect(isWorkspaceSidebarRoute(pathname)).toBe(false);
   });
 });

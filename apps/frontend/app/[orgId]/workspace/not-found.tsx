@@ -1,15 +1,18 @@
+"use client";
+
+import { useParams } from "next/navigation";
 import { WorkspaceNotFound } from "@/components/workspace-not-found";
-import { MAIN_CONTENT_ID } from "@/components/skip-link";
-import { SidebarInset } from "@/components/ui/sidebar";
+import { WorkspaceShell } from "@/components/workspace-shell";
 
 /**
- * A missing Workspace: the Workspace layout's read came back 404. Renders
- * beside the sidebar, so the way to another Workspace stays in reach.
+ * A missing Workspace: the Workspace layout's read came back 404. Renders in
+ * the plain shell, whose header leads to the Organization home.
  */
 export default function NotFound() {
+  const { orgId } = useParams<{ orgId: string }>();
   return (
-    <SidebarInset id={MAIN_CONTENT_ID} className="min-w-0">
+    <WorkspaceShell orgId={orgId}>
       <WorkspaceNotFound />
-    </SidebarInset>
+    </WorkspaceShell>
   );
 }

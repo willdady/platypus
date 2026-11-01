@@ -4,7 +4,11 @@ import { BackButton } from "@/components/back-button";
 export type ResourcePageVariant = "bare" | "narrow" | "stacked" | "wide";
 
 export type ResourcePageProps = {
-  backFallbackHref: string;
+  /**
+   * Draws a labelled Back above the title, landing here when there is no
+   * history. Omitted inside a Workspace, whose header already holds the Back.
+   */
+  backFallbackHref?: string;
   title: string;
   children: ReactNode;
   variant?: ResourcePageVariant;
@@ -54,7 +58,9 @@ export function ResourcePage({
 
   const inner = (
     <div className={layout.inner}>
-      <BackButton fallbackHref={backFallbackHref} className={layout.back} />
+      {backFallbackHref && (
+        <BackButton fallbackHref={backFallbackHref} className={layout.back} />
+      )}
       {actions ? (
         <div className="flex items-start justify-between gap-4">
           {heading}
