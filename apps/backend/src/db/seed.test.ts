@@ -166,6 +166,42 @@ describe("seedFirstBoot", () => {
     expect(fake.tables.organization).toHaveLength(0);
   });
 
+  // The pair every deployment guide used to ship. A production deployment that
+  // never changed it is the one an attacker tries first, so it must not boot.
+  it("refuses the well-known admin credentials in production", async () => {
+    const fake = createFakeDb();
+    const createUser = createUserApi(fake.tables);
+
+    const error = await seedFirstBoot(asSeedDb(fake), {
+      createUser,
+      env: {
+        ADMIN_EMAIL: "admin@example.com",
+        ADMIN_PASSWORD: "admin123",
+        NODE_ENV: "production",
+      },
+    }).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(NonRetryableSeedError);
+    expect((error as Error).message).toMatch(/ADMIN_EMAIL \/ ADMIN_PASSWORD/);
+    expect(createUser).not.toHaveBeenCalled();
+    expect(fake.tables.organization).toHaveLength(0);
+  });
+
+  it("keeps the development flow working with those credentials outside production", async () => {
+    const fake = createFakeDb();
+
+    const result = await seedFirstBoot(asSeedDb(fake), {
+      createUser: createUserApi(fake.tables),
+      env: {
+        ADMIN_EMAIL: "admin@example.com",
+        ADMIN_PASSWORD: "admin123",
+        NODE_ENV: "development",
+      },
+    });
+
+    expect(result.seeded).toBe(true);
+  });
+
   it("leaves no organization behind when a write after the organization insert fails", async () => {
     const fake = createFakeDb({
       onInsert: (table) => {

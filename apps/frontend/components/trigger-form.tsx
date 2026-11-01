@@ -54,6 +54,7 @@ import {
 } from "@platypus/schemas";
 import {
   gateAdmits,
+  triggerTypeSchema,
   TRIGGER_INSTRUCTION_MAX_LENGTH,
   TRIGGER_MAX_RUNS_TO_KEEP_MAX,
   TRIGGER_MAX_RUNS_TO_KEEP_MIN,
@@ -347,7 +348,10 @@ function TriggerForm({
             <FieldLabel htmlFor="trigger-type">Trigger Type</FieldLabel>
             <Select
               value={triggerType}
-              onValueChange={(value) => setTriggerType(value as TriggerType)}
+              onValueChange={(value) => {
+                const parsed = triggerTypeSchema.safeParse(value);
+                if (parsed.success) setTriggerType(parsed.data);
+              }}
               disabled={isSubmitting || !!triggerId}
             >
               <SelectTrigger

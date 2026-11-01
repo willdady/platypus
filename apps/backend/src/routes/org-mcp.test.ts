@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
+  insertTimestamps,
   mockSession,
   resetMockDb,
   seedDb,
@@ -54,6 +55,8 @@ describe("Organization MCP Routes", () => {
     oauthClientSecret: "client-secret",
     organizationId: orgId,
     workspaceId: null,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    updatedAt: new Date("2026-01-01T00:00:00.000Z"),
     ...over,
   });
 
@@ -83,7 +86,10 @@ describe("Organization MCP Routes", () => {
         ],
         ...rows,
       },
-      { unique: { mcp: [uniqueNameOrg] } },
+      {
+        unique: { mcp: [uniqueNameOrg] },
+        defaults: { mcp: insertTimestamps() },
+      },
     );
 
   const uniqueNameOrg = {
@@ -116,6 +122,8 @@ describe("Organization MCP Routes", () => {
         organizationId: orgId,
         workspaceId: null,
         authType: "None",
+        scope: "organization",
+        bearerTokenSet: { configured: false },
       });
       expect(fake.tables.mcp).toHaveLength(4);
     });
@@ -175,6 +183,9 @@ describe("Organization MCP Routes", () => {
 
       expect(status).toBe(200);
       expect(results.map((r) => r.id)).toEqual(["mcp-1"]);
+      expect(results).toEqual([
+        expect.objectContaining({ scope: "organization" }),
+      ]);
     });
 
     it("redacts request credentials and never returns OAuth tokens to a member", async () => {
@@ -251,7 +262,12 @@ describe("Organization MCP Routes", () => {
 
       expect(res.status).toBe(200);
       const body = (await res.json()) as Row;
-      expect(body).toMatchObject({ id: "mcp-1", name: "Renamed MCP" });
+      expect(body).toMatchObject({
+        id: "mcp-1",
+        name: "Renamed MCP",
+        scope: "organization",
+        bearerTokenSet: { configured: true },
+      });
       expect(body).not.toHaveProperty("oauthAccessToken");
       expect(namesOf(fake)).toEqual(["Renamed MCP", "Org MCP", "Org MCP"]);
     });

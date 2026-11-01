@@ -38,8 +38,8 @@ export const plugin: PlatypusPlugin = {
         category: "Utilities",
         description:
           "Tools for getting current time and converting between timezones",
-        // Core always fills `timezone`; it is optional only in the SDK type
-        tools: ({ timezone = "UTC" }) => createTimeTools(timezone),
+        // Core always fills `timezone` (required as of API v4)
+        tools: ({ timezone }) => createTimeTools(timezone),
       },
       {
         id: "identifiers",

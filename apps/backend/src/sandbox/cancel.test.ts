@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { DEFAULT_MAX_EXTRACTED_TEXT_CHARS } from "@platypus/schemas";
 import type { LanguageModelV3StreamPart } from "@ai-sdk/provider";
 import { simulateReadableStream } from "ai";
 import { MockLanguageModelV3 } from "ai/test";
@@ -109,7 +110,12 @@ const driveAgainst = (
   const drive = driveDelegate({
     plan: {
       model: shellExecModel(),
-      tools: createSandboxTools(backend, ctx),
+      tools: createSandboxTools(backend, ctx, {}, () =>
+        Promise.resolve({
+          passthroughFileTypes: [],
+          maxExtractedTextChars: DEFAULT_MAX_EXTRACTED_TEXT_CHARS,
+        }),
+      ),
       maxSteps: 3,
     },
     run,

@@ -1,7 +1,6 @@
 import { count, eq } from "drizzle-orm";
 import {
   gateAdmits,
-  type OrgGate,
   type OrgGateAccess,
   type OrgGateAccessUpdate,
 } from "@platypus/schemas";
@@ -58,5 +57,5 @@ export const skillImportAllowed = async (
     )
     .where(eq(workspaceTable.id, workspaceId))
     .limit(1);
-  return !!row && gateAdmits(row.gate as OrgGate, row.allowed);
+  return !!row && gateAdmits(row.gate, row.allowed);
 };

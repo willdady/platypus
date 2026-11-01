@@ -97,7 +97,11 @@ describe("Organization Agent Routes", () => {
       // and `foreign` is another Organization's.
       expect(await res.json()).toEqual({
         results: [
-          expect.objectContaining({ id: "agent-1", name: "Shared Agent" }),
+          expect.objectContaining({
+            id: "agent-1",
+            name: "Shared Agent",
+            scope: "organization",
+          }),
         ],
       });
     });
@@ -111,7 +115,11 @@ describe("Organization Agent Routes", () => {
       const res = await app.request(`${baseUrl}/agent-1`);
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual(
-        expect.objectContaining({ id: "agent-1", organizationId: orgId }),
+        expect.objectContaining({
+          id: "agent-1",
+          organizationId: orgId,
+          scope: "organization",
+        }),
       );
     });
 

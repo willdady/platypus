@@ -20,25 +20,19 @@ describe("Authentication Middleware", () => {
     expect(await res.json()).toEqual({ error: "Unauthorized" });
   });
 
-  it("should set user and session in context if session is found", async () => {
+  it("should set the session user in context if a session is found", async () => {
     const sessionData = {
       user: { id: "u1", email: "test@example.com" },
       session: { id: "s1" },
     };
     mockAuth.api.getSession.mockResolvedValue(sessionData);
 
-    const app = new Hono<{
-      Variables: { user: unknown; session: unknown };
-    }>();
+    const app = new Hono<{ Variables: { user: unknown } }>();
     app.use("*", requireAuth);
-    app.get("/test", (c) => {
-      const user = c.get("user");
-      const session = c.get("session");
-      return c.json({ user, session });
-    });
+    app.get("/test", (c) => c.json({ user: c.get("user") }));
 
     const res = await app.request("/test");
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual(sessionData);
+    expect(await res.json()).toEqual({ user: sessionData.user });
   });
 });

@@ -1,7 +1,13 @@
 import { Hono } from "hono";
 import { validate } from "../validate.ts";
 import { db } from "../index.ts";
-import { providerCreateSchema, providerUpdateSchema } from "@platypus/schemas";
+import {
+  providerCreateSchema,
+  providerListResponseSchema,
+  providerResponseSchema,
+  providerUpdateResponseSchema,
+  providerUpdateSchema,
+} from "@platypus/schemas";
 import { requireAuth } from "../middleware/authentication.ts";
 import {
   orgCredentialsVisible,
@@ -18,6 +24,7 @@ import {
   deleteProvider,
   updateProvider,
 } from "../services/provider-write.ts";
+import { respond } from "../respond.ts";
 import type { Variables } from "../server.ts";
 
 const orgProvider = new Hono<{ Variables: Variables }>();
@@ -32,8 +39,13 @@ orgProvider.post(
     const { orgId } = orgScopeOf(c);
     const data = c.req.valid("json");
 
-    const row = await createProvider({ kind: "organization", orgId }, data);
-    return c.json(row, 201);
+    const row = await createProvider({ kind: "organization", orgId }, data, db);
+    return respond(
+      c,
+      providerResponseSchema,
+      providerReadModel(row, { reveal: true, scope: "organization" }),
+      201,
+    );
   },
 );
 
@@ -45,9 +57,13 @@ orgProvider.get("/", requireAuth, requireOrgAccess(), async (c) => {
   // This route admits any Organization member — a Shared Provider has to be
   // listable to be selected. Only an Org Admin sees its credentials (ADR-0006).
   const reveal = orgCredentialsVisible(c);
-  const results = rows.map((row) => providerReadModel(row, { reveal }));
+  // Every row here is Organization-scoped by construction; the response still
+  // says so rather than leaving the caller to infer it from the endpoint.
+  const results = rows.map((row) =>
+    providerReadModel(row, { reveal, scope: "organization" }),
+  );
 
-  return c.json({ results });
+  return respond(c, providerListResponseSchema, { results });
 });
 
 /** Get an organization provider by ID */
@@ -59,7 +75,11 @@ orgProvider.get("/:providerId", requireAuth, requireOrgAccess(), async (c) => {
 
   // See the list route: credentials are Org-Admin-only (ADR-0006).
   const reveal = orgCredentialsVisible(c);
-  return c.json(providerReadModel(record, { reveal }));
+  return respond(
+    c,
+    providerResponseSchema,
+    providerReadModel(record, { reveal, scope: "organization" }),
+  );
 });
 
 /** Update an organization provider by ID (admin only) */
@@ -83,7 +103,15 @@ orgProvider.put(
       data,
     );
 
-    return c.json({ ...row, aliasRepoints }, 200);
+    return respond(
+      c,
+      providerUpdateResponseSchema,
+      {
+        ...providerReadModel(row, { reveal: true, scope: "organization" }),
+        aliasRepoints,
+      },
+      200,
+    );
   },
 );
 

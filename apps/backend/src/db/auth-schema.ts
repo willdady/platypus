@@ -15,7 +15,7 @@ export const user = pgTable("user", {
   role: text("role", { enum: ["user", "admin"] })
     .default("user")
     .notNull(),
-  banned: boolean("banned").default(false),
+  banned: boolean("banned").default(false).notNull(),
   banReason: text("ban_reason"),
   banExpires: timestamp("ban_expires"),
   timezone: text("timezone"),

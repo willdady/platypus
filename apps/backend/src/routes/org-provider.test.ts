@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
+  insertTimestamps,
   mockSession,
   resetMockDb,
   seedDb,
@@ -32,7 +33,13 @@ describe("Organization Provider Routes", () => {
     apiKey: "sk-secret",
     organizationId: orgId,
     workspaceId: null,
+    apiMode: "responses",
+    searchSource: "native",
     modelIds: [{ id: "gpt-4" }],
+    taskModelId: "gpt-4",
+    memoryExtractionModelId: "gpt-4",
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    updatedAt: new Date("2026-01-01T00:00:00.000Z"),
     ...over,
   });
 
@@ -73,6 +80,7 @@ describe("Organization Provider Routes", () => {
             },
           ],
         },
+        defaults: { provider: insertTimestamps() },
       },
     );
 
@@ -102,6 +110,9 @@ describe("Organization Provider Routes", () => {
         providerType: "OpenAI",
         organizationId: orgId,
         workspaceId: null,
+        scope: "organization",
+        apiKey: "sk-123",
+        apiKeySet: { configured: true },
       });
       expect(fake.tables.provider).toHaveLength(4);
     });
@@ -151,6 +162,11 @@ describe("Organization Provider Routes", () => {
 
       expect(status).toBe(200);
       expect(results.map((r) => r.id)).toEqual(["p1"]);
+      // The Organization surface tags its rows with the scope too, rather than
+      // leaving the caller to infer it from the endpoint.
+      expect(results).toEqual([
+        expect.objectContaining({ scope: "organization" }),
+      ]);
     });
 
     it("redacts apiKey for a non-admin member", async () => {
@@ -233,6 +249,9 @@ describe("Organization Provider Routes", () => {
         name: "Renamed",
         organizationId: orgId,
         aliasRepoints: [],
+        scope: "organization",
+        apiKey: "sk-123",
+        apiKeySet: { configured: true },
       });
       expect(fake.tables.provider.find((p) => p.id === "p1")).toMatchObject({
         name: "Renamed",

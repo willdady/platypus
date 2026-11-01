@@ -1,9 +1,5 @@
 import { and, eq, inArray, notInArray } from "drizzle-orm";
-import type {
-  OrgGateAccess,
-  OrgGateAccessUpdate,
-  OrgGate,
-} from "@platypus/schemas";
+import type { OrgGateAccess, OrgGateAccessUpdate } from "@platypus/schemas";
 import { db } from "../index.ts";
 import {
   organization as organizationTable,
@@ -60,7 +56,7 @@ export const getGateAccess = async (
     ]),
   );
   return {
-    gate: (org?.gate ?? "off") as OrgGate,
+    gate: org?.gate ?? "off",
     workspaces: workspaces
       .map((workspace) => ({
         ...workspace,

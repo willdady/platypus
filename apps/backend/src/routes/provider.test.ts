@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
+  insertTimestamps,
   mockSession,
   resetMockDb,
   seedDb,
@@ -79,6 +80,7 @@ describe("Provider Routes", () => {
             },
           ],
         },
+        defaults: { provider: insertTimestamps() },
       },
     );
   };
@@ -91,7 +93,13 @@ describe("Provider Routes", () => {
     apiKey: "sk-secret",
     organizationId: null,
     workspaceId,
+    apiMode: "responses",
+    searchSource: "native",
     modelIds: [{ id: "gpt-4" }],
+    taskModelId: "gpt-4",
+    memoryExtractionModelId: "gpt-4",
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    updatedAt: new Date("2026-01-01T00:00:00.000Z"),
     ...over,
   });
 
@@ -103,7 +111,13 @@ describe("Provider Routes", () => {
     apiKey: "sk-org",
     organizationId: orgId,
     workspaceId: null,
+    apiMode: "responses",
+    searchSource: "native",
     modelIds: [{ id: "gpt-4" }],
+    taskModelId: "gpt-4",
+    memoryExtractionModelId: "gpt-4",
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    updatedAt: new Date("2026-01-01T00:00:00.000Z"),
     ...over,
   });
 
@@ -142,7 +156,17 @@ describe("Provider Routes", () => {
 
       expect(res.status).toBe(201);
       expect(await res.json()).toEqual(
-        expect.objectContaining({ name: "OpenAI", providerType: "OpenAI" }),
+        expect.objectContaining({
+          name: "OpenAI",
+          providerType: "OpenAI",
+          // A write response is the same shape as a read: the caller may manage
+          // this Provider, so the credential and its presence indicator both
+          // come back, tagged with the scope the route created it at.
+          apiKey: "sk-123",
+          apiKeySet: { configured: true },
+          headersSet: { configured: false },
+          scope: "workspace",
+        }),
       );
       expect(fake.tables.provider).toHaveLength(1);
     });
@@ -444,6 +468,9 @@ describe("Provider Routes", () => {
           id: "p1",
           name: "Renamed",
           aliasRepoints: [],
+          scope: "workspace",
+          apiKey: "sk-123",
+          apiKeySet: { configured: true },
         }),
       );
       expect(fake.tables.provider[0]).toMatchObject({ name: "Renamed" });

@@ -194,7 +194,7 @@ export type McpOAuthAuthorizeResult =
 export const clearOAuthTokens = async (
   database: Database,
   where: SQL,
-  dropRegisteredClient = false,
+  { dropRegisteredClient }: { dropRegisteredClient: boolean },
 ): Promise<McpRecord[]> =>
   // One transaction: a row left with tokens but no client would refresh with
   // a client the tokens were never issued to.
@@ -245,11 +245,9 @@ export const authorizeMcpOAuth = async (
   if (opts.force) {
     // A client the library registered is registered again, so an MCP whose
     // server moved to another authorization server gets a client it knows.
-    const [cleared] = await clearOAuthTokens(
-      database,
-      opts.clearTokensWhere,
-      true,
-    );
+    const [cleared] = await clearOAuthTokens(database, opts.clearTokensWhere, {
+      dropRegisteredClient: true,
+    });
     // Deleted or moved since it was resolved.
     if (!cleared) {
       return { kind: "error", message: "MCP not found", status: 404 };

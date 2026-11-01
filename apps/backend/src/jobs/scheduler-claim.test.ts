@@ -41,7 +41,11 @@ const { processDueTriggers, reapFiredOneOffTriggers, recoverStuckTriggers } =
 
 const NOW = new Date("2026-08-30T12:00:30.000Z");
 const minutesAgo = (m: number) => new Date(NOW.getTime() - m * 60_000);
-const hourly = { cronExpression: "0 * * * *", timezone: "UTC" };
+const hourly = {
+  cronExpression: "0 * * * *",
+  timezone: "UTC",
+  isOneOff: false,
+};
 
 let pg: PGlite;
 let db: ReturnType<typeof drizzle>;
@@ -195,7 +199,11 @@ describe("processDueTriggers", () => {
 
   it("runs a Trigger that waited for a slot once, scheduling from the claim", async () => {
     await seedTrigger("late", {
-      config: { cronExpression: "*/5 * * * *", timezone: "UTC" },
+      config: {
+        cronExpression: "*/5 * * * *",
+        timezone: "UTC",
+        isOneOff: false,
+      },
       nextRunAt: minutesAgo(20),
     });
 
@@ -241,7 +249,11 @@ describe("processDueTriggers", () => {
 
   it("leaves a recurring Trigger whose next slot cannot be computed unclaimed", async () => {
     await seedTrigger("bad", {
-      config: { cronExpression: "not a cron", timezone: "UTC" },
+      config: {
+        cronExpression: "not a cron",
+        timezone: "UTC",
+        isOneOff: false,
+      },
     });
 
     await processDueTriggers();
@@ -252,38 +264,15 @@ describe("processDueTriggers", () => {
 });
 
 describe("recoverStuckTriggers", () => {
-  it("reschedules an enabled recurring Cron Trigger stranded with a NULL nextRunAt", async () => {
-    await seedTrigger("stranded", { nextRunAt: null });
-
-    await recoverStuckTriggers();
-
-    expect((await row("stranded")).nextRunAt).toEqual(
-      new Date("2026-08-30T13:00:00.000Z"),
-    );
-  });
-
-  it("reschedules one whose run it just failed as abandoned", async () => {
+  it("leaves a Trigger's schedule alone when it fails an abandoned run", async () => {
     await seedTrigger("crashed", { nextRunAt: null });
     await seedRunning("crashed", minutesAgo(120));
 
     await recoverStuckTriggers();
 
-    expect((await row("crashed")).nextRunAt).toEqual(
-      new Date("2026-08-30T13:00:00.000Z"),
-    );
-  });
-
-  it.each([
-    ["one with a live run", "live", {}],
-    ["a disabled one", "off", { enabled: false }],
-    ["a one-off", "once", { config: { ...hourly, isOneOff: true } }],
-  ] as const)("leaves %s alone", async (_label, id, over) => {
-    await seedTrigger(id, { nextRunAt: null, ...over });
-    if (id === "live") await seedRunning(id);
-
-    await recoverStuckTriggers();
-
-    expect((await row(id)).nextRunAt).toBeNull();
+    // The NULL-schedule repair is a one-off data step at upgrade
+    // (`scripts/backfill-trigger-next-run.ts`), not a runtime branch.
+    expect((await row("crashed")).nextRunAt).toBeNull();
   });
 });
 

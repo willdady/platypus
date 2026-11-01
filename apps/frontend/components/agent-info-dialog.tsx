@@ -95,28 +95,26 @@ export function AgentInfoDialog({
             </div>
           </div>
         )}
-        {toolSets.length > 0 &&
-          agent.toolSetIds &&
-          agent.toolSetIds.length > 0 && (
-            <div className="grid gap-2">
-              <p className="text-sm leading-none font-medium">Tools</p>
-              <div className="flex flex-wrap gap-2">
-                {agent.toolSetIds.map((id) => {
-                  const toolSet = toolSets.find((ts) => ts.id === id);
-                  return toolSet ? (
-                    <Badge
-                      key={id}
-                      className="cursor-default"
-                      variant="secondary"
-                    >
-                      {toolSet.name}
-                    </Badge>
-                  ) : null;
-                })}
-              </div>
+        {toolSets.length > 0 && agent.toolSetIds.length > 0 && (
+          <div className="grid gap-2">
+            <p className="text-sm leading-none font-medium">Tools</p>
+            <div className="flex flex-wrap gap-2">
+              {agent.toolSetIds.map((id) => {
+                const toolSet = toolSets.find((ts) => ts.id === id);
+                return toolSet ? (
+                  <Badge
+                    key={id}
+                    className="cursor-default"
+                    variant="secondary"
+                  >
+                    {toolSet.name}
+                  </Badge>
+                ) : null;
+              })}
             </div>
-          )}
-        {skills.length > 0 && agent.skillIds && agent.skillIds.length > 0 && (
+          </div>
+        )}
+        {skills.length > 0 && agent.skillIds.length > 0 && (
           <div className="grid gap-2">
             <p className="text-sm leading-none font-medium">Skills</p>
             <div className="flex flex-wrap gap-2">
@@ -135,27 +133,25 @@ export function AgentInfoDialog({
             </div>
           </div>
         )}
-        {agents.length > 0 &&
-          agent.subAgentIds &&
-          agent.subAgentIds.length > 0 && (
-            <div className="grid gap-2">
-              <p className="text-sm leading-none font-medium">Sub-Agents</p>
-              <div className="flex flex-wrap gap-2">
-                {agent.subAgentIds.map((id) => {
-                  const subAgent = agents.find((a) => a.id === id);
-                  return subAgent ? (
-                    <Badge
-                      key={id}
-                      className="cursor-default"
-                      variant="secondary"
-                    >
-                      {subAgent.name}
-                    </Badge>
-                  ) : null;
-                })}
-              </div>
+        {agents.length > 0 && agent.subAgentIds.length > 0 && (
+          <div className="grid gap-2">
+            <p className="text-sm leading-none font-medium">Sub-Agents</p>
+            <div className="flex flex-wrap gap-2">
+              {agent.subAgentIds.map((id) => {
+                const subAgent = agents.find((a) => a.id === id);
+                return subAgent ? (
+                  <Badge
+                    key={id}
+                    className="cursor-default"
+                    variant="secondary"
+                  >
+                    {subAgent.name}
+                  </Badge>
+                ) : null;
+              })}
             </div>
-          )}
+          </div>
+        )}
         <Collapsible open={isAdvancedOpen} onOpenChange={setIsAdvancedOpen}>
           <CollapsibleTrigger asChild>
             <div className="flex text-sm justify-between items-center">

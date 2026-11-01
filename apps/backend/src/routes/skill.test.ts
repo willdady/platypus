@@ -92,7 +92,7 @@ describe("Skill Routes", () => {
       });
 
       expect(res.status).toBe(201);
-      expect(await res.json()).toEqual(mockSkill);
+      expect(await res.json()).toEqual({ ...mockSkill, scope: "workspace" });
       expect(mockDb.insert).toHaveBeenCalled();
     });
 
@@ -227,7 +227,7 @@ describe("Skill Routes", () => {
         headers: { "Content-Type": "application/json" },
       });
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual(updated);
+      expect(await res.json()).toEqual({ ...updated, scope: "workspace" });
     });
 
     it("locks a shared skill in the workspace (edit on org surface)", async () => {

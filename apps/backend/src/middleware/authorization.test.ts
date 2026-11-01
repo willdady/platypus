@@ -21,12 +21,9 @@ describe("Authorization Middleware", () => {
 
   describe("requireOrgAccess", () => {
     it("should allow super admin to bypass checks", async () => {
-      const app = new Hono<{
-        Variables: { user: unknown; orgMembership: unknown; db: unknown };
-      }>();
+      const app = new Hono<{ Variables: Variables }>();
       app.use("*", async (c, next) => {
-        c.set("user", { id: "admin-1", role: "admin" });
-        c.set("db", mockDb);
+        c.set("user", { id: "admin-1", role: "admin" } as never);
         await next();
       });
       app.use("*", requireOrgAccess());
@@ -40,10 +37,9 @@ describe("Authorization Middleware", () => {
     it("should return 403 if user is not a member of the organization", async () => {
       mockDb.limit.mockResolvedValueOnce([]); // No membership found
 
-      const app = new Hono<{ Variables: { user: unknown; db: unknown } }>();
+      const app = new Hono<{ Variables: Variables }>();
       app.use("*", async (c, next) => {
-        c.set("user", { id: "u1", role: "user" });
-        c.set("db", mockDb);
+        c.set("user", { id: "u1", role: "user" } as never);
         await next();
       });
       app.use("/organizations/:orgId/*", requireOrgAccess());
@@ -64,12 +60,9 @@ describe("Authorization Middleware", () => {
       };
       mockDb.limit.mockResolvedValueOnce([mockMembership]);
 
-      const app = new Hono<{
-        Variables: { user: unknown; orgMembership: unknown; db: unknown };
-      }>();
+      const app = new Hono<{ Variables: Variables }>();
       app.use("*", async (c, next) => {
-        c.set("user", { id: "u1", role: "user" });
-        c.set("db", mockDb);
+        c.set("user", { id: "u1", role: "user" } as never);
         await next();
       });
       app.use("/organizations/:orgId/*", requireOrgAccess());
@@ -89,34 +82,17 @@ describe("Authorization Middleware", () => {
     const buildApp = (
       user: unknown,
       orgMembership: unknown,
-    ): Hono<{
-      Variables: {
-        user: unknown;
-        orgMembership: unknown;
-        orgScope: unknown;
-        isWorkspaceOwner: unknown;
-        db: unknown;
-      };
-    }> => {
-      const app = new Hono<{
-        Variables: {
-          user: unknown;
-          orgMembership: unknown;
-          orgScope: unknown;
-          isWorkspaceOwner: unknown;
-          db: unknown;
-        };
-      }>();
+    ): Hono<{ Variables: Variables }> => {
+      const app = new Hono<{ Variables: Variables }>();
       app.use("*", async (c, next) => {
-        c.set("user", user);
+        c.set("user", user as never);
         // Both of these are what requireOrgAccess leaves behind; this stub
         // stands in for it, so requireWorkspaceAccess sees its prerequisite.
-        c.set("orgMembership", orgMembership);
+        c.set("orgMembership", orgMembership as never);
         c.set("orgScope", {
           orgId: "org-1",
           principal: { kind: "user", userId: "u1", name: "Ada" },
         });
-        c.set("db", mockDb);
         await next();
       });
       app.use(
@@ -124,7 +100,7 @@ describe("Authorization Middleware", () => {
         requireWorkspaceAccess,
       );
       app.get("/organizations/:orgId/workspaces/:workspaceId/test", (c) =>
-        c.json({ isWorkspaceOwner: c.get("isWorkspaceOwner") }),
+        c.json({ isWorkspaceOwner: workspaceScopeOf(c).isWorkspaceOwner }),
       );
       return app;
     };
@@ -258,15 +234,13 @@ describe("Authorization Middleware", () => {
     const buildApp = (user: {
       id: string;
       role: string;
+      name: string;
     }): Hono<{ Variables: Variables }> => {
       const app = new Hono<{ Variables: Variables }>();
       app.use("*", async (c, next) => {
-        // requireAuth would set both; stand in for it.
+        // requireAuth would set this; stand in for it. `userScope` is derived
+        // from it, never stored.
         c.set("user", user as never);
-        c.set("userScope", {
-          principal: { kind: "user", userId: user.id, name: "Ada" },
-        });
-        c.set("db", mockDb as never);
         await next();
       });
       app.get("/organizations/:orgId/only", requireOrgAccess(), (c) =>
@@ -295,7 +269,7 @@ describe("Authorization Middleware", () => {
         { organizationId: "org-1", userId: "u1", role: "member" },
       ]);
 
-      const app = buildApp({ id: "u1", role: "user" });
+      const app = buildApp({ id: "u1", role: "user", name: "Ada" });
       const res = await app.request("/organizations/org-1/only");
 
       expect(res.status).toBe(200);
@@ -312,7 +286,7 @@ describe("Authorization Middleware", () => {
         ])
         .mockResolvedValueOnce([{ ownerId: "u1", organizationId: "org-1" }]);
 
-      const app = buildApp({ id: "u1", role: "user" });
+      const app = buildApp({ id: "u1", role: "user", name: "Ada" });
       const res = await app.request(
         "/organizations/org-1/workspaces/ws-1/test",
       );
@@ -335,7 +309,7 @@ describe("Authorization Middleware", () => {
           { ownerId: "other-user", organizationId: "org-1" },
         ]);
 
-      const app = buildApp({ id: "u1", role: "user" });
+      const app = buildApp({ id: "u1", role: "user", name: "Ada" });
       const res = await app.request(
         "/organizations/org-1/workspaces/ws-1/test",
       );
@@ -349,7 +323,7 @@ describe("Authorization Middleware", () => {
         { ownerId: "other-user", organizationId: "org-1" },
       ]);
 
-      const app = buildApp({ id: "admin-1", role: "admin" });
+      const app = buildApp({ id: "admin-1", role: "admin", name: "Ada" });
       const res = await app.request(
         "/organizations/org-1/workspaces/ws-1/test",
       );
@@ -363,7 +337,7 @@ describe("Authorization Middleware", () => {
     });
 
     it("throws when the workspace middleware did not run", async () => {
-      const app = buildApp({ id: "u1", role: "user" });
+      const app = buildApp({ id: "u1", role: "user", name: "Ada" });
 
       const res = await app.request("/unguarded");
       expect(res.status).toBe(500);
@@ -371,7 +345,7 @@ describe("Authorization Middleware", () => {
     });
 
     it("throws when the org middleware did not run", async () => {
-      const app = buildApp({ id: "u1", role: "user" });
+      const app = buildApp({ id: "u1", role: "user", name: "Ada" });
 
       const res = await app.request("/unguarded-org");
       expect(res.status).toBe(500);
@@ -383,7 +357,7 @@ describe("Authorization Middleware", () => {
         { organizationId: "org-1", userId: "u1", role: "member" },
       ]);
 
-      const app = buildApp({ id: "u1", role: "user" });
+      const app = buildApp({ id: "u1", role: "user", name: "Ada" });
       const res = await app.request("/organizations/org-1/membership");
 
       expect(res.status).toBe(200);
@@ -394,7 +368,7 @@ describe("Authorization Middleware", () => {
     });
 
     it("throws from orgMembershipOf when the org middleware did not run", async () => {
-      const app = buildApp({ id: "u1", role: "user" });
+      const app = buildApp({ id: "u1", role: "user", name: "Ada" });
 
       const res = await app.request("/unguarded-membership");
       expect(res.status).toBe(500);

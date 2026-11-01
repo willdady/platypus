@@ -29,7 +29,7 @@ type SandboxRecord = typeof sandboxTable.$inferSelect;
 
 // Sandboxes are admin-only and never delegatable to the workspace owner
 // (ADR-0006). Reused on create/delete; PUT applies field-level gating inline.
-const requireSandboxAdmin = requireWorkspaceConfigAccess();
+const requireSandboxAdmin = requireWorkspaceConfigAccess(null);
 
 const sandbox = new Hono<{ Variables: Variables }>();
 
@@ -38,11 +38,10 @@ const forceQuerySchema = z.strictObject({
   force: z.enum(["true", "false"]).optional(),
 });
 
-// Credentials are server-side only, to admins too. Stripping here is a quiet
-// improvement over the Provider/MCP routes which still return their secret
-// fields; revisit when those routes adopt a similar redaction pattern. In their
-// place `hasCredentials` says whether any are stored, so the settings form can
-// show a stored key instead of a blank field that looks lost. `transfer` says
+// Credentials are server-side only, to admins too. In their place
+// `hasCredentials` says whether any are stored, so the settings form can show a
+// stored key instead of a blank field that looks lost — the same
+// value-or-presence rule the Provider and MCP responses follow. `transfer` says
 // which file-transfer directions the backend offers (ADR-0027), so the UI
 // needn't attempt one to find out.
 //

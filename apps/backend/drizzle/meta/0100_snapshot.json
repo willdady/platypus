@@ -1,5 +1,5 @@
 {
-  "id": "a2afe042-fb71-4afe-93a8-1cd91b158fa0",
+  "id": "22a5d8b1-5db6-489f-b9d4-486aabd4dc4a",
   "prevId": "f3c08280-5e91-4051-a5da-e6598b615c15",
   "version": "7",
   "dialect": "postgresql",
@@ -684,21 +684,21 @@
           "name": "tool_set_ids",
           "type": "jsonb",
           "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "default": "'[]'::jsonb"
         },
         "skill_ids": {
           "name": "skill_ids",
           "type": "jsonb",
           "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "default": "'[]'::jsonb"
         },
         "sub_agent_ids": {
           "name": "sub_agent_ids",
           "type": "jsonb",
           "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "default": "'[]'::jsonb"
         },
         "input_placeholder": {
@@ -828,7 +828,12 @@
         }
       },
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "agent_scope_exclusive": {
+          "name": "agent_scope_exclusive",
+          "value": "(\"agent\".\"organization_id\" is null) <> (\"agent\".\"workspace_id\" is null)"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.attachment": {
@@ -1291,7 +1296,7 @@
           "name": "tags",
           "type": "jsonb",
           "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "default": "'[]'::jsonb"
         },
         "title_failures": {
@@ -1420,7 +1425,8 @@
           "name": "run_heartbeat_at",
           "type": "timestamp",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true,
+          "default": "now()"
         },
         "a2a_token_id": {
           "name": "a2a_token_id",
@@ -1612,7 +1618,12 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "chat_status_allowed": {
+          "name": "chat_status_allowed",
+          "value": "\"chat\".\"status\" in ('running', 'succeeded', 'failed', 'cancelled')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.chat_message": {
@@ -2027,7 +2038,7 @@
           "name": "token",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "expires_at": {
           "name": "expires_at",
@@ -3317,7 +3328,12 @@
         }
       },
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "mcp_scope_exclusive": {
+          "name": "mcp_scope_exclusive",
+          "value": "(\"mcp\".\"organization_id\" is null) <> (\"mcp\".\"workspace_id\" is null)"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.mcp_oauth_state": {
@@ -3958,7 +3974,20 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "organization_inbound_trigger_gate_allowed": {
+          "name": "organization_inbound_trigger_gate_allowed",
+          "value": "\"organization\".\"inbound_trigger_gate\" in ('off', 'all', 'selected')"
+        },
+        "organization_a2a_gate_allowed": {
+          "name": "organization_a2a_gate_allowed",
+          "value": "\"organization\".\"a2a_gate\" in ('off', 'all', 'selected')"
+        },
+        "organization_skill_import_gate_allowed": {
+          "name": "organization_skill_import_gate_allowed",
+          "value": "\"organization\".\"skill_import_gate\" in ('off', 'all', 'selected')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.organization_member": {
@@ -4077,7 +4106,12 @@
         }
       },
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "organization_member_role_allowed": {
+          "name": "organization_member_role_allowed",
+          "value": "\"organization_member\".\"role\" in ('admin', 'member')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.provider": {
@@ -4301,7 +4335,12 @@
         }
       },
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "provider_scope_exclusive": {
+          "name": "provider_scope_exclusive",
+          "value": "(\"provider\".\"organization_id\" is null) <> (\"provider\".\"workspace_id\" is null)"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.sandbox": {
@@ -4683,7 +4722,12 @@
         }
       },
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "skill_scope_exclusive": {
+          "name": "skill_scope_exclusive",
+          "value": "(\"skill\".\"organization_id\" is null) <> (\"skill\".\"workspace_id\" is null)"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.skill_file": {
@@ -5013,7 +5057,12 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "trigger_type_allowed": {
+          "name": "trigger_type_allowed",
+          "value": "\"trigger\".\"type\" in ('cron', 'event', 'inbound')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.trigger_run": {
@@ -5210,7 +5259,16 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "trigger_run_status_allowed": {
+          "name": "trigger_run_status_allowed",
+          "value": "\"trigger_run\".\"status\" in ('pending', 'running', 'success', 'failed', 'cancelled', 'suppressed')"
+        },
+        "trigger_run_event_type_allowed": {
+          "name": "trigger_run_event_type_allowed",
+          "value": "\"trigger_run\".\"event_type\" is null or \"trigger_run\".\"event_type\" in ('notification.created', 'notification.updated', 'notification.read', 'notification.dismissed', 'card.created', 'card.updated', 'card.moved', 'card.deleted')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.trigger_run_event": {
@@ -5354,7 +5412,16 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "trigger_run_event_type_allowed": {
+          "name": "trigger_run_event_type_allowed",
+          "value": "\"trigger_run_event\".\"type\" in ('tool-call', 'tool-input', 'reasoning', 'text', 'delegate')"
+        },
+        "trigger_run_event_status_allowed": {
+          "name": "trigger_run_event_status_allowed",
+          "value": "\"trigger_run_event\".\"status\" in ('running', 'completed', 'error', 'cancelled')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.webhook": {
@@ -5520,7 +5587,7 @@
           "name": "max_daily_summaries",
           "type": "integer",
           "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "default": 90
         },
         "provider_self_management": {
@@ -6096,7 +6163,7 @@
           "name": "banned",
           "type": "boolean",
           "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "default": false
         },
         "ban_reason": {

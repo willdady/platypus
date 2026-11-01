@@ -50,6 +50,7 @@ import {
   TOP_P_MIN,
   type ToolSet,
   type Agent,
+  type AgentResponse,
   type Provider,
   type Skill,
 } from "@platypus/schemas";
@@ -205,11 +206,7 @@ function AgentForm({
     setFloatField,
     clearErrors,
     submit,
-  } = useEntityForm<
-    AgentFormData,
-    Agent,
-    Agent & { scope?: "organization" | "workspace" }
-  >({
+  } = useEntityForm<AgentFormData, Agent, AgentResponse>({
     initialData: {
       name: "",
       description: "",
@@ -242,9 +239,9 @@ function AgentForm({
       reasoningThinking: agent.reasoningThinking ?? undefined,
       reasoningEffort: agent.reasoningEffort ?? undefined,
       thinkingBudget: agent.thinkingBudget ?? undefined,
-      toolSetIds: agent.toolSetIds || [],
-      skillIds: agent.skillIds || [],
-      subAgentIds: agent.subAgentIds || [],
+      toolSetIds: agent.toolSetIds,
+      skillIds: agent.skillIds,
+      subAgentIds: agent.subAgentIds,
     }),
     sideState: { avatarFile, avatarDeleted },
     onSeed: (agent) => {

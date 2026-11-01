@@ -86,13 +86,12 @@ function extensionForMediaType(mimeType: string): string {
  */
 function generateStorageKey(
   context: FileExtractionContext,
+  messageId: string,
   partIndex: number,
   contentHash: string,
   extension: string,
 ): string {
   const hash8 = contentHash.slice(0, 8);
-  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- an empty string falls back too
-  const messageId = context.messageId || "unknown";
   const key = `${chatStorageKeyPrefix(context)}${messageId}/${partIndex}-${hash8}.${extension}`;
   assertValidStorageKey(key);
   return key;
@@ -150,7 +149,8 @@ export async function extractFiles(
             const contentHash = hashContent(buffer);
             const extension = extensionForMediaType(mediaType);
             const key = generateStorageKey(
-              { ...context, messageId: message.id },
+              context,
+              message.id,
               partIndex,
               contentHash,
               extension,

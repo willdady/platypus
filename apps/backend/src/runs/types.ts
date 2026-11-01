@@ -171,10 +171,10 @@ export type TurnRequest = {
    */
   memoriesReferenceDate: Date;
   /**
-   * Whether this run composes a Memories block at all (#645). Absent means yes.
-   * A Trigger forwards its own opt-out here, exactly as it forwards `search`,
-   * so turn preparation decides from its inputs rather than re-reading the
-   * Trigger row.
+   * Whether this run composes a Memories block at all (#645). A Trigger
+   * forwards its own opt-out here, exactly as it forwards `search`, so turn
+   * preparation decides from its inputs rather than re-reading the Trigger
+   * row.
    *
    * Beats `memorySnapshot` where a caller supplies both: this decides *whether*
    * a block is composed, the pin only decides *what* is in it.
@@ -183,14 +183,15 @@ export type TurnRequest = {
    * Trigger's Agent holding `memorySearch` / `memoryGet` keeps them and can
    * still retrieve deliberately.
    */
-  includeMemories?: boolean;
+  includeMemories: boolean;
   /**
    * Whether the run serves the Agent's `memory` Tool set, to it and to its
-   * delegates. Absent means yes. A Chat turn sets it with `includeMemories`, so
-   * an A2A Chat with Include Memories off reaches the Owner's Memories by
-   * neither route (ADR-0032).
+   * delegates. A Chat turn sets it with `includeMemories`, so an A2A Chat with
+   * Include Memories off reaches the Owner's Memories by neither route
+   * (ADR-0032); a Trigger keeps its Agent's Memory tools whatever its own
+   * Include Memories says.
    */
-  memoryTools?: boolean;
+  memoryTools: boolean;
 };
 
 /**

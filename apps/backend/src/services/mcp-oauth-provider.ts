@@ -1,5 +1,4 @@
 import {
-  auth as mcpAuth,
   type OAuthAuthorizationServerInformation,
   type OAuthClientProvider,
   type OAuthTokens,
@@ -267,12 +266,10 @@ export class DatabaseOAuthClientProvider implements OAuthClientProvider {
         .limit(1);
       return states[0]?.info ?? undefined;
     }
-    const record = await this.oauthRow();
-    if (record?.oauthAuthorizationServer)
-      return record.oauthAuthorizationServer;
-    if (record?.oauthRefreshToken)
-      return this.adoptAuthorizationServer(record, record.oauthRefreshToken);
-    return undefined;
+    // An MCP authorized before the library recorded this has no entry, and the
+    // library will not refresh without one. Those must sign in again; v4
+    // removed the one-off adoption that used to paper over it.
+    return (await this.oauthRow())?.oauthAuthorizationServer ?? undefined;
   }
 
   async saveAuthorizationServerInformation(
@@ -284,64 +281,6 @@ export class DatabaseOAuthClientProvider implements OAuthClientProvider {
       .update(mcpOauthState)
       .set({ authorizationServer: info })
       .where(eq(mcpOauthState.id, this.state()));
-  }
-
-  validateAuthorizationServerURL(_serverUrl: string | URL, url: string | URL) {
-    this._authorizationServerUrl = new URL(url).href;
-  }
-
-  /**
-   * Rows authorized before @ai-sdk/mcp 2.0.57 hold a refresh token but no
-   * record, and the library will not refresh without one. Adopt what discovery
-   * reports now (the trust those tokens already had) for the authorization
-   * server this auth() call already discovered and vetted, read by the
-   * library's own metadata discovery through a throwaway sign-in started at
-   * that server, and kept only when it agrees with that server.
-   */
-  // ponytail: one-off backfill; delete once no OAuth MCP with a refresh token has a NULL oauth_authorization_server.
-  private async adoptAuthorizationServer(
-    record: OAuthClientColumns,
-    refreshToken: string,
-  ) {
-    const client = toClientInformation(record);
-    if (!client || !this._authorizationServerUrl) return undefined;
-    let adopted: OAuthAuthorizationServerInformation | undefined;
-    // A failure is thrown, not answered with undefined: undefined makes the
-    // library drop the tokens, and a network blip must not sign the MCP out.
-    await mcpAuth(
-      {
-        redirectUrl: this.callbackUrl,
-        clientMetadata: this.clientMetadata,
-        clientInformation: () => client,
-        tokens: () => undefined,
-        saveTokens: () => {},
-        codeVerifier: () => "",
-        saveCodeVerifier: () => {},
-        redirectToAuthorization: () => {},
-        // The resource belongs to the MCP, not to this throwaway sign-in.
-        validateResourceURL: () => Promise.resolve(undefined),
-        saveAuthorizationServerInformation: (info) => {
-          adopted = info;
-        },
-      },
-      { serverUrl: this._authorizationServerUrl, fetchFn: oauthFetchFn },
-    );
-    if (
-      !adopted ||
-      adopted.authorizationServerUrl !== this._authorizationServerUrl
-    ) {
-      return undefined;
-    }
-    // Only onto the sign-in it was discovered for: one that finished meanwhile
-    // already holds its own record, and the refresh token in hand is spent.
-    // Refreshing with it anyway would trip reuse detection and revoke the new
-    // sign-in too.
-    const updated = await db
-      .update(mcpTable)
-      .set({ oauthAuthorizationServer: adopted })
-      .where(this.sameSignIn(refreshToken))
-      .returning({ id: mcpTable.id });
-    return updated.length ? adopted : undefined;
   }
 
   redirectToAuthorization(authorizationUrl: URL) {
@@ -423,7 +362,6 @@ export class DatabaseOAuthClientProvider implements OAuthClientProvider {
   private _pendingCodeVerifier?: string;
   private _generatedState?: string;
   private _stateForLookup?: string;
-  private _authorizationServerUrl?: string;
   private _refreshTokenRead?: string;
 }
 

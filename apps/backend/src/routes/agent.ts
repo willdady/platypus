@@ -21,8 +21,8 @@ import {
 import { findNonSharedReferences } from "../services/agent-scope-validation.ts";
 import { promoteScoped } from "../services/promote.ts";
 import { listScoped, requireScoped } from "../services/scoped-resource.ts";
+import { agentResponse } from "../services/scoped-response.ts";
 import { avatarBodyLimit } from "./avatar-body-limit.ts";
-import { agentWithAvatarUrl } from "../utils/avatar-url.ts";
 import { getOrigin } from "../utils/get-origin.ts";
 
 const agent = new Hono<{ Variables: Variables }>();
@@ -43,7 +43,7 @@ agent.post(
     if ("error" in result) {
       return c.json({ error: result.error }, 400);
     }
-    return c.json(agentWithAvatarUrl(result.row, baseUrl), 201);
+    return c.json(agentResponse(result.row, "workspace", baseUrl), 201);
   },
 );
 
@@ -62,8 +62,7 @@ agent.get(
       pinnedAgentIds(ctx.workspaceId),
     ]);
     const results = scoped.map(({ row, scope }) => ({
-      ...agentWithAvatarUrl(row, baseUrl),
-      scope,
+      ...agentResponse(row, scope, baseUrl),
       isPinned: pinned.has(row.id),
     }));
     return c.json({ results });
@@ -86,10 +85,7 @@ agent.get(
       agentId,
       workspaceScopeOf(c),
     );
-    return c.json({
-      ...agentWithAvatarUrl(found.row, baseUrl),
-      scope: found.scope,
-    });
+    return c.json(agentResponse(found.row, found.scope, baseUrl));
   },
 );
 
@@ -117,7 +113,7 @@ agent.put(
     if ("error" in result) {
       return c.json({ error: result.error }, 400);
     }
-    return c.json(agentWithAvatarUrl(result.row, baseUrl), 200);
+    return c.json(agentResponse(result.row, "workspace", baseUrl), 200);
   },
 );
 
@@ -161,7 +157,7 @@ agent.post(
       c.req.param("agentId"),
       body["file"],
     );
-    return c.json(agentWithAvatarUrl(row, getOrigin(c)));
+    return c.json(agentResponse(row, "workspace", getOrigin(c)));
   },
 );
 
@@ -176,7 +172,7 @@ agent.delete(
       { kind: "workspace", ctx: workspaceScopeOf(c) },
       c.req.param("agentId"),
     );
-    return c.json(agentWithAvatarUrl(row, getOrigin(c)));
+    return c.json(agentResponse(row, "workspace", getOrigin(c)));
   },
 );
 
@@ -239,10 +235,7 @@ agent.post(
         422,
       );
     }
-    return c.json(
-      { ...agentWithAvatarUrl(outcome.row, baseUrl), scope: "organization" },
-      200,
-    );
+    return c.json(agentResponse(outcome.row, "organization", baseUrl), 200);
   },
 );
 

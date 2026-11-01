@@ -18,6 +18,9 @@ function agent(overrides: Partial<Serialized<Agent>> = {}) {
     name: "Helper",
     providerId: "provider-1",
     modelId: "gpt-4o",
+    toolSetIds: [],
+    skillIds: [],
+    subAgentIds: [],
     ...overrides,
   } as Serialized<Agent>;
 }

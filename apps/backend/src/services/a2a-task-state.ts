@@ -19,6 +19,7 @@ import {
 } from "../db/schema.ts";
 import type { RunStatus } from "../runs/types.ts";
 import type { ChatMessageMetadata } from "../types.ts";
+import type { ChatStatus } from "@platypus/schemas";
 import { a2aTextPart, replyArtifact } from "./a2a-parts.ts";
 import type { A2aCaller } from "./a2a-task.ts";
 
@@ -181,7 +182,7 @@ export type TaskStatus = {
  * the Chat is gone; the reply is read only for a Task with no end recorded.
  */
 export type TaskReading = TaskRow & {
-  chatStatus: string | null;
+  chatStatus: ChatStatus | null;
   leafId: string | null;
   firstReplyId: string | null;
 };
@@ -263,7 +264,8 @@ export const deriveStatus = (task: TaskReading): DerivedStatus => {
     };
   }
   return {
-    unrecordedEnd: END_OF_RUN[task.chatStatus as RunStatus] ?? "failed",
+    unrecordedEnd:
+      (task.chatStatus ? END_OF_RUN[task.chatStatus] : undefined) ?? "failed",
   };
 };
 
@@ -303,7 +305,7 @@ const STOP_REASON_TEXT: Record<StopReason, string> = {
  */
 export const recordedReplies = async (
   tasks: { id: string; chatId: string; status: TaskStatus }[],
-  { withText = true }: { withText?: boolean } = {},
+  { withText }: { withText: boolean },
 ): Promise<Map<string, RecordedReply>> => {
   const completed = tasks.flatMap(({ id, chatId, status }) =>
     status.state === TaskState.TASK_STATE_COMPLETED && status.replyId
@@ -419,7 +421,9 @@ export const readWithStatus = async (
   task: TaskRow,
   status: TaskStatus,
 ): Promise<Task> => {
-  const replies = await recordedReplies([{ ...task, status }]);
+  const replies = await recordedReplies([{ ...task, status }], {
+    withText: true,
+  });
   return toTask(task, status, replies.get(task.id));
 };
 

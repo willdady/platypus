@@ -12,11 +12,11 @@ const exaCredentialsSchema = z.object({ apiKey: z.string().min(1) }).strict();
 
 type ExaCredentials = z.infer<typeof exaCredentialsSchema>;
 
-const exaBackend: WebBackendContribution = {
+const exaBackend: WebBackendContribution<unknown, ExaCredentials> = {
   backend: "exa",
   name: "Exa",
   createExecutors: (_ctx, plugin) => {
-    const exa = new Exa((plugin.credentials as ExaCredentials).apiKey);
+    const exa = new Exa(plugin.credentials.apiKey);
     return {
       web_search: async ({ query }, { signal }) => {
         const res = await exa.search(
@@ -54,7 +54,7 @@ const exaBackend: WebBackendContribution = {
 // egress an Operator would plausibly want to deny in isolation (ADR-0013).
 // Enable it by listing "@platypus/exa" in PLATYPUS_PLUGINS and supplying the API
 // key. The discriminator stays the unprefixed core id "exa".
-export const plugin: PlatypusPlugin = {
+export const plugin: PlatypusPlugin<unknown, ExaCredentials> = {
   name: "@platypus/exa",
   version: "0.1.0",
   apiVersion: PLUGIN_API_VERSION,

@@ -15,6 +15,7 @@ import {
   requireOrgScoped,
 } from "../services/scoped-resource.ts";
 import { createSkill, deleteSkill, updateSkill } from "../services/skill.ts";
+import { skillResponse } from "../services/scoped-response.ts";
 import {
   exportSkillBundle,
   importSkillBundle,
@@ -58,7 +59,7 @@ orgSkill.post(
     // `agentIds` at Organization scope. A duplicate name surfaces as a Postgres
     // unique violation, mapped to 409 by the central onError (ADR-0010).
     const row = await createSkill({ kind: "organization", orgId }, data);
-    return c.json(row, 201);
+    return c.json(skillResponse(row, "organization"), 201);
   },
 );
 
@@ -66,7 +67,9 @@ orgSkill.post(
 orgSkill.get("/", requireAuth, requireOrgAccess(), async (c) => {
   const { orgId } = orgScopeOf(c);
   const results = await listOrgScoped(db, "skill", orgId);
-  return c.json({ results });
+  return c.json({
+    results: results.map((row) => skillResponse(row, "organization")),
+  });
 });
 
 /** Get an org-scoped Skill by ID */
@@ -75,7 +78,7 @@ orgSkill.get("/:skillId", requireAuth, requireOrgAccess(), async (c) => {
   const skillId = c.req.param("skillId");
   const record = await requireOrgScoped(db, "skill", skillId, orgId);
   return c.json({
-    ...record,
+    ...skillResponse(record, "organization"),
     files: await skillFilesForApi(skillId),
     modified: isModified(record),
   });
@@ -95,7 +98,7 @@ orgSkill.post(
       { kind: "organization", orgId: orgScopeOf(c).orgId },
       zip,
     );
-    return c.json(row, 201);
+    return c.json(skillResponse(row, "organization"), 201);
   },
 );
 
@@ -142,7 +145,7 @@ orgSkill.put(
       c.req.param("skillId"),
       zip,
     );
-    return c.json(row, 200);
+    return c.json(skillResponse(row, "organization"), 200);
   },
 );
 
@@ -227,7 +230,7 @@ orgSkill.put(
       skillId,
       data,
     );
-    return c.json(row, 200);
+    return c.json(skillResponse(row, "organization"), 200);
   },
 );
 

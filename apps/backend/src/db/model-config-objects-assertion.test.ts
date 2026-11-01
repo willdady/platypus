@@ -3,11 +3,11 @@ import { readFileSync } from "node:fs";
 import { PGlite } from "@electric-sql/pglite";
 
 /**
- * 0100 refuses a Provider row the earlier backfills did not resolve, so the
+ * 0101 refuses a Provider row the earlier backfills did not resolve, so the
  * backend never reads a `modelIds` shape its schema no longer has.
  */
 const migration = readFileSync(
-  new URL("../../drizzle/0100_assert_model_configs.sql", import.meta.url),
+  new URL("../../drizzle/0101_assert_model_configs.sql", import.meta.url),
   "utf8",
 );
 
@@ -30,7 +30,7 @@ const run = async (modelIds: unknown[]) => {
   await db.exec(migration);
 };
 
-describe("0100 model-config assertion", () => {
+describe("0101 model-config assertion", () => {
   it("passes resolved objects and an empty list", async () => {
     await expect(
       run([{ id: "gpt-4", passthroughFileTypes: [] }]),

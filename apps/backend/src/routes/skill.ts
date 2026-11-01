@@ -18,6 +18,7 @@ import {
   workspaceScopeOf,
 } from "../middleware/authorization.ts";
 import { listScoped, requireScoped } from "../services/scoped-resource.ts";
+import { skillResponse } from "../services/scoped-response.ts";
 import { createSkill, deleteSkill, updateSkill } from "../services/skill.ts";
 import {
   exportSkillBundle,
@@ -72,7 +73,7 @@ skill.get(
     // Workspace-scoped Skills plus the attached org-scoped (Shared) ones, each
     // tagged with its scope for the frontend (locked cards for org).
     const scoped = await listScoped(db, "skill", workspaceScopeOf(c));
-    const results = scoped.map(({ row, scope }) => ({ ...row, scope }));
+    const results = scoped.map(({ row, scope }) => skillResponse(row, scope));
 
     return c.json({ results });
   },
@@ -104,8 +105,7 @@ skill.get(
       );
 
     return c.json({
-      ...found.row,
-      scope: found.scope,
+      ...skillResponse(found.row, found.scope),
       agentIds: agentsWithSkill.map((a) => a.id),
       files: await skillFilesForApi(skillId),
       modified: isModified(found.row),
@@ -129,7 +129,7 @@ skill.post(
       { kind: "workspace", ctx: workspaceScopeOf(c) },
       zip,
     );
-    return c.json(row, 201);
+    return c.json(skillResponse(row, "workspace"), 201);
   },
 );
 
@@ -149,7 +149,7 @@ skill.put(
       c.req.param("skillId"),
       zip,
     );
-    return c.json(row, 200);
+    return c.json(skillResponse(row, "workspace"), 200);
   },
 );
 
@@ -273,7 +273,7 @@ skill.post(
     // a Postgres unique violation, mapped to 409 by the central onError
     // (ADR-0010).
     const row = await createSkill({ kind: "workspace", ctx: scope }, data);
-    return c.json(row, 201);
+    return c.json(skillResponse(row, "workspace"), 201);
   },
 );
 
@@ -299,7 +299,7 @@ skill.put(
       skillId,
       data,
     );
-    return c.json(row, 200);
+    return c.json(skillResponse(row, "workspace"), 200);
   },
 );
 
@@ -350,7 +350,7 @@ skill.post(
       workspaceId,
     });
 
-    return c.json({ ...outcome.row, scope: "organization" }, 200);
+    return c.json(skillResponse(outcome.row, "organization"), 200);
   },
 );
 

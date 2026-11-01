@@ -74,9 +74,11 @@ describe("databaseConfig", () => {
     expect(searchPath.rows[0].search_path).toBe("pg_catalog");
   });
 
-  it("leaves the connection to node-postgres' PG* defaults without a URL", () => {
-    vi.stubEnv("PGOPTIONS", undefined);
-    expect(databaseConfig(undefined)).toEqual({ options: "-c TimeZone=UTC" });
+  it("appends the UTC pin to PGOPTIONS when the URL carries none", () => {
+    vi.stubEnv("PGOPTIONS", "-c statement_timeout=1000");
+    expect(databaseConfig("postgres://u:p@db:5432/platypus").options).toBe(
+      "-c statement_timeout=1000 -c TimeZone=UTC",
+    );
   });
 
   it("connects to the database the URL names", () => {
@@ -94,7 +96,12 @@ describe("databaseConfig", () => {
 
 describe("buildPoolConfig", () => {
   it("sets the pool size and every connection guard explicitly", () => {
-    expect(buildPoolConfig(undefined, 10)).toEqual({
+    expect(buildPoolConfig("postgres://u:p@db:5432/platypus", 10)).toEqual({
+      user: "u",
+      password: "p",
+      host: "db",
+      port: 5432,
+      database: "platypus",
       options: "-c TimeZone=UTC",
       max: 10,
       connectionTimeoutMillis: 10_000,

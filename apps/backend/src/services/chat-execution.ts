@@ -212,13 +212,13 @@ export type PrepareChatTurnInput = TurnRequest & {
    * sub-agents) whose messages contain no file references.
    */
   origin?: string;
-  frontendUrl?: string;
+  /** `FRONTEND_URL` (`frontendBaseUrl()`), for resource links in tool output. */
+  frontendUrl: string;
   /**
-   * Defaults to "interactive" when omitted. Headless callers (triggers,
-   * sub-agents) must pass "headless" so the system prompt reframes the
-   * user line and surfaces the agent's own identity.
+   * Headless callers (triggers, sub-agents) pass "headless" so the system
+   * prompt reframes the user line and surfaces the agent's own identity.
    */
-  runMode?: "interactive" | "headless";
+  runMode: "interactive" | "headless";
   /** The A2A token's name, when an A2A client started the turn (ADR-0032). */
   a2aClientName?: string;
   /**
@@ -246,10 +246,10 @@ export type PrepareChatTurnInput = TurnRequest & {
 // --- Queries seam ---
 
 /**
- * The data-access surface `prepareChatTurn` depends on. Production wires this
- * to Drizzle (`drizzleChatTurnQueries`); tests pass an in-memory implementation
- * from `chat-execution.test-fixtures.ts`. Methods are named after domain
- * lookups, not query shapes — callers don't compose `where`/`limit` chains.
+ * The data-access surface `prepareChatTurn` depends on. Production passes
+ * {@link drizzleChatTurnQueries}; tests pass an in-memory implementation from
+ * `chat-execution.test-fixtures.ts`. Methods are named after domain lookups, not
+ * query shapes — callers don't compose `where`/`limit` chains.
  */
 export type ChatTurnQueries = ToolSessionQueries & {
   getWorkspace(id: string): Promise<WorkspaceRow | null>;
@@ -314,7 +314,7 @@ export type ChatTurnQueries = ToolSessionQueries & {
  * workspaceId" as the definition of Shared, which lets a row carrying both
  * columns resolve in a Workspace that neither owns nor attached it.
  */
-const drizzleChatTurnQueries: ChatTurnQueries = {
+export const drizzleChatTurnQueries: ChatTurnQueries = {
   async getWorkspace(id) {
     const rows = await db
       .select()
@@ -583,12 +583,12 @@ const resolveSearchTools = async (
  * Caller passes the result to `streamText` and calls `dispose` on abort and
  * on `onFinish`. Persistence reads from `resolved`.
  *
- * The `queries` parameter defaults to the Drizzle adapter; tests pass an
- * in-memory implementation.
+ * Production passes {@link drizzleChatTurnQueries}; tests pass an in-memory
+ * implementation.
  */
 export const prepareChatTurn = async (
   input: PrepareChatTurnInput,
-  queries: ChatTurnQueries = drizzleChatTurnQueries,
+  queries: ChatTurnQueries,
 ): Promise<ChatTurn> => {
   const {
     orgId,
@@ -599,7 +599,7 @@ export const prepareChatTurn = async (
     chatSummaries,
     origin,
     frontendUrl,
-    runMode = "interactive",
+    runMode,
     a2aClientName,
     onActivity,
     run,
@@ -649,11 +649,11 @@ export const prepareChatTurn = async (
   // built alongside it nest their own sessions into this one — they take the
   // promise, not the session, and await it only if they are ever invoked.
   //
-  // Absent means yes, so a Trigger keeps its Agent's Memory tools whatever its
-  // own Include Memories says; only a Chat turn withholds them (ADR-0032).
-  // Withheld from the session rather than dropped from its tools, so a
-  // delegate's session, which inherits the option, is withheld them too.
-  const memoryTools = input.memoryTools ?? true;
+  // A Trigger keeps its Agent's Memory tools whatever its own Include Memories
+  // says; only a Chat turn withholds them (ADR-0032). Withheld from the session
+  // rather than dropped from its tools, so a delegate's session, which inherits
+  // the option, is withheld them too.
+  const memoryTools = input.memoryTools;
   const sessionPromise = openToolSession(scope, agent, queries, {
     signal,
     withheldToolSetIds: memoryTools ? [] : [MEMORY_TOOLSET_ID],
@@ -678,10 +678,9 @@ export const prepareChatTurn = async (
     // about the awaited work moves.
     const searchResolution = resolveSearchMode(request.search, provider);
 
-    // Absent means yes, which is what every interactive Chat turn relies on.
     // Resolved once, here, so the retrieval below and the block composed further
     // down read the same decision rather than each re-deriving it (#645).
-    const includeMemories = input.includeMemories ?? true;
+    const includeMemories = input.includeMemories;
 
     const [
       session,
@@ -747,7 +746,7 @@ export const prepareChatTurn = async (
         agent && !memoryTools
           ? {
               ...agent,
-              toolSetIds: (agent.toolSetIds ?? []).filter(
+              toolSetIds: agent.toolSetIds.filter(
                 (id) => id !== MEMORY_TOOLSET_ID,
               ),
             }
@@ -788,7 +787,7 @@ export const prepareChatTurn = async (
         orgId,
         workspaceId,
         permittedSkillIds,
-        (agent?.toolSetIds ?? []).includes(SANDBOX_TOOLSET_ID),
+        agent?.toolSetIds.includes(SANDBOX_TOOLSET_ID) ?? false,
       );
       tools[READ_SKILL_FILE_TOOL_NAME] = createReadSkillFileTool(
         orgId,
@@ -961,7 +960,7 @@ export const validateTurnAttachments = async (
     /** The run's session id — see `PrepareChatTurnInput.sessionId`. */
     sessionId: string;
   },
-  queries: ChatTurnQueries = drizzleChatTurnQueries,
+  queries: ChatTurnQueries,
 ): Promise<void> => {
   if (!messagesHaveFileParts(args.messages)) return;
 
@@ -1104,7 +1103,7 @@ const loadSkills = async (
   skills: Array<Pick<Skill, "name" | "description">>;
   permittedSkillIds: string[];
 }> => {
-  if (!agent?.skillIds || agent.skillIds.length === 0) {
+  if (!agent || agent.skillIds.length === 0) {
     return { skills: [], permittedSkillIds: [] };
   }
   return queries.getSkillsByIds(agent.skillIds, orgId, workspaceId);
@@ -1129,7 +1128,7 @@ const loadSubAgents = async (
   unavailableSubAgents: SubAgentFailure[];
   subAgentTools: Record<string, Tool>;
 }> => {
-  if (!agent?.subAgentIds || agent.subAgentIds.length === 0) {
+  if (!agent || agent.subAgentIds.length === 0) {
     return {
       subAgents: [],
       unavailableSubAgents: [],

@@ -705,8 +705,15 @@
     {
       "idx": 100,
       "version": "7",
-      "when": 1793492399594,
-      "tag": "0100_assert_model_configs",
+      "when": 1793501018261,
+      "tag": "0100_same_kitty_pryde",
+      "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "7",
+      "when": 1793506628382,
+      "tag": "0101_assert_model_configs",
       "breakpoints": true
     }
   ]

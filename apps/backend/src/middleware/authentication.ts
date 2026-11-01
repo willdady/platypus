@@ -1,6 +1,5 @@
 import { createMiddleware } from "hono/factory";
 import { auth } from "../auth.ts";
-import { userScope } from "../scope.ts";
 
 /**
  * Middleware that validates user authentication via session.
@@ -13,12 +12,11 @@ import { userScope } from "../scope.ts";
  * **Behavior:**
  * - Validates the session using better-auth's session API
  * - Returns 401 Unauthorized if no valid session exists
- * - Sets `user` and `session` in the Hono context for use by subsequent middleware/handlers
+ * - Sets `user` in the Hono context for use by subsequent middleware/handlers
  * - Allows the request to proceed if authentication is successful
  *
  * **Context Variables Set:**
  * - `user` - The authenticated user object from the session
- * - `session` - The session object containing session metadata
  *
  * **Usage:**
  * This middleware should be the first in the chain for protected routes,
@@ -49,8 +47,6 @@ export const requireAuth = createMiddleware(async (c, next) => {
   }
 
   c.set("user", session.user);
-  c.set("session", session.session);
-  c.set("userScope", userScope(session.user));
   await next();
   return;
 });

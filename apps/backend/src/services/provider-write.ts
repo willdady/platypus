@@ -95,7 +95,7 @@ export async function createProvider(
   scope: ProviderScope,
   fields: ProviderCreateFields,
   // A transaction handle, when the create is one step of a larger write.
-  exec: Executor = db,
+  exec: Executor,
 ): Promise<ProviderRow> {
   const data = dedupeModels(fields);
 

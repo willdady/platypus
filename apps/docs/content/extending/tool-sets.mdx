@@ -20,8 +20,8 @@ you to call.
 Each entry is a `ToolSetContribution` from
 [`@platypuschat/plugin-sdk`](https://www.npmjs.com/package/@platypuschat/plugin-sdk).
 It carries an `id`, a display `name`, a `category` that groups it on the Agent
-form, an optional `description`, and `tools`. The exact signatures live in the
-package; the rules below are what those types don't encode.
+form, a `description`, and `tools`. The exact signatures live in the package; the
+rules below are what those types don't encode.
 
 An individual tool is a Vercel AI SDK tool — `tool()` from the `ai` package,
 with a Zod `inputSchema` and an `execute` function.
@@ -78,15 +78,13 @@ the link as optional.
 
 Read `timezone` to report or schedule a time for the User. It is the acting
 User's IANA timezone — the Workspace Owner's on a Trigger or A2A run — taken
-from their profile, else the deployment's `TIMEZONE`, else `UTC`. Current core
-always fills it in; the type marks it optional only because an older core
-doesn't, so fall back to `UTC` if your Plugin must run on one.
+from their profile, else the deployment's `TIMEZONE`, else `UTC`. It is required
+from API v4, and core fills it on every turn, so read it directly.
 
 Read `sessionId` to tell which Chat or Trigger run the turn belongs to: the
 Chat's id, or the Trigger run's id on a headless run. It stays the same for
 every turn of a Chat and every delegate that Chat starts, and changes on each
-Trigger run. Current core always fills it in too; the type marks it optional
-only because an older core doesn't.
+Trigger run. It is required from API v4 and core fills it on every turn.
 
 A factory also receives the Plugin's deploy-time config as an appended second
 argument — see
@@ -94,7 +92,9 @@ argument — see
 That same argument carries the [logger](/extending/plugin-api-and-config#logging)
 core binds to your Plugin's name, which is a reason to reach for a factory even
 where a static map would otherwise do: a static map is handed nothing, so it has
-nowhere to log from.
+nowhere to log from. Type the manifest (`PlatypusPlugin<Config>`, alongside the
+`configSchema` that produces it) and the block arrives narrowed, with
+`plugin.config` ready to read.
 
 ## Ids and namespacing
 
@@ -144,6 +144,8 @@ connection, a pool, a watcher — register a way to close it:
   id: "kanban",
   name: "Kanban Cards",
   category: "Kanban",
+  description:
+    "Read kanban boards and manage their cards and comments in this workspace",
   tools: (ctx) => {
     const client = connect(ctx.workspaceId);
     ctx.registerCloser(() => client.close());

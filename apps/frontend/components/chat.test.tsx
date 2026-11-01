@@ -452,6 +452,9 @@ function agentOn(id: string, providerId: string, modelId: string) {
     name: id,
     providerId,
     modelId,
+    toolSetIds: [],
+    skillIds: [],
+    subAgentIds: [],
   };
 }
 

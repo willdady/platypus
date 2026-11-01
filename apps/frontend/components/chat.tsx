@@ -274,7 +274,7 @@ export function Chat({
   // What the slash-command picker offers — see `skillsForAgent` for why the
   // list is the Agent's unfiltered assignment.
   const agentSkills = useMemo(
-    () => skillsForAgent(skills, selectedAgent?.skillIds),
+    () => skillsForAgent(skills, selectedAgent ? selectedAgent.skillIds : []),
     [selectedAgent, skills],
   );
 
@@ -548,7 +548,8 @@ export function Chat({
 
   // Hidden rather than disabled when any condition fails (ADR-0028).
   const canUploadToSandbox = Boolean(
-    sandbox?.transfer.upload && selectedAgent?.toolSetIds?.includes("sandbox"),
+    sandbox?.transfer.upload &&
+    (selectedAgent?.toolSetIds.includes("sandbox") ?? false),
   );
 
   // Built-in commands come first, and only once there is a turn to act on.

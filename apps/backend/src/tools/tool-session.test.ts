@@ -33,6 +33,7 @@ import {
   deferCloserRegistrar,
   openToolSession,
   type ToolSession,
+  type ToolSessionOptions,
   type ToolSessionScope,
 } from "./tool-session.ts";
 import { CLOSER_TIMEOUT_MS } from "./closers.ts";
@@ -57,10 +58,26 @@ const scope: ToolSessionScope = {
   orgId: "org-1",
   workspaceId: "ws-1",
   userId: "user-1",
-  frontendUrl: undefined,
+  frontendUrl: "http://localhost:3000",
   timezone: "Australia/Melbourne",
   sessionId: "chat-1",
 };
+
+/**
+ * Opens a session with the options a test that has no opinion about them wants:
+ * nothing withheld, and no User watching.
+ */
+const openSession = (
+  sessionScope: ToolSessionScope,
+  sessionAgent: Parameters<typeof openToolSession>[1],
+  queries: Parameters<typeof openToolSession>[2],
+  options: Partial<ToolSessionOptions> = {},
+): ReturnType<typeof openToolSession> =>
+  openToolSession(sessionScope, sessionAgent, queries, {
+    withheldToolSetIds: [],
+    interactive: false,
+    ...options,
+  });
 
 /** The Agent a session resolves for, with the ids it was granted. */
 const grantedAgent = (...toolSetIds: string[]) => ({
@@ -122,7 +139,12 @@ const register = (
       id,
       pluginName,
       isCore,
-      contribution: { name: id, category: "Test", tools },
+      contribution: {
+        name: id,
+        category: "Test",
+        description: "Test set",
+        tools,
+      },
       plugin: PLUGIN,
     }),
   );
@@ -173,7 +195,7 @@ describe("openToolSession", () => {
 
   it("serves nothing, and needs no lookups, for an Agent with no tool sets", async () => {
     const queries = noMcps();
-    const session = await openToolSession(scope, undefined, queries);
+    const session = await openSession(scope, undefined, queries);
 
     expect(session.tools).toEqual({});
     expect(queries.getMcp).not.toHaveBeenCalled();
@@ -185,7 +207,7 @@ describe("openToolSession", () => {
     register("set.alpha", factory);
     register("set.beta", { beta: toolNamed("beta") });
 
-    const session = await openToolSession(
+    const session = await openSession(
       scope,
       grantedAgent("set.alpha", "set.beta"),
       noMcps(),
@@ -198,7 +220,7 @@ describe("openToolSession", () => {
         workspaceId: "ws-1",
         agentId: "agent-1",
         userId: "user-1",
-        frontendUrl: undefined,
+        frontendUrl: "http://localhost:3000",
         timezone: "Australia/Melbourne",
         sessionId: "chat-1",
         // The scope's fields, plus the one capability on the context.
@@ -212,7 +234,7 @@ describe("openToolSession", () => {
   // with no User watching is not offered it. `fsView` the model reads itself.
   describe("fsDownload", () => {
     it("is served to an interactive session", async () => {
-      const session = await openToolSession(
+      const session = await openSession(
         scope,
         grantDownloads("set.download-interactive"),
         noMcps(),
@@ -226,7 +248,7 @@ describe("openToolSession", () => {
     });
 
     it("is withheld from a session no User watches", async () => {
-      const session = await openToolSession(
+      const session = await openSession(
         scope,
         grantDownloads("set.download-headless"),
         noMcps(),
@@ -242,7 +264,7 @@ describe("openToolSession", () => {
     });
     register("set.fine", { fine: toolNamed("fine") });
 
-    const session = await openToolSession(
+    const session = await openSession(
       scope,
       grantedAgent("set.broken", "set.fine"),
       noMcps(),
@@ -265,7 +287,7 @@ describe("openToolSession", () => {
       { pluginName: "core-b" },
     );
 
-    const session = await openToolSession(
+    const session = await openSession(
       scope,
       grantedAgent("set.first", "set.second"),
       noMcps(),
@@ -296,7 +318,7 @@ describe("openToolSession", () => {
     register("shared.first", () => ({ read: shared() }));
     register("shared.second", () => ({ read: shared() }));
 
-    const session = await openToolSession(
+    const session = await openSession(
       scope,
       grantedAgent("shared.first", "shared.second"),
       noMcps(),
@@ -318,7 +340,7 @@ describe("openToolSession", () => {
     register("acme.first", { search: toolNamed("first") }, origin);
     register("acme.second", { search: toolNamed("second") }, origin);
 
-    const session = await openToolSession(
+    const session = await openSession(
       scope,
       grantedAgent("acme.first", "acme.second"),
       noMcps(),
@@ -349,7 +371,7 @@ describe("openToolSession", () => {
       { pluginName: "globex", isCore: false },
     );
 
-    const session = await openToolSession(
+    const session = await openSession(
       scope,
       grantedAgent("acme.issues", "globex.issues"),
       noMcps(),
@@ -394,7 +416,7 @@ describe("openToolSession", () => {
     it("opens every attached MCP at once, so the slowest bounds the turn rather than the sum", async () => {
       const counts = instrumentConcurrentOpens(3);
 
-      const session = await openToolSession(
+      const session = await openSession(
         scope,
         grantedAgent("mcp-1", "mcp-2", "mcp-3"),
         queriesFor([
@@ -442,7 +464,7 @@ describe("openToolSession", () => {
         { pluginName: "core-b" },
       );
 
-      const session = await openToolSession(
+      const session = await openSession(
         scope,
         grantedAgent("set.slow", "set.fast"),
         noMcps(),
@@ -466,7 +488,7 @@ describe("openToolSession", () => {
       register("set.native", { test_mcp__search: toolNamed("native") });
       connected({ search: toolNamed("mcp") });
 
-      const session = await openToolSession(
+      const session = await openSession(
         scope,
         grantedAgent("set.native", "mcp-1"),
         queriesFor([mcpRow()]),
@@ -514,7 +536,7 @@ describe("openToolSession", () => {
           ),
       );
 
-      const session = await openToolSession(
+      const session = await openSession(
         scope,
         // An unknown id, a throwing factory, an MCP with no URL, a listing
         // failure and a healthy MCP — all resolving at once.
@@ -554,7 +576,7 @@ describe("openToolSession", () => {
       };
 
       await expect(
-        openToolSession(scope, grantedAgent("mcp-1", "mcp-2"), queries),
+        openSession(scope, grantedAgent("mcp-1", "mcp-2"), queries),
       ).rejects.toThrow("database is down");
 
       expect(close).toHaveBeenCalled();
@@ -573,7 +595,7 @@ describe("openToolSession", () => {
         register("set.hung-factory", () => never(), { pluginName: "acme" });
         register("set.beside-hung", { fine: toolNamed("fine") });
 
-        const opening = openToolSession(
+        const opening = openSession(
           scope,
           grantedAgent("set.hung-factory", "set.beside-hung"),
           noMcps(),
@@ -604,7 +626,7 @@ describe("openToolSession", () => {
           close,
         });
 
-        const opening = openToolSession(
+        const opening = openSession(
           scope,
           grantedAgent("mcp-1"),
           queriesFor([mcpRow()]),
@@ -639,7 +661,7 @@ describe("openToolSession", () => {
           }),
         );
 
-        const opening = openToolSession(
+        const opening = openSession(
           scope,
           grantedAgent("mcp-1"),
           queriesFor([mcpRow()]),
@@ -661,7 +683,7 @@ describe("openToolSession", () => {
       mockCreateMCPClient.mockReturnValueOnce(never());
       const run = new AbortController();
 
-      const opening = openToolSession(
+      const opening = openSession(
         scope,
         grantedAgent("set.hung-until-abort", "mcp-1", "set.beside-abort"),
         queriesFor([mcpRow()]),
@@ -678,7 +700,7 @@ describe("openToolSession", () => {
     it("serves an MCP server's tools, namespaced under its slug, for an id no Tool set claims, and closes it on dispose", async () => {
       const close = connected({ mcpTool: toolNamed("mcpTool") });
 
-      const session = await openToolSession(
+      const session = await openSession(
         scope,
         grantedAgent("mcp-1"),
         queriesFor([mcpRow()]),
@@ -704,7 +726,7 @@ describe("openToolSession", () => {
         },
       });
 
-      const session = await openToolSession(
+      const session = await openSession(
         scope,
         grantedAgent("mcp-1"),
         queriesFor([mcpRow()]),
@@ -724,7 +746,7 @@ describe("openToolSession", () => {
       mockCreateMCPClient.mockRejectedValueOnce(new Error("ECONNREFUSED"));
       register("set.survivor", { fine: toolNamed("fine") });
 
-      const session = await openToolSession(
+      const session = await openSession(
         scope,
         grantedAgent("mcp-1", "set.survivor"),
         queriesFor([mcpRow()]),
@@ -745,7 +767,7 @@ describe("openToolSession", () => {
         close,
       });
 
-      const session = await openToolSession(
+      const session = await openSession(
         scope,
         grantedAgent("mcp-1"),
         queriesFor([mcpRow()]),
@@ -759,7 +781,7 @@ describe("openToolSession", () => {
     });
 
     it("warns for an MCP with no URL configured", async () => {
-      const session = await openToolSession(
+      const session = await openSession(
         scope,
         grantedAgent("mcp-1"),
         queriesFor([mcpRow({ url: null })]),
@@ -773,11 +795,7 @@ describe("openToolSession", () => {
     });
 
     it("warns for an id that is neither a Tool set nor an MCP", async () => {
-      const session = await openToolSession(
-        scope,
-        grantedAgent("ghost"),
-        noMcps(),
-      );
+      const session = await openSession(scope, grantedAgent("ghost"), noMcps());
 
       expect(session.tools).toEqual({});
       expect(logger.warn).toHaveBeenCalledWith(
@@ -796,7 +814,7 @@ describe("openToolSession", () => {
       );
       connected({ search: toolNamed("mcp") });
 
-      const session = await openToolSession(
+      const session = await openSession(
         scope,
         grantedAgent("set.search", "mcp-1"),
         queriesFor([mcpRow()]),
@@ -810,7 +828,7 @@ describe("openToolSession", () => {
     it("namespaces a tool name that already looks namespaced, rather than stripping it", async () => {
       connected({ github__pull: toolNamed("pull") });
 
-      const session = await openToolSession(
+      const session = await openSession(
         scope,
         grantedAgent("mcp-1"),
         queriesFor([mcpRow({ name: "GitHub", slug: "github" })]),
@@ -823,7 +841,7 @@ describe("openToolSession", () => {
       connected({ search: toolNamed("from-one") });
       connected({ search: toolNamed("from-two") });
 
-      const session = await openToolSession(
+      const session = await openSession(
         scope,
         grantedAgent("mcp-1", "mcp-2"),
         queriesFor([
@@ -843,7 +861,7 @@ describe("openToolSession", () => {
         thisNameIsWayTooLongToFitOnceNamespaced: toolNamed("too-long"),
       });
 
-      const session = await openToolSession(
+      const session = await openSession(
         scope,
         grantedAgent("mcp-1"),
         queriesFor([mcpRow({ slug: longSlug })]),
@@ -869,7 +887,7 @@ describe("openToolSession", () => {
       const second = connected({ b: toolNamed("b") });
 
       await expect(
-        openToolSession(
+        openSession(
           scope,
           grantedAgent("mcp-1", "mcp-2"),
           queriesFor([
@@ -894,7 +912,7 @@ describe("openToolSession", () => {
       });
       const second = connected({ b: toolNamed("b") });
 
-      const session = await openToolSession(
+      const session = await openSession(
         scope,
         grantedAgent("mcp-1", "mcp-2"),
         queriesFor([
@@ -918,7 +936,7 @@ describe("openToolSession", () => {
       register("set.loads", { fine: toolNamed("fine") });
       connected({ mcpTool: toolNamed("mcpTool") });
 
-      const session = await openToolSession(
+      const session = await openSession(
         scope,
         grantedAgent("set.loads", "mcp-1"),
         queriesFor([mcpRow()]),
@@ -928,7 +946,7 @@ describe("openToolSession", () => {
     });
 
     it("lists an id that is neither a Tool set nor an MCP as not found", async () => {
-      const session = await openToolSession(
+      const session = await openSession(
         scope,
         grantedAgent("deleted-set"),
         noMcps(),
@@ -940,7 +958,7 @@ describe("openToolSession", () => {
     });
 
     it("lists an MCP with no URL as misconfigured", async () => {
-      const session = await openToolSession(
+      const session = await openSession(
         scope,
         grantedAgent("mcp-1"),
         queriesFor([mcpRow({ url: null, name: "Jira" })]),
@@ -954,7 +972,7 @@ describe("openToolSession", () => {
     it("lists an unreachable MCP with no last-known listing as unreachable", async () => {
       mockCreateMCPClient.mockRejectedValueOnce(new Error("ECONNREFUSED"));
 
-      const session = await openToolSession(
+      const session = await openSession(
         scope,
         grantedAgent("mcp-1"),
         queriesFor([mcpRow({ name: "Jira" })]),
@@ -974,7 +992,7 @@ describe("openToolSession", () => {
           close: vi.fn().mockResolvedValue(undefined),
         });
 
-        const opening = openToolSession(
+        const opening = openSession(
           scope,
           grantedAgent("mcp-1"),
           queriesFor([mcpRow()]),
@@ -998,7 +1016,7 @@ describe("openToolSession", () => {
         }),
       );
 
-      const session = await openToolSession(
+      const session = await openSession(
         scope,
         grantedAgent("mcp-1"),
         queriesFor([mcpRow()]),
@@ -1014,7 +1032,7 @@ describe("openToolSession", () => {
         throw new Error("boom");
       });
 
-      const session = await openToolSession(
+      const session = await openSession(
         scope,
         grantedAgent("set.unloaded-throws"),
         noMcps(),
@@ -1034,7 +1052,7 @@ describe("openToolSession", () => {
       try {
         register("set.unloaded-hangs", () => new Promise(() => {}));
 
-        const opening = openToolSession(
+        const opening = openSession(
           scope,
           grantedAgent("set.unloaded-hangs"),
           noMcps(),
@@ -1056,7 +1074,7 @@ describe("openToolSession", () => {
     it("does not list a factory that deliberately serves no tools", async () => {
       register("set.serves-none", () => ({}));
 
-      const session = await openToolSession(
+      const session = await openSession(
         scope,
         grantedAgent("set.serves-none"),
         noMcps(),
@@ -1070,7 +1088,7 @@ describe("openToolSession", () => {
       mockCreateMCPClient.mockReturnValueOnce(new Promise(() => {}));
       const run = new AbortController();
 
-      const opening = openToolSession(
+      const opening = openSession(
         scope,
         grantedAgent("set.unloaded-until-abort", "mcp-1"),
         queriesFor([mcpRow()]),
@@ -1083,7 +1101,7 @@ describe("openToolSession", () => {
     });
 
     it("keeps a delegate's unloaded Tool sets out of the parent's list", async () => {
-      const parent = await openToolSession(scope, grantedAgent(), noMcps());
+      const parent = await openSession(scope, grantedAgent(), noMcps());
       const child = await parent.nest({
         id: "agent-2",
         toolSetIds: ["deleted-set"],
@@ -1098,7 +1116,7 @@ describe("openToolSession", () => {
     it("carries a declared read-only hint through, keyed by the namespaced name", async () => {
       connected({ readTool: toolNamed("readTool") }, { readTool: true });
 
-      const session = await openToolSession(
+      const session = await openSession(
         scope,
         grantedAgent("mcp-1"),
         queriesFor([mcpRow()]),
@@ -1110,7 +1128,7 @@ describe("openToolSession", () => {
     it("treats a declared writes hint as not read-only", async () => {
       connected({ writeTool: toolNamed("writeTool") }, { writeTool: false });
 
-      const session = await openToolSession(
+      const session = await openSession(
         scope,
         grantedAgent("mcp-1"),
         queriesFor([mcpRow()]),
@@ -1122,7 +1140,7 @@ describe("openToolSession", () => {
     it("treats an undeclared hint as not read-only", async () => {
       connected({ plainTool: toolNamed("plainTool") });
 
-      const session = await openToolSession(
+      const session = await openSession(
         scope,
         grantedAgent("mcp-1"),
         queriesFor([mcpRow()]),
@@ -1138,7 +1156,7 @@ describe("openToolSession", () => {
         { sneaky: "true" as unknown as boolean },
       );
 
-      const session = await openToolSession(
+      const session = await openSession(
         scope,
         grantedAgent("mcp-1"),
         queriesFor([mcpRow()]),
@@ -1150,7 +1168,7 @@ describe("openToolSession", () => {
     it("carries no hint for a Tool set that is not an MCP", async () => {
       register("set.readOnlyHints.plain", { plain: toolNamed("plain") });
 
-      const session = await openToolSession(
+      const session = await openSession(
         scope,
         grantedAgent("set.readOnlyHints.plain"),
         noMcps(),
@@ -1172,7 +1190,7 @@ describe("openToolSession", () => {
         { readTool: true, writeTool: false },
       );
 
-      const session = await openToolSession(
+      const session = await openSession(
         scope,
         grantedAgent("set.gate-scope", "mcp-1"),
         queriesFor([mcpRow()]),
@@ -1198,7 +1216,7 @@ describe("openToolSession", () => {
     });
 
     it("marks a delegate's session unattended under its own Agent, even from an attended turn", async () => {
-      const parent = await openToolSession(scope, grantedAgent(), noMcps(), {
+      const parent = await openSession(scope, grantedAgent(), noMcps(), {
         interactive: true,
       });
       const child = await parent.nest({ id: "sub-agent-1", toolSetIds: [] });
@@ -1210,7 +1228,7 @@ describe("openToolSession", () => {
     });
 
     it("is unattended when no User is watching", async () => {
-      const session = await openToolSession(scope, undefined, noMcps());
+      const session = await openSession(scope, undefined, noMcps());
 
       expect(session.gateScope.attended).toBe(false);
       expect(session.gateScope.agentId).toBeUndefined();
@@ -1235,7 +1253,7 @@ describe("openToolSession", () => {
       const close = vi.fn().mockResolvedValue(undefined);
       registering("set.pooled", close);
 
-      const session = await openToolSession(
+      const session = await openSession(
         scope,
         grantedAgent("set.pooled"),
         noMcps(),
@@ -1253,7 +1271,7 @@ describe("openToolSession", () => {
     it("resolves a factory that registers nothing exactly as before", async () => {
       register("set.plain", () => ({ plain: toolNamed("plain") }));
 
-      const session = await openToolSession(
+      const session = await openSession(
         scope,
         grantedAgent("set.plain"),
         noMcps(),
@@ -1266,7 +1284,7 @@ describe("openToolSession", () => {
     });
 
     it("closes at once when registered after dispose", async () => {
-      const session = await openToolSession(scope, grantedAgent(), noMcps());
+      const session = await openSession(scope, grantedAgent(), noMcps());
       await session.dispose();
 
       const close = vi.fn().mockResolvedValue(undefined);
@@ -1282,7 +1300,7 @@ describe("openToolSession", () => {
       registering("set.a", close);
       registering("set.b", close);
 
-      const session = await openToolSession(
+      const session = await openSession(
         scope,
         grantedAgent("set.a", "set.b"),
         noMcps(),
@@ -1298,7 +1316,7 @@ describe("openToolSession", () => {
       registering("set.failing", failing);
       registering("set.after", after);
 
-      const session = await openToolSession(
+      const session = await openSession(
         scope,
         grantedAgent("set.failing", "set.after"),
         noMcps(),
@@ -1321,7 +1339,7 @@ describe("openToolSession", () => {
         registering("set.hung", hung);
         registering("set.next", after);
 
-        const session = await openToolSession(
+        const session = await openSession(
           scope,
           grantedAgent("set.hung", "set.next"),
           noMcps(),
@@ -1352,7 +1370,7 @@ describe("openToolSession", () => {
         { pluginName: "acme", isCore: false },
       );
 
-      const session = await openToolSession(
+      const session = await openSession(
         scope,
         grantedAgent("set.js-plugin"),
         noMcps(),
@@ -1378,7 +1396,7 @@ describe("openToolSession", () => {
           close: vi.fn(() => new Promise<void>(() => {})),
         });
 
-        const session = await openToolSession(
+        const session = await openSession(
           scope,
           grantedAgent("mcp-1"),
           queriesFor([mcpRow()]),
@@ -1409,7 +1427,7 @@ describe("openToolSession", () => {
 
       deferCloserRegistrar(pending)(close);
 
-      const session = await openToolSession(scope, grantedAgent(), noMcps());
+      const session = await openSession(scope, grantedAgent(), noMcps());
       resolveSession(session);
       await pending;
       expect(close).not.toHaveBeenCalled();
@@ -1433,7 +1451,7 @@ describe("openToolSession", () => {
   describe("nested sessions", () => {
     it("keeps a delegate's tools to itself and closes them with the parent", async () => {
       register("set.parent", { parentTool: toolNamed("parentTool") });
-      const parent = await openToolSession(
+      const parent = await openSession(
         scope,
         grantedAgent("set.parent"),
         queriesFor([mcpRow()]),
@@ -1464,7 +1482,7 @@ describe("openToolSession", () => {
         { createIssue: toolNamed("createIssue") },
         { pluginName: "acme", isCore: false },
       );
-      const parent = await openToolSession(scope, undefined, noMcps());
+      const parent = await openSession(scope, undefined, noMcps());
 
       const child = await parent.nest({
         id: "sub-agent-1",
@@ -1479,7 +1497,7 @@ describe("openToolSession", () => {
       register("set.parent.readOnlyHints", {
         parentTool: toolNamed("parentTool"),
       });
-      const parent = await openToolSession(
+      const parent = await openSession(
         scope,
         grantedAgent("set.parent.readOnlyHints"),
         queriesFor([mcpRow()]),
@@ -1503,7 +1521,7 @@ describe("openToolSession", () => {
       const factory = vi.fn().mockResolvedValue({});
       register("set.delegate", factory);
 
-      const parent = await openToolSession(scope, grantedAgent(), noMcps());
+      const parent = await openSession(scope, grantedAgent(), noMcps());
       await parent.nest({ id: "sub-agent-1", toolSetIds: ["set.delegate"] });
 
       expect(factory).toHaveBeenCalledWith(
@@ -1525,7 +1543,7 @@ describe("openToolSession", () => {
       register("set.memory", () => ({ memoryGet: toolNamed("memoryGet") }));
       register("set.other", () => ({ other: toolNamed("other") }));
 
-      const parent = await openToolSession(
+      const parent = await openSession(
         scope,
         grantedAgent("set.memory", "set.other"),
         noMcps(),
@@ -1551,7 +1569,7 @@ describe("openToolSession", () => {
         const { toolSetIds } = grantDownloads(
           `set.download-nested-${interactive}`,
         );
-        const parent = await openToolSession(scope, undefined, noMcps(), {
+        const parent = await openSession(scope, undefined, noMcps(), {
           interactive,
         });
 
@@ -1563,7 +1581,7 @@ describe("openToolSession", () => {
     );
 
     it("closes a session opened after the parent was already disposed", async () => {
-      const parent = await openToolSession(
+      const parent = await openSession(
         scope,
         grantedAgent(),
         queriesFor([mcpRow()]),

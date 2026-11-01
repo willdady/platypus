@@ -42,7 +42,9 @@ const ROOT_DIR_NAME = "workspace";
 const HTTP_GRACE_MS = 5_000;
 
 // The adapter's own housekeeping commands (root and parent-directory setup).
-const UTILITY_EXEC: SandboxExecOptions = {
+// They run outside a turn, so they carry no cancellation signal: the transport
+// contract's `signal` is the turn's, and there is no turn here.
+const UTILITY_EXEC: Omit<SandboxExecOptions, "signal"> = {
   timeoutMs: 30_000,
   stdoutCap: 4_096,
   stderrCap: 4_096,
@@ -109,11 +111,11 @@ class DaytonaSandboxTransport implements SandboxTransport {
   // turn, and concurrent first calls share the one lookup.
   private provisioned: Map<string, Promise<Provisioned>>;
 
-  constructor(plugin: PluginConfigContext) {
-    this.config = daytonaPluginConfigSchema.parse(plugin.config ?? {});
-    const { apiKey, outboundProxyUrl } = daytonaPluginCredentialsSchema.parse(
-      plugin.credentials,
-    );
+  constructor(
+    plugin: PluginConfigContext<DaytonaPluginConfig, DaytonaPluginCredentials>,
+  ) {
+    this.config = plugin.config;
+    const { apiKey, outboundProxyUrl } = plugin.credentials;
     this.outboundProxyUrl = outboundProxyUrl;
     this.daytona = new Daytona({
       apiKey,
@@ -204,18 +206,19 @@ class DaytonaSandboxTransport implements SandboxTransport {
     const { sandbox } = await raceCancellation(opts.signal, () =>
       this.ensureSandbox(ctx),
     );
-    return this.run(ctx, sandbox, argv, opts);
+    return this.run(ctx, sandbox, argv, opts, opts.signal);
   }
 
   private async run(
     ctx: SandboxContext,
     sandbox: Sandbox,
     argv: string[],
-    opts: SandboxExecOptions,
+    opts: Omit<SandboxExecOptions, "signal">,
+    signal?: AbortSignal,
   ): Promise<SandboxExecResult> {
     const started = Date.now();
     const sessionId = `platypus-${randomUUID()}`;
-    await raceCancellation(opts.signal, () =>
+    await raceCancellation(signal, () =>
       sandbox.process.createSession(sessionId),
     );
 
@@ -224,7 +227,7 @@ class DaytonaSandboxTransport implements SandboxTransport {
       timer = setTimeout(() => resolve(null), opts.timeoutMs);
     });
     try {
-      const res = await raceCancellation(opts.signal, () =>
+      const res = await raceCancellation(signal, () =>
         Promise.race([
           sandbox.process.executeSessionCommand(
             sessionId,
@@ -274,7 +277,7 @@ class DaytonaSandboxTransport implements SandboxTransport {
     ctx: SandboxContext,
     absPath: string,
     cap: number,
-    signal?: AbortSignal,
+    signal: AbortSignal,
   ): Promise<Buffer> {
     const { sandbox } = await this.ensureSandbox(ctx);
     const stream = await sandbox.fs.downloadFileStream(absPath, { signal });
@@ -339,5 +342,5 @@ class DaytonaSandboxTransport implements SandboxTransport {
  * five-tool core.
  */
 export const createDaytonaSandboxBackend = (
-  plugin: PluginConfigContext,
+  plugin: PluginConfigContext<DaytonaPluginConfig, DaytonaPluginCredentials>,
 ): SandboxBackend => createPosixSandbox(new DaytonaSandboxTransport(plugin));

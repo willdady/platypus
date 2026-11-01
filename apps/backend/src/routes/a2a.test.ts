@@ -226,6 +226,7 @@ const registerMemoryToolSet = () => {
       contribution: {
         name: "Memory",
         category: "Memory",
+        description: "Call the Memory tool under test",
         tools: () => ({
           memorySearch: memoryTool("Search Memories"),
           memoryGet: memoryTool("Get a Memory"),
@@ -311,6 +312,7 @@ const seed = ({
         description: "Internal: uses the CRM tools",
         toolSetIds: ["crm"],
         skillIds: ["refunds"],
+        subAgentIds: [],
       },
     ],
     a2a_endpoint: [
@@ -619,6 +621,9 @@ const seedConversation = (
           modelId: "gpt-test",
           name: "Helper",
           description: "Internal",
+          toolSetIds: [],
+          skillIds: [],
+          subAgentIds: [],
         },
         {
           id: "agent-2",
@@ -627,6 +632,9 @@ const seedConversation = (
           modelId: "gpt-test",
           name: "Other",
           description: "Other",
+          toolSetIds: [],
+          skillIds: [],
+          subAgentIds: [],
         },
       ],
       a2a_endpoint: [
@@ -2260,6 +2268,7 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
             activeLeafId: "reply-a",
             a2aTokenId: "tok-1",
             lastTurnAt: hourAgo,
+            runHeartbeatAt: hourAgo,
             updatedAt: hourAgo,
           },
         ],
@@ -3547,6 +3556,7 @@ describe("POST /a2a/:endpointId — push notifications", () => {
           status: "running",
           activeLeafId: "msg-a",
           lastTurnAt: hourAgo,
+          runHeartbeatAt: hourAgo,
           updatedAt: hourAgo,
         },
       ],

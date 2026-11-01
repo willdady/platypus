@@ -79,6 +79,7 @@ const buildTools = (
 ): Promise<Record<string, Tool>> =>
   composeWebBackend({
     contribution: contribution(executors, overrides),
+    backend: "searx",
     pluginName: "@acme/searx",
     resolveHostname: resolvePublic,
     plugin: PLUGIN,
@@ -109,6 +110,7 @@ describe("web-backend registry", () => {
         { web_search: () => ({ query: "", results: [] }) },
         { backend },
       ),
+      backend,
       pluginName: "@acme/searx",
       plugin: PLUGIN,
     });
@@ -184,6 +186,7 @@ describe("composeWebBackend — tool construction", () => {
 
     await composeWebBackend({
       contribution: contribution({}, { createExecutors }),
+      backend: "searx",
       plugin,
       pluginName: "@acme/searx",
     }).buildTurnTools(CTX);
@@ -226,6 +229,7 @@ describe("composeWebBackend — tool construction", () => {
           },
         },
       ),
+      backend: "searx",
       pluginName: "@acme/searx",
       plugin: PLUGIN,
     }).buildTurnTools(CTX);
@@ -255,6 +259,7 @@ describe("composeWebBackend — tool construction", () => {
           timeoutMs: 20,
         },
       ),
+      backend: "searx",
       pluginName: "@acme/searx",
       plugin: PLUGIN,
     }).buildTurnTools(CTX);
@@ -1135,6 +1140,7 @@ describe("the signal an executor is handed", () => {
         web_search: () => ({ query: "q", results: [] }),
         read_url,
       }),
+      backend: "searx",
       pluginName: "@acme/searx",
       resolveHostname,
       plugin: PLUGIN,
@@ -1201,6 +1207,7 @@ describe("the closer a backend registers", () => {
 
     await composeWebBackend({
       contribution: contribution({}, { createExecutors }),
+      backend: "searx",
       pluginName: "@acme/searx",
       plugin: PLUGIN,
     }).buildTurnTools(ctxWith(() => {}));
@@ -1252,6 +1259,7 @@ describe("the closer a backend registers", () => {
           },
         },
       ),
+      backend: "searx",
       pluginName: "@acme/searx",
       plugin: PLUGIN,
     }).buildTurnTools(
@@ -1284,6 +1292,7 @@ describe("the closer a backend registers", () => {
           },
         },
       ),
+      backend: "searx",
       pluginName: "@acme/searx",
       plugin: PLUGIN,
     }).buildTurnTools(CTX);

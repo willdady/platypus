@@ -4,6 +4,7 @@ import {
   cronTriggerConfigSchema,
   eventTriggerFiltersSchema,
   eventTriggerEventSchema,
+  triggerCreateSchema,
   type CronTriggerConfig,
   type EventTriggerConfig,
 } from "@platypus/schemas";
@@ -11,22 +12,25 @@ import { db } from "../index.ts";
 import { buildResourceUrl } from "../utils/resource-url.ts";
 import { listScoped } from "../services/scoped-resource.ts";
 import {
-  createTrigger,
+  createTrigger as createTriggerService,
   deleteTrigger as deleteTriggerService,
   FIRED_ONE_OFF_TTL_DAYS,
   getTrigger as getTriggerService,
   listTriggers as listTriggersService,
+  narrowTriggerConfig,
   toPublicTrigger,
-  updateTrigger,
+  updateTrigger as updateTriggerService,
+  type TriggerRow,
 } from "../services/trigger.ts";
 import { NotFoundError, ValidationError } from "../errors.ts";
+import { formatIssues } from "../zod-issues.ts";
 import { createGetCurrentTime } from "./time.ts";
 import type { ScopeContext } from "../scope.ts";
 
 export function createTriggerTools(
   workspaceId: string,
   orgId: string,
-  frontendUrl: string | undefined,
+  frontendUrl: string,
   /** The acting User's effective timezone (`ToolSetContext.timezone`). */
   timezone: string,
 ): Record<string, Tool> {
@@ -104,23 +108,26 @@ export function createTriggerTools(
         enabledOnly,
         includeFired: true,
       });
-      const triggers = rows.map((row) => ({
-        id: row.id,
-        name: row.name,
-        description: row.description,
-        agentId: row.agentId,
-        type: row.type,
-        enabled: row.enabled,
-        ...(row.type === "cron" && {
-          isOneOff: (row.config as CronTriggerConfig).isOneOff === true,
-        }),
-        nextRunAt: row.nextRunAt,
-        lastRunAt: row.lastRunAt,
-        firedAt: row.firedAt,
-        lastRunStatus: row.lastRunStatus,
-        lastRunStartedAt: row.lastRunStartedAt,
-        createdAt: row.createdAt,
-      }));
+      const triggers = rows.map((row) => {
+        const typed = narrowTriggerConfig(row);
+        return {
+          id: row.id,
+          name: row.name,
+          description: row.description,
+          agentId: row.agentId,
+          type: row.type,
+          enabled: row.enabled,
+          ...(typed.type === "cron" && {
+            isOneOff: typed.config.isOneOff === true,
+          }),
+          nextRunAt: row.nextRunAt,
+          lastRunAt: row.lastRunAt,
+          firedAt: row.firedAt,
+          lastRunStatus: row.lastRunStatus,
+          lastRunStartedAt: row.lastRunStartedAt,
+          createdAt: row.createdAt,
+        };
+      });
 
       return { triggers, count: triggers.length };
     },
@@ -148,37 +155,183 @@ export function createTriggerTools(
     },
   });
 
-  const upsertTrigger = tool({
+  /** The Trigger config the model may set, per its chosen type. */
+  const configField = z
+    .object({
+      cronExpression: cronTriggerConfigSchema.shape.cronExpression
+        .optional()
+        .describe(
+          "Cron expression for cron triggers (e.g., '0 9 * * *' for daily at 9 AM UTC)",
+        ),
+      timezone: z
+        .string()
+        .optional()
+        .describe(
+          "IANA timezone for cron triggers (e.g., 'America/New_York'). Defaults to the Workspace Owner's timezone, or the deployment default if they have not set one.",
+        ),
+      isOneOff: z
+        .boolean()
+        .optional()
+        .describe(
+          `Cron triggers only: if true, the trigger fires once at the next time its cron expression matches, then is disabled for good and deleted ${FIRED_ONE_OFF_TTL_DAYS} days after its run ends. Defaults to false (recurring).`,
+        ),
+      events: z
+        .array(eventTriggerEventSchema)
+        .optional()
+        .describe(
+          `Array of event names for event triggers. Allowed values: ${eventTriggerEventSchema.options.join(", ")}`,
+        ),
+      filters: eventTriggerFiltersSchema
+        .optional()
+        .describe(
+          "Optional filters to narrow which events trigger this agent: boardId, columnId, and/or changedFields (changedFields only applies to card.updated).",
+        ),
+    })
+    .describe(
+      "Trigger configuration. For cron type: requires cronExpression. For event type: requires events array.",
+    );
+
+  /** The Trigger fields a write may set, minus the create-only ones. */
+  const triggerFields = {
+    description: z
+      .string()
+      .min(1)
+      .max(500)
+      .optional()
+      .describe("Description of what this trigger does"),
+    enabled: z.boolean().optional().describe("Whether the trigger is enabled"),
+    maxRunsToKeep: z
+      .number()
+      .int()
+      .min(1)
+      .max(1000)
+      .optional()
+      .describe(
+        "Minimum number of recent run records to keep; runs inside the run-rate breaker's window are retained beyond it",
+      ),
+    search: z
+      .boolean()
+      .optional()
+      .describe("If true, enables web search for the LLM"),
+    includeMemories: z
+      .boolean()
+      .optional()
+      .describe(
+        "If true, the trigger's runs include the user's recent memory summaries in the system prompt. Defaults to false, so a run's prompt does not vary with unrelated chat activity.",
+      ),
+  };
+
+  type TriggerConfigField = z.infer<typeof configField>;
+
+  /**
+   * A cron config the model left without a timezone runs in the acting User's
+   * zone, on create and update alike — the tool's own instruction says so.
+   * An event config carries no cron expression and is returned untouched.
+   */
+  const withActingTimezone = (config: TriggerConfigField) =>
+    config.cronExpression === undefined
+      ? config
+      : { ...config, timezone: config.timezone ?? timezone };
+
+  /** The service validates the config against the Trigger's effective type. */
+  const asTriggerConfig = (config: TriggerConfigField) =>
+    withActingTimezone(config) as CronTriggerConfig | EventTriggerConfig;
+
+  /** A written Trigger as a Tool returns it: the row, its next run, and a link. */
+  const withTriggerResult = (record: TriggerRow) => {
+    const url = buildResourceUrl(
+      frontendUrl,
+      orgId,
+      workspaceId,
+      `triggers/${record.id}`,
+    );
+    return {
+      success: true as const,
+      trigger: toPublicTrigger(record),
+      ...describeNextRun(record),
+      ...(url && { url }),
+    };
+  };
+
+  const createTriggerTool = tool({
     description:
-      "Create a new trigger or update an existing trigger. If triggerId is provided, updates the existing trigger. If triggerId is not provided, creates a new trigger (requires name, agentId, instruction, type, and config). " +
+      "Create a new trigger. Requires label, name, agentId, instruction, type and config. " +
       "For something the User wants done once (a reminder, a one-time task), create a cron trigger with config.isOneOff set to true: it fires at the first time its cron expression matches, then is spent and cannot be re-enabled. Use getCurrentTime to work out dates such as 'tomorrow'. " +
       "A cron trigger with no config.timezone is scheduled in the User's timezone when the system prompt names one; pass config.timezone only when the User means a different zone. If the system prompt names no timezone, ask the User rather than guessing, and pass their answer as config.timezone. " +
       "A cron trigger's result carries nextRunAt (UTC) and nextRunAtLocal (in its timezone): check it is the instant the User asked for. Cron has no year, so a date already past this year runs next year.",
     inputSchema: z.object({
-      triggerId: z
+      label: z.string().describe("The trigger name (for display purposes)"),
+      name: z
         .string()
-        .optional()
-        .describe(
-          "The trigger ID to update. If not provided, a new trigger will be created.",
-        ),
-      label: z
+        .min(1)
+        .max(100)
+        .describe("A descriptive name for the trigger"),
+      agentId: z
         .string()
         .describe(
-          "The trigger name (for display purposes, required when updating by triggerId)",
+          "The ID of the agent to run (use listAgents to find available IDs)",
         ),
+      instruction: z
+        .string()
+        .min(1)
+        .max(10000)
+        .describe(
+          "The instruction/prompt to send to the agent when the trigger fires",
+        ),
+      type: z
+        .enum(["cron", "event"])
+        .describe(
+          "The trigger type: 'cron' for scheduled triggers or 'event' for event-based triggers",
+        ),
+      config: configField,
+      ...triggerFields,
+    }),
+    execute: async (params) => {
+      const { label: _label, ...fields } = params;
+      try {
+        // The create schema is the one defaults table: parsing here fills the
+        // fields the Tool left out, so the Trigger model is handed a complete
+        // set rather than a second copy of the same defaults. The module then
+        // validates the config against the chosen type.
+        const parsed = triggerCreateSchema.safeParse({
+          ...fields,
+          workspaceId,
+          config: asTriggerConfig(fields.config),
+        });
+        if (!parsed.success) {
+          return { success: false, error: formatIssues(parsed.error.issues) };
+        }
+        // The schema needs a workspace to type its values; the Trigger model
+        // takes the one from `ctx`, which is the only identity it may write to.
+        const { workspaceId: _workspaceId, ...createFields } = parsed.data;
+        return withTriggerResult(
+          await createTriggerService(ctx, createFields, {
+            allowInbound: false,
+          }),
+        );
+      } catch (error) {
+        return toToolError(error);
+      }
+    },
+  });
+
+  const updateTriggerTool = tool({
+    description:
+      "Update an existing trigger. Only the fields provided are changed; omitted fields are left as they are. Supplying config replaces it wholesale, so read the trigger first and pass the complete merged config. A cron config with no timezone runs in the User's timezone.",
+    inputSchema: z.object({
+      triggerId: z.string().describe("The trigger ID to update"),
+      label: z.string().describe("The trigger name (for display purposes)"),
       name: z
         .string()
         .min(1)
         .max(100)
         .optional()
-        .describe(
-          "A descriptive name for the trigger (required when creating)",
-        ),
+        .describe("A descriptive name for the trigger"),
       agentId: z
         .string()
         .optional()
         .describe(
-          "The ID of the agent to run (required when creating, use listAgents to find available IDs)",
+          "The ID of the agent to run (use listAgents to find available IDs)",
         ),
       instruction: z
         .string()
@@ -186,164 +339,33 @@ export function createTriggerTools(
         .max(10000)
         .optional()
         .describe(
-          "The instruction/prompt to send to the agent when the trigger fires (required when creating)",
+          "The instruction/prompt to send to the agent when the trigger fires",
         ),
       type: z
         .enum(["cron", "event"])
         .optional()
         .describe(
-          "The trigger type: 'cron' for scheduled triggers or 'event' for event-based triggers (required when creating)",
+          "The trigger type: 'cron' for scheduled triggers or 'event' for event-based triggers",
         ),
-      config: z
-        .object({
-          cronExpression: cronTriggerConfigSchema.shape.cronExpression
-            .optional()
-            .describe(
-              "Cron expression for cron triggers (e.g., '0 9 * * *' for daily at 9 AM UTC)",
-            ),
-          timezone: z
-            .string()
-            .optional()
-            .describe(
-              "IANA timezone for cron triggers (e.g., 'America/New_York'). Defaults to the Workspace Owner's timezone, or the deployment default if they have not set one.",
-            ),
-          isOneOff: z
-            .boolean()
-            .optional()
-            .describe(
-              `Cron triggers only: if true, the trigger fires once at the next time its cron expression matches, then is disabled for good and deleted ${FIRED_ONE_OFF_TTL_DAYS} days after its run ends. Defaults to false (recurring).`,
-            ),
-          events: z
-            .array(eventTriggerEventSchema)
-            .optional()
-            .describe(
-              `Array of event names for event triggers. Allowed values: ${eventTriggerEventSchema.options.join(", ")}`,
-            ),
-          filters: eventTriggerFiltersSchema
-            .optional()
-            .describe(
-              "Optional filters to narrow which events trigger this agent: boardId, columnId, and/or changedFields (changedFields only applies to card.updated).",
-            ),
-        })
-        .optional()
-        .describe(
-          "Trigger configuration. For cron type: requires cronExpression. For event type: requires events array.",
-        ),
-      description: z
-        .string()
-        .min(1)
-        .max(500)
-        .describe("Description of what this trigger does"),
-      enabled: z
-        .boolean()
-        .optional()
-        .describe("Whether the trigger is enabled"),
-      maxRunsToKeep: z
-        .number()
-        .int()
-        .min(1)
-        .max(1000)
-        .optional()
-        .describe(
-          "Minimum number of recent run records to keep; runs inside the run-rate breaker's window are retained beyond it",
-        ),
-      search: z
-        .boolean()
-        .optional()
-        .describe("If true, enables web search for the LLM"),
-      includeMemories: z
-        .boolean()
-        .optional()
-        .describe(
-          "If true, the trigger's runs include the user's recent memory summaries in the system prompt. Defaults to false, so a run's prompt does not vary with unrelated chat activity.",
-        ),
+      config: configField.optional(),
+      ...triggerFields,
     }),
     execute: async (params) => {
       const { triggerId, label: _label, ...fields } = params;
-      const config = fields.config as
-        (CronTriggerConfig | EventTriggerConfig) | undefined;
-
-      // Update existing trigger
-      if (triggerId) {
-        try {
-          const record = await updateTrigger(ctx, triggerId, {
-            agentId: fields.agentId,
-            type: fields.type,
-            name: fields.name,
-            description: fields.description,
-            instruction: fields.instruction,
-            enabled: fields.enabled,
-            maxRunsToKeep: fields.maxRunsToKeep,
-            search: fields.search,
-            includeMemories: fields.includeMemories,
-            config,
-          });
-
-          const url = buildResourceUrl(
-            frontendUrl,
-            orgId,
-            workspaceId,
-            `triggers/${triggerId}`,
-          );
-
-          return {
-            success: true,
-            trigger: toPublicTrigger(record),
-            ...describeNextRun(record),
-            ...(url && { url }),
-          };
-        } catch (error) {
-          return toToolError(error);
-        }
-      }
-
-      // Create new trigger — validate required fields
-      const { name, agentId, instruction, type } = fields;
-
-      if (!name || !agentId || !instruction || !type || !config) {
-        return {
-          error:
-            "name, agentId, instruction, type, and config are required when creating a new trigger",
-        };
-      }
-
-      // A cron Trigger the Agent gave no timezone runs in the acting User's zone
-      const createConfig =
-        type === "cron"
-          ? {
-              ...config,
-              timezone:
-                (config as Partial<CronTriggerConfig>).timezone ?? timezone,
-            }
-          : config;
-
       try {
-        const record = await createTrigger(ctx, {
-          agentId,
-          type,
-          name,
-          description: fields.description,
-          instruction,
-          enabled: fields.enabled,
-          maxRunsToKeep: fields.maxRunsToKeep,
-          search: fields.search,
-          includeMemories: fields.includeMemories,
-          config: createConfig,
-        });
-
-        const url = buildResourceUrl(
-          frontendUrl,
-          orgId,
-          workspaceId,
-          `triggers/${record.id}`,
+        return withTriggerResult(
+          await updateTriggerService(
+            ctx,
+            triggerId,
+            {
+              ...fields,
+              ...(fields.config !== undefined && {
+                config: asTriggerConfig(fields.config),
+              }),
+            },
+            { allowInbound: false },
+          ),
         );
-
-        return {
-          success: true,
-          trigger: toPublicTrigger(record),
-          ...describeNextRun(record),
-          ...(url && { url }),
-        };
       } catch (error) {
         return toToolError(error);
       }
@@ -362,7 +384,9 @@ export function createTriggerTools(
     }),
     execute: async ({ triggerId }) => {
       try {
-        if (!(await deleteTriggerService(ctx, triggerId))) {
+        if (
+          !(await deleteTriggerService(ctx, triggerId, { allowInbound: false }))
+        ) {
           return { error: "Trigger not found" };
         }
       } catch (error) {
@@ -378,7 +402,8 @@ export function createTriggerTools(
     listAgents,
     listTriggers,
     getTrigger,
-    upsertTrigger,
+    createTrigger: createTriggerTool,
+    updateTrigger: updateTriggerTool,
     deleteTrigger,
     // The Time Tool set's own tool under the same name, so an Agent holding
     // both sees it once.

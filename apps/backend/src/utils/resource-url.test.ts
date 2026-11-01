@@ -2,12 +2,6 @@ import { describe, it, expect } from "vitest";
 import { buildResourceUrl } from "./resource-url.ts";
 
 describe("buildResourceUrl", () => {
-  it("should return undefined when frontendUrl is undefined", () => {
-    expect(
-      buildResourceUrl(undefined, "org-1", "ws-1", "chat/c1"),
-    ).toBeUndefined();
-  });
-
   it("should build a correct resource URL", () => {
     expect(
       buildResourceUrl("http://localhost:3000", "org-1", "ws-1", "chat/c1"),

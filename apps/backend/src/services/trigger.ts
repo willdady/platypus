@@ -4,7 +4,6 @@ import {
   cronTriggerConfigSchema,
   eventTriggerConfigSchema,
   inboundTriggerConfigSchema,
-  triggerTypeSchema,
   type CronTriggerConfig,
   type EventTriggerConfig,
   type InboundTriggerConfig,
@@ -19,7 +18,7 @@ import {
 } from "../db/schema.ts";
 import type { ScopeContext } from "../scope.ts";
 import { NotFoundError, ValidationError } from "../errors.ts";
-import { validateCronExpression } from "../utils/cron.ts";
+import { nextCronRunAt } from "../utils/cron.ts";
 import {
   generateBearerToken,
   bearerTokenStatus,
@@ -40,8 +39,8 @@ const INBOUND_TOKEN_PREFIX = "pit_";
 
 /**
  * The Trigger model: the one place `type`/`config` validation, the Agent
- * visibility check, create defaults and `nextRunAt` computation happen, and
- * the reads both surfaces share, behind an interface both surfaces call.
+ * visibility check and `nextRunAt` computation happen, and the reads both
+ * surfaces share, behind an interface both surfaces call.
  * `routes/trigger.ts` (the UI's HTTP route) and `tools/trigger.ts` (the
  * Agent-facing Tool set) used to each hand-roll this — the Tool's copy
  * imported nothing from `@platypus/schemas`, so it drifted narrower on
@@ -78,10 +77,10 @@ type TriggerBaseFields = {
   name: string;
   description?: string | null;
   instruction: string;
-  enabled?: boolean;
-  maxRunsToKeep?: number;
-  search?: boolean;
-  includeMemories?: boolean;
+  enabled: boolean;
+  maxRunsToKeep: number;
+  search: boolean;
+  includeMemories: boolean;
   config: CronTriggerConfig | EventTriggerConfig | InboundTriggerConfig;
 };
 
@@ -89,31 +88,19 @@ type TriggerBaseFields = {
  * Who is writing. Only the Workspace Owner, through the UI, may create, edit
  * or delete an Inbound Trigger (ADR-0030): the Agent's Trigger tools must
  * never mint a live credential into a model's context or a Chat transcript,
- * nor stop an integration a caller depends on. Defaults to the narrower
- * surface, so a new caller has to opt in to reaching Inbound Triggers.
+ * nor stop an integration a caller depends on. Required, so every caller names
+ * the surface it writes on rather than inheriting one.
  */
-export type TriggerWriteOptions = { allowInbound?: boolean };
+export type TriggerWriteOptions = { allowInbound: boolean };
 
 /**
- * The fields a create carries. `enabled`, `maxRunsToKeep`, `search` and
- * `includeMemories` are optional: an omitted one takes {@link CREATE_DEFAULTS}.
- * The HTTP route always supplies them, already defaulted by
- * `triggerCreateSchema`'s Zod defaults.
+ * The fields a create carries. Every field is supplied: the defaults a form or
+ * a Tool leaves out live in `triggerCreateSchema`'s Zod defaults, so this model
+ * does not hold a second copy of them.
  */
 export type TriggerCreateFields = TriggerBaseFields & {
   /** Inbound only: `false` creates it with no token. Omitted, one is issued. */
   issueToken?: boolean;
-};
-
-/**
- * What a create stores for a field the caller omitted — matching the `trigger`
- * table's column defaults and the Trigger form.
- */
-const CREATE_DEFAULTS = {
-  enabled: true,
-  maxRunsToKeep: 10,
-  search: false,
-  includeMemories: false,
 };
 
 /**
@@ -140,7 +127,8 @@ export type TypedTriggerConfig =
  * Narrows a stored row's `type` + `config` into {@link TypedTriggerConfig},
  * validated against the real config schemas. A malformed row throws here — the
  * one place it can — rather than surfacing as an `undefined` read wherever a
- * caller cast the jsonb to the shape it hoped for.
+ * caller assumed the jsonb matched its type. The upgrade's repair migration is
+ * the only way such a row can reach this point.
  */
 export const narrowTriggerConfig = (
   row: Pick<TriggerRow, "id" | "type" | "config">,
@@ -151,7 +139,8 @@ export const narrowTriggerConfig = (
   } else if (row.type === "event") {
     const parsed = eventTriggerConfigSchema.safeParse(row.config);
     if (parsed.success) return { type: "event", config: parsed.data };
-  } else if (row.type === "inbound") {
+  } else {
+    // The column's CHECK leaves `inbound` as the only other type.
     const parsed = inboundTriggerConfigSchema.safeParse(row.config);
     if (parsed.success) return { type: "inbound", config: parsed.data };
   }
@@ -160,14 +149,9 @@ export const narrowTriggerConfig = (
   );
 };
 
-/**
- * The next `nextRunAt` a cron config names, from now — or `null` when the
- * expression or timezone cannot be parsed. The one statement of the schedule
- * rule: the write model, the post-run bookkeeping and the recovery sweep all
- * call it.
- */
-export const nextCronRunAt = (config: CronTriggerConfig): Date | null =>
-  validateCronExpression(config.cronExpression, config.timezone);
+// The schedule rule has one home, in `utils/cron.ts`: the one-off upgrade
+// step that repairs stranded schedules reads it without this module's db.
+export { nextCronRunAt };
 
 /**
  * Validates a cron config and returns it normalized (Zod defaults applied —
@@ -231,13 +215,14 @@ export const MAX_PENDING_ONE_OFF_TRIGGERS = 50;
 /** How long a fired One-off Trigger outlives the end of its run. */
 export const FIRED_ONE_OFF_TTL_DAYS = 7;
 
-const isOneOffConfig = (config: unknown): boolean =>
-  cronTriggerConfigSchema.safeParse(config).data?.isOneOff === true;
-
 /** A One-off Trigger that has not fired yet, enabled or not. */
 const isPendingOneOff = (
-  row: Pick<TriggerRow, "type" | "config" | "firedAt">,
-): boolean => row.type === "cron" && !row.firedAt && isOneOffConfig(row.config);
+  row: Pick<TriggerRow, "id" | "type" | "config" | "firedAt">,
+): boolean => {
+  if (row.type !== "cron" || row.firedAt) return false;
+  const typed = narrowTriggerConfig(row);
+  return typed.type === "cron" && typed.config.isOneOff === true;
+};
 
 /**
  * Throws `ValidationError` when this Workspace already holds its limit of
@@ -272,11 +257,12 @@ const requireNotReArmed = (
   existing: TriggerRow,
   fields: TriggerUpdateFields,
 ): void => {
-  const stored = cronTriggerConfigSchema.safeParse(existing.config).data;
+  const storedPair = narrowTriggerConfig(existing);
+  const stored = storedPair.type === "cron" ? storedPair.config : undefined;
   const next =
     fields.config === undefined
       ? stored
-      : cronTriggerConfigSchema.safeParse(fields.config).data;
+      : parseCronConfig(fields.config).config;
   const sameSchedule =
     !!stored &&
     !!next &&
@@ -332,7 +318,7 @@ const requireUsableAgent = async (
 export async function createTrigger(
   ctx: ScopeContext,
   fields: TriggerCreateFields,
-  { allowInbound = false }: TriggerWriteOptions = {},
+  { allowInbound }: TriggerWriteOptions,
 ): Promise<TriggerRow & { issuedToken?: string }> {
   if (fields.type === "inbound" && !allowInbound) {
     throw new ValidationError(INBOUND_ONLY_IN_UI);
@@ -371,10 +357,10 @@ export async function createTrigger(
     name: fields.name,
     description: fields.description ?? null,
     instruction: fields.instruction,
-    enabled: fields.enabled ?? CREATE_DEFAULTS.enabled,
-    maxRunsToKeep: fields.maxRunsToKeep ?? CREATE_DEFAULTS.maxRunsToKeep,
-    search: fields.search ?? CREATE_DEFAULTS.search,
-    includeMemories: fields.includeMemories ?? CREATE_DEFAULTS.includeMemories,
+    enabled: fields.enabled,
+    maxRunsToKeep: fields.maxRunsToKeep,
+    search: fields.search,
+    includeMemories: fields.includeMemories,
     config,
     nextRunAt,
     ...tokenFields,
@@ -402,7 +388,7 @@ export async function updateTrigger(
   ctx: ScopeContext,
   triggerId: string,
   fields: TriggerUpdateFields,
-  { allowInbound = false }: TriggerWriteOptions = {},
+  { allowInbound }: TriggerWriteOptions,
 ): Promise<TriggerRow> {
   const existing = await requireOwned(db, "trigger", {
     id: triggerId,
@@ -432,9 +418,7 @@ export async function updateTrigger(
   }
   // Only the stored type is read here, not its config: an update that supplies
   // a new config must be able to repair a row whose stored one is malformed.
-  // An unknown stored type falls through to the `ValidationError` below.
-  const effectiveType: TriggerType | undefined =
-    fields.type ?? triggerTypeSchema.safeParse(existing.type).data;
+  const effectiveType: TriggerType = fields.type ?? existing.type;
 
   const updateData: Partial<TriggerRow> = {
     updatedAt: new Date(),
@@ -477,7 +461,10 @@ export async function updateTrigger(
     if (fields.config !== undefined) {
       updateData.config = parseInboundConfig(fields.config);
     }
-  } else if (effectiveType === "cron") {
+  } else {
+    // `effectiveType` is a stored Trigger type, so the database's CHECK leaves
+    // only `cron` here.
+    effectiveType satisfies "cron";
     if (fields.config !== undefined || fields.type !== undefined) {
       const effectiveConfigInput = fields.config ?? existing.config;
       const parsed = parseCronConfig(effectiveConfigInput);
@@ -499,10 +486,6 @@ export async function updateTrigger(
       // its own expression actually names.
       updateData.nextRunAt = parseCronConfig(existing.config).nextRunAt;
     }
-  } else {
-    throw new ValidationError(
-      "Invalid trigger type. Must be 'cron', 'event' or 'inbound'.",
-    );
   }
 
   const row = await db.transaction(async (tx) => {
@@ -529,9 +512,9 @@ export async function updateTrigger(
 export async function listTriggers(
   ctx: ScopeContext,
   {
-    enabledOnly = false,
-    includeFired = false,
-  }: { enabledOnly?: boolean; includeFired?: boolean } = {},
+    enabledOnly,
+    includeFired,
+  }: { enabledOnly: boolean; includeFired: boolean },
 ): Promise<
   (TriggerRow & {
     lastRunStatus: TriggerRunStatus | null;
@@ -570,7 +553,7 @@ export async function listTriggers(
     const run = lastRun.get(row.id);
     return {
       ...row,
-      lastRunStatus: (run?.status as TriggerRunStatus | undefined) ?? null,
+      lastRunStatus: run?.status ?? null,
       lastRunStartedAt: run?.startedAt ?? null,
     };
   });
@@ -594,7 +577,7 @@ export const getTrigger = (
 export const deleteTrigger = async (
   ctx: ScopeContext,
   triggerId: string,
-  { allowInbound = false }: TriggerWriteOptions = {},
+  { allowInbound }: TriggerWriteOptions,
 ): Promise<boolean> => {
   const ref = { id: triggerId, workspaceId: ctx.workspaceId };
   if (!allowInbound) {
@@ -620,19 +603,14 @@ export async function regenerateTriggerToken(
     id: triggerId,
     workspaceId: ctx.workspaceId,
   });
-  if (existing.type !== "inbound") {
+  // Narrows `type`/`config` together: a pair the upgrade could not repair is
+  // reported here rather than silently read as an empty config.
+  const typed = narrowTriggerConfig(existing);
+  if (typed.type !== "inbound") {
     throw new ValidationError("Only inbound triggers have a token.");
   }
-  // A stored config that no longer parses is a Trigger to repair, not a
-  // server fault: saving its inputs again rewrites the config.
-  const parsed = inboundTriggerConfigSchema.safeParse(existing.config);
-  if (!parsed.success) {
-    throw new ValidationError(
-      "This trigger's configuration is invalid. Save its inputs again, then regenerate the token.",
-    );
-  }
   const { token, hash } = generateBearerToken(INBOUND_TOKEN_PREFIX);
-  const fields = issuedTokenFields(hash, parsed.data.tokenExpiryDays);
+  const fields = issuedTokenFields(hash, typed.config.tokenExpiryDays);
   const row = await updateOwned(
     db,
     "trigger",
