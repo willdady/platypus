@@ -73,11 +73,14 @@ const openDecisionModel = (
     case "google":
       return createGoogleGenerativeAI({ apiKey }).decisionModel(model);
     case "openrouter":
-      // OpenRouter's provider (3.1.0) still implements the older evaluation
-      // model, whose types say `state` is plain JSON; `decide` now sends state
-      // parts. Ours is always `[{ type: "json", value }]` — no file parts — so
-      // it is still JSON, which OpenRouter posts to its Decisions API as is.
-      // Drop the cast once the provider ships `decisionModel()`.
+      // OpenRouter's provider 3.1.0 has only `evaluationModel()`, typed against
+      // an older decision spec, so it fails typecheck against our `ai`. It
+      // also posts `decide`'s state wrapper (`[{ type: "json", value }]`) to
+      // the Decisions API as is; the API accepts it and the model reads the
+      // wrapper as the state (OpenRouterTeam/ai-sdk-provider#576).
+      // Remove when: 3.2.0 ships (`decisionModel()`, #564; wrapper fix, #577)
+      // — switch to `decisionModel()` then — and the question-type fix
+      // (#602) is released, which lets the cast go.
       return createOpenRouter({ apiKey }).evaluationModel(
         model,
       ) as unknown as Experimental_DecisionModel;
