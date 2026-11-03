@@ -1,5 +1,3 @@
-"use client";
-
 import { ResourcePage } from "@/components/resource-page";
 import { AgentFormSkeleton } from "@/components/agent-form-skeleton";
 
