@@ -2,13 +2,14 @@ import {
   convertToModelMessages,
   generateText,
   isToolUIPart,
+  type FinishReason,
   type LanguageModel,
   type ModelMessage,
 } from "ai";
 import { randomUUID } from "node:crypto";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { db } from "../index.ts";
-import { chatSummary } from "../db/schema.ts";
+import { chatSummary, workspace as workspaceTable } from "../db/schema.ts";
 import { clearStaleToolResults } from "../runs/tool-result-clearing.ts";
 import { LOAD_SKILL_TOOL_NAME } from "../tools/turn-tool-names.ts";
 import {
@@ -22,9 +23,16 @@ import {
   type ContextOccupancyReading,
 } from "@platypus/schemas";
 import type { PlatypusUIMessage } from "../types.ts";
+import type { ScopeContext } from "../scope.ts";
 import { logger } from "../logger.ts";
 import { isContextOverflowError } from "./context-overflow.ts";
 import { resolveScoped } from "./scoped-resource.ts";
+import { openProvider } from "./provider.ts";
+import { pointerSettingModelId } from "./model-capability.ts";
+import {
+  resolveTaskModelProvider,
+  type TaskModelWorkspace,
+} from "./task-model.ts";
 import {
   resolveGenerationPlan,
   type GenerationSource,
@@ -57,6 +65,11 @@ type TranscriptSummaryQueries = {
     orgId: string,
     workspaceId: string,
   ): Promise<ProviderRow | null>;
+  /** Only the Workspace field task-model selection reads. */
+  getWorkspace(
+    orgId: string,
+    workspaceId: string,
+  ): Promise<TaskModelWorkspace | null>;
 };
 
 import type { ProviderRow } from "./provider-write.ts";
@@ -78,6 +91,19 @@ const drizzleTranscriptSummaryQueries: TranscriptSummaryQueries = {
       (await resolveScoped(db, "provider", id, { orgId, workspaceId }))?.row ??
       null
     );
+  },
+  async getWorkspace(orgId, workspaceId) {
+    const [row] = await db
+      .select({ taskModelProviderId: workspaceTable.taskModelProviderId })
+      .from(workspaceTable)
+      .where(
+        and(
+          eq(workspaceTable.id, workspaceId),
+          eq(workspaceTable.organizationId, orgId),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
   },
 };
 
@@ -549,18 +575,33 @@ ${steering !== undefined ? `The requester's instruction for this summary: ${stee
 export const TRANSCRIPT_SUMMARY_REQUEST =
   "Write the summary now, following the instructions you were given.";
 
+/** One opened model a summary pass may write with, and the id to record in
+ *  `stats` when it does. */
+export type TranscriptSummaryModel = {
+  model: LanguageModel;
+  modelId: string;
+};
+
+/** The models a pass tries: the Chat's own model, and the task model first
+ *  where it differs from the Chat's. */
+export type TranscriptSummaryModels = {
+  chat: TranscriptSummaryModel;
+  task?: TranscriptSummaryModel;
+};
+
 /**
- * A summary pass's inputs, resolved by the caller — the model is a parameter,
+ * A summary pass's inputs, resolved by the caller — the models are parameters,
  * never read inside (ADR-0041, so a cheaper summariser is a resolver change).
+ *
+ * The pass tries `task` first where present and falls back to `chat`, so every
+ * caller gets the same order.
  */
 export type TranscriptSummaryPassInput = {
   /** The Chat's id — the ordering, the deletion cascade and the in-flight
    *  registry all key on it. */
   chatId: string;
-  /** The opened model — the Chat's own resolved model. */
-  model: LanguageModel;
-  /** The resolved model id to record in `stats`. */
-  modelId: string;
+  /** The models to try: the task model first where present, then the Chat's. */
+  models: TranscriptSummaryModels;
   /** The full live path at trigger time, oldest first. */
   path: PlatypusUIMessage[];
   /** The occupancy reading the pass was triggered from. */
@@ -596,17 +637,23 @@ export type TranscriptSummaryPassInput = {
  * ordinary turns at 0.7 does not gate a pass that may itself be the one
  * keeping a turn under the window.
  *
- * Overflow on the summary call retries once with an earlier anchor (one more
- * turn kept verbatim); a second failure is an ordinary failed summary. Summary
- * tokens fold into no turn's Token usage; `stats` records them from day one.
+ * The pass tries the task model first where the caller supplied one, falling
+ * back to the Chat's own model on any failure — a context overflow, an
+ * unknown model, an auth error, or a blank reply. The task model's window is
+ * normally undeclared, so its own error is the only measurement available.
+ *
+ * Overflow on the Chat's model retries once with an earlier anchor (one more
+ * turn kept verbatim); a second failure is an ordinary failed summary. A
+ * model fallback is its own step beside that anchor retry, so a pass makes at
+ * most three model calls. Summary tokens fold into no turn's Token usage;
+ * `stats` records the model that actually wrote it and the counts from day one.
  */
 export const takeTranscriptSummary = async (
   input: TranscriptSummaryPassInput,
 ): Promise<ChatSummaryRow | undefined> => {
   const {
     chatId,
-    model,
-    modelId,
+    models,
     path,
     triggeredFromOccupancy,
     previousSummary,
@@ -619,40 +666,56 @@ export const takeTranscriptSummary = async (
     generateId = defaultSummaryId,
   } = input;
 
+  const { chat: chatModel, task: taskModel } = models;
+
   let anchorIndex = summaryAnchorIndex(path, keptTurns);
   if (anchorIndex === undefined) return undefined;
 
-  // One bounded retry on a context overflow, with an earlier anchor — a pass
-  // whose input alone outgrew the window it protects cannot be retried on the
-  // same range. A second failure is an ordinary failed summary.
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  type SummaryInput = {
+    anchorIndex: number;
+    priorText?: string;
+    modelMessages: ModelMessage[];
+  };
+
+  const anchorInput = async (index: number): Promise<SummaryInput> => {
     const { priorText, messages } = incrementalInput(
       previousSummary,
       path,
-      anchorIndex,
+      index,
     );
-    const modelMessages = await clearedModelMessages(
-      messages,
-      readOnlyToolNames,
-    );
+    return {
+      anchorIndex: index,
+      ...(priorText !== undefined ? { priorText } : {}),
+      modelMessages: await clearedModelMessages(messages, readOnlyToolNames),
+    };
+  };
 
+  const attempt = async (
+    entry: TranscriptSummaryModel,
+    input: SummaryInput,
+  ): Promise<
+    | { kind: "row"; row: ChatSummaryRow }
+    | { kind: "blank"; finishReason: FinishReason }
+    | { kind: "error"; error: unknown }
+    | { kind: "storage-error" }
+  > => {
     try {
       const result = await generateText({
-        model,
+        model: entry.model,
         // The summary is the conversation's first word in this call: the
         // model is handed the handoff, then the previous summary, then the
         // incremental range; it answers with the next summary.
         instructions: TRANSCRIPT_SUMMARY_PROMPT(instruction),
         messages: [
-          ...(priorText !== undefined
+          ...(input.priorText !== undefined
             ? [
                 {
                   role: "user" as const,
-                  content: `[Summary so far]\n${priorText}`,
+                  content: `[Summary so far]\n${input.priorText}`,
                 },
               ]
             : []),
-          ...modelMessages,
+          ...input.modelMessages,
           { role: "user" as const, content: TRANSCRIPT_SUMMARY_REQUEST },
         ],
         maxOutputTokens: TRANSCRIPT_SUMMARY_MAX_OUTPUT_TOKENS,
@@ -661,26 +724,30 @@ export const takeTranscriptSummary = async (
 
       // A blank reply is a failed summary, not a summary: stored, it would
       // stand in for every covered message and the next turn would read
-      // nothing.
+      // nothing. A task model that answers blank falls back like any other
+      // task-model failure.
       if (result.text.trim() === "") {
-        logger.warn(
-          { chatId, finishReason: result.finishReason },
-          "Transcript summary came back blank; proceeding without one",
-        );
-        return undefined;
+        return { kind: "blank", finishReason: result.finishReason };
       }
 
-      const anchor = path[anchorIndex];
-      if (anchor === undefined) break;
+      const anchor = path[input.anchorIndex];
+      if (anchor === undefined) {
+        return {
+          kind: "error",
+          error: new Error("The summary anchor is no longer on the path"),
+        };
+      }
       const anchorId = anchor.id;
       const row: ChatSummaryRow = {
         id: generateId(),
         chatId,
         anchorId,
-        coveredIds: path.slice(0, anchorIndex + 1).map((message) => message.id),
+        coveredIds: path
+          .slice(0, input.anchorIndex + 1)
+          .map((message) => message.id),
         text: result.text,
         stats: {
-          modelId,
+          modelId: entry.modelId,
           // A summary's usage is a measurement the pass's own call reported;
           // 0 stands in for a Provider that reported none (ADR-0018's rule).
           inputTokens: result.usage.inputTokens ?? 0,
@@ -693,36 +760,78 @@ export const takeTranscriptSummary = async (
         await db.insert(chatSummary).values(row);
       } catch (error) {
         logger.error({ error, chatId }, "Error storing a transcript summary");
-        return undefined;
+        return { kind: "storage-error" };
       }
       logger.info(
         {
           chatId,
           anchorId,
+          modelId: entry.modelId,
           inputTokens: result.usage.inputTokens,
           outputTokens: result.usage.outputTokens,
           trigger: triggeredFromOccupancy,
         },
         "Transcript summary taken",
       );
-      return row;
+      return { kind: "row", row };
     } catch (error) {
-      if (isContextOverflowError(error) && attempt === 0) {
-        const earlier = summaryAnchorIndex(path, keptTurns + 1);
-        if (earlier === undefined || earlier >= anchorIndex) break;
-        anchorIndex = earlier;
-        logger.warn(
-          { chatId, error },
-          "Transcript summary call overflowed; retrying with an earlier anchor",
-        );
-        continue;
-      }
+      return { kind: "error", error };
+    }
+  };
+
+  let summaryInput = await anchorInput(anchorIndex);
+
+  if (taskModel) {
+    const outcome = await attempt(taskModel, summaryInput);
+    if (outcome.kind === "row") return outcome.row;
+    if (outcome.kind === "storage-error") return undefined;
+    logger.warn(
+      {
+        chatId,
+        modelId: taskModel.modelId,
+        fallbackModelId: chatModel.modelId,
+        ...(outcome.kind === "error"
+          ? { error: outcome.error }
+          : { finishReason: outcome.finishReason }),
+      },
+      outcome.kind === "blank"
+        ? "Transcript summary task model came back blank; falling back to the Chat's model"
+        : "Transcript summary task model failed; falling back to the Chat's model",
+    );
+  }
+
+  // The Chat's model keeps the existing overflow ladder: one retry with an
+  // earlier anchor. It is not preceded by another task-model attempt, which
+  // is what bounds a pass at three model calls.
+  for (let retry = 0; retry < 2; retry += 1) {
+    if (retry > 0) {
+      summaryInput = await anchorInput(anchorIndex);
+    }
+    const outcome = await attempt(chatModel, summaryInput);
+    if (outcome.kind === "row") return outcome.row;
+    if (outcome.kind === "blank") {
       logger.warn(
-        { chatId, error },
-        "Transcript summary failed; proceeding without one",
+        { chatId, finishReason: outcome.finishReason },
+        "Transcript summary came back blank; proceeding without one",
       );
       return undefined;
     }
+    if (outcome.kind === "storage-error") return undefined;
+    if (isContextOverflowError(outcome.error) && retry === 0) {
+      const earlier = summaryAnchorIndex(path, keptTurns + 1);
+      if (earlier === undefined || earlier >= anchorIndex) break;
+      anchorIndex = earlier;
+      logger.warn(
+        { chatId, error: outcome.error },
+        "Transcript summary call overflowed; retrying with an earlier anchor",
+      );
+      continue;
+    }
+    logger.warn(
+      { chatId, error: outcome.error },
+      "Transcript summary failed; proceeding without one",
+    );
+    return undefined;
   }
   return undefined;
 };
@@ -757,24 +866,23 @@ export type SummariserSource =
   { agentId: string } | { providerId: string; modelId: string };
 
 /**
- * Re-resolves the model a summary pass writes with, from the same authority a
- * Chat turn resolves its model from (`resolveGenerationPlan`) and with the
- * same "the reference, whichever form it was stored in" rule (ADR-0017). The
- * pass takes the opened model as a parameter; this is the caller's half of
- * that contract, shared by the turn finish and the backstop so they cannot
- * rewrite the rule in two places.
+ * Re-resolves the models a summary pass tries, in order: the Workspace's task
+ * model first where it differs, then the Chat's own model. The Chat's model
+ * comes from the same authority a Chat turn resolves its model from
+ * (`resolveGenerationPlan`) and with the same "the reference, whichever form it
+ * was stored in" rule (ADR-0017).
+ *
+ * The pass takes the opened models as a parameter; this is the caller's half
+ * of that contract, shared by the turn finish, `/compact` and the backstop so
+ * they cannot rewrite the rule in two places.
  */
-const resolveSummariserModel = async (
+const resolveSummariserModels = async (
   source: SummariserSource,
   orgId: string,
   workspaceId: string,
   sessionId: string,
   queries: TranscriptSummaryQueries,
-): Promise<{
-  model: LanguageModel;
-  modelId: string;
-  contextWindow?: number;
-}> => {
+): Promise<TranscriptSummaryModels> => {
   const generation: GenerationSource =
     "agentId" in source
       ? {
@@ -789,16 +897,94 @@ const resolveSummariserModel = async (
           ),
         }
       : { providerId: source.providerId, modelId: source.modelId };
-  const { plan, resolvedModelId } = await resolveGenerationPlan(
+  const { plan, provider, resolvedModelId } = await resolveGenerationPlan(
     generation,
     { orgId, workspaceId, sessionId },
     queries,
   );
-  return {
+  const chat: TranscriptSummaryModel = {
     model: plan.model,
     modelId: resolvedModelId,
-    contextWindow: plan.contextWindow,
   };
+  const task = await resolveTaskSummariserModel({
+    orgId,
+    workspaceId,
+    chatProviderId: provider.id,
+    chatModelId: resolvedModelId,
+    sessionId,
+    queries,
+  });
+  return task ? { task, chat } : { chat };
+};
+
+/**
+ * The task model a pass should try before the Chat's own, or `undefined` when
+ * there is nothing else to try: the same Provider and model as the Chat, or a
+ * Provider this Workspace cannot see. Resolution never makes the pass fail —
+ * an unavailable task model just means the Chat's model writes the summary.
+ */
+const resolveTaskSummariserModel = async (args: {
+  orgId: string;
+  workspaceId: string;
+  chatProviderId: string;
+  chatModelId: string;
+  sessionId: string;
+  queries: TranscriptSummaryQueries;
+}): Promise<TranscriptSummaryModel | undefined> => {
+  const {
+    orgId,
+    workspaceId,
+    chatProviderId,
+    chatModelId,
+    sessionId,
+    queries,
+  } = args;
+  try {
+    const workspace = await queries.getWorkspace(orgId, workspaceId);
+    const taskProvider = await resolveTaskModelProvider(
+      {
+        workspace,
+        fallbackProviderId: chatProviderId,
+        orgId,
+        workspaceId,
+      },
+      queries,
+    );
+    if (!taskProvider.provider) {
+      logger.warn(
+        {
+          orgId,
+          workspaceId,
+          providerId: taskProvider.providerId,
+          fromTaskModelOverride: taskProvider.fromOverride,
+        },
+        "Transcript summary task model skipped: provider is not visible in this workspace",
+      );
+      return undefined;
+    }
+    const taskModelId = taskProvider.provider.taskModelId;
+    // An empty Task Model ID is a Provider with no task model configured, not
+    // a model to call: the form allows it, and every call would be doomed.
+    if (
+      taskModelId.trim() === "" ||
+      (taskProvider.provider.id === chatProviderId &&
+        taskModelId === chatModelId)
+    ) {
+      return undefined;
+    }
+    return {
+      model: openProvider(taskProvider.provider, { sessionId }).languageModel(
+        pointerSettingModelId(taskModelId),
+      ),
+      modelId: taskModelId,
+    };
+  } catch (error) {
+    logger.warn(
+      { error, orgId, workspaceId },
+      "Transcript summary task model unavailable; using the Chat's model",
+    );
+    return undefined;
+  }
 };
 
 const mustGetAgent = async (
@@ -869,13 +1055,13 @@ export const registerTranscriptSummary = (
 /**
  * The one take the turn verbs start: the anchor, the incremental base and the
  * occupancy the pass records are derived here once, so the backstop and the
- * after-turn pass cannot drift. The caller supplies the model (already resolved
- * for the backstop, freshly resolved for the finish) and the summaries it read.
+ * after-turn pass cannot drift. The caller supplies the models to try (already
+ * resolved for the backstop, freshly resolved for the finish) and the summaries
+ * it read.
  */
 const takeFromReading = (args: {
   chatId: string;
-  model: LanguageModel;
-  modelId: string;
+  models: TranscriptSummaryModels;
   path: PlatypusUIMessage[];
   summaries: readonly ChatSummaryRow[];
   triggeredFromOccupancy: number | undefined;
@@ -889,8 +1075,7 @@ const takeFromReading = (args: {
   );
   return takeTranscriptSummary({
     chatId: args.chatId,
-    model: args.model,
-    modelId: args.modelId,
+    models: args.models,
     path: args.path,
     triggeredFromOccupancy: args.triggeredFromOccupancy ?? 0,
     previousSummary: deepestPriorSummary(
@@ -912,9 +1097,10 @@ const takeFromReading = (args: {
  * known — wait for (or join) a take and apply its result. A Trigger run has no
  * Chat id: it applies only, never takes (ADR-0041).
  *
- * The turn's own resolved model and signal are passed in, so the backstop never
- * re-resolves a model (unlike {@link afterTurn}) and is cancellable with the
- * turn that is waiting on it.
+ * The turn's own resolved model and signal are passed in, so the backstop
+ * falls back to the model the turn already opened rather than re-resolving the
+ * Chat's model (unlike {@link afterTurn}). It does resolve the Workspace's task
+ * model to try first, and is cancellable with the turn that is waiting on it.
  */
 export const beforeTurn = async (args: {
   /** The Chat's id; absent on a Trigger run, which never takes a summary. */
@@ -926,6 +1112,12 @@ export const beforeTurn = async (args: {
   contextWindow?: number;
   model: LanguageModel;
   modelId: string;
+  /** Present on a Chat turn: where the task model is resolved from. */
+  taskModel?: {
+    scope: ScopeContext;
+    /** The Chat's own Provider id — the task-model fallback. */
+    providerId: string;
+  };
   readOnlyToolNames?: ReadonlySet<string>;
   signal?: AbortSignal;
 }): Promise<{
@@ -940,6 +1132,7 @@ export const beforeTurn = async (args: {
     contextWindow,
     model,
     modelId,
+    taskModel,
     readOnlyToolNames,
     signal,
   } = args;
@@ -959,19 +1152,30 @@ export const beforeTurn = async (args: {
       path,
     })
   ) {
-    const summary = await registerTranscriptSummary(chatId, () =>
-      takeFromReading({
+    const chat: TranscriptSummaryModel = { model, modelId };
+    const summary = await registerTranscriptSummary(chatId, async () => {
+      const task =
+        taskModel === undefined
+          ? undefined
+          : await resolveTaskSummariserModel({
+              orgId: taskModel.scope.orgId,
+              workspaceId: taskModel.scope.workspaceId,
+              chatProviderId: taskModel.providerId,
+              chatModelId: modelId,
+              sessionId: chatId,
+              queries: drizzleTranscriptSummaryQueries,
+            });
+      return takeFromReading({
         chatId,
-        model,
-        modelId,
+        models: task ? { task, chat } : { chat },
         path,
         summaries,
         triggeredFromOccupancy: reading?.projected,
         readingSummaryId: reading?.summaryId,
         readOnlyToolNames,
         signal,
-      }),
-    );
+      });
+    });
     if (summary !== undefined) {
       summaries = await loadChatSummaries(chatId);
       summaryRead = applyTranscriptSummary(path, summaries);
@@ -1032,7 +1236,7 @@ export const afterTurn = (args: {
     : reading?.summaryId;
 
   void registerTranscriptSummary(chatId, async () => {
-    const { model, modelId } = await resolveSummariserModel(
+    const models = await resolveSummariserModels(
       source,
       orgId,
       workspaceId,
@@ -1041,8 +1245,7 @@ export const afterTurn = (args: {
     );
     return takeFromReading({
       chatId,
-      model,
-      modelId,
+      models,
       path,
       summaries: await loadChatSummaries(chatId),
       triggeredFromOccupancy: reading?.projected,
@@ -1090,7 +1293,7 @@ export const compactTranscript = async (args: {
   const claim = { ours: false };
   const start = async () => {
     claim.ours = true;
-    const { model, modelId } = await resolveSummariserModel(
+    const models = await resolveSummariserModels(
       source,
       orgId,
       workspaceId,
@@ -1099,8 +1302,7 @@ export const compactTranscript = async (args: {
     );
     return takeTranscriptSummary({
       chatId,
-      model,
-      modelId,
+      models,
       path,
       triggeredFromOccupancy: projectedOccupancyOf(path)?.projected ?? 0,
       previousSummary: deepestPriorSummary(

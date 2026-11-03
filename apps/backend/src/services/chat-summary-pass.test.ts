@@ -1,10 +1,11 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // First, so its `vi.mock` of the database module is installed before the
 // module under test imports the real handle.
 import { resetMockDb, seedDb } from "../test-utils.ts";
 import { APICallError } from "ai";
 import { MockLanguageModelV3 } from "ai/test";
 import { CLEARED_TOOL_RESULT_MARKER } from "@platypus/schemas";
+import { logger } from "../logger.ts";
 import type { PlatypusUIMessage } from "../types.ts";
 import {
   registerTranscriptSummary,
@@ -63,6 +64,10 @@ const sixTurns = (): PlatypusUIMessage[] => [
 
 const seedSummaryTable = () => seedDb({ chat_summary: [] });
 
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 /** A model answering with one summary, recording every prompt it was sent. */
 const summaryModel = (prompts: PromptMessage[][] = [], text = "The summary.") =>
   new MockLanguageModelV3({
@@ -104,8 +109,7 @@ describe("takeTranscriptSummary", () => {
     const fake = seedSummaryTable();
     const row = await takeTranscriptSummary({
       chatId: "chat-1",
-      model: summaryModel(),
-      modelId: "openai:gpt",
+      models: { chat: { model: summaryModel(), modelId: "openai:gpt" } },
       path: sixTurns(),
       triggeredFromOccupancy: 8_200,
       previousSummary: undefined,
@@ -141,12 +145,196 @@ describe("takeTranscriptSummary", () => {
     ).toEqual([]);
   });
 
+  it("tries the task model first and records the model that wrote the summary", async () => {
+    seedSummaryTable();
+    const taskPrompts: PromptMessage[][] = [];
+    const chatPrompts: PromptMessage[][] = [];
+    const row = await takeTranscriptSummary({
+      chatId: "chat-1",
+      models: {
+        task: {
+          model: summaryModel(taskPrompts, "The task summary."),
+          modelId: "task-model",
+        },
+        chat: {
+          model: summaryModel(chatPrompts, "The chat summary."),
+          modelId: "chat-model",
+        },
+      },
+      path: sixTurns(),
+      triggeredFromOccupancy: 8_200,
+      previousSummary: undefined,
+      readingSummaryId: undefined,
+    });
+
+    expect(row?.text).toBe("The task summary.");
+    expect(row?.stats?.modelId).toBe("task-model");
+    expect(taskPrompts).toHaveLength(1);
+    expect(chatPrompts).toHaveLength(0);
+  });
+
+  it("falls back to the Chat's model over the same range when the task model overflows", async () => {
+    seedSummaryTable();
+    const taskPrompts: PromptMessage[][] = [];
+    const chatPrompts: PromptMessage[][] = [];
+    const row = await takeTranscriptSummary({
+      chatId: "chat-1",
+      models: {
+        task: {
+          model: new MockLanguageModelV3({
+            doGenerate: (options) => {
+              taskPrompts.push(options.prompt as unknown as PromptMessage[]);
+              return Promise.reject(
+                new APICallError({
+                  message: "prompt is too long: context length exceeded",
+                  statusCode: 400,
+                  url: "https://example.test/v1",
+                  requestBodyValues: {},
+                }),
+              );
+            },
+          }),
+          modelId: "task-model",
+        },
+        chat: {
+          model: summaryModel(chatPrompts, "The chat summary."),
+          modelId: "chat-model",
+        },
+      },
+      path: sixTurns(),
+      triggeredFromOccupancy: 8_200,
+      previousSummary: undefined,
+      readingSummaryId: undefined,
+    });
+
+    expect(row?.text).toBe("The chat summary.");
+    expect(row?.stats?.modelId).toBe("chat-model");
+    // The task model is not retried with an earlier anchor: the Chat's model
+    // gets the same range, and the anchor stays at a2.
+    expect(row?.anchorId).toBe("a2");
+    expect(taskPrompts).toHaveLength(1);
+    expect(chatPrompts).toHaveLength(1);
+    expect(promptText(chatPrompts[0] ?? [])).toBe(
+      promptText(taskPrompts[0] ?? []),
+    );
+  });
+
+  it("falls back to the Chat's model on a non-overflow task-model error", async () => {
+    seedSummaryTable();
+    const warn = vi.spyOn(logger, "warn").mockImplementation(() => logger);
+    const chatPrompts: PromptMessage[][] = [];
+    const row = await takeTranscriptSummary({
+      chatId: "chat-1",
+      models: {
+        task: {
+          model: new MockLanguageModelV3({
+            doGenerate: () =>
+              Promise.reject(
+                new APICallError({
+                  message: "model not found",
+                  statusCode: 404,
+                  url: "https://example.test/v1",
+                  requestBodyValues: {},
+                }),
+              ),
+          }),
+          modelId: "retired-task-model",
+        },
+        chat: {
+          model: summaryModel(chatPrompts, "The chat summary."),
+          modelId: "chat-model",
+        },
+      },
+      path: sixTurns(),
+      triggeredFromOccupancy: 8_200,
+      previousSummary: undefined,
+      readingSummaryId: undefined,
+    });
+
+    expect(row?.stats?.modelId).toBe("chat-model");
+    expect(chatPrompts).toHaveLength(1);
+    // The fallback names the failed task model and the one that replaced it.
+    expect(warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        modelId: "retired-task-model",
+        fallbackModelId: "chat-model",
+      }),
+      expect.stringContaining("falling back to the Chat's model"),
+    );
+  });
+
+  it("falls back to the Chat's model when the task model returns blank text", async () => {
+    seedSummaryTable();
+    const row = await takeTranscriptSummary({
+      chatId: "chat-1",
+      models: {
+        task: { model: summaryModel([], " "), modelId: "task-model" },
+        chat: {
+          model: summaryModel([], "The chat summary."),
+          modelId: "chat-model",
+        },
+      },
+      path: sixTurns(),
+      triggeredFromOccupancy: 8_200,
+      previousSummary: undefined,
+      readingSummaryId: undefined,
+    });
+
+    expect(row?.text).toBe("The chat summary.");
+    expect(row?.stats?.modelId).toBe("chat-model");
+  });
+
+  it("still retries the Chat's model once with an earlier anchor after a task-model failure", async () => {
+    const fake = seedSummaryTable();
+    let taskCalls = 0;
+    let chatCalls = 0;
+    const row = await takeTranscriptSummary({
+      chatId: "chat-1",
+      models: {
+        task: {
+          model: new MockLanguageModelV3({
+            doGenerate: () => {
+              taskCalls += 1;
+              return Promise.reject(new Error("task model unavailable"));
+            },
+          }),
+          modelId: "task-model",
+        },
+        chat: {
+          model: new MockLanguageModelV3({
+            doGenerate: () => {
+              chatCalls += 1;
+              return Promise.reject(
+                new APICallError({
+                  message: "maximum context length exceeded",
+                  statusCode: 400,
+                  url: "https://example.test/v1",
+                  requestBodyValues: {},
+                }),
+              );
+            },
+          }),
+          modelId: "chat-model",
+        },
+      },
+      path: sixTurns(),
+      triggeredFromOccupancy: 9_800,
+      previousSummary: undefined,
+      readingSummaryId: undefined,
+    });
+
+    expect(row).toBeUndefined();
+    expect(fake.tables.chat_summary).toHaveLength(0);
+    // One task attempt, then the Chat model's existing two-attempt ladder.
+    expect(taskCalls).toBe(1);
+    expect(chatCalls).toBe(2);
+  });
+
   it("keeps one turn when the triggering reading was taken with a summary", async () => {
     seedSummaryTable();
     const row = await takeTranscriptSummary({
       chatId: "chat-1",
-      model: summaryModel(),
-      modelId: "openai:gpt",
+      models: { chat: { model: summaryModel(), modelId: "openai:gpt" } },
       path: sixTurns(),
       triggeredFromOccupancy: 8_200,
       previousSummary: undefined,
@@ -191,8 +379,7 @@ describe("takeTranscriptSummary", () => {
     };
     await takeTranscriptSummary({
       chatId: "chat-1",
-      model: summaryModel(prompts),
-      modelId: "openai:gpt",
+      models: { chat: { model: summaryModel(prompts), modelId: "openai:gpt" } },
       path,
       triggeredFromOccupancy: 8_200,
       previousSummary: undefined,
@@ -216,8 +403,7 @@ describe("takeTranscriptSummary", () => {
     };
     await takeTranscriptSummary({
       chatId: "chat-1",
-      model: summaryModel(prompts),
-      modelId: "openai:gpt",
+      models: { chat: { model: summaryModel(prompts), modelId: "openai:gpt" } },
       path: sixTurns(),
       triggeredFromOccupancy: 8_200,
       previousSummary: previous,
@@ -258,8 +444,7 @@ describe("takeTranscriptSummary", () => {
     });
     const row = await takeTranscriptSummary({
       chatId: "chat-1",
-      model,
-      modelId: "openai:gpt",
+      models: { chat: { model, modelId: "openai:gpt" } },
       path: sixTurns(),
       triggeredFromOccupancy: 9_800,
       previousSummary: undefined,
@@ -286,8 +471,7 @@ describe("takeTranscriptSummary", () => {
     });
     const row = await takeTranscriptSummary({
       chatId: "chat-1",
-      model,
-      modelId: "openai:gpt",
+      models: { chat: { model, modelId: "openai:gpt" } },
       path: sixTurns(),
       triggeredFromOccupancy: 9_800,
       previousSummary: undefined,
@@ -305,8 +489,7 @@ describe("takeTranscriptSummary", () => {
     await expect(
       takeTranscriptSummary({
         chatId: "chat-1",
-        model,
-        modelId: "openai:gpt",
+        models: { chat: { model, modelId: "openai:gpt" } },
         path: sixTurns(),
         triggeredFromOccupancy: 8_200,
         previousSummary: undefined,
@@ -320,8 +503,7 @@ describe("takeTranscriptSummary", () => {
     const prompts: PromptMessage[][] = [];
     await takeTranscriptSummary({
       chatId: "chat-1",
-      model: summaryModel(prompts),
-      modelId: "openai:gpt",
+      models: { chat: { model: summaryModel(prompts), modelId: "openai:gpt" } },
       path: sixTurns(),
       triggeredFromOccupancy: 8_200,
       previousSummary: undefined,
@@ -337,8 +519,9 @@ describe("takeTranscriptSummary", () => {
     await expect(
       takeTranscriptSummary({
         chatId: "chat-1",
-        model: summaryModel([], " "),
-        modelId: "openai:gpt",
+        models: {
+          chat: { model: summaryModel([], " "), modelId: "openai:gpt" },
+        },
         path: sixTurns(),
         triggeredFromOccupancy: 8_200,
         previousSummary: undefined,
@@ -352,8 +535,7 @@ describe("takeTranscriptSummary", () => {
     const fake = seedSummaryTable();
     const row = await takeTranscriptSummary({
       chatId: "chat-1",
-      model: summaryModel(),
-      modelId: "openai:gpt",
+      models: { chat: { model: summaryModel(), modelId: "openai:gpt" } },
       path: [user("u1"), assistant("a1"), user("u2"), assistant("a2")],
       triggeredFromOccupancy: 8_200,
       previousSummary: undefined,

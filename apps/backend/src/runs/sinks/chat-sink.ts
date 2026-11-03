@@ -475,15 +475,15 @@ export class ChatSink implements RunSink {
   /**
    * Starts (never awaits) the after-turn Transcript summary pass: the turn's
    * final Projected occupancy crossed the trigger and the declared window
-   * exists — or the turn overflowed (issue #1717) — and the Chat's own model
-   * is available to write the summary. The kept tail
+   * exists — or the turn overflowed (issue #1717) — and a model reference is
+   * available to write the summary. The kept tail
    * shrinks to one turn when the triggering reading itself ran with a summary
    * in place. Registered in the in-flight map so a backstop on the next turn
    * waits for this pass rather than starting a second.
    *
    * The due-ness decision and the take live in `chat-summary.ts`'s `afterTurn`;
    * this method only hands it the finished path and the Chat's own model
-   * reference.
+   * reference, from which it tries the Workspace's task model first.
    */
   private scheduleTranscriptSummary(): void {
     const plan = this.plan;

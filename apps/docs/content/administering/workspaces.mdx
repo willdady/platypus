@@ -61,10 +61,10 @@ service is called, which team owns it, house terminology.
 These only appear once the Workspace exists, and each lists Providers available to
 that Workspace.
 
-- **Task Model Provider** — the Provider used for the small one-shot jobs, such as
-  naming a Chat and generating its tags. Leave it as **None (use chat provider)**
-  and each Chat uses its own. Point it at something cheap and fast if your chat
-  models are expensive.
+- **Task Model Provider** — the Provider used for background jobs, such as
+  naming a Chat and summarising a long conversation. Leave it as **None (use
+  chat provider)** and each Chat uses its own. Point it at something cheap and
+  fast if your chat models are expensive.
 - **Memory Extraction Provider** — **this is the switch that turns Memory on.**
   Leave it **Disabled** and nothing new is extracted. Summaries already written
   stay in the prompt until they age out — see [Turning Memory

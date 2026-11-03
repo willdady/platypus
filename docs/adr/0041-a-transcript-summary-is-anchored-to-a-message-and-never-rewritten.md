@@ -185,6 +185,29 @@ does a pass whose Provider reported no usage, save for the model: a recorded `0`
 means "not reported", never "free". The collapsed divider is unchanged; the cost
 is detail, not the first thing a User meets.
 
+## Amendment: the task model writes the summary first (#1732)
+
+The deferred "cheaper summariser model" row above is now built, under this
+ADR's rule rather than a new decision. A pass resolves the **task model** by the
+same rule Chat titling uses: the Workspace's `taskModelProviderId` Provider
+when it sets one, otherwise the Chat's own Provider, with that Provider's
+`taskModelId` resolved as the Scoped resource it is. The task model is a
+concrete pointer setting, never an alias.
+
+A pass tries the task model first and falls back to the Chat's own model over
+the same range on any failure — context overflow, an unknown or retired model,
+a Provider the Workspace cannot see, an auth error, or a blank reply. A model
+fallback is its own step alongside the anchor retry: only the Chat's model
+keeps the earlier-anchor retry, so a pass makes at most three model calls. Each
+fallback is logged with its reason, and `stats.modelId` records the model that
+actually wrote the summary.
+
+The task model is tried first because its window is normally undeclared. A
+declared-window comparison would skip it pre-emptively on a guess; its own
+error is the only honest measurement, and the Chat's model remains the safe
+fallback. Where the task model resolves to the same Provider and model as the
+Chat, there is one model to try and no duplicate call.
+
 ## Notes
 
 - **`/compact` (#1111) takes a summary on demand.** It is the same pass, steered

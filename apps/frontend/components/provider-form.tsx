@@ -752,7 +752,7 @@ function ProviderForm({
             onChange={toFieldChange("taskModelId")}
             disabled={isSubmitting || isReadOnly}
             error={validationErrors.taskModelId}
-            description="Model to use for chat metadata generation."
+            description="Used for background jobs: naming Chats and summarising long conversations. Choose a fast, inexpensive model with a large context window. If it can't take a long conversation, the Chat's own model writes the summary instead."
           />
 
           <FormTextField
@@ -763,7 +763,7 @@ function ProviderForm({
             onChange={toFieldChange("memoryExtractionModelId")}
             disabled={isSubmitting || isReadOnly}
             error={validationErrors.memoryExtractionModelId}
-            description="Model to use for extracting memories from conversations."
+            description="Used to pull memories from conversations in the background. Choose a fast, inexpensive model."
           />
 
           <FormTextField

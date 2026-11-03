@@ -110,7 +110,7 @@ every turn fails no matter how correct the URL is.
 | `headers`            | Optional extra HTTP headers, as a JSON object, sent with every request to this Provider. On OpenRouter, setting any [app attribution](#openrouter-app-attribution) header here replaces all three defaults. |
 | `region`             | Required for Bedrock (AWS region).                                                                                                                                                                          |
 | `modelIds`           | The models this Provider exposes for selection (at least one). Each entry is an object carrying that model's own settings — see [What each model entry holds](#what-each-model-entry-holds).                |
-| `taskModelId`        | The model used for one-shot internal tasks (e.g. generating a chat title), not chat turns. Must be a real model id — a Model alias is rejected.                                                             |
+| `taskModelId`        | The model used for background jobs (generating a chat title and summarising a long conversation), not chat turns. Must be a real model id — a Model alias is rejected.                                      |
 | `securityGuardrails` | Optional free-text security directives appended last in the system prompt for every run on this Provider.                                                                                                   |
 
 A Provider also carries the models used for **Memory** (extraction and
@@ -132,9 +132,9 @@ is rejected when the Provider is saved.
 
 <Callout type="info">
   The distinction between a **chat turn** (running the selected Agent/model to
-  reply to a user) and a **one-shot Provider execution** (like title generation,
-  which uses `taskModelId`) is part of the domain vocabulary — see
-  [Concepts](/concepts).
+  reply to a user) and a **background Provider execution** (like title
+  generation or summarising a long conversation, which use `taskModelId`) is
+  part of the domain vocabulary — see [Concepts](/concepts).
 </Callout>
 
 ### OpenRouter app attribution

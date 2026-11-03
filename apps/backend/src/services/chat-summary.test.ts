@@ -6,9 +6,16 @@ import { resetMockDb, seedDb } from "../test-utils.ts";
 // The model call and the model re-resolution are the pass's only I/O. Stub
 // them here so the turn verbs can be observed at their own seam: what they
 // schedule, what they apply, and how they fail.
-const { mockGenerateText, mockResolveGenerationPlan } = vi.hoisted(() => ({
+const {
+  mockGenerateText,
+  mockResolveGenerationPlan,
+  mockOpenProvider,
+  mockLanguageModel,
+} = vi.hoisted(() => ({
   mockGenerateText: vi.fn(),
   mockResolveGenerationPlan: vi.fn(),
+  mockOpenProvider: vi.fn(),
+  mockLanguageModel: vi.fn(),
 }));
 vi.mock("ai", async (importOriginal) => {
   const actual = await importOriginal<typeof import("ai")>();
@@ -18,12 +25,18 @@ vi.mock("../runs/agent-plan.ts", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../runs/agent-plan.ts")>();
   return { ...actual, resolveGenerationPlan: mockResolveGenerationPlan };
 });
+vi.mock("./provider.ts", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./provider.ts")>();
+  return { ...actual, openProvider: mockOpenProvider };
+});
 
+import { makeProviderRow } from "./provider-row.test-fixtures.ts";
 import type { PlatypusUIMessage } from "../types.ts";
 import {
   afterTurn,
   applyTranscriptSummary,
   beforeTurn,
+  compactTranscript,
   isSummaryUsable,
   lastOccupancyReading,
   projectedOccupancyOf,
@@ -519,8 +532,56 @@ const stubPassIO = () => {
   });
   mockResolveGenerationPlan.mockReset();
   mockResolveGenerationPlan.mockResolvedValue({
-    plan: { model: {} },
+    plan: { model: { id: "chat-model" } },
+    provider: { id: "p1" },
     resolvedModelId: "m1",
+  });
+  mockOpenProvider.mockReset();
+  mockLanguageModel.mockReset();
+  mockLanguageModel.mockImplementation((modelId: string) => ({ modelId }));
+  mockOpenProvider.mockReturnValue({ languageModel: mockLanguageModel });
+};
+
+/** Seats the Workspace's task-model Provider (and an override Provider) in the
+ *  fake db, so a pass resolves a real task model rather than falling back. */
+const seedTaskModelProviders = (
+  over: {
+    taskModelProviderId?: string | null;
+    taskModelId?: string;
+    agent?: boolean;
+  } = {},
+) => {
+  const chatProvider = makeProviderRow({
+    id: "p1",
+    workspaceId: "ws-1",
+    taskModelId: over.taskModelId ?? "task-model",
+  });
+  const overrideProvider = makeProviderRow({
+    id: "p2",
+    workspaceId: "ws-1",
+    taskModelId: "override-task",
+  });
+  return seedDb({
+    chat_summary: [],
+    workspace: [
+      {
+        id: "ws-1",
+        organizationId: "org-1",
+        taskModelProviderId: over.taskModelProviderId ?? null,
+      },
+    ],
+    provider: [chatProvider, overrideProvider],
+    agent: over.agent
+      ? [
+          {
+            id: "agent-1",
+            workspaceId: "ws-1",
+            organizationId: null,
+            providerId: "p1",
+            modelId: "m1",
+          },
+        ]
+      : [],
   });
 };
 
@@ -566,6 +627,58 @@ describe("beforeTurn", () => {
     expect(result.backstopEngaged).toBe(true);
     // The fresh summary rides the first kept message.
     expect(result.messages[0].id).toBe("u2");
+  });
+
+  it("writes the backstop summary with the workspace's task model", async () => {
+    const fake = seedTaskModelProviders();
+    const path = withReading(fiveTurns(), 9_600);
+
+    const result = await beforeTurn({
+      chatId: "chat-1",
+      path,
+      summaries: [],
+      contextWindow: 10_000,
+      model: { id: "chat-model" } as never,
+      modelId: "m1",
+      taskModel: {
+        scope: { orgId: "org-1", workspaceId: "ws-1" },
+        providerId: "p1",
+      },
+    });
+
+    expect(result.backstopEngaged).toBe(true);
+    expect(fake.tables.chat_summary[0]).toMatchObject({
+      stats: { modelId: "task-model" },
+    });
+    expect(mockGenerateText).toHaveBeenCalledTimes(1);
+    expect(mockGenerateText.mock.calls[0][0]).toMatchObject({
+      model: { modelId: "task-model" },
+    });
+  });
+
+  it("falls back to the turn's own model when the task model fails", async () => {
+    const fake = seedTaskModelProviders();
+    const path = withReading(fiveTurns(), 9_600);
+    mockGenerateText.mockRejectedValueOnce(new Error("task model exploded"));
+
+    const result = await beforeTurn({
+      chatId: "chat-1",
+      path,
+      summaries: [],
+      contextWindow: 10_000,
+      model: { id: "chat-model" } as never,
+      modelId: "m1",
+      taskModel: {
+        scope: { orgId: "org-1", workspaceId: "ws-1" },
+        providerId: "p1",
+      },
+    });
+
+    expect(result.backstopEngaged).toBe(true);
+    expect(fake.tables.chat_summary[0]).toMatchObject({
+      stats: { modelId: "m1" },
+    });
+    expect(mockGenerateText).toHaveBeenCalledTimes(2);
   });
 
   it("applies only, never takes, without a chatId (a Trigger run)", async () => {
@@ -637,6 +750,101 @@ describe("afterTurn", () => {
         expect.anything(),
       ),
     );
+  });
+
+  it("writes the after-turn summary with the task model first", async () => {
+    const fake = seedTaskModelProviders();
+
+    afterTurn({
+      chatId: "chat-1",
+      ...direct,
+      path: withReading(fiveTurns(), 8_100),
+      contextWindow: 10_000,
+    });
+
+    await vi.waitFor(() => expect(fake.tables.chat_summary).toHaveLength(1));
+    expect(fake.tables.chat_summary[0]).toMatchObject({
+      stats: { modelId: "task-model" },
+    });
+    expect(mockGenerateText).toHaveBeenCalledTimes(1);
+    expect(mockGenerateText.mock.calls[0][0]).toMatchObject({
+      model: { modelId: "task-model" },
+    });
+  });
+
+  it("takes the task model from the Workspace's task-model Provider override", async () => {
+    const fake = seedTaskModelProviders({ taskModelProviderId: "p2" });
+
+    afterTurn({
+      chatId: "chat-1",
+      ...direct,
+      path: withReading(fiveTurns(), 8_100),
+      contextWindow: 10_000,
+    });
+
+    await vi.waitFor(() => expect(fake.tables.chat_summary).toHaveLength(1));
+    expect(fake.tables.chat_summary[0]).toMatchObject({
+      stats: { modelId: "override-task" },
+    });
+    expect(mockGenerateText.mock.calls[0][0]).toMatchObject({
+      model: { modelId: "override-task" },
+    });
+  });
+
+  it("makes one call when the task model is the Chat's own Provider and model", async () => {
+    const fake = seedTaskModelProviders({ taskModelId: "m1" });
+
+    afterTurn({
+      chatId: "chat-1",
+      ...direct,
+      path: withReading(fiveTurns(), 8_100),
+      contextWindow: 10_000,
+    });
+
+    await vi.waitFor(() => expect(fake.tables.chat_summary).toHaveLength(1));
+    expect(fake.tables.chat_summary[0]).toMatchObject({
+      stats: { modelId: "m1" },
+    });
+    expect(mockOpenProvider).not.toHaveBeenCalled();
+    expect(mockGenerateText).toHaveBeenCalledTimes(1);
+  });
+
+  it("makes one call for an Agent Chat whose task model is the Agent's own", async () => {
+    const fake = seedTaskModelProviders({ taskModelId: "m1", agent: true });
+
+    afterTurn({
+      chatId: "chat-1",
+      orgId: "org-1",
+      workspaceId: "ws-1",
+      source: { agentId: "agent-1" },
+      path: withReading(fiveTurns(), 8_100),
+      contextWindow: 10_000,
+    });
+
+    await vi.waitFor(() => expect(fake.tables.chat_summary).toHaveLength(1));
+    expect(fake.tables.chat_summary[0]).toMatchObject({
+      stats: { modelId: "m1" },
+    });
+    expect(mockOpenProvider).not.toHaveBeenCalled();
+    expect(mockGenerateText).toHaveBeenCalledTimes(1);
+  });
+
+  it("skips a blank Task Model ID rather than making a doomed call", async () => {
+    const fake = seedTaskModelProviders({ taskModelId: "" });
+
+    afterTurn({
+      chatId: "chat-1",
+      ...direct,
+      path: withReading(fiveTurns(), 8_100),
+      contextWindow: 10_000,
+    });
+
+    await vi.waitFor(() => expect(fake.tables.chat_summary).toHaveLength(1));
+    expect(fake.tables.chat_summary[0]).toMatchObject({
+      stats: { modelId: "m1" },
+    });
+    expect(mockOpenProvider).not.toHaveBeenCalled();
+    expect(mockGenerateText).toHaveBeenCalledTimes(1);
   });
 
   it("takes exactly one summary when the final occupancy crosses 0.8", async () => {
@@ -762,5 +970,29 @@ describe("afterTurn", () => {
 
     await vi.waitFor(() => expect(mockGenerateText).toHaveBeenCalled());
     expect(fake.tables.chat_summary).toHaveLength(0);
+  });
+});
+
+describe("compactTranscript", () => {
+  beforeEach(stubPassIO);
+
+  it("writes the /compact summary with the task model first", async () => {
+    const fake = seedTaskModelProviders();
+
+    const row = await compactTranscript({
+      chatId: "chat-1",
+      orgId: "org-1",
+      workspaceId: "ws-1",
+      source: { providerId: "p1", modelId: "m1" },
+      path: fiveTurns(),
+      instruction: "Keep the decisions.",
+    });
+
+    expect(row?.stats?.modelId).toBe("task-model");
+    expect(fake.tables.chat_summary).toHaveLength(1);
+    expect(mockGenerateText).toHaveBeenCalledTimes(1);
+    expect(mockGenerateText.mock.calls[0][0]).toMatchObject({
+      model: { modelId: "task-model" },
+    });
   });
 });
