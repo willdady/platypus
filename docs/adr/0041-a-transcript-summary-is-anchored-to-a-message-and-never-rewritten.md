@@ -172,6 +172,19 @@ even with headroom. That only drops older read-only results and successful
 write inputs, which is harmless. Within a turn, the per-step reading still
 drives `prepareStep` as before.
 
+## Amendment: the divider shows what a summary cost (#1733)
+
+The deferred row above is now built, in the place this ADR already renders a
+summary: the divider's expanded panel names the model that wrote it and the
+input and output tokens the pass used. **These are not part of any turn's Token
+usage**, and they are not added to the response metrics panel or to any
+Chat-, Workspace- or Organization-level total — those counts belong to no turn's
+billed call (see Consequences), and a total would invite being read as one. A
+summary with no `stats` (written before the field existed) shows nothing here. So
+does a pass whose Provider reported no usage, save for the model: a recorded `0`
+means "not reported", never "free". The collapsed divider is unchanged; the cost
+is detail, not the first thing a User meets.
+
 ## Notes
 
 - **`/compact` (#1111) takes a summary on demand.** It is the same pass, steered
