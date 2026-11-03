@@ -213,6 +213,7 @@ export function ResourceList({
   return (
     <>
       <EntityCardList
+        singleColumn
         items={cards}
         isLoading={isLoading}
         error={error}
@@ -223,6 +224,7 @@ export function ResourceList({
           // list offers this caller, so neither pops in when the read lands.
           <>
             <CardGridSkeleton
+              singleColumn
               titleBadges={workspaceId ? ["w-24"] : []}
               descriptionLines={1}
               extra={

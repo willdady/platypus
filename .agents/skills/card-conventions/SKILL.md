@@ -14,7 +14,9 @@ list fills in the slots instead of re-building them: `media` leads the card,
 `badges` fills the title row, `meta` adds the lines under the description,
 `actions` puts a primary button before the menu, `menu` is the `RowActionsMenu`,
 `href` is the card's click, and `isShared` adds the Organization badge and
-locks the click. Use its `groups` for a Pinned section.
+locks the click. Use its `groups` for a Pinned section. A list on a settings
+screen (beside the settings menu) sets `singleColumn`; the two-column grid is
+for full-width screens.
 
 ## What clicking a card opens
 
