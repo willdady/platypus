@@ -195,9 +195,15 @@ export function CardGridSkeleton({
   extra,
   actions = <IconButtonSkeleton />,
   className,
-}: CardSkeletonProps & { cards?: number }) {
+  singleColumn = false,
+}: CardSkeletonProps & { cards?: number; singleColumn?: boolean }) {
   return (
-    <ul className="grid grid-cols-1 lg:grid-cols-2 gap-2 lg:gap-4">
+    <ul
+      className={cn(
+        "grid grid-cols-1 gap-2",
+        !singleColumn && "lg:grid-cols-2 lg:gap-4",
+      )}
+    >
       {Array.from({ length: cards }, (_, i) => (
         <li key={i}>
           <Item variant="outline" className={cn("h-full", className)}>

@@ -1,6 +1,7 @@
 "use client";
 
 import { use, useCallback, useRef } from "react";
+import type { ReactNode } from "react";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { TriangleAlert } from "lucide-react";
 import type { RunEvent, TriggerRunDetailResponse } from "@platypus/schemas";
@@ -30,9 +31,18 @@ export const RUN_DETAIL_POLL_MS = 5_000;
 export const RUN_DETAIL_ERROR_NOTICE =
   "This run could not be read. It may have been pruned by the trigger's Max Runs to Keep, or it belongs to another workspace.";
 
+/** The heading above a section of the run page. */
+function SectionHeading({ children }: { children: ReactNode }) {
+  return (
+    <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-2">
+      {children}
+    </h2>
+  );
+}
+
 /**
- * One Trigger run in full: its row as the list shows it, its **Run timeline**
- * as a waterfall, and the answer it left behind.
+ * One Trigger run in full: its row as the list shows it, the answer it left
+ * behind, and its **Timeline** as a waterfall.
  *
  * The timeline is read incrementally. The first request takes everything;
  * each poll after that asks only for events past a sequence number, and the
@@ -87,7 +97,7 @@ function TriggerRunDetailPage({
       <div className="w-full px-4 md:px-8 xl:w-4/5 max-w-4xl">
         <h1 className="text-2xl mb-1 font-bold">Trigger run</h1>
         <p className="text-muted-foreground mb-4">
-          Where this run&apos;s time went, and what it concluded.
+          What this run concluded, and where its time went.
         </p>
 
         {error && !data ? (
@@ -107,22 +117,9 @@ function TriggerRunDetailPage({
               />
             </div>
 
-            <section>
-              <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-2">
-                Timeline
-              </h2>
-              <RunTimeline
-                events={data.events}
-                runStatus={data.run.status}
-                eventsTruncated={data.run.eventsTruncated}
-              />
-            </section>
-
             {data.run.finalText && (
               <section>
-                <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-2">
-                  Response
-                </h2>
+                <SectionHeading>Response</SectionHeading>
                 <div className="border rounded-lg p-4">
                   {/* The chat column caps a message at 80% and lets its inner
                       column shrink to fit the content; here the Response is
@@ -139,6 +136,15 @@ function TriggerRunDetailPage({
                 </div>
               </section>
             )}
+
+            <section>
+              <SectionHeading>Timeline</SectionHeading>
+              <RunTimeline
+                events={data.events}
+                runStatus={data.run.status}
+                eventsTruncated={data.run.eventsTruncated}
+              />
+            </section>
           </div>
         ) : (
           // Anything short of data or an error is still loading, the frames

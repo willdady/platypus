@@ -14,6 +14,22 @@ vi.mock("@/components/header", () => ({
   ),
 }));
 
+vi.mock("@/components/back-button", () => ({
+  BackButton: ({
+    variant,
+    fallbackHref,
+  }: {
+    variant?: string;
+    fallbackHref?: string;
+  }) => (
+    <button
+      aria-label="Back"
+      data-variant={variant}
+      data-fallback-href={fallbackHref}
+    />
+  ),
+}));
+
 vi.mock("@/components/auth-provider", () => ({
   useBackendUrl: () => "http://test",
   useAuth: () => ({ actor: null, isAuthLoading: false }),
@@ -68,5 +84,14 @@ describe("OrganizationLoading", () => {
       "h-dvh overflow-y-auto pb-4",
     );
     expect(screen.getAllByTestId("step-placeholder")).toHaveLength(3);
+  });
+
+  it("gives the settings skeleton the header Back the settings shell draws", () => {
+    nav.pathname = "/org2/settings/agents/agent1";
+    render(<OrganizationLoading />);
+
+    const back = screen.getByRole("button", { name: "Back" });
+    expect(back).toHaveAttribute("data-variant", "header");
+    expect(back).toHaveAttribute("data-fallback-href", "/org2/settings");
   });
 });
