@@ -7,7 +7,11 @@ import {
 import type { LanguageModelV3StreamPart } from "@ai-sdk/provider";
 import { MockLanguageModelV3 } from "ai/test";
 import { z } from "zod";
-import type { ToolGateCall, ToolGateVerdict } from "@platypuschat/plugin-sdk";
+import type {
+  ToolGateCall,
+  ToolGateVerdict,
+  ToolResultVerdict,
+} from "@platypuschat/plugin-sdk";
 import { startRun } from "./run-lifecycle.ts";
 import { driveChat, driveDelegate, driveOnce } from "./drive.ts";
 import { createOverflowRecovery } from "./context-overflow-recovery.ts";
@@ -18,8 +22,14 @@ import type { PlatypusUIMessage } from "../types.ts";
 import {
   clearToolGates,
   registerToolGate,
+  toolResultGateOptions,
   type ToolGateScope,
 } from "../tool-gates/index.ts";
+import {
+  createDelegateTool,
+  type SubAgentDelegate,
+} from "../tools/sub-agent.ts";
+import { DELEGATE_TOOL_NAME } from "../tools/turn-tool-names.ts";
 
 /**
  * The Tool gate (ADR-0033) at the seam all three Drives share: a real AI SDK
@@ -73,6 +83,36 @@ const callThenAnswer = () => {
     doStream: (options) => {
       prompts.push(options.prompt);
       const parts = index === 0 ? toolCallStep("tc1") : answerStep;
+      index += 1;
+      return Promise.resolve({
+        stream: simulateReadableStream({ chunks: parts }),
+      });
+    },
+  });
+  return { model, prompts };
+};
+
+/** Calls one named tool once, then answers. Keeps every prompt it was sent. */
+const callToolThenAnswer = (toolName: string, input: object) => {
+  const prompts: unknown[] = [];
+  let index = 0;
+  const model = new MockLanguageModelV3({
+    doStream: (options) => {
+      prompts.push(options.prompt);
+      const parts =
+        index === 0
+          ? step(
+              [
+                {
+                  type: "tool-call",
+                  toolCallId: "tc1",
+                  toolName,
+                  input: JSON.stringify(input),
+                },
+              ],
+              "tool-calls",
+            )
+          : answerStep;
       index += 1;
       return Promise.resolve({
         stream: simulateReadableStream({ chunks: parts }),
@@ -160,8 +200,31 @@ const toolResultSentBack = (prompts: unknown[]) =>
     .filter((m) => m.role === "tool")
     .flatMap((m) => m.content)
     .find((p) => (p as { toolCallId?: string }).toolCallId === "tc1") as {
-    output: { type: string; reason?: string };
+    output: { type: string; reason?: string; value?: unknown };
   };
+
+/** Registers a gate with a result stage, answering `answer` and recording. */
+const resultGate = (
+  id: string,
+  answer: (
+    call: ToolGateCall,
+    result: unknown,
+  ) => ToolResultVerdict | Promise<ToolResultVerdict>,
+  timeoutMs = 1_000,
+) => {
+  const seen: Array<{ call: ToolGateCall; result: unknown }> = [];
+  registerToolGate({
+    id,
+    name: id,
+    timeoutMs,
+    evaluate: () => ({ verdict: "allow" }),
+    evaluateResult: (call, result) => {
+      seen.push({ call, result });
+      return answer(call, result);
+    },
+  });
+  return seen;
+};
 
 afterEach(() => clearToolGates());
 
@@ -391,6 +454,7 @@ type ToolPart = {
   type: string;
   toolCallId: string;
   state: string;
+  errorText?: string;
   approval?: {
     id: string;
     approved?: boolean;
@@ -639,6 +703,268 @@ describe("what a gate is told", () => {
         readOnlyHint: "writes",
       },
     ]);
+  });
+});
+
+describe("a Tool gate's result stage", () => {
+  it("withholds a denied result and tells the model the tool ran", async () => {
+    const seen = resultGate("screener", () => ({
+      verdict: "deny",
+      reason: "Contains a prompt injection.",
+    }));
+    const { model, prompts } = callThenAnswer();
+    const executed: string[] = [];
+    const { run, outcome } = startRecordedRun();
+
+    await driveOnce({ plan: planWith(model, executed), prompt: "go", run });
+
+    // The tool ran; only its result was withheld.
+    expect(executed).toEqual(["/data"]);
+    expect(outcome[0]?.status).toBe("succeeded");
+    expect(seen).toHaveLength(1);
+    expect(seen[0]?.call).toEqual({
+      toolName: "wipe",
+      toolDescription: "Delete a directory.",
+      args: { path: "/data" },
+      toolSetId: "files",
+      orgId: "org-1",
+      workspaceId: "ws-1",
+      agentId: "agent-1",
+      attended: false,
+      readOnlyHint: "undeclared",
+    });
+    expect(seen[0]?.result).toBe("wiped");
+
+    // The original result reached neither the model nor anywhere it is kept.
+    expect(JSON.stringify(prompts)).not.toContain("wiped");
+    const result = toolResultSentBack(prompts);
+    expect(result.output.type).toBe("error-text");
+    expect(result.output.value).toContain("screener");
+    expect(result.output.value).toContain("Contains a prompt injection.");
+    expect(result.output.value).toMatch(/ran/);
+  });
+
+  it("does not evaluate results when no gate declares a result stage", async () => {
+    gate("open", () => ({ verdict: "allow" }));
+    const { model, prompts } = callThenAnswer();
+    const executed: string[] = [];
+    const { run } = startRecordedRun();
+
+    await driveOnce({ plan: planWith(model, executed), prompt: "go", run });
+
+    expect(executed).toEqual(["/data"]);
+    expect(toolResultSentBack(prompts).output).toEqual({
+      type: "text",
+      value: "wiped",
+    });
+  });
+
+  it("leaves the tool map itself untouched when no gate declares a result stage", () => {
+    gate("open", () => ({ verdict: "allow" }));
+    const tools = {
+      wipe: {
+        description: "Delete a directory.",
+        inputSchema: z.object({ path: z.string() }),
+        execute: () => "wiped",
+      },
+    };
+
+    expect(
+      toolResultGateOptions(tools, SCOPE, new AbortController().signal),
+    ).toBe(tools);
+  });
+
+  it("withholds a result when the gate throws", async () => {
+    resultGate("broken", () => {
+      throw new Error("boom");
+    });
+    const { model, prompts } = callThenAnswer();
+    const executed: string[] = [];
+    const { run } = startRecordedRun();
+
+    await driveOnce({ plan: planWith(model, executed), prompt: "go", run });
+
+    expect(executed).toEqual(["/data"]);
+    expect(JSON.stringify(prompts)).not.toContain("wiped");
+    const value = toolResultSentBack(prompts).output.value;
+    expect(value).toContain("broken");
+    expect(value).toContain("boom");
+  });
+
+  it("withholds a result when the gate outruns its timeout", async () => {
+    resultGate("slow", () => new Promise(() => {}), 20);
+    const { model, prompts } = callThenAnswer();
+    const executed: string[] = [];
+    const { run } = startRecordedRun();
+
+    await driveOnce({ plan: planWith(model, executed), prompt: "go", run });
+
+    expect(executed).toEqual(["/data"]);
+    expect(JSON.stringify(prompts)).not.toContain("wiped");
+    expect(toolResultSentBack(prompts).output.value).toContain("slow");
+  });
+
+  it("lets the first denying gate's reason win when several deny", async () => {
+    resultGate("open", () => ({ verdict: "allow" }));
+    resultGate("first", () => ({
+      verdict: "deny",
+      reason: "First says no.",
+    }));
+    resultGate("second", () => ({
+      verdict: "deny",
+      reason: "Second says no.",
+    }));
+    const { model, prompts } = callThenAnswer();
+    const executed: string[] = [];
+    const { run } = startRecordedRun();
+
+    await driveOnce({ plan: planWith(model, executed), prompt: "go", run });
+
+    expect(executed).toEqual(["/data"]);
+    const value = toolResultSentBack(prompts).output.value as string;
+    expect(value).toContain("First says no.");
+    expect(value).not.toContain("Second says no.");
+  });
+
+  it("passes the result through unchanged when every gate allows", async () => {
+    const first = resultGate("open", () => ({ verdict: "allow" }));
+    const second = resultGate("also-open", () => ({ verdict: "allow" }));
+    const { model, prompts } = callThenAnswer();
+    const executed: string[] = [];
+    const { run, outcome } = startRecordedRun();
+
+    await driveOnce({ plan: planWith(model, executed), prompt: "go", run });
+
+    expect(executed).toEqual(["/data"]);
+    expect(outcome[0]?.status).toBe("succeeded");
+    expect(first[0]?.result).toBe("wiped");
+    expect(second[0]?.result).toBe("wiped");
+    expect(toolResultSentBack(prompts).output).toEqual({
+      type: "text",
+      value: "wiped",
+    });
+  });
+
+  it("withholds a denied result from the stored Chat message and the stream", async () => {
+    resultGate("screener", () => ({
+      verdict: "deny",
+      reason: "Contains a prompt injection.",
+    }));
+    const { model } = callThenAnswer();
+    const executed: string[] = [];
+    const { run } = startRecordedRun();
+
+    const drive = driveChat({
+      plan: planWith(model, executed, { ...SCOPE, attended: true }),
+      modelMessages: [{ role: "user", content: "go" }],
+      run,
+    });
+    let streamed = "";
+    void (async () => {
+      for await (const chunk of drive.response)
+        streamed += JSON.stringify(chunk);
+    })();
+    for await (const snapshot of drive.snapshots)
+      streamed += JSON.stringify(snapshot);
+    const { messages } = await drive.done;
+
+    expect(executed).toEqual(["/data"]);
+    expect(JSON.stringify(messages)).not.toContain("wiped");
+    expect(streamed).not.toContain("wiped");
+    const part = toolParts(messages)[0];
+    expect(part.state).toBe("output-error");
+    expect(part.errorText).toContain("Contains a prompt injection.");
+  });
+
+  it("withholds a denied result in a Sub-Agent run", async () => {
+    resultGate("screener", () => ({
+      verdict: "deny",
+      reason: "Contains a prompt injection.",
+    }));
+    const { model } = callThenAnswer();
+    const executed: string[] = [];
+    const { run } = startRecordedRun();
+
+    const drive = driveDelegate({
+      agentId: "sub-1",
+      plan: planWith(model, executed),
+      prompt: "go",
+      run,
+    });
+    for await (const _ of drive.snapshots);
+    const result = await drive.done;
+
+    expect(executed).toEqual(["/data"]);
+    expect(result.status).toBe("succeeded");
+    expect(JSON.stringify(result)).not.toContain("wiped");
+  });
+
+  it("withholds a denied delegation result in the parent", async () => {
+    resultGate("screener", (call) =>
+      call.toolName === DELEGATE_TOOL_NAME
+        ? { verdict: "deny", reason: "Inside the sub-agent answer." }
+        : { verdict: "allow" },
+    );
+    let ran = false;
+    const delegate: SubAgentDelegate = {
+      id: "sub-1",
+      name: "Researcher",
+      description: "Researches.",
+      run: async function* () {
+        ran = true;
+        await Promise.resolve();
+        yield {
+          entries: [
+            { type: "tool-call", toolName: "search", status: "completed" },
+          ],
+        };
+        yield { entries: [], text: "SECRET-FINDING" };
+      },
+    };
+    const { model, prompts } = callToolThenAnswer(DELEGATE_TOOL_NAME, {
+      subAgent: "Researcher",
+      task: "Find the answer.",
+    });
+    const { run } = startRecordedRun();
+
+    await driveOnce({
+      plan: {
+        model,
+        maxSteps: 4,
+        gateScope: SCOPE,
+        tools: { [DELEGATE_TOOL_NAME]: createDelegateTool([delegate]) },
+      },
+      prompt: "go",
+      run,
+    });
+
+    expect(ran).toBe(true);
+    expect(JSON.stringify(prompts)).not.toContain("SECRET-FINDING");
+    const value = toolResultSentBack(prompts).output.value as string;
+    expect(value).toContain("screener");
+    expect(value).toContain("Inside the sub-agent answer.");
+  });
+
+  it("closes the Run timeline as a tool error without recording the result", async () => {
+    resultGate("screener", () => ({
+      verdict: "deny",
+      reason: "Contains a prompt injection.",
+    }));
+    const { model } = callThenAnswer();
+    const { run } = startRecordedRun();
+    const events = new RunEventRecorder({ runId: run.handle.runId });
+
+    await driveOnce({
+      plan: planWith(model, []),
+      prompt: "go",
+      run,
+      events,
+    });
+
+    expect(JSON.stringify(events.events)).not.toContain("wiped");
+    const call = events.events.find((e) => e.type === "tool-call");
+    expect(call?.status).toBe("error");
+    expect(call?.error?.message).toContain("Contains a prompt injection.");
   });
 });
 

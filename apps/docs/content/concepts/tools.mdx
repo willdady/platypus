@@ -30,7 +30,8 @@ tools the model can call.
 
 Granting a tool does not guarantee it runs. A **Tool gate**, contributed by a
 Plugin the Operator enabled, sees every call Platypus runs before it runs —
-from a built-in, a Plugin, an MCP server or a Sandbox — and can stop it. A
+from a built-in, a Plugin, an MCP server or a Sandbox — and can stop it. It can
+also withhold a tool's result from the model after the tool has run. A
 Provider's built-in web search runs at the vendor, so no gate sees it. See
 [Configuration → Tool
 gates](/self-hosting/configuration#tool-gates), and [Extending → Tool

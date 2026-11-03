@@ -15,7 +15,11 @@ import {
 import { applyToolInputClearing } from "./tool-input-clearing.ts";
 import { withAnswerStepInstruction } from "./answer-step.ts";
 import { stepOccupancy, type UsageModel } from "./run-stats.ts";
-import { toolGateOptions, type ToolGateScope } from "../tool-gates/index.ts";
+import {
+  toolGateOptions,
+  toolResultGateOptions,
+  type ToolGateScope,
+} from "../tool-gates/index.ts";
 import { capToolResults } from "../services/tool-result.ts";
 import type { OverflowRecovery } from "./context-overflow-recovery.ts";
 import {
@@ -218,8 +222,14 @@ export const buildModelInvocation = (
           providerOptions: BEDROCK_CACHE_POINT,
         } satisfies SystemModelMessage),
   // Every tool's result is capped here, core-built ones included: the one seam
-  // every Drive passes through (issue #1618).
-  tools: capToolResults(plan.tools),
+  // every Drive passes through (issue #1618). The Tool gate's after-call stage
+  // wraps each locally-executed tool here too (ADR-0033), so no Drive can miss
+  // it; with no result-evaluating gate the map is the capped one, unchanged.
+  tools: toolResultGateOptions(
+    capToolResults(plan.tools),
+    plan.gateScope,
+    options.abortSignal,
+  ),
   stopWhen: options.extraStopCondition
     ? [stepCountIs(plan.maxSteps), options.extraStopCondition]
     : [stepCountIs(plan.maxSteps)],

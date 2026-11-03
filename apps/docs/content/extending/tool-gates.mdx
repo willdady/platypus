@@ -9,7 +9,9 @@ import { Callout } from "nextra/components";
 
 A **Tool gate** sees every tool call the backend runs, before it runs, and
 answers with a **Verdict**: `allow`, `ask` or `deny`, with an optional reason. A
-gate only gates. It cannot change a call's arguments or its result.
+gate may also see a tool's result before the model does and withhold it. A gate
+only gates: it cannot change a call's arguments, and it cannot rewrite, redact
+or annotate a result.
 
 An enabled gate applies to the whole deployment: every Organization, every
 Chat, Trigger run, A2A call and Sub-Agent run, and every tool, whether it came
@@ -80,6 +82,61 @@ all three.
 With several gates enabled they all run, at the same time, and the most
 restrictive Verdict wins: `deny` over `ask` over `allow`.
 
+## Withholding a result
+
+A gate may also declare `evaluateResult`, an optional second stage that sees a
+tool's result before the model does. It is handed the same fields as `evaluate`
+plus `result` — the value the tool returned, after Platypus has normalised it.
+Declare it only when you want that stage; a gate that leaves it out behaves
+exactly as it always did.
+
+```ts
+export const plugin: PlatypusPlugin = {
+  name: "acme-gates",
+  version: "0.1.0",
+  apiVersion: PLUGIN_API_VERSION,
+  contributes: {
+    toolGates: [
+      {
+        id: "screener",
+        name: "Injection screener",
+        timeoutMs: 2_000,
+        evaluate: () => ({ verdict: "allow" }),
+        evaluateResult: (call, result, plugin, { signal }) =>
+          String(result).includes("IGNORE PREVIOUS INSTRUCTIONS")
+            ? {
+                verdict: "deny",
+                reason: "Looks like a prompt injection.",
+              }
+            : { verdict: "allow" },
+      },
+    ],
+  },
+};
+```
+
+A result Verdict is `allow` or `deny`, with an optional reason. There is no
+`ask`, because a result the tool already produced has nothing for a person to
+approve.
+
+- **`allow`** — the result is passed to the model unchanged.
+- **`deny`** — the result is withheld entirely. It is never stored, streamed to
+  the Chat or recorded on the Run timeline. The model receives a tool error
+  naming your gate and carrying your `reason`; the Chat's tool card shows its
+  error state, and the Run timeline closes the call as failed. The tool has
+  already run, so its side effects stand — write `reason` so the model
+  understands that the call happened and only its result was withheld.
+
+The result stage fails closed in the same way as the call stage: a gate that
+throws, returns something that is not a result Verdict, or outruns the same
+`timeoutMs` withholds the result. With several result-evaluating gates they all
+run in parallel, any `deny` wins, and the first denying gate's reason is the one
+used.
+
+Your gate receives the whole normalised result. If yours sends it somewhere
+else — a decision model, for example — bound it first; Platypus does not shorten
+it for you.
+
 ## Your gate fails closed
 
 <Callout type="warning">
@@ -89,7 +146,9 @@ restrictive Verdict wins: `deny` over `ask` over `allow`.
   tool call on the deployment, and asks about every attended one. That is
   deliberate: a gate that times out under load must not let through the calls it
   exists to stop. Budget your timeout for your slowest honest answer, and honour
-  the `signal`.
+  the `signal`. On the result stage the same failure withholds the result, and a
+  gate that never answers leaves every tool result withheld across the
+  deployment.
 </Callout>
 
 `timeoutMs` defaults to **10 000** ms and is capped at **30 000**. A
@@ -105,9 +164,9 @@ any run repeating the same call for the same result is.
 ## What a gate cannot see
 
 Tools the Provider runs itself — a Provider's built-in web search, for one —
-run on the Provider's side and never reach Platypus, so no gate sees them. If an
-Operator needs those stopped too, the place to do it is the Provider's settings,
-not a gate.
+run on the Provider's side and never reach Platypus, so no gate sees their calls
+or results and their results cannot be withheld. If an Operator needs those
+stopped too, the place to do it is the Provider's settings, not a gate.
 
 ## Where to next
 

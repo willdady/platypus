@@ -4,6 +4,7 @@ import type {
   ToolGateCall,
   ToolGateOptions,
   ToolGateVerdict,
+  ToolResultVerdict,
 } from "@platypuschat/plugin-sdk";
 import { logger } from "../logger.ts";
 import { createContributionRegistry } from "../registry/contribution-registry.ts";
@@ -32,6 +33,16 @@ export type ToolGateRegistration = {
     call: ToolGateCall,
     options: ToolGateOptions,
   ) => ToolGateVerdict | Promise<ToolGateVerdict>;
+  /** The optional after-call stage; absent on a gate that only vets calls. */
+  evaluateResult?: (
+    call: ToolGateCall,
+    result: unknown,
+    options: ToolGateOptions,
+  ) => ToolResultVerdict | Promise<ToolResultVerdict>;
+};
+
+type ResultGate = ToolGateRegistration & {
+  evaluateResult: NonNullable<ToolGateRegistration["evaluateResult"]>;
 };
 
 const TOOL_GATES = createContributionRegistry<ToolGateRegistration>({
@@ -122,6 +133,101 @@ const runGate = async (
   }
 };
 
+/**
+ * One gate's answer about a result, in core's terms. Anything a gate cannot
+ * vouch for is a denial: a throw, a timeout, or an answer that is not a result
+ * Verdict at all. There is no `ask`, because the tool already ran.
+ */
+const runResultGate = async (
+  gate: ResultGate,
+  call: ToolGateCall,
+  result: unknown,
+  signal: AbortSignal,
+): Promise<{ allowed: true } | { allowed: false; reason: string }> => {
+  try {
+    const answer = await withDeadline(
+      (deadline) => gate.evaluateResult(call, result, { signal: deadline }),
+      gate.timeoutMs,
+      signal,
+    );
+    const verdict = (answer as Partial<ToolResultVerdict> | undefined)?.verdict;
+    if (verdict !== "allow" && verdict !== "deny") {
+      throw new Error(
+        `returned ${JSON.stringify(verdict)}, not a result Verdict`,
+      );
+    }
+    if (verdict === "allow") return { allowed: true };
+    const given = typeof answer.reason === "string" ? answer.reason.trim() : "";
+    return {
+      allowed: false,
+      reason: `The tool ran, but the "${gate.name}" Tool gate withheld its result${given ? `: ${given}` : "."}`,
+    };
+  } catch (error) {
+    logger.warn(
+      { err: error, toolGate: gate.id, toolName: call.toolName },
+      "Tool gate failed to vet a tool result; the result is withheld",
+    );
+    const failure =
+      error instanceof DeadlineExceededError
+        ? `the "${gate.name}" Tool gate did not answer within ${gate.timeoutMs}ms`
+        : `the "${gate.name}" Tool gate failed (${errorMessage(error)})`;
+    return {
+      allowed: false,
+      reason: `The tool ran, but ${failure}, so its result was withheld.`,
+    };
+  }
+};
+
+/**
+ * Ask every result-evaluating gate about one result, in parallel. Any denial
+ * wins, and the first in registration order supplies the reason the model and
+ * the User are given.
+ */
+const evaluateResult = async (
+  gates: readonly ResultGate[],
+  call: ToolGateCall,
+  result: unknown,
+  signal: AbortSignal,
+): Promise<{ allowed: true } | { allowed: false; reason: string }> => {
+  const decisions = await Promise.all(
+    gates.map((gate) => runResultGate(gate, call, result, signal)),
+  );
+  const denied = decisions.find(
+    (decision): decision is { allowed: false; reason: string } =>
+      !decision.allowed,
+  );
+  return denied ?? { allowed: true };
+};
+
+/**
+ * The {@link ToolGateCall} a call is described by, for either stage. Reads the
+ * description off the tool itself, because the result stage has no request
+ * carrying one.
+ */
+const gateCall = (
+  scope: ToolGateScope,
+  toolName: string,
+  tool: Tool | undefined,
+  args: unknown,
+): ToolGateCall => {
+  const description = tool?.description;
+  return {
+    toolName,
+    ...(typeof description === "string"
+      ? { toolDescription: description }
+      : {}),
+    args,
+    ...(scope.toolSetIds.has(toolName)
+      ? { toolSetId: scope.toolSetIds.get(toolName) }
+      : {}),
+    orgId: scope.orgId,
+    workspaceId: scope.workspaceId,
+    ...(scope.agentId !== undefined ? { agentId: scope.agentId } : {}),
+    attended: scope.attended,
+    readOnlyHint: scope.readOnlyHints.get(toolName) ?? "undeclared",
+  };
+};
+
 type ApprovalRequest = {
   toolCall: {
     toolCallId: string;
@@ -193,23 +299,12 @@ export const toolGateOptions = (
               reason: "No Tool gate could vet this call, so it was not run.",
             };
           }
-          const description = tools?.[toolCall.toolName]?.description;
-          const call: ToolGateCall = {
-            toolName: toolCall.toolName,
-            ...(typeof description === "string"
-              ? { toolDescription: description }
-              : {}),
-            args: toolCall.input,
-            ...(scope.toolSetIds.has(toolCall.toolName)
-              ? { toolSetId: scope.toolSetIds.get(toolCall.toolName) }
-              : {}),
-            orgId: scope.orgId,
-            workspaceId: scope.workspaceId,
-            ...(scope.agentId !== undefined ? { agentId: scope.agentId } : {}),
-            attended: scope.attended,
-            readOnlyHint:
-              scope.readOnlyHints.get(toolCall.toolName) ?? "undeclared",
-          };
+          const call = gateCall(
+            scope,
+            toolCall.toolName,
+            tools?.[toolCall.toolName],
+            toolCall.input,
+          );
           const decisions = await Promise.all(
             gates.map((gate) => runGate(gate, call, signal)),
           );
@@ -225,4 +320,111 @@ export const toolGateOptions = (
             : { type: "denied", reason: decision.reason };
         },
       };
+};
+
+const isThenable = (value: unknown): value is PromiseLike<unknown> =>
+  value != null && typeof (value as { then?: unknown }).then === "function";
+
+const isAsyncIterable = (value: unknown): value is AsyncIterable<unknown> =>
+  value != null &&
+  typeof (value as Record<symbol, unknown>)[Symbol.asyncIterator] ===
+    "function";
+
+/** Vet one result against every result gate, throwing the first denial. */
+const vetResult = async (
+  scope: ToolGateScope | undefined,
+  gates: readonly ResultGate[],
+  toolName: string,
+  tool: Tool,
+  args: unknown,
+  result: unknown,
+  signal: AbortSignal,
+): Promise<void> => {
+  // A plan with no scope cannot describe its calls to a gate. The before-call
+  // stage already refused the call, so this only fires for a result produced
+  // ahead of that seam; it fails closed too.
+  if (!scope) {
+    throw new Error(
+      "The tool ran, but no Tool gate could vet its result, so its result was withheld.",
+    );
+  }
+  const decision = await evaluateResult(
+    gates,
+    gateCall(scope, toolName, tool, args),
+    result,
+    signal,
+  );
+  if (!decision.allowed) throw new Error(decision.reason);
+};
+
+/**
+ * A streaming tool's result while it is withheld from the model until the gate
+ * answers. Every yield but the last is preliminary activity the UI may show;
+ * the last is the value the model receives, so it is held back until it is
+ * vetted and dropped entirely if the gate denies it.
+ */
+const gateResultStream = (
+  stream: AsyncIterable<unknown>,
+  vet: (result: unknown) => Promise<void>,
+): AsyncGenerator<unknown> =>
+  (async function* () {
+    let pending: unknown;
+    let hasPending = false;
+    for await (const value of stream) {
+      if (hasPending) yield pending;
+      pending = value;
+      hasPending = true;
+    }
+    // A generator that yielded nothing produced no result to withhold.
+    if (!hasPending) return;
+    await vet(pending);
+    yield pending;
+  })();
+
+/**
+ * The after-call stage of the Tool gate (ADR-0033), applied to every locally
+ * executed tool at the model-invocation seam all Drives share — so no Drive can
+ * miss it and a Provider-executed tool (which has no `execute`) is untouched.
+ *
+ * Returns `tools` itself when no gate declares a result stage, so a deployment
+ * without one sends exactly the tools it always did.
+ */
+export const toolResultGateOptions = (
+  tools: Record<string, Tool>,
+  scope: ToolGateScope | undefined,
+  signal: AbortSignal,
+): Record<string, Tool> => {
+  const gates = getToolGates().filter(
+    (gate): gate is ResultGate => typeof gate.evaluateResult === "function",
+  );
+  if (gates.length === 0) return tools;
+
+  const wrapped: Record<string, Tool> = {};
+  for (const [name, tool] of Object.entries(tools)) {
+    const execute = (tool as { execute?: unknown }).execute;
+    if (typeof execute !== "function") {
+      wrapped[name] = tool;
+      continue;
+    }
+    const runExecute = execute as (args: unknown, options: unknown) => unknown;
+    wrapped[name] = {
+      ...tool,
+      execute: (args: unknown, options: unknown) => {
+        const vet = (result: unknown) =>
+          vetResult(scope, gates, name, tool, args, result, signal);
+        // Called on the tool it came from, so a tool set may write `execute`
+        // as a method reaching sibling state through `this`.
+        const result = runExecute.call(tool, args, options);
+        if (isThenable(result)) {
+          return result.then(async (value) => {
+            await vet(value);
+            return value;
+          });
+        }
+        if (isAsyncIterable(result)) return gateResultStream(result, vet);
+        return vet(result).then(() => result);
+      },
+    };
+  }
+  return wrapped;
 };
