@@ -63,6 +63,8 @@ type EntityCardSlots<T extends EntityCard> = {
    * run. The caller keeps owning the menu contents (`RowActionsMenu shared …`).
    */
   isShared?: (item: T) => boolean;
+  /** One card per row at every width: a settings list beside its menu. */
+  singleColumn?: boolean;
 };
 
 /**
@@ -85,6 +87,7 @@ function EntityCardGrid<T extends EntityCard>({
   menu,
   wrap,
   isShared,
+  singleColumn = false,
 }: EntityCardSlots<T> & {
   items: readonly T[];
   /** Empty slots after the cards, filling a short last page or row. */
@@ -150,7 +153,10 @@ function EntityCardGrid<T extends EntityCard>({
   return (
     <ul
       aria-label={label}
-      className="grid grid-cols-1 lg:grid-cols-2 auto-rows-fr gap-2 lg:gap-4"
+      className={cn(
+        "grid grid-cols-1 auto-rows-fr gap-2",
+        !singleColumn && "lg:grid-cols-2 lg:gap-4",
+      )}
     >
       {items.map((item) => (
         <li key={item.id}>
