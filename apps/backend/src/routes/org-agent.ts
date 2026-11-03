@@ -16,7 +16,7 @@ import {
 } from "../services/scoped-resource.ts";
 import { avatarBodyLimit } from "./avatar-body-limit.ts";
 import { agentResponse } from "../services/scoped-response.ts";
-import { getOrigin } from "../utils/get-origin.ts";
+import { backendBaseUrl } from "../base-urls.ts";
 import type { Variables } from "../server.ts";
 import { NotFoundError } from "../errors.ts";
 
@@ -29,7 +29,7 @@ const orgAgent = new Hono<{ Variables: Variables }>();
 /** List org-scoped Agents */
 orgAgent.get("/", requireAuth, requireOrgAccess(), async (c) => {
   const { orgId } = orgScopeOf(c);
-  const baseUrl = getOrigin(c);
+  const baseUrl = backendBaseUrl();
   const results = await listOrgScoped(db, "agent", orgId);
   return c.json({
     results: results.map((r) => agentResponse(r, "organization", baseUrl)),
@@ -40,7 +40,7 @@ orgAgent.get("/", requireAuth, requireOrgAccess(), async (c) => {
 orgAgent.get("/:agentId", requireAuth, requireOrgAccess(), async (c) => {
   const { orgId } = orgScopeOf(c);
   const agentId = c.req.param("agentId");
-  const baseUrl = getOrigin(c);
+  const baseUrl = backendBaseUrl();
   const record = await requireOrgScoped(db, "agent", agentId, orgId);
   return c.json(agentResponse(record, "organization", baseUrl));
 });
@@ -55,7 +55,7 @@ orgAgent.put(
     const { orgId } = orgScopeOf(c);
     const agentId = c.req.param("agentId");
     const data = c.req.valid("json");
-    const baseUrl = getOrigin(c);
+    const baseUrl = backendBaseUrl();
 
     // `updateAgentRow` throws NotFound (→404) when the Agent is not visible
     // here; a duplicate name surfaces as a Postgres unique violation, mapped
@@ -94,7 +94,7 @@ orgAgent.post(
       c.req.param("agentId"),
       body["file"],
     );
-    return c.json(agentResponse(row, "organization", getOrigin(c)));
+    return c.json(agentResponse(row, "organization", backendBaseUrl()));
   },
 );
 
@@ -108,7 +108,7 @@ orgAgent.delete(
       { kind: "organization", orgId: orgScopeOf(c).orgId },
       c.req.param("agentId"),
     );
-    return c.json(agentResponse(row, "organization", getOrigin(c)));
+    return c.json(agentResponse(row, "organization", backendBaseUrl()));
   },
 );
 

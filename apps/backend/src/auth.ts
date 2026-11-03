@@ -3,7 +3,7 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { authPlugins, authUserFieldOverrides } from "./auth-plugins.ts";
 import { requireInvitationToSignUp } from "./sign-up.ts";
 import { db } from "./index.ts";
-import { backendBaseUrl } from "./base-urls.ts";
+import { authBaseUrl } from "./base-urls.ts";
 import * as authSchema from "./db/auth-schema.ts";
 import { timezoneSchema } from "@platypus/schemas";
 import {
@@ -48,8 +48,10 @@ export const SESSION_READ_WINDOW_SECONDS = 60;
 export const SESSION_READ_MAX = 300;
 
 export const auth = betterAuth({
-  baseURL: backendBaseUrl(),
-  basePath: "/auth",
+  // The full URL, prefix included: given a `baseURL` that has a path,
+  // better-auth ignores `basePath` and routes on that path instead.
+  baseURL: authBaseUrl(),
+  basePath: new URL(authBaseUrl()).pathname,
   database: drizzleAdapter(db, {
     provider: "pg",
     schema: authSchema,

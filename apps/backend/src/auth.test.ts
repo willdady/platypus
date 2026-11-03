@@ -350,3 +350,57 @@ describe("User timezone", () => {
     expect(await sessionTimezone()).toBe("Europe/London");
   });
 });
+
+/**
+ * A `BACKEND_URL` served under a prefix a reverse proxy strips (#1810): the
+ * server hands better-auth the browser-facing path, so better-auth must route
+ * on `<prefix>/auth` and build its links with the prefix in them.
+ */
+describe("a path-prefixed BACKEND_URL", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    process.env.BETTER_AUTH_URL = "https://chat.example.com/api";
+    process.env.FRONTEND_URL = "https://chat.example.com";
+    process.env.BETTER_AUTH_SECRET = "a-test-secret-that-is-at-least-32-chars";
+  });
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+  });
+
+  it("routes auth under the prefix", async () => {
+    const auth = await runnableAuth();
+    const status = async (path: string) =>
+      (await auth.handler(new Request(`https://chat.example.com${path}`)))
+        .status;
+
+    expect(await status("/api/auth/ok")).toBe(200);
+    expect(await status("/auth/ok")).toBe(404);
+  });
+
+  it("signs in and reads the session back under the prefix", async () => {
+    const auth = await runnableAuth();
+    await auth.api.createUser({ body: INVITEE });
+
+    const signIn = await auth.handler(
+      new Request("https://chat.example.com/api/auth/sign-in/email", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          origin: "https://chat.example.com",
+        },
+        body: JSON.stringify(INVITEE),
+      }),
+    );
+    expect(signIn.status).toBe(200);
+
+    const session = await auth.handler(
+      new Request("https://chat.example.com/api/auth/get-session", {
+        headers: { cookie: sessionCookie(signIn) },
+      }),
+    );
+    expect(await session.json()).toMatchObject({
+      user: { email: INVITEE.email },
+    });
+  });
+});

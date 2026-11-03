@@ -18,7 +18,7 @@ import {
 import { NotFoundError } from "../errors.ts";
 import type { Variables } from "../server.ts";
 import { avatarKeyToUrl } from "../utils/avatar-url.ts";
-import { getOrigin } from "../utils/get-origin.ts";
+import { backendBaseUrl } from "../base-urls.ts";
 import { paginationQuerySchema, validate } from "../validate.ts";
 
 const notification = new Hono<{ Variables: Variables }>();
@@ -34,7 +34,7 @@ notification.get(
     const { workspaceId } = workspaceScopeOf(c);
     const user = userOf(c);
     const { limit, offset } = c.req.valid("query");
-    const baseUrl = getOrigin(c);
+    const baseUrl = backendBaseUrl();
 
     const results = await listWorkspaceNotifications(
       db,

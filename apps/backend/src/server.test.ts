@@ -134,3 +134,31 @@ describe("health and readiness", () => {
     expect(query).not.toHaveBeenCalled();
   });
 });
+
+describe("auth mount", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  // A prefix-stripping proxy, or the frontend's internal URL, delivers
+  // `/auth/*`; better-auth routes on the `BACKEND_URL` path (#1810).
+  it("hands /auth/* to better-auth under the BACKEND_URL prefix", async () => {
+    vi.stubEnv("BETTER_AUTH_URL", "https://chat.example.com/api/");
+    vi.resetModules();
+    const { auth } = await import("./auth.ts");
+    let handled: URL | undefined;
+    Object.assign(auth, {
+      handler: (req: Request) => {
+        handled = new URL(req.url);
+        return Promise.resolve(new Response(null, { status: 204 }));
+      },
+    });
+    const { default: prefixedApp } = await import("./server.ts");
+
+    await prefixedApp.request("/auth/get-session?disableRefresh=true");
+
+    expect(handled?.pathname).toBe("/api/auth/get-session");
+    expect(handled?.search).toBe("?disableRefresh=true");
+  });
+});

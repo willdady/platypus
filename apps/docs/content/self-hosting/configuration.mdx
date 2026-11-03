@@ -65,7 +65,7 @@ end up on different hosts they must also share a parent domain named by
 
 The session cookie is issued by the backend and has to be sent back to it on requests a page served from the frontend makes. Only two layouts let that happen:
 
-- **One origin behind a reverse proxy** — the frontend at `/` and the backend under a path such as `/api` on the same host. The browser holds one cookie covering both, so no extra configuration is needed.
+- **One origin behind a reverse proxy** — the frontend at `/` and the backend under a path such as `/api` on the same host. Set `BACKEND_URL` to include the path (`https://chat.example.com/api`), and have the proxy strip that path before forwarding to the backend, so a request for `/api/auth/sign-in/email` reaches the backend as `/auth/sign-in/email`. The browser holds one cookie covering both, so no extra configuration is needed.
 - **Two subdomains of one parent domain** — e.g. `app.example.com` and `api.example.com`. Set `AUTH_COOKIE_DOMAIN` to the shared parent (`example.com`) so the session cookie is issued for it and every subdomain sends it. Without the variable the cookie is host-only and server-rendered requests arrive unauthenticated.
 
 Two hosts with **different parent domains** — e.g. `app.example.com` and `api.example.net` — are **not supported**. No cookie can cover both, and there is no service-to-service credential for internal calls. The backend refuses to start on that topology, naming both hostnames and `AUTH_COOKIE_DOMAIN`; a malformed `AUTH_COOKIE_DOMAIN` stops it the same way.

@@ -23,7 +23,7 @@ import { promoteScoped } from "../services/promote.ts";
 import { listScoped, requireScoped } from "../services/scoped-resource.ts";
 import { agentResponse } from "../services/scoped-response.ts";
 import { avatarBodyLimit } from "./avatar-body-limit.ts";
-import { getOrigin } from "../utils/get-origin.ts";
+import { backendBaseUrl } from "../base-urls.ts";
 
 const agent = new Hono<{ Variables: Variables }>();
 
@@ -37,7 +37,7 @@ agent.post(
   async (c) => {
     const data = c.req.valid("json");
     const scope = workspaceScopeOf(c);
-    const baseUrl = getOrigin(c);
+    const baseUrl = backendBaseUrl();
 
     const result = await createAgentRow(scope, data);
     if ("error" in result) {
@@ -54,7 +54,7 @@ agent.get(
   requireOrgAccess(),
   requireWorkspaceAccess,
   async (c) => {
-    const baseUrl = getOrigin(c);
+    const baseUrl = backendBaseUrl();
 
     const ctx = workspaceScopeOf(c);
     const [scoped, pinned] = await Promise.all([
@@ -77,7 +77,7 @@ agent.get(
   requireWorkspaceAccess,
   async (c) => {
     const agentId = c.req.param("agentId");
-    const baseUrl = getOrigin(c);
+    const baseUrl = backendBaseUrl();
 
     const found = await requireScoped(
       db,
@@ -100,7 +100,7 @@ agent.put(
     const agentId = c.req.param("agentId");
     const data = c.req.valid("json");
     const scope = workspaceScopeOf(c);
-    const baseUrl = getOrigin(c);
+    const baseUrl = backendBaseUrl();
 
     // A Shared Agent is a single source of truth edited only on the Organization
     // surface (ADR-0007); `updateAgentRow` throws NotFound (→404) when the
@@ -157,7 +157,7 @@ agent.post(
       c.req.param("agentId"),
       body["file"],
     );
-    return c.json(agentResponse(row, "workspace", getOrigin(c)));
+    return c.json(agentResponse(row, "workspace", backendBaseUrl()));
   },
 );
 
@@ -172,7 +172,7 @@ agent.delete(
       { kind: "workspace", ctx: workspaceScopeOf(c) },
       c.req.param("agentId"),
     );
-    return c.json(agentResponse(row, "workspace", getOrigin(c)));
+    return c.json(agentResponse(row, "workspace", backendBaseUrl()));
   },
 );
 
@@ -213,7 +213,7 @@ agent.post(
   async (c) => {
     const { orgId, workspaceId } = workspaceScopeOf(c);
     const agentId = c.req.param("agentId");
-    const baseUrl = getOrigin(c);
+    const baseUrl = backendBaseUrl();
 
     const outcome = await promoteScoped(db, {
       type: "agent",

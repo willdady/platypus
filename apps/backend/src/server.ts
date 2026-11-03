@@ -3,6 +3,7 @@ import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
 import { db } from "./index.ts";
 import { auth } from "./auth.ts";
+import { authBaseUrl } from "./base-urls.ts";
 import { requireInvitationToSignUp } from "./sign-up.ts";
 import { chat } from "./routes/chat.ts";
 import { files } from "./routes/files.ts";
@@ -128,9 +129,14 @@ app.use("*", async (c, next) => {
   }
 });
 
-// Auth routes - must be before the db middleware
+// Auth routes - must be before the db middleware. Requests arrive at `/auth/*`
+// (a prefix-stripping proxy, or the frontend's internal URL), but better-auth
+// routes on the browser-facing path, which carries any `BACKEND_URL` prefix.
+const authPath = new URL(authBaseUrl()).pathname;
 app.on(["POST", "GET"], "/auth/*", (c) => {
-  return auth.handler(c.req.raw);
+  const url = new URL(c.req.url);
+  url.pathname = authPath + url.pathname.slice("/auth".length);
+  return auth.handler(new Request(url, c.req.raw));
 });
 
 // Liveness only: `ok` says the process is up and serving, nothing about the

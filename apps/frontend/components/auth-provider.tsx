@@ -24,7 +24,7 @@ import {
   workspaceEntity,
   type Serialized,
 } from "@/lib/api-write";
-import { fetcher, isNotFoundOrForbidden } from "@/lib/utils";
+import { fetcher, isNotFoundOrForbidden, joinUrl } from "@/lib/utils";
 import { sessionExpiryHandler } from "@/lib/session-expiry";
 
 type OrgMembership = {
@@ -95,8 +95,9 @@ const BackendContext = createContext<BackendContextType | undefined>(undefined);
 const authClients = new Map<string, AuthClient>();
 function newAuthClient(backendUrl: string) {
   return createAuthClient({
-    baseURL: backendUrl,
-    basePath: "/auth",
+    // The full URL: given a `baseURL` with a path (a `BACKEND_URL` served under
+    // a prefix), better-auth ignores `basePath`, so `/auth` goes in here.
+    baseURL: joinUrl(backendUrl, "/auth"),
     plugins: [
       // Mirrors the backend's user additional fields so `updateUser` accepts them
       inferAdditionalFields({

@@ -48,7 +48,7 @@ import {
   type A2aCallLogEntry,
 } from "../services/a2a-call.ts";
 import { logger } from "../logger.ts";
-import { getOrigin } from "../utils/get-origin.ts";
+import { backendBaseUrl } from "../base-urls.ts";
 import { errorMessage } from "../utils/error-message.ts";
 import type { Variables } from "../server.ts";
 
@@ -425,7 +425,7 @@ const answerRpc = async (c: Context, log: A2aCallLogEntry) => {
   });
   const transport = new JsonRpcTransportHandler(
     requestHandler(
-      { endpoint, token, origin: getOrigin(c), signal: hangUp.signal },
+      { endpoint, token, origin: backendBaseUrl(), signal: hangUp.signal },
       envelope.nullDataParts,
       guardedFor(log),
       guardedStreamFor(log),
