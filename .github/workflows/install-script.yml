@@ -86,6 +86,63 @@ jobs:
           PATH="$bin:$PATH" PLATYPUS_DOMAIN=chat.example.com \
             PLATYPUS_DIR="$RUNNER_TEMP/platypus" bash < apps/website/public/install.sh
 
+      - name: Refuse a Compose older than 2.24.0
+        run: |
+          bin="$RUNNER_TEMP/old-bin"
+          mkdir -p "$bin"
+          cat > "$bin/docker" <<'STUB'
+          #!/usr/bin/env bash
+          case "$*" in
+            "compose version --short") echo "2.23.9" ;;
+            "compose version") echo "Docker Compose version v2.23.9" ;;
+            "info") exit 0 ;;
+            "volume inspect"*) exit 1 ;;
+            *) exit 0 ;;
+          esac
+          STUB
+          chmod +x "$bin/docker"
+          dir="$RUNNER_TEMP/old-compose"
+          if output="$(PATH="$bin:$PATH" PLATYPUS_DOMAIN=chat.example.com \
+            PLATYPUS_DIR="$dir" bash < apps/website/public/install.sh 2>&1)"; then
+            echo "expected the installer to refuse an old Compose" >&2
+            exit 1
+          fi
+          echo "$output"
+          grep -q "2.24.0" <<<"$output" || {
+            echo "expected the refusal to name Compose 2.24.0" >&2
+            exit 1
+          }
+          test ! -e "$dir"
+
+      - name: The generated block matches the Compose page
+        run: |
+          python3 - <<'PY'
+          import os, pathlib, re, sys
+
+          page_text = pathlib.Path("apps/docs/content/self-hosting/docker-compose.mdx").read_text()
+          blocks = re.findall(r"```yaml\n(.*?)```", page_text, re.S)
+          page = next((block for block in blocks if "caddy_data:" in block), None)
+          if page is None:
+              sys.exit("no Caddy block on the Compose page")
+
+          generated = pathlib.Path(
+              os.environ["RUNNER_TEMP"], "platypus", "compose.override.yaml"
+          ).read_text()
+          # The installer inserts the pinned tags the page leaves to the reader.
+          generated = re.sub(
+              r"^    image: willdady/platypus-(?:backend|frontend):.*\n",
+              "",
+              generated,
+              flags=re.M,
+          )
+          if generated.strip() != page.strip():
+              sys.exit(
+                  "the generated compose.override.yaml has drifted from the Compose page:\n"
+                  + generated
+              )
+          print("generated block matches the Compose page")
+          PY
+
       - name: Assert the generated deployment
         run: |
           dir="$RUNNER_TEMP/platypus"

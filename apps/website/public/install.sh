@@ -45,6 +45,15 @@ compose_at_least() {
   }'
 }
 
+# Fails when something is already listening on the port. Checked before
+# anything is written: caught later by 'docker compose up', a taken port leaves
+# a .env behind that stops this installer from re-running.
+require_free_port() {
+  local port="$1" reason="$2"
+  ! (echo >"/dev/tcp/127.0.0.1/$port") 2>/dev/null ||
+    fail "port $port is already in use on this host, and $reason. Stop whatever is using it (see: lsof -i :$port) and try again."
+}
+
 # Everything runs from main, called on the last line, so a download cut short
 # by the network runs nothing rather than half a script.
 main() {
@@ -71,18 +80,14 @@ main() {
       fail "PLATYPUS_DOMAIN needs Docker Compose 2.24.0 or later. The Caddy block closes ports with 'ports: !reset []', which older Compose rejects. Upgrade Compose, or unset PLATYPUS_DOMAIN to install over plain HTTP."
   fi
 
-  # Caught here, a taken port costs nothing; caught by 'docker compose up', it
-  # leaves a .env behind that stops this installer from re-running.
   local port
   if [[ -n "$domain" ]]; then
     for port in 80 443; do
-      ! (echo >"/dev/tcp/127.0.0.1/$port") 2>/dev/null ||
-        fail "port $port is already in use on this host, and Caddy needs it to obtain a certificate and serve HTTPS. Stop whatever is using it (see: lsof -i :$port) and try again."
+      require_free_port "$port" "Caddy needs it to obtain a certificate and serve HTTPS"
     done
   else
     for port in 3000 4000; do
-      ! (echo >"/dev/tcp/127.0.0.1/$port") 2>/dev/null ||
-        fail "port $port is already in use on this host, and Platypus needs it. Stop whatever is using it (see: lsof -i :$port) and try again."
+      require_free_port "$port" "Platypus needs it"
     done
   fi
 
@@ -231,13 +236,12 @@ EOF
   # --- Write .env: the release's .example.env with our values substituted. ---
   local frontend_url="http://$host:3000"
   local backend_url="http://$host:4000"
-  local allowed_origins="http://$host:3000"
   if [[ -n "$domain" ]]; then
     # One origin, with the backend under /api as the Caddyfile routes it.
     frontend_url="https://$domain"
     backend_url="https://$domain/api"
-    allowed_origins="https://$domain"
   fi
+  local allowed_origins="$frontend_url"
   (
     umask 077
     V_BETTER_AUTH_SECRET="$secret" \
@@ -293,16 +297,11 @@ EOF
     fail "the stack did not start. See why with: cd $dir && docker compose logs backend
 Once fixed, start it with 'docker compose up -d' in $dir; re-running this installer will refuse, because .env now exists."
 
-  local sign_in_url="http://$host:3000"
-  if [[ -n "$domain" ]]; then
-    sign_in_url="https://$domain"
-  fi
-
   cat <<EOF
 
 Platypus $version is running.
 
-  Sign in at:  $sign_in_url
+  Sign in at:  $frontend_url
   Email:       $email
   Password:    $password
 
