@@ -55,6 +55,11 @@ export const RUN_SUPPRESSED_NOTICE =
 /** The accessible name of a run's warnings, for tests to find them by. */
 export const RUN_WARNINGS_LABEL = "Run warnings";
 
+/** What the runs list says about a run that switched to its Fallback model. */
+export function fallbackNotice(from: string, to: string): string {
+  return `Fell back from ${from} to ${to} after the primary Provider failed.`;
+}
+
 const UNLOADED_REASON_LABELS: Record<UnloadedToolSetReason, string> = {
   not_found: "not found",
   factory_failed: "its Plugin failed to build it",
@@ -307,6 +312,11 @@ export function TriggerRunRow({
         )}
         {stats?.stoppedAtStepLimit && (
           <TurnNotice className="mt-1">{RUN_STEP_LIMIT_NOTICE}</TurnNotice>
+        )}
+        {stats?.fallback && (
+          <TurnNotice className="mt-1">
+            {fallbackNotice(stats.fallback.from.model, stats.fallback.to.model)}
+          </TurnNotice>
         )}
         {/* Warnings, never a status: a run that went without some of its
             tools, or whose tool calls failed, can still end `success`

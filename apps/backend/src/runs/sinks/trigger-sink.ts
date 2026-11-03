@@ -84,6 +84,7 @@ const toTriggerRunStats = (stats: RunStats): TriggerRunStats | null => {
     // no key, so the flag's presence is the whole of its meaning.
     ...(stats.stoppedAtStepLimit ? { stoppedAtStepLimit: true as const } : {}),
     ...(stats.usageByModel ? { usageByModel: stats.usageByModel } : {}),
+    ...(stats.fallback ? { fallback: stats.fallback } : {}),
   };
 };
 
@@ -337,6 +338,7 @@ export class TriggerSink implements RunSink {
               durationMs: event.durationMs,
               status: event.status,
               error: event.error,
+              modelSwitch: event.modelSwitch,
               childrenTruncated: event.childrenTruncated,
             })),
           )

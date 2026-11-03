@@ -68,6 +68,7 @@ describe("RunEventRecorder", () => {
       durationMs: 250,
       status: "completed",
       error: null,
+      modelSwitch: null,
       childrenTruncated: false,
     });
   });

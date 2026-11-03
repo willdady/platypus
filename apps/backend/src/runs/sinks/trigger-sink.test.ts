@@ -380,6 +380,30 @@ describe("TriggerSink", () => {
       expect(setArg.stats).not.toHaveProperty("cacheWriteTokens");
     });
 
+    it("persists the Fallback switch marker on the run's stats", async () => {
+      const sink = new TriggerSink({ ...owner, triggerId: "trigger-1" });
+      const fallback = {
+        from: { providerId: "p1", model: "m1" },
+        to: { providerId: "p2", model: "m2" },
+      };
+
+      await sink.onFinish({
+        runId: "run-1",
+        status: "succeeded",
+        messages: [],
+        stats: {
+          steps: 1,
+          toolCalls: [],
+          inputTokens: 10,
+          outputTokens: 5,
+          fallback,
+        },
+      });
+
+      const setArg = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
+      expect(setArg.stats).toMatchObject({ fallback });
+    });
+
     it("maps a failed run to status 'failed' with the error message", async () => {
       const sink = new TriggerSink({ ...owner, triggerId: "trigger-1" });
 

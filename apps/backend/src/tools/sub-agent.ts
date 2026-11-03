@@ -5,6 +5,8 @@ import { logger } from "../logger.ts";
 import { startRun } from "../runs/run-lifecycle.ts";
 import { driveDelegate, failBeforeDrive } from "../runs/drive.ts";
 import type { RunPlan } from "../runs/run-plan.ts";
+import type { GenerationPlan } from "../runs/agent-plan.ts";
+import { FALLBACK_SDK_RETRIES } from "../runs/fallback.ts";
 import { runRegistry } from "../runs/run-registry.ts";
 import { describeSdkError } from "../runs/stream-error.ts";
 import { runEventScopeOf, type RunEventScope } from "../runs/run-events.ts";
@@ -180,6 +182,11 @@ interface SubAgentDelegateOptions {
   guardrails?: string | null;
   /** The parent run this delegate is invoked from, when there is one. */
   parentRun?: ParentRunContext;
+  /**
+   * The delegate's own Fallback model (ADR-0043), when its run type may
+   * consult one. Composed here with the fallback Provider's guardrails.
+   */
+  fallback?: GenerationPlan;
 }
 
 /**
@@ -230,6 +237,7 @@ export const createSubAgentDelegate = (
     plan,
     guardrails,
     parentRun,
+    fallback,
   } = options;
 
   // Append the provider's security directives to the base instructions —
@@ -244,6 +252,16 @@ export const createSubAgentDelegate = (
   const securityBlock = renderSecurityGuardrails(guardrails);
   const composedInstructions = securityBlock
     ? `${baseInstructions}\n\n${securityBlock}`
+    : baseInstructions;
+
+  // The same Instructions with the fallback Provider's guardrails, ready for a
+  // switch (ADR-0043). A Sub-Agent never renders the full system prompt, so
+  // this pair is the whole of what a fallback changes about its prompt.
+  const fallbackSecurityBlock = fallback
+    ? renderSecurityGuardrails(fallback.guardrails)
+    : "";
+  const fallbackSystem = fallbackSecurityBlock
+    ? `${baseInstructions}\n\n${fallbackSecurityBlock}`
     : baseInstructions;
 
   return {
@@ -369,6 +387,12 @@ export const createSubAgentDelegate = (
             },
             prompt: task,
             run,
+            ...(fallback
+              ? {
+                  fallback: { plan: fallback.plan, system: fallbackSystem },
+                  maxRetries: FALLBACK_SDK_RETRIES,
+                }
+              : {}),
             onStepFinish: (step) => {
               rawFinishReason = step.rawFinishReason;
             },
@@ -618,6 +642,8 @@ export const COLLIDING_SUB_AGENT_NAME_REASON =
 export type SubAgentPlan = {
   plan: Omit<RunPlan, "system" | "tools">;
   guardrails: string | null;
+  /** The Sub-Agent's own Fallback model, when its run type may consult one. */
+  fallback?: GenerationPlan;
 };
 
 /**
@@ -707,7 +733,7 @@ export const createDelegateTools = async <
     }
 
     try {
-      const { plan, guardrails } = await resolvePlan(subAgent);
+      const { plan, guardrails, fallback } = await resolvePlan(subAgent);
 
       // The sub-agent's tools are opened on its first delegation, not here.
       // Memoized so a delegate called twice in one turn resolves them once.
@@ -727,6 +753,7 @@ export const createDelegateTools = async <
           plan,
           guardrails,
           parentRun,
+          ...(fallback ? { fallback } : {}),
         }),
       );
     } catch (error) {

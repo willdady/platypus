@@ -223,6 +223,7 @@ agent.post(
       guard: (existing) =>
         findNonSharedReferences(orgId, {
           providerId: existing.providerId,
+          fallbackProviderId: existing.fallbackProviderId,
           skillIds: existing.skillIds,
           subAgentIds: existing.subAgentIds,
           toolSetIds: existing.toolSetIds,

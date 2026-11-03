@@ -95,6 +95,8 @@ const RETRACTABLE_FIELDS = [
   "instructions",
   "providerId",
   "modelId",
+  "fallbackProviderId",
+  "fallbackModelId",
   "maxSteps",
   "temperature",
   "topP",
@@ -114,6 +116,8 @@ type AgentFormData = {
   instructions: string;
   providerId: string;
   modelId: string;
+  fallbackProviderId: string;
+  fallbackModelId: string;
   maxSteps: number;
   temperature?: number;
   toolSetIds: string[];
@@ -214,6 +218,8 @@ function AgentForm({
       instructions: "",
       providerId: "",
       modelId: "",
+      fallbackProviderId: "",
+      fallbackModelId: "",
       maxSteps: DEFAULT_AGENT_MAX_STEPS,
       toolSetIds: [],
       skillIds: [],
@@ -229,6 +235,8 @@ function AgentForm({
       instructions: agent.instructions || "",
       providerId: agent.providerId,
       modelId: agent.modelId,
+      fallbackProviderId: agent.fallbackProviderId || "",
+      fallbackModelId: agent.fallbackModelId || "",
       maxSteps: agent.maxSteps || DEFAULT_AGENT_MAX_STEPS,
       temperature: agent.temperature ?? undefined,
       topP: agent.topP ?? undefined,
@@ -265,6 +273,17 @@ function AgentForm({
           ? findModelOption(submittedProvider, data.modelId)?.value
           : undefined) ?? data.modelId;
 
+      // The Fallback model migrates its alias reference the same way (ADR-0017).
+      const submittedFallbackProvider = providers.find(
+        (p) => p.id === data.fallbackProviderId,
+      );
+      const submittedFallbackModelId = data.fallbackModelId
+        ? ((submittedFallbackProvider
+            ? findModelOption(submittedFallbackProvider, data.fallbackModelId)
+                ?.value
+            : undefined) ?? data.fallbackModelId)
+        : "";
+
       return {
         providerId: data.providerId,
         name: data.name,
@@ -272,6 +291,10 @@ function AgentForm({
         inputPlaceholder: data.inputPlaceholder || undefined,
         instructions: data.instructions,
         modelId: submittedModelId,
+        // Null rather than an empty string clears the pair; the two travel
+        // together, so a fallback is never half-set (ADR-0043).
+        fallbackProviderId: data.fallbackProviderId || null,
+        fallbackModelId: submittedFallbackModelId || null,
         maxSteps: data.maxSteps,
         // Send null (not undefined) for cleared sampling params so the key
         // survives JSON.stringify and the backend persists the cleared value
@@ -442,6 +465,24 @@ function AgentForm({
       ...prevData,
       providerId: decoded.providerId,
       modelId: decoded.modelReference,
+    }));
+  };
+
+  const handleFallbackModelChange = (value: string) => {
+    clearErrors("fallbackProviderId", "fallbackModelId");
+    const decoded = decodeSelectionReference(value);
+    if (decoded?.type !== "provider") {
+      setFormData((prevData) => ({
+        ...prevData,
+        fallbackProviderId: "",
+        fallbackModelId: "",
+      }));
+      return;
+    }
+    setFormData((prevData) => ({
+      ...prevData,
+      fallbackProviderId: decoded.providerId,
+      fallbackModelId: decoded.modelReference,
     }));
   };
 
@@ -652,6 +693,75 @@ function AgentForm({
                     passthroughFileTypes={resolvedModel.passthroughFileTypes}
                   />
                 )}
+              </Field>
+            );
+          })()}
+          {/* The optional Fallback model (ADR-0043), chosen with the same
+              Provider/model control as the primary. Only a Trigger run
+              consults it, and only when the primary Provider is unavailable. */}
+          {(() => {
+            const fallbackError =
+              validationErrors.fallbackProviderId ||
+              validationErrors.fallbackModelId;
+            const fallbackProvider = providers.find(
+              (p) => p.id === formData.fallbackProviderId,
+            );
+            const fallbackOption =
+              fallbackProvider && formData.fallbackModelId
+                ? findModelOption(fallbackProvider, formData.fallbackModelId)
+                : undefined;
+            return (
+              <Field data-invalid={!!fallbackError}>
+                <FieldLabel htmlFor="fallbackModelId">
+                  Fallback model
+                </FieldLabel>
+                <Select
+                  value={
+                    fallbackOption
+                      ? encodeProviderSelection(
+                          formData.fallbackProviderId,
+                          fallbackOption.value,
+                        )
+                      : "none"
+                  }
+                  onValueChange={handleFallbackModelChange}
+                  disabled={isSubmitting || readOnly}
+                >
+                  <SelectTrigger
+                    id="fallbackModelId"
+                    disabled={isSubmitting || readOnly}
+                    aria-invalid={!!fallbackError}
+                  >
+                    <SelectValue placeholder="None" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None</SelectItem>
+                    {providers.map((provider) => (
+                      <SelectGroup key={provider.id}>
+                        <SelectLabel>{provider.name}</SelectLabel>
+                        {getModelOptions(provider).map((model) => (
+                          <SelectItem
+                            key={encodeProviderSelection(
+                              provider.id,
+                              model.value,
+                            )}
+                            value={encodeProviderSelection(
+                              provider.id,
+                              model.value,
+                            )}
+                          >
+                            {model.label}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {fallbackError && <FieldError>{fallbackError}</FieldError>}
+                <FieldDescription>
+                  Used by Trigger runs when this Agent&apos;s primary Provider
+                  is unavailable. Chat turns never switch models.
+                </FieldDescription>
               </Field>
             );
           })()}

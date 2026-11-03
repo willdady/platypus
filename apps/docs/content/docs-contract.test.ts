@@ -930,18 +930,38 @@ describe("webhook events", () => {
  */
 
 /** A shape-bearing schema, and a union of them, without importing zod here. */
-type ShapeLike = { shape: Record<string, unknown> };
+type ShapeLike = {
+  shape: Record<string, { isOptional?: () => boolean } | undefined>;
+};
 type UnionLike = { options: ShapeLike[] };
 
-/** The key sets one event's payload may take — more than one where it has two shapes. */
-const declaredPayloadKeys = (event: WebhookEvent): string[][] => {
+/**
+ * The key sets one event's payload may take — more than one where it has two
+ * shapes. `required` is what every payload must carry; `all` is the widest a
+ * payload may be. An optional field is a legitimate omission, so an example is
+ * held to the required keys and refused for anything undeclared — but not
+ * forced to show every optional one.
+ */
+type DeclaredKeys = { required: string[]; all: string[] };
+
+const declaredPayloadKeys = (event: WebhookEvent): DeclaredKeys[] => {
   const schema: unknown = webhookEventDataSchemas[event];
   const variants =
     schema !== null && typeof schema === "object" && "options" in schema
       ? (schema as UnionLike).options
       : [schema as ShapeLike];
-  return variants.map((variant) => Object.keys(variant.shape).sort());
+  return variants.map((variant) => ({
+    all: Object.keys(variant.shape).sort(),
+    required: Object.keys(variant.shape)
+      .filter((key) => variant.shape[key]?.isOptional?.() !== true)
+      .sort(),
+  }));
 };
+
+/** Whether an example's keys are a legal payload for one declared variant. */
+const keysMatch = (keys: string[], variant: DeclaredKeys): boolean =>
+  variant.required.every((key) => keys.includes(key)) &&
+  keys.every((key) => variant.all.includes(key));
 
 /** Each ```json fence in `content`, with the line its opening fence sits on. */
 const jsonFences = (content: string): { line: number; text: string }[] => {
@@ -1005,9 +1025,9 @@ describe("webhook event payloads", () => {
       // form drops silently.
       const variants = declaredPayloadKeys(event);
       for (const variant of variants) {
-        if (!shown.some((example) => example.keys.join() === variant.join())) {
+        if (!shown.some((example) => keysMatch(example.keys, variant))) {
           violations.push(
-            `\`${event}\` declares a payload shaped \`{ ${variant.join(", ")} }\` in ${source}, ` +
+            `\`${event}\` declares a payload shaped \`{ ${variant.required.join(", ")} }\` in ${source}, ` +
               `and apps/docs/content/${page} shows no example of it.\n` +
               `Each shape an event can take needs its own example.`,
           );
@@ -1028,17 +1048,25 @@ describe("webhook event payloads", () => {
         continue;
       }
       const variants = declaredPayloadKeys(example.event as WebhookEvent);
-      if (variants.some((variant) => variant.join() === example.keys.join())) {
+      if (variants.some((variant) => keysMatch(example.keys, variant))) {
         continue;
       }
       violations.push(
         `apps/docs/content/${page}:${example.line} shows \`${example.event}\` carrying ` +
           `\`{ ${example.keys.join(", ")} }\`, but ${source} declares ` +
-          `${variants.map((variant) => `\`{ ${variant.join(", ")} }\``).join(" or ")}.\n` +
+          `${variants.map((variant) => `\`{ ${variant.required.join(", ")} }\``).join(" or ")}.\n` +
           `The page is what an integrator writes their handler against.`,
       );
     }
     expectNoViolations(violations);
+  });
+
+  it("documents the optional trigger_run Fallback field", () => {
+    const shape = (
+      webhookEventDataSchemas["trigger_run.succeeded"] as ShapeLike
+    ).shape;
+    expect(Object.keys(shape)).toContain("fallback");
+    expect(readDoc(page)).toContain("data.fallback");
   });
 });
 

@@ -715,6 +715,13 @@
       "when": 1793506628382,
       "tag": "0101_assert_model_configs",
       "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "7",
+      "when": 1793702977023,
+      "tag": "0102_organic_purple_man",
+      "breakpoints": true
     }
   ]
 }

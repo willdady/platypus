@@ -162,6 +162,144 @@ describe("Agent Routes", () => {
       );
     });
 
+    it("creates an agent whose Fallback model resolves on a reachable Provider", async () => {
+      mockSession();
+      const fake = world({
+        rows: {
+          provider: [
+            {
+              id: "p1",
+              workspaceId,
+              organizationId: null,
+              name: "Primary",
+              modelIds: [{ id: "m1" }],
+            },
+            {
+              id: "p2",
+              workspaceId,
+              organizationId: null,
+              name: "Fallback",
+              modelIds: [{ id: "m2" }],
+            },
+          ],
+        },
+      });
+
+      const res = await send("POST", baseUrl, {
+        ...createBody,
+        fallbackProviderId: "p2",
+        fallbackModelId: "m2",
+      });
+
+      expect(res.status).toBe(201);
+      expect(fake.tables.agent).toContainEqual(
+        expect.objectContaining({
+          name: "New Agent",
+          fallbackProviderId: "p2",
+          fallbackModelId: "m2",
+        }),
+      );
+    });
+
+    it("allows a Fallback model on the same Provider with a different model", async () => {
+      mockSession();
+      const fake = world({
+        rows: {
+          provider: [
+            {
+              id: "p1",
+              workspaceId,
+              organizationId: null,
+              name: "Primary",
+              modelIds: [{ id: "m1" }, { id: "m2" }],
+            },
+          ],
+        },
+      });
+
+      const res = await send("POST", baseUrl, {
+        ...createBody,
+        fallbackProviderId: "p1",
+        fallbackModelId: "m2",
+      });
+
+      expect(res.status).toBe(201);
+      expect(fake.tables.agent).toContainEqual(
+        expect.objectContaining({ fallbackModelId: "m2" }),
+      );
+    });
+
+    it.each([
+      [
+        "the Fallback pair is incomplete",
+        { fallbackProviderId: "p2" },
+        /both a Provider and a model/i,
+      ],
+      [
+        "the Fallback model is the primary model",
+        { fallbackProviderId: "p1", fallbackModelId: "m1" },
+        /differ from the primary/i,
+      ],
+      [
+        "the Fallback model is not enabled on that Provider",
+        { fallbackProviderId: "p2", fallbackModelId: "missing" },
+        /not enabled/i,
+      ],
+      [
+        "the Fallback Provider is not reachable here",
+        { fallbackProviderId: "p3", fallbackModelId: "m3" },
+        /not available/i,
+      ],
+    ])("rejects a Fallback model when %s", async (_label, fallback, error) => {
+      mockSession();
+      world({
+        rows: {
+          provider: [
+            {
+              id: "p1",
+              workspaceId,
+              organizationId: null,
+              name: "Primary",
+              modelIds: [{ id: "m1" }],
+            },
+            {
+              id: "p2",
+              workspaceId,
+              organizationId: null,
+              name: "Fallback",
+              modelIds: [{ id: "m2" }],
+            },
+            {
+              id: "p3",
+              workspaceId: "ws-2",
+              organizationId: null,
+              name: "Elsewhere",
+              modelIds: [{ id: "m3" }],
+            },
+          ],
+        },
+      });
+
+      const res = await send("POST", baseUrl, {
+        ...createBody,
+        ...fallback,
+      });
+
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as {
+        error:
+          string | Array<{ message?: string; path?: Array<string | number> }>;
+      };
+      // A schema refusal is an issue array; a write-model refusal is a single
+      // string. One reading of both, so the test names the reason rather than
+      // matching a serialised body.
+      const messages =
+        typeof body.error === "string"
+          ? [body.error]
+          : body.error.map((issue) => issue.message ?? "");
+      expect(messages.join(" ")).toMatch(error);
+    });
+
     it("should return 400 if description is too long", async () => {
       mockSession();
       world();

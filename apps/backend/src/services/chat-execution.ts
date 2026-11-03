@@ -83,12 +83,16 @@ import {
 import type {
   ParentRunContext,
   ChatTurnRequest,
+  FallbackTurn,
   ResolvedGeneration,
   TurnRequest,
 } from "../runs/types.ts";
 import type { TranscriptSummaryRow } from "@platypus/schemas";
 import {
+  resolveFallbackGeneration,
   resolveGenerationPlan,
+  type FallbackAgentSource,
+  type GenerationPlan,
   type GenerationSource,
 } from "../runs/agent-plan.ts";
 import type { RunPlan } from "../runs/run-plan.ts";
@@ -123,11 +127,19 @@ type ChatContext = {
   plan: Omit<RunPlan, "system" | "tools">;
   /** The resolved Provider's free-text security directives, or null. */
   guardrails: string | null;
+  /**
+   * The Agent's optional Fallback model, resolved (ADR-0043). Present only for
+   * a run type that may consult it — a Trigger run and its Sub-Agents — and
+   * only when it resolved; a broken fallback never fails the primary path.
+   */
+  fallback?: GenerationPlan;
 };
 
 export type ChatTurn = {
   stream: RunPlan & { messages: PlatypusUIMessage[] };
   resolved: ResolvedGeneration;
+  /** The Fallback model a Trigger run may switch to (ADR-0043). */
+  fallback?: FallbackTurn;
   /**
    * This turn's start engaged the pre-turn **backstop** (ADR-0041): it waited
    * for a Transcript summary before the model was called, and the turn's
@@ -236,6 +248,12 @@ export type PrepareChatTurnInput = TurnRequest & {
    * `run` is absent for.
    */
   signal?: AbortSignal;
+  /**
+   * Whether this turn may consult the Agent's Fallback model (ADR-0043). Only
+   * a Trigger run — and a Sub-Agent run inside one, which this flag reaches
+   * through delegation — passes true. A Chat turn and an A2A run never do.
+   */
+  fallbackAllowed?: boolean;
 };
 
 // --- Queries seam ---
@@ -599,6 +617,7 @@ export const prepareChatTurn = async (
     onActivity,
     run,
     signal,
+    fallbackAllowed = false,
   } = input;
 
   const workspace = await queries.getWorkspace(workspaceId);
@@ -620,6 +639,7 @@ export const prepareChatTurn = async (
     orgId,
     workspaceId,
     input.sessionId,
+    fallbackAllowed,
   );
   const { provider, agent, resolvedModelId } = context;
 
@@ -688,7 +708,14 @@ export const prepareChatTurn = async (
     ] = await Promise.all([
       sessionPromise,
       loadSkills(queries, agent, orgId, workspaceId),
-      loadSubAgents(queries, agent, scope, sessionPromise, run),
+      loadSubAgents(
+        queries,
+        agent,
+        scope,
+        sessionPromise,
+        run,
+        fallbackAllowed,
+      ),
       queries.getUserContexts(user.id, workspaceId),
       resolveMemories(
         queries,
@@ -776,6 +803,15 @@ export const prepareChatTurn = async (
     };
 
     const systemPrompt = renderSystemPrompt(stable);
+    // The same prompt composed with the fallback Provider's guardrails, kept
+    // ready for a Trigger run that switches (ADR-0043): the security fragment
+    // is the resolved Provider's, so a switch changes it with the model.
+    const fallbackSystem = context.fallback
+      ? renderSystemPrompt({
+          ...stable,
+          securityGuardrails: context.fallback.guardrails,
+        })
+      : undefined;
 
     if (permittedSkillIds.length > 0) {
       tools[LOAD_SKILL_TOOL_NAME] = createLoadSkillTool(
@@ -921,6 +957,14 @@ export const prepareChatTurn = async (
         maxSteps: agent ? undefined : (request.maxSteps ?? undefined),
       },
       searchUnavailable,
+      ...(context.fallback && fallbackSystem !== undefined
+        ? {
+            fallback: {
+              plan: context.fallback.plan,
+              system: fallbackSystem,
+            },
+          }
+        : {}),
       unloadedToolSets: session.unloadedToolSets,
       // The stream opens with the visible "Summarising earlier messages…"
       // status the backstop's wait owes the User (ADR-0041).
@@ -975,6 +1019,9 @@ export const validateTurnAttachments = async (
       args.orgId,
       args.workspaceId,
       args.sessionId,
+      // The file gate runs on every turn shape, before a run exists, and only
+      // ever reads the primary's capabilities.
+      false,
     );
     passthroughFileTypes = passthroughFileTypesForModel(
       context.provider,
@@ -1030,6 +1077,34 @@ export { normalizeToolResult };
 export { wrapToolsWithActivity, type ToolActivityEvent };
 
 /**
+ * Resolves an Agent's Fallback model for a run that may consult one, treating
+ * a resolution failure as an absent fallback (resolution failure never
+ * switches, ADR-0017/0043). A dangling fallback is a configuration fault in
+ * its own right; failing the run over it would break a healthy primary path.
+ */
+const resolveFallbackOrLog = async (
+  agent: FallbackAgentSource & { id: string },
+  scope: { orgId: string; workspaceId: string; sessionId: string },
+  queries: ChatTurnQueries,
+  message: string,
+): Promise<GenerationPlan | undefined> => {
+  try {
+    return await resolveFallbackGeneration(agent, scope, queries);
+  } catch (error) {
+    logger.warn(
+      {
+        agentId: agent.id,
+        fallbackProviderId: agent.fallbackProviderId,
+        fallbackModelId: agent.fallbackModelId,
+        error,
+      },
+      message,
+    );
+    return undefined;
+  }
+};
+
+/**
  * Resolves the Agent-or-direct selection down to a `GenerationSource`
  * (`resolveGenerationPlan`'s input), fetching the Agent row when `agentId` is
  * given. The one place that decides whether THIS turn's fields — not an
@@ -1042,6 +1117,7 @@ const resolveChatContext = async (
   orgId: string,
   workspaceId: string,
   sessionId: string,
+  fallbackAllowed: boolean,
 ): Promise<ChatContext> => {
   const { agentId, providerId, modelId } = data;
 
@@ -1083,6 +1159,18 @@ const resolveChatContext = async (
       queries,
     );
 
+  // Only a run type that may consult it gets a fallback, and only when it
+  // resolves.
+  let fallback: GenerationPlan | undefined;
+  if (fallbackAllowed && agent) {
+    fallback = await resolveFallbackOrLog(
+      agent,
+      { orgId, workspaceId, sessionId },
+      queries,
+      "Fallback model did not resolve; the run will use the primary only",
+    );
+  }
+
   return {
     provider,
     agent,
@@ -1094,6 +1182,7 @@ const resolveChatContext = async (
     resolvedAgentId,
     plan,
     guardrails,
+    ...(fallback ? { fallback } : {}),
   };
 };
 
@@ -1126,6 +1215,7 @@ const loadSubAgents = async (
   scope: ToolSessionScope,
   session: Promise<ToolSession>,
   run: ParentRunContext | undefined,
+  fallbackAllowed: boolean,
 ): Promise<{
   subAgents: SubAgentCatalogueEntry[];
   unavailableSubAgents: SubAgentFailure[];
@@ -1164,15 +1254,26 @@ const loadSubAgents = async (
     // A sub-Agent's plan is resolved the same way the parent turn's is —
     // through `resolveGenerationPlan`, not a second copy of model/ceiling/
     // sampling resolution (this path used to say, in so many words, that it
-    // never went through `resolveChatContext`).
-    (subAgent) =>
-      resolveGenerationPlan(
+    // never went through `resolveChatContext`). Its fallback is its OWN
+    // (ADR-0043), and only where the parent run may consult one — a Sub-Agent
+    // under a Chat inherits no fallback, and never the parent's switched state.
+    async (subAgent) => {
+      const resolved = await resolveGenerationPlan(
         { agent: subAgent },
         // A delegate carries its parent's session id, so a Chat keeps one
         // upstream session and a Trigger run keeps its own.
         { orgId, workspaceId, sessionId },
         queries,
-      ),
+      );
+      if (!fallbackAllowed) return resolved;
+      const fallback = await resolveFallbackOrLog(
+        subAgent,
+        { orgId, workspaceId, sessionId },
+        queries,
+        "Sub-Agent fallback model did not resolve; its run will use the primary only",
+      );
+      return fallback ? { ...resolved, fallback } : resolved;
+    },
     // Called on a delegate's FIRST invocation, not now: a parent with three
     // MCP-backed delegates used to open — and warn about — every one of their
     // servers on every Chat turn, whether or not it delegated. The nested

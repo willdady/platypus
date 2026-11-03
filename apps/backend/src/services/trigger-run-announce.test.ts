@@ -75,6 +75,37 @@ describe("announceTriggerRunsEnded", () => {
     });
   });
 
+  it("names the Fallback switch when the run switched", async () => {
+    mockDb.where.mockResolvedValueOnce([triggerRow()]);
+    const fallback = {
+      from: { providerId: "p1", model: "m1" },
+      to: { providerId: "p2", model: "m2" },
+    };
+
+    await announceTriggerRunsEnded([
+      endedRun({ status: "success", errorMessage: null, stats: { fallback } }),
+    ]);
+
+    const payload = mockDispatchWebhookEvent.mock.calls[0]?.[2] as unknown as {
+      event: string;
+      data: { fallback: unknown };
+    };
+    expect(payload.event).toBe("trigger_run.succeeded");
+    expect(payload.data.fallback).toEqual(fallback);
+  });
+
+  it("omits the Fallback field on a run that never switched", async () => {
+    mockDb.where.mockResolvedValueOnce([triggerRow()]);
+
+    await announceTriggerRunsEnded([
+      endedRun({ status: "success", errorMessage: null, stats: { steps: 1 } }),
+    ]);
+
+    expect(
+      JSON.stringify(mockDispatchWebhookEvent.mock.calls[0]?.[2] as unknown),
+    ).not.toContain('"fallback"');
+  });
+
   it.each([
     ["success", "trigger_run.succeeded"],
     ["failed", "trigger_run.failed"],

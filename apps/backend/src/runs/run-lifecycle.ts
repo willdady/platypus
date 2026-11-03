@@ -6,6 +6,7 @@ import type { ModelUsage } from "@platypus/schemas";
 import {
   accumulateStepStats,
   mergeUsageByModel,
+  pickCachedInput,
   withDelegatedUsage,
   type RunStep,
   type UsageModel,
@@ -130,10 +131,16 @@ export const startRun = (params: {
   const logFields = { runId, ...params.log };
   let stats: RunStats = {};
   let usageModel: UsageModel | undefined;
+  /**
+   * The run's own usage, keyed by whichever (Provider, model) its steps ran
+   * under. A run that switched to its Fallback model mid-run bills each step
+   * to the model that actually served it (ADR-0043).
+   */
+  let ownUsage: ModelUsage[] = [];
   let delegated: ModelUsage[] = [];
   const delegateReports = new Map<RunId, readonly ModelUsage[]>();
   const reported = (): RunStats =>
-    withDelegatedUsage(stats, usageModel, delegated);
+    withDelegatedUsage(stats, usageModel, delegated, ownUsage);
   let terminated = false;
   let graceTimer: ReturnType<typeof setTimeout> | undefined;
   /** The Tool session this run must close, once it has one — see
@@ -207,6 +214,20 @@ export const startRun = (params: {
   const onStep = (step: RunStep): void => {
     handle.bumpStep();
     accumulateStepStats(stats, step);
+    // Bill this step to the model that served it. `usageModel` may change
+    // mid-run on a Fallback switch, and this is what keeps the two apart in
+    // `usageByModel` (ADR-0043).
+    if (usageModel && step.usage) {
+      ownUsage = [
+        ...ownUsage,
+        {
+          ...usageModel,
+          inputTokens: step.usage.inputTokens ?? 0,
+          outputTokens: step.usage.outputTokens ?? 0,
+          ...pickCachedInput(step.usage.inputTokenDetails),
+        },
+      ];
+    }
     logger.info(
       {
         ...logFields,

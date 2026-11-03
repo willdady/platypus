@@ -1,12 +1,9 @@
 ---
-status: accepted-pending-implementation
+status: accepted
 implemented-by: "#1803"
 ---
 
 # A Fallback model serves Trigger runs only, and a switch sticks for the run
-
-> **Today:** an Agent has one Provider and model. A run whose Provider is down
-> fails at its first model call, and nothing retries it on another model.
 
 An Agent may carry an optional **Fallback model**: a second Provider and model,
 where the model may be one of that Provider's aliases. Only a **Trigger run**

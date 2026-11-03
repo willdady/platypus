@@ -166,6 +166,7 @@ export class AgentRunner {
     onActivity: (event: ToolActivityEvent) => void,
     signal: AbortSignal,
     setDelegateUsage: ParentRunContext["setDelegateUsage"],
+    fallbackAllowed: boolean,
   ): Promise<ChatTurn> {
     // The turn rides down whole; the runner adds only what it is the one to
     // know. `runId` is the run's own identity, not the turn's, so it is the
@@ -183,6 +184,7 @@ export class AgentRunner {
         origin,
         frontendUrl,
         runMode: scope.principal.kind === "user" ? "interactive" : "headless",
+        fallbackAllowed,
         a2aClientName:
           scope.principal.kind === "a2a" ? scope.principal.name : undefined,
         onActivity,
@@ -218,6 +220,11 @@ export class AgentRunner {
     timeouts?: RunTimeouts;
     /** The run's Run event recorder, for a headless run that keeps one. */
     events?: RunEventRecorder;
+    /**
+     * Whether this run may consult the Agent's Fallback model (ADR-0043).
+     * Only `generate` — the Trigger path — sets it.
+     */
+    fallbackAllowed?: boolean;
   }): Promise<{
     state: RunState;
     run: ReturnType<typeof startRun>;
@@ -317,6 +324,7 @@ export class AgentRunner {
           run.onActivity,
           run.handle.signal,
           run.setDelegateUsage,
+          params.fallbackAllowed ?? false,
         ),
     );
 
@@ -541,6 +549,9 @@ export class AgentRunner {
       frontendUrl: options.frontendUrl,
       timeouts: options.timeouts,
       events,
+      // A Trigger run is the one run type that may switch to the Agent's
+      // Fallback model (ADR-0043).
+      fallbackAllowed: true,
     });
 
     // The drive computes the stats, records the output-ceiling cutoff, decides
@@ -553,6 +564,7 @@ export class AgentRunner {
       run,
       agentId: facts.agentId,
       events,
+      ...(turn.fallback ? { fallback: turn.fallback } : {}),
       // Read by the terminal callback `setup` wired, so the sink's final write
       // persists what the run concluded.
       onFinal: (finalText) => {

@@ -37,6 +37,8 @@ const agentRecord = (
   description: "test",
   instructions: null,
   modelId: "gpt-4",
+  fallbackProviderId: null,
+  fallbackModelId: null,
   maxSteps: null,
   temperature: null,
   topP: null,

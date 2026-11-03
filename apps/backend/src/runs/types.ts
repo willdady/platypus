@@ -2,6 +2,7 @@ import type { PlatypusUIMessage } from "../types.ts";
 import type {
   CachedInputTokens,
   ReasoningEffort,
+  ModelSwitch,
   ModelUsage,
   TranscriptSummaryRow,
   UnloadedToolSet,
@@ -9,6 +10,7 @@ import type {
 import type { WorkspaceScope } from "../scope.ts";
 import type { RunTimeouts } from "./run-registry.ts";
 import type { RunEventRecorder } from "./run-events.ts";
+import type { RunPlan } from "./run-plan.ts";
 
 export type RunId = string;
 
@@ -77,6 +79,16 @@ export type ParentRunContext = {
 export type RunStatus = "running" | "succeeded" | "failed" | "cancelled";
 
 /**
+ * The Fallback model as a Drive receives it (ADR-0043): its generation plan
+ * and the System prompt composed with the fallback Provider's guardrails, so a
+ * switch changes the Provider's security directives with the model.
+ */
+export type FallbackTurn = {
+  plan: Omit<RunPlan, "system" | "tools">;
+  system: string;
+};
+
+/**
  * What a run reports about itself. Intersected with `CachedInputTokens`, whose
  * pair is the cached-input breakdown of `inputTokens` (issue #734), summed
  * across the run's model calls the same way that figure is — absent where the
@@ -123,6 +135,12 @@ export type RunStats = {
    * step on a low ceiling.
    */
   stoppedAtStepLimit?: true;
+  /**
+   * The run switched to its Fallback model (ADR-0043), naming the pair it left
+   * and the pair it moved to. Absent on a run that never switched; never
+   * changes `status`.
+   */
+  fallback?: ModelSwitch;
 } & CachedInputTokens;
 
 /**

@@ -22,6 +22,8 @@ export type ReferenceBlocker = {
 
 type AgentReferences = {
   providerId: string;
+  /** The optional Fallback model's Provider (ADR-0043) — Shared like the primary. */
+  fallbackProviderId?: string | null;
   skillIds?: string[] | null;
   subAgentIds?: string[] | null;
   toolSetIds?: string[] | null;
@@ -67,6 +69,26 @@ export const findNonSharedReferences = async (
       id: refs.providerId,
       name: prov?.name ?? refs.providerId,
     });
+  }
+
+  // The Fallback model's Provider travels with the Agent the same way (ADR-0043).
+  if (refs.fallbackProviderId) {
+    const [fallback] = await db
+      .select({
+        id: providerTable.id,
+        name: providerTable.name,
+        organizationId: providerTable.organizationId,
+        workspaceId: providerTable.workspaceId,
+      })
+      .from(providerTable)
+      .where(eq(providerTable.id, refs.fallbackProviderId));
+    if (!isSharedRow(fallback, orgId)) {
+      blockers.push({
+        type: "provider",
+        id: refs.fallbackProviderId,
+        name: fallback?.name ?? refs.fallbackProviderId,
+      });
+    }
   }
 
   // Skills — each must be org-scoped.

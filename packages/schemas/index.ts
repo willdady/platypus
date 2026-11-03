@@ -651,6 +651,13 @@ export const agentBaseSchema = z.object({
     .max(AGENT_DESCRIPTION_MAX_LENGTH),
   instructions: z.string().optional(),
   modelId: z.string(),
+  // The optional Fallback model (ADR-0043): a second Provider and model only a
+  // Trigger run uses, and only when the primary Provider cannot serve the
+  // request. Two nullable columns rather than one compound value so an ordered
+  // list can replace it later without a breaking migration. Null clears the
+  // pair; both are set together or both stay empty.
+  fallbackProviderId: z.string().nullable().optional(),
+  fallbackModelId: z.string().nullable().optional(),
   // Bounded because the value reaches `stepCountIs(n)`, whose predicate is
   // `steps.length === n`, evaluated only after a step has completed. A `0` (or
   // any negative, or a fraction the integer column would never match) is
@@ -692,18 +699,72 @@ const agentStoredIdArrays = {
   subAgentIds: z.array(z.string()),
 };
 
-export const agentSchema = agentBaseSchema.extend(agentStoredIdArrays).refine(
-  (data) => {
-    const hasOrg = Boolean(data.organizationId);
-    const hasWorkspace = Boolean(data.workspaceId);
-    return (hasOrg || hasWorkspace) && !(hasOrg && hasWorkspace);
+/**
+ * The one rule the Fallback model's two fields share, wherever an Agent is
+ * validated: set both or neither, and a pair may not repeat the primary pair
+ * verbatim. The resolved-pair comparison (a concrete id against the alias that
+ * names it) needs the Provider rows, so it lives in the Agent write model.
+ *
+ * The two messages live here because both the request schema and the write
+ * model (which the Agent-management Tool reaches without the schema) answer
+ * the same rules.
+ */
+export const FALLBACK_PAIR_MESSAGE =
+  "The Fallback model needs both a Provider and a model, or neither.";
+export const FALLBACK_SAME_MODEL_MESSAGE =
+  "The Fallback model must differ from the primary model.";
+
+export const checkFallbackPair = (
+  data: {
+    providerId?: string | null;
+    modelId?: string | null;
+    fallbackProviderId?: string | null;
+    fallbackModelId?: string | null;
   },
-  {
-    message:
-      "Agent must have either organizationId or workspaceId, but not both",
-    path: ["organizationId"],
-  },
-);
+  ctx: z.RefinementCtx,
+): void => {
+  const provider = data.fallbackProviderId?.trim()
+    ? data.fallbackProviderId
+    : null;
+  const model = data.fallbackModelId?.trim() ? data.fallbackModelId : null;
+  if ((provider === null) !== (model === null)) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["fallbackModelId"],
+      message: FALLBACK_PAIR_MESSAGE,
+    });
+    return;
+  }
+  if (provider === null || model === null) return;
+  if (
+    data.providerId &&
+    data.modelId &&
+    provider === data.providerId &&
+    model.toLowerCase() === data.modelId.toLowerCase()
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["fallbackModelId"],
+      message: FALLBACK_SAME_MODEL_MESSAGE,
+    });
+  }
+};
+
+export const agentSchema = agentBaseSchema
+  .extend(agentStoredIdArrays)
+  .refine(
+    (data) => {
+      const hasOrg = Boolean(data.organizationId);
+      const hasWorkspace = Boolean(data.workspaceId);
+      return (hasOrg || hasWorkspace) && !(hasOrg && hasWorkspace);
+    },
+    {
+      message:
+        "Agent must have either organizationId or workspaceId, but not both",
+      path: ["organizationId"],
+    },
+  )
+  .superRefine(checkFallbackPair);
 
 export type Agent = z.infer<typeof agentSchema>;
 
@@ -725,6 +786,8 @@ export const agentCreateSchema = strictRequest(
     description: true,
     instructions: true,
     modelId: true,
+    fallbackProviderId: true,
+    fallbackModelId: true,
     maxSteps: true,
     temperature: true,
     topP: true,
@@ -740,7 +803,7 @@ export const agentCreateSchema = strictRequest(
     subAgentIds: true,
     inputPlaceholder: true,
   }),
-);
+).superRefine(checkFallbackPair);
 
 export const agentUpdateSchema = strictRequest(
   agentBaseSchema.pick({
@@ -749,6 +812,8 @@ export const agentUpdateSchema = strictRequest(
     description: true,
     instructions: true,
     modelId: true,
+    fallbackProviderId: true,
+    fallbackModelId: true,
     maxSteps: true,
     temperature: true,
     topP: true,
@@ -764,7 +829,7 @@ export const agentUpdateSchema = strictRequest(
     subAgentIds: true,
     inputPlaceholder: true,
   }),
-);
+).superRefine(checkFallbackPair);
 
 // Skill
 
@@ -3476,6 +3541,19 @@ export const modelUsageSchema = z.object({
 
 export type ModelUsage = z.infer<typeof modelUsageSchema>;
 
+/**
+ * One Fallback model switch, in the terms every reader names it by: the pair
+ * the run was on and the pair it moved to (ADR-0043). Shared by the Run event
+ * that records the switch, the run-level stats marker the runs list reads, and
+ * the `trigger_run.*` Webhook payload — so all three spell it the same way.
+ */
+export const modelSwitchSchema = z.object({
+  from: z.object({ providerId: z.string(), model: z.string() }),
+  to: z.object({ providerId: z.string(), model: z.string() }),
+});
+
+export type ModelSwitch = z.infer<typeof modelSwitchSchema>;
+
 export const triggerRunStatsSchema = z.object({
   steps: z.number(),
   toolCalls: z.array(z.object({ name: z.string(), count: z.number() })),
@@ -3511,6 +3589,12 @@ export const triggerRunStatsSchema = z.object({
    * own message.
    */
   stoppedAtStepLimit: z.literal(true).optional(),
+  /**
+   * The run switched to its Fallback model at some point (ADR-0043). Absent on
+   * a run that never switched, so the marker's presence is the whole of its
+   * meaning — it never changes the run's `status`.
+   */
+  fallback: modelSwitchSchema.optional(),
 });
 
 export type TriggerRunStats = z.infer<typeof triggerRunStatsSchema>;
@@ -3600,6 +3684,9 @@ export const runEventTypeSchema = z.enum([
   "reasoning",
   "text",
   "delegate",
+  // A Fallback model switch (ADR-0043): the pair the run left and the pair it
+  // moved to. Carries no content beyond those names and the primary's error.
+  "model-switch",
 ]);
 
 export type RunEventType = z.infer<typeof runEventTypeSchema>;
@@ -3661,6 +3748,12 @@ export const runEventSchema = z.object({
   durationMs: z.number().int().nonnegative().nullable(),
   status: runEventStatusSchema,
   error: runEventErrorSchema.nullable(),
+  /**
+   * The two pairs a `model-switch` event names; null on every other event.
+   * Model identity, not content — the same pairs the run's usage is billed
+   * under (ADR-0043).
+   */
+  modelSwitch: modelSwitchSchema.nullable(),
   /**
    * Set when the run hit its event ceiling while this event was open, so
    * children it would have had were dropped. Marked on the node — not only on
@@ -4311,6 +4404,12 @@ const webhookTriggerRunShape = <S extends TriggerRunStatus>(status: S) =>
     entityId: z.string().nullable(),
     unloadedToolSets: z.array(unloadedToolSetSchema),
     failedToolCalls: z.number().int().nonnegative(),
+    /**
+     * Present only when the run switched to its Fallback model (ADR-0043),
+     * naming both pairs. An added optional field, so a consumer written before
+     * it existed is unaffected.
+     */
+    fallback: modelSwitchSchema.optional(),
   });
 
 /**

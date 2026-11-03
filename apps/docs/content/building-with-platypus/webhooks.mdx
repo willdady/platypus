@@ -366,7 +366,24 @@ use:
 }
 ```
 
-The other three carry the same fields. A `trigger_run.succeeded` from a Cron
+The other three carry the same fields, and so does every Trigger type. A run
+that switched to its Agent's [Fallback
+model](/building-with-platypus/agents#add-a-fallback-model) adds
+`data.fallback`, naming the pair it left and the pair it moved to:
+
+```
+{
+  "data": {
+    "fallback": {
+      "from": { "providerId": "Tz4nW8sVdB1kx6Ym2Qp9L", "model": "gpt-5" },
+      "to": { "providerId": "Hp9sD4fG7jK2lZ5xC8vBn", "model": "claude-sonnet-4-5" }
+    }
+  }
+}
+```
+
+The field is omitted entirely on a run that never switched, so a consumer
+written before it existed is unaffected. A `trigger_run.succeeded` from a Cron
 Trigger:
 
 ```json

@@ -21,6 +21,7 @@ function event(over: Partial<RunEvent> & { id: string }): RunEvent {
     durationMs: 100,
     status: "completed",
     error: null,
+    modelSwitch: null,
     childrenTruncated: false,
     ...over,
   };

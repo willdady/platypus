@@ -250,3 +250,44 @@ describe("TriggerRunRow", () => {
     });
   });
 });
+
+describe("TriggerRunRow fallback marker", () => {
+  it("says which models a switched run fell between, beside the status", () => {
+    const stats = {
+      steps: 2,
+      toolCalls: [],
+      inputTokens: 10,
+      outputTokens: 5,
+      fallback: {
+        from: { providerId: "p1", model: "gpt-5" },
+        to: { providerId: "p2", model: "claude-sonnet-4-5" },
+      },
+    };
+
+    render(
+      <TriggerRunRow run={run({ stats })} orgId="org-1" workspaceId="ws-1" />,
+    );
+
+    expect(
+      screen.getByText(
+        "Fell back from gpt-5 to claude-sonnet-4-5 after the primary Provider failed.",
+      ),
+    ).toBeInTheDocument();
+    // The warning never changes the run's status.
+    expect(screen.getByText("Success")).toBeInTheDocument();
+  });
+
+  it("shows no fallback notice on a run that never switched", () => {
+    render(
+      <TriggerRunRow
+        run={run({
+          stats: { steps: 1, toolCalls: [], inputTokens: 1, outputTokens: 1 },
+        })}
+        orgId="org-1"
+        workspaceId="ws-1"
+      />,
+    );
+
+    expect(screen.queryByText(/Fell back from/)).not.toBeInTheDocument();
+  });
+});

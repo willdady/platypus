@@ -1,5 +1,5 @@
 import type { z } from "zod";
-import { eq, type SQL } from "drizzle-orm";
+import { eq, or, type SQL } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { db, type Executor } from "../index.ts";
 import {
@@ -181,8 +181,9 @@ export async function updateProvider(
 
 /**
  * Throws `ConflictError` naming every Agent that still runs on this Provider —
- * `agent.provider_id` is an `ON DELETE RESTRICT` foreign key, so the delete
- * would otherwise fail in Postgres with nothing the user could act on.
+ * `agent.provider_id` and `agent.fallback_provider_id` are both
+ * `ON DELETE RESTRICT` foreign keys (ADR-0043), so the delete would otherwise
+ * fail in Postgres with nothing the user could act on.
  */
 async function requireNoAgents(
   providerId: string,
@@ -191,7 +192,12 @@ async function requireNoAgents(
   const agents = await exec
     .select({ name: agentTable.name })
     .from(agentTable)
-    .where(eq(agentTable.providerId, providerId));
+    .where(
+      or(
+        eq(agentTable.providerId, providerId),
+        eq(agentTable.fallbackProviderId, providerId),
+      ),
+    );
   if (agents.length > 0) {
     throw inUseConflict(
       "provider",
