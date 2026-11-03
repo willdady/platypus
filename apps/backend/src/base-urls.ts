@@ -13,8 +13,17 @@ import { env } from "./env.ts";
  * and auth redirects at localhost.
  */
 
-/** `BETTER_AUTH_URL` — the backend origin the browser talks to. */
-export const backendBaseUrl = (): string => env().BETTER_AUTH_URL;
+/**
+ * `BETTER_AUTH_URL` — the backend URL the browser talks to, without trailing
+ * slashes. It may carry a path (`https://host/api`) when a reverse proxy serves
+ * the backend under a prefix it strips, so build links from this rather than
+ * from the request's host.
+ */
+export const backendBaseUrl = (): string =>
+  env().BETTER_AUTH_URL.replace(/\/+$/, "");
+
+/** The browser-facing URL of the `/auth/*` routes, prefix included. */
+export const authBaseUrl = (): string => `${backendBaseUrl()}/auth`;
 
 /** `FRONTEND_URL` — the origin the browser loads the app from. */
 export const frontendBaseUrl = (): string => env().FRONTEND_URL;

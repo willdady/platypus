@@ -26,7 +26,7 @@ import {
 import type { Variables } from "../server.ts";
 import { rewriteStorageUrls, deleteStoredPrefix } from "../storage/utils.ts";
 import { chatStorageKeyPrefix } from "../storage/keys.ts";
-import { getOrigin } from "../utils/get-origin.ts";
+import { backendBaseUrl } from "../base-urls.ts";
 import { cancelRun } from "../runs/run-cancel.ts";
 import { chatRunIsLive } from "../runs/chat-run-heartbeat.ts";
 import { CHAT_BUSY_MESSAGE } from "../runs/sinks/chat-sink.ts";
@@ -173,7 +173,7 @@ chat.get(
     return c.json({
       ...chatResponse(chat),
       ...(chat.a2aClientName ? { a2aClientName: chat.a2aClientName } : {}),
-      messages: servedMessages(messages, getOrigin(c)),
+      messages: servedMessages(messages, backendBaseUrl()),
       tree,
       summaries,
     });
@@ -195,7 +195,7 @@ chat.post(
       chatId: c.req.param("chatId"),
       request: c.req.valid("json"),
       includeMemories: true,
-      origin: getOrigin(c),
+      origin: backendBaseUrl(),
     });
   },
 );
@@ -335,7 +335,10 @@ chat.put(
 
     const { messages, tree } = await switchActivePath(chatId, messageId);
 
-    return c.json({ messages: servedMessages(messages, getOrigin(c)), tree });
+    return c.json({
+      messages: servedMessages(messages, backendBaseUrl()),
+      tree,
+    });
   },
 );
 

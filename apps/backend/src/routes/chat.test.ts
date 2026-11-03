@@ -346,7 +346,10 @@ describe("Chat Routes", () => {
         ],
       });
 
+      // Served under a prefix a proxy strips: file URLs carry it (#1810).
+      vi.stubEnv("BETTER_AUTH_URL", "https://chat.example.com/api");
       const res = await app.request(`${baseUrl}/chat-1`);
+      vi.unstubAllEnvs();
 
       expect(res.status).toBe(200);
       const body = (await res.json()) as Record<string, unknown>;
@@ -359,7 +362,7 @@ describe("Chat Routes", () => {
             {
               type: "file",
               mediaType: "image/png",
-              url: "http://localhost/files/org-1/ws-1/chat-1/u1/0-aaaaaaaa.png",
+              url: "https://chat.example.com/api/files/org-1/ws-1/chat-1/u1/0-aaaaaaaa.png",
             },
           ],
         },

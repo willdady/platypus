@@ -1,7 +1,7 @@
 import { Hono, type Context } from "hono";
 import { validate } from "../validate.ts";
 import { db } from "../index.ts";
-import { getOrigin } from "../utils/get-origin.ts";
+import { backendBaseUrl } from "../base-urls.ts";
 import {
   kanbanBoardCreateSchema,
   kanbanBoardUpdateSchema,
@@ -168,7 +168,7 @@ kanban.get(
   requireWorkspaceAccess,
   async (c) => {
     const state = await getBoardState(db, scopeOf(c), c.req.param("boardId"));
-    return c.json(await resolveBoardState(db, state, getOrigin(c)));
+    return c.json(await resolveBoardState(db, state, backendBaseUrl()));
   },
 );
 
