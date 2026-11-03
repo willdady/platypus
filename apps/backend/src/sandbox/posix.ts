@@ -2,9 +2,11 @@ import {
   DEFAULT_SHELL_TIMEOUT_MS,
   MAX_LIST_ENTRIES,
   MAX_LIST_OUTPUT_BYTES,
+  MAX_DIAGNOSTIC_BYTES,
   MAX_READ_BYTES,
   MAX_SHELL_OUTPUT_BYTES,
   MAX_SHELL_TIMEOUT_MS,
+  SHELL_STREAM_CAP,
 } from "./index.ts";
 import {
   raceCancellation,
@@ -254,8 +256,8 @@ export const createPosixSandbox = (
       // Passed to the transport so a cancelled turn stops the command itself,
       // not just core's wait for it (issue #921).
       signal: options.signal,
-      stdoutCap: MAX_SHELL_OUTPUT_BYTES,
-      stderrCap: MAX_SHELL_OUTPUT_BYTES,
+      stdoutCap: SHELL_STREAM_CAP,
+      stderrCap: SHELL_STREAM_CAP,
     });
 
     return {
@@ -264,7 +266,8 @@ export const createPosixSandbox = (
       exitCode: res.exitCode,
       // A stream sitting exactly on its cap cannot be told apart from one that
       // overran it, so `>=` is the convention: err towards warning the model
-      // that it may not have the whole picture.
+      // that it may not have the whole picture. A head+tail sink's marker
+      // pushes a truncated stream past the cap, so the rule still holds.
       truncated:
         res.stdout.length >= MAX_SHELL_OUTPUT_BYTES ||
         res.stderr.length >= MAX_SHELL_OUTPUT_BYTES,
@@ -379,8 +382,8 @@ export const createPosixSandbox = (
       cwd: rootDir,
       timeoutMs: DEFAULT_SHELL_TIMEOUT_MS,
       signal: options.signal,
-      stdoutCap: MAX_LIST_OUTPUT_BYTES,
-      stderrCap: MAX_SHELL_OUTPUT_BYTES,
+      stdoutCap: { head: MAX_LIST_OUTPUT_BYTES },
+      stderrCap: { head: MAX_DIAGNOSTIC_BYTES },
     });
 
     // find exits non-zero on a partial failure — an unreadable subdirectory —

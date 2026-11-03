@@ -5,9 +5,12 @@ import {
   DEFAULT_SHELL_TIMEOUT_MS,
   MAX_LIST_ENTRIES,
   MAX_LIST_OUTPUT_BYTES,
+  MAX_DIAGNOSTIC_BYTES,
   MAX_READ_BYTES,
   MAX_SHELL_OUTPUT_BYTES,
   MAX_SHELL_TIMEOUT_MS,
+  SHELL_OUTPUT_HEAD_BYTES,
+  SHELL_OUTPUT_TAIL_BYTES,
 } from "./index.ts";
 import { buildFindArgs, createPosixSandbox, parseFindOutput } from "./posix.ts";
 import {
@@ -183,8 +186,14 @@ describe("createPosixSandbox — shell.exec", () => {
 
     expect(execCalls[0].opts).toMatchObject({
       timeoutMs: DEFAULT_SHELL_TIMEOUT_MS,
-      stdoutCap: MAX_SHELL_OUTPUT_BYTES,
-      stderrCap: MAX_SHELL_OUTPUT_BYTES,
+      stdoutCap: {
+        head: SHELL_OUTPUT_HEAD_BYTES,
+        tail: SHELL_OUTPUT_TAIL_BYTES,
+      },
+      stderrCap: {
+        head: SHELL_OUTPUT_HEAD_BYTES,
+        tail: SHELL_OUTPUT_TAIL_BYTES,
+      },
     });
   });
 
@@ -932,8 +941,8 @@ describe("createPosixSandbox — fs.list", () => {
     expect(execCalls[0].opts).toMatchObject({
       cwd: ROOT,
       timeoutMs: DEFAULT_SHELL_TIMEOUT_MS,
-      stdoutCap: MAX_LIST_OUTPUT_BYTES,
-      stderrCap: MAX_SHELL_OUTPUT_BYTES,
+      stdoutCap: { head: MAX_LIST_OUTPUT_BYTES },
+      stderrCap: { head: MAX_DIAGNOSTIC_BYTES },
     });
   });
 

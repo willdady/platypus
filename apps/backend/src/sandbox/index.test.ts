@@ -2,9 +2,13 @@ import { beforeEach, describe, it, expect } from "vitest";
 import { z } from "zod";
 import {
   clearSandboxBackends,
+  MAX_SHELL_OUTPUT_BYTES,
   registerSandboxBackend,
   getSandboxBackend,
   getSandboxBackends,
+  SHELL_OUTPUT_HEAD_BYTES,
+  SHELL_OUTPUT_TAIL_BYTES,
+  SHELL_STREAM_CAP,
 } from "./index.ts";
 import type { SandboxBackend, SandboxBackendRegistration } from "./types.ts";
 
@@ -42,6 +46,17 @@ const makeRegistration = (
 describe("sandbox backend registry", () => {
   beforeEach(() => {
     clearSandboxBackends();
+  });
+
+  it("splits the shell output budget between the head and the tail", () => {
+    expect(SHELL_OUTPUT_HEAD_BYTES + SHELL_OUTPUT_TAIL_BYTES).toBe(
+      MAX_SHELL_OUTPUT_BYTES,
+    );
+    expect(SHELL_OUTPUT_TAIL_BYTES).toBeGreaterThan(SHELL_OUTPUT_HEAD_BYTES);
+    expect(SHELL_STREAM_CAP).toEqual({
+      head: SHELL_OUTPUT_HEAD_BYTES,
+      tail: SHELL_OUTPUT_TAIL_BYTES,
+    });
   });
 
   it("keys a registration on its own backend id", () => {

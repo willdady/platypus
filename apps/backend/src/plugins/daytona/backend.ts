@@ -21,6 +21,7 @@ import {
   type SandboxExecOptions,
   type SandboxExecResult,
   type SandboxTransport,
+  type StreamCap,
 } from "../../sandbox/transport.ts";
 import type { SandboxBackend, SandboxContext } from "../../sandbox/types.ts";
 
@@ -46,8 +47,8 @@ const HTTP_GRACE_MS = 5_000;
 // contract's `signal` is the turn's, and there is no turn here.
 const UTILITY_EXEC: Omit<SandboxExecOptions, "signal"> = {
   timeoutMs: 30_000,
-  stdoutCap: 4_096,
-  stderrCap: 4_096,
+  stdoutCap: { head: 4_096 },
+  stderrCap: { head: 4_096 },
 };
 
 const listEntry = z
@@ -248,14 +249,14 @@ class DaytonaSandboxTransport implements SandboxTransport {
       if (typeof res.exitCode !== "number") {
         throw new Error("Daytona did not report the command's exit status");
       }
-      const cap = (s: string | undefined, n: number) => {
-        const sink = createCappedSink(n);
+      const capStream = (s: string | undefined, shape: StreamCap) => {
+        const sink = createCappedSink(shape);
         sink.push(Buffer.from(s ?? "", "utf8"));
         return sink.collect();
       };
       return {
-        stdout: cap(res.stdout, opts.stdoutCap),
-        stderr: cap(res.stderr, opts.stderrCap),
+        stdout: capStream(res.stdout, opts.stdoutCap),
+        stderr: capStream(res.stderr, opts.stderrCap),
         exitCode: res.exitCode,
         durationMs: Date.now() - started,
       };
@@ -281,7 +282,7 @@ class DaytonaSandboxTransport implements SandboxTransport {
   ): Promise<Buffer> {
     const { sandbox } = await this.ensureSandbox(ctx);
     const stream = await sandbox.fs.downloadFileStream(absPath, { signal });
-    const sink = createCappedSink(cap);
+    const sink = createCappedSink({ head: cap });
     let bytes = 0;
     try {
       for await (const chunk of stream) {

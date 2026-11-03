@@ -2032,6 +2032,20 @@ const BACKEND_CONSTANTS = [
   },
   {
     source: "apps/backend/src/sandbox/index.ts",
+    name: "SHELL_OUTPUT_HEAD_BYTES",
+    phrase: (bytes: number) => `**${bytes.toLocaleString("en-US")} bytes**`,
+    files: ["extending/sandbox-backends.mdx"],
+    cost: "A backend author keeping a different share of the start disagrees with every other adapter about what survives a cut.",
+  },
+  {
+    source: "apps/backend/src/sandbox/index.ts",
+    name: "SHELL_OUTPUT_TAIL_BYTES",
+    phrase: (bytes: number) => `**${bytes.toLocaleString("en-US")} bytes**`,
+    files: ["extending/sandbox-backends.mdx"],
+    cost: "A backend author keeping a different share of the end drops the build error or test summary the tail exists for.",
+  },
+  {
+    source: "apps/backend/src/sandbox/index.ts",
     name: "MAX_READ_BYTES",
     phrase: (bytes: number) => `**${bytes.toLocaleString("en-US")} bytes**`,
     files: ["extending/sandbox-backends.mdx"],

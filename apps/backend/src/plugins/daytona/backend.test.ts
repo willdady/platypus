@@ -98,6 +98,11 @@ import {
   type DaytonaPluginCredentials,
 } from "./backend.ts";
 import { makeFakePluginLogger } from "../../test-utils.ts";
+import {
+  MAX_SHELL_OUTPUT_BYTES,
+  SHELL_OUTPUT_HEAD_BYTES,
+  SHELL_OUTPUT_TAIL_BYTES,
+} from "../../sandbox/index.ts";
 import type { SandboxContext } from "../../sandbox/types.ts";
 
 const ctx: SandboxContext = {
@@ -202,6 +207,29 @@ describe("Daytona sandbox backend", () => {
       "cd '/home/daytona/workspace/src' && ",
     );
     expect(fake.state.deletedSessions).toHaveLength(2);
+  });
+
+  it("keeps the head and tail of output over the shell cap", async () => {
+    const huge = "a".repeat(MAX_SHELL_OUTPUT_BYTES + 5_000);
+    fake.state.exec = (command) =>
+      Promise.resolve(
+        command.includes("pwd")
+          ? { exitCode: 0, stdout: "/home/daytona/workspace" }
+          : { exitCode: 0, stdout: huge, stderr: "" },
+      );
+
+    const res = await makeBackend().shellExec(
+      ctx,
+      { command: "yes" },
+      callOptions,
+    );
+
+    expect(res.stdout.startsWith("a".repeat(SHELL_OUTPUT_HEAD_BYTES))).toBe(
+      true,
+    );
+    expect(res.stdout.endsWith("a".repeat(SHELL_OUTPUT_TAIL_BYTES))).toBe(true);
+    expect(res.stdout).toContain("bytes omitted");
+    expect(res.truncated).toBe(true);
   });
 
   it("reports a command that outruns its timeout as exit 124", async () => {

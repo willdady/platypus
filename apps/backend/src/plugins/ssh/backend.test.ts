@@ -327,7 +327,12 @@ import {
   makeFakePluginLogger,
   type FakePluginLogger,
 } from "../../test-utils.ts";
-import { MAX_READ_BYTES, MAX_SHELL_OUTPUT_BYTES } from "../../sandbox/index.ts";
+import {
+  MAX_READ_BYTES,
+  MAX_SHELL_OUTPUT_BYTES,
+  SHELL_OUTPUT_HEAD_BYTES,
+  SHELL_OUTPUT_TAIL_BYTES,
+} from "../../sandbox/index.ts";
 import type {
   SandboxBackendRegistration,
   SandboxContext,
@@ -720,9 +725,10 @@ describe("SshSandboxTransport — shellExec", () => {
     expect(cmd).not.toContain("rm -rf");
   });
 
-  it("stops buffering the ssh2 stream once the caller's stdout cap is reached", async () => {
+  it("keeps both ends of the ssh2 stream once the caller's stdout cap is reached", async () => {
     // The cap is enforced while the channel is streaming, not afterwards: the
-    // fake emits more than the cap in one chunk and only the cap is retained.
+    // fake emits more than the cap in one chunk, the head is clipped as it
+    // arrives and the tail rolls through a bounded buffer.
     const huge = "a".repeat(MAX_SHELL_OUTPUT_BYTES + 5_000);
     queueExec({ stdout: huge, exitCode: 0 });
     const backend = createSshSandboxBackend(
@@ -731,7 +737,11 @@ describe("SshSandboxTransport — shellExec", () => {
       withPluginLogger(),
     );
     const res = await backend.shellExec(ctx, { command: "yes" }, callOptions);
-    expect(res.stdout.length).toBe(MAX_SHELL_OUTPUT_BYTES);
+    expect(res.stdout.startsWith("a".repeat(SHELL_OUTPUT_HEAD_BYTES))).toBe(
+      true,
+    );
+    expect(res.stdout.endsWith("a".repeat(SHELL_OUTPUT_TAIL_BYTES))).toBe(true);
+    expect(res.stdout).toContain("bytes omitted");
     expect(res.truncated).toBe(true);
   });
 
