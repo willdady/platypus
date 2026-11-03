@@ -1,5 +1,21 @@
 # Changelog
 
+## [4.1.0](https://github.com/willdady/platypus/compare/v4.0.0...v4.1.0) (2026-11-03)
+
+
+### Features
+
+* **frontend:** one Back control on Organization and user settings pages ([#1806](https://github.com/willdady/platypus/issues/1806)) ([e53c9cb](https://github.com/willdady/platypus/commit/e53c9cbd19500d77ef4e12484365facf4ca3be25))
+* **frontend:** show the Response above the Timeline on a Trigger run ([#1804](https://github.com/willdady/platypus/issues/1804)) ([d73dde0](https://github.com/willdady/platypus/commit/d73dde0ba9c5c09de0ef3036142eee2f1711b1ca))
+* **frontend:** show transcript summary cost in the divider ([#1805](https://github.com/willdady/platypus/issues/1805)) ([cbae33b](https://github.com/willdady/platypus/commit/cbae33bbbe443e9a79c83d6a1b30fb298ef986a2))
+* write Transcript summaries with the task model ([#1807](https://github.com/willdady/platypus/issues/1807)) ([f17e328](https://github.com/willdady/platypus/commit/f17e32853725c8a9721f80a948f7d2c3c3271034))
+
+
+### Bug Fixes
+
+* **docs:** show v4 image tags in Docker Compose examples ([#1800](https://github.com/willdady/platypus/issues/1800)) ([3d71116](https://github.com/willdady/platypus/commit/3d71116ba20ea78e1fbe6137e6c12678dd1f4a4c))
+* **frontend:** draw Provider and MCP server lists in one column ([#1802](https://github.com/willdady/platypus/issues/1802)) ([798f62f](https://github.com/willdady/platypus/commit/798f62f569b3e41b609f6dc84aaf173331a596a3))
+
 ## [4.0.0](https://github.com/willdady/platypus/compare/v3.30.0...v4.0.0) (2026-11-01)
 
 
