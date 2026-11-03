@@ -133,9 +133,10 @@ throws, returns something that is not a result Verdict, or outruns the same
 run in parallel, any `deny` wins, and the first denying gate's reason is the one
 used.
 
-Your gate receives the whole normalised result. If yours sends it somewhere
-else — a decision model, for example — bound it first; Platypus does not shorten
-it for you.
+Your gate receives the result as the model would receive it, after Platypus has
+normalised it and applied its own size cap, so it may already be shortened. If
+yours sends it somewhere else — a decision model, for example — bound it
+further yourself.
 
 ## Your gate fails closed
 

@@ -790,9 +790,11 @@ export interface ToolGateVerdict {
  * `reason`. There is no `ask` — a result that was already produced has nothing
  * for a person to approve.
  *
- * Unlike {@link ToolGateVerdict}, `reason` is required reading for the model,
+ * `reason` is what the model, the Chat and the Run timeline are given when you
+ * withhold a result. Give one: core supplies fallback wording only when you do
+ * not, and it cannot say what you found. Write it as a fact about the result,
  * because the tool has already run and the model must not be left thinking it
- * did not. Write it as a fact about the result, not a refusal of the call.
+ * did not.
  */
 export interface ToolResultVerdict {
   verdict: "allow" | "deny";

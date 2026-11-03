@@ -22,7 +22,10 @@ const call: ToolGateCall = {
 };
 
 /** A decision model that answers `probability` and records what it was asked. */
-const stubModel = (probability: number) => {
+const stubModel = (
+  probability: number,
+  question: "destructive" | "injection" = "destructive",
+) => {
   const asked: unknown[] = [];
   const model = {
     specificationVersion: "v4",
@@ -32,26 +35,7 @@ const stubModel = (probability: number) => {
     doDecide: (options: unknown) => {
       asked.push(options);
       return Promise.resolve({
-        answers: { destructive: { type: "boolean", probability } },
-        warnings: [],
-      });
-    },
-  } as unknown as Experimental_DecisionModel;
-  return { model, asked };
-};
-
-/** A decision model that answers the result-stage question `probability`. */
-const stubResultModel = (probability: number) => {
-  const asked: unknown[] = [];
-  const model = {
-    specificationVersion: "v4",
-    provider: "stub",
-    modelId: "stub",
-    supportedQuestionTypes: ["boolean"],
-    doDecide: (options: unknown) => {
-      asked.push(options);
-      return Promise.resolve({
-        answers: { injection: { type: "boolean", probability } },
+        answers: { [question]: { type: "boolean", probability } },
         warnings: [],
       });
     },
@@ -166,7 +150,7 @@ describe("@platypus/decision-gate", () => {
       "maps a probability of %s to %s above the result threshold",
       async (probability, verdict) => {
         const resultVerdict = await judgeToolResult(
-          stubResultModel(probability).model,
+          () => stubModel(probability, "injection").model,
           call,
           result,
           thresholds(0.9, undefined, 0.9),
@@ -178,7 +162,7 @@ describe("@platypus/decision-gate", () => {
 
     it("gives the probability as its reason", async () => {
       const resultVerdict = await judgeToolResult(
-        stubResultModel(0.93).model,
+        () => stubModel(0.93, "injection").model,
         call,
         result,
         thresholds(0.9, undefined, 0.9),
@@ -188,9 +172,9 @@ describe("@platypus/decision-gate", () => {
     });
 
     it("asks the model about the result", async () => {
-      const { model, asked } = stubResultModel(0);
+      const { model, asked } = stubModel(0, "injection");
       await judgeToolResult(
-        model,
+        () => model,
         call,
         result,
         thresholds(0.9, undefined, 0.9),
@@ -202,9 +186,9 @@ describe("@platypus/decision-gate", () => {
     });
 
     it("does not evaluate results without a result threshold", async () => {
-      const { model, asked } = stubResultModel(0.99);
+      const { model, asked } = stubModel(0.99, "injection");
       const resultVerdict = await judgeToolResult(
-        model,
+        () => model,
         call,
         result,
         thresholds(0.9),

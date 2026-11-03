@@ -312,12 +312,10 @@ export const toolGatePoint = (
       evaluate: (call, options) => contribution.evaluate(call, plugin, options),
       // Additive and optional: a gate written before the result stage has no
       // member here, and core registers it exactly as it always did.
-      ...(typeof evaluateResult === "function"
-        ? {
-            evaluateResult: (call, result, options) =>
-              evaluateResult(call, result, plugin, options),
-          }
-        : {}),
+      evaluateResult: evaluateResult
+        ? (call, result, options) =>
+            evaluateResult(call, result, plugin, options)
+        : undefined,
     };
   },
   register: (_id, registration) => register(registration),

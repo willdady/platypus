@@ -149,16 +149,18 @@ const resultText = (result: unknown): string => {
  * `resultDenyThreshold` the result stage is off, and no model is called.
  */
 export const judgeToolResult = async (
-  model: Experimental_DecisionModel,
+  openModel: () => Experimental_DecisionModel,
   call: ToolGateCall,
   result: unknown,
   { resultDenyThreshold }: DecisionGateConfig,
   signal: AbortSignal,
 ): Promise<ToolResultVerdict> => {
+  // Off is off: without a threshold the model is never opened, because this
+  // stage is opt-in and the before-call stage is unaffected.
   if (resultDenyThreshold === undefined) return { verdict: "allow" };
 
   const { answers } = await decide({
-    model,
+    model: openModel(),
     state: JSON.parse(
       JSON.stringify({
         toolName: call.toolName,
@@ -202,20 +204,14 @@ const decisionModelGate: ToolGateContribution<
   name: "Decision model",
   evaluate: (call, plugin, { signal }) =>
     judgeToolCall(modelFor(plugin), call, plugin.config, signal),
-  evaluateResult: (call, result, plugin, { signal }) => {
-    // Without a result threshold the plugin does not evaluate results; the
-    // check is here so the model is never opened for a stage that is off.
-    if (plugin.config.resultDenyThreshold === undefined) {
-      return { verdict: "allow" };
-    }
-    return judgeToolResult(
-      modelFor(plugin),
+  evaluateResult: (call, result, plugin, { signal }) =>
+    judgeToolResult(
+      () => modelFor(plugin),
       call,
       result,
       plugin.config,
       signal,
-    );
-  },
+    ),
 };
 
 export const plugin: PlatypusPlugin<

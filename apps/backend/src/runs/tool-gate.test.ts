@@ -22,7 +22,7 @@ import type { PlatypusUIMessage } from "../types.ts";
 import {
   clearToolGates,
   registerToolGate,
-  toolResultGateOptions,
+  wrapToolsWithToolResultGate,
   type ToolGateScope,
 } from "../tool-gates/index.ts";
 import {
@@ -175,13 +175,23 @@ const startRecordedRun = () => {
   return { run, outcome };
 };
 
-/** Registers a gate that answers `verdict` and records every call it saw. */
+/** Registers a gate that records every call (and result) it was asked about. */
 const gate = (
   id: string,
   answer: (call: ToolGateCall) => ToolGateVerdict | Promise<ToolGateVerdict>,
-  timeoutMs = 1_000,
+  {
+    timeoutMs = 1_000,
+    evaluateResult,
+  }: {
+    timeoutMs?: number;
+    evaluateResult?: (
+      call: ToolGateCall,
+      result: unknown,
+    ) => ToolResultVerdict | Promise<ToolResultVerdict>;
+  } = {},
 ) => {
   const seen: ToolGateCall[] = [];
+  const results: Array<{ call: ToolGateCall; result: unknown }> = [];
   registerToolGate({
     id,
     name: id,
@@ -190,8 +200,16 @@ const gate = (
       seen.push(call);
       return answer(call);
     },
+    ...(evaluateResult
+      ? {
+          evaluateResult: (call, result) => {
+            results.push({ call, result });
+            return evaluateResult(call, result);
+          },
+        }
+      : {}),
   });
-  return seen;
+  return { seen, results };
 };
 
 /** The tool-result part the model was sent for `tc1` on its second call. */
@@ -203,7 +221,7 @@ const toolResultSentBack = (prompts: unknown[]) =>
     output: { type: string; reason?: string; value?: unknown };
   };
 
-/** Registers a gate with a result stage, answering `answer` and recording. */
+/** Registers a gate with an allow-by-default call stage and a result stage. */
 const resultGate = (
   id: string,
   answer: (
@@ -211,20 +229,11 @@ const resultGate = (
     result: unknown,
   ) => ToolResultVerdict | Promise<ToolResultVerdict>,
   timeoutMs = 1_000,
-) => {
-  const seen: Array<{ call: ToolGateCall; result: unknown }> = [];
-  registerToolGate({
-    id,
-    name: id,
+) =>
+  gate(id, () => ({ verdict: "allow" }), {
     timeoutMs,
-    evaluate: () => ({ verdict: "allow" }),
-    evaluateResult: (call, result) => {
-      seen.push({ call, result });
-      return answer(call, result);
-    },
-  });
-  return seen;
-};
+    evaluateResult: answer,
+  }).results;
 
 afterEach(() => clearToolGates());
 
@@ -396,7 +405,7 @@ describe("failing closed", () => {
   });
 
   it("does not run a call whose gate outruns its timeout", async () => {
-    gate("slow", () => new Promise(() => {}), 20);
+    gate("slow", () => new Promise(() => {}), { timeoutMs: 20 });
     const executed: string[] = [];
     const { run } = startRecordedRun();
 
@@ -678,7 +687,7 @@ describe("combining gates", () => {
 
 describe("what a gate is told", () => {
   it("receives the call, its Tool set and the run's scope", async () => {
-    const seen = gate("watch", () => ({ verdict: "allow" }));
+    const { seen } = gate("watch", () => ({ verdict: "allow" }));
     const { run } = startRecordedRun();
 
     await driveOnce({
@@ -770,7 +779,7 @@ describe("a Tool gate's result stage", () => {
     };
 
     expect(
-      toolResultGateOptions(tools, SCOPE, new AbortController().signal),
+      wrapToolsWithToolResultGate(tools, SCOPE, new AbortController().signal),
     ).toBe(tools);
   });
 
@@ -925,21 +934,31 @@ describe("a Tool gate's result stage", () => {
       subAgent: "Researcher",
       task: "Find the answer.",
     });
-    const { run } = startRecordedRun();
-
-    await driveOnce({
+    const drive = driveChat({
       plan: {
         model,
         maxSteps: 4,
-        gateScope: SCOPE,
+        gateScope: { ...SCOPE, attended: true },
         tools: { [DELEGATE_TOOL_NAME]: createDelegateTool([delegate]) },
       },
-      prompt: "go",
-      run,
+      modelMessages: [{ role: "user", content: "go" }],
+      run: startRecordedRun().run,
     });
+    let streamed = "";
+    void (async () => {
+      for await (const chunk of drive.response)
+        streamed += JSON.stringify(chunk);
+    })();
+    for await (const snapshot of drive.snapshots)
+      streamed += JSON.stringify(snapshot);
+    const { messages } = await drive.done;
 
     expect(ran).toBe(true);
+    // The final answer — the value the model receives — reached neither the
+    // model nor the Chat, though the tool ran and streamed its activity.
     expect(JSON.stringify(prompts)).not.toContain("SECRET-FINDING");
+    expect(streamed).not.toContain("SECRET-FINDING");
+    expect(JSON.stringify(messages)).not.toContain("SECRET-FINDING");
     const value = toolResultSentBack(prompts).output.value as string;
     expect(value).toContain("screener");
     expect(value).toContain("Inside the sub-agent answer.");

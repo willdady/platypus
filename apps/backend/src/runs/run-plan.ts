@@ -17,7 +17,7 @@ import { withAnswerStepInstruction } from "./answer-step.ts";
 import { stepOccupancy, type UsageModel } from "./run-stats.ts";
 import {
   toolGateOptions,
-  toolResultGateOptions,
+  wrapToolsWithToolResultGate,
   type ToolGateScope,
 } from "../tool-gates/index.ts";
 import { capToolResults } from "../services/tool-result.ts";
@@ -225,7 +225,7 @@ export const buildModelInvocation = (
   // every Drive passes through (issue #1618). The Tool gate's after-call stage
   // wraps each locally-executed tool here too (ADR-0033), so no Drive can miss
   // it; with no result-evaluating gate the map is the capped one, unchanged.
-  tools: toolResultGateOptions(
+  tools: wrapToolsWithToolResultGate(
     capToolResults(plan.tools),
     plan.gateScope,
     options.abortSignal,
