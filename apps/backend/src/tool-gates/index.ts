@@ -90,12 +90,15 @@ type Decision = {
   ask?: string;
 };
 
+/** The result stage's answer: there is no `ask`, because the tool already ran. */
+type ResultDecision = { allowed: true } | { allowed: false; reason: string };
+
 const RANK = { allow: 0, ask: 1, deny: 2 } as const;
 
 /**
- * Log a gate's failure and phrase it for the model, uncapitalised so callers
- * can slot it into their own sentence. Used by both stages: a timeout and a
- * throw are the same fact before and after a call.
+ * Log a gate's failure and say what went wrong, as a clause following "the
+ * <name> Tool gate". Used by both stages: a timeout and a throw are the same
+ * fact before and after a call.
  */
 const gateFailure = (
   gate: Pick<ToolGateRegistration, "id" | "name" | "timeoutMs">,
@@ -105,12 +108,9 @@ const gateFailure = (
 ): string => {
   logger.warn({ err: error, toolGate: gate.id, toolName }, message);
   return error instanceof DeadlineExceededError
-    ? `the "${gate.name}" Tool gate did not answer within ${gate.timeoutMs}ms`
-    : `the "${gate.name}" Tool gate failed (${errorMessage(error)})`;
+    ? `did not answer within ${gate.timeoutMs}ms`
+    : `failed (${errorMessage(error)})`;
 };
-
-const sentence = (text: string): string =>
-  `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
 
 // One gate's answer, in core's terms. Anything a gate cannot vouch for is
 // `ask`: a throw, a timeout, or an answer that is not a Verdict at all.
@@ -142,14 +142,12 @@ const runGate = async (
         }
       : { verdict, reason: `Blocked by the "${gate.name}" Tool gate${reason}` };
   } catch (error) {
-    const failure = sentence(
-      gateFailure(
-        gate,
-        error,
-        call.toolName,
-        "Tool gate failed to answer; the call is not run",
-      ),
-    );
+    const failure = `The "${gate.name}" Tool gate ${gateFailure(
+      gate,
+      error,
+      call.toolName,
+      "Tool gate failed to answer; the call is not run",
+    )}`;
     return {
       verdict: "ask",
       reason: `${failure}, so the call was not run.`,
@@ -168,7 +166,7 @@ const runResultGate = async (
   call: ToolGateCall,
   result: unknown,
   signal: AbortSignal,
-): Promise<{ allowed: true } | { allowed: false; reason: string }> => {
+): Promise<ResultDecision> => {
   try {
     const answer = await withDeadline(
       (deadline) => gate.evaluateResult(call, result, { signal: deadline }),
@@ -178,7 +176,7 @@ const runResultGate = async (
     const verdict = (answer as Partial<ToolResultVerdict> | undefined)?.verdict;
     if (verdict !== "allow" && verdict !== "deny") {
       throw new Error(
-        `returned ${JSON.stringify(verdict)}, not a result Verdict`,
+        `returned ${JSON.stringify(verdict)}, not a Result Verdict`,
       );
     }
     if (verdict === "allow") return { allowed: true };
@@ -196,7 +194,7 @@ const runResultGate = async (
     );
     return {
       allowed: false,
-      reason: `The tool ran, but ${failure}, so its result was withheld.`,
+      reason: `The tool ran, but the "${gate.name}" Tool gate ${failure}, so its result was withheld.`,
     };
   }
 };
@@ -211,15 +209,11 @@ const runResultGates = async (
   call: ToolGateCall,
   result: unknown,
   signal: AbortSignal,
-): Promise<{ allowed: true } | { allowed: false; reason: string }> => {
+): Promise<ResultDecision> => {
   const decisions = await Promise.all(
     gates.map((gate) => runResultGate(gate, call, result, signal)),
   );
-  const denied = decisions.find(
-    (decision): decision is { allowed: false; reason: string } =>
-      !decision.allowed,
-  );
-  return denied ?? { allowed: true };
+  return decisions.find((decision) => !decision.allowed) ?? { allowed: true };
 };
 
 /**
@@ -227,7 +221,7 @@ const runResultGates = async (
  * description off the tool itself, because the result stage has no request
  * carrying one.
  */
-const gateCall = (
+const toGateCall = (
   scope: ToolGateScope,
   toolName: string,
   tool: Tool | undefined,
@@ -322,7 +316,7 @@ export const toolGateOptions = (
               reason: "No Tool gate could vet this call, so it was not run.",
             };
           }
-          const call = gateCall(
+          const call = toGateCall(
             scope,
             toolCall.toolName,
             tools?.[toolCall.toolName],
@@ -347,7 +341,7 @@ export const toolGateOptions = (
 
 /** Everything the result stage needs about one run, carried as a value. */
 type ResultStage = {
-  scope: ToolGateScope | undefined;
+  scope: ToolGateScope;
   gates: readonly ResultGate[];
   signal: AbortSignal;
 };
@@ -360,21 +354,27 @@ const gateOneResult = async (
   args: unknown,
   result: unknown,
 ): Promise<void> => {
-  // A plan with no scope cannot describe its calls to a gate. The before-call
-  // stage already refused the call, so this only fires for a result produced
-  // ahead of that seam; it fails closed too.
-  if (!scope) {
-    throw new Error(
-      "The tool ran, but no Tool gate could vet its result, so its result was withheld.",
-    );
-  }
   const decision = await runResultGates(
     gates,
-    gateCall(scope, toolName, tool, args),
+    toGateCall(scope, toolName, tool, args),
     result,
     signal,
   );
   if (!decision.allowed) throw new Error(decision.reason);
+};
+
+/**
+ * Vet a tool's error as its result, then rethrow it. The model and the stored
+ * Chat message receive the error's message, so content a tool fetched — a
+ * Sub-Agent's partial output, an MCP server's error text — is screened like a
+ * result. A denial replaces the error with the gate's reason.
+ */
+const vetError = async (
+  vet: (result: unknown) => Promise<void>,
+  error: unknown,
+): Promise<never> => {
+  await vet(errorMessage(error));
+  throw error;
 };
 
 /**
@@ -383,7 +383,7 @@ const gateOneResult = async (
  * the last is the value the model receives, so it is held back until it is
  * vetted and dropped entirely if the gate denies it. Holding one yield back is
  * what makes the last one provably not final: it is released only once a later
- * yield exists.
+ * yield exists, or once the stream throws, since then no yield is the result.
  */
 const gateResultStream = (
   stream: AsyncIterable<unknown>,
@@ -392,10 +392,15 @@ const gateResultStream = (
   (async function* () {
     let pending: unknown;
     let hasPending = false;
-    for await (const value of stream) {
+    try {
+      for await (const value of stream) {
+        if (hasPending) yield pending;
+        pending = value;
+        hasPending = true;
+      }
+    } catch (error) {
       if (hasPending) yield pending;
-      pending = value;
-      hasPending = true;
+      return await vetError(vet, error);
     }
     // A generator that yielded nothing produced no result to withhold.
     if (!hasPending) return;
@@ -419,7 +424,9 @@ export const wrapToolsWithToolResultGate = (
   const gates = getToolGates().filter(
     (gate): gate is ResultGate => typeof gate.evaluateResult === "function",
   );
-  if (gates.length === 0) return tools;
+  // A plan with no scope has every call denied by the before-call stage, so
+  // none of its tools runs.
+  if (gates.length === 0 || !scope) return tools;
 
   const stage: ResultStage = { scope, gates, signal };
   return wrapToolExecutes(
@@ -427,12 +434,21 @@ export const wrapToolsWithToolResultGate = (
     (runExecute, tool, name) => (args, options) => {
       const vet = (result: unknown) =>
         gateOneResult(stage, name, tool, args, result);
-      const result = runExecute.call(tool, args, options);
+      let result: unknown;
+      try {
+        result = runExecute.call(tool, args, options);
+      } catch (error) {
+        return vetError(vet, error);
+      }
       if (isThenable(result)) {
-        return result.then(async (value) => {
-          await vet(value);
-          return value;
-        });
+        // Two-argument `then`, so a denial thrown by `vet` is not vetted again.
+        return result.then(
+          async (value) => {
+            await vet(value);
+            return value;
+          },
+          (error: unknown) => vetError(vet, error),
+        );
       }
       if (isAsyncIterable(result)) return gateResultStream(result, vet);
       return vet(result).then(() => result);

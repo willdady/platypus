@@ -117,10 +117,22 @@ consequence above, which no longer holds; the rest of the Decision is unchanged.
   result-evaluating gate sends exactly the tools it always did. Provider-executed
   tools remain ungated: they have no `execute` to wrap, which is the same gap the
   before-call stage already accepts.
+- **A tool's error is vetted as its result.** A tool that throws reaches the
+  model as a tool error carrying its message, and that message can carry content
+  the tool fetched: a failed Sub-Agent's partial output, an MCP server's error
+  text. Result gates are asked about the message as the result; a denial
+  replaces the error with the gate's reason. A streaming tool that throws
+  releases its last activity yield first, because no yield is its result then.
 - **Tool-result clearing is unaffected.** A withheld result is an ordinary tool
   error part, so clearing treats it like any other failed call.
 - **The reference gate's result stage is opt-in.** `@platypus/decision-gate`
   asks its decision model whether the result contains instructions directed at
   the assistant rather than data, and denies above a new optional
   `resultDenyThreshold`. Without that field it performs no result evaluation and
-  its before-call stage is unchanged.
+  its before-call stage is unchanged. A contribution's shape is fixed, not read
+  from config, so the plugin declares `evaluateResult` either way: with it
+  enabled but no threshold, core still wraps each tool and a streaming tool's
+  last yield waits one tick for an `allow`. Accepted rather than making
+  contributions depend on config. A long result is asked about in overlapping
+  parts, and the most suspicious part decides, so no instruction goes unscreened
+  by sitting past the first part.

@@ -262,9 +262,10 @@ With several gates the most restrictive Verdict wins. `ask` stops the call too,
 until core can put the question to the User; a denied call returns the reason to
 the model as a tool error and the run continues.
 
-A result Verdict is `allow` or `deny`, with an optional `reason`; there is no
-`ask`, because the tool has already run. `deny`, a throw, a timeout or an answer
-that is not a result Verdict withholds the result entirely: the model receives a
+A Result Verdict is `allow` or `deny`, with an optional `reason`; there is no
+`ask`, because the tool has already run. When the tool throws, the gate is given
+the error's message as the result. `deny`, a throw, a timeout or an answer that
+is not a Result Verdict withholds the result entirely: the model receives a
 tool error naming the gate, and the result is never persisted, streamed or
 recorded. Several result gates run in parallel, any denial wins, and the first
 denying gate's reason is used.

@@ -964,6 +964,96 @@ describe("a Tool gate's result stage", () => {
     expect(value).toContain("Inside the sub-agent answer.");
   });
 
+  it("vets a tool's error as its result, withholding fetched content it carries", async () => {
+    const seen = resultGate("screener", (_call, result) =>
+      String(result).includes("INJECTED")
+        ? { verdict: "deny", reason: "Inside the error." }
+        : { verdict: "allow" },
+    );
+    const { model, prompts } = callThenAnswer();
+    const plan = planWith(model, []);
+    plan.tools.wipe = {
+      ...plan.tools.wipe,
+      execute: () => Promise.reject(new Error("Fetched page said INJECTED")),
+    };
+
+    await driveOnce({ plan, prompt: "go", run: startRecordedRun().run });
+
+    expect(String(seen[0]?.result)).toContain("INJECTED");
+    expect(JSON.stringify(prompts)).not.toContain("INJECTED");
+    expect(toolResultSentBack(prompts).output.value).toContain(
+      "Inside the error.",
+    );
+  });
+
+  it("passes an allowed tool error through unchanged", async () => {
+    resultGate("open", () => ({ verdict: "allow" }));
+    const { model, prompts } = callThenAnswer();
+    const plan = planWith(model, []);
+    plan.tools.wipe = {
+      ...plan.tools.wipe,
+      execute: () => {
+        throw new Error("Disk is read-only.");
+      },
+    };
+
+    await driveOnce({ plan, prompt: "go", run: startRecordedRun().run });
+
+    expect(toolResultSentBack(prompts).output).toMatchObject({
+      type: "error-text",
+      value: expect.stringContaining("Disk is read-only.") as unknown,
+    });
+  });
+
+  it("withholds a failed delegation's partial output but still streams its failure", async () => {
+    resultGate("screener", (_call, result) =>
+      String(result).includes("PARTIAL-SECRET")
+        ? { verdict: "deny", reason: "Inside the partial output." }
+        : { verdict: "allow" },
+    );
+    const delegate: SubAgentDelegate = {
+      id: "sub-1",
+      name: "Researcher",
+      description: "Researches.",
+      run: async function* () {
+        await Promise.resolve();
+        yield { entries: [{ type: "failed", status: "error", error: "x" }] };
+        throw new Error("Partial output before the failure:\nPARTIAL-SECRET");
+      },
+    };
+    const { model, prompts } = callToolThenAnswer(DELEGATE_TOOL_NAME, {
+      subAgent: "Researcher",
+      task: "Find the answer.",
+    });
+    const drive = driveChat({
+      plan: {
+        model,
+        maxSteps: 4,
+        gateScope: { ...SCOPE, attended: true },
+        tools: { [DELEGATE_TOOL_NAME]: createDelegateTool([delegate]) },
+      },
+      modelMessages: [{ role: "user", content: "go" }],
+      run: startRecordedRun().run,
+    });
+    let streamed = "";
+    void (async () => {
+      for await (const chunk of drive.response)
+        streamed += JSON.stringify(chunk);
+    })();
+    for await (const snapshot of drive.snapshots)
+      streamed += JSON.stringify(snapshot);
+    const { messages } = await drive.done;
+
+    expect(JSON.stringify(prompts)).not.toContain("PARTIAL-SECRET");
+    expect(streamed).not.toContain("PARTIAL-SECRET");
+    expect(JSON.stringify(messages)).not.toContain("PARTIAL-SECRET");
+    // The activity yielded before the throw is released, not swallowed.
+    expect(streamed).toContain('"type":"failed"');
+    expect(toolResultSentBack(prompts).output.value).toContain(
+      "Inside the partial output.",
+    );
+  });
+
   it("closes the Run timeline as a tool error without recording the result", async () => {
     resultGate("screener", () => ({
       verdict: "deny",

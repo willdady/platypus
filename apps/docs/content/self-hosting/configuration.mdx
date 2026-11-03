@@ -393,7 +393,7 @@ Platypus ships one, off by default:
 
   | Field                 | Required            | Meaning                                                                                                                                                       |
   | --------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-  | `provider`            | No                  | `gateway` (the default), `anthropic`, `openai` or `google`.                                                                                                   |
+  | `provider`            | No                  | `gateway` (the default), `anthropic`, `openai`, `google` or `openrouter`.                                                                                     |
   | `model`               | Except on `gateway` | The decision model's id. On `gateway` it defaults to `typesafe-ai/jev`.                                                                                       |
   | `denyThreshold`       | Yes                 | From 0 to 1. A call the model rates at least this likely to be destructive is stopped.                                                                        |
   | `askThreshold`        | No                  | From 0 to 1, no higher than `denyThreshold`. A call rated between the two needs a person's approval.                                                          |
@@ -402,7 +402,8 @@ Platypus ships one, off by default:
 
   Without the key or a `denyThreshold`, boot aborts with an error naming the
   Plugin. Every tool call's arguments are sent to the provider you chose, and,
-  when `resultDenyThreshold` is set, so is each tool's result.
+  when `resultDenyThreshold` is set, so is each tool's result. A long result is
+  screened in parts, one model call each, so no part of it goes unscreened.
 
 When a gate stops a call, the tool never runs. The Agent is told the call was
 blocked, by which gate and why, and carries on — it can try something else or
@@ -411,7 +412,8 @@ reason; in a Trigger run the call shows on the Run timeline as cancelled, with
 the same reason.
 
 When a gate withholds a result, the tool has already run and its side effects
-stand. The result itself is never stored, streamed to the Chat or recorded on
+stand. A tool's error message counts as its result, since it can carry what the
+tool fetched. The result itself is never stored, streamed to the Chat or recorded on
 the Run timeline; the Agent is told the call ran and its result was withheld, by
 which gate and why. The Chat's tool card shows the error with that reason, and
 the Run timeline closes the call as failed.

@@ -115,20 +115,20 @@ export const plugin: PlatypusPlugin = {
 };
 ```
 
-A result Verdict is `allow` or `deny`, with an optional reason. There is no
+A Result Verdict is `allow` or `deny`, with an optional reason. There is no
 `ask`, because a result the tool already produced has nothing for a person to
-approve.
+approve. When the tool fails, your gate is given its error message as the
+result, because that message reaches the model too.
 
 - **`allow`** — the result is passed to the model unchanged.
-- **`deny`** — the result is withheld entirely. It is never stored, streamed to
-  the Chat or recorded on the Run timeline. The model receives a tool error
-  naming your gate and carrying your `reason`; the Chat's tool card shows its
-  error state, and the Run timeline closes the call as failed. The tool has
+- **`deny`** — the result is withheld entirely, as [Configuration → Tool
+  gates](/self-hosting/configuration#tool-gates) describes. The model receives
+  a tool error naming your gate and carrying your `reason`. The tool has
   already run, so its side effects stand — write `reason` so the model
   understands that the call happened and only its result was withheld.
 
 The result stage fails closed in the same way as the call stage: a gate that
-throws, returns something that is not a result Verdict, or outruns the same
+throws, returns something that is not a Result Verdict, or outruns the same
 `timeoutMs` withholds the result. With several result-evaluating gates they all
 run in parallel, any `deny` wins, and the first denying gate's reason is the one
 used.

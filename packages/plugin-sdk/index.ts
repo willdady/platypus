@@ -855,7 +855,8 @@ export interface ToolGateContribution<
    * in every Drive — Chat turns, Trigger runs, A2A calls, Sub-Agent runs and the
    * delegation tool's own result — after the result has been normalised. It is
    * given the same {@link ToolGateCall} the before-call stage sees, plus the
-   * result itself.
+   * result itself. When the tool throws, `result` is the error's message, the
+   * text the model would otherwise receive.
    *
    * `deny`, a throw, a timeout, or an answer that is not a
    * {@link ToolResultVerdict} withholds the result. The tool has already run,
