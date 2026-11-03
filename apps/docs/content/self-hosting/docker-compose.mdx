@@ -88,6 +88,10 @@ released as a pair and are only tested against each other.
 - **Frontend** — `http://localhost:3000` (the URL you sign in at).
 - **Backend** — `http://localhost:4000` (the REST API and `/auth/*` endpoints).
 
+With Caddy on (see [Serve HTTPS with Caddy](#serve-https-with-caddy)), neither
+port is published: the stack is reached at `https://<domain>`, and only Caddy's
+`80` and `443` are open.
+
 The frontend reaches the backend over the private network at
 `http://backend:4000` (set via `INTERNAL_BACKEND_URL`) for server-side rendering,
 while the browser talks to the backend at its public URL. See
@@ -107,6 +111,10 @@ a model server running on the host machine rather than in the stack — see
   `./data/files`. Override
   [`STORAGE_DISK_PATH`](/reference/backend-configuration#storage) and your
   uploads follow it out of this mount.
+- `caddy_data` and `caddy_config` — only when [Caddy](#serve-https-with-caddy) is
+  on. `caddy_data` holds the issued certificates and the ACME account key. Keep
+  it: recreating Caddy without it asks for a new certificate every time, which
+  can hit Let's Encrypt's rate limit.
 
 #### File ownership on `./data`
 
@@ -151,8 +159,9 @@ curl -fsSL https://platypus.chat/install.sh | ADMIN_EMAIL=you@example.com bash
 
 The installer asks no questions. It creates a `platypus` directory in the
 current directory holding `compose.yaml`, a `compose.override.yaml` that pins
-both images to one exact version, a `.env` readable only by you, and a
-`README.md` listing the commands to start, stop and restart the stack. Then it runs
+both images to one exact version (and, with `PLATYPUS_DOMAIN`, adds the Caddy
+block), a `.env` readable only by you, and a `README.md` listing the commands to
+start, stop and restart the stack. Then it runs
 `docker compose up -d --wait` and prints the sign-in URL, the admin email and the
 admin password.
 
@@ -166,13 +175,14 @@ admin password.
 
 Set these as environment variables on the `bash` side of the pipe:
 
-| Variable           | Default                     | What it does                                                                                                                                                     |
-| ------------------ | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PLATYPUS_VERSION` | the latest release          | The release to install, e.g. `3.13.0`.                                                                                                                           |
-| `PLATYPUS_DIR`     | `./platypus`                | The directory to install into.                                                                                                                                   |
-| `PLATYPUS_HOST`    | `localhost`                 | The host the browser reaches Platypus on — a host name or IP address, with no scheme or port. Sets `FRONTEND_URL`, `BACKEND_URL` and `ALLOWED_ORIGINS` together. |
-| `ADMIN_EMAIL`      | `admin@example.com`         | The initial admin's email.                                                                                                                                       |
-| `ADMIN_PASSWORD`   | a random 24-character value | The initial admin's password. At least 8 characters.                                                                                                             |
+| Variable           | Default                     | What it does                                                                                                                                                                                                                               |
+| ------------------ | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `PLATYPUS_VERSION` | the latest release          | The release to install, e.g. `3.13.0`.                                                                                                                                                                                                     |
+| `PLATYPUS_DIR`     | `./platypus`                | The directory to install into.                                                                                                                                                                                                             |
+| `PLATYPUS_HOST`    | `localhost`                 | The host the browser reaches Platypus on — a host name or IP address, with no scheme or port. Sets `FRONTEND_URL`, `BACKEND_URL` and `ALLOWED_ORIGINS` together.                                                                           |
+| `PLATYPUS_DOMAIN`  | _unset_                     | The domain to serve HTTPS on, e.g. `chat.example.com`. Writes the Caddy block into `compose.override.yaml` and points all three URLs at `https://<domain>`. Cannot be set together with `PLATYPUS_HOST`. Requires Compose 2.24.0 or later. |
+| `ADMIN_EMAIL`      | `admin@example.com`         | The initial admin's email.                                                                                                                                                                                                                 |
+| `ADMIN_PASSWORD`   | a random 24-character value | The initial admin's password. At least 8 characters.                                                                                                                                                                                       |
 
 For example, on a server you reach as `platypus.internal`:
 
@@ -180,11 +190,19 @@ For example, on a server you reach as `platypus.internal`:
 curl -fsSL https://platypus.chat/install.sh | PLATYPUS_HOST=platypus.internal bash
 ```
 
+For an HTTPS install, point the domain's DNS at the host first:
+
+```bash
+curl -fsSL https://platypus.chat/install.sh | PLATYPUS_DOMAIN=chat.example.com bash
+```
+
 <Callout type="error">
   With `PLATYPUS_HOST` set to anything other than `localhost`, ports `3000` and
   `4000` serve plain HTTP, with no TLS, on every network interface of the host.
-  That suits a trusted network, not the internet. See [Running in
-  production](/self-hosting/production) before exposing it further.
+  That suits a trusted network, not the internet. Set
+  [`PLATYPUS_DOMAIN`](#serve-https-with-caddy) instead to put the stack behind
+  TLS. See [Running in production](/self-hosting/production) before exposing it
+  further.
 </Callout>
 
 The installer refuses to run against a directory that already has a `.env`, and
@@ -200,6 +218,117 @@ database, because first boot doesn't run twice. Remove the volume with
 `docker volume rm platypus_postgres_data` if you mean to start over, or keep it
 and install into a directory with another name, such as
 `PLATYPUS_DIR=./platypus2`.
+
+## Serve HTTPS with Caddy
+
+A `caddy` service in `compose.override.yaml` gives the deployment TLS on one
+domain: the frontend at `/`, the backend at `/api`, automatic certificates, and
+an HTTP → HTTPS redirect. Nothing is published on `3000` or `4000` once it is
+on.
+
+The installer writes this for you when `PLATYPUS_DOMAIN` is set. To add it to an
+existing install instead, paste the block below into `compose.override.yaml`,
+replacing `chat.example.com` with your domain.
+
+The file already has a `services:` block holding the pinned image tags. Add the
+`caddy` service and the two `ports: !reset []` lines to that block, keeping its
+`image:` lines, and add the `volumes:` and `configs:` blocks beside `services:`
+at the top level. There must be one `services:` key, not a second one. `!reset`
+drops the `3000` and `4000` publishes inherited from `compose.yaml`, so Caddy is
+the only way in.
+
+```yaml
+services:
+  backend:
+    ports: !reset []
+  frontend:
+    ports: !reset []
+  caddy:
+    image: caddy:2.11.7
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    configs:
+      - source: caddyfile
+        target: /etc/caddy/Caddyfile
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - platypus-network
+
+volumes:
+  caddy_data:
+  caddy_config:
+
+configs:
+  caddyfile:
+    content: |
+      chat.example.com {
+        encode zstd gzip
+
+        handle_path /api/* {
+          reverse_proxy backend:4000 {
+            header_up X-Forwarded-For {remote_host}
+            flush_interval -1
+          }
+        }
+
+        handle {
+          reverse_proxy frontend:3000
+        }
+      }
+```
+
+It needs:
+
+- **Docker Compose 2.24.0 or later** — `ports: !reset []` and an inline
+  `configs:` entry arrived there. An older Compose refuses to load the file.
+- **DNS pointed at this host** — an A or AAAA record for the domain must already
+  resolve to it.
+- **Ports 80 and 443 reachable from the internet** — Caddy answers the ACME
+  challenge on port 80 and serves HTTPS on 443. A firewall or NAT that blocks
+  either stops the certificate from issuing.
+
+Then change all three URL variables in `.env` in one edit, and bring the stack
+up:
+
+```dotenv
+FRONTEND_URL=https://chat.example.com
+BACKEND_URL=https://chat.example.com/api
+ALLOWED_ORIGINS=https://chat.example.com
+```
+
+```bash
+docker compose up -d
+```
+
+`BACKEND_URL` includes the `/api` path because that is where the browser reaches
+the backend and Caddy strips the prefix before forwarding. This is the
+one-origin layout, so no `AUTH_COOKIE_DOMAIN` is needed: a single host-only
+cookie covers both.
+
+<Callout type="warning">
+  **Change the three URLs together**, as [Configuration &
+  environment](/self-hosting/configuration#service-urls) warns. Updating only
+  some of them gives you a sign-in that appears to succeed and then silently
+  signs you out.
+</Callout>
+
+Two proxy details the backend depends on are already in the block: the real
+client address arrives as a single-value `X-Forwarded-For` (the auth rate
+limiter counts per address), and responses stream through instead of being
+buffered, so a Chat run's reply arrives incrementally.
+
+Caddy here does **not** rate-limit: the stock image has no rate limiter. The
+[rate-limit section](/self-hosting/production#put-a-rate-limiter-in-front) still
+applies to a deployment anyone hostile can reach.
+
+Caddy's `caddy_data` volume holds the issued certificates and account key, and
+`caddy_config` holds its autosaved configuration. Keep both across recreates, or
+every restart asks Let's Encrypt for a new certificate and can hit its rate
+limit.
 
 ## Manual install
 

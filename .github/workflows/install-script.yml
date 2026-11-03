@@ -54,6 +54,53 @@ jobs:
           refuses ADMIN_EMAIL=not-an-email
           refuses PLATYPUS_HOST=http://example.com
           refuses PLATYPUS_HOST=example.com:3000
+          refuses PLATYPUS_DOMAIN=chat.example.com PLATYPUS_HOST=example.com
+          refuses PLATYPUS_DOMAIN=https://chat.example.com
+          refuses PLATYPUS_DOMAIN=chat.example.com:443
+
+  # The HTTPS path writes different files from the plain-HTTP one. A stub
+  # `docker` lets the installer finish without pulling images, so this checks
+  # what it writes rather than whether the stack starts.
+  caddy-install:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Install with a domain, without starting the stack
+        run: |
+          bin="$RUNNER_TEMP/bin"
+          mkdir -p "$bin"
+          cat > "$bin/docker" <<'STUB'
+          #!/usr/bin/env bash
+          case "$*" in
+            "compose version --short") echo "2.24.0" ;;
+            "compose version") echo "Docker Compose version v2.24.0" ;;
+            "info") exit 0 ;;
+            "volume inspect"*) exit 1 ;;
+            "compose up"*) exit 0 ;;
+            *) exit 0 ;;
+          esac
+          STUB
+          chmod +x "$bin/docker"
+          PATH="$bin:$PATH" PLATYPUS_DOMAIN=chat.example.com \
+            PLATYPUS_DIR="$RUNNER_TEMP/platypus" bash < apps/website/public/install.sh
+
+      - name: Assert the generated deployment
+        run: |
+          dir="$RUNNER_TEMP/platypus"
+          grep -q '^  caddy:$' "$dir/compose.override.yaml"
+          grep -q '^    image: willdady/platypus-backend:' "$dir/compose.override.yaml"
+          grep -q '^    image: willdady/platypus-frontend:' "$dir/compose.override.yaml"
+          test "$(grep -c 'ports: !reset \[\]' "$dir/compose.override.yaml")" = 2
+          grep -q '^      chat.example.com {$' "$dir/compose.override.yaml"
+          grep -q "^FRONTEND_URL='https://chat.example.com'$" "$dir/.env"
+          grep -q "^BACKEND_URL='https://chat.example.com/api'$" "$dir/.env"
+          grep -q "^ALLOWED_ORIGINS='https://chat.example.com'$" "$dir/.env"
+          test "$(stat -c %a "$dir/.env")" = 600
+          ! grep -q '^AUTH_COOKIE_DOMAIN=' "$dir/.env"
+          # The real Compose validates the generated file, including !reset.
+          (cd "$dir" && docker compose config >/dev/null)
 
   end-to-end:
     runs-on: ubuntu-latest
