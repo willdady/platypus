@@ -31,8 +31,8 @@ export const RUN_DETAIL_ERROR_NOTICE =
   "This run could not be read. It may have been pruned by the trigger's Max Runs to Keep, or it belongs to another workspace.";
 
 /**
- * One Trigger run in full: its row as the list shows it, its **Run timeline**
- * as a waterfall, and the answer it left behind.
+ * One Trigger run in full: its row as the list shows it, the answer it left
+ * behind, and its **Run timeline** as a waterfall.
  *
  * The timeline is read incrementally. The first request takes everything;
  * each poll after that asks only for events past a sequence number, and the
@@ -107,17 +107,6 @@ function TriggerRunDetailPage({
               />
             </div>
 
-            <section>
-              <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-2">
-                Timeline
-              </h2>
-              <RunTimeline
-                events={data.events}
-                runStatus={data.run.status}
-                eventsTruncated={data.run.eventsTruncated}
-              />
-            </section>
-
             {data.run.finalText && (
               <section>
                 <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-2">
@@ -139,6 +128,17 @@ function TriggerRunDetailPage({
                 </div>
               </section>
             )}
+
+            <section>
+              <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-2">
+                Timeline
+              </h2>
+              <RunTimeline
+                events={data.events}
+                runStatus={data.run.status}
+                eventsTruncated={data.run.eventsTruncated}
+              />
+            </section>
           </div>
         ) : (
           // Anything short of data or an error is still loading, the frames
