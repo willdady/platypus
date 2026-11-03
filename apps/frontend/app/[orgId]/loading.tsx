@@ -8,6 +8,7 @@ import { OrgHome } from "@/components/org-home";
 import { OrgListSidebar } from "@/components/org-list-sidebar";
 import { resourcePageLayout } from "@/components/resource-page";
 import { Skeleton } from "@/components/ui/skeleton";
+import { orgRoutes } from "@/lib/routes";
 import WorkspaceLoading from "./workspace/loading";
 
 function MenuSkeleton() {
@@ -107,7 +108,10 @@ export default function OrganizationLoading() {
         menu={<MenuSkeleton />}
         headerLeft={
           <div className="flex items-center gap-2">
-            <BackButton variant="header" />
+            <BackButton
+              variant="header"
+              fallbackHref={orgRoutes(orgId).settings.root}
+            />
             <HeaderHomeButton />
           </div>
         }

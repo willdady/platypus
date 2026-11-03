@@ -16,10 +16,7 @@ async function OrgSkillInstallPage({
   const { settings } = orgRoutes(orgId);
 
   return (
-    <ResourcePage
-      backFallbackHref={settings.skills}
-      title="Install Organization Skills from GitHub"
-    >
+    <ResourcePage title="Install Organization Skills from GitHub">
       <SkillGithubInstall
         scope={{ orgId }}
         skillsHref={settings.skills}
