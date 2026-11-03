@@ -822,6 +822,12 @@ export const prepareChatTurn = async (
       contextWindow: context.plan.contextWindow,
       model: context.plan.model,
       modelId: context.resolvedModelId,
+      // The backstop tries the Workspace's task model first, falling back to
+      // the model this turn already opened.
+      taskModel: {
+        scope: { orgId, workspaceId },
+        providerId: context.resolvedProviderId,
+      },
       readOnlyToolNames: session.readOnlyToolNames,
       signal,
     });

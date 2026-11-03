@@ -7,8 +7,11 @@ import {
   workspace as workspaceTable,
 } from "../db/schema.ts";
 import { openProvider } from "./provider.ts";
-import { resolveScoped } from "./scoped-resource.ts";
 import { pointerSettingModelId } from "./model-capability.ts";
+import {
+  drizzleTaskModelQueries,
+  resolveTaskModelProvider,
+} from "./task-model.ts";
 import { UNTITLED_CHAT_TITLE, chatSchema } from "@platypus/schemas";
 import type { PlatypusUIMessage } from "../types.ts";
 import { logger } from "../logger.ts";
@@ -118,18 +121,20 @@ export const generateChatMetadata = async (
   const workspace = workspaceRows[0];
   if (!workspace) return null;
 
-  // Use the workspace task-model provider if set, otherwise the supplied one.
-  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- an empty string falls back too
-  const effectiveProviderId = workspace.taskModelProviderId || providerId;
-
-  // Resolved through the Scoped-resource authority, as every other resource a
-  // Chat turn reaches is: a Shared Provider titles here only where an Attachment
-  // makes it visible to this Workspace (ADR-0007).
-  const found = await resolveScoped(db, "provider", effectiveProviderId, {
-    orgId,
-    workspaceId,
-  });
-  if (!found) {
+  // The Workspace's task-model Provider if it sets one, otherwise the Chat's
+  // own Provider. Resolved through the Scoped-resource authority, as every
+  // other resource a Chat turn reaches is: a Shared Provider titles here only
+  // where an Attachment makes it visible to this Workspace (ADR-0007).
+  const taskProvider = await resolveTaskModelProvider(
+    {
+      workspace,
+      fallbackProviderId: providerId,
+      orgId,
+      workspaceId,
+    },
+    drizzleTaskModelQueries,
+  );
+  if (!taskProvider.provider) {
     // Titling is fire-and-forget, so an unresolvable provider leaves chats
     // named "Untitled" with nothing else to show for it. Say so: the usual
     // cause is a task-model override naming an Organization-scoped Provider
@@ -139,14 +144,14 @@ export const generateChatMetadata = async (
       {
         chatId,
         workspaceId,
-        providerId: effectiveProviderId,
-        fromTaskModelOverride: !!workspace.taskModelProviderId,
+        providerId: taskProvider.providerId,
+        fromTaskModelOverride: taskProvider.fromOverride,
       },
       "Chat titling skipped: provider is not visible in this workspace",
     );
     return null;
   }
-  const provider = found.row;
+  const provider = taskProvider.provider;
 
   // Fetch the workspace's most-used tags so the model can reuse them rather
   // than minting near-duplicate variants.

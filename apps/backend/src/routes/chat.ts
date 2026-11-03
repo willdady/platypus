@@ -272,8 +272,9 @@ chat.delete(
 
 /**
  * `/compact` (issue #1111): a Transcript summary of the whole Active path,
- * taken now with the Chat's own model and steered by the User's instruction
- * (ADR-0041). No message is written; the next turn reads the summary.
+ * taken now with the task model first and the Chat's own model as fallback,
+ * steered by the User's instruction (ADR-0041). No message is written; the next
+ * turn reads the summary.
  */
 chat.post(
   "/:chatId/compact",

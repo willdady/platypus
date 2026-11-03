@@ -72,15 +72,16 @@ To undo one, use **Detach** inside the Workspace, or untick the Workspace in
 
 An Attachment governs more than what shows up in a list. A Workspace reaches a
 Shared resource only where one exists, background work included: a Trigger can
-run an attached Shared Agent, and a Workspace titles its chats and extracts its
-memories with a Shared Provider only while that Provider is attached.
+run an attached Shared Agent, and a Workspace titles and summarises its chats,
+and extracts its memories, with a Shared Provider only while that Provider is
+attached.
 
 <Callout type="warning">
   Detaching a Shared Provider that a Workspace's **Task Model Provider** points
   at is the trap. Nothing reports an error — chats simply stay **Untitled**,
   because the Workspace can no longer see the Provider doing the titling. Attach
-  the Provider again, or pick another **Task Model Provider**, and titling
-  resumes.
+  the Provider again, or pick another **Task Model Provider**, and titling and
+  summarising resume.
 </Callout>
 
 ## What a Workspace Owner sees

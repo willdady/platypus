@@ -530,6 +530,14 @@ saying that older messages were summarised for the assistant and stay readable
 above. This happens on its own, usually just
 after a reply finishes, so your next message is not delayed.
 
+The summary is normally written by the **Task Model ID** of the Provider set as
+the Workspace's **Task Model Provider**, or of the Chat's own Provider where the
+Workspace sets none. That is the same fast, inexpensive model that names Chats.
+If it cannot take the conversation — an error, an unknown model, or an empty
+reply — the Chat's own model writes the summary instead, over the same messages.
+Every summary follows that order, including `/compact` and the one taken after
+a reply is refused as too long.
+
 **Click the line** to read the summary the assistant was given. Everything above
 it is still on screen, still copyable, still editable, and still there after a
 reload: nothing was deleted, and the Chat itself has not changed. What changed is

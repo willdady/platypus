@@ -25,8 +25,11 @@ A Provider carries:
   proxy needs,
 - an optional **base URL** for self-hosted or proxied endpoints,
 - the list of **models** that have been enabled for use,
-- a default **task model** used for quick one-shot jobs (like generating a
-  title for a Chat) rather than full conversations,
+- a default **task model** used for background jobs — naming a Chat and
+  summarising a long conversation — rather than full turns. Choose a fast,
+  inexpensive model with a large context window: a summary can send it most of
+  a conversation. If it cannot take that much, the Chat's own model writes the
+  summary instead,
 - and the models used for memory extraction and embeddings, plus per-model
   settings such as the context window.
 
