@@ -179,18 +179,21 @@ describe("TriggerRunDetailPage", () => {
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
   });
 
-  it("puts the Response above the Timeline", async () => {
+  it("renders the row, then the Response, then the Timeline", async () => {
     state.data = { run: run(), events: [] };
 
     await renderPage();
 
+    const row = screen.getByText("Nightly digest");
     const response = screen.getByRole("heading", { name: "Response" });
     const timeline = screen.getByRole("heading", { name: "Timeline" });
     // Response is the first thing to read; the Timeline explains why.
-    expect(
-      response.compareDocumentPosition(timeline) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
+    expect(row.compareDocumentPosition(response)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(response.compareDocumentPosition(timeline)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
   });
 
   it("offers the Trigger, its other runs and the run id from the header's menu", async () => {
