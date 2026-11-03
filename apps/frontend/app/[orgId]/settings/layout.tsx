@@ -7,6 +7,7 @@ import { SettingsShell } from "@/components/settings-shell";
 import { BackButton } from "@/components/back-button";
 import { HeaderHomeButton } from "@/components/header-home-button";
 import { ProtectedRoute } from "@/components/protected-route";
+import { orgRoutes } from "@/lib/routes";
 
 // Unlike the workspace shell, a failure here must not break the page: the
 // organization is only a label and the title, so it degrades to null.
@@ -46,7 +47,10 @@ export default async function OrgSettingsLayout({
         }
         headerLeft={
           <div className="flex items-center gap-2">
-            <BackButton variant="header" />
+            <BackButton
+              variant="header"
+              fallbackHref={orgRoutes(orgId).settings.root}
+            />
             <HeaderHomeButton />
           </div>
         }

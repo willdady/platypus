@@ -3,7 +3,6 @@ import { AgentForm } from "@/components/agent-form";
 import { ResourcePage } from "@/components/resource-page";
 import { fetchToolSets, toolSetFormProps } from "@/lib/tool-sets-request";
 import { backendPath } from "@/lib/server-read";
-import { orgRoutes } from "@/lib/routes";
 
 export const metadata: Metadata = { title: "Edit Shared Agent" };
 
@@ -22,10 +21,7 @@ async function OrgAgentEditPage({
   );
 
   return (
-    <ResourcePage
-      backFallbackHref={orgRoutes(orgId).settings.agents}
-      title="Edit Shared Agent"
-    >
+    <ResourcePage title="Edit Shared Agent">
       <AgentForm
         orgId={orgId}
         agentId={agentId}

@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { McpForm } from "@/components/mcp-form";
 import { ResourcePage } from "@/components/resource-page";
-import { orgRoutes } from "@/lib/routes";
 
 export const metadata: Metadata = { title: "Edit Organization MCP" };
 
@@ -13,10 +12,7 @@ async function EditOrgMcpPage({
   const { orgId, mcpId } = await params;
 
   return (
-    <ResourcePage
-      backFallbackHref={orgRoutes(orgId).settings.mcp}
-      title="Edit Organization MCP"
-    >
+    <ResourcePage title="Edit Organization MCP">
       <McpForm orgId={orgId} mcpId={mcpId} />
     </ResourcePage>
   );
