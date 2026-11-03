@@ -9,11 +9,13 @@ import { z } from "zod";
  * The shape the API returns. The row's full record (covered ids, stats) is
  * what makes each summary self-describing: whether a summary is usable on the
  * current Active path is a pure read-time check against what it covered, and
- * `stats` records from day one what a later per-summary cost display needs.
+ * `stats` carries the model and token counts the divider shows as the
+ * summary's cost (issue #1733).
  *
  * Absent here deliberately: the summary is never a `chat_message`. It renders
- * as a divider between the coverage and the kept tail, and its `stats` are not
- * surfaced in the product in v1 (ADR-0041, "Deferred").
+ * as a divider between the coverage and the kept tail, and its `stats` appear
+ * only there, in the divider's expanded panel — they belong to no turn's Token
+ * usage.
  */
 export type TranscriptSummary = {
   id: string;
@@ -40,10 +42,10 @@ export type TranscriptSummary = {
 };
 
 /**
- * What a summary pass recorded about itself. Written from day one so a future
- * "what did a summary cost" display never faces usage that was not recorded,
- * and so a cheaper summariser model can be introduced as a resolver change
- * rather than a schema change (ADR-0041, "Deferred").
+ * What a summary pass recorded about itself. Written from day one so the
+ * divider can show what a summary cost (issue #1733) rather than facing usage
+ * that was not recorded, and so a cheaper summariser model can be introduced as
+ * a resolver change rather than a schema change (ADR-0041, "Deferred").
  */
 export type TranscriptSummaryStats = {
   /**

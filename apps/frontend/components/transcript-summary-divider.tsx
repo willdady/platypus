@@ -2,7 +2,9 @@
 
 import { ChevronRightIcon } from "lucide-react";
 import { useState } from "react";
+import type { TranscriptSummaryStats } from "@platypus/schemas";
 import type { ChatTranscriptSummary } from "@/lib/chat-summary";
+import { formatTokenCount } from "@/lib/token-count";
 import { cn } from "@/lib/utils";
 
 /**
@@ -14,10 +16,37 @@ export const SUMMARY_DIVIDER_TEXT =
   "Older messages were summarised for the assistant. They stay readable above.";
 
 /**
+ * What the summary pass recorded about itself (ADR-0041): the model that wrote
+ * the summary and the vendor's token counts. Both counts at `0` means the
+ * Provider reported no usage, so the counts are left out rather than shown as
+ * a real zero; `triggeredFromOccupancy` is a diagnostic, not a cost, and is
+ * never shown.
+ */
+function SummaryCost({ stats }: { stats: TranscriptSummaryStats }) {
+  const reportedUsage = stats.inputTokens !== 0 || stats.outputTokens !== 0;
+
+  return (
+    <p className="mt-2 text-xs text-muted-foreground">
+      Summarised by {stats.modelId}
+      {reportedUsage && (
+        <>
+          {" · "}
+          {formatTokenCount(stats.inputTokens)} input
+          {" · "}
+          {formatTokenCount(stats.outputTokens)} output tokens
+        </>
+      )}
+    </p>
+  );
+}
+
+/**
  * The expandable divider a **Transcript summary** renders at its anchor
  * (ADR-0041, issue #1716): a quiet line in the Transcript that opens to show
- * the summary text. Every message above it stays fully readable — nothing was
- * deleted, only what the model is sent changed.
+ * the summary text and, when the pass recorded it, what the summary cost —
+ * which model wrote it and the tokens it used (issue #1733). Every message
+ * above it stays fully readable — nothing was deleted, only what the model is
+ * sent changed.
  *
  * A divider, not a message: it sits between two messages on the Active path and
  * is never written to the Transcript.
@@ -49,8 +78,9 @@ export function TranscriptSummaryDivider({
         <span>{SUMMARY_DIVIDER_TEXT}</span>
       </button>
       {open && (
-        <div className="mt-2 whitespace-pre-wrap rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground">
-          {summary.text}
+        <div className="mt-2 rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground">
+          <p className="whitespace-pre-wrap">{summary.text}</p>
+          {summary.stats && <SummaryCost stats={summary.stats} />}
         </div>
       )}
     </div>

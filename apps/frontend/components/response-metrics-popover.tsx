@@ -5,6 +5,7 @@ import type { CachedInputTokens, ChatMessageMetadata } from "@platypus/schemas";
 import { MessageAction } from "./ai-elements/message";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { cachedTokenBreakdown } from "@/lib/cached-tokens";
+import { formatTokenCount } from "@/lib/token-count";
 import { formatToolDuration } from "@/lib/tool-duration";
 import { cn } from "@/lib/utils";
 
@@ -60,10 +61,6 @@ export function responseMetrics(
     modelDurationMs,
     measuredToolDurationMs,
   };
-}
-
-function formatTokenCount(n: number) {
-  return n.toLocaleString();
 }
 
 function MetricRow({ label, value }: { label: string; value: string }) {
