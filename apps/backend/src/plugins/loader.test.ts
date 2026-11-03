@@ -1163,6 +1163,56 @@ describe("loadPlugins — tool gates", () => {
       options,
     );
   });
+
+  it("carries a result stage through and binds the same config block to it", async () => {
+    const evaluateResult = vi.fn(() => ({
+      verdict: "deny" as const,
+      reason: "Screened.",
+    }));
+    const { result, calls } = loadGates(
+      {
+        acme: {
+          ...gateManifest("acme", [{ ...toolGate("g"), evaluateResult }]),
+          credentialsSchema: z.object({ apiKey: z.string() }),
+        },
+      },
+      { PLATYPUS_PLUGIN_CONFIG_ACME: '{"credentials":{"apiKey":"sk-test"}}' },
+    );
+    await result;
+    const call = {
+      toolName: "t",
+      args: {},
+      orgId: "o",
+      workspaceId: "w",
+      attended: false,
+      readOnlyHint: "undeclared" as const,
+    };
+    const options = { signal: new AbortController().signal };
+    await calls[0].evaluateResult?.(call, "the result", options);
+
+    expect(evaluateResult).toHaveBeenCalledWith(
+      call,
+      "the result",
+      {
+        config: undefined,
+        credentials: { apiKey: "sk-test" },
+        logger: A_LOGGER_MATCHER,
+      },
+      options,
+    );
+  });
+
+  it("aborts (fail-loud) when evaluateResult is declared but is not a function", async () => {
+    const { result } = loadGates({
+      acme: gateManifest("acme", [
+        {
+          ...toolGate("g"),
+          evaluateResult: "nope",
+        } as unknown as ToolGateContribution,
+      ]),
+    });
+    await expect(result).rejects.toThrow(/acme.*"g".*evaluateResult/s);
+  });
 });
 
 describe("loadPlugins — deploy-time plugin config injection", () => {

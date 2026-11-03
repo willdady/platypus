@@ -284,6 +284,14 @@ export const toolGatePoint = (
         `Plugin "${pluginName}": tool gate "${rawId}" must provide an "evaluate" function.`,
       );
     }
+    if (
+      contribution.evaluateResult !== undefined &&
+      typeof contribution.evaluateResult !== "function"
+    ) {
+      throw new Error(
+        `Plugin "${pluginName}": tool gate "${rawId}" must provide an "evaluateResult" function when it declares one.`,
+      );
+    }
     assertTimeoutMs(
       contribution.timeoutMs,
       MAX_TOOL_GATE_TIMEOUT_MS,
@@ -292,13 +300,22 @@ export const toolGatePoint = (
   },
   prepare: (raw, { id, plugin }) => {
     const contribution = raw as unknown as ToolGateContribution;
-    // Field by field, and `evaluate` called on the author's own object, for the
-    // same prototype/`this` reason as the sandbox point.
+    // Bound here rather than read off the contribution later: the author's
+    // object is the receiver, and an unbound method loses its `this`.
+    const evaluateResult = contribution.evaluateResult?.bind(contribution);
+    // Field by field, and each factory called on the author's own object, for
+    // the same prototype/`this` reason as the sandbox point.
     return {
       id,
       name: contribution.name,
       timeoutMs: contribution.timeoutMs ?? DEFAULT_TOOL_GATE_TIMEOUT_MS,
       evaluate: (call, options) => contribution.evaluate(call, plugin, options),
+      // Additive and optional: a gate written before the result stage has no
+      // member here, and core registers it exactly as it always did.
+      evaluateResult: evaluateResult
+        ? (call, result, options) =>
+            evaluateResult(call, result, plugin, options)
+        : undefined,
     };
   },
   register: (_id, registration) => register(registration),

@@ -250,15 +250,25 @@ compiles and still works.
 ## Tool gates
 
 A Tool gate sees every tool call the backend runs, before it runs, and returns a
-Verdict: `allow`, `ask` or `deny`, with an optional `reason`. A gate only gates; it
-cannot change a call's arguments or its result. An enabled gate applies to every
-tool call in the deployment, MCP tools included. Tools the Provider runs itself
-(native web search) never reach the backend and are not gated.
+Verdict: `allow`, `ask` or `deny`, with an optional `reason`. A gate may also
+declare `evaluateResult` to see a tool's result before the model does and
+withhold it. A gate only gates; it cannot change a call's arguments and cannot
+rewrite or redact a result. An enabled gate applies to every tool call in the
+deployment, MCP tools included. Tools the Provider runs itself (native web
+search) never reach the backend and are not gated.
 
 Core fails closed. A gate that throws or outruns its `timeoutMs` counts as `ask`.
 With several gates the most restrictive Verdict wins. `ask` stops the call too,
 until core can put the question to the User; a denied call returns the reason to
 the model as a tool error and the run continues.
+
+A Result Verdict is `allow` or `deny`, with an optional `reason`; there is no
+`ask`, because the tool has already run. When the tool throws, the gate is given
+the error's message as the result. `deny`, a throw, a timeout or an answer that
+is not a Result Verdict withholds the result entirely: the model receives a
+tool error naming the gate, and the result is never persisted, streamed or
+recorded. Several result gates run in parallel, any denial wins, and the first
+denying gate's reason is used.
 
 ```ts
 export const plugin: PlatypusPlugin = {
@@ -277,6 +287,11 @@ export const plugin: PlatypusPlugin = {
         evaluate: (call, plugin, { signal }) =>
           JSON.stringify(call.args).includes("DROP TABLE")
             ? { verdict: "deny", reason: "Drops a table." }
+            : { verdict: "allow" },
+        // Optional; sees the normalised result before the model does.
+        evaluateResult: (call, result, plugin, { signal }) =>
+          String(result).includes("IGNORE PREVIOUS INSTRUCTIONS")
+            ? { verdict: "deny", reason: "Looks like a prompt injection." }
             : { verdict: "allow" },
       },
     ],

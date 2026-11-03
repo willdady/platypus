@@ -148,16 +148,16 @@ Plugins come in two tiers:
 **The core Plugins.** This page owns the list; other pages link here rather than
 repeat it.
 
-| Plugin                     | Tier      | Contributes                                                                                                                                    |
-| -------------------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@platypus/tools-basic`    | Always-on | Pure-utility Tool sets — math conversions, time, identifiers.                                                                                  |
-| `@platypus/tools-platform` | Always-on | The Platypus-domain Tool sets — kanban, triggers, memory, notifications, agent discovery/management, skill management.                         |
-| `@platypus/web-fetch`      | Gate-able | The web-fetch Tool set. Its own Plugin so **network egress** can be denied in isolation.                                                       |
-| `@platypus/docker`         | Gate-able | The Docker Sandbox backend. Opt-in infra; also needs the `compose.docker-sandbox.yaml` overlay.                                                |
-| `@platypus/ssh`            | Gate-able | The SSH Sandbox backend — attach to a host you already run. Viable in horizontally-scaled deployments.                                         |
-| `@platypus/daytona`        | Gate-able | The Daytona Sandbox backend — hosted sandboxes on your Daytona account. Viable in horizontally-scaled deployments.                             |
-| `@platypus/exa`            | Gate-able | The Exa Web-search backend — search and page reading through Exa's hosted API. Needs an Exa API key.                                           |
-| `@platypus/decision-gate`  | Gate-able | The decision-model Tool gate — asks a decision model whether each tool call is destructive, and stops it if so. See [Tool gates](#tool-gates). |
+| Plugin                     | Tier      | Contributes                                                                                                                                                                                                           |
+| -------------------------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@platypus/tools-basic`    | Always-on | Pure-utility Tool sets — math conversions, time, identifiers.                                                                                                                                                         |
+| `@platypus/tools-platform` | Always-on | The Platypus-domain Tool sets — kanban, triggers, memory, notifications, agent discovery/management, skill management.                                                                                                |
+| `@platypus/web-fetch`      | Gate-able | The web-fetch Tool set. Its own Plugin so **network egress** can be denied in isolation.                                                                                                                              |
+| `@platypus/docker`         | Gate-able | The Docker Sandbox backend. Opt-in infra; also needs the `compose.docker-sandbox.yaml` overlay.                                                                                                                       |
+| `@platypus/ssh`            | Gate-able | The SSH Sandbox backend — attach to a host you already run. Viable in horizontally-scaled deployments.                                                                                                                |
+| `@platypus/daytona`        | Gate-able | The Daytona Sandbox backend — hosted sandboxes on your Daytona account. Viable in horizontally-scaled deployments.                                                                                                    |
+| `@platypus/exa`            | Gate-able | The Exa Web-search backend — search and page reading through Exa's hosted API. Needs an Exa API key.                                                                                                                  |
+| `@platypus/decision-gate`  | Gate-able | The decision-model Tool gate — asks a decision model whether each tool call is destructive, and, when configured, whether a tool's result carries instructions aimed at the assistant. See [Tool gates](#tool-gates). |
 
 The two always-on Plugins load unconditionally and must not be listed. The six
 gate-able ones load only when named in `PLATYPUS_PLUGINS`. All eight are internal
@@ -370,7 +370,8 @@ one:
 ## Tool gates
 
 A **Tool gate** sees every tool call before it runs and decides whether it may:
-allow it, stop it, or ask for a person to approve it. An enabled gate applies to
+allow it, stop it, or ask for a person to approve it. A gate may also see a
+tool's result before the model does and withhold it. An enabled gate applies to
 every Organization on the deployment, in Chats, Trigger runs, A2A calls and
 Sub-Agent runs, and to MCP tools as well as built-in ones. No Workspace Owner can
 turn it off for their Agents.
@@ -379,30 +380,43 @@ Platypus ships one, off by default:
 
 - **Decision model** — `@platypus/decision-gate`. Asks a decision model one
   question about each call — is it destructive or irreversible? — and stops the
-  call when the model's confidence reaches your threshold. List it in
-  `PLATYPUS_PLUGINS` and give it a model, a key and its thresholds:
+  call when the model's confidence reaches your threshold. Set
+  `resultDenyThreshold` and it also asks whether a tool's result contains
+  instructions directed at the assistant rather than data, withholding the
+  result when it does. List it in `PLATYPUS_PLUGINS` and give it a model, a key
+  and its thresholds:
 
   ```
   PLATYPUS_PLUGINS=@platypus/web-fetch,@platypus/decision-gate
-  PLATYPUS_PLUGIN_CONFIG_DECISION_GATE={"config":{"provider":"gateway","denyThreshold":0.9,"askThreshold":0.6},"credentials":{"apiKey":"your-gateway-api-key"}}
+  PLATYPUS_PLUGIN_CONFIG_DECISION_GATE={"config":{"provider":"gateway","denyThreshold":0.9,"askThreshold":0.6,"resultDenyThreshold":0.8},"credentials":{"apiKey":"your-gateway-api-key"}}
   ```
 
-  | Field           | Required            | Meaning                                                                                              |
-  | --------------- | ------------------- | ---------------------------------------------------------------------------------------------------- |
-  | `provider`      | No                  | `gateway` (the default), `anthropic`, `openai` or `google`.                                          |
-  | `model`         | Except on `gateway` | The decision model's id. On `gateway` it defaults to `typesafe-ai/jev`.                              |
-  | `denyThreshold` | Yes                 | From 0 to 1. A call the model rates at least this likely to be destructive is stopped.               |
-  | `askThreshold`  | No                  | From 0 to 1, no higher than `denyThreshold`. A call rated between the two needs a person's approval. |
-  | `apiKey`        | Yes, in credentials | The key for that provider.                                                                           |
+  | Field                 | Required            | Meaning                                                                                                                                                       |
+  | --------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | `provider`            | No                  | `gateway` (the default), `anthropic`, `openai`, `google` or `openrouter`.                                                                                     |
+  | `model`               | Except on `gateway` | The decision model's id. On `gateway` it defaults to `typesafe-ai/jev`.                                                                                       |
+  | `denyThreshold`       | Yes                 | From 0 to 1. A call the model rates at least this likely to be destructive is stopped.                                                                        |
+  | `askThreshold`        | No                  | From 0 to 1, no higher than `denyThreshold`. A call rated between the two needs a person's approval.                                                          |
+  | `resultDenyThreshold` | No                  | From 0 to 1. A result the model rates at least this likely to contain instructions aimed at the assistant is withheld. Leave it out to skip results entirely. |
+  | `apiKey`              | Yes, in credentials | The key for that provider.                                                                                                                                    |
 
   Without the key or a `denyThreshold`, boot aborts with an error naming the
-  Plugin. Every tool call's arguments are sent to the provider you chose.
+  Plugin. Every tool call's arguments are sent to the provider you chose, and,
+  when `resultDenyThreshold` is set, so is each tool's result. A long result is
+  screened in parts, one model call each, so no part of it goes unscreened.
 
 When a gate stops a call, the tool never runs. The Agent is told the call was
 blocked, by which gate and why, and carries on — it can try something else or
 explain itself. In a Chat the tool's card shows **Denied** with the gate's
 reason; in a Trigger run the call shows on the Run timeline as cancelled, with
 the same reason.
+
+When a gate withholds a result, the tool has already run and its side effects
+stand. A tool's error message counts as its result, since it can carry what the
+tool fetched. The result itself is never stored, streamed to the Chat or recorded on
+the Run timeline; the Agent is told the call ran and its result was withheld, by
+which gate and why. The Chat's tool card shows the error with that reason, and
+the Run timeline closes the call as failed.
 
 <Callout type="warning">
   **A gate fails closed.** A gate that errors or takes longer than its own time
@@ -411,6 +425,7 @@ the same reason.
   therefore stops every tool call in Trigger runs, A2A calls and Sub-Agent runs,
   and turns every tool call in a Chat into a request for approval, until it
   recovers or until you remove the Plugin from `PLATYPUS_PLUGINS` and restart.
+  With `resultDenyThreshold` set, the same outage withholds every tool result.
 </Callout>
 
 **A call a gate wants approved is asked about only in a Chat.** The reply stops

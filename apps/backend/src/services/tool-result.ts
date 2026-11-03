@@ -1,5 +1,10 @@
 import type { Tool } from "ai";
 import { logger } from "../logger.ts";
+import {
+  isAsyncIterable,
+  isThenable,
+  wrapToolExecutes,
+} from "../utils/tool-execution.ts";
 
 /**
  * Coerce a tool result to plain JSON (issue #321).
@@ -67,46 +72,21 @@ export const capToolResult = (value: unknown, toolName: string): unknown => {
  * Wrap every tool in a map so `transform` is applied to its result on the way
  * back to the model.
  *
- * The async-iterable path is exempt: its yields are streamed UI parts, not the
- * value fed to the model.
+ * A streaming tool is exempt: its yields are streamed UI parts, and the model
+ * receives its final value — the last yield — so a plain transform cannot
+ * rewrite one without buffering the whole stream. The Tool gate's result stage,
+ * which does need to see that last yield, handles it explicitly.
  */
 const mapToolResults = (
   tools: Record<string, Tool>,
   transform: (result: unknown, toolName: string) => unknown,
-): Record<string, Tool> => {
-  const wrapped: Record<string, Tool> = {};
-  for (const [name, t] of Object.entries(tools)) {
-    const execute = (t as { execute?: unknown }).execute;
-    if (typeof execute !== "function") {
-      wrapped[name] = t;
-      continue;
-    }
-    const runExecute = execute as (args: unknown, options: unknown) => unknown;
-    wrapped[name] = {
-      ...t,
-      execute: (args: unknown, options: unknown) => {
-        // Called on the tool it came from, so a tool set may write `execute` as
-        // a method reaching sibling state through `this`.
-        const result = runExecute.call(t, args, options);
-        if (
-          result != null &&
-          typeof (result as { then?: unknown }).then === "function"
-        ) {
-          return (result as Promise<unknown>).then((r) => transform(r, name));
-        }
-        if (
-          result != null &&
-          typeof (result as Record<symbol, unknown>)[Symbol.asyncIterator] ===
-            "function"
-        ) {
-          return result;
-        }
-        return transform(result, name);
-      },
-    };
-  }
-  return wrapped;
-};
+): Record<string, Tool> =>
+  wrapToolExecutes(tools, (runExecute, tool, name) => (args, options) => {
+    const result = runExecute.call(tool, args, options);
+    if (isThenable(result)) return result.then((r) => transform(r, name));
+    if (isAsyncIterable(result)) return result;
+    return transform(result, name);
+  });
 
 /**
  * Wrap every tool in a map so its result is normalized on the way back to the

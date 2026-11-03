@@ -783,6 +783,24 @@ export interface ToolGateVerdict {
   reason?: string;
 }
 
+/**
+ * A Tool gate's answer about a tool's **result** (ADR-0033). `allow` hands the
+ * result to the model unchanged. `deny` withholds it entirely: it is never
+ * persisted, streamed or recorded, and the model receives a tool error carrying
+ * `reason`. There is no `ask` — a result that was already produced has nothing
+ * for a person to approve.
+ *
+ * `reason` is what the model, the Chat and the Run timeline are given when you
+ * withhold a result. Give one: core supplies fallback wording only when you do
+ * not, and it cannot say what you found. Write it as a fact about the result,
+ * because the tool has already run and the model must not be left thinking it
+ * did not.
+ */
+export interface ToolResultVerdict {
+  verdict: "allow" | "deny";
+  reason?: string;
+}
+
 /** The per-call options core passes {@link ToolGateContribution.evaluate}. */
 export interface ToolGateOptions {
   /**
@@ -795,7 +813,8 @@ export interface ToolGateOptions {
 /**
  * A Tool gate contribution (ADR-0033): sees every tool call the backend runs,
  * before it runs, and decides whether it may. A gate only gates. It cannot
- * change a call's arguments or its result.
+ * change a call's arguments or its result, though it may withhold a result from
+ * the model — see {@link evaluateResult}.
  *
  * An enabled gate applies to every tool call in every Organization, MCP tools
  * included. Tools the Provider runs itself, such as native web search, never
@@ -803,7 +822,8 @@ export interface ToolGateOptions {
  *
  * Core fails closed. A gate that throws, or doesn't answer within its timeout,
  * counts as `ask`, which stops the call. With several gates the most
- * restrictive answer wins: `deny` over `ask` over `allow`.
+ * restrictive answer wins: `deny` over `ask` over `allow`. A gate that fails
+ * the result stage withholds the result, as if it had denied it.
  */
 export interface ToolGateContribution<
   TPluginConfig = unknown,
@@ -812,9 +832,10 @@ export interface ToolGateContribution<
   id: string;
   name: string;
   /**
-   * How long core waits for {@link evaluate}. Core defaults to 10000 when
-   * absent and refuses at boot anything above its ceiling of 30000. Every
-   * enabled gate adds this much latency to a tool call at worst.
+   * How long core waits for {@link evaluate} and {@link evaluateResult}. Core
+   * defaults to 10000 when absent and refuses at boot anything above its
+   * ceiling of 30000. Every enabled gate adds this much latency to a tool call
+   * at worst, per stage.
    */
   timeoutMs?: number;
   /**
@@ -827,6 +848,31 @@ export interface ToolGateContribution<
     plugin: PluginConfigContext<TPluginConfig, TPluginCredentials>,
     options: ToolGateOptions,
   ): ToolGateVerdict | Promise<ToolGateVerdict>;
+  /**
+   * Judge a tool's result before the model sees it, optionally withholding it.
+   *
+   * A gate that declares this is asked about every locally-executed tool result
+   * in every Drive — Chat turns, Trigger runs, A2A calls, Sub-Agent runs and the
+   * delegation tool's own result — after the result has been normalised. It is
+   * given the same {@link ToolGateCall} the before-call stage sees, plus the
+   * result itself. When the tool throws, `result` is the error's message, the
+   * text the model would otherwise receive.
+   *
+   * `deny`, a throw, a timeout, or an answer that is not a
+   * {@link ToolResultVerdict} withholds the result. The tool has already run,
+   * so its side effects stand; only the value is withheld. Core gives the model
+   * a tool error naming this gate and its reason, and the original result is
+   * never persisted, streamed or recorded.
+   *
+   * Optional. Leave it out and core sends a tool map exactly as it did before
+   * this stage existed.
+   */
+  evaluateResult?(
+    call: ToolGateCall,
+    result: unknown,
+    plugin: PluginConfigContext<TPluginConfig, TPluginCredentials>,
+    options: ToolGateOptions,
+  ): ToolResultVerdict | Promise<ToolResultVerdict>;
 }
 
 /**

@@ -82,3 +82,57 @@ longer holds; the rest of the Decision is unchanged.
   the model sees a refusal rather than the call vanishing from later turns. A
   regenerate leaves the waiting reply as an Alternative, and the same denial
   applies if that Alternative is ever continued.
+
+## Notes: the after-call result stage (2026-11-03)
+
+Added with issue #1255. It replaces the "Before tool call is the only stage"
+consequence above, which no longer holds; the rest of the Decision is unchanged.
+
+- **A gate may also declare `evaluateResult`.** It is asked about every locally
+  executed tool's result before the model sees it: in a Chat turn, a Trigger run,
+  an A2A call, a Sub-Agent run, and for the delegation tool's own result in the
+  parent. It sees the same `ToolGateCall` the before-call stage sees, plus the
+  result as the model would receive it after result normalisation. No
+  credentials, no message history.
+- **A result is gated, never rewritten.** The answer is a Result Verdict:
+  `allow` or `deny`, with an optional reason. There is no `ask`, because a result
+  the tool already produced has nothing a person could approve. Core never
+  redacts, rewrites or annotates a value.
+- **The result stage fails closed.** A gate that throws, outruns the same
+  `timeoutMs` as its before-call stage, or returns anything that is not a Result
+  Verdict counts as `deny`. Several result-evaluating gates run in parallel; any
+  `deny` wins, and the first denying gate in registration order supplies the
+  reason.
+- **A denied result is withheld entirely.** It is never persisted, streamed to
+  the Chat, or recorded on the Run timeline. What is persisted is an ordinary
+  tool error carrying the reason, in the same shape as a tool that threw. The
+  model is told the tool **ran** and its result was withheld by the named gate;
+  a write tool's side effects have already happened, and the wording must not
+  imply otherwise. The Chat tool card shows its existing error state, and the
+  Run timeline closes the tool event as it does for any tool error. No new part
+  state or UI.
+- **The seam is the shared model invocation, as a wrapper on `execute`.** Every
+  Drive builds its model call through `buildModelInvocation`, so the result
+  stage is applied there and no Drive can miss it. A deployment with no
+  result-evaluating gate sends exactly the tools it always did. Provider-executed
+  tools remain ungated: they have no `execute` to wrap, which is the same gap the
+  before-call stage already accepts.
+- **A tool's error is vetted as its result.** A tool that throws reaches the
+  model as a tool error carrying its message, and that message can carry content
+  the tool fetched: a failed Sub-Agent's partial output, an MCP server's error
+  text. Result gates are asked about the message as the result; a denial
+  replaces the error with the gate's reason. A streaming tool that throws
+  releases its last activity yield first, because no yield is its result then.
+- **Tool-result clearing is unaffected.** A withheld result is an ordinary tool
+  error part, so clearing treats it like any other failed call.
+- **The reference gate's result stage is opt-in.** `@platypus/decision-gate`
+  asks its decision model whether the result contains instructions directed at
+  the assistant rather than data, and denies above a new optional
+  `resultDenyThreshold`. Without that field it performs no result evaluation and
+  its before-call stage is unchanged. A contribution's shape is fixed, not read
+  from config, so the plugin declares `evaluateResult` either way: with it
+  enabled but no threshold, core still wraps each tool and a streaming tool's
+  last yield waits one tick for an `allow`. Accepted rather than making
+  contributions depend on config. A long result is asked about in overlapping
+  parts, and the most suspicious part decides, so no instruction goes unscreened
+  by sitting past the first part.
