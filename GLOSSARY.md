@@ -35,6 +35,10 @@ _Avoid_: parsed text, converted file, OCR (Platypus does not OCR).
 **Agent**:
 A configurable preset that pins a Provider, model, Instructions, generation parameters, Tools, Skills, and Sub-Agents. Selecting an Agent on a Chat turn replaces direct Provider/model selection.
 
+**Fallback model**:
+An optional second Provider and model on an **Agent**, which may name one of that Provider's **Model aliases**. Only a **Trigger run** uses it (including a **Sub-Agent** run inside one, which uses the Sub-Agent's own fallback), and only when the primary Provider cannot serve the request: it is unreachable, times out, rate-limits, errors on its own side, or refuses the credentials. It is never used for a request the primary rejected as invalid. A run that switches stays on the fallback until it ends, and every new run tries the primary first. A Chat turn, A2A included, never uses it, because someone is there to retry or pick another model, and switching mid-conversation would throw away the prompt cache.
+_Avoid_: backup model, secondary model, failover model.
+
 **Pinned Agent**:
 An **Agent** the **Workspace Owner** has pinned in one Workspace, listed in its own group above the rest wherever that Workspace lists its Agents. A pin belongs to the Workspace, not to a User: only the Owner can set or clear it, everyone with access sees it, and a Shared Agent pinned in one Workspace is not pinned in another. Detaching a Shared Agent clears its pin there. Display only; it changes nothing about how the Agent runs.
 _Avoid_: favourite Agent, starred Agent (a pin is not per-User).
