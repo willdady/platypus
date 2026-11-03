@@ -17,25 +17,24 @@ export const SUMMARY_DIVIDER_TEXT =
 
 /**
  * What the summary pass recorded about itself (ADR-0041): the model that wrote
- * the summary and the vendor's token counts. Both counts at `0` means the
- * Provider reported no usage, so the counts are left out rather than shown as
- * a real zero; `triggeredFromOccupancy` is a diagnostic, not a cost, and is
- * never shown.
+ * the summary and the vendor's token counts. A count at `0` means the Provider
+ * reported none (ADR-0018), so that count is left out rather than shown as a
+ * real zero; `triggeredFromOccupancy` is a diagnostic, not a cost, and is never
+ * shown.
  */
 function SummaryCost({ stats }: { stats: TranscriptSummaryStats }) {
-  const reportedUsage = stats.inputTokens !== 0 || stats.outputTokens !== 0;
+  const counts: string[] = [];
+  if (stats.inputTokens !== 0) {
+    counts.push(`${formatTokenCount(stats.inputTokens)} input`);
+  }
+  if (stats.outputTokens !== 0) {
+    counts.push(`${formatTokenCount(stats.outputTokens)} output`);
+  }
 
   return (
     <p className="mt-2 text-xs text-muted-foreground">
       Summarised by {stats.modelId}
-      {reportedUsage && (
-        <>
-          {" · "}
-          {formatTokenCount(stats.inputTokens)} input
-          {" · "}
-          {formatTokenCount(stats.outputTokens)} output tokens
-        </>
-      )}
+      {counts.length > 0 && <> · {counts.join(" · ")} tokens</>}
     </p>
   );
 }

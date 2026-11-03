@@ -87,4 +87,19 @@ describe("TranscriptSummaryDivider", () => {
     expect(screen.queryByText(/input/)).not.toBeInTheDocument();
     expect(screen.queryByText(/output tokens/)).not.toBeInTheDocument();
   });
+
+  it("leaves out a single count the provider did not report", () => {
+    render(
+      <TranscriptSummaryDivider
+        summary={summary({ stats: stats({ inputTokens: 0 }) })}
+      />,
+    );
+
+    expand();
+
+    expect(
+      screen.getByText("Summarised by claude-sonnet-4-5 · 678 output tokens"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/input/)).not.toBeInTheDocument();
+  });
 });
