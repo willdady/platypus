@@ -13,7 +13,7 @@ import type {
 } from "@platypuschat/plugin-sdk";
 import {
   DEFAULT_SHELL_TIMEOUT_MS,
-  MAX_SHELL_OUTPUT_BYTES,
+  MAX_DIAGNOSTIC_BYTES,
 } from "../../sandbox/index.ts";
 import { createPosixSandbox } from "../../sandbox/posix.ts";
 import {
@@ -26,6 +26,7 @@ import {
   type SandboxExecOptions,
   type SandboxExecResult,
   type SandboxTransport,
+  type StreamCap,
 } from "../../sandbox/transport.ts";
 import type { SandboxBackend, SandboxContext } from "../../sandbox/types.ts";
 
@@ -411,6 +412,8 @@ class SshSandboxTransport implements SandboxTransport {
       client,
       resolveCmd,
       DEFAULT_SHELL_TIMEOUT_MS,
+      { head: MAX_DIAGNOSTIC_BYTES },
+      { head: MAX_DIAGNOSTIC_BYTES },
     );
     if (res.exitCode !== 0) {
       const detail = res.stderr.toString("utf8").trim() || "unknown error";
@@ -496,8 +499,8 @@ class SshSandboxTransport implements SandboxTransport {
     client: Client,
     command: string,
     timeoutMs: number,
-    stdoutCap: number = MAX_SHELL_OUTPUT_BYTES,
-    stderrCap: number = MAX_SHELL_OUTPUT_BYTES,
+    stdoutCap: StreamCap,
+    stderrCap: StreamCap,
     signal?: AbortSignal,
   ): Promise<SandboxExecResult> {
     return new Promise<SandboxExecResult>((resolve, reject) => {

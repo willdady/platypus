@@ -282,7 +282,7 @@ Available as \`$VAR\` in every \`shellExec\` (may be secrets — pass to program
       : ""
   }
 
-Tool output is bounded. When a response has \`truncated: true\`, narrow your view — \`grep\`, \`head\`, \`tail\`, or a specific \`lineRange\` on \`fsRead\` — rather than re-requesting the same output.${
+Tool output is bounded. When a response has \`truncated: true\`, narrow your view — \`grep\`, \`head\`, \`tail\`, or a specific \`lineRange\` on \`fsRead\` — rather than re-requesting the same output. For a command that prints a lot, redirect its output to a file in the sandbox (e.g. \`build.log\`) and then \`tail\` or \`grep\` that file instead of reading it all.${
     ctx.fsDownloadAvailable
       ? `
 

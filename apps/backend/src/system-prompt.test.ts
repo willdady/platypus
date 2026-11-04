@@ -631,6 +631,17 @@ describe("renderSystemPrompt — sandbox fragment", () => {
     expect(out).toMatch(/truncated/);
   });
 
+  it("steers long output into a file the model can tail or grep", () => {
+    const out = renderSystemPrompt({
+      ...baseCtx(),
+      agent: agentRecord({ toolSetIds: ["sandbox"] }),
+    });
+
+    expect(out).toMatch(/redirect .* to a file/i);
+    expect(out).toMatch(/tail/);
+    expect(out).toMatch(/grep/);
+  });
+
   // Issue #1060: only the Docker backend is rooted at /workspace. SSH and
   // plugin backends resolve their own root, so the prompt names none.
   it("names no fixed root path and steers the model to relative paths", () => {

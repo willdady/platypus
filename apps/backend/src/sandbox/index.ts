@@ -1,13 +1,37 @@
 import { createContributionRegistry } from "../registry/contribution-registry.ts";
+import type { StreamCap } from "./transport.ts";
 import type { SandboxBackendRegistration } from "./types.ts";
 
 // Output bounds, fixed by Platypus and identical across all adapters (ADR-0002).
 // An adapter built on `createPosixSandbox` gets these applied for it — core
 // passes the caps down and sets `truncated` itself. One implementing
 // `SandboxBackend` directly MUST truncate to them and set the flag on its own.
-export const MAX_SHELL_OUTPUT_BYTES = 100_000;
+//
+// A shell stream over its budget keeps both ends: the start is the command's
+// setup and the end is where builds report errors, test runs summarise, and
+// stack traces land. The tail gets the larger share for that reason, and the
+// omitted-bytes marker between them does not count towards the budget.
+export const MAX_SHELL_OUTPUT_BYTES = 30_000;
+export const SHELL_OUTPUT_HEAD_BYTES = 10_000;
+// Written out rather than derived so the docs-contract test can read it; the
+// two must add up to MAX_SHELL_OUTPUT_BYTES, which index.test.ts checks.
+export const SHELL_OUTPUT_TAIL_BYTES = 20_000;
+
+// The one head+tail budget `shellExec` hands a transport, so re-balancing the
+// split is a change here rather than at every call site.
+export const SHELL_STREAM_CAP: StreamCap = {
+  head: SHELL_OUTPUT_HEAD_BYTES,
+  tail: SHELL_OUTPUT_TAIL_BYTES,
+};
+
 export const MAX_READ_BYTES = 1_000_000;
 export const MAX_LIST_ENTRIES = 1_000;
+
+// Stderr from a helper command — the error text behind a failed `fs.list` or
+// read — is kept for its message, not handed to the model as output. It gets its
+// own bound so the shell-stream budget can move without changing how much of a
+// failure message survives.
+export const MAX_DIAGNOSTIC_BYTES = 100_000;
 
 // Byte cap on the raw `find` output behind `fs.list`. Larger than
 // MAX_SHELL_OUTPUT_BYTES because a recursive listing of up to MAX_LIST_ENTRIES

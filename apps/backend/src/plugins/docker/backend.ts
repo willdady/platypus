@@ -8,7 +8,7 @@ import type {
   PluginLogger,
 } from "@platypuschat/plugin-sdk";
 import {
-  MAX_SHELL_OUTPUT_BYTES,
+  MAX_DIAGNOSTIC_BYTES,
   SANDBOX_WORKSPACE_ROOT,
 } from "../../sandbox/index.ts";
 import { createPosixSandbox } from "../../sandbox/posix.ts";
@@ -20,6 +20,7 @@ import {
   type SandboxExecOptions,
   type SandboxExecResult,
   type SandboxTransport,
+  type StreamCap,
 } from "../../sandbox/transport.ts";
 import type { SandboxBackend, SandboxContext } from "../../sandbox/types.ts";
 import { errorMessage } from "../../utils/error-message.ts";
@@ -351,8 +352,8 @@ async function runExec(
     workingDir?: string;
     env?: Record<string, string>;
     timeoutMs?: number;
-    stdoutCap?: number;
-    stderrCap?: number;
+    stdoutCap?: StreamCap;
+    stderrCap?: StreamCap;
     signal?: AbortSignal;
     log: ExecLog;
     /** Kill the command in the container if it does not finish. Default true. */
@@ -402,10 +403,10 @@ async function runExec(
   }
 
   const stdoutSink = createCappedSink(
-    opts.stdoutCap ?? Number.POSITIVE_INFINITY,
+    opts.stdoutCap ?? { head: Number.POSITIVE_INFINITY },
   );
   const stderrSink = createCappedSink(
-    opts.stderrCap ?? Number.POSITIVE_INFINITY,
+    opts.stderrCap ?? { head: Number.POSITIVE_INFINITY },
   );
 
   const stdoutPass = new PassThrough();
@@ -694,8 +695,8 @@ class DockerSandboxTransport implements SandboxTransport {
       {
         workingDir: SANDBOX_WORKSPACE_ROOT,
         timeoutMs: READ_TIMEOUT_MS,
-        stdoutCap: cap,
-        stderrCap: MAX_SHELL_OUTPUT_BYTES,
+        stdoutCap: { head: cap },
+        stderrCap: { head: MAX_DIAGNOSTIC_BYTES },
         signal,
         log: this.execLog(ctx),
       },

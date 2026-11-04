@@ -55,12 +55,19 @@ things exposes the extra through a
 - **`fsRead` decodes strict UTF-8.** Fail on a file that isn't valid UTF-8
   rather than decode it lossily. `lineRange` is 1-indexed and inclusive.
 - **Three of the five tool responses carry a `truncated` flag** —
-  `shellExec`, `fsRead` and `fsList`. The caps are **100,000 bytes** per
+  `shellExec`, `fsRead` and `fsList`. The caps are **30,000 bytes** per
   `shellExec` stream (stdout and stderr each), **1,000,000 bytes** per `fsRead`
-  file and **1,000 entries** per `fsList`. Set the flag when output reaches a
-  byte cap — output exactly at the cap counts — or when a listing had more
-  entries than the cap. Truncate yourself if your environment can't honour a cap
-  natively. `fsWrite` and `fsEdit` have no such flag; there is nothing to cut.
+  file and **1,000 entries** per `fsList`. A cut `shellExec` stream also gains
+  one marker line naming what was dropped, and that line does not count towards
+  the cap. Set the flag when output reaches a byte cap — output exactly at the
+  cap counts — or when a listing had more entries than the cap. A `shellExec`
+  stream over its cap keeps the first **10,000 bytes** and the last **20,000
+  bytes**, separated by the marker — `[… 184,213 bytes omitted …]`, for example.
+  If you truncate yourself, keep both ends and insert that marker line: a
+  build's errors, a test run's summary and a stack trace are at the end.
+  `fsRead` and `fsList` keep only the start of the output, because the beginning
+  of a file or a listing is the part worth keeping. `fsWrite` and `fsEdit` have
+  no such flag; there is nothing to cut.
 - **`destroy` must be idempotent.** It fires on row delete, on a backend change,
   and best-effort when a Workspace is deleted, including each Workspace an
   Organization delete removes. Forcing the delete or the backend change skips

@@ -35,10 +35,10 @@ export interface SandboxExecOptions {
   env?: Record<string, string>;
   /** Wall-clock budget. Core has already clamped it to the Platypus maximum. */
   timeoutMs: number;
-  /** Stop accumulating stdout past this many bytes (keep draining). */
-  stdoutCap: number;
-  /** Stop accumulating stderr past this many bytes (keep draining). */
-  stderrCap: number;
+  /** Stop accumulating stdout past this budget (keep draining). */
+  stdoutCap: StreamCap;
+  /** Stop accumulating stderr past this budget (keep draining). */
+  stderrCap: StreamCap;
   /**
    * Fires when core has stopped waiting for this command — the turn was
    * cancelled, or the run hit a timeout.
@@ -76,6 +76,109 @@ export interface SandboxExecResult {
 }
 
 /**
+ * How much of one captured stream to keep. A stream that outgrows the budget
+ * keeps `head` bytes from its start and, when `tail` is set, `tail` bytes from
+ * its end; what lies between is dropped and counted in a marker line.
+ * Omit `tail` for a head-only cut — the right shape for a file read or a
+ * listing, where the beginning is the only part that means anything.
+ */
+export interface StreamCap {
+  /** Bytes kept from the start of the stream. */
+  head: number;
+  /** Bytes kept from the end of the stream. Omitted for a head-only cut. */
+  tail?: number;
+}
+
+const isContinuationByte = (byte: number): boolean => (byte & 0xc0) === 0x80;
+
+/** Length of the UTF-8 sequence `byte` leads, or 0 when it leads none. */
+const utf8SequenceLength = (byte: number): number => {
+  if (byte < 0x80) return 1;
+  if ((byte & 0xe0) === 0xc0) return 2;
+  if ((byte & 0xf0) === 0xe0) return 3;
+  if ((byte & 0xf8) === 0xf0) return 4;
+  return 0;
+};
+
+/**
+ * How much of `bytes` ends on a UTF-8 character boundary. A sequence straddling
+ * the cut is dropped whole: half a character decodes to U+FFFD, which is a
+ * byte the command never produced.
+ */
+const utf8HeadEnd = (bytes: Buffer): number => {
+  // A sequence is at most 4 bytes, so only the last 4 can start one that the
+  // cut splits.
+  for (let back = 1; back <= 4 && back <= bytes.length; back++) {
+    const start = bytes.length - back;
+    const byte = bytes.readUInt8(start);
+    if (isContinuationByte(byte)) continue;
+    const length = utf8SequenceLength(byte);
+    if (length === 0) return bytes.length; // not UTF-8: nothing to protect
+    return start + length <= bytes.length ? bytes.length : start;
+  }
+  return bytes.length;
+};
+
+/**
+ * How much of `bytes` to skip so what remains starts on a UTF-8 character
+ * boundary. A tail cut lands mid-sequence, so its leading continuation bytes
+ * belong to a character the head already dropped (or omits).
+ *
+ * A UTF-8 sequence has at most 3 continuation bytes, so the skip is bounded at
+ * 3. Unbounded, a binary tail — arbitrary bytes, often a long 0x80–0xBF run —
+ * could be swallowed whole, leaving the stitched output under the budget; core
+ * reads that as `truncated: false` and a cut goes unreported.
+ */
+const utf8TailStart = (bytes: Buffer): number => {
+  let start = 0;
+  while (
+    start < 3 &&
+    start < bytes.length &&
+    isContinuationByte(bytes.readUInt8(start))
+  )
+    start++;
+  return start;
+};
+
+/**
+ * A bounded ring that keeps the last `capacity` bytes written to it. Chunks
+ * are copied in, so nothing outside the ring is kept alive by a view.
+ */
+const createTailBuffer = (capacity: number) => {
+  const buffer = Buffer.allocUnsafe(capacity);
+  let write = 0;
+  let filled = 0;
+
+  return {
+    push(chunk: Buffer): void {
+      if (buffer.length === 0 || chunk.length === 0) return;
+      // A chunk larger than the whole ring can only contribute its own tail.
+      const bytes =
+        chunk.length > buffer.length
+          ? chunk.subarray(chunk.length - buffer.length)
+          : chunk;
+      const first = Math.min(bytes.length, buffer.length - write);
+      bytes.copy(buffer, write, 0, first);
+      if (first < bytes.length) bytes.copy(buffer, 0, first);
+      write = (write + bytes.length) % buffer.length;
+      filled = Math.min(buffer.length, filled + bytes.length);
+    },
+    toBuffer(): Buffer {
+      if (filled < buffer.length) return buffer.subarray(0, filled);
+      return Buffer.concat([buffer.subarray(write), buffer.subarray(0, write)]);
+    },
+  };
+};
+
+/**
+ * The one line that stands in for output a sink dropped. Counted in bytes, not
+ * characters, and formatted for a model to read at a glance. It is deliberately
+ * outside the budget: the marker is how a cut stays visible.
+ */
+const omittedMarker = (bytes: number): string =>
+  `\n[… ${bytes.toLocaleString("en-US")} bytes omitted …]\n`;
+
+/**
  * A byte-capped output accumulator, for the `stdoutCap` / `stderrCap` half of
  * {@link SandboxExecOptions}.
  *
@@ -85,20 +188,60 @@ export interface SandboxExecResult {
  * underlying stream still drains. A transport that instead unsubscribed at the
  * cap would leave the command blocked on a full pipe, and the failure would look
  * like a hang rather than a truncation.
+ *
+ * With a `tail`, memory stays bounded at `head + tail` however large the
+ * output: the head is clipped as it arrives and the tail rolls through a fixed
+ * ring. What comes back is the head, a marker naming the omitted byte count, and
+ * the tail — the end of a build log, a test summary or a stack trace is usually
+ * the part worth keeping.
  */
-export const createCappedSink = (cap: number) => {
-  const chunks: Buffer[] = [];
-  let bytes = 0;
+export const createCappedSink = (cap: StreamCap) => {
+  const headChunks: Buffer[] = [];
+  let headBytes = 0;
+  const tailCapacity = cap.tail ?? 0;
+  const keepTail = cap.tail !== undefined;
+  const tail = createTailBuffer(tailCapacity);
+  let totalBytes = 0;
+
   return {
     push(chunk: Buffer): void {
-      if (bytes >= cap) return;
-      const room = cap - bytes;
-      const take = chunk.length <= room ? chunk : chunk.subarray(0, room);
-      chunks.push(take);
-      bytes += take.length;
+      totalBytes += chunk.length;
+      if (headBytes < cap.head) {
+        const room = cap.head - headBytes;
+        const taken = chunk.length <= room ? chunk : chunk.subarray(0, room);
+        // A clipped chunk is copied so the sink never pins the caller's larger
+        // buffer; a whole one is owned outright.
+        headChunks.push(taken === chunk ? taken : Buffer.from(taken));
+        headBytes += taken.length;
+      }
+      if (keepTail) tail.push(chunk);
     },
     collect(): Buffer {
-      return Buffer.concat(chunks);
+      const head = Buffer.concat(headChunks);
+      if (!keepTail) return head;
+
+      const tailBytes = tail.toBuffer();
+      const budget = cap.head + tailCapacity;
+      if (totalBytes <= budget) {
+        // Under the budget, the two windows together cover the whole stream —
+        // overlapping in the middle — so reconstruct it rather than cut.
+        if (totalBytes <= headBytes) return head;
+        const tailStart = totalBytes - tailBytes.length;
+        return Buffer.concat([
+          head,
+          tailBytes.subarray(Math.max(0, headBytes - tailStart)),
+        ]);
+      }
+
+      const keptHead = head.subarray(0, utf8HeadEnd(head));
+      const keptTail = tailBytes.subarray(utf8TailStart(tailBytes));
+      return Buffer.concat([
+        keptHead,
+        Buffer.from(
+          omittedMarker(totalBytes - keptHead.length - keptTail.length),
+        ),
+        keptTail,
+      ]);
     },
   };
 };

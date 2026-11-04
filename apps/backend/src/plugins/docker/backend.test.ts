@@ -324,6 +324,8 @@ import {
   MAX_READ_BYTES,
   MAX_SHELL_OUTPUT_BYTES,
   SANDBOX_WORKSPACE_ROOT,
+  SHELL_OUTPUT_HEAD_BYTES,
+  SHELL_OUTPUT_TAIL_BYTES,
 } from "../../sandbox/index.ts";
 import { buildFindArgs } from "../../sandbox/posix.ts";
 import type {
@@ -946,7 +948,7 @@ describe("DockerSandboxTransport — shellExec output handling", () => {
     ).rejects.toThrow(/cancelled/i);
   });
 
-  it("caps stdout at MAX_SHELL_OUTPUT_BYTES and flags truncated", async () => {
+  it("keeps the head and tail of stdout over MAX_SHELL_OUTPUT_BYTES and flags truncated", async () => {
     setupFreshProvision();
     const huge = "a".repeat(MAX_SHELL_OUTPUT_BYTES + 5_000);
     queueExec({ stdout: huge, exitCode: 0 });
@@ -954,7 +956,11 @@ describe("DockerSandboxTransport — shellExec output handling", () => {
     const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
     const res = await backend.shellExec(ctx, { command: "yes" }, callOptions);
 
-    expect(res.stdout.length).toBe(MAX_SHELL_OUTPUT_BYTES);
+    expect(res.stdout.startsWith("a".repeat(SHELL_OUTPUT_HEAD_BYTES))).toBe(
+      true,
+    );
+    expect(res.stdout.endsWith("a".repeat(SHELL_OUTPUT_TAIL_BYTES))).toBe(true);
+    expect(res.stdout).toContain("bytes omitted");
     expect(res.truncated).toBe(true);
   });
 });
