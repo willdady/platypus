@@ -1,4 +1,9 @@
 import { describe, expect, it } from "vitest";
+import {
+  MAX_SHELL_OUTPUT_BYTES,
+  SHELL_OUTPUT_HEAD_BYTES,
+  SHELL_OUTPUT_TAIL_BYTES,
+} from "./index.ts";
 import { createCappedSink } from "./transport.ts";
 
 // The byte-capped sink is a contract helper every adapter streams through, so
@@ -70,6 +75,24 @@ describe("createCappedSink", () => {
     expect(text).not.toContain("\uFFFD");
     expect(text.startsWith(`xx\n${marker(1_000 + 4 - 2 - 1)}\n`)).toBe(true);
     expect(text.endsWith("\ny")).toBe(true);
+  });
+
+  it("does not shrink a binary cut below its budget", () => {
+    // 0x80–0xBF are UTF-8 continuation bytes, and binary output is full of
+    // them. A cut can land at most 3 bytes into a sequence, so the tail skip
+    // must stop there. Skipping a whole continuation run leaves a cut stream
+    // under its budget, and core's `>=` rule then reports it complete.
+    const out = collect(
+      { head: SHELL_OUTPUT_HEAD_BYTES, tail: SHELL_OUTPUT_TAIL_BYTES },
+      Buffer.concat([
+        Buffer.from("a".repeat(SHELL_OUTPUT_HEAD_BYTES)),
+        // One byte over the budget, so this reaches the cut path rather than
+        // the under-budget reconstruction.
+        Buffer.alloc(SHELL_OUTPUT_TAIL_BYTES + 1, 0x80),
+      ]),
+    );
+
+    expect(out.length).toBeGreaterThanOrEqual(MAX_SHELL_OUTPUT_BYTES);
   });
 
   it("keeps memory bounded by the budget over a multi-megabyte stream", () => {

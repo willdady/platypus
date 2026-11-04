@@ -123,10 +123,19 @@ const utf8HeadEnd = (bytes: Buffer): number => {
  * How much of `bytes` to skip so what remains starts on a UTF-8 character
  * boundary. A tail cut lands mid-sequence, so its leading continuation bytes
  * belong to a character the head already dropped (or omits).
+ *
+ * A UTF-8 sequence has at most 3 continuation bytes, so the skip is bounded at
+ * 3. Unbounded, a binary tail — arbitrary bytes, often a long 0x80–0xBF run —
+ * could be swallowed whole, leaving the stitched output under the budget; core
+ * reads that as `truncated: false` and a cut goes unreported.
  */
 const utf8TailStart = (bytes: Buffer): number => {
   let start = 0;
-  while (start < bytes.length && isContinuationByte(bytes.readUInt8(start)))
+  while (
+    start < 3 &&
+    start < bytes.length &&
+    isContinuationByte(bytes.readUInt8(start))
+  )
     start++;
   return start;
 };
