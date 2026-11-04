@@ -10,10 +10,28 @@ import {
 } from "../test-utils.ts";
 import app from "../server.ts";
 
+// Fakes the completion at the SDK boundary, as in `provider.test.ts`: the
+// Organization route's own work — admin guard, validation, opening the vendor
+// client — runs for real. File-local because the `ai` mock factory must be in
+// place before `ai` is first imported.
+const { mockGenerateText, mockCreateOpenAI } = vi.hoisted(() => ({
+  mockGenerateText: vi.fn(),
+  mockCreateOpenAI: vi.fn(
+    (_config: Record<string, unknown>) => (modelId: string) => ({ modelId }),
+  ),
+}));
+
+vi.mock("ai", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("ai")>();
+  return { ...actual, generateText: mockGenerateText };
+});
+vi.mock("@ai-sdk/openai", () => ({ createOpenAI: mockCreateOpenAI }));
+
 describe("Organization Provider Routes", () => {
   beforeEach(() => {
     resetMockDb();
     vi.clearAllMocks();
+    mockGenerateText.mockReset();
   });
 
   const orgId = "org-1";
@@ -380,6 +398,68 @@ describe("Organization Provider Routes", () => {
 
       expect(res.status).toBe(403);
       expect(idsOf(fake)).toContain("p1");
+    });
+  });
+
+  describe("POST /test", () => {
+    const testBody = {
+      name: "Org OpenAI",
+      providerType: "OpenAI",
+      apiKey: "sk-unsaved",
+      apiMode: "responses",
+      modelIds: [{ id: "gpt-4", passthroughFileTypes: [] }],
+      modelId: "gpt-4",
+    };
+
+    const probe = () => app.request(`${baseUrl}/test`, json("POST", testBody));
+
+    it("tests the unsaved config without needing a stored Provider", async () => {
+      mockSession();
+      world("admin");
+      mockGenerateText.mockResolvedValue({ text: "ok" });
+
+      const res = await probe();
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({
+        success: true,
+        modelId: "gpt-4",
+        sessionIdSubstituted: false,
+      });
+      // Taken exactly as sent: nothing is resolved against a stored row.
+      expect(mockCreateOpenAI.mock.calls.at(-1)?.[0]).toEqual(
+        expect.objectContaining({ apiKey: "sk-unsaved" }),
+      );
+    });
+
+    it("returns 403 for a non-admin", async () => {
+      mockSession();
+      world("member");
+
+      const res = await probe();
+
+      expect(res.status).toBe(403);
+      expect(mockGenerateText).not.toHaveBeenCalled();
+    });
+
+    it("returns 403 for a caller outside the Organization", async () => {
+      mockSession();
+      // An Admin of another Organization sees nothing here.
+      world("admin", {
+        organization_member: [
+          {
+            id: "m1",
+            userId: "user-1",
+            organizationId: "org-2",
+            role: "admin",
+          },
+        ],
+      });
+
+      const res = await probe();
+
+      expect(res.status).toBe(403);
+      expect(mockGenerateText).not.toHaveBeenCalled();
     });
   });
 });

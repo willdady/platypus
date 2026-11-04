@@ -21,6 +21,7 @@
         "$TURBO_ROOT$/apps/backend/src/runs/trigger-timeouts.ts",
         "$TURBO_ROOT$/apps/backend/src/runs/chat-timeouts.ts",
         "$TURBO_ROOT$/apps/backend/src/services/trigger-breaker.ts",
+        "$TURBO_ROOT$/apps/backend/src/services/provider-connection.ts",
         "$TURBO_ROOT$/apps/backend/src/services/a2a-call.ts",
         "$TURBO_ROOT$/apps/backend/src/services/memory-retrieval.ts",
         "$TURBO_ROOT$/apps/backend/src/services/file-extraction.ts",

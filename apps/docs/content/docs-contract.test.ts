@@ -2023,6 +2023,13 @@ const BACKEND_CONSTANTS = [
     cost: "A reader attaching a large PDF is refused at a size the page never warned of.",
   },
   {
+    source: "apps/backend/src/services/provider-connection.ts",
+    name: "PROVIDER_TEST_TIMEOUT_MS",
+    phrase: (ms: number) => `**${ms / 1_000} seconds**`,
+    files: ["concepts/providers.mdx"],
+    cost: "A reader waiting on a slow Provider takes a hang for a slow answer when the page said the test gives up sooner.",
+  },
+  {
     source: "apps/backend/src/storage/utils.ts",
     name: "MAX_INLINE_FILE_BYTES",
     phrase: (bytes: number) => `**${bytes / 1024 / 1024} MiB**`,

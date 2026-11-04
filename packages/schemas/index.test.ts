@@ -51,6 +51,8 @@ import {
   SANDBOX_ENV_MAX_VALUE_BYTES,
   providerCreateSchema,
   providerUpdateSchema,
+  providerTestSchema,
+  providerTestResponseSchema,
   providerSchema,
   providerResponseSchema,
   mcpResponseSchema,
@@ -930,6 +932,97 @@ describe("Provider Create Schema", () => {
         webBackend: "acme.searx",
       }).success,
     ).toBe(false);
+  });
+});
+
+describe("Provider Test Schema", () => {
+  const baseTest = {
+    providerType: "OpenAI" as const,
+    apiKey: "sk-test",
+    apiMode: "responses" as const,
+    modelIds: [{ id: "gpt-4", passthroughFileTypes: [] }],
+    modelId: "gpt-4",
+  };
+
+  it("requires the model being tested", () => {
+    const { modelId: _, ...without } = baseTest;
+    expect(providerTestSchema.safeParse(without).success).toBe(false);
+    expect(
+      providerTestSchema.safeParse({ ...baseTest, modelId: "" }).success,
+    ).toBe(false);
+  });
+
+  it("does not demand the save-only settings a half-filled form lacks", () => {
+    // Name, Web search and the task/memory/embedding models are not read by
+    // the probe, so requiring them would make a form that is not yet savable
+    // untestable — exactly when a test is most useful.
+    expect(providerTestSchema.safeParse(baseTest).success).toBe(true);
+  });
+
+  it("keeps the create rules for every field the probe opens with", () => {
+    for (const field of [
+      "providerType",
+      "apiKey",
+      "apiMode",
+      "modelIds",
+    ] as const) {
+      const { [field]: _, ...without } = baseTest;
+      expect(providerTestSchema.safeParse(without).success).toBe(false);
+    }
+    // Name is optional, but a supplied one is held to the same length rule.
+    expect(
+      providerTestSchema.safeParse({ ...baseTest, name: "AB" }).success,
+    ).toBe(false);
+    // The picked header field keeps the create rule too.
+    expect(
+      providerTestSchema.safeParse({
+        ...baseTest,
+        headers: { "x-session": "sess-${SESSION_ID}" },
+      }).success,
+    ).toBe(true);
+  });
+
+  it("rejects an unknown key and a scope the body must not choose", () => {
+    expect(
+      providerTestSchema.safeParse({ ...baseTest, workspaceId: "ws-1" })
+        .success,
+    ).toBe(false);
+    // A save-only field is not part of a test's request.
+    expect(
+      providerTestSchema.safeParse({ ...baseTest, taskModelId: "gpt-4" })
+        .success,
+    ).toBe(false);
+  });
+
+  it("accepts each failure class on a failed result", () => {
+    for (const failureClass of [
+      "api-key-rejected",
+      "model-not-available",
+      "api-mode-wrong",
+      "base-url-unreachable",
+      "rate-limited",
+      "unknown",
+    ]) {
+      expect(
+        providerTestResponseSchema.safeParse({
+          success: false,
+          modelId: "gpt-4",
+          failureClass,
+          message: "vendor said no",
+          sessionIdSubstituted: false,
+        }).success,
+      ).toBe(true);
+    }
+  });
+
+  it("accepts a successful result with no failure fields", () => {
+    expect(
+      providerTestResponseSchema.safeParse({
+        success: true,
+        modelId: "gpt-4",
+        sessionIdSubstituted: true,
+      }).success,
+    ).toBe(true);
   });
 });
 

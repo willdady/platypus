@@ -63,6 +63,25 @@ export type ProviderRequestContext = {
 };
 
 /**
+ * What opening a Provider reads: the connection settings and the identity the
+ * vendor SDK is named after. Narrower than the stored row on purpose, so a
+ * config a route validated but never stored — the Provider form's unsaved
+ * values sent to `/providers/test` — is opened directly, rather than a
+ * synthetic row being invented to satisfy a type.
+ */
+export type ProviderConnection = Pick<
+  ProviderRow,
+  "name" | "providerType" | "apiKey" | "apiMode"
+> & {
+  region?: string | null;
+  baseUrl?: string | null;
+  headers?: Record<string, string> | null;
+  extraBody?: Record<string, unknown> | null;
+  organization?: string | null;
+  project?: string | null;
+};
+
+/**
  * A Provider's custom headers with every `${SESSION_ID}` in a **value**
  * replaced. Names are never substituted. A `$` not followed by `{` is sent as
  * written, and Providers with no placeholder are passed through unchanged.
@@ -152,7 +171,7 @@ export const compatProviderOptionsName = (
 ): string => provider.name.replace(/\..*/s, "").trim();
 
 export const openProvider = (
-  provider: ProviderRow,
+  provider: ProviderConnection,
   request: ProviderRequestContext,
 ): OpenedProvider => {
   const headers = resolveSessionHeaders(provider.headers, request);

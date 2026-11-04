@@ -2821,6 +2821,74 @@ export const providerCreateSchema = strictRequest(
   }),
 );
 
+/**
+ * Why a Provider's Test action failed, as a class the UI can explain: the
+ * Provider's own message arrives alongside it, verbatim, so the class says what
+ * to fix and the message says what the vendor said.
+ */
+export const providerTestFailureClassSchema = z.enum([
+  "api-key-rejected",
+  "model-not-available",
+  "api-mode-wrong",
+  "base-url-unreachable",
+  "rate-limited",
+  "unknown",
+]);
+export type ProviderTestFailureClass = z.infer<
+  typeof providerTestFailureClassSchema
+>;
+
+/**
+ * Testing one model from the Provider form. It carries only the fields opening
+ * the connection reads: the save-only settings — Web search, the task, memory
+ * and embedding models, guardrails — are not needed to answer, and requiring
+ * them would make a half-filled form untestable. Name is optional for the same
+ * reason; when present it keeps the create rule. Built by `.pick()`ing
+ * `providerCreateSchema` so the field definitions cannot drift.
+ */
+export const providerTestSchema = strictRequest(
+  providerCreateSchema
+    .pick({
+      providerType: true,
+      apiKey: true,
+      region: true,
+      baseUrl: true,
+      headers: true,
+      extraBody: true,
+      organization: true,
+      project: true,
+      apiMode: true,
+      modelIds: true,
+    })
+    .extend({
+      name: providerCreateSchema.shape.name.optional(),
+      modelId: z.string().min(1),
+    }),
+);
+export type ProviderTest = z.infer<typeof providerTestSchema>;
+
+/**
+ * The Test action's result. A failing test is still a completed request — the
+ * class is the outcome, not an HTTP error — so both arms are a 200. Every arm
+ * names the model that was tested, and says whether a `${SESSION_ID}` header
+ * placeholder was replaced with the fixed test id.
+ */
+export const providerTestResponseSchema = z.discriminatedUnion("success", [
+  z.object({
+    success: z.literal(true),
+    modelId: z.string(),
+    sessionIdSubstituted: z.boolean(),
+  }),
+  z.object({
+    success: z.literal(false),
+    modelId: z.string(),
+    failureClass: providerTestFailureClassSchema,
+    message: z.string(),
+    sessionIdSubstituted: z.boolean(),
+  }),
+]);
+export type ProviderTestResponse = z.infer<typeof providerTestResponseSchema>;
+
 // Sandbox
 
 // Workspace-default environment variables merged into every sandbox shell.exec

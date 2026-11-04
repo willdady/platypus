@@ -9,12 +9,14 @@ import {
 import type { Provider } from "@platypus/schemas";
 import {
   authMock,
+  authState,
   swrMock,
   setData,
   setDataFor,
   setError,
   resetFormHarness,
   stubAcceptedSave,
+  stubPendingSave,
   stubRejectedSave,
   savedBody,
 } from "@/test/form-test-harness";
@@ -220,6 +222,9 @@ describe("ProviderForm model cards", () => {
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Remove model gpt-4o" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Test model gpt-4o" }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Add model" }),
@@ -1011,6 +1016,254 @@ describe("ProviderForm Web search selector", () => {
       expect(savedBody(fetchMock).searchSource).toBe(searchSource);
     },
   );
+});
+
+describe("ProviderForm Test action", () => {
+  const SUCCESS = {
+    success: true,
+    modelId: "gpt-4o",
+    sessionIdSubstituted: false,
+  };
+
+  const testButton = (id: string) =>
+    screen.getByRole("button", { name: `Test model ${id}` });
+
+  it("shows the result inline on the card that was tested", async () => {
+    stubAcceptedSave(SUCCESS);
+    renderEditForm([
+      { id: "gpt-4o", passthroughFileTypes: [] },
+      { id: "o3", passthroughFileTypes: [] },
+    ]);
+
+    fireEvent.click(testButton("gpt-4o"));
+
+    expect(
+      await within(modelCard("gpt-4o")).findByText("Connection successful"),
+    ).toBeInTheDocument();
+    expect(
+      within(modelCard("o3")).queryByText("Connection successful"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("sends only the connection fields and the model to test", async () => {
+    const fetchMock = stubAcceptedSave(SUCCESS);
+    renderEditForm([{ id: "gpt-4o", passthroughFileTypes: [] }]);
+
+    fireEvent.change(screen.getByLabelText("Base URL"), {
+      target: { value: "https://unsaved.example/v1" },
+    });
+    fireEvent.click(testButton("gpt-4o"));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const [url, init] = fetchMock.mock.calls.at(-1) as [string, RequestInit];
+    expect(url).toBe("http://test/organizations/org1/providers/test");
+    const body = JSON.parse(init.body as string) as Record<string, unknown>;
+    expect(body).toEqual(
+      expect.objectContaining({
+        apiKey: "sk-test",
+        baseUrl: "https://unsaved.example/v1",
+        modelId: "gpt-4o",
+      }),
+    );
+    // Save-only settings are not part of a test request, so a form that is not
+    // yet savable can still be tested.
+    expect(body).not.toHaveProperty("taskModelId");
+    expect(body).not.toHaveProperty("memoryExtractionModelId");
+    expect(body).not.toHaveProperty("searchSource");
+  });
+
+  it("reports a request the API refused as not run, not as a Provider error", async () => {
+    // A half-filled form can fail validation before the Provider is contacted.
+    stubRejectedSave([{ path: ["apiKey"], message: "API key is required" }]);
+    renderEditForm([{ id: "gpt-4o", passthroughFileTypes: [] }]);
+
+    fireEvent.click(testButton("gpt-4o"));
+
+    const card = modelCard("gpt-4o");
+    expect(
+      await within(card).findByText("Could not run the test"),
+    ).toBeInTheDocument();
+    expect(within(card).getByText("API key is required")).toBeInTheDocument();
+    expect(within(card).queryByText("Unknown error")).not.toBeInTheDocument();
+  });
+
+  it("reports a failed test as its class, with the Provider's message", async () => {
+    stubAcceptedSave({
+      success: false,
+      modelId: "gpt-4o",
+      failureClass: "api-key-rejected",
+      message: "Incorrect API key provided: sk-test.",
+      sessionIdSubstituted: false,
+    });
+    renderEditForm([{ id: "gpt-4o", passthroughFileTypes: [] }]);
+
+    fireEvent.click(testButton("gpt-4o"));
+
+    const card = modelCard("gpt-4o");
+    expect(
+      await within(card).findByText("API key rejected"),
+    ).toBeInTheDocument();
+    expect(
+      within(card).getByText("Incorrect API key provided: sk-test."),
+    ).toBeInTheDocument();
+  });
+
+  it("presents a rate limit as a warning rather than an error", async () => {
+    stubAcceptedSave({
+      success: false,
+      modelId: "gpt-4o",
+      failureClass: "rate-limited",
+      message: "Rate limit reached.",
+      sessionIdSubstituted: false,
+    });
+    renderEditForm([{ id: "gpt-4o", passthroughFileTypes: [] }]);
+
+    fireEvent.click(testButton("gpt-4o"));
+
+    const alert = await within(modelCard("gpt-4o")).findByRole("alert");
+    expect(alert).toHaveTextContent("Reachable but rate limited");
+    expect(alert).toHaveAttribute("data-variant", "warning");
+  });
+
+  it("says when a header's ${SESSION_ID} placeholder was replaced", async () => {
+    stubAcceptedSave({ ...SUCCESS, sessionIdSubstituted: true });
+    renderEditForm([{ id: "gpt-4o", passthroughFileTypes: [] }]);
+
+    fireEvent.click(testButton("gpt-4o"));
+
+    expect(
+      await within(modelCard("gpt-4o")).findByText(
+        "${SESSION_ID} in the headers was replaced with a fixed test id for this request.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("drops a verdict whose config changed while the probe ran", async () => {
+    const { resolve } = stubPendingSave(SUCCESS);
+    renderEditForm([{ id: "gpt-4o", passthroughFileTypes: [] }]);
+
+    fireEvent.click(testButton("gpt-4o"));
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Renamed" },
+    });
+    resolve();
+
+    // The probe's answer was for the values that are now gone, so it must not
+    // land on the card as a verdict about the edited Provider.
+    await waitFor(() => expect(testButton("gpt-4o")).toBeEnabled());
+    expect(screen.queryByText("Connection successful")).not.toBeInTheDocument();
+  });
+
+  it("clears every result when a Provider field changes", async () => {
+    stubAcceptedSave(SUCCESS);
+    renderEditForm([{ id: "gpt-4o", passthroughFileTypes: [] }]);
+
+    fireEvent.click(testButton("gpt-4o"));
+    await within(modelCard("gpt-4o")).findByText("Connection successful");
+
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Renamed" },
+    });
+
+    expect(screen.queryByText("Connection successful")).not.toBeInTheDocument();
+  });
+
+  it("clears only the edited model's result", async () => {
+    stubAcceptedSave(SUCCESS);
+    renderEditForm([
+      { id: "gpt-4o", passthroughFileTypes: [] },
+      { id: "o3", passthroughFileTypes: [] },
+    ]);
+
+    fireEvent.click(testButton("gpt-4o"));
+    await within(modelCard("gpt-4o")).findByText("Connection successful");
+    fireEvent.click(testButton("o3"));
+    await within(modelCard("o3")).findByText("Connection successful");
+
+    const dialog = openEditDialog("gpt-4o");
+    type(dialog, "Alias", "flagship");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+
+    expect(
+      within(modelCard("gpt-4o")).queryByText("Connection successful"),
+    ).not.toBeInTheDocument();
+    expect(
+      within(modelCard("o3")).getByText("Connection successful"),
+    ).toBeInTheDocument();
+  });
+
+  it("offers no Test button to a Workspace Owner without the delegation", () => {
+    authState.actor = "workspace-owner";
+    authState.workspaceDelegation = {
+      providerSelfManagement: false,
+      mcpSelfManagement: false,
+    };
+    setData({
+      id: "p1",
+      name: "Workspace provider",
+      providerType: "OpenAI",
+      apiKey: "sk-test",
+      apiMode: "responses",
+      scope: "workspace",
+      modelIds: [{ id: "gpt-4o", passthroughFileTypes: [] }],
+      taskModelId: "gpt-4o",
+      memoryExtractionModelId: "gpt-4o",
+    });
+    render(<ProviderForm orgId="org1" workspaceId="ws1" providerId="p1" />);
+
+    expect(
+      screen.queryByRole("button", { name: "Test model gpt-4o" }),
+    ).not.toBeInTheDocument();
+    // The other card actions keep their existing visibility: this gate is
+    // about who may contact the Provider, not about the rest of the form.
+    expect(
+      screen.getByRole("button", { name: "Edit model gpt-4o" }),
+    ).toBeInTheDocument();
+  });
+
+  it("offers no Test button on the Organization surface to a non-admin", () => {
+    authState.actor = "org-member";
+    setData({
+      id: "p1",
+      name: "Org provider",
+      providerType: "OpenAI",
+      apiKey: "sk-test",
+      apiMode: "responses",
+      scope: "organization",
+      modelIds: [{ id: "gpt-4o", passthroughFileTypes: [] }],
+      taskModelId: "gpt-4o",
+      memoryExtractionModelId: "gpt-4o",
+    });
+    render(<ProviderForm orgId="org1" providerId="p1" />);
+
+    expect(
+      screen.queryByRole("button", { name: "Test model gpt-4o" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("offers Test to a Workspace Owner who was delegated Provider management", () => {
+    authState.actor = "workspace-owner";
+    authState.workspaceDelegation = {
+      providerSelfManagement: true,
+      mcpSelfManagement: false,
+    };
+    setData({
+      id: "p1",
+      name: "Workspace provider",
+      providerType: "OpenAI",
+      apiKey: "sk-test",
+      apiMode: "responses",
+      scope: "workspace",
+      modelIds: [{ id: "gpt-4o", passthroughFileTypes: [] }],
+      taskModelId: "gpt-4o",
+      memoryExtractionModelId: "gpt-4o",
+    });
+    render(<ProviderForm orgId="org1" workspaceId="ws1" providerId="p1" />);
+
+    expect(
+      screen.getByRole("button", { name: "Test model gpt-4o" }),
+    ).toBeInTheDocument();
+  });
 });
 
 // Issue #1521: the Reasoning map is JSON on the Model entry.
