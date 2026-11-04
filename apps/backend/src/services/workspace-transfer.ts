@@ -1,5 +1,4 @@
 import { and, eq, inArray } from "drizzle-orm";
-import { nanoid } from "nanoid";
 import { db, type Tx } from "../index.ts";
 import {
   a2aEndpoint as a2aEndpointTable,
@@ -25,6 +24,7 @@ import { errorMessage } from "../utils/error-message.ts";
 import { stopRevokedA2aWork } from "./a2a-cancel.ts";
 import { revokedTokenFields } from "./bearer-token.ts";
 import { OAUTH_TOKEN_CLEAR_FIELDS } from "./mcp-oauth-provider.ts";
+import { createPlatypusNotification } from "./notification.ts";
 import { isBanned } from "./owner-membership.ts";
 
 export type WorkspaceTransferInput = {
@@ -234,10 +234,8 @@ export const applyWorkspaceTransfer = async (
   }
 
   // Posted by Platypus, so no Agent; and no Webhook event for a transfer.
-  await tx.insert(notificationTable).values({
-    id: nanoid(),
+  await createPlatypusNotification(tx, {
     workspaceId,
-    agentId: null,
     title: "This Workspace is now yours",
     body: noticeBody(input),
   });

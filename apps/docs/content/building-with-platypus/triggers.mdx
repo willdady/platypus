@@ -210,9 +210,12 @@ background job — there's no live Chat window. The run is captured as a
 **trigger run** record: it starts as _Running_ (an Inbound run is _Pending_
 first, from the moment its call is accepted), accrues stats (steps, tool calls,
 token counts, how full the Context window got), and ends _Success_, _Failed_ or
-_Cancelled_. An Inbound run still _Pending_ after five minutes lost its server
-before it could start; it is marked _Failed_, so the next call for that record
-starts a new run instead of being handed the stuck one.
+_Cancelled_. A _Failed_ run also posts a
+[Notification](/building-with-platypus/notifications#when-a-trigger-run-fails)
+to the Workspace bell, naming the Trigger and the reason. An Inbound run still
+_Pending_ after five minutes lost its server before it could start; it is marked
+_Failed_, so the next call for that record starts a new run instead of being
+handed the stuck one.
 
 - **Scheduled (cron) runs** are checked about once a minute. When a due
   Trigger's run starts, its next run time is set from the cadence straight away,
