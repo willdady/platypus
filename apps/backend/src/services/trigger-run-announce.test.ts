@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { dbError, mockDb, resetMockDb } from "../test-utils.ts";
+import { dbError, mockDb, resetMockDb, seedDb } from "../test-utils.ts";
 import { mockLogger } from "../test-setup.ts";
 
 const { mockDispatchWebhookEvent } = vi.hoisted(() => ({
@@ -179,5 +179,125 @@ describe("announceTriggerRunsEnded", () => {
 
     expect(mockLogger.error).toHaveBeenCalled();
     expect(mockDispatchWebhookEvent).not.toHaveBeenCalled();
+  });
+});
+
+/** Seeds the Trigger and the Workspace the announcement reads. */
+const seedAnnouncement = (trigger: Record<string, unknown> = {}) =>
+  seedDb({
+    trigger: [triggerRow(trigger)],
+    workspace: [{ id: "ws-1", organizationId: "org-1" }],
+    notification: [],
+  });
+
+describe("announceTriggerRunsEnded: a failed run's Notification", () => {
+  beforeEach(() => {
+    resetMockDb();
+    vi.clearAllMocks();
+  });
+
+  it("posts one Notification from Platypus, naming the Trigger and the reason", async () => {
+    const fake = seedAnnouncement();
+
+    await announceTriggerRunsEnded([endedRun()]);
+
+    expect(fake.tables.notification).toEqual([
+      expect.objectContaining({
+        workspaceId: "ws-1",
+        agentId: null,
+        title: "Trigger run failed: Card triage",
+        body: "boom",
+        sourceTriggerRunId: "run-1",
+      }),
+    ]);
+  });
+
+  it.each([null, ""])(
+    "falls back to a plain body when the run recorded no error message (%j)",
+    async (errorMessage) => {
+      const fake = seedAnnouncement();
+
+      await announceTriggerRunsEnded([endedRun({ errorMessage })]);
+
+      expect(fake.tables.notification).toHaveLength(1);
+      expect(fake.tables.notification[0]?.body).toEqual(
+        "The run failed without an error message.",
+      );
+    },
+  );
+
+  it("stores the run's error verbatim, without unescaping it", async () => {
+    const fake = seedAnnouncement();
+    const reason = 'provider said {"detail":"line\\nbreak"}';
+
+    await announceTriggerRunsEnded([endedRun({ errorMessage: reason })]);
+
+    expect(fake.tables.notification[0]?.body).toBe(reason);
+  });
+
+  it.each(["success", "cancelled", "suppressed"])(
+    "posts no Notification for a %s run",
+    async (status) => {
+      const fake = seedAnnouncement();
+
+      await announceTriggerRunsEnded([endedRun({ status })]);
+
+      expect(fake.tables.notification).toHaveLength(0);
+    },
+  );
+
+  it("posts one Notification per failed run", async () => {
+    const fake = seedAnnouncement();
+
+    await announceTriggerRunsEnded([
+      endedRun({ runId: "run-1" }),
+      endedRun({ runId: "run-2" }),
+    ]);
+
+    expect(
+      fake.tables.notification.map((row) => row.sourceTriggerRunId),
+    ).toEqual(["run-1", "run-2"]);
+  });
+
+  it("posts nothing for a run whose Trigger was deleted", async () => {
+    const fake = seedDb({ notification: [] });
+
+    await announceTriggerRunsEnded([endedRun()]);
+
+    expect(fake.tables.notification).toHaveLength(0);
+  });
+
+  it("delivers only the trigger_run.failed event, never a notification one", async () => {
+    seedAnnouncement();
+
+    await announceTriggerRunsEnded([endedRun()]);
+
+    expect(mockDispatchWebhookEvent).toHaveBeenCalledTimes(1);
+    expect(mockDispatchWebhookEvent).toHaveBeenCalledWith(
+      "org-1",
+      "ws-1",
+      expect.objectContaining({ event: "trigger_run.failed" }) as unknown,
+    );
+  });
+
+  it("logs a failed insert rather than throwing, and still delivers the Webhook event", async () => {
+    seedDb(
+      {
+        trigger: [triggerRow()],
+        workspace: [{ id: "ws-1", organizationId: "org-1" }],
+      },
+      {
+        onInsert: (table) => {
+          if (table === "notification") throw dbError("08006", "db down");
+        },
+      },
+    );
+
+    await expect(
+      announceTriggerRunsEnded([endedRun()]),
+    ).resolves.toBeUndefined();
+
+    expect(mockLogger.error).toHaveBeenCalled();
+    expect(mockDispatchWebhookEvent).toHaveBeenCalledTimes(1);
   });
 });

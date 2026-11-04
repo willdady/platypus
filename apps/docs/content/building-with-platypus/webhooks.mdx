@@ -43,6 +43,11 @@ The form groups them under **Notifications**, **Cards** and **Trigger runs**.
 Every event starts selected on a new Webhook; turn off the ones you don't want.
 A Webhook needs at least one, so the last switch won't turn off.
 
+A Notification Platypus posts itself — a Workspace transfer notice, or a failed
+Trigger run's — is not a `notification.created` event. No Webhook or Event
+Trigger subscribed to `notification.*` sees it. A failed run is announced by
+`trigger_run.failed` instead, below.
+
 ## Create a Webhook
 
 <Steps>

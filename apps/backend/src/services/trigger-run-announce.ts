@@ -8,6 +8,7 @@ import {
 import { logger } from "../logger.ts";
 import { errorMessage } from "../utils/error-message.ts";
 import { dispatchWebhookEvent } from "./event-dispatch.ts";
+import { createPlatypusNotification } from "./notification.ts";
 import type {
   ModelSwitch,
   TriggerRunStats,
@@ -19,7 +20,8 @@ import type {
 /**
  * The columns a terminal write returns so its run can be announced. Taken from
  * the write itself rather than re-read afterwards, so a run retention prunes in
- * the meantime is still announced.
+ * the meantime is still announced as a Webhook event; its Notification is lost,
+ * because the row references the run and the insert then fails.
  */
 export const endedTriggerRunColumns = {
   runId: triggerRunTable.id,
@@ -56,10 +58,17 @@ type TriggerCoordinates = {
   agentId: string;
 };
 
+/** A Trigger row as the announcement reads it, joined to its Workspace. */
+type AnnouncedTrigger = TriggerCoordinates & {
+  id: string;
+  workspaceId: string;
+  organizationId: string;
+};
+
 /** A run's terminal event, or `null` for a status that is not terminal. */
 const terminalEvent = (
   run: EndedTriggerRun,
-  trigger: TriggerCoordinates & { id: string },
+  trigger: AnnouncedTrigger,
 ): TriggerRunWebhookEventPayload | null => {
   // Every field is on the wire, an empty one as `null` rather than absent —
   // except the Fallback marker, which is an added optional field and is
@@ -107,18 +116,42 @@ const terminalEvent = (
 };
 
 /**
+ * Posts the Workspace bell's notice that a Trigger run failed. Written by
+ * Platypus rather than the Agent (`agentId: null`) and linked to the run, so
+ * the bell reads "Platypus" and **Open** reaches the run.
+ */
+const postFailedRunNotification = async (
+  run: EndedTriggerRun,
+  trigger: AnnouncedTrigger,
+): Promise<void> => {
+  const reason = run.errorMessage?.trim() ?? "";
+  await createPlatypusNotification(db, {
+    workspaceId: trigger.workspaceId,
+    title: `Trigger run failed: ${trigger.name}`,
+    body: reason === "" ? "The run failed without an error message." : reason,
+    sourceTriggerRunId: run.runId,
+  });
+};
+
+/**
  * Announces Trigger runs that have just reached a terminal status, as
- * `trigger_run.*` Webhook events.
+ * `trigger_run.*` Webhook events, and posts a Notification to the Trigger's
+ * Workspace when a run ends `failed`.
  *
- * Exactly one event per run rests on the caller: pass only the rows a terminal
- * write actually changed — a write conditional on the row still being
- * `pending`/`running`, or the insert of a `suppressed` row — so whichever
- * instance won the write is the only one that announces. Delivery is
+ * Exactly one event — and one Notification — per run rests on the caller: pass
+ * only the rows a terminal write actually changed — a write conditional on the
+ * row still being `pending`/`running`, or the insert of a `suppressed` row — so
+ * whichever instance won the write is the only one that announces. Delivery is
  * in-process, never over the cross-instance channel.
  *
+ * What is announced is the run's final status, not the first Provider error it
+ * saw: a run that recovers (through the Fallback model or otherwise) and ends
+ * `success` posts nothing.
+ *
  * A run whose Trigger has since been deleted announces nothing. Never rejects:
- * a failed lookup is logged and the events are lost, as a Webhook delivery is
- * best-effort.
+ * a failed lookup is logged and the events are lost, and a failed Notification
+ * insert is logged on its own without dropping the run's Webhook event, as both
+ * are best-effort.
  */
 export const announceTriggerRunsEnded = async (
   runs: EndedTriggerRun[],
@@ -153,6 +186,15 @@ export const announceTriggerRunsEnded = async (
         trigger.workspaceId,
         payload,
       );
+      if (payload.event !== "trigger_run.failed") continue;
+      try {
+        await postFailedRunNotification(run, trigger);
+      } catch (error) {
+        logger.error(
+          { runId: run.runId, error: errorMessage(error) },
+          "Failed to post a Trigger run failure notification",
+        );
+      }
     }
   } catch (error) {
     logger.error(

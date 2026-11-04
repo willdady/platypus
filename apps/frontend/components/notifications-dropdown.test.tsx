@@ -404,8 +404,11 @@ describe("NotificationsDropdown body", () => {
 });
 
 describe("NotificationsDropdown source link", () => {
-  const renderWithSource = async (source: unknown) => {
-    feeds["/notifications"] = { results: [{ ...unread, source }] };
+  const renderWithSource = async (
+    source: unknown,
+    over: Record<string, unknown> = {},
+  ) => {
+    feeds["/notifications"] = { results: [{ ...unread, ...over, source }] };
     render(<NotificationsDropdown orgId="org1" workspaceId="ws1" />);
     await openDropdownMenu();
   };
@@ -431,6 +434,19 @@ describe("NotificationsDropdown source link", () => {
     expect(
       screen.queryByRole("menuitem", { name: "Open" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("shows a Trigger run failure notice as from Platypus and links to the run", async () => {
+    await renderWithSource(
+      { kind: "triggerRun", triggerRunId: "run-1" },
+      { agentName: null },
+    );
+
+    expect(screen.getByText("Platypus")).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Open" })).toHaveAttribute(
+      "href",
+      "/org1/workspace/ws1/trigger-runs/run-1",
+    );
   });
 
   it("marks it read and closes the bell when the link is followed", async () => {
