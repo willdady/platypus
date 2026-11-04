@@ -43,6 +43,11 @@ The form groups them under **Notifications**, **Cards** and **Trigger runs**.
 Every event starts selected on a new Webhook; turn off the ones you don't want.
 A Webhook needs at least one, so the last switch won't turn off.
 
+A Notification Platypus posts itself — a Workspace transfer notice, or a failed
+Trigger run's — is not a `notification.created` event. No Webhook or Event
+Trigger subscribed to `notification.*` sees it. A failed run is announced by
+`trigger_run.failed` instead, below.
+
 ## Create a Webhook
 
 <Steps>
@@ -328,6 +333,9 @@ A `trigger_run.*` event is sent once when a run of any Trigger type — Cron,
 Event or Inbound — reaches its final status. The event name says how it ended,
 and `data.status` carries the same word the run history and the Inbound poll
 use:
+
+A `failed` run also posts a Notification in the Workspace bell. That
+Notification emits no event of its own, so this is the only event it sends.
 
 | `data.status` | Event                    |
 | ------------- | ------------------------ |

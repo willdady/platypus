@@ -19,7 +19,8 @@ Notification is the reply.
 The bell in the header carries a count. Click it for the list. Each entry shows
 the Agent that posted it — by name and avatar — its title if it has one, the
 message, and how long ago. A Notification Platypus posts itself, such as the notice a new
-owner gets when a Workspace is transferred to them, shows **Platypus** instead.
+owner gets when a Workspace is transferred to them or a Trigger run's failure
+notice, shows **Platypus** instead.
 
 - Clicking a Notification marks it read and expands it; **Show more** and **Show
   less** toggle the full text.
@@ -47,6 +48,20 @@ report.
   or for the first admin account. See [Users &
   access](/self-hosting/users-and-access).
 </Callout>
+
+## When a Trigger run fails
+
+Platypus posts a Notification whenever a Trigger run ends _Failed_. It names the
+Trigger, gives the run's error as the message, shows as from **Platypus**, and
+its **Open** link goes to the run's page. One is posted for each failed run, with
+no setting to turn them off; a Trigger that fails every hour posts every hour.
+A run that ends _Success_, is _Cancelled_, or is dropped by the [run
+limit](/building-with-platypus/triggers#run-limits) posts nothing.
+
+These Notifications are deliberately not `notification.created` events: a
+Webhook or an Event Trigger subscribed to that event never hears about them.
+Subscribe to `trigger_run.failed` instead — see [Webhooks: Trigger run
+events](/building-with-platypus/webhooks#trigger-run-events).
 
 ## Getting an Agent to post one
 
