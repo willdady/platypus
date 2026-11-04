@@ -212,9 +212,10 @@ first, from the moment its call is accepted), accrues stats (steps, tool calls,
 token counts, how full the Context window got), and ends _Success_, _Failed_ or
 _Cancelled_. A _Failed_ run also posts a
 [Notification](/building-with-platypus/notifications#when-a-trigger-run-fails)
-to the Workspace bell, naming the Trigger and the reason. An Inbound run still _Pending_ after five minutes lost its server
-before it could start; it is marked _Failed_, so the next call for that record
-starts a new run instead of being handed the stuck one.
+to the Workspace bell, naming the Trigger and the reason. An Inbound run still
+_Pending_ after five minutes lost its server before it could start; it is marked
+_Failed_, so the next call for that record starts a new run instead of being
+handed the stuck one.
 
 - **Scheduled (cron) runs** are checked about once a minute. When a due
   Trigger's run starts, its next run time is set from the cadence straight away,
@@ -790,10 +791,7 @@ for.
   A run that stopped because the Agent made no progress — the same tool call
   returning the same result over and over — is a different thing, and reports
   itself differently: it ends _Failed_ with a `no_progress:` message naming the
-  tool, and posts a
-  [Notification](/building-with-platypus/notifications#when-a-trigger-run-fails)
-  to the Workspace bell naming the Trigger and that reason. That is not a step
-  limit and raising **Max steps** will not help it.
+  tool. That is not a step limit and raising **Max steps** will not help it.
 </Callout>
 
 ## Where to next

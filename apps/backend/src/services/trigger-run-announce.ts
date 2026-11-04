@@ -1,8 +1,6 @@
 import { eq, inArray } from "drizzle-orm";
-import { nanoid } from "nanoid";
 import { db } from "../index.ts";
 import {
-  notification as notificationTable,
   trigger as triggerTable,
   triggerRun as triggerRunTable,
   workspace as workspaceTable,
@@ -10,6 +8,7 @@ import {
 import { logger } from "../logger.ts";
 import { errorMessage } from "../utils/error-message.ts";
 import { dispatchWebhookEvent } from "./event-dispatch.ts";
+import { createPlatypusNotification } from "./notification.ts";
 import type {
   ModelSwitch,
   TriggerRunStats,
@@ -21,7 +20,8 @@ import type {
 /**
  * The columns a terminal write returns so its run can be announced. Taken from
  * the write itself rather than re-read afterwards, so a run retention prunes in
- * the meantime is still announced.
+ * the meantime is still announced as a Webhook event; its Notification is lost,
+ * because the row references the run and the insert then fails.
  */
 export const endedTriggerRunColumns = {
   runId: triggerRunTable.id,
@@ -118,20 +118,15 @@ const terminalEvent = (
 /**
  * Posts the Workspace bell's notice that a Trigger run failed. Written by
  * Platypus rather than the Agent (`agentId: null`) and linked to the run, so
- * the bell reads "Platypus" and **Open** reaches the run. Deliberately inserts
- * the row itself, like a Workspace transfer's notice, so no
- * `notification.created` event reaches a Webhook or an Event Trigger — a
- * failure that notified, fired a Trigger, and failed again would loop.
+ * the bell reads "Platypus" and **Open** reaches the run.
  */
 const postFailedRunNotification = async (
   run: EndedTriggerRun,
   trigger: AnnouncedTrigger,
 ): Promise<void> => {
   const reason = run.errorMessage?.trim() ?? "";
-  await db.insert(notificationTable).values({
-    id: nanoid(),
+  await createPlatypusNotification(db, {
     workspaceId: trigger.workspaceId,
-    agentId: null,
     title: `Trigger run failed: ${trigger.name}`,
     body: reason === "" ? "The run failed without an error message." : reason,
     sourceTriggerRunId: run.runId,
@@ -191,8 +186,6 @@ export const announceTriggerRunsEnded = async (
         trigger.workspaceId,
         payload,
       );
-      // The notification follows the same decision the `trigger_run.failed`
-      // event does, so a run that recovers and ends `success` posts nothing.
       if (payload.event !== "trigger_run.failed") continue;
       try {
         await postFailedRunNotification(run, trigger);

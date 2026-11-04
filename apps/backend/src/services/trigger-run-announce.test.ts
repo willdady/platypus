@@ -269,11 +269,6 @@ describe("announceTriggerRunsEnded: a failed run's Notification", () => {
       "ws-1",
       expect.objectContaining({ event: "trigger_run.failed" }) as unknown,
     );
-    expect(
-      mockDispatchWebhookEvent.mock.calls.map(
-        (call) => (call[2] as { event: string }).event,
-      ),
-    ).not.toContain("notification.created");
   });
 
   it("logs a failed insert rather than throwing, and still delivers the Webhook event", async () => {

@@ -1,6 +1,6 @@
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
-import type { db } from "../index.ts";
+import type { db, Tx } from "../index.ts";
 import {
   agent as agentTable,
   notification as notificationTable,
@@ -49,6 +49,33 @@ const agentOwnedWhere = (ctx: NotificationContext, id: string) =>
     ownedWhere("notification", { id, workspaceId: ctx.workspaceId }),
     ctx.agentId ? eq(notificationTable.agentId, ctx.agentId) : undefined,
   );
+
+/**
+ * Inserts a Notification Platypus posts itself: no Agent, and no
+ * `notification.created` event, so it reaches no Webhook and fires no Event
+ * Trigger. A Workspace transfer's notice and a failed Trigger run's use this.
+ *
+ * Accepts a transaction so a transfer can post its notice atomically with the
+ * rest of the switch.
+ */
+export const createPlatypusNotification = async (
+  database: Database | Tx,
+  data: {
+    workspaceId: string;
+    title: string;
+    body: string;
+    sourceTriggerRunId?: string | null;
+  },
+) => {
+  await database.insert(notificationTable).values({
+    id: nanoid(),
+    workspaceId: data.workspaceId,
+    agentId: null,
+    title: data.title,
+    body: normalizeBody(data.body),
+    sourceTriggerRunId: data.sourceTriggerRunId ?? null,
+  });
+};
 
 export const createNotification = async (
   database: Database,
