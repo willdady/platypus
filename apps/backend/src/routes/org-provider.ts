@@ -5,6 +5,8 @@ import {
   providerCreateSchema,
   providerListResponseSchema,
   providerResponseSchema,
+  providerTestResponseSchema,
+  providerTestSchema,
   providerUpdateResponseSchema,
   providerUpdateSchema,
 } from "@platypus/schemas";
@@ -24,6 +26,7 @@ import {
   deleteProvider,
   updateProvider,
 } from "../services/provider-write.ts";
+import { probeProviderConnection } from "../services/provider-connection.ts";
 import { respond } from "../respond.ts";
 import type { Variables } from "../server.ts";
 
@@ -130,6 +133,18 @@ orgProvider.delete(
     await deleteProvider({ kind: "organization", orgId }, providerId);
 
     return c.json({ message: "Provider deleted" });
+  },
+);
+
+/** Test one of this Organization Provider's models with unsaved form values (admin only) */
+orgProvider.post(
+  "/test",
+  requireAuth,
+  requireOrgAccess(["admin"]),
+  validate("json", providerTestSchema),
+  async (c) => {
+    const result = await probeProviderConnection(c.req.valid("json"));
+    return respond(c, providerTestResponseSchema, result);
   },
 );
 

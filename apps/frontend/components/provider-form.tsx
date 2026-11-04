@@ -18,7 +18,18 @@ import { FormAdvancedSection } from "@/components/form-advanced-section";
 import { Badge } from "@/components/ui/badge";
 import { ListState } from "@/components/list-state";
 import { ModelEntryDialog } from "@/components/model-entry-dialog";
-import { Building, OctagonX, Pencil, Plus, Trash2 } from "lucide-react";
+import {
+  Building,
+  Check,
+  Loader2,
+  OctagonX,
+  Pencil,
+  Plug,
+  Plus,
+  Trash2,
+  TriangleAlert,
+  X,
+} from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { SelectGroup, SelectItem, SelectLabel } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -44,6 +55,7 @@ import {
   type AliasRepoint,
   type Provider,
   type ProviderResponse,
+  type ProviderTestResponse,
 } from "@platypus/schemas";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { cn } from "@/lib/utils";
@@ -57,7 +69,14 @@ import {
 import { CONTEXT_WINDOW_PRESETS } from "@/lib/context-window";
 import { toast } from "sonner";
 import { orgRoutes, workspaceRoutes } from "@/lib/routes";
-import type { Serialized } from "@/lib/api-write";
+import { joinUrl } from "@/lib/utils";
+import { scopedPath, type Serialized } from "@/lib/api-write";
+import { useAuth, useBackendUrl } from "@/components/auth-provider";
+import {
+  canConfigureWorkspaceResource,
+  canManageOrgSharedResource,
+} from "@/lib/authorization";
+import { useModelTestResults } from "@/hooks/use-model-test-results";
 
 /** Errors reported against one Model entry, split by the field each belongs to. */
 type ModelEntryErrors = { row?: string; fields: Record<string, string> };
@@ -92,14 +111,89 @@ function modelDetails(model: ModelConfigView): string[] {
 }
 
 /**
+ * The inline verdict for one model's Test action: the class says what to fix,
+ * and `result.message` carries what the Provider actually said.
+ */
+function testResultCopy(result: ProviderTestResponse): {
+  variant: "success" | "destructive" | "warning";
+  title: string;
+  explanation: string;
+} {
+  if (result.success) {
+    return {
+      variant: "success",
+      title: "Connection successful",
+      explanation: `The Provider answered on ${result.modelId}.`,
+    };
+  }
+  switch (result.failureClass) {
+    case "api-key-rejected":
+      return {
+        variant: "destructive",
+        title: "API key rejected",
+        explanation: "The Provider refused the API key this form would save.",
+      };
+    case "model-not-available":
+      return {
+        variant: "destructive",
+        title: "Model not available on this Provider",
+        explanation: "The Provider does not serve the model this card names.",
+      };
+    case "api-mode-wrong":
+      return {
+        variant: "destructive",
+        title: "API mode wrong for this server",
+        explanation:
+          "The server does not implement the selected API mode. OpenAI-compatible servers such as vLLM or Ollama usually need Chat Completions.",
+      };
+    case "base-url-unreachable":
+      return {
+        variant: "destructive",
+        title: "Base URL unreachable",
+        explanation:
+          "Platypus could not connect to the Base URL. Check the URL, DNS, and TLS certificate.",
+      };
+    case "rate-limited":
+      return {
+        variant: "warning",
+        title: "Reachable but rate limited",
+        explanation:
+          "The connection itself is fine; the Provider is rate limiting requests right now. Try again later.",
+      };
+    case "unknown":
+      return {
+        variant: "destructive",
+        title: "Unknown error",
+        explanation:
+          "The Provider returned an error Platypus does not recognise.",
+      };
+  }
+}
+
+/**
+ * The Test action a model card renders: whether this caller may run one, its
+ * in-flight and disabled states, the last verdict, and the click handler.
+ */
+type ModelTestAction = {
+  canRun: boolean;
+  disabled: boolean;
+  pending: boolean;
+  result?: ProviderTestResponse;
+  onRun: () => void;
+};
+
+/**
  * One entry in the Models list, view-only: editing happens in
- * `ModelEntryDialog`. A card the server rejected shows why under its title.
+ * `ModelEntryDialog`. A card the server rejected shows why under its title, and
+ * a card whose Test action ran shows the verdict inline — never as a toast, so
+ * it stays attached to the model it describes.
  */
 function ModelCard({
   model,
   errors,
   readOnly,
   disabled,
+  test,
   onEdit,
   onRemove,
 }: {
@@ -107,6 +201,7 @@ function ModelCard({
   errors: ModelEntryErrors;
   readOnly: boolean;
   disabled: boolean;
+  test: ModelTestAction;
   onEdit: () => void;
   onRemove: () => void;
 }) {
@@ -115,49 +210,93 @@ function ModelCard({
     (m): m is string => !!m,
   );
   const invalid = messages.length > 0;
+  const copy = test.result ? testResultCopy(test.result) : null;
   return (
     <li
       data-invalid={invalid}
       className={cn(
-        "flex items-center justify-between gap-2 rounded-md border px-3 py-2",
+        "flex flex-col gap-2 rounded-md border px-3 py-2",
         invalid && "border-destructive",
       )}
     >
-      <div className="min-w-0">
-        <div className="flex items-center gap-2">
-          <p className="truncate text-sm font-medium">{model.id}</p>
-          {model.alias && <Badge variant="secondary">{model.alias}</Badge>}
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <p className="truncate text-sm font-medium">{model.id}</p>
+            {model.alias && <Badge variant="secondary">{model.alias}</Badge>}
+          </div>
+          {details.length > 0 && (
+            <p className="text-xs text-muted-foreground">
+              {details.join(" · ")}
+            </p>
+          )}
+          {messages.map((message) => (
+            <FieldError key={message}>{message}</FieldError>
+          ))}
         </div>
-        {details.length > 0 && (
-          <p className="text-xs text-muted-foreground">{details.join(" · ")}</p>
+        {!readOnly && (
+          <div className="flex shrink-0 gap-2">
+            {test.canRun && (
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                aria-label={`Test model ${model.id}`}
+                aria-busy={test.pending}
+                onClick={test.onRun}
+                disabled={test.disabled || test.pending}
+              >
+                {test.pending ? <Loader2 className="animate-spin" /> : <Plug />}
+              </Button>
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              aria-label={`Edit model ${model.id}`}
+              onClick={onEdit}
+              disabled={disabled}
+            >
+              <Pencil />
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              aria-label={`Remove model ${model.id}`}
+              onClick={onRemove}
+              disabled={disabled}
+            >
+              <Trash2 />
+            </Button>
+          </div>
         )}
-        {messages.map((message) => (
-          <FieldError key={message}>{message}</FieldError>
-        ))}
       </div>
-      {!readOnly && (
-        <div className="flex shrink-0 gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            aria-label={`Edit model ${model.id}`}
-            onClick={onEdit}
-            disabled={disabled}
-          >
-            <Pencil />
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            aria-label={`Remove model ${model.id}`}
-            onClick={onRemove}
-            disabled={disabled}
-          >
-            <Trash2 />
-          </Button>
-        </div>
+      {test.result && copy && (
+        <Alert variant={copy.variant}>
+          {copy.variant === "success" ? (
+            <Check />
+          ) : copy.variant === "warning" ? (
+            <TriangleAlert />
+          ) : (
+            <X />
+          )}
+          <AlertTitle>{copy.title}</AlertTitle>
+          <AlertDescription>
+            <p>{copy.explanation}</p>
+            {!test.result.success && (
+              <p className="font-mono text-xs break-words">
+                {test.result.message}
+              </p>
+            )}
+            {test.result.sessionIdSubstituted && (
+              <p>
+                ${"${SESSION_ID}"} in the headers was replaced with a fixed test
+                id for this request.
+              </p>
+            )}
+          </AlertDescription>
+        </Alert>
       )}
     </li>
   );
@@ -241,6 +380,7 @@ function ProviderForm({
   type SerializedProvider = Serialized<ProviderResponse>;
 
   const router = useRouter();
+  const backendUrl = useBackendUrl();
 
   const formScope = workspaceId ? "workspace" : "organization";
   const listHref = workspaceId
@@ -262,6 +402,26 @@ function ProviderForm({
   const [error, setError] = useState<string | null>(null);
 
   const scope = formScope === "workspace" ? { orgId, workspaceId } : { orgId };
+  const collectionUrl = scopedPath("providers", scope);
+  // The same authority the create route enforces: an Org Admin, or a Workspace
+  // Owner only where the Workspace delegates Provider management (ADR-0006).
+  // A viewer without it sees no Test button, rather than a button whose click
+  // comes back as a 403 on the card.
+  const { actor, workspaceDelegation } = useAuth();
+  const canTest = workspaceId
+    ? canConfigureWorkspaceResource(
+        actor,
+        "provider",
+        workspaceDelegation?.providerSelfManagement === true,
+      )
+    : canManageOrgSharedResource(actor);
+  const {
+    results: testResults,
+    pendingIndex: testingModel,
+    run: runModelTest,
+    clearAll: clearTestResults,
+    clearCard: clearTestResult,
+  } = useModelTestResults(joinUrl(backendUrl, `${collectionUrl}/test`));
 
   const {
     record: provider,
@@ -444,6 +604,9 @@ function ProviderForm({
     // Clear validation error for this field
     clearErrors(id);
     setError(null);
+    // Any Provider-level edit retracts every verdict: each described the
+    // values now on screen, which have just changed.
+    clearTestResults();
 
     if (id === "headers") {
       setHeadersString(value);
@@ -488,6 +651,8 @@ function ProviderForm({
     // Clear validation error for this field
     clearErrors(id);
     setError(null);
+    // See handleChange: a Provider-level edit invalidates every verdict.
+    clearTestResults();
 
     setFormData((prevData) => ({ ...prevData, [id]: value }));
   };
@@ -530,6 +695,9 @@ function ProviderForm({
 
   const stageModel = (model: ModelConfigView) => {
     clearModelIdsError();
+    // Editing a card retracts that card's verdict; the others still describe
+    // values nobody has touched.
+    if (typeof modelDialog === "number") clearTestResult(modelDialog);
     setFormData((prev) => ({
       ...prev,
       modelIds:
@@ -542,11 +710,22 @@ function ProviderForm({
 
   const removeModel = (index: number) => {
     clearModelIdsError();
+    // Removing shifts every later card's index, so no verdict can stay
+    // attached to the card it was about.
+    clearTestResults();
     setFormData((prev) => ({
       ...prev,
       modelIds: prev.modelIds.filter((_, i) => i !== index),
     }));
   };
+
+  /**
+   * Tests one card's model with the Provider config exactly as the form holds
+   * it — nothing is saved first, so a wrong key or Base URL is reported before
+   * it reaches a Chat. The verdict lands back on the same card.
+   */
+  const testModel = (index: number, modelId: string) =>
+    runModelTest(index, modelId, buildPayload(formData));
 
   /**
    * Removing or renaming an alias silently rewrites every Agent and Chat that
@@ -709,6 +888,17 @@ function ProviderForm({
                     errors={errorsForEntry(index)}
                     readOnly={isReadOnly}
                     disabled={isSubmitting}
+                    test={{
+                      canRun: canTest,
+                      disabled:
+                        isSubmitting ||
+                        testingModel !== null ||
+                        !!headersError ||
+                        !!extraBodyError,
+                      pending: testingModel === index,
+                      result: testResults[index],
+                      onRun: () => void testModel(index, model.id),
+                    }}
                     onEdit={() => setModelDialog(index)}
                     onRemove={() => removeModel(index)}
                   />

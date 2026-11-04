@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import { APICallError } from "ai";
 import {
   insertTimestamps,
   mockSession,
@@ -8,6 +9,25 @@ import {
   type Store,
 } from "../test-utils.ts";
 import app from "../server.ts";
+
+// The Test action's only real work is one completion at the SDK boundary, so
+// that is where a test fakes the Provider: the rest of the route — auth,
+// validation, opening the vendor client, classification — runs for real. The
+// values stay here rather than in a shared fixture because the `ai` factory
+// must be in place before `ai` is first imported (see the same block in
+// org-provider.test.ts).
+const { mockGenerateText, mockCreateOpenAI } = vi.hoisted(() => ({
+  mockGenerateText: vi.fn(),
+  mockCreateOpenAI: vi.fn(
+    (_config: Record<string, unknown>) => (modelId: string) => ({ modelId }),
+  ),
+}));
+
+vi.mock("ai", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("ai")>();
+  return { ...actual, generateText: mockGenerateText };
+});
+vi.mock("@ai-sdk/openai", () => ({ createOpenAI: mockCreateOpenAI }));
 
 /**
  * These tests state fixture rows rather than counting queries: `seedDb()`
@@ -25,6 +45,9 @@ describe("Provider Routes", () => {
   beforeEach(() => {
     resetMockDb();
     vi.clearAllMocks();
+    // `clearAllMocks` keeps implementations, so a rejection one case set would
+    // otherwise leak into the next.
+    mockGenerateText.mockReset();
   });
 
   const orgId = "org-1";
@@ -624,6 +647,251 @@ describe("Provider Routes", () => {
       const res = await app.request(`${baseUrl}/p4`, { method: "DELETE" });
       expect(res.status).toBe(404);
       expect(fake.tables.provider).toHaveLength(1);
+    });
+  });
+
+  describe("POST /test", () => {
+    const testBody = (over: Record<string, unknown> = {}) => ({
+      name: "OpenAI",
+      providerType: "OpenAI",
+      apiKey: "sk-test",
+      apiMode: "responses",
+      searchSource: "native",
+      modelIds: [{ id: "gpt-4", passthroughFileTypes: [] }],
+      taskModelId: "gpt-4",
+      memoryExtractionModelId: "gpt-4",
+      modelId: "gpt-4",
+      ...over,
+    });
+
+    const probe = (payload: unknown = testBody()) =>
+      app.request(`${baseUrl}/test`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+        headers: { "Content-Type": "application/json" },
+      });
+
+    it("runs one completion and reports success for the tested model", async () => {
+      mockSession();
+      world();
+      mockGenerateText.mockResolvedValue({ text: "ok" });
+
+      const res = await probe();
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({
+        success: true,
+        modelId: "gpt-4",
+        sessionIdSubstituted: false,
+      });
+    });
+
+    it("replaces ${SESSION_ID} in a header value with the fixed test id", async () => {
+      mockSession();
+      world();
+      mockGenerateText.mockResolvedValue({ text: "ok" });
+
+      const res = await probe(
+        testBody({ headers: { "x-session": "sess-${SESSION_ID}" } }),
+      );
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual(
+        expect.objectContaining({ success: true, sessionIdSubstituted: true }),
+      );
+      expect(mockCreateOpenAI.mock.calls.at(-1)?.[0]).toEqual(
+        expect.objectContaining({
+          headers: { "x-session": "sess-provider-connection-test" },
+        }),
+      );
+    });
+
+    it("reports a rejected API key with the vendor's message", async () => {
+      mockSession();
+      world();
+      mockGenerateText.mockRejectedValue(
+        new APICallError({
+          message: "Incorrect API key provided: sk-test.",
+          url: "https://api.openai.com/v1/responses",
+          requestBodyValues: {},
+          statusCode: 401,
+        }),
+      );
+
+      const res = await probe();
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({
+        success: false,
+        modelId: "gpt-4",
+        failureClass: "api-key-rejected",
+        message: "Incorrect API key provided: sk-test.",
+        sessionIdSubstituted: false,
+      });
+    });
+
+    it.each([
+      {
+        label: "a 404",
+        error: new APICallError({
+          message: "The model `gpt-5` does not exist.",
+          url: "https://api.openai.com/v1/responses",
+          requestBodyValues: {},
+          statusCode: 404,
+        }),
+        failureClass: "model-not-available",
+      },
+      {
+        label: "a vendor's own model-not-found wording on a 400",
+        error: new APICallError({
+          message: "Model 'gpt-5' not found",
+          url: "https://api.openai.com/v1/responses",
+          requestBodyValues: {},
+          statusCode: 400,
+        }),
+        failureClass: "model-not-available",
+      },
+      {
+        label: "a 400 naming the Responses API",
+        error: new APICallError({
+          message: "Unknown route /v1/responses. Use /v1/chat/completions.",
+          url: "http://vllm.local/v1/responses",
+          requestBodyValues: {},
+          statusCode: 400,
+        }),
+        failureClass: "api-mode-wrong",
+      },
+      {
+        label: "a rate limit",
+        error: new APICallError({
+          message: "Rate limit reached for gpt-4.",
+          url: "https://api.openai.com/v1/responses",
+          requestBodyValues: {},
+          statusCode: 429,
+        }),
+        failureClass: "rate-limited",
+      },
+      {
+        label: "a server error",
+        error: new APICallError({
+          message: "Internal server error",
+          url: "https://api.openai.com/v1/responses",
+          requestBodyValues: {},
+          statusCode: 500,
+        }),
+        failureClass: "unknown",
+      },
+    ])("reports $label as $failureClass", async ({ error, failureClass }) => {
+      mockSession();
+      world();
+      mockGenerateText.mockRejectedValue(error);
+
+      const res = await probe();
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual(
+        expect.objectContaining({ success: false, failureClass }),
+      );
+    });
+
+    it("reports a failed connection as an unreachable Base URL", async () => {
+      mockSession();
+      world();
+      const failure = new TypeError("fetch failed", {
+        cause: Object.assign(new Error("getaddrinfo ENOTFOUND"), {
+          code: "ENOTFOUND",
+        }),
+      });
+      mockGenerateText.mockRejectedValue(failure);
+
+      const res = await probe();
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({
+        success: false,
+        modelId: "gpt-4",
+        failureClass: "base-url-unreachable",
+        message: "fetch failed",
+        sessionIdSubstituted: false,
+      });
+    });
+
+    it("reports a server that accepts the connection and never answers", async () => {
+      mockSession();
+      world();
+      vi.useFakeTimers();
+      try {
+        mockGenerateText.mockReturnValue(new Promise(() => {}));
+        const pending = probe();
+        await vi.advanceTimersByTimeAsync(20_000);
+        const res = await pending;
+
+        expect(res.status).toBe(200);
+        expect(await res.json()).toEqual(
+          expect.objectContaining({
+            success: false,
+            failureClass: "base-url-unreachable",
+          }),
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("reports an unlisted model without calling the Provider", async () => {
+      mockSession();
+      world();
+
+      const res = await probe(testBody({ modelId: "gpt-5" }));
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual(
+        expect.objectContaining({
+          success: false,
+          modelId: "gpt-5",
+          failureClass: "model-not-available",
+        }),
+      );
+      expect(mockGenerateText).not.toHaveBeenCalled();
+    });
+
+    it("resolves an alias reference in the tested model", async () => {
+      mockSession();
+      world();
+      mockGenerateText.mockResolvedValue({ text: "ok" });
+
+      const res = await probe(
+        testBody({
+          modelIds: [{ id: "gpt-4", alias: "fast", passthroughFileTypes: [] }],
+          modelId: "alias:fast",
+        }),
+      );
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({
+        success: true,
+        modelId: "alias:fast",
+        sessionIdSubstituted: false,
+      });
+      expect(mockGenerateText.mock.calls.at(-1)?.[0]).toEqual(
+        expect.objectContaining({ model: { modelId: "gpt-4" } }),
+      );
+    });
+
+    it("returns 403 for a non-admin owner when self-management is disabled", async () => {
+      mockSession();
+      world({ role: "member", providerSelfManagement: false });
+
+      expect((await probe()).status).toBe(403);
+      expect(mockGenerateText).not.toHaveBeenCalled();
+    });
+
+    it("allows a non-admin owner when self-management is enabled", async () => {
+      mockSession();
+      world({ role: "member", providerSelfManagement: true });
+      mockGenerateText.mockResolvedValue({ text: "ok" });
+
+      expect((await probe()).status).toBe(200);
     });
   });
 });

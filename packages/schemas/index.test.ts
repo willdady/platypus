@@ -51,6 +51,8 @@ import {
   SANDBOX_ENV_MAX_VALUE_BYTES,
   providerCreateSchema,
   providerUpdateSchema,
+  providerTestSchema,
+  providerTestResponseSchema,
   providerSchema,
   providerResponseSchema,
   mcpResponseSchema,
@@ -930,6 +932,79 @@ describe("Provider Create Schema", () => {
         webBackend: "acme.searx",
       }).success,
     ).toBe(false);
+  });
+});
+
+describe("Provider Test Schema", () => {
+  const baseTest = {
+    name: "Test Provider",
+    providerType: "OpenAI" as const,
+    apiKey: "sk-test",
+    apiMode: "responses" as const,
+    searchSource: SEARCH_SOURCE_NATIVE,
+    modelIds: [{ id: "gpt-4", passthroughFileTypes: [] }],
+    taskModelId: "gpt-4",
+    memoryExtractionModelId: "gpt-4",
+    modelId: "gpt-4",
+  };
+
+  it("requires the model being tested", () => {
+    const { modelId: _, ...without } = baseTest;
+    expect(providerTestSchema.safeParse(without).success).toBe(false);
+    expect(
+      providerTestSchema.safeParse({ ...baseTest, modelId: "" }).success,
+    ).toBe(false);
+  });
+
+  it("carries the same Provider config the create schema does", () => {
+    // Reused rather than redefined: a field the create shape requires must not
+    // become optional just because the Test endpoint asks for it.
+    const { taskModelId: _, ...withoutTaskModel } = baseTest;
+    expect(providerTestSchema.safeParse(withoutTaskModel).success).toBe(false);
+    expect(
+      providerTestSchema.safeParse({
+        ...baseTest,
+        headers: { "x-session": "sess-${SESSION_ID}" },
+      }).success,
+    ).toBe(true);
+  });
+
+  it("rejects an unknown key and a scope the body must not choose", () => {
+    expect(
+      providerTestSchema.safeParse({ ...baseTest, workspaceId: "ws-1" })
+        .success,
+    ).toBe(false);
+  });
+
+  it("accepts each failure class on a failed result", () => {
+    for (const failureClass of [
+      "api-key-rejected",
+      "model-not-available",
+      "api-mode-wrong",
+      "base-url-unreachable",
+      "rate-limited",
+      "unknown",
+    ]) {
+      expect(
+        providerTestResponseSchema.safeParse({
+          success: false,
+          modelId: "gpt-4",
+          failureClass,
+          message: "vendor said no",
+          sessionIdSubstituted: false,
+        }).success,
+      ).toBe(true);
+    }
+  });
+
+  it("accepts a successful result with no failure fields", () => {
+    expect(
+      providerTestResponseSchema.safeParse({
+        success: true,
+        modelId: "gpt-4",
+        sessionIdSubstituted: true,
+      }).success,
+    ).toBe(true);
   });
 });
 

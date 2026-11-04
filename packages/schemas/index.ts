@@ -2821,6 +2821,56 @@ export const providerCreateSchema = strictRequest(
   }),
 );
 
+/**
+ * Why a Provider's Test action failed, as a class the UI can explain: the
+ * Provider's own message arrives alongside it, verbatim, so the class says what
+ * to fix and the message says what the vendor said.
+ */
+export const providerTestFailureClassSchema = z.enum([
+  "api-key-rejected",
+  "model-not-available",
+  "api-mode-wrong",
+  "base-url-unreachable",
+  "rate-limited",
+  "unknown",
+]);
+export type ProviderTestFailureClass = z.infer<
+  typeof providerTestFailureClassSchema
+>;
+
+/**
+ * Testing one model from the Provider form: the config exactly as the form
+ * holds it — nothing is stored, so there is no saved row to fall back on and
+ * the create shape's fields are the whole connection — plus the model to test.
+ * Built by `.extend()`ing `providerCreateSchema` so the two cannot drift.
+ */
+export const providerTestSchema = strictRequest(
+  providerCreateSchema.extend({ modelId: z.string().min(1) }),
+);
+export type ProviderTest = z.infer<typeof providerTestSchema>;
+
+/**
+ * The Test action's result. A failing test is still a completed request — the
+ * class is the outcome, not an HTTP error — so both arms are a 200. Every arm
+ * names the model that was tested, and says whether a `${SESSION_ID}` header
+ * placeholder was replaced with the fixed test id.
+ */
+export const providerTestResponseSchema = z.discriminatedUnion("success", [
+  z.object({
+    success: z.literal(true),
+    modelId: z.string(),
+    sessionIdSubstituted: z.boolean(),
+  }),
+  z.object({
+    success: z.literal(false),
+    modelId: z.string(),
+    failureClass: providerTestFailureClassSchema,
+    message: z.string(),
+    sessionIdSubstituted: z.boolean(),
+  }),
+]);
+export type ProviderTestResponse = z.infer<typeof providerTestResponseSchema>;
+
 // Sandbox
 
 // Workspace-default environment variables merged into every sandbox shell.exec

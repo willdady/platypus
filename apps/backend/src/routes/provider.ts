@@ -5,6 +5,8 @@ import {
   providerCreateSchema,
   providerListResponseSchema,
   providerResponseSchema,
+  providerTestResponseSchema,
+  providerTestSchema,
   providerUpdateResponseSchema,
   providerUpdateSchema,
 } from "@platypus/schemas";
@@ -23,6 +25,7 @@ import {
   deleteProvider,
   updateProvider,
 } from "../services/provider-write.ts";
+import { probeProviderConnection } from "../services/provider-connection.ts";
 import { respond } from "../respond.ts";
 import type { Variables } from "../server.ts";
 
@@ -164,6 +167,25 @@ provider.delete(
     await deleteProvider({ kind: "workspace", ctx }, providerId);
 
     return c.json({ message: "Provider deleted" });
+  },
+);
+
+/**
+ * Test one of this Provider's models with the form's current, unsaved config
+ * (org-admin, or owner when delegated — ADR-0006). The same guard as creating
+ * a Provider here: reading a failure is not more sensitive than configuring
+ * what it tests. Nothing is stored, so the body carries the whole connection.
+ */
+provider.post(
+  "/test",
+  requireAuth,
+  requireOrgAccess(),
+  requireWorkspaceAccess,
+  requireWorkspaceConfigAccess("providerSelfManagement"),
+  validate("json", providerTestSchema),
+  async (c) => {
+    const result = await probeProviderConnection(c.req.valid("json"));
+    return respond(c, providerTestResponseSchema, result);
   },
 );
 
