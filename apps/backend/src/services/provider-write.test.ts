@@ -308,6 +308,29 @@ describe("provider-write module", () => {
       expect(nullifyEmbeddingsForProvider).not.toHaveBeenCalled();
     });
 
+    it("refuses to delete a Provider an Agent uses as its Fallback model", async () => {
+      const fake = seedDb({
+        provider: [{ id: "p1", workspaceId: "ws-1", organizationId: null }],
+        agent: [
+          {
+            id: "a1",
+            workspaceId: "ws-1",
+            providerId: "p2",
+            fallbackProviderId: "p1",
+            name: "Fallback user",
+          },
+        ],
+      });
+
+      await expect(
+        deleteProvider({ kind: "workspace", ctx: workspaceCtx }, "p1"),
+      ).rejects.toThrow(
+        'Cannot delete: this provider is used by 1 agent ("Fallback user"). Delete it or switch it to another provider first.',
+      );
+      expect(fake.tables.provider).toHaveLength(1);
+      expect(nullifyEmbeddingsForProvider).not.toHaveBeenCalled();
+    });
+
     it("throws ConflictError naming the Agents that still use an organization-scoped provider", async () => {
       const fake = seedDb({
         provider: [{ id: "p2", workspaceId: null, organizationId: "org-1" }],

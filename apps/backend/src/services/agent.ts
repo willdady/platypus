@@ -1,6 +1,10 @@
 import { nanoid } from "nanoid";
 import type { z } from "zod";
 import type { agentBaseSchema } from "@platypus/schemas";
+import {
+  FALLBACK_PAIR_MESSAGE,
+  FALLBACK_SAME_MODEL_MESSAGE,
+} from "@platypus/schemas";
 import { eq, type SQL } from "drizzle-orm";
 import { db } from "../index.ts";
 import { agent as agentTable, trigger as triggerTable } from "../db/schema.ts";
@@ -21,8 +25,12 @@ import {
   requireOrgScoped,
   requireSharedDeletable,
   requireWorkspaceMutable,
+  resolveOrgScoped,
+  resolveScoped,
   workspaceScopedWhere,
 } from "./scoped-resource.ts";
+import { resolveModelId } from "./model-capability.ts";
+import type { ProviderRow } from "./provider-write.ts";
 import { deleteAvatar, storeAvatar } from "./avatar.ts";
 import { oneRow } from "../db/one-row.ts";
 
@@ -103,6 +111,106 @@ const dedupeIdArrays = <T extends IdArrayFields>(fields: T): T => ({
   }),
 });
 
+/** A blank reference is "unset", so a form that clears a field stores null. */
+const normaliseReference = (
+  value: string | null | undefined,
+): string | null | undefined =>
+  value === undefined ? undefined : value?.trim() ? value : null;
+
+/**
+ * The Fallback model's two fields, normalised for a write. A key the caller
+ * did not send is absent — an update that never mentions the fallback leaves
+ * it as it was — while a key sent blank becomes null, which clears it.
+ */
+const normaliseFallbackFields = (
+  fields: Pick<AgentUpdateFields, "fallbackProviderId" | "fallbackModelId">,
+): Pick<AgentUpdateFields, "fallbackProviderId" | "fallbackModelId"> => ({
+  ...(fields.fallbackProviderId !== undefined
+    ? { fallbackProviderId: normaliseReference(fields.fallbackProviderId) }
+    : {}),
+  ...(fields.fallbackModelId !== undefined
+    ? { fallbackModelId: normaliseReference(fields.fallbackModelId) }
+    : {}),
+});
+
+/** The Fallback model as the write will leave it, after merging an update. */
+type FallbackPair = {
+  providerId: string | null;
+  modelId: string | null;
+};
+
+/** A Provider the Agent's scope can reach, or undefined. */
+const providerInScope = async (
+  scope: AgentScope,
+  providerId: string,
+): Promise<ProviderRow | undefined> => {
+  const row =
+    scope.kind === "workspace"
+      ? (await resolveScoped(db, "provider", providerId, scope.ctx))?.row
+      : await resolveOrgScoped(db, "provider", providerId, scope.orgId);
+  return row ?? undefined;
+};
+
+/**
+ * Validates the Fallback model a write is about to store (ADR-0043): the pair
+ * is complete, its Provider is reachable from the Agent's scope, the model (or
+ * alias) is enabled on it, and the pair is not the primary pair in disguise.
+ *
+ * Runs in the write model rather than the request schema because both adapters
+ * — the HTTP routes and the Agent-management Tool — must answer it, and because
+ * deciding "the same model" needs the Provider rows: a concrete id and the
+ * alias that resolves to it are one model.
+ */
+const validateFallbackPair = async (
+  scope: AgentScope,
+  primary: { providerId: string; modelId: string },
+  fallback: FallbackPair,
+): Promise<AgentWriteError | null> => {
+  if ((fallback.providerId === null) !== (fallback.modelId === null)) {
+    return { error: FALLBACK_PAIR_MESSAGE };
+  }
+  if (fallback.providerId === null || fallback.modelId === null) return null;
+
+  const provider = await providerInScope(scope, fallback.providerId);
+  if (!provider) {
+    return {
+      error:
+        "The Fallback model's Provider is not available in this Agent's scope.",
+    };
+  }
+
+  const resolved = resolveModelId(provider, fallback.modelId);
+  if (!resolved) {
+    return {
+      error: `The Fallback model '${fallback.modelId}' is not enabled for provider '${provider.name}'.`,
+    };
+  }
+
+  const primaryProvider = await providerInScope(scope, primary.providerId);
+  if (
+    primaryProvider?.id === provider.id &&
+    resolveModelId(primaryProvider, primary.modelId) === resolved
+  ) {
+    return { error: FALLBACK_SAME_MODEL_MESSAGE };
+  }
+  return null;
+};
+
+/** Merges a write's fields onto an existing Agent, for pair validation. */
+const mergedFallbackPair = (
+  existing: AgentRow,
+  fields: AgentUpdateFields,
+): FallbackPair => ({
+  providerId:
+    fields.fallbackProviderId !== undefined
+      ? (fields.fallbackProviderId ?? null)
+      : (existing.fallbackProviderId ?? null),
+  modelId:
+    fields.fallbackModelId !== undefined
+      ? (fields.fallbackModelId ?? null)
+      : (existing.fallbackModelId ?? null),
+});
+
 /**
  * Creates a new Workspace-scoped Agent. The Workspace comes from `ctx`, never
  * the body — a Workspace surface only ever creates Workspace-scoped Agents
@@ -112,8 +220,21 @@ export async function createAgent(
   ctx: ScopeContext,
   fields: AgentCreateFields,
 ): Promise<AgentWriteResult> {
-  const data = dedupeIdArrays(fields);
+  const data = {
+    ...dedupeIdArrays(fields),
+    ...normaliseFallbackFields(fields),
+  };
   const id = nanoid();
+
+  const fallbackError = await validateFallbackPair(
+    { kind: "workspace", ctx },
+    { providerId: data.providerId, modelId: data.modelId },
+    {
+      providerId: data.fallbackProviderId ?? null,
+      modelId: data.fallbackModelId ?? null,
+    },
+  );
+  if (fallbackError) return fallbackError;
 
   if (data.subAgentIds && data.subAgentIds.length > 0) {
     const validation = await validateSubAgentAssignment(
@@ -155,10 +276,28 @@ export async function updateAgent(
   agentId: string,
   fields: AgentUpdateFields,
 ): Promise<AgentWriteResult> {
-  const data = dedupeIdArrays(fields);
+  const data = {
+    ...dedupeIdArrays(fields),
+    ...normaliseFallbackFields(fields),
+  };
 
   if (scope.kind === "workspace") {
-    await requireWorkspaceMutable(db, "agent", agentId, scope.ctx);
+    const { row: existing } = await requireWorkspaceMutable(
+      db,
+      "agent",
+      agentId,
+      scope.ctx,
+    );
+
+    const fallbackError = await validateFallbackPair(
+      { kind: "workspace", ctx: scope.ctx },
+      {
+        providerId: data.providerId ?? existing.providerId,
+        modelId: data.modelId ?? existing.modelId,
+      },
+      mergedFallbackPair(existing, data),
+    );
+    if (fallbackError) return fallbackError;
 
     if (data.subAgentIds) {
       const validation = await validateSubAgentAssignment(
@@ -180,7 +319,7 @@ export async function updateAgent(
     return { row };
   }
 
-  await requireOrgScoped(db, "agent", agentId, scope.orgId);
+  const existing = await requireOrgScoped(db, "agent", agentId, scope.orgId);
 
   if (data.subAgentIds?.includes(agentId)) {
     return { error: SUB_AGENT_SELF_ASSIGNMENT_ERROR };
@@ -194,8 +333,24 @@ export async function updateAgent(
   if (data.providerId === undefined) {
     throw new Error("A Shared Agent update must carry providerId");
   }
+  const fallbackPair = mergedFallbackPair(existing, data);
+  const fallbackError = await validateFallbackPair(
+    { kind: "organization", orgId: scope.orgId },
+    {
+      providerId: data.providerId,
+      modelId: data.modelId ?? existing.modelId,
+    },
+    fallbackPair,
+  );
+  if (fallbackError) return fallbackError;
+
   const blockers = await findNonSharedReferences(scope.orgId, {
     providerId: data.providerId,
+    // Only named when the Agent has a fallback, so an Agent without one is
+    // checked for exactly the references it has.
+    ...(fallbackPair.providerId
+      ? { fallbackProviderId: fallbackPair.providerId }
+      : {}),
     skillIds: data.skillIds,
     subAgentIds: data.subAgentIds,
     toolSetIds: data.toolSetIds,

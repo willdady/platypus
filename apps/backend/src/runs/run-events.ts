@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { InferUIMessageChunk, Tool } from "ai";
 import {
   RUN_EVENT_ERROR_MAX_BYTES,
+  type ModelSwitch,
   type RunEvent,
   type RunEventError,
   type RunEventStatus,
@@ -60,7 +61,12 @@ export type RunEventPatch = Pick<
 /** What one flush writes: events never written, and patches for those that were. */
 export type RunEventBatch = { inserts: RunEvent[]; updates: RunEventPatch[] };
 
-type OpenSpec = { type: RunEventType; toolName?: string };
+type OpenSpec = {
+  type: RunEventType;
+  toolName?: string;
+  /** The two pairs a `model-switch` names (ADR-0043); absent otherwise. */
+  modelSwitch?: ModelSwitch;
+};
 type CloseSpec = { status: Exclude<RunEventStatus, "running">; error?: string };
 
 /**
@@ -181,6 +187,7 @@ export class RunEventRecorder {
       durationMs: null,
       status: "running",
       error: null,
+      modelSwitch: spec.modelSwitch ?? null,
       childrenTruncated: false,
     };
     const recorded = { event, monoStart: this.clocks.monotonic() };

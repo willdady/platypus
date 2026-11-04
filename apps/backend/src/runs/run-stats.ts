@@ -210,16 +210,25 @@ export const withDelegatedUsage = (
   own: RunStats,
   model: UsageModel | undefined,
   delegated: readonly ModelUsage[],
+  /**
+   * The run's own calls already split by the (Provider, model) each step ran
+   * under — what a run that switched to its Fallback model mid-run needs
+   * (ADR-0043). Absent falls back to the single pair above, unchanged.
+   */
+  ownByModel?: readonly ModelUsage[],
 ): RunStats => {
   const ownCounts: TokenCounts = {
     inputTokens: own.inputTokens ?? 0,
     outputTokens: own.outputTokens ?? 0,
     ...pickCachedInput(own),
   };
-  const usageByModel = mergeUsageByModel([
-    ...(model && own.steps ? [{ ...model, ...ownCounts }] : []),
-    ...delegated,
-  ]);
+  const ownRows =
+    ownByModel && ownByModel.length > 0
+      ? mergeUsageByModel(ownByModel)
+      : model && own.steps
+        ? [{ ...model, ...ownCounts }]
+        : [];
+  const usageByModel = mergeUsageByModel([...ownRows, ...delegated]);
   if (usageByModel.length === 0) return own;
   return {
     ...own,

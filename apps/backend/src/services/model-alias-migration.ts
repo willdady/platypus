@@ -131,10 +131,23 @@ export const deMigrateOrphanedAliases = async (
       )
       .returning({ id: chatTable.id });
 
+    // A Fallback model naming the same Provider's alias (ADR-0043) is the same
+    // reference in a second column, and orphans the same way.
+    const fallbackAgents = await exec
+      .update(agentTable)
+      .set({ fallbackModelId: modelId, updatedAt: new Date() })
+      .where(
+        and(
+          eq(agentTable.fallbackProviderId, providerId),
+          sql`lower(${agentTable.fallbackModelId}) = ${reference}`,
+        ),
+      )
+      .returning({ id: agentTable.id });
+
     results.push({
       alias,
       modelId,
-      agents: agents.length,
+      agents: agents.length + fallbackAgents.length,
       chats: chats.length,
     });
   }

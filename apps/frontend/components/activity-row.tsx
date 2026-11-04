@@ -7,12 +7,17 @@ import {
   BrainIcon,
   CheckCircleIcon,
   PenLineIcon,
+  RefreshCwIcon,
   WrenchIcon,
   XCircleIcon,
   type LucideIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
-import type { RunEventStatus, RunEventType } from "@platypus/schemas";
+import type {
+  ModelSwitch,
+  RunEventStatus,
+  RunEventType,
+} from "@platypus/schemas";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
@@ -33,6 +38,8 @@ export type ActivityRowEntry = {
   toolName?: string | null;
   status: RunEventStatus;
   error?: string;
+  /** The two pairs a `model-switch` event names. */
+  modelSwitch?: ModelSwitch | null;
   /** How many identical consecutive entries this row stands for. */
   count?: number;
 };
@@ -48,6 +55,7 @@ export const activityColor: Record<RunEventType, { text: string; bg: string }> =
     reasoning: { text: "text-purple-500", bg: "bg-purple-500" },
     text: { text: "text-amber-500", bg: "bg-amber-500" },
     delegate: { text: "text-emerald-500", bg: "bg-emerald-500" },
+    "model-switch": { text: "text-orange-500", bg: "bg-orange-500" },
   };
 
 const config: Record<
@@ -82,6 +90,14 @@ const config: Record<
     icon: BotIcon,
     activeColor: activityColor.delegate.text,
     label: (entry) => entry.toolName ?? "Sub-Agent",
+  },
+  "model-switch": {
+    icon: RefreshCwIcon,
+    activeColor: activityColor["model-switch"].text,
+    label: (entry) =>
+      entry.modelSwitch
+        ? `Switched model: ${entry.modelSwitch.from.model} → ${entry.modelSwitch.to.model}`
+        : "Switched model",
   },
   failed: {
     icon: XCircleIcon,

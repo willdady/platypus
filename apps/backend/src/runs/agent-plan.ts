@@ -151,7 +151,11 @@ const reasoningSettings = (
  *
  * Aliases re-resolve on EVERY call — no pinning — so repointing an alias moves
  * every Agent and Chat using it on their next turn or delegation. A reference
- * that matches nothing is a hard error, never a fallback to some other model.
+ * that matches nothing is a hard error, never a silent substitution for some
+ * other model: resolution failure is a configuration fault. Whether a run may
+ * switch to its Fallback model because a Provider is *unavailable* is a
+ * separate decision, made by the headless Drive (ADR-0043) — this module only
+ * resolves the pair it is asked for.
  */
 export const resolveGenerationPlan = async (
   source: GenerationSource,
@@ -214,4 +218,34 @@ export const resolveGenerationPlan = async (
     modelReference,
     guardrails: provider.securityGuardrails ?? null,
   };
+};
+
+/** An Agent row that may carry the optional Fallback pair (ADR-0043). */
+export type FallbackAgentSource = GenerationAgentSource & {
+  fallbackProviderId?: string | null;
+  fallbackModelId?: string | null;
+};
+
+/**
+ * Resolves the Agent's optional Fallback model, when it has one — the same
+ * Agent settings (sampling, step ceiling) through the same
+ * `resolveGenerationPlan`, with the fallback Provider's model, ceilings,
+ * Reasoning map and guardrails. Absent when the Agent carries no fallback.
+ *
+ * Resolution failure here is a configuration fault like any other (ADR-0017);
+ * callers that offer the fallback only when it resolved keep a broken fallback
+ * from breaking runs that never needed it.
+ */
+export const resolveFallbackGeneration = async (
+  agent: FallbackAgentSource,
+  scope: GenerationPlanScope,
+  queries: GenerationPlanQueries,
+): Promise<GenerationPlan | undefined> => {
+  if (!agent.fallbackProviderId || !agent.fallbackModelId) return undefined;
+  const source: GenerationAgentSource = {
+    ...agent,
+    providerId: agent.fallbackProviderId,
+    modelId: agent.fallbackModelId,
+  };
+  return resolveGenerationPlan({ agent: source }, scope, queries);
 };

@@ -145,6 +145,7 @@ export function RunTimeline({
                 entry={{
                   type: row.event.type,
                   toolName: row.event.toolName,
+                  modelSwitch: row.event.modelSwitch,
                   status: row.event.status,
                   error: row.event.error?.message
                     ? row.event.error.truncated

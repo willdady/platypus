@@ -21,10 +21,15 @@ import {
 } from "./context-overflow-recovery.ts";
 import type { RunLifecycle } from "./run-lifecycle.ts";
 import { describeTimeout, TimeoutError } from "./run-registry.ts";
-import type { RunStep } from "./run-stats.ts";
+import type { RunStep, UsageModel } from "./run-stats.ts";
 import { computeStats } from "./run-stats.ts";
 import { describeSdkError, formatStreamError } from "./stream-error.ts";
 import { applyToolDurations } from "./tool-durations.ts";
+import {
+  FALLBACK_SDK_RETRIES,
+  isProviderUnavailableError,
+  sanitizeMessagesForFallback,
+} from "./fallback.ts";
 import {
   eventStatusForRun,
   recordRunEvents,
@@ -34,6 +39,8 @@ import {
   type RunEventScope,
 } from "./run-events.ts";
 import type { RunStats, RunStatus, TurnFacts } from "./types.ts";
+import type { FallbackTurn } from "./types.ts";
+import type { ModelSwitch } from "@platypus/schemas";
 import {
   normalizeWebToolMessage,
   normalizeWebToolParts,
@@ -85,6 +92,12 @@ type DriveConversation =
 type DriveBase = {
   plan: RunPlan;
   run: RunLifecycle;
+  /**
+   * The SDK retry budget for the model calls. Absent leaves the SDK's default;
+   * a run with a Fallback model passes one, so the switch happens after two
+   * attempts rather than after three (ADR-0043).
+   */
+  maxRetries?: number;
 };
 
 /** The conversation as the SDK takes it — exactly one of the two keys. */
@@ -109,6 +122,7 @@ const modelArgs = (
     overflowRecovery,
   }),
   ...conversationArgs(opts),
+  ...(opts.maxRetries !== undefined ? { maxRetries: opts.maxRetries } : {}),
 });
 
 /** An unattended run gets the no-progress detector; an attended one does not. */
@@ -285,6 +299,11 @@ export type ChatDriveOptions = DriveBase &
      * — its message parts remain its record (#647).
      */
     events?: RunEventScope;
+    /**
+     * A Fallback model this delegate may switch to (ADR-0043). Only a
+     * Sub-Agent under a Trigger run passes one; a Chat turn never does.
+     */
+    fallback?: FallbackTurn;
   };
 
 /** A delegated sub-Agent's drive: the same conversation and step hook, none of
@@ -302,6 +321,8 @@ export type DelegateDriveOptions = DriveBase &
     agentId: string;
     /** The parent's scope for this delegate's events — see `ChatDriveOptions`. */
     events?: RunEventScope;
+    /** This delegate's own Fallback model (ADR-0043), when it has one. */
+    fallback?: FallbackTurn;
   };
 
 /** Where a drive's UI stream goes before it is consumed. A Chat turn tees off a
@@ -334,6 +355,23 @@ type ModelLoopOptions = DriveBase &
 type LoopStats = Parameters<typeof computeStats>[0];
 
 /**
+ * One completed step as the Drive holds it: the statistics `computeStats`
+ * reads, plus the wider fields a Fallback switch needs — the token detail per
+ * step and the response messages to continue from.
+ */
+type LoopStep = LoopStats["steps"][number] & {
+  usage?: {
+    inputTokens?: number;
+    outputTokens?: number;
+    inputTokenDetails?: {
+      cacheReadTokens?: number;
+      cacheWriteTokens?: number;
+    };
+  };
+  response?: { messages?: ModelMessage[] };
+};
+
+/**
  * What one model loop settles on, once its chunk stream has drained.
  *
  * The loop owns the one cutoff rule: the terminal finish's metadata is read as
@@ -357,11 +395,29 @@ type ModelLoopOutcome = {
   /** The provider's raw terminal reason — what it actually said. */
   rawFinishReason: string | undefined;
   /** The steps the SDK completed, for a caller computing its own statistics. */
-  steps: LoopStats["steps"];
+  steps: LoopStep[];
   /** The usage the provider reported across the loop. */
   totalUsage: LoopStats["totalUsage"];
   /** Why the result's terminal promises rejected, when they did. */
   rejection?: { error: unknown };
+  /**
+   * The error the stream itself reported, in its raw form. Kept beside the
+   * caller-facing `failure` sentence so the Drive can classify it — whether a
+   * Fallback model may answer it — rather than matching prose (ADR-0043).
+   */
+  failureError?: unknown;
+  /**
+   * The messages the completed steps generated, in SDK form. A switch to the
+   * Fallback model continues from these plus the messages already sent, so the
+   * earlier tool calls and their results survive it (ADR-0043).
+   */
+  stepMessages: ModelMessage[];
+  /**
+   * The steps the loop completed, collected as they ended. `steps` is empty
+   * when the loop failed mid-run — its terminal promise rejects — so this is
+   * the only record of the work the run was billed for before the failure.
+   */
+  completedSteps: LoopStep[];
 };
 
 /**
@@ -414,16 +470,24 @@ const modelLoop = ({
   onStepFinish,
   onToolExecutionEnd,
   onEnd,
+  maxRetries,
   ...conversation
 }: ModelLoopOptions): ModelLoop => {
   run.setUsageModel(givenPlan.usageModel);
   const plan = planRecording(givenPlan, events);
   const overflowRecovery = createOverflowRecovery();
-  // The first error the stream reported, in a caller-facing sentence.
+  // The first error the stream reported, in a caller-facing sentence and in
+  // its raw form — the latter for a Fallback switch's classifier.
   let failure: string | undefined;
+  let failureError: unknown;
   const recordFailure = (error: unknown): void => {
+    if (failure === undefined) failureError = error;
     failure ??= describeSdkError(error);
   };
+  // The messages the completed steps generated, which a Fallback switch
+  // continues from.
+  const stepMessages: ModelMessage[] = [];
+  const completedSteps: LoopStep[] = [];
   // The terminal finish's cutoffs, read off the metadata extractor below.
   let truncated = false;
   let stoppedAtStepLimit = false;
@@ -436,8 +500,19 @@ const modelLoop = ({
   const driveStartMs = Date.now();
 
   const result = streamText({
-    ...modelArgs({ plan, run, ...conversation }, noProgress, overflowRecovery),
+    ...modelArgs(
+      { plan, run, maxRetries, ...conversation },
+      noProgress,
+      overflowRecovery,
+    ),
     onStepEnd: (step: RunStep) => {
+      // The SDK's step result is wider than `RunStep`; the response messages
+      // are read here for a possible Fallback switch (ADR-0043).
+      completedSteps.push(step as LoopStep);
+      stepMessages.push(
+        ...((step as { response?: { messages?: ModelMessage[] } }).response
+          ?.messages ?? []),
+      );
       onStepFinish?.(step);
       run.onStep(step);
     },
@@ -496,6 +571,7 @@ const modelLoop = ({
   const outcome = async (): Promise<ModelLoopOutcome> => {
     const cutoffs = {
       failure,
+      failureError,
       truncated,
       // A no-progress abort halts the loop on the same terminal finish reason
       // the step ceiling does, and under a ceiling as low as the detector's own
@@ -515,11 +591,16 @@ const modelLoop = ({
         ]);
       return {
         ...cutoffs,
-        text,
+        text: typeof text === "string" ? text : "",
         finishReason,
         rawFinishReason,
-        steps,
-        totalUsage,
+        steps: (steps as LoopStep[] | undefined) ?? [],
+        // A test double's `streamText` result can omit usage; normalize it
+        // here so the drive always reads the documented shape.
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- the runtime value can be absent though the type says otherwise
+        totalUsage: totalUsage ?? {},
+        stepMessages,
+        completedSteps,
       };
     } catch (error) {
       return {
@@ -529,6 +610,8 @@ const modelLoop = ({
         rawFinishReason: undefined,
         steps: [],
         totalUsage: {},
+        stepMessages,
+        completedSteps,
         rejection: { error },
       };
     }
@@ -541,16 +624,183 @@ const modelLoop = ({
   };
 };
 
+/** What a switch decision hands the caller that must perform it. */
+type SwitchDecision = {
+  modelSwitch: ModelSwitch;
+  /** The fallback this switch runs on. */
+  fallback: FallbackTurn;
+  /** The primary's failure, in a caller-facing sentence. */
+  primaryFailure: string;
+};
+
+/**
+ * Whether this ended loop is the primary's Provider failing in the class a
+ * Fallback model may answer (ADR-0043). False when there is no fallback, one
+ * has already been used, the run was stopped, the failure is not the
+ * Provider's, or either pair is unnamed (a hand-built test plan).
+ */
+const fallbackSwitchFor = ({
+  fallback,
+  switched,
+  run,
+  outcome,
+  from,
+  stepsUsed,
+  maxSteps,
+}: {
+  fallback: FallbackTurn | undefined;
+  switched: boolean;
+  run: RunLifecycle;
+  outcome: ModelLoopOutcome;
+  from: UsageModel | undefined;
+  stepsUsed: number;
+  maxSteps: number;
+}): SwitchDecision | null => {
+  if (!fallback || switched || run.handle.signal.aborted) return null;
+  // The step ceiling counts across the whole run: a primary that already spent
+  // it leaves nothing for the fallback, so the run ends as it failed.
+  if (stepsUsed >= maxSteps) return null;
+  if (!outcome.failure && !outcome.rejection) return null;
+  const error = outcome.failureError ?? outcome.rejection?.error;
+  if (!isProviderUnavailableError(error)) return null;
+  const to = fallback.plan.usageModel;
+  if (!from || !to) return null;
+  return {
+    modelSwitch: {
+      from: { providerId: from.providerId, model: from.model },
+      to: { providerId: to.providerId, model: to.model },
+    },
+    fallback,
+    primaryFailure: outcome.failure ?? describeSdkError(error),
+  };
+};
+
+/**
+ * Records a switch on the run: the run-level marker every reader uses (the
+ * runs list, the webhook payload) and the zero-duration `model-switch` event
+ * on the timeline, with the primary's capped error.
+ *
+ * Recorded at switch time, not at the end, so a run that switched and then
+ * failed still carries the marker — a failed run's terminal write is the one
+ * that most needs to explain the model it was on.
+ */
+const recordModelSwitch = ({
+  run,
+  events,
+  modelSwitch,
+  primaryFailure,
+}: {
+  run: RunLifecycle;
+  events: RunEventScope | undefined;
+  modelSwitch: ModelSwitch;
+  primaryFailure: string;
+}): void => {
+  run.setStats({ ...run.stats, fallback: modelSwitch });
+  if (!events) return;
+  const id = events.recorder.open(events.parentEventId, {
+    type: "model-switch",
+    modelSwitch,
+  });
+  if (id) {
+    events.recorder.close(id, { status: "completed", error: primaryFailure });
+  }
+};
+
+/**
+ * The same plan on the fallback, with the step ceiling counting across the
+ * whole run (ADR-0043). Fields that describe the turn rather than the model —
+ * tools, the gate's scope, occupancy readings — stay the primary's; everything
+ * the model decides comes from the fallback's resolved plan, so the primary's
+ * Reasoning options and ceilings cannot leak into it.
+ */
+const fallbackPlan = (
+  plan: RunPlan,
+  fallback: FallbackTurn,
+  stepsUsed: number,
+): RunPlan => ({
+  ...fallback.plan,
+  maxSteps: Math.max(1, plan.maxSteps - stepsUsed),
+  tools: plan.tools,
+  system: fallback.system,
+  ...(plan.gateScope ? { gateScope: plan.gateScope } : {}),
+  ...(plan.readOnlyToolNames
+    ? { readOnlyToolNames: plan.readOnlyToolNames }
+    : {}),
+  ...(plan.initialOccupancy !== undefined
+    ? { initialOccupancy: plan.initialOccupancy }
+    : {}),
+  ...(plan.priorOccupancyReadings
+    ? { priorOccupancyReadings: plan.priorOccupancyReadings }
+    : {}),
+  ...(plan.summaryId ? { summaryId: plan.summaryId } : {}),
+});
+
+/** The messages a loop's request carried, in the shape a switch continues from. */
+const conversationMessages = (
+  conversation: DriveConversation,
+): ModelMessage[] =>
+  conversation.prompt !== undefined
+    ? [{ role: "user", content: conversation.prompt }]
+    : conversation.modelMessages;
+
+/** How much of each failure the run's error keeps. */
+const FALLBACK_FAILURE_MAX_LENGTH = 400;
+
+const capFailure = (message: string): string =>
+  message.length <= FALLBACK_FAILURE_MAX_LENGTH
+    ? message
+    : `${message.slice(0, FALLBACK_FAILURE_MAX_LENGTH)}…`;
+
+/**
+ * The plan and conversation a switched run continues with: the fallback's
+ * generation plan with the step ceiling counting across the run, and the
+ * messages already sent plus every completed step's — reasoning and
+ * vendor-only metadata stripped (ADR-0043).
+ */
+const switchToFallback = ({
+  plan,
+  conversation,
+  fallback,
+  stepMessages,
+  stepsUsed,
+}: {
+  plan: RunPlan;
+  conversation: DriveConversation;
+  fallback: FallbackTurn;
+  stepMessages: ModelMessage[];
+  stepsUsed: number;
+}): { plan: RunPlan; conversation: DriveConversation } => ({
+  plan: fallbackPlan(plan, fallback, stepsUsed),
+  conversation: {
+    modelMessages: sanitizeMessagesForFallback([
+      ...conversationMessages(conversation),
+      ...stepMessages,
+    ]),
+  },
+});
+
+/** The run's error when the fallback failed too: both, each capped. */
+export const fallbackFailureMessage = (
+  primaryFailure: string,
+  fallbackFailure: string,
+): string =>
+  `The primary model failed: ${capFailure(primaryFailure)} The Fallback model also failed: ${capFailure(fallbackFailure)}`;
+
 /**
  * Runs the shared model loop inside its registered lifecycle and folds the
  * streamed parts into `PlatypusUIMessage`s — metadata, tool durations, stream
  * errors and the terminal finish all handled here — then records the terminal
  * status exactly once, when the snapshot stream drains.
+ *
+ * A delegate under a Trigger may switch to its own Fallback model mid-run
+ * (ADR-0043): the loop is rebuilt on the fallback and the snapshot stream goes
+ * on yielding, so the caller sees one continuous run.
  */
 const runStreamedDrive = (
   opts: ChatDriveOptions,
   behavior: StreamedBehavior,
   split: SplitStream,
+  causation: { agentId?: string; child: boolean },
 ): StreamedCore => {
   const {
     run,
@@ -558,6 +808,9 @@ const runStreamedDrive = (
     toolDurations,
     onFinal,
     events,
+    fallback,
+    prompt: givenPrompt,
+    modelMessages: givenMessages,
     ...loopOpts
   } = opts;
 
@@ -578,78 +831,173 @@ const runStreamedDrive = (
     resolveDone = resolve;
   });
 
-  const loop = modelLoop({
-    ...loopOpts,
-    run,
-    originalMessages,
-    continued,
-    noProgress,
-    onEnd: (finalMessages) => {
-      finalHandedOver = true;
-      // The terminal finish, stamped with the locally-measured tool durations
-      // and the normalized web-tool view (issue #525) — same order both apply
-      // in the read path (`routes/chat.ts`), for one composed shape either way.
-      const withDurations =
-        toolDurations && toolDurations.size > 0
-          ? applyToolDurations(finalMessages, toolDurations)
-          : finalMessages;
-      handoverMessages = normalizeWebToolParts(withDurations);
-      onFinal?.(handoverMessages);
-    },
-  });
+  /** The request's conversation, replaced by the accumulated one on a switch. */
+  let conversation: DriveConversation =
+    givenPrompt !== undefined
+      ? { prompt: givenPrompt }
+      : { modelMessages: givenMessages };
+  /** The UI conversation the stream folds onto. */
+  let foldMessages = originalMessages;
+  let seed: PlatypusUIMessage | undefined = continued;
+  let plan = opts.plan;
+  let switched = false;
+  let primaryFailure: string | undefined;
 
-  // A continued assistant message's own parts, put back on the stream before
-  // anything downstream reads it — the SDK reuses the message's id but re-emits
-  // nothing, and its own fold is the only consumer that already has them. See
-  // `replay-seeded-parts.ts`.
-  const withSeeded = loop.chunks.pipeThrough(
-    replaySeededParts(originalMessages),
-  );
+  /**
+   * Starts a model loop and its chunk stream. Called once before the snapshot
+   * generator exists, because the Chat's client branch is teed off
+   * synchronously — and again on a switch, inside the same causation context
+   * so the new loop's tool executions are attributed like the first.
+   */
+  const startLoop = (): {
+    loop: ModelLoop;
+    consume: ReadableStream<InferUIMessageChunk<PlatypusUIMessage>>;
+  } => {
+    const build = () =>
+      modelLoop({
+        ...loopOpts,
+        ...(conversation.prompt !== undefined
+          ? { prompt: conversation.prompt }
+          : { modelMessages: conversation.modelMessages }),
+        plan,
+        run,
+        originalMessages: foldMessages,
+        continued: seed,
+        noProgress,
+        onEnd: (finalMessages) => {
+          finalHandedOver = true;
+          // The terminal finish, stamped with the locally-measured tool
+          // durations and the normalized web-tool view (issue #525) — same
+          // order both apply in the read path (`routes/chat.ts`), for one
+          // composed shape either way.
+          const withDurations =
+            toolDurations && toolDurations.size > 0
+              ? applyToolDurations(finalMessages, toolDurations)
+              : finalMessages;
+          handoverMessages = normalizeWebToolParts(withDurations);
+          onFinal?.(handoverMessages);
+        },
+      });
+    const loop =
+      causation.child && causation.agentId
+        ? withChildCausation(causation.agentId, build)
+        : withAgentCausation(causation.agentId, build);
 
-  // Recorded before the split, so the delegate's Run events see every chunk
-  // whichever branch is read first, and a Chat turn (no scope) pays nothing.
-  const consume = split(
-    events ? withSeeded.pipeThrough(recordRunEvents(events)) : withSeeded,
-  );
+    // A continued assistant message's own parts, put back on the stream
+    // before anything downstream reads it — the SDK reuses the message's id
+    // but re-emits nothing, and its own fold is the only consumer that
+    // already has them. See `replay-seeded-parts.ts`.
+    const withSeeded = loop.chunks.pipeThrough(replaySeededParts(foldMessages));
+
+    // Recorded before the split, so the delegate's Run events see every chunk
+    // whichever branch is read first, and a Chat turn (no scope) pays nothing.
+    const consume = split(
+      events ? withSeeded.pipeThrough(recordRunEvents(events)) : withSeeded,
+    );
+    return { loop, consume };
+  };
+
+  let current = startLoop();
 
   const snapshots: AsyncIterable<PlatypusUIMessage> = (async function* () {
-    try {
-      for await (const message of readUIMessageStream<PlatypusUIMessage>({
-        // Folded onto, as the SDK's own fold is: a reply resumed after its
-        // approvals were answered holds parts the stream never re-sends, and
-        // goes on to update them by id.
-        ...(continued ? { message: structuredClone(continued) } : {}),
-        stream: consume,
-        onError: (error) => {
-          loop.reportFailure(error);
-        },
-      })) {
-        // Normalized live, not only on the folded final: a search must render
-        // identically while streaming and after a reload (issue #525), and the
-        // final's own normalization run happens separately, in `onEnd` above.
-        const normalized = normalizeWebToolMessage(message);
-        latest = normalized;
-        // Drain past the handover but don't yield: a snapshot after the folded
-        // final is no better than what it would overwrite (no durations).
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- set in a callback, which TS narrowing does not track
-        if (behavior.stopSnapshotsAfterFinal && finalHandedOver) continue;
-        yield normalized;
+    for (;;) {
+      const { loop, consume } = current;
+
+      try {
+        for await (const message of readUIMessageStream<PlatypusUIMessage>({
+          // Folded onto, as the SDK's own fold is: a reply resumed after its
+          // approvals were answered holds parts the stream never re-sends, and
+          // goes on to update them by id.
+          ...(seed ? { message: structuredClone(seed) } : {}),
+          stream: consume,
+          onError: (error) => {
+            loop.reportFailure(error);
+          },
+        })) {
+          // Normalized live, not only on the folded final: a search must render
+          // identically while streaming and after a reload (issue #525), and the
+          // final's own normalization run happens separately, in `onEnd` above.
+          const normalized = normalizeWebToolMessage(message);
+          latest = normalized;
+          // Drain past the handover but don't yield: a snapshot after the folded
+          // final is no better than what it would overwrite (no durations).
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- set in a callback, which TS narrowing does not track
+          if (behavior.stopSnapshotsAfterFinal && finalHandedOver) continue;
+          yield normalized;
+        }
+      } catch (error) {
+        logger.error(
+          { err: error, runId: run.handle.runId },
+          "Server-side UI stream consumer error",
+        );
+        loop.reportFailure(error);
       }
-    } catch (error) {
-      logger.error(
-        { err: error, runId: run.handle.runId },
-        "Server-side UI stream consumer error",
-      );
-      loop.reportFailure(error);
-    } finally {
+
       // The cutoffs were decided once, as the loop's terminal finish passed
       // through its metadata extractor; the run records them from here.
       const outcome = await loop.outcome();
+      const outcomeSteps =
+        outcome.steps.length > 0 ? outcome.steps : outcome.completedSteps;
+      // Only a delegate under a Trigger carries a fallback, and only until it
+      // has switched once. A stream that ended with no stream failure (a
+      // ceiling stop, or a clean finish) never switches.
+      const switchable = fallbackSwitchFor({
+        fallback,
+        switched,
+        run,
+        outcome,
+        from: plan.usageModel,
+        stepsUsed: outcomeSteps.length,
+        maxSteps: plan.maxSteps,
+      });
+      if (switchable) {
+        const {
+          primaryFailure: captured,
+          modelSwitch,
+          fallback: switchedTo,
+        } = switchable;
+        primaryFailure = captured;
+        switched = true;
+        recordModelSwitch({
+          run,
+          events,
+          modelSwitch,
+          primaryFailure: captured,
+        });
+        // The next loop runs on the fallback with the step ceiling counting
+        // across the whole run, and continues from what the primary already
+        // sent — reasoning and vendor-only metadata stripped (ADR-0043).
+        const next = switchToFallback({
+          plan,
+          conversation,
+          fallback: switchedTo,
+          stepMessages: outcome.stepMessages,
+          stepsUsed: outcomeSteps.length,
+        });
+        plan = next.plan;
+        conversation = next.conversation;
+        foldMessages = latest ? [latest] : [];
+        seed = latest;
+        finalHandedOver = false;
+        current = startLoop();
+        continue;
+      }
+
       if (outcome.truncated || outcome.stoppedAtStepLimit) {
         run.setStats(withCutoffs(run.stats, outcome));
       }
+      const activeFailure =
+        outcome.failure ??
+        (outcome.rejection && !run.handle.signal.aborted
+          ? describeSdkError(outcome.rejection.error)
+          : undefined);
       const decision = decideTerminalStatus(run, {
-        failure: outcome.failure,
+        failure:
+          primaryFailure !== undefined &&
+          switched &&
+          activeFailure !== undefined
+            ? fallbackFailureMessage(primaryFailure, activeFailure)
+            : activeFailure,
         noProgress,
         failOnStreamError: behavior.failOnStreamError,
       });
@@ -669,6 +1017,7 @@ const runStreamedDrive = (
         truncated: outcome.truncated,
         stoppedAtStepLimit: outcome.stoppedAtStepLimit,
       });
+      break;
     }
   })();
 
@@ -733,23 +1082,25 @@ export const driveChat = (opts: ChatDriveOptions): ChatDrive => {
   // The turn's Agent is what caused any write it makes; a direct (no-Agent)
   // turn establishes no causation and so never suppresses an Event Trigger
   // (ADR-0022).
-  const core = withAgentCausation(opts.facts?.agentId, () =>
-    runStreamedDrive(
-      opts,
-      {
-        unattended: false,
-        failOnStreamError: false,
-        stopSnapshotsAfterFinal: true,
-      },
-      (ui) => {
-        const [client, serverSide] = ui.tee();
-        // Only the client branch carries the notice: the run itself already
-        // records the timeout through `statusFromSignal`, so adding it to the
-        // server-side drain would report the same failure twice.
-        response = client.pipeThrough(withAbortNotice(opts.run));
-        return serverSide;
-      },
-    ),
+  const core = runStreamedDrive(
+    opts,
+    {
+      unattended: false,
+      failOnStreamError: false,
+      stopSnapshotsAfterFinal: true,
+    },
+    (ui) => {
+      const [client, serverSide] = ui.tee();
+      // Only the client branch carries the notice: the run itself already
+      // records the timeout through `statusFromSignal`, so adding it to the
+      // server-side drain would report the same failure twice.
+      response = client.pipeThrough(withAbortNotice(opts.run));
+      return serverSide;
+    },
+    // The turn's Agent is what caused any write it makes; a direct (no-Agent)
+    // turn establishes no causation and so never suppresses an Event Trigger
+    // (ADR-0022).
+    { agentId: opts.facts?.agentId, child: false },
   );
   return { ...core, response };
 };
@@ -768,16 +1119,15 @@ export const driveDelegate = (opts: DelegateDriveOptions): StreamedCore => {
   // every Agent above it, so a parent's Event Trigger is still suppressed when
   // the work is done through a Sub-Agent (ADR-0022, issue #668).
   const { agentId, ...rest } = opts;
-  return withChildCausation(agentId, () =>
-    runStreamedDrive(
-      rest,
-      {
-        unattended: true,
-        failOnStreamError: true,
-        stopSnapshotsAfterFinal: false,
-      },
-      (ui) => ui,
-    ),
+  return runStreamedDrive(
+    rest,
+    {
+      unattended: true,
+      failOnStreamError: true,
+      stopSnapshotsAfterFinal: false,
+    },
+    (ui) => ui,
+    { agentId, child: true },
   );
 };
 
@@ -799,6 +1149,12 @@ export type DriveOnceOptions = DriveBase &
     /** The final assistant text, right before the run ends — so the sink's
      *  terminal write can persist it. */
     onFinal?: (text: string) => void;
+    /**
+     * The Agent's Fallback model (ADR-0043). A Trigger run passes one when the
+     * Agent has one; the drive switches on a Provider failure and stays on the
+     * fallback for the rest of the run.
+     */
+    fallback?: FallbackTurn;
   };
 
 /**
@@ -857,35 +1213,159 @@ export const driveOnce = async (
   const { run } = opts;
   const noProgress = detectorFor(true);
   const startTime = Date.now();
-  const { agentId, onFinal, events: recorder, ...loopOpts } = opts;
+  const {
+    agentId,
+    onFinal,
+    events: recorder,
+    fallback,
+    plan: initialPlan,
+    ...loopOpts
+  } = opts;
   const scope: RunEventScope | undefined = recorder
     ? { recorder, parentEventId: null }
     : undefined;
 
+  /** The request's conversation, replaced by the accumulated one on a switch. */
+  let conversation: DriveConversation =
+    loopOpts.prompt !== undefined
+      ? { prompt: loopOpts.prompt }
+      : { modelMessages: loopOpts.modelMessages };
+  const {
+    prompt: _prompt,
+    modelMessages: _modelMessages,
+    ...baseOpts
+  } = loopOpts;
+  let plan = initialPlan;
+  let switched = false;
+  let modelSwitch: ModelSwitch | undefined;
+  let primaryFailure: string | undefined;
+
+  // Every completed step of every attempt, and the summed usage, so a run that
+  // switched still reports the whole run — its Step ceiling and its billing
+  // count across the switch (ADR-0043).
+  const steps: LoopStats["steps"] = [];
+  let totalInput = 0;
+  let totalOutput = 0;
+  let cacheRead: number | undefined;
+  let cacheWrite: number | undefined;
+
   // The plan's tool wrapping is inside the `try` too: nothing above this drive
   // finishes the run if it throws (issue #1122).
   try {
-    // Built inside the causation chain so the SDK's stream keeps it alive for
-    // every tool execution it drives (ADR-0022).
-    const loop = withAgentCausation(agentId, () =>
-      modelLoop({ ...loopOpts, noProgress, events: scope }),
-    );
+    const finalOutcome = await (async (): Promise<ModelLoopOutcome> => {
+      for (;;) {
+        // Built inside the causation chain so the SDK's stream keeps it alive for
+        // every tool execution it drives (ADR-0022).
+        const loop = withAgentCausation(agentId, () =>
+          modelLoop({
+            ...baseOpts,
+            ...conversation,
+            plan,
+            noProgress,
+            events: scope,
+            // One SDK retry before a switch, rather than the default two
+            // (ADR-0043). Absent a fallback the SDK's default stands.
+            maxRetries: fallback
+              ? (baseOpts.maxRetries ?? FALLBACK_SDK_RETRIES)
+              : baseOpts.maxRetries,
+          }),
+        );
 
-    // Drained through the UI message stream so the Run events are read off
-    // the same chunks a delegate's are. Nothing else reads it.
-    for await (const chunk of loop.chunks) {
-      if (scope) recordUiChunk(scope, chunk);
-    }
-    const outcome = await loop.outcome();
-    // What the stream reported outranks what the result's promises rejected
-    // with: a provider that throws before producing anything rejects them
-    // with a generic "no output" error, and the reason is in the report.
-    if (outcome.failure) throw new Error(outcome.failure);
-    if (outcome.rejection) throw outcome.rejection.error;
+        // Drained through the UI message stream so the Run events are read off
+        // the same chunks a delegate's are. Nothing else reads it.
+        for await (const chunk of loop.chunks) {
+          if (scope) recordUiChunk(scope, chunk);
+        }
+        const outcome = await loop.outcome();
+        // A loop that failed mid-run has an empty `steps` (its terminal promise
+        // rejected); the steps it completed before that are still billed and
+        // still count towards the ceiling.
+        const outcomeSteps =
+          outcome.steps.length > 0 ? outcome.steps : outcome.completedSteps;
+        steps.push(...outcomeSteps);
+        for (const step of outcomeSteps) {
+          totalInput += step.usage?.inputTokens ?? 0;
+          totalOutput += step.usage?.outputTokens ?? 0;
+          const stepDetails = step.usage?.inputTokenDetails;
+          if (stepDetails?.cacheReadTokens !== undefined) {
+            cacheRead = (cacheRead ?? 0) + stepDetails.cacheReadTokens;
+          }
+          if (stepDetails?.cacheWriteTokens !== undefined) {
+            cacheWrite = (cacheWrite ?? 0) + stepDetails.cacheWriteTokens;
+          }
+        }
 
+        const switchable = fallbackSwitchFor({
+          fallback,
+          switched,
+          run,
+          outcome,
+          from: plan.usageModel,
+          stepsUsed: outcomeSteps.length,
+          maxSteps: plan.maxSteps,
+        });
+        if (switchable) {
+          primaryFailure = switchable.primaryFailure;
+          modelSwitch = switchable.modelSwitch;
+          switched = true;
+          recordModelSwitch({
+            run,
+            events: scope,
+            modelSwitch: switchable.modelSwitch,
+            primaryFailure,
+          });
+          const next = switchToFallback({
+            plan,
+            conversation,
+            fallback: switchable.fallback,
+            stepMessages: outcome.stepMessages,
+            stepsUsed: outcomeSteps.length,
+          });
+          plan = next.plan;
+          conversation = next.conversation;
+          continue;
+        }
+
+        // What the stream reported outranks what the result's promises rejected
+        // with: a provider that throws before producing anything rejects them
+        // with a generic "no output" error, and the reason is in the report.
+        if (outcome.failure) {
+          throw new Error(
+            primaryFailure !== undefined && switched
+              ? fallbackFailureMessage(primaryFailure, outcome.failure)
+              : outcome.failure,
+          );
+        }
+        if (outcome.rejection) {
+          const reason = describeSdkError(outcome.rejection.error);
+          if (primaryFailure !== undefined && switched) {
+            throw new Error(fallbackFailureMessage(primaryFailure, reason));
+          }
+          throw outcome.rejection.error instanceof Error
+            ? outcome.rejection.error
+            : new Error(reason);
+        }
+        return outcome;
+      }
+    })();
+
+    const mergedStats = computeStats({
+      steps,
+      totalUsage: {
+        inputTokens: totalInput,
+        outputTokens: totalOutput,
+        inputTokenDetails: {
+          ...(cacheRead !== undefined ? { cacheReadTokens: cacheRead } : {}),
+          ...(cacheWrite !== undefined ? { cacheWriteTokens: cacheWrite } : {}),
+        },
+      },
+    });
     const stats = withCutoffs(
-      computeStats({ steps: outcome.steps, totalUsage: outcome.totalUsage }),
-      outcome,
+      {
+        ...mergedStats,
+        ...(modelSwitch ? { fallback: modelSwitch } : {}),
+      },
+      finalOutcome,
     );
     run.setStats(stats);
 
@@ -895,13 +1375,13 @@ export const driveOnce = async (
       noProgress,
       failOnStreamError: false,
       emptyAtOutputCeiling:
-        !!stats.truncatedByTokenLimit && !outcome.text.trim(),
+        !!stats.truncatedByTokenLimit && !finalOutcome.text.trim(),
     });
-    logHeadlessCompletion(run, outcome, stats, startTime, decision.error);
+    logHeadlessCompletion(run, finalOutcome, stats, startTime, decision.error);
 
-    onFinal?.(outcome.text);
+    onFinal?.(finalOutcome.text);
     await run.finish(decision.status, decision.error);
-    return { text: outcome.text, stats };
+    return { text: finalOutcome.text, stats };
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error));
     logger.error(

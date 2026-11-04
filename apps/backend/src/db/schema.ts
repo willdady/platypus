@@ -33,6 +33,7 @@ import type {
   providerApiModeSchema,
   ReasoningEffort,
   RunEventError,
+  ModelSwitch,
   RunEventStatus,
   RunEventType,
   TranscriptSummaryStats,
@@ -522,6 +523,18 @@ export const agent = pgTable(
     // system prompt, not the composite (see ./system-prompt.ts).
     instructions: t.text("instructions"),
     modelId: t.text("model_id").notNull(),
+    // The optional Fallback model (ADR-0043): a second Provider and model a
+    // Trigger run may switch to when the primary Provider cannot serve the
+    // request. Referenced like the primary — `restrict`, so deleting a Provider
+    // an Agent uses as its fallback is refused rather than silently cleared.
+    // Two nullable columns, not one compound value, so an ordered list can
+    // replace them later without a breaking migration.
+    fallbackProviderId: t
+      .text("fallback_provider_id")
+      .references(() => provider.id, {
+        onDelete: "restrict",
+      }),
+    fallbackModelId: t.text("fallback_model_id"),
     maxSteps: t.integer("max_steps"),
     temperature: t.real("temperature"),
     topP: t.real("top_p"),
@@ -553,6 +566,7 @@ export const agent = pgTable(
     index("idx_agent_workspace_id").on(t.workspaceId),
     index("idx_agent_organization_id").on(t.organizationId),
     index("idx_agent_provider_id").on(t.providerId),
+    index("idx_agent_fallback_provider_id").on(t.fallbackProviderId),
     // Shared Agents must have unique names within an Organization so Promote
     // surfaces a clean conflict. Workspace Agent names stay unconstrained.
     unique("unique_agent_name_org").on(t.organizationId, t.name),
@@ -1383,12 +1397,15 @@ export const triggerRunEvent = pgTable(
     // `{ message, truncated, originalBytes }` — the one content a Run event
     // carries, capped at 1 KB on a character boundary. Null unless it failed.
     error: t.jsonb("error").$type<RunEventError>(),
+    // `{ from, to }` on a `model-switch` event (ADR-0043): the (Provider, model)
+    // pairs the run left and moved to. Null on every other event.
+    modelSwitch: t.jsonb("model_switch").$type<ModelSwitch>(),
     childrenTruncated: t.boolean("children_truncated").notNull().default(false),
   }),
   (t) => [
     check(
       "trigger_run_event_type_allowed",
-      sql`${t.type} in ('tool-call', 'tool-input', 'reasoning', 'text', 'delegate')`,
+      sql`${t.type} in ('tool-call', 'tool-input', 'reasoning', 'text', 'delegate', 'model-switch')`,
     ),
     check(
       "trigger_run_event_status_allowed",

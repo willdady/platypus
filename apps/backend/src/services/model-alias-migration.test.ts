@@ -104,7 +104,8 @@ describe("deMigrateOrphanedAliases", () => {
   it("rewrites Agents and Chats back to the concrete id and counts each", async () => {
     mockDb.returning
       .mockResolvedValueOnce([{ id: "a1" }, { id: "a2" }, { id: "a3" }])
-      .mockResolvedValueOnce([{ id: "c1" }]);
+      .mockResolvedValueOnce([{ id: "c1" }])
+      .mockResolvedValueOnce([]);
 
     const report = await deMigrateOrphanedAliases(
       "p1",
@@ -115,9 +116,29 @@ describe("deMigrateOrphanedAliases", () => {
     expect(report).toEqual([
       { alias: "flagship", modelId: "gpt-4", agents: 3, chats: 1 },
     ]);
-    expect(mockDb.update).toHaveBeenCalledTimes(2);
+    expect(mockDb.update).toHaveBeenCalledTimes(3);
     expect(mockDb.set).toHaveBeenCalledWith(
       expect.objectContaining({ modelId: "gpt-4" }),
+    );
+  });
+
+  it("rewrites a Fallback model that named the orphaned alias", async () => {
+    mockDb.returning
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ id: "a1" }, { id: "a2" }]);
+
+    const report = await deMigrateOrphanedAliases(
+      "p1",
+      [model("gpt-4", "flagship")],
+      [model("gpt-4")],
+    );
+
+    expect(report).toEqual([
+      { alias: "flagship", modelId: "gpt-4", agents: 2, chats: 0 },
+    ]);
+    expect(mockDb.set).toHaveBeenCalledWith(
+      expect.objectContaining({ fallbackModelId: "gpt-4" }),
     );
   });
 

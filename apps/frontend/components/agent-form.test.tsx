@@ -68,7 +68,7 @@ describe("AgentForm validation error surfacing", () => {
     expect(await screen.findByText("Model is required")).toBeInTheDocument();
 
     // The Model select trigger is marked invalid for assistive tech.
-    const trigger = screen.getByRole("combobox");
+    const trigger = screen.getByRole("combobox", { name: "Model" });
     expect(trigger).toHaveAttribute("aria-invalid", "true");
 
     // A validation failure is never silent.
@@ -620,6 +620,83 @@ describe("AgentForm Reasoning section", () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
     expect(savedBody(fetchMock)).toMatchObject({
       thinkingBudget: null,
+    });
+  });
+});
+
+// Issue #1803 / ADR-0043: an Agent may carry a Fallback model.
+describe("AgentForm Fallback model", () => {
+  const fallbackProvider = {
+    ...provider,
+    id: "p2",
+    name: "Anthropic",
+    modelIds: [{ id: "claude-sonnet-4-5", passthroughFileTypes: [] }],
+  } as unknown as Provider;
+
+  const stored = {
+    id: "a1",
+    name: "Bot",
+    description: "A helpful bot",
+    instructions: "",
+    providerId: "p1",
+    modelId: "gpt-4o",
+    fallbackProviderId: "p2",
+    fallbackModelId: "claude-sonnet-4-5",
+    maxSteps: 5,
+  };
+
+  const renderEdit = () =>
+    render(
+      <AgentForm
+        orgId="org1"
+        workspaceId="ws1"
+        toolSets={[]}
+        agents={[]}
+        agentId="a1"
+      />,
+    );
+
+  beforeEach(() => {
+    resetFormHarness();
+    registerSwrData();
+    setDataFor("/providers", { results: [provider, fallbackProvider] });
+  });
+
+  it("shows the field with the Agent's stored fallback and saves it", async () => {
+    setDataFor("/agents/a1", stored);
+    const fetchMock = stubSaveSequence({ status: 200, body: { id: "a1" } });
+    renderEdit();
+
+    expect(await screen.findByText("Fallback model")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Used by Trigger runs when this Agent's primary Provider is unavailable. Chat turns never switch models.",
+      ),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(savedBody(fetchMock)).toMatchObject({
+      fallbackProviderId: "p2",
+      fallbackModelId: "claude-sonnet-4-5",
+    });
+  });
+
+  it("saves an Agent with no fallback as null", async () => {
+    setDataFor("/agents/a1", {
+      ...stored,
+      fallbackProviderId: null,
+      fallbackModelId: null,
+    });
+    const fetchMock = stubSaveSequence({ status: 200, body: { id: "a1" } });
+    renderEdit();
+
+    expect(await screen.findByText("Fallback model")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(savedBody(fetchMock)).toMatchObject({
+      fallbackProviderId: null,
+      fallbackModelId: null,
     });
   });
 });

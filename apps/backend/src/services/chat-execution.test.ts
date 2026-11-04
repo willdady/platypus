@@ -149,6 +149,8 @@ const baseAgent = {
   workspaceId: "ws-1",
   providerId: "p1",
   modelId: "gpt-4",
+  fallbackProviderId: null,
+  fallbackModelId: null,
   maxSteps: 3,
   instructions: null,
   temperature: null,

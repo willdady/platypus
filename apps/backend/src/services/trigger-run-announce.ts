@@ -9,6 +9,8 @@ import { logger } from "../logger.ts";
 import { errorMessage } from "../utils/error-message.ts";
 import { dispatchWebhookEvent } from "./event-dispatch.ts";
 import type {
+  ModelSwitch,
+  TriggerRunStats,
   TriggerRunWebhookEventPayload,
   TriggerType,
   UnloadedToolSet,
@@ -30,6 +32,7 @@ export const endedTriggerRunColumns = {
   entityId: triggerRunTable.entityId,
   unloadedToolSets: triggerRunTable.unloadedToolSets,
   failedToolCalls: triggerRunTable.failedToolCalls,
+  stats: triggerRunTable.stats,
 };
 
 export type EndedTriggerRun = {
@@ -43,6 +46,8 @@ export type EndedTriggerRun = {
   entityId: string | null;
   unloadedToolSets: UnloadedToolSet[];
   failedToolCalls: number;
+  /** The run's stats, for the Fallback marker carried on its terminal event. */
+  stats?: TriggerRunStats | null;
 };
 
 type TriggerCoordinates = {
@@ -56,7 +61,10 @@ const terminalEvent = (
   run: EndedTriggerRun,
   trigger: TriggerCoordinates & { id: string },
 ): TriggerRunWebhookEventPayload | null => {
-  // Every field is on the wire, an empty one as `null` rather than absent.
+  // Every field is on the wire, an empty one as `null` rather than absent —
+  // except the Fallback marker, which is an added optional field and is
+  // omitted entirely on a run that never switched (ADR-0043).
+  const fallback: ModelSwitch | undefined = run.stats?.fallback;
   const fields = {
     runId: run.runId,
     startedAt: run.startedAt,
@@ -70,6 +78,7 @@ const terminalEvent = (
     entityId: run.entityId ?? null,
     unloadedToolSets: run.unloadedToolSets,
     failedToolCalls: run.failedToolCalls,
+    ...(fallback ? { fallback } : {}),
   };
   switch (run.status) {
     case "success":

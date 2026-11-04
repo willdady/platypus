@@ -58,6 +58,26 @@ the Agent later without you editing it.
 If the model you pick doesn't natively accept file attachments, the form warns
 you, before anyone sends this Agent something it can't read.
 
+### Add a Fallback model
+
+**Fallback model** is optional. Pick a second Provider and model from the same
+dropdown, or leave it at **None**. A Trigger run switches to it when the primary
+Provider cannot serve the request — it is unreachable, it times out, it
+rate-limits, it returns a server error, or it refuses the credentials — and
+stays on it for every remaining step of that run. Every new run tries the
+primary first.
+
+A Chat turn never uses it. Someone is there to retry or pick another model, and
+switching mid-conversation would throw away the prompt cache and bill the
+context again. Leaving the field at **None** changes nothing about how an Agent
+runs.
+
+The Fallback model must resolve to a model (or [Model
+alias](/concepts/providers#model-aliases)) the Agent's scope can reach, and it
+must differ from the primary model. A Shared Agent's fallback must be a Shared
+Provider. Deleting a Provider an Agent uses as its fallback is refused, just
+like its primary.
+
 ### Save it
 
 Click **Save** to create the Agent. Reopen it to change any field later; the

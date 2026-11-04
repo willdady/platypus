@@ -589,14 +589,18 @@ failing.
 
 ### Run warnings
 
-A row also says when the run went without some of its tools, even if it ended
-_Success_:
+A row also says when the run went without some of its tools, or switched
+models, even if it ended _Success_:
 
 - **'Jira' loaded no tools: unreachable**: one of the Agent's Tool sets or
   MCPs served the run no tools. The run went on without them.
 - **2 tool calls failed**: tool calls that ended in an error, including calls
   the model made with input the tool rejected. Each is ringed red on the run's
   [timeline](#inspect-a-run).
+- **Fell back from _model_ to _model_**: the primary Provider could not serve
+  the run, so it switched to the Agent's
+  [Fallback model](/building-with-platypus/agents#add-a-fallback-model) and
+  stayed on it for the rest of the run. A Chat turn never switches.
 
 Warnings never change a run's status. A clean run shows neither. The reason
 says what to fix:
@@ -636,7 +640,7 @@ filtered to that Trigger.
 
 The timeline answers "where did this run's time go?". It is a waterfall: one
 line per thing the Agent did, laid out against the run's whole span, so a long
-bar is a long wait. Each line is one of five kinds:
+bar is a long wait. Each line is one of six kinds:
 
 - a **tool call**, named for the tool;
 - a stretch of **generating arguments** for a tool call, named for the tool:
@@ -645,7 +649,9 @@ bar is a long wait. Each line is one of five kinds:
 - a stretch of **thinking** (the model's reasoning);
 - a stretch of **generating** (the model writing its answer);
 - a **delegation** to a Sub-Agent, named for that Sub-Agent, with the
-  Sub-Agent's own tool calls and answer indented beneath it.
+  Sub-Agent's own tool calls and answer indented beneath it;
+- a **model switch**, reading **Switched model: _from_ → _to_**, when the run
+  fell back to the Agent's Fallback model.
 
 Tool calls the Agent issued at the same time overlap on the timeline rather
 than following one another, which is how you tell parallel work from a chain
