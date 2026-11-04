@@ -1045,7 +1045,7 @@ describe("ProviderForm Test action", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("sends the form's unsaved config and the model to test", async () => {
+  it("sends only the connection fields and the model to test", async () => {
     const fetchMock = stubAcceptedSave(SUCCESS);
     renderEditForm([{ id: "gpt-4o", passthroughFileTypes: [] }]);
 
@@ -1057,13 +1057,34 @@ describe("ProviderForm Test action", () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     const [url, init] = fetchMock.mock.calls.at(-1) as [string, RequestInit];
     expect(url).toBe("http://test/organizations/org1/providers/test");
-    expect(JSON.parse(init.body as string)).toEqual(
+    const body = JSON.parse(init.body as string) as Record<string, unknown>;
+    expect(body).toEqual(
       expect.objectContaining({
         apiKey: "sk-test",
         baseUrl: "https://unsaved.example/v1",
         modelId: "gpt-4o",
       }),
     );
+    // Save-only settings are not part of a test request, so a form that is not
+    // yet savable can still be tested.
+    expect(body).not.toHaveProperty("taskModelId");
+    expect(body).not.toHaveProperty("memoryExtractionModelId");
+    expect(body).not.toHaveProperty("searchSource");
+  });
+
+  it("reports a request the API refused as not run, not as a Provider error", async () => {
+    // A half-filled form can fail validation before the Provider is contacted.
+    stubRejectedSave([{ path: ["apiKey"], message: "API key is required" }]);
+    renderEditForm([{ id: "gpt-4o", passthroughFileTypes: [] }]);
+
+    fireEvent.click(testButton("gpt-4o"));
+
+    const card = modelCard("gpt-4o");
+    expect(
+      await within(card).findByText("Could not run the test"),
+    ).toBeInTheDocument();
+    expect(within(card).getByText("API key is required")).toBeInTheDocument();
+    expect(within(card).queryByText("Unknown error")).not.toBeInTheDocument();
   });
 
   it("reports a failed test as its class, with the Provider's message", async () => {
@@ -1112,7 +1133,7 @@ describe("ProviderForm Test action", () => {
 
     expect(
       await within(modelCard("gpt-4o")).findByText(
-        /replaced with a fixed test id/,
+        "${SESSION_ID} in the headers was replaced with a fixed test id for this request.",
       ),
     ).toBeInTheDocument();
   });

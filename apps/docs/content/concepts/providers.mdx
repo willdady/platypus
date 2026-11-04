@@ -126,16 +126,26 @@ you removed a model they named directly.
 
 ## Testing a model
 
-Every card in the **Models** list has a **Test** button. It runs one small real
-completion — a request for the single word `ok` — against that card's model,
-using the Provider settings as they currently stand in the form, unsaved edits
-included. Nothing is saved, and the test leaves nothing behind.
+Each card in the **Models** list has a plug icon beside its pencil and bin. It
+runs one small real completion — a request for the single word `ok` — against
+that card's model, using the Provider settings as they currently stand in the
+form, unsaved edits included. Nothing is saved, and the test leaves nothing
+behind.
 
 Use it after setting up a Provider. It finds a wrong API key, Base URL, API mode
-or model id in one click, instead of on a Chat's first turn.
+or model id in one click, instead of on a Chat's first turn. You can test before
+the form is finished: the test needs the API key and the model list, not a Name
+or a task model.
+
+The test gives up after **20 seconds**. A server that accepts the connection and
+never answers is therefore reported as **Base URL unreachable**, not waited on.
 
 The verdict appears on the card itself and never as a toast. Changing any
-Provider-level field clears every verdict; editing a model clears that card's.
+Provider-level field clears every verdict, and so does removing a model, because
+the later cards shift. Editing one model clears only that card's verdict. A
+request the API refuses before it reaches the Provider — typically a field the
+form has not filled in yet — is reported as **Could not run the test**, with the
+reason; it says nothing about the connection.
 
 | The test says                            | What it means                                                                                                                                             |
 | ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -147,14 +157,14 @@ Provider-level field clears every verdict; editing a model clears that card's.
 | **Reachable but rate limited**           | The connection works; the Provider is refusing requests for now. This is a warning, not a configuration error — try again later.                          |
 | **Unknown error**                        | The Provider rejected the request for a reason Platypus does not recognise. The Provider's own message is shown with it.                                  |
 
-Every failure shows the Provider's own message verbatim, so a proxy's or a
-vendor's explanation is not lost.
+Every Provider failure shows the Provider's own message verbatim, so a proxy's
+or a vendor's explanation is not lost.
 
 A test has no Chat or Trigger run behind it, so a `${SESSION_ID}` placeholder in
 a custom header value is replaced with a fixed test id. The verdict on the card
 says when that happened.
 
-The button follows the same rule as saving the Provider: an Org Admin, or a
+The plug icon follows the same rule as saving the Provider: an Org Admin, or a
 Workspace Owner where an Org Admin has turned on **Owner-managed providers**. It
 is absent from a read-only Provider, such as a Shared Provider opened from a
 Workspace.

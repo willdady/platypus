@@ -55,10 +55,9 @@ import {
   type AliasRepoint,
   type Provider,
   type ProviderResponse,
-  type ProviderTestResponse,
 } from "@platypus/schemas";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
-import { cn } from "@/lib/utils";
+import { cn, joinUrl } from "@/lib/utils";
 import { toastGuidanceOrError } from "@/lib/apply-write-outcome";
 import type { FormDraft } from "@/lib/api-write";
 import {
@@ -69,14 +68,17 @@ import {
 import { CONTEXT_WINDOW_PRESETS } from "@/lib/context-window";
 import { toast } from "sonner";
 import { orgRoutes, workspaceRoutes } from "@/lib/routes";
-import { joinUrl } from "@/lib/utils";
 import { scopedPath, type Serialized } from "@/lib/api-write";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import {
   canConfigureWorkspaceResource,
   canManageOrgSharedResource,
 } from "@/lib/authorization";
-import { useModelTestResults } from "@/hooks/use-model-test-results";
+import {
+  useModelTestResults,
+  type ModelTestVerdict,
+  type ProviderTestPayload,
+} from "@/hooks/use-model-test-results";
 
 /** Errors reported against one Model entry, split by the field each belongs to. */
 type ModelEntryErrors = { row?: string; fields: Record<string, string> };
@@ -112,13 +114,23 @@ function modelDetails(model: ModelConfigView): string[] {
 
 /**
  * The inline verdict for one model's Test action: the class says what to fix,
- * and `result.message` carries what the Provider actually said.
+ * and the Provider's own message is shown verbatim beneath it. A request that
+ * never reached the Provider says so rather than borrowing a failure class.
  */
-function testResultCopy(result: ProviderTestResponse): {
+function testResultCopy(verdict: ModelTestVerdict): {
   variant: "success" | "destructive" | "warning";
   title: string;
   explanation: string;
 } {
+  if (verdict.kind === "not-run") {
+    return {
+      variant: "destructive",
+      title: "Could not run the test",
+      explanation:
+        "The Provider was not contacted, so this says nothing about the connection. Fix the form and try again.",
+    };
+  }
+  const { result } = verdict;
   if (result.success) {
     return {
       variant: "success",
@@ -178,7 +190,7 @@ type ModelTestAction = {
   canRun: boolean;
   disabled: boolean;
   pending: boolean;
-  result?: ProviderTestResponse;
+  result?: ModelTestVerdict;
   onRun: () => void;
 };
 
@@ -284,17 +296,24 @@ function ModelCard({
           <AlertTitle>{copy.title}</AlertTitle>
           <AlertDescription>
             <p>{copy.explanation}</p>
-            {!test.result.success && (
+            {test.result.kind === "not-run" ? (
               <p className="font-mono text-xs break-words">
                 {test.result.message}
               </p>
+            ) : (
+              !test.result.result.success && (
+                <p className="font-mono text-xs break-words">
+                  {test.result.result.message}
+                </p>
+              )
             )}
-            {test.result.sessionIdSubstituted && (
-              <p>
-                ${"${SESSION_ID}"} in the headers was replaced with a fixed test
-                id for this request.
-              </p>
-            )}
+            {test.result.kind === "probe" &&
+              test.result.result.sessionIdSubstituted && (
+                <p>
+                  {"${SESSION_ID}"} in the headers was replaced with a fixed
+                  test id for this request.
+                </p>
+              )}
           </AlertDescription>
         </Alert>
       )}
@@ -538,6 +557,27 @@ function ProviderForm({
     };
   }
 
+  /**
+   * The Test request's slice of the form: only what opening the connection
+   * reads, so a form that is not yet savable — no Name, no task or memory
+   * models — can still be tested. A blank Name is omitted rather than sent.
+   */
+  function buildTestPayload(data: ProviderFormData): ProviderTestPayload {
+    return {
+      name: data.name.trim() || undefined,
+      providerType: data.providerType,
+      apiKey: data.apiKey,
+      region: data.region || undefined,
+      baseUrl: data.baseUrl || undefined,
+      headers: data.headers,
+      extraBody: data.extraBody,
+      organization: data.organization || undefined,
+      project: data.project || undefined,
+      apiMode: data.apiMode,
+      modelIds: data.modelIds,
+    };
+  }
+
   const {
     isDeleteDialogOpen,
     setIsDeleteDialogOpen,
@@ -725,7 +765,7 @@ function ProviderForm({
    * it reaches a Chat. The verdict lands back on the same card.
    */
   const testModel = (index: number, modelId: string) =>
-    runModelTest(index, modelId, buildPayload(formData));
+    runModelTest(index, modelId, buildTestPayload(formData));
 
   /**
    * Removing or renaming an alias silently rewrites every Agent and Chat that

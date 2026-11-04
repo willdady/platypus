@@ -407,10 +407,7 @@ describe("Organization Provider Routes", () => {
       providerType: "OpenAI",
       apiKey: "sk-unsaved",
       apiMode: "responses",
-      searchSource: "native",
       modelIds: [{ id: "gpt-4", passthroughFileTypes: [] }],
-      taskModelId: "gpt-4",
-      memoryExtractionModelId: "gpt-4",
       modelId: "gpt-4",
     };
 
@@ -438,6 +435,26 @@ describe("Organization Provider Routes", () => {
     it("returns 403 for a non-admin", async () => {
       mockSession();
       world("member");
+
+      const res = await probe();
+
+      expect(res.status).toBe(403);
+      expect(mockGenerateText).not.toHaveBeenCalled();
+    });
+
+    it("returns 403 for a caller outside the Organization", async () => {
+      mockSession();
+      // An Admin of another Organization sees nothing here.
+      world("admin", {
+        organization_member: [
+          {
+            id: "m1",
+            userId: "user-1",
+            organizationId: "org-2",
+            role: "admin",
+          },
+        ],
+      });
 
       const res = await probe();
 

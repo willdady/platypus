@@ -2839,13 +2839,31 @@ export type ProviderTestFailureClass = z.infer<
 >;
 
 /**
- * Testing one model from the Provider form: the config exactly as the form
- * holds it — nothing is stored, so there is no saved row to fall back on and
- * the create shape's fields are the whole connection — plus the model to test.
- * Built by `.extend()`ing `providerCreateSchema` so the two cannot drift.
+ * Testing one model from the Provider form. It carries only the fields opening
+ * the connection reads: the save-only settings — Web search, the task, memory
+ * and embedding models, guardrails — are not needed to answer, and requiring
+ * them would make a half-filled form untestable. Name is optional for the same
+ * reason; when present it keeps the create rule. Built by `.pick()`ing
+ * `providerCreateSchema` so the field definitions cannot drift.
  */
 export const providerTestSchema = strictRequest(
-  providerCreateSchema.extend({ modelId: z.string().min(1) }),
+  providerCreateSchema
+    .pick({
+      providerType: true,
+      apiKey: true,
+      region: true,
+      baseUrl: true,
+      headers: true,
+      extraBody: true,
+      organization: true,
+      project: true,
+      apiMode: true,
+      modelIds: true,
+    })
+    .extend({
+      name: providerCreateSchema.shape.name.optional(),
+      modelId: z.string().min(1),
+    }),
 );
 export type ProviderTest = z.infer<typeof providerTestSchema>;
 

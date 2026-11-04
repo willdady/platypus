@@ -656,10 +656,7 @@ describe("Provider Routes", () => {
       providerType: "OpenAI",
       apiKey: "sk-test",
       apiMode: "responses",
-      searchSource: "native",
       modelIds: [{ id: "gpt-4", passthroughFileTypes: [] }],
-      taskModelId: "gpt-4",
-      memoryExtractionModelId: "gpt-4",
       modelId: "gpt-4",
       ...over,
     });
@@ -838,21 +835,41 @@ describe("Provider Routes", () => {
       }
     });
 
-    it("reports an unlisted model without calling the Provider", async () => {
+    it("refuses a model the Provider does not list, without calling it", async () => {
       mockSession();
       world();
 
       const res = await probe(testBody({ modelId: "gpt-5" }));
 
-      expect(res.status).toBe(200);
-      expect(await res.json()).toEqual(
-        expect.objectContaining({
-          success: false,
-          modelId: "gpt-5",
-          failureClass: "model-not-available",
-        }),
+      // A malformed request, not a Provider verdict: nothing was sent, so the
+      // failure carries no invented vendor message.
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as { error: string };
+      expect(body.error).toBe(
+        'Model "gpt-5" is not one of this Provider\'s models.',
       );
       expect(mockGenerateText).not.toHaveBeenCalled();
+    });
+
+    it("tests a half-filled form whose save-only fields are absent", async () => {
+      mockSession();
+      world();
+      mockGenerateText.mockResolvedValue({ text: "ok" });
+
+      // No Name, Web search, task or memory model: a form that could not be
+      // saved yet must still be testable.
+      const res = await probe({
+        providerType: "OpenAI",
+        apiKey: "sk-test",
+        apiMode: "responses",
+        modelIds: [{ id: "gpt-4", passthroughFileTypes: [] }],
+        modelId: "gpt-4",
+      });
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual(
+        expect.objectContaining({ success: true }),
+      );
     });
 
     it("resolves an alias reference in the tested model", async () => {
@@ -876,6 +893,30 @@ describe("Provider Routes", () => {
       expect(mockGenerateText.mock.calls.at(-1)?.[0]).toEqual(
         expect.objectContaining({ model: { modelId: "gpt-4" } }),
       );
+    });
+
+    it("returns 403 for a member who does not own this Workspace", async () => {
+      mockSession();
+      // A member of the Organization, but not the Owner of ws-1 — and the
+      // delegation is on, so only Workspace access stands in the way.
+      world({
+        role: "member",
+        providerSelfManagement: true,
+        rows: {
+          workspace: [
+            {
+              id: workspaceId,
+              name: "Alpha",
+              organizationId: orgId,
+              ownerId: "user-2",
+              providerSelfManagement: true,
+            },
+          ],
+        },
+      });
+
+      expect((await probe()).status).toBe(403);
+      expect(mockGenerateText).not.toHaveBeenCalled();
     });
 
     it("returns 403 for a non-admin owner when self-management is disabled", async () => {

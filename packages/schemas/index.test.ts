@@ -937,14 +937,10 @@ describe("Provider Create Schema", () => {
 
 describe("Provider Test Schema", () => {
   const baseTest = {
-    name: "Test Provider",
     providerType: "OpenAI" as const,
     apiKey: "sk-test",
     apiMode: "responses" as const,
-    searchSource: SEARCH_SOURCE_NATIVE,
     modelIds: [{ id: "gpt-4", passthroughFileTypes: [] }],
-    taskModelId: "gpt-4",
-    memoryExtractionModelId: "gpt-4",
     modelId: "gpt-4",
   };
 
@@ -956,11 +952,28 @@ describe("Provider Test Schema", () => {
     ).toBe(false);
   });
 
-  it("carries the same Provider config the create schema does", () => {
-    // Reused rather than redefined: a field the create shape requires must not
-    // become optional just because the Test endpoint asks for it.
-    const { taskModelId: _, ...withoutTaskModel } = baseTest;
-    expect(providerTestSchema.safeParse(withoutTaskModel).success).toBe(false);
+  it("does not demand the save-only settings a half-filled form lacks", () => {
+    // Name, Web search and the task/memory/embedding models are not read by
+    // the probe, so requiring them would make a form that is not yet savable
+    // untestable — exactly when a test is most useful.
+    expect(providerTestSchema.safeParse(baseTest).success).toBe(true);
+  });
+
+  it("keeps the create rules for every field the probe opens with", () => {
+    for (const field of [
+      "providerType",
+      "apiKey",
+      "apiMode",
+      "modelIds",
+    ] as const) {
+      const { [field]: _, ...without } = baseTest;
+      expect(providerTestSchema.safeParse(without).success).toBe(false);
+    }
+    // Name is optional, but a supplied one is held to the same length rule.
+    expect(
+      providerTestSchema.safeParse({ ...baseTest, name: "AB" }).success,
+    ).toBe(false);
+    // The picked header field keeps the create rule too.
     expect(
       providerTestSchema.safeParse({
         ...baseTest,
@@ -972,6 +985,11 @@ describe("Provider Test Schema", () => {
   it("rejects an unknown key and a scope the body must not choose", () => {
     expect(
       providerTestSchema.safeParse({ ...baseTest, workspaceId: "ws-1" })
+        .success,
+    ).toBe(false);
+    // A save-only field is not part of a test's request.
+    expect(
+      providerTestSchema.safeParse({ ...baseTest, taskModelId: "gpt-4" })
         .success,
     ).toBe(false);
   });

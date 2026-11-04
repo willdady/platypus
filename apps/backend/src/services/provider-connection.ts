@@ -8,6 +8,7 @@ import {
 import { openProvider } from "./provider.ts";
 import { resolveModelId } from "./model-capability.ts";
 import { DeadlineExceededError, withDeadline } from "../utils/abort-race.ts";
+import { ValidationError } from "../errors.ts";
 
 /**
  * The Provider-connection probe both `/providers/test` routes delegate to, the
@@ -65,16 +66,16 @@ const CONNECTION_ERROR_CODES = new Set([
   "ERR_TLS_CERT_ALTNAME_INVALID",
 ]);
 
-const connectionFailureCode = (error: unknown): string | undefined => {
+const isConnectionFailure = (error: unknown): boolean => {
   let current: unknown = error;
   for (let depth = 0; depth < 5 && current instanceof Error; depth++) {
     const { code } = current as { code?: unknown };
     if (typeof code === "string" && CONNECTION_ERROR_CODES.has(code)) {
-      return code;
+      return true;
     }
     current = current.cause;
   }
-  return undefined;
+  return false;
 };
 
 /**
@@ -116,7 +117,7 @@ const classifyProviderTestFailure = (
   if (failure instanceof DeadlineExceededError) return "base-url-unreachable";
   if (failure instanceof Error) {
     if (failure.name === "TimeoutError") return "base-url-unreachable";
-    if (connectionFailureCode(failure)) return "base-url-unreachable";
+    if (isConnectionFailure(failure)) return "base-url-unreachable";
     // `fetch` reports a connection failure as a bare TypeError.
     if (
       failure.name === "TypeError" &&
@@ -149,34 +150,44 @@ const substitutesSessionId = (headers: ProviderTest["headers"]): boolean =>
  * Probes one of a Provider's models with the form's current values and reports
  * success, or a failure class together with the vendor's message. The model is
  * resolved through the Provider's own model list, exactly as a turn resolves
- * it, so an alias works and a model the Provider does not expose fails as
- * Model not available without a vendor call.
+ * it, so an alias works.
  */
 export const probeProviderConnection = async (
   data: ProviderTest,
 ): Promise<ProviderTestResponse> => {
-  const sessionIdSubstituted = substitutesSessionId(data.headers);
   const { modelId } = data;
+  const sessionIdSubstituted = substitutesSessionId(data.headers);
 
-  const concreteModelId = resolveModelId(
-    { modelIds: data.modelIds },
-    data.modelId,
-  );
+  const concreteModelId = resolveModelId({ modelIds: data.modelIds }, modelId);
   if (!concreteModelId) {
-    return {
-      success: false,
-      modelId,
-      failureClass: "model-not-available",
-      message: `This Provider has no model "${data.modelId}".`,
-      sessionIdSubstituted,
-    };
+    // Unreachable from the form, which only sends a card's own id. It is a
+    // malformed request, not a Provider result: nothing was sent, so there is
+    // no vendor message to report and none is invented.
+    throw new ValidationError(
+      `Model "${modelId}" is not one of this Provider's models.`,
+    );
   }
+
+  // A half-filled form can test before it has a Name, which only names the
+  // vendor client in-process; the create rule still applies when one is sent.
+  const connection = {
+    name: data.name ?? "Provider test",
+    providerType: data.providerType,
+    apiKey: data.apiKey,
+    apiMode: data.apiMode,
+    region: data.region ?? null,
+    baseUrl: data.baseUrl ?? null,
+    headers: data.headers ?? null,
+    extraBody: data.extraBody ?? null,
+    organization: data.organization ?? null,
+    project: data.project ?? null,
+  };
 
   try {
     await withDeadline(
       (abortSignal) =>
         generateText({
-          model: openProvider(data, {
+          model: openProvider(connection, {
             sessionId: PROVIDER_TEST_SESSION_ID,
           }).languageModel(concreteModelId),
           prompt: PROVIDER_TEST_PROMPT,
