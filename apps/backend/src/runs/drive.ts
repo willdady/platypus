@@ -675,12 +675,27 @@ const fallbackSwitchFor = ({
   };
 };
 
-/** Records a switch on the run's timeline — a zero-duration, completed event. */
-const recordModelSwitch = (
-  events: RunEventScope | undefined,
-  modelSwitch: ModelSwitch,
-  primaryFailure: string,
-): void => {
+/**
+ * Records a switch on the run: the run-level marker every reader uses (the
+ * runs list, the webhook payload) and the zero-duration `model-switch` event
+ * on the timeline, with the primary's capped error.
+ *
+ * Recorded at switch time, not at the end, so a run that switched and then
+ * failed still carries the marker — a failed run's terminal write is the one
+ * that most needs to explain the model it was on.
+ */
+const recordModelSwitch = ({
+  run,
+  events,
+  modelSwitch,
+  primaryFailure,
+}: {
+  run: RunLifecycle;
+  events: RunEventScope | undefined;
+  modelSwitch: ModelSwitch;
+  primaryFailure: string;
+}): void => {
+  run.setStats({ ...run.stats, fallback: modelSwitch });
   if (!events) return;
   const id = events.recorder.open(events.parentEventId, {
     type: "model-switch",
@@ -943,8 +958,12 @@ const runStreamedDrive = (
         } = switchable;
         primaryFailure = captured;
         switched = true;
-        recordModelSwitch(events, modelSwitch, captured);
-        run.setStats({ ...run.stats, fallback: modelSwitch });
+        recordModelSwitch({
+          run,
+          events,
+          modelSwitch,
+          primaryFailure: captured,
+        });
         // The next loop runs on the fallback with the step ceiling counting
         // across the whole run, and continues from what the primary already
         // sent — reasoning and vendor-only metadata stripped (ADR-0043).
@@ -1289,7 +1308,12 @@ export const driveOnce = async (
           primaryFailure = switchable.primaryFailure;
           modelSwitch = switchable.modelSwitch;
           switched = true;
-          recordModelSwitch(scope, switchable.modelSwitch, primaryFailure);
+          recordModelSwitch({
+            run,
+            events: scope,
+            modelSwitch: switchable.modelSwitch,
+            primaryFailure,
+          });
           const next = switchToFallback({
             plan,
             conversation,

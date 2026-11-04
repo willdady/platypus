@@ -204,6 +204,12 @@ describe("driveOnce with a Fallback model", () => {
     expect(outcome[0]?.status).toBe("failed");
     expect(outcome[0]?.error?.message).toMatch(/primary/i);
     expect(outcome[0]?.error?.message).toMatch(/fallback/i);
+    // A failed run that switched still carries the marker: the runs list shows
+    // it and the `trigger_run.failed` payload names the switch.
+    expect(outcome[0]?.stats.fallback).toEqual({
+      from: { providerId: "p1", model: "m1" },
+      to: { providerId: "p2", model: "m2" },
+    });
   });
 
   it("continues from the primary's completed tool step, stripped for the new Provider", async () => {
