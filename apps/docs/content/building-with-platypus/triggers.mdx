@@ -244,10 +244,8 @@ starts a new run instead of being handed the stuck one.
   whether or not other calls come in between. An Agent that polls a status
   tool and gets the same answer three times is stopped too. The run is recorded
   as _failed_ with a reason naming the repeated tool, so it can't quietly burn
-  its whole step budget, and posts a [Notification](/building-with-platypus/notifications#when-a-trigger-run-fails)
-  to the Workspace bell naming the Trigger and that reason. (Only unattended
-  work is stopped this way: Trigger runs and Sub-Agents. The top-level Chat turn
-  is not.)
+  its whole step budget. (Only unattended work is stopped this way: Trigger
+  runs and Sub-Agents. The top-level Chat turn is not.)
 - Older run records are pruned automatically, keeping at least the newest **Max
   Runs to Keep**.
 
@@ -761,9 +759,7 @@ depends on whether the Agent wrote anything:
 - **No answer at all** ends _Failed_. This usually means the model spent its
   whole allowance reasoning before it started writing. The error says the model
   hit its output limit, and points you at the model's **Max output tokens** on
-  its Provider. The run also posts a
-  [Notification](/building-with-platypus/notifications#when-a-trigger-run-fails)
-  to the Workspace bell, naming the Trigger and that error.
+  its Provider.
 
 <Callout type="warning">
   **Nothing retries or resumes a cut-short run.** The next scheduled or event
@@ -794,7 +790,10 @@ for.
   A run that stopped because the Agent made no progress — the same tool call
   returning the same result over and over — is a different thing, and reports
   itself differently: it ends _Failed_ with a `no_progress:` message naming the
-  tool. That is not a step limit and raising **Max steps** will not help it.
+  tool, and posts a
+  [Notification](/building-with-platypus/notifications#when-a-trigger-run-fails)
+  to the Workspace bell naming the Trigger and that reason. That is not a step
+  limit and raising **Max steps** will not help it.
 </Callout>
 
 ## Where to next

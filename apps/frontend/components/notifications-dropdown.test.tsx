@@ -439,7 +439,7 @@ describe("NotificationsDropdown source link", () => {
   it("shows a Trigger run failure notice as from Platypus and links to the run", async () => {
     await renderWithSource(
       { kind: "triggerRun", triggerRunId: "run-1" },
-      { agentName: null, title: "Trigger run failed: Card triage" },
+      { agentName: null },
     );
 
     expect(screen.getByText("Platypus")).toBeInTheDocument();

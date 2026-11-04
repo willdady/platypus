@@ -58,10 +58,17 @@ type TriggerCoordinates = {
   agentId: string;
 };
 
+/** A Trigger row as the announcement reads it, joined to its Workspace. */
+type AnnouncedTrigger = TriggerCoordinates & {
+  id: string;
+  workspaceId: string;
+  organizationId: string;
+};
+
 /** A run's terminal event, or `null` for a status that is not terminal. */
 const terminalEvent = (
   run: EndedTriggerRun,
-  trigger: TriggerCoordinates & { id: string },
+  trigger: AnnouncedTrigger,
 ): TriggerRunWebhookEventPayload | null => {
   // Every field is on the wire, an empty one as `null` rather than absent —
   // except the Fallback marker, which is an added optional field and is
@@ -118,14 +125,15 @@ const terminalEvent = (
  */
 const postFailedRunNotification = async (
   run: EndedTriggerRun,
-  trigger: TriggerCoordinates & { id: string; workspaceId: string },
+  trigger: AnnouncedTrigger,
 ): Promise<void> => {
+  const reason = run.errorMessage?.trim() ?? "";
   await db.insert(notificationTable).values({
     id: nanoid(),
     workspaceId: trigger.workspaceId,
     agentId: null,
     title: `Trigger run failed: ${trigger.name}`,
-    body: run.errorMessage ?? "The run failed without an error message.",
+    body: reason === "" ? "The run failed without an error message." : reason,
     sourceTriggerRunId: run.runId,
   });
 };
@@ -177,14 +185,15 @@ export const announceTriggerRunsEnded = async (
       const trigger = byId.get(run.triggerId);
       if (!trigger) continue;
       const payload = terminalEvent(run, trigger);
-      if (payload) {
-        dispatchWebhookEvent(
-          trigger.organizationId,
-          trigger.workspaceId,
-          payload,
-        );
-      }
-      if (run.status !== "failed") continue;
+      if (!payload) continue;
+      dispatchWebhookEvent(
+        trigger.organizationId,
+        trigger.workspaceId,
+        payload,
+      );
+      // The notification follows the same decision the `trigger_run.failed`
+      // event does, so a run that recovers and ends `success` posts nothing.
+      if (payload.event !== "trigger_run.failed") continue;
       try {
         await postFailedRunNotification(run, trigger);
       } catch (error) {

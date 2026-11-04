@@ -2,14 +2,12 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { dbError, mockDb, resetMockDb, seedDb } from "../test-utils.ts";
 import { mockLogger } from "../test-setup.ts";
 
-const { mockDispatchWebhookEvent, mockDispatchEvent } = vi.hoisted(() => ({
+const { mockDispatchWebhookEvent } = vi.hoisted(() => ({
   mockDispatchWebhookEvent: vi.fn(),
-  mockDispatchEvent: vi.fn(),
 }));
 
 vi.mock("./event-dispatch.ts", () => ({
   dispatchWebhookEvent: mockDispatchWebhookEvent,
-  dispatchEvent: mockDispatchEvent,
 }));
 
 import { announceTriggerRunsEnded } from "./trigger-run-announce.ts";
@@ -214,15 +212,19 @@ describe("announceTriggerRunsEnded: a failed run's Notification", () => {
     ]);
   });
 
-  it("falls back to a plain body when the run recorded no error message", async () => {
-    const fake = seedAnnouncement();
+  it.each([null, ""])(
+    "falls back to a plain body when the run recorded no error message (%j)",
+    async (errorMessage) => {
+      const fake = seedAnnouncement();
 
-    await announceTriggerRunsEnded([endedRun({ errorMessage: null })]);
+      await announceTriggerRunsEnded([endedRun({ errorMessage })]);
 
-    expect(fake.tables.notification).toHaveLength(1);
-    expect(fake.tables.notification[0]?.body).toEqual(expect.any(String));
-    expect(fake.tables.notification[0]?.body).not.toEqual("");
-  });
+      expect(fake.tables.notification).toHaveLength(1);
+      expect(fake.tables.notification[0]?.body).toEqual(
+        "The run failed without an error message.",
+      );
+    },
+  );
 
   it.each(["success", "cancelled", "suppressed"])(
     "posts no Notification for a %s run",
@@ -256,12 +258,22 @@ describe("announceTriggerRunsEnded: a failed run's Notification", () => {
     expect(fake.tables.notification).toHaveLength(0);
   });
 
-  it("dispatches no notification.created event", async () => {
+  it("delivers only the trigger_run.failed event, never a notification one", async () => {
     seedAnnouncement();
 
     await announceTriggerRunsEnded([endedRun()]);
 
-    expect(mockDispatchEvent).not.toHaveBeenCalled();
+    expect(mockDispatchWebhookEvent).toHaveBeenCalledTimes(1);
+    expect(mockDispatchWebhookEvent).toHaveBeenCalledWith(
+      "org-1",
+      "ws-1",
+      expect.objectContaining({ event: "trigger_run.failed" }) as unknown,
+    );
+    expect(
+      mockDispatchWebhookEvent.mock.calls.map(
+        (call) => (call[2] as { event: string }).event,
+      ),
+    ).not.toContain("notification.created");
   });
 
   it("logs a failed insert rather than throwing, and still delivers the Webhook event", async () => {

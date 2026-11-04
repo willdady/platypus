@@ -334,9 +334,6 @@ Event or Inbound — reaches its final status. The event name says how it ended,
 and `data.status` carries the same word the run history and the Inbound poll
 use:
 
-A `failed` run also posts a Notification in the Workspace bell. That
-Notification emits no event of its own, so this is the only event it sends.
-
 | `data.status` | Event                    |
 | ------------- | ------------------------ |
 | `success`     | `trigger_run.succeeded`  |
