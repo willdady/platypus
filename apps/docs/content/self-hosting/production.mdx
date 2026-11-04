@@ -21,6 +21,13 @@ publishes, and Platypus ships no certificate handling of any kind. A reverse pro
 in front — nginx, Caddy, Traefik, a cloud load balancer — is not an optimisation;
 it is the missing half of the deployment.
 
+Compose ships one option: a Caddy block that terminates TLS on one domain,
+redirects HTTP to HTTPS, and routes `/api` to the backend. The installer writes
+it when `PLATYPUS_DOMAIN` is set, and you can paste it into
+`compose.override.yaml` on an existing install. See [Serve HTTPS with
+Caddy](/self-hosting/docker-compose#serve-https-with-caddy). It does **not**
+rate-limit, so the next section applies either way.
+
 The proxy has two jobs: terminate TLS, and route to the two services. Sign-in
 depends on the second one more than you'd expect, so read the next section before
 you pick hostnames.

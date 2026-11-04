@@ -9,6 +9,8 @@
 #   PLATYPUS_VERSION  release to install, e.g. 3.13.0 (default: latest)
 #   PLATYPUS_DIR      install directory (default: ./platypus)
 #   PLATYPUS_HOST     host the browser reaches Platypus on (default: localhost)
+#   PLATYPUS_DOMAIN   domain to serve HTTPS on, e.g. chat.example.com
+#                     (default: unset, which serves plain HTTP on PLATYPUS_HOST)
 #   ADMIN_EMAIL       initial admin email (default: admin@example.com)
 #   ADMIN_PASSWORD    initial admin password (default: randomly generated)
 #
@@ -22,6 +24,51 @@ DOCS="https://docs.platypus.chat"
 fail() {
   echo "error: $*" >&2
   exit 1
+}
+
+# True when the installed Compose is at least the given x.y.z. `!reset` and
+# `configs: content:` both need 2.24.x, so the whole Caddy block needs it.
+compose_at_least() {
+  local version
+  version="$(docker compose version --short 2>/dev/null)" || return 1
+  version="${version#v}"
+  awk -v have="$version" -v need="$1" 'BEGIN {
+    n = split(have, a, ".")
+    split(need, b, ".")
+    for (i = 1; i <= 3; i++) {
+      av = (i <= n) ? a[i] + 0 : 0
+      bv = b[i] + 0
+      if (av > bv) exit 0
+      if (av < bv) exit 1
+    }
+    exit 0
+  }'
+}
+
+# Fails when something is already listening on the port. Checked before
+# anything is written: caught later by 'docker compose up', a taken port leaves
+# a .env behind that stops this installer from re-running.
+require_free_port() {
+  local port="$1" reason="$2"
+  ! (echo >"/dev/tcp/127.0.0.1/$port") 2>/dev/null ||
+    fail "port $port is already in use on this host, and $reason. Stop whatever is using it (see: lsof -i :$port) and try again."
+}
+
+# A DNS-style host name: letters, digits, dots and hyphens, not starting or
+# ending with a dot or hyphen. An IPv4 literal also matches that shape, so it is
+# excluded: a certificate cannot be issued for an IP address.
+is_host_name() {
+  local value="$1"
+  [[ "$value" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$ ]] &&
+    [[ ! "$value" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]]
+}
+
+# A host name, IPv4 address or bracketed IPv6 address — what PLATYPUS_HOST
+# accepts, since it only becomes the host of a URL.
+is_host_or_ip() {
+  is_host_name "$1" ||
+    [[ "$1" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] ||
+    [[ "$1" =~ ^\[[0-9A-Fa-f:.]+\]$ ]]
 }
 
 # Everything runs from main, called on the last line, so a download cut short
@@ -40,29 +87,45 @@ main() {
     fail "Docker Compose v2 ('docker compose') is required but was not found."
   docker info >/dev/null 2>&1 ||
     fail "the Docker daemon is not running (or this user cannot reach it). Start Docker and try again."
-  # Caught here, a taken port costs nothing; caught by 'docker compose up', it
-  # leaves a .env behind that stops this installer from re-running.
-  local port
-  for port in 3000 4000; do
-    ! (echo >"/dev/tcp/127.0.0.1/$port") 2>/dev/null ||
-      fail "port $port is already in use on this host, and Platypus needs it. Stop whatever is using it (see: lsof -i :$port) and try again."
-  done
 
+  local domain="${PLATYPUS_DOMAIN:-}"
   local host="${PLATYPUS_HOST:-localhost}"
+  if [[ -n "$domain" ]]; then
+    [[ -z "${PLATYPUS_HOST:-}" ]] ||
+      fail "PLATYPUS_DOMAIN and PLATYPUS_HOST cannot both be set. PLATYPUS_DOMAIN is the HTTPS domain Caddy serves; PLATYPUS_HOST is the plain-HTTP host. Set PLATYPUS_DOMAIN alone."
+    compose_at_least 2.24.0 ||
+      fail "PLATYPUS_DOMAIN needs Docker Compose 2.24.0 or later. The Caddy block closes ports with 'ports: !reset []', which older Compose rejects. Upgrade Compose, or unset PLATYPUS_DOMAIN to install over plain HTTP."
+  fi
+
+  local port
+  if [[ -n "$domain" ]]; then
+    for port in 80 443; do
+      require_free_port "$port" "Caddy needs it to obtain a certificate and serve HTTPS"
+    done
+  else
+    for port in 3000 4000; do
+      require_free_port "$port" "Platypus needs it"
+    done
+  fi
+
   local email="${ADMIN_EMAIL:-admin@example.com}"
   local password="${ADMIN_PASSWORD:-$(openssl rand -hex 12)}"
   local secret
   secret="$(openssl rand -hex 32)"
   # Values are written single-quoted, one per line, so they can't hold a ' or
   # a control character such as a newline.
-  for value in "$host" "$email" "$password"; do
+  for value in "$host" "$domain" "$email" "$password"; do
     [[ "$value" != *"'"* && "$value" != *[[:cntrl:]]* ]] ||
-      fail "PLATYPUS_HOST, ADMIN_EMAIL and ADMIN_PASSWORD must not contain a single quote (') or a control character such as a newline."
+      fail "PLATYPUS_HOST, PLATYPUS_DOMAIN, ADMIN_EMAIL and ADMIN_PASSWORD must not contain a single quote (') or a control character such as a newline."
   done
   # A host name, IPv4 address or bracketed IPv6 address — it becomes the
   # scheme-and-host of three URLs.
-  [[ "$host" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$ || "$host" =~ ^\[[0-9A-Fa-f:.]+\]$ ]] ||
+  is_host_or_ip "$host" ||
     fail "PLATYPUS_HOST '$host' is not a host name or IP address (no scheme, port or path)."
+  # Caddy obtains a certificate for a DNS name, so PLATYPUS_DOMAIN takes a host
+  # name only: an IP address cannot be issued a certificate.
+  [[ -z "$domain" ]] || is_host_name "$domain" ||
+    fail "PLATYPUS_DOMAIN '$domain' is not a host name (no scheme, port or path). Caddy obtains a certificate by DNS name, so an IP address cannot be used."
   [[ "$email" =~ ^[^[:space:]@]+@[^[:space:]@]+$ ]] ||
     fail "ADMIN_EMAIL '$email' is not an email address."
   # The backend refuses to seed a shorter one, which would leave a half-started
@@ -110,23 +173,98 @@ This install would reuse it, and the admin password printed at the end wouldn't 
     curl -fsSL "$raw/.env.example" -o "$dir/.example.env" ||
     fail "could not download .example.env for v$version."
 
-  cat >"$dir/compose.override.yaml" <<EOF
+  if [[ -n "$domain" ]]; then
+    # The Caddy block. Keep it byte-identical to the one on the Compose page
+    # (apps/docs/content/self-hosting/docker-compose.mdx); a docs-contract test
+    # compares the two. PLATYPUS_DOMAIN stands where the domain goes, and the
+    # pinned image tags are inserted under backend: and frontend: below, so the
+    # generated override has one top-level services: key.
+    local caddy_block
+    caddy_block="$(cat <<'CADDY_BLOCK'
+services:
+  backend:
+    ports: !reset []
+  frontend:
+    ports: !reset []
+  caddy:
+    image: caddy:2.11.7
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    configs:
+      - source: caddyfile
+        target: /etc/caddy/Caddyfile
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - platypus-network
+
+volumes:
+  caddy_data:
+  caddy_config:
+
+configs:
+  caddyfile:
+    content: |
+      PLATYPUS_DOMAIN {
+        handle_path /api/* {
+          reverse_proxy backend:4000 {
+            header_up X-Forwarded-For {remote_host}
+            flush_interval -1
+          }
+        }
+
+        handle {
+          reverse_proxy frontend:3000
+        }
+      }
+CADDY_BLOCK
+)"
+    awk -v version="$version" -v domain="$domain" '
+      /^  backend:$/ {
+        print
+        printf "    image: willdady/platypus-backend:%s\n", version
+        next
+      }
+      /^  frontend:$/ {
+        print
+        printf "    image: willdady/platypus-frontend:%s\n", version
+        next
+      }
+      {
+        gsub(/PLATYPUS_DOMAIN/, domain)
+        print
+      }
+    ' <<<"$caddy_block" >"$dir/compose.override.yaml"
+  else
+    cat >"$dir/compose.override.yaml" <<EOF
 services:
   backend:
     image: willdady/platypus-backend:$version
   frontend:
     image: willdady/platypus-frontend:$version
 EOF
+  fi
 
   # --- Write .env: the release's .example.env with our values substituted. ---
+  local frontend_url="http://$host:3000"
+  local backend_url="http://$host:4000"
+  if [[ -n "$domain" ]]; then
+    # One origin, with the backend under /api as the Caddyfile routes it.
+    frontend_url="https://$domain"
+    backend_url="https://$domain/api"
+  fi
+  local allowed_origins="$frontend_url"
   (
     umask 077
     V_BETTER_AUTH_SECRET="$secret" \
       V_ADMIN_EMAIL="$email" \
       V_ADMIN_PASSWORD="$password" \
-      V_FRONTEND_URL="http://$host:3000" \
-      V_BACKEND_URL="http://$host:4000" \
-      V_ALLOWED_ORIGINS="http://$host:3000" \
+      V_FRONTEND_URL="$frontend_url" \
+      V_BACKEND_URL="$backend_url" \
+      V_ALLOWED_ORIGINS="$allowed_origins" \
       awk '
         match($0, /^[A-Z_]+=/) {
           key = substr($0, 1, RLENGTH - 1)
@@ -178,7 +316,7 @@ Once fixed, start it with 'docker compose up -d' in $dir; re-running this instal
 
 Platypus $version is running.
 
-  Sign in at:  http://$host:3000
+  Sign in at:  $frontend_url
   Email:       $email
   Password:    $password
 
@@ -188,7 +326,15 @@ They are also saved in $dir/.env.
 To stop, start or upgrade Platypus, see $dir/README.md.
 EOF
 
-  if [[ "$host" != "localhost" ]]; then
+  if [[ -n "$domain" ]]; then
+    cat <<EOF
+
+Caddy obtains the certificate for $domain over the internet. DNS must already
+point $domain at this host, and ports 80 and 443 must be reachable from the
+internet, or the certificate will not issue. See
+$DOCS/self-hosting/docker-compose#serve-https-with-caddy
+EOF
+  elif [[ "$host" != "localhost" ]]; then
     cat <<EOF
 
 WARNING: ports 3000 and 4000 serve plain HTTP, with no TLS, on every network

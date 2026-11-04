@@ -54,6 +54,112 @@ jobs:
           refuses ADMIN_EMAIL=not-an-email
           refuses PLATYPUS_HOST=http://example.com
           refuses PLATYPUS_HOST=example.com:3000
+          refuses PLATYPUS_DOMAIN=chat.example.com PLATYPUS_HOST=example.com
+          refuses PLATYPUS_DOMAIN=https://chat.example.com
+          refuses PLATYPUS_DOMAIN=chat.example.com:443
+          refuses PLATYPUS_DOMAIN=203.0.113.10
+          refuses PLATYPUS_DOMAIN='[::1]'
+
+  # The HTTPS path writes different files from the plain-HTTP one. A stub
+  # `docker` lets the installer finish without pulling images, so this checks
+  # what it writes rather than whether the stack starts.
+  caddy-install:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Install with a domain, without starting the stack
+        run: |
+          bin="$RUNNER_TEMP/bin"
+          mkdir -p "$bin"
+          cat > "$bin/docker" <<'STUB'
+          #!/usr/bin/env bash
+          case "$*" in
+            "compose version --short") echo "2.24.0" ;;
+            "compose version") echo "Docker Compose version v2.24.0" ;;
+            "info") exit 0 ;;
+            "volume inspect"*) exit 1 ;;
+            "compose up"*) exit 0 ;;
+            *) exit 0 ;;
+          esac
+          STUB
+          chmod +x "$bin/docker"
+          PATH="$bin:$PATH" PLATYPUS_DOMAIN=chat.example.com \
+            PLATYPUS_DIR="$RUNNER_TEMP/platypus" bash < apps/website/public/install.sh
+
+      - name: Refuse a Compose older than 2.24.0
+        run: |
+          bin="$RUNNER_TEMP/old-bin"
+          mkdir -p "$bin"
+          cat > "$bin/docker" <<'STUB'
+          #!/usr/bin/env bash
+          case "$*" in
+            "compose version --short") echo "2.23.9" ;;
+            "compose version") echo "Docker Compose version v2.23.9" ;;
+            "info") exit 0 ;;
+            "volume inspect"*) exit 1 ;;
+            *) exit 0 ;;
+          esac
+          STUB
+          chmod +x "$bin/docker"
+          dir="$RUNNER_TEMP/old-compose"
+          if output="$(PATH="$bin:$PATH" PLATYPUS_DOMAIN=chat.example.com \
+            PLATYPUS_DIR="$dir" bash < apps/website/public/install.sh 2>&1)"; then
+            echo "expected the installer to refuse an old Compose" >&2
+            exit 1
+          fi
+          echo "$output"
+          grep -q "2.24.0" <<<"$output" || {
+            echo "expected the refusal to name Compose 2.24.0" >&2
+            exit 1
+          }
+          test ! -e "$dir"
+
+      - name: The generated block matches the Compose page
+        run: |
+          python3 - <<'PY'
+          import os, pathlib, re, sys
+
+          page_text = pathlib.Path("apps/docs/content/self-hosting/docker-compose.mdx").read_text()
+          blocks = re.findall(r"```yaml\n(.*?)```", page_text, re.S)
+          page = next((block for block in blocks if "caddy_data:" in block), None)
+          if page is None:
+              sys.exit("no Caddy block on the Compose page")
+
+          generated = pathlib.Path(
+              os.environ["RUNNER_TEMP"], "platypus", "compose.override.yaml"
+          ).read_text()
+          # The installer inserts the pinned tags the page leaves to the reader.
+          generated = re.sub(
+              r"^    image: willdady/platypus-(?:backend|frontend):.*\n",
+              "",
+              generated,
+              flags=re.M,
+          )
+          if generated.strip() != page.strip():
+              sys.exit(
+                  "the generated compose.override.yaml has drifted from the Compose page:\n"
+                  + generated
+              )
+          print("generated block matches the Compose page")
+          PY
+
+      - name: Assert the generated deployment
+        run: |
+          dir="$RUNNER_TEMP/platypus"
+          grep -q '^  caddy:$' "$dir/compose.override.yaml"
+          grep -q '^    image: willdady/platypus-backend:' "$dir/compose.override.yaml"
+          grep -q '^    image: willdady/platypus-frontend:' "$dir/compose.override.yaml"
+          test "$(grep -c 'ports: !reset \[\]' "$dir/compose.override.yaml")" = 2
+          grep -q '^      chat.example.com {$' "$dir/compose.override.yaml"
+          grep -q "^FRONTEND_URL='https://chat.example.com'$" "$dir/.env"
+          grep -q "^BACKEND_URL='https://chat.example.com/api'$" "$dir/.env"
+          grep -q "^ALLOWED_ORIGINS='https://chat.example.com'$" "$dir/.env"
+          test "$(stat -c %a "$dir/.env")" = 600
+          ! grep -q '^AUTH_COOKIE_DOMAIN=' "$dir/.env"
+          # The real Compose validates the generated file, including !reset.
+          (cd "$dir" && docker compose config >/dev/null)
 
   end-to-end:
     runs-on: ubuntu-latest

@@ -2954,6 +2954,164 @@ describe("docker image tags", () => {
   });
 });
 
+// --- the Caddy reverse-proxy block -------------------------------------------
+
+const INSTALLER_SCRIPT = "apps/website/public/install.sh";
+const EXAMPLE_DOMAIN = "chat.example.com";
+const DOMAIN_PLACEHOLDER = "PLATYPUS_DOMAIN";
+
+/** The block the installer writes, read out of its here-doc. */
+const installerCaddyBlock = (source: string): string | undefined => {
+  const lines = source.split("\n");
+  const start = lines.findIndex((line) =>
+    line.includes(`caddy_block="$(cat <<'CADDY_BLOCK'`),
+  );
+  if (start === -1) return undefined;
+  const end = lines.indexOf("CADDY_BLOCK", start + 1);
+  if (end === -1) return undefined;
+  return lines.slice(start + 1, end).join("\n");
+};
+
+/**
+ * The Compose page and the installer ship the same Caddy block: the page tells
+ * an Operator to paste it into `compose.override.yaml`, and the installer writes
+ * it when `PLATYPUS_DOMAIN` is set. Two long copies drift — a port, a volume
+ * name, the `/api` rewrite — and an Operator who pastes the page's copy ends up
+ * with a different deployment from the one the installer makes.
+ *
+ * The installer's copy stands the domain up as a placeholder it substitutes, so
+ * the two are compared with the domain normalised on both sides.
+ */
+describe("the Caddy reverse-proxy block", () => {
+  const installerSource = readRepoFile(INSTALLER_SCRIPT);
+  const installer = installerCaddyBlock(installerSource);
+  const page = fencedBlocks(readDoc(COMPOSE_PAGE)).find((block) =>
+    block.text.includes("caddy_data:"),
+  )?.text;
+
+  const withoutDomain = (text: string): string =>
+    text
+      .replaceAll(EXAMPLE_DOMAIN, "<domain>")
+      .replaceAll(DOMAIN_PLACEHOLDER, "<domain>");
+
+  it("found the block in the installer and on the Compose page", () => {
+    expect(
+      installer,
+      `No \`caddy_block="$(cat <<'CADDY_BLOCK'\` here-doc in ${INSTALLER_SCRIPT}. ` +
+        `The Compose page tells an Operator to paste a Caddy block the installer is ` +
+        `supposed to write; one of the two moved.`,
+    ).toBeDefined();
+    expect(
+      page,
+      `${COMPOSE_PAGE} has no fenced block defining \`caddy_data:\`, so the page ` +
+        `stopped showing the Caddy block the installer writes.`,
+    ).toBeDefined();
+  });
+
+  it("is the same text on both surfaces, apart from the domain", () => {
+    if (installer === undefined || page === undefined) return;
+    expect(
+      withoutDomain(installer),
+      `The block in ${INSTALLER_SCRIPT} and the one on ${COMPOSE_PAGE} have drifted. ` +
+        `An Operator pasting the page's block then runs a different stack from one ` +
+        `the installer writes: fix both together.`,
+    ).toBe(withoutDomain(page));
+  });
+
+  it("serves one origin with Caddy as the only way in", () => {
+    if (page === undefined) return;
+    const violations: string[] = [];
+    const expectAll = (phrases: string[]) => {
+      for (const phrase of phrases) {
+        if (!page.includes(phrase)) {
+          violations.push(
+            `${COMPOSE_PAGE}'s Caddy block has no \`${phrase}\`.`,
+          );
+        }
+      }
+    };
+
+    expectAll([
+      "image: caddy:",
+      "80:80",
+      "443:443",
+      "443:443/udp",
+      "caddy_data:/data",
+      "caddy_config:/config",
+      "handle_path /api/*",
+      "reverse_proxy backend:4000",
+      "reverse_proxy frontend:3000",
+      "header_up X-Forwarded-For {remote_host}",
+      "flush_interval -1",
+      `${EXAMPLE_DOMAIN} {`,
+    ]);
+
+    const resetCount = page.split("ports: !reset []").length - 1;
+    if (resetCount !== 2) {
+      violations.push(
+        `${COMPOSE_PAGE}'s Caddy block resets ports on ${resetCount} services, not 2. ` +
+          `A backend or frontend left publishing 3000/4000 is a way around Caddy.`,
+      );
+    }
+
+    const image = page.match(/image: caddy:(\S+)/)?.[1];
+    if (image === undefined || !/^\d+\.\d+\.\d+$/.test(image)) {
+      violations.push(
+        `${COMPOSE_PAGE}'s Caddy image is \`${image ?? "(none)"}\`, not an exact ` +
+          `\`x.y.z\` version. A floating tag moves the proxy under a deployment ` +
+          `that pinned its own images.`,
+      );
+    }
+
+    const namedVolumes = ["caddy_data:", "caddy_config:"];
+    for (const volume of namedVolumes) {
+      const declarations = page
+        .split("\n")
+        .filter((line) => line.trim() === volume).length;
+      if (declarations !== 1) {
+        violations.push(
+          `${COMPOSE_PAGE}'s Caddy block has \`${volume}\` declared ${declarations} ` +
+            `times as a named volume, not once. Certificates have to survive a ` +
+            `container recreate or ACME rate limits bite.`,
+        );
+      }
+    }
+
+    expectNoViolations(violations);
+  });
+
+  it("documents the installer setting and the Compose minimum", () => {
+    const content = readDoc(COMPOSE_PAGE);
+    const violations: string[] = [];
+    // `PLATYPUS_DOMAIN` is an installer setting, not one of the reference
+    // variables, so the Compose page is its only home.
+    if (!content.includes("PLATYPUS_DOMAIN")) {
+      violations.push(
+        `${COMPOSE_PAGE} does not document \`PLATYPUS_DOMAIN\`, so the only ` +
+          `installer setting that turns on HTTPS is undocumented.`,
+      );
+    }
+    if (!content.includes("2.24.0")) {
+      violations.push(
+        `${COMPOSE_PAGE} does not state the Compose 2.24.0 minimum, which is ` +
+          `where \`!reset\` arrived. An older Compose rejects the Caddy block.`,
+      );
+    }
+    expectNoViolations(violations);
+  });
+
+  it("points the production guide at the shipped option", () => {
+    expect(
+      readDoc("self-hosting/production.mdx").includes(
+        "/self-hosting/docker-compose#serve-https-with-caddy",
+      ),
+      `self-hosting/production.mdx does not link to the shipped Caddy setup. ` +
+        `Its reverse-proxy section is where an Operator decides what to put in ` +
+        `front of the stack.`,
+    ).toBe(true);
+  });
+});
+
 // --- internal links and heading anchors --------------------------------------
 
 /** `content/index.mdx` → `/`, `content/foo/index.mdx` → `/foo`. */
