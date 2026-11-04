@@ -57,6 +57,8 @@ jobs:
           refuses PLATYPUS_DOMAIN=chat.example.com PLATYPUS_HOST=example.com
           refuses PLATYPUS_DOMAIN=https://chat.example.com
           refuses PLATYPUS_DOMAIN=chat.example.com:443
+          refuses PLATYPUS_DOMAIN=203.0.113.10
+          refuses PLATYPUS_DOMAIN='[::1]'
 
   # The HTTPS path writes different files from the plain-HTTP one. A stub
   # `docker` lets the installer finish without pulling images, so this checks

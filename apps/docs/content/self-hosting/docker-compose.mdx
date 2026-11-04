@@ -171,14 +171,14 @@ admin password.
 
 Set these as environment variables on the `bash` side of the pipe:
 
-| Variable           | Default                     | What it does                                                                                                                                                                                             |
-| ------------------ | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PLATYPUS_VERSION` | the latest release          | The release to install, e.g. `3.13.0`.                                                                                                                                                                   |
-| `PLATYPUS_DIR`     | `./platypus`                | The directory to install into.                                                                                                                                                                           |
-| `PLATYPUS_HOST`    | `localhost`                 | The host the browser reaches Platypus on — a host name or IP address, with no scheme or port. Sets `FRONTEND_URL`, `BACKEND_URL` and `ALLOWED_ORIGINS` together.                                         |
-| `PLATYPUS_DOMAIN`  | _(unset)_                   | The domain to serve HTTPS on, e.g. `chat.example.com`. Writes the Caddy block into `compose.override.yaml` and points all three URLs at `https://<domain>`. Cannot be set together with `PLATYPUS_HOST`. |
-| `ADMIN_EMAIL`      | `admin@example.com`         | The initial admin's email.                                                                                                                                                                               |
-| `ADMIN_PASSWORD`   | a random 24-character value | The initial admin's password. At least 8 characters.                                                                                                                                                     |
+| Variable           | Default                     | What it does                                                                                                                                                                                                                                |
+| ------------------ | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PLATYPUS_VERSION` | the latest release          | The release to install, e.g. `3.13.0`.                                                                                                                                                                                                      |
+| `PLATYPUS_DIR`     | `./platypus`                | The directory to install into.                                                                                                                                                                                                              |
+| `PLATYPUS_HOST`    | `localhost`                 | The host the browser reaches Platypus on — a host name or IP address, with no scheme or port. Sets `FRONTEND_URL`, `BACKEND_URL` and `ALLOWED_ORIGINS` together.                                                                            |
+| `PLATYPUS_DOMAIN`  | _(unset)_                   | The domain to serve HTTPS on — a host name such as `chat.example.com`, not an IP address. Writes the Caddy block into `compose.override.yaml` and points all three URLs at `https://<domain>`. Cannot be set together with `PLATYPUS_HOST`. |
+| `ADMIN_EMAIL`      | `admin@example.com`         | The initial admin's email.                                                                                                                                                                                                                  |
+| `ADMIN_PASSWORD`   | a random 24-character value | The initial admin's password. At least 8 characters.                                                                                                                                                                                        |
 
 For example, on a server you reach as `platypus.internal`:
 
@@ -262,8 +262,6 @@ configs:
   caddyfile:
     content: |
       chat.example.com {
-        encode zstd gzip
-
         handle_path /api/* {
           reverse_proxy backend:4000 {
             header_up X-Forwarded-For {remote_host}
@@ -282,7 +280,8 @@ It needs:
 - **Docker Compose 2.24.0 or later** — `ports: !reset []` and an inline
   `configs:` entry arrived there. An older Compose refuses to load the file.
 - **DNS pointed at this host** — an A or AAAA record for the domain must already
-  resolve to it.
+  resolve to it. The value is a host name, not an IP address: Let's Encrypt
+  issues certificates by DNS name.
 - **Ports 80 and 443 reachable from the internet** — Caddy answers the ACME
   challenge on port 80 and serves HTTPS on 443. A firewall or NAT that blocks
   either stops the certificate from issuing.

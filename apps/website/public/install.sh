@@ -54,6 +54,23 @@ require_free_port() {
     fail "port $port is already in use on this host, and $reason. Stop whatever is using it (see: lsof -i :$port) and try again."
 }
 
+# A DNS-style host name: letters, digits, dots and hyphens, not starting or
+# ending with a dot or hyphen. An IPv4 literal also matches that shape, so it is
+# excluded: a certificate cannot be issued for an IP address.
+is_host_name() {
+  local value="$1"
+  [[ "$value" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$ ]] &&
+    [[ ! "$value" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]]
+}
+
+# A host name, IPv4 address or bracketed IPv6 address — what PLATYPUS_HOST
+# accepts, since it only becomes the host of a URL.
+is_host_or_ip() {
+  is_host_name "$1" ||
+    [[ "$1" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] ||
+    [[ "$1" =~ ^\[[0-9A-Fa-f:.]+\]$ ]]
+}
+
 # Everything runs from main, called on the last line, so a download cut short
 # by the network runs nothing rather than half a script.
 main() {
@@ -103,12 +120,12 @@ main() {
   done
   # A host name, IPv4 address or bracketed IPv6 address — it becomes the
   # scheme-and-host of three URLs.
-  [[ "$host" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$ || "$host" =~ ^\[[0-9A-Fa-f:.]+\]$ ]] ||
+  is_host_or_ip "$host" ||
     fail "PLATYPUS_HOST '$host' is not a host name or IP address (no scheme, port or path)."
-  # Validated the same way as PLATYPUS_HOST: it becomes the scheme-and-host of
-  # the three HTTPS URLs.
-  [[ -z "$domain" || "$domain" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$ || "$domain" =~ ^\[[0-9A-Fa-f:.]+\]$ ]] ||
-    fail "PLATYPUS_DOMAIN '$domain' is not a host name or IP address (no scheme, port or path)."
+  # Caddy obtains a certificate for a DNS name, so PLATYPUS_DOMAIN takes a host
+  # name only: an IP address cannot be issued a certificate.
+  [[ -z "$domain" ]] || is_host_name "$domain" ||
+    fail "PLATYPUS_DOMAIN '$domain' is not a host name (no scheme, port or path). Caddy obtains a certificate by DNS name, so an IP address cannot be used."
   [[ "$email" =~ ^[^[:space:]@]+@[^[:space:]@]+$ ]] ||
     fail "ADMIN_EMAIL '$email' is not an email address."
   # The backend refuses to seed a shorter one, which would leave a half-started
@@ -192,8 +209,6 @@ configs:
   caddyfile:
     content: |
       PLATYPUS_DOMAIN {
-        encode zstd gzip
-
         handle_path /api/* {
           reverse_proxy backend:4000 {
             header_up X-Forwarded-For {remote_host}
