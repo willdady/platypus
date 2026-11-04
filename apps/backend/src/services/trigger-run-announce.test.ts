@@ -226,6 +226,15 @@ describe("announceTriggerRunsEnded: a failed run's Notification", () => {
     },
   );
 
+  it("stores the run's error verbatim, without unescaping it", async () => {
+    const fake = seedAnnouncement();
+    const reason = 'provider said {"detail":"line\\nbreak"}';
+
+    await announceTriggerRunsEnded([endedRun({ errorMessage: reason })]);
+
+    expect(fake.tables.notification[0]?.body).toBe(reason);
+  });
+
   it.each(["success", "cancelled", "suppressed"])(
     "posts no Notification for a %s run",
     async (status) => {

@@ -72,7 +72,9 @@ export const createPlatypusNotification = async (
     workspaceId: data.workspaceId,
     agentId: null,
     title: data.title,
-    body: normalizeBody(data.body),
+    // Platypus writes the body itself; unlike an Agent's, it is stored
+    // verbatim rather than unescaped.
+    body: data.body,
     sourceTriggerRunId: data.sourceTriggerRunId ?? null,
   });
 };
