@@ -192,6 +192,7 @@ type ModelTestAction = {
   pending: boolean;
   result?: ModelTestVerdict;
   onRun: () => void;
+  onDismiss: () => void;
 };
 
 /**
@@ -285,7 +286,7 @@ function ModelCard({
         )}
       </div>
       {test.result && copy && (
-        <Alert variant={copy.variant}>
+        <Alert variant={copy.variant} className="pr-10">
           {copy.variant === "success" ? (
             <Check />
           ) : copy.variant === "warning" ? (
@@ -315,6 +316,16 @@ function ModelCard({
                 </p>
               )}
           </AlertDescription>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="absolute top-1.5 right-1.5 size-7"
+            aria-label={`Dismiss test result for ${model.id}`}
+            onClick={test.onDismiss}
+          >
+            <X />
+          </Button>
         </Alert>
       )}
     </li>
@@ -938,6 +949,7 @@ function ProviderForm({
                       pending: testingModel === index,
                       result: testResults[index],
                       onRun: () => void testModel(index, model.id),
+                      onDismiss: () => clearTestResult(index),
                     }}
                     onEdit={() => setModelDialog(index)}
                     onRemove={() => removeModel(index)}
