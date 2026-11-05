@@ -161,4 +161,41 @@ describe("auth mount", () => {
     expect(handled?.pathname).toBe("/api/auth/get-session");
     expect(handled?.search).toBe("?disableRefresh=true");
   });
+
+  // Over a real socket `c.req.raw` is @hono/node-server's lightweight request,
+  // not a Request; using it as a Request init threw on Node 26.13+ (4.2.0).
+  it("forwards a POST served by @hono/node-server, body included", async () => {
+    vi.stubEnv("BETTER_AUTH_URL", "https://chat.example.com/api/");
+    vi.resetModules();
+    const { auth } = await import("./auth.ts");
+    let received: { path: string; body: string } | undefined;
+    Object.assign(auth, {
+      handler: async (req: Request) => {
+        received = { path: new URL(req.url).pathname, body: await req.text() };
+        return new Response(null, { status: 204 });
+      },
+    });
+    const { default: prefixedApp } = await import("./server.ts");
+    const { serve } = await import("@hono/node-server");
+    const server = await new Promise<import("node:http").Server>((resolve) => {
+      const s = serve({ fetch: prefixedApp.fetch, port: 0 }, () =>
+        resolve(s as import("node:http").Server),
+      );
+    });
+    try {
+      const { port } = server.address() as import("node:net").AddressInfo;
+      const res = await fetch(`http://127.0.0.1:${port}/auth/sign-in/email`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: '{"email":"a@example.com"}',
+      });
+      expect(res.status).toBe(204);
+      expect(received).toEqual({
+        path: "/api/auth/sign-in/email",
+        body: '{"email":"a@example.com"}',
+      });
+    } finally {
+      server.close();
+    }
+  });
 });

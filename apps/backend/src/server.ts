@@ -136,7 +136,19 @@ const authPath = new URL(authBaseUrl()).pathname;
 app.on(["POST", "GET"], "/auth/*", (c) => {
   const url = new URL(c.req.url);
   url.pathname = authPath + url.pathname.slice("/auth".length);
-  return auth.handler(new Request(url, c.req.raw));
+  // Fields copied one by one: under @hono/node-server `c.req.raw` is not a real
+  // Request, and passing it as the init makes undici call its `duplex` getter on
+  // it, which throws "Illegal invocation" from Node 26.13.
+  const raw = c.req.raw;
+  return auth.handler(
+    new Request(url, {
+      method: raw.method,
+      headers: raw.headers,
+      body: raw.body,
+      duplex: "half",
+      signal: raw.signal,
+    } as RequestInit),
+  );
 });
 
 // Liveness only: `ok` says the process is up and serving, nothing about the
