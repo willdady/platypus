@@ -1,5 +1,23 @@
 # Changelog
 
+## [4.2.0](https://github.com/willdady/platypus/compare/v4.1.0...v4.2.0) (2026-11-05)
+
+
+### Features
+
+* **backend:** add a Fallback model for Trigger runs ([#1815](https://github.com/willdady/platypus/issues/1815)) ([a79545e](https://github.com/willdady/platypus/commit/a79545ee93ca3d4923cad823293a4ea070848ed2))
+* **backend:** add a result stage to the Tool gate ([#1808](https://github.com/willdady/platypus/issues/1808)) ([8a94bf8](https://github.com/willdady/platypus/commit/8a94bf8b5445b5864f3ddd74cf760ad17d33e01a))
+* **backend:** keep the head and tail of shellExec output ([#1813](https://github.com/willdady/platypus/issues/1813)) ([ee30fa0](https://github.com/willdady/platypus/commit/ee30fa035801c96b0599fa0eac0d99b392b1415b))
+* **backend:** notify when a trigger run fails ([#1817](https://github.com/willdady/platypus/issues/1817)) ([6728812](https://github.com/willdady/platypus/commit/6728812ea668b573ad555e818ab748c6f98678fc))
+* **deploy:** serve the Compose stack over HTTPS with Caddy ([#1814](https://github.com/willdady/platypus/issues/1814)) ([3f7c9e0](https://github.com/willdady/platypus/commit/3f7c9e0ecac51571427cff383a189d5d0a60a905))
+* **frontend:** dismiss a model's test result ([#1819](https://github.com/willdady/platypus/issues/1819)) ([cac04c3](https://github.com/willdady/platypus/commit/cac04c389013d6f9596d3c6491b7e957436dd827))
+* **providers:** test a Provider model from the form ([#1818](https://github.com/willdady/platypus/issues/1818)) ([8726694](https://github.com/willdady/platypus/commit/8726694894045eee5c7f1f85228d7e658751aa48))
+
+
+### Bug Fixes
+
+* **backend:** support a path-prefixed BACKEND_URL ([#1811](https://github.com/willdady/platypus/issues/1811)) ([82df288](https://github.com/willdady/platypus/commit/82df2885290ed4038cf60c1bf683221d9a034bb4))
+
 ## [4.1.0](https://github.com/willdady/platypus/compare/v4.0.0...v4.1.0) (2026-11-03)
 
 
