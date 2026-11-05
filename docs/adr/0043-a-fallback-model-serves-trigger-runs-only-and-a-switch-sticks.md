@@ -1,6 +1,5 @@
 ---
 status: accepted
-implemented-by: "#1803"
 ---
 
 # A Fallback model serves Trigger runs only, and a switch sticks for the run

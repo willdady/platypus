@@ -286,8 +286,9 @@ It needs:
   challenge on port 80 and serves HTTPS on 443. A firewall or NAT that blocks
   either stops the certificate from issuing.
 
-Then change all three URL variables in `.env` in one edit, and bring the stack
-up:
+Then change all three URL variables in `.env` in one edit (a partial edit
+signs you out straight after sign-in; see the warning under
+[Clone and configure](#clone-and-configure)), and bring the stack up:
 
 ```dotenv
 FRONTEND_URL=https://chat.example.com
