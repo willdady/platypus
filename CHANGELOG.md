@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.2.1](https://github.com/willdady/platypus/compare/v4.2.0...v4.2.1) (2026-11-05)
+
+
+### Bug Fixes
+
+* **backend:** rebuild the auth request without passing the raw request as init ([#1821](https://github.com/willdady/platypus/issues/1821)) ([8def412](https://github.com/willdady/platypus/commit/8def412e0a9cf4977181941a986d697d81b41f4c))
+
 ## [4.2.0](https://github.com/willdady/platypus/compare/v4.1.0...v4.2.0) (2026-11-05)
 
 
