@@ -1168,6 +1168,20 @@ describe("ProviderForm Test action", () => {
     expect(screen.queryByText("Connection successful")).not.toBeInTheDocument();
   });
 
+  it("dismisses one model's result", async () => {
+    stubAcceptedSave(SUCCESS);
+    renderEditForm([{ id: "gpt-4o", passthroughFileTypes: [] }]);
+
+    fireEvent.click(testButton("gpt-4o"));
+    await within(modelCard("gpt-4o")).findByText("Connection successful");
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Dismiss test result for gpt-4o" }),
+    );
+
+    expect(screen.queryByText("Connection successful")).not.toBeInTheDocument();
+  });
+
   it("clears only the edited model's result", async () => {
     stubAcceptedSave(SUCCESS);
     renderEditForm([
