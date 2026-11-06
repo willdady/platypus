@@ -36,6 +36,8 @@ import type {
   ToolUIPart,
 } from "ai";
 import { isToolUIPart, type ChatStatus } from "ai";
+import remarkBreaks from "remark-breaks";
+import { defaultRemarkPlugins } from "streamdown";
 import type { Agent } from "@platypus/schemas";
 import {
   formatFileSize,
@@ -118,6 +120,14 @@ type PartOfType<T extends MessagePart["type"]> = Extract<
   MessagePart,
   { type: T }
 >;
+
+// A user types plain text, where Enter means a new line; Markdown would fold a
+// single newline into a space. Passing `remarkPlugins` replaces Streamdown's
+// defaults, so they are kept alongside.
+const userRemarkPlugins = [
+  ...Object.values(defaultRemarkPlugins),
+  remarkBreaks,
+];
 
 function isTextPart(part: MessagePart): part is TextUIPart {
   return part.type === "text";
@@ -475,7 +485,13 @@ export const ChatMessage = memo(function ChatMessage({
         avatar={assistantAvatar(i)}
       >
         <MessageContent className="max-w-full">
-          <MessageResponse>{textPart.text}</MessageResponse>
+          <MessageResponse
+            remarkPlugins={
+              message.role === "user" ? userRemarkPlugins : undefined
+            }
+          >
+            {textPart.text}
+          </MessageResponse>
         </MessageContent>
       </Message>
     )),

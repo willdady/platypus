@@ -1704,3 +1704,23 @@ describe("ChatMessage offered files", () => {
     expect(screen.getByText("Blocked by a Tool gate")).toBeInTheDocument();
   });
 });
+
+describe("ChatMessage line breaks", () => {
+  const text = "first line\nsecond line";
+
+  it("keeps a single newline in a user message as a line break", () => {
+    renderMessage({ id: "u1", role: "user", parts: [{ type: "text", text }] });
+
+    expect(screen.getByText(/first line/).innerHTML).toContain("<br>");
+  });
+
+  it("leaves an assistant reply's single newline to Markdown", () => {
+    renderMessage({
+      id: "a1",
+      role: "assistant",
+      parts: [{ type: "text", text }],
+    });
+
+    expect(screen.getByText(/first line/).innerHTML).not.toContain("<br>");
+  });
+});
