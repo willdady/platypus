@@ -4,6 +4,7 @@ import { Blocks, Container, Globe, ShieldCheck, Wrench } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useScopedList } from "@/hooks/use-scoped-list";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Item,
   ItemContent,
@@ -40,6 +41,7 @@ function PluginsList({
     data,
     error,
     results: plugins,
+    mutate,
   } = useScopedList<InstalledPlugin>("plugins", { orgId });
 
   // No data and no error is still loading — gating on data rather than
@@ -77,7 +79,8 @@ function PluginsList({
       <EmptyCard
         icon={<Blocks />}
         title="Couldn't load plugins"
-        description="The installed-plugins catalog is temporarily unavailable. Try refreshing the page."
+        description="The installed-plugins catalog is temporarily unavailable."
+        action={<Button onClick={() => void mutate()}>Retry</Button>}
       />
     );
   }

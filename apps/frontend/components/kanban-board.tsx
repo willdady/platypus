@@ -31,6 +31,7 @@ import {
 } from "@/lib/api-write";
 import { moveCard, type ColumnWithCards } from "@/lib/board-moves";
 import { useBackendUrl } from "@/components/auth-provider";
+import { FetchErrorNotice } from "@/components/fetch-error-notice";
 import { KanbanColumnComponent } from "@/components/kanban-column";
 import { KanbanCardComponent } from "@/components/kanban-card";
 import { KanbanCardDialog } from "@/components/kanban-card-dialog";
@@ -341,8 +342,14 @@ export function KanbanBoard({
   // last good state on screen rather than swapping a loaded board for an error.
   if (error && !data) {
     return (
-      <div role="alert" className="p-4 text-destructive">
-        Failed to load board.
+      <div className="p-4">
+        <FetchErrorNotice
+          error={error}
+          subject="board"
+          backHref={routes.root}
+          backLabel="Back to workspace"
+          onRetry={() => void mutate()}
+        />
       </div>
     );
   }

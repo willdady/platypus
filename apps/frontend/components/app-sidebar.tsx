@@ -39,6 +39,7 @@ import {
   SidebarSeparator,
 } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ListState } from "@/components/list-state";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -422,8 +423,10 @@ export function AppSidebar() {
               {/* Names the search the shown list answered, not the one in
                 flight, so a pending search never reads as "no matches". */}
               {chatGroups.length === 0 && shownChatList?.search && (
-                <div className="px-4 py-6 text-center text-sm text-muted-foreground">
-                  No chats match &ldquo;{shownChatList.search}&rdquo;
+                <div className="p-2">
+                  <ListState variant="empty">
+                    No chats match &ldquo;{shownChatList.search}&rdquo;
+                  </ListState>
                 </div>
               )}
               {chatGroups.map((group) => (

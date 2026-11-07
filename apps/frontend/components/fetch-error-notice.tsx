@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { FileQuestion, ShieldX, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EmptyCard } from "@/components/empty-card";
@@ -40,6 +41,7 @@ function noticeFor(subject: string, error: unknown) {
 export function FetchErrorNotice({
   error,
   subject,
+  description,
   backHref,
   backLabel,
   onRetry,
@@ -47,6 +49,8 @@ export function FetchErrorNotice({
   error: unknown;
   /** What the record is, for the messages: "provider", "workspace". */
   subject: string;
+  /** Replaces the default description when the record explains itself. */
+  description?: ReactNode;
   backHref: string;
   backLabel: string;
   onRetry?: () => void;
@@ -57,7 +61,7 @@ export function FetchErrorNotice({
     <EmptyCard
       icon={notice.icon}
       title={notice.title}
-      description={notice.description}
+      description={description ?? notice.description}
       action={
         <>
           {retryable && <Button onClick={() => onRetry()}>Retry</Button>}

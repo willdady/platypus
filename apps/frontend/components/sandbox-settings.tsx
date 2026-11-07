@@ -51,7 +51,6 @@ import { EmptyCard } from "@/components/empty-card";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
-import { ListError } from "@/components/list-state";
 import { Skeleton } from "@/components/ui/skeleton";
 
 type SandboxBackend = { backend: string; name: string };
@@ -488,12 +487,15 @@ function SandboxSettings({
     return <SandboxSettingsSkeleton canConfigure={canConfigure} />;
   }
 
-  if (error) {
+  // Only a cold failure replaces the form; a failed revalidation keeps the
+  // loaded sandbox (or the "none configured" state) on screen.
+  if (error && data === undefined) {
     return (
-      <ListError
-        error={error}
-        subject="sandbox"
-        onRetry={() => void mutate()}
+      <EmptyCard
+        icon={<Box />}
+        title="Couldn't load sandbox"
+        description="The sandbox settings could not be read. Try again in a moment."
+        action={<Button onClick={() => void mutate()}>Retry</Button>}
       />
     );
   }

@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from "./ui/dialog";
 import { Item, ItemActions, ItemContent, ItemTitle } from "./ui/item";
+import { ListState } from "./list-state";
 import { Skeleton } from "./ui/skeleton";
 import { useState } from "react";
 
@@ -120,9 +121,9 @@ function AttachSharedResourceDialog({
             ))}
           </ul>
         ) : available.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-2">
+          <ListState variant="empty">
             No shared {label}s available to attach.
-          </p>
+          </ListState>
         ) : (
           <ul className="max-h-72 overflow-y-auto">
             {available.map((r) => (

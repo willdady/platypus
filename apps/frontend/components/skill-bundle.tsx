@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FieldDescription } from "@/components/ui/field";
+import { ListState } from "@/components/list-state";
 import { useBackendUrl } from "@/components/auth-provider";
 import {
   scopedUrl,
@@ -261,7 +262,7 @@ export function SkillBundleCard({
             ))}
           </ul>
         ) : (
-          <p className="text-sm text-muted-foreground">No bundled files.</p>
+          <ListState variant="empty">No bundled files.</ListState>
         )}
 
         {frontmatter.length > 0 && (

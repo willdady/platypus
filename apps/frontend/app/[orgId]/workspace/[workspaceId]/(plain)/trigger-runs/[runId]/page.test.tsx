@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { Suspense } from "react";
 import type { RunEvent, TriggerRunDetail } from "@platypus/schemas";
 
@@ -17,6 +23,7 @@ const state = {
   data: undefined as unknown,
   error: undefined as Error | undefined,
   isLoading: false,
+  mutate: vi.fn(),
   /** The page's own fetcher and key, captured so a test can run a poll. */
   key: null as string | null,
   fetcher: undefined as ((url: string) => Promise<unknown>) | undefined,
@@ -32,7 +39,12 @@ vi.mock("swr", () => ({
     state.config = config;
     state.key = key;
     state.fetcher = fetcher;
-    return { data: state.data, error: state.error, isLoading: state.isLoading };
+    return {
+      data: state.data,
+      error: state.error,
+      isLoading: state.isLoading,
+      mutate: state.mutate,
+    };
   },
 }));
 
@@ -148,6 +160,7 @@ describe("TriggerRunDetailPage", () => {
     state.data = undefined;
     state.error = undefined;
     state.isLoading = false;
+    state.mutate.mockReset();
     state.key = null;
     state.fetcher = undefined;
     rerender = undefined;
@@ -322,4 +335,37 @@ describe("TriggerRunDetailPage", () => {
 
     expect(screen.getByText(RUN_DETAIL_ERROR_NOTICE)).toBeInTheDocument();
   });
+
+  // A failed read for any reason other than gone/forbidden may clear on its
+  // own, so it offers another read and a way back to the run list.
+  it("offers a retry and a way back when the run read fails transiently", async () => {
+    state.error = Object.assign(new Error("boom"), { status: 500 });
+
+    await renderPage();
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(state.mutate).toHaveBeenCalledOnce();
+    expect(screen.getByRole("link", { name: "Trigger runs" })).toHaveAttribute(
+      "href",
+      "/org-1/workspace/ws-1/trigger-runs",
+    );
+  });
+
+  // A pruned or inaccessible run won't come back, so a retry would only
+  // pretend there is a way forward. The way back stays.
+  it.each([404, 403])(
+    "offers no retry when the run read answers %i",
+    async (status) => {
+      state.error = Object.assign(new Error("nope"), { status });
+
+      await renderPage();
+
+      expect(
+        screen.queryByRole("button", { name: "Retry" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("link", { name: "Trigger runs" }),
+      ).toHaveAttribute("href", "/org-1/workspace/ws-1/trigger-runs");
+    },
+  );
 });
