@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.2.2](https://github.com/willdady/platypus/compare/v4.2.1...v4.2.2) (2026-11-07)
+
+
+### Bug Fixes
+
+* **backend:** follow fetch redirects hop by hop and check MCP server URLs ([f991017](https://github.com/willdady/platypus/commit/f991017a3983a4db87c6821eba951bbf1cf87b38))
+* **frontend:** keep line breaks in user chat messages ([#1823](https://github.com/willdady/platypus/issues/1823)) ([08371d2](https://github.com/willdady/platypus/commit/08371d2de5bd9811c2a013b0e56de053930ec57b))
+
 ## [4.2.1](https://github.com/willdady/platypus/compare/v4.2.0...v4.2.1) (2026-11-05)
 
 
