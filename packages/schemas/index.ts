@@ -3435,6 +3435,9 @@ export const triggerBaseSchema = z.object({
   // headless run should not have a system prompt that drifts with the
   // Workspace User's unrelated interactive-chat activity.
   includeMemories: z.boolean().default(false),
+  // Whether memory extraction reads this Trigger's run Chats. Off by default:
+  // a run has no User whose preferences a Memory would capture.
+  extractMemories: z.boolean().default(false),
   lastRunAt: z.date().nullable().optional(),
   nextRunAt: z.date().nullable().optional(),
   // One-off Triggers only: when it fired. A fired One-off is spent.
@@ -3487,6 +3490,7 @@ const triggerCreateBaseSchema = triggerBaseSchema.pick({
   maxRunsToKeep: true,
   search: true,
   includeMemories: true,
+  extractMemories: true,
 });
 
 /**
@@ -3530,6 +3534,7 @@ export const triggerUpdateSchema = strictRequest(
         maxRunsToKeep: true,
         search: true,
         includeMemories: true,
+        extractMemories: true,
       })
       .extend({ type: triggerTypeSchema }),
   ).extend({

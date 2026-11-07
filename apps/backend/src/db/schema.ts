@@ -358,6 +358,12 @@ export const chat = pgTable(
     // deleted endpoint, so its Chats stay out of extraction rather than
     // falling back to looking like the Owner's own.
     a2aEndpointId: t.text("a2a_endpoint_id"),
+    // The Trigger run whose Transcript this Chat keeps (ADR-0044). Such a
+    // Chat is left out of the Chat list and goes with its run, so pruning
+    // under Max Runs to Keep prunes it too. Null for any other Chat.
+    triggerRunId: t
+      .text("trigger_run_id")
+      .references((): AnyPgColumn => triggerRun.id, { onDelete: "cascade" }),
 
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
@@ -385,6 +391,13 @@ export const chat = pgTable(
     index("idx_chat_provider_id").on(t.providerId),
     // A retried A2A message is found among the Chats its token started.
     index("idx_chat_a2a_token_id").on(t.a2aTokenId),
+    // A run's delete cascades through this.
+    index("idx_chat_trigger_run_id").on(t.triggerRunId),
+    // A Chat is started by an A2A client or by a Trigger run, never both.
+    check(
+      "chat_one_binding",
+      sql`${t.a2aEndpointId} is null or ${t.triggerRunId} is null`,
+    ),
     // NO ACTION rather than a cascade or set-null, for the leaf and the memory
     // cursor alike: a message row is never hard-deleted on its own, only with
     // its Chat, so neither can dangle.
@@ -1132,6 +1145,9 @@ export const trigger = pgTable(
     // activity unrelated to it. Existing Triggers stop composing the
     // `<memories>` block when this column lands — the intended outcome.
     includeMemories: t.boolean("include_memories").notNull().default(false),
+    // Whether memory extraction reads this Trigger's run Chats (ADR-0044).
+    // Off by default: a run has no User whose preferences a Memory captures.
+    extractMemories: t.boolean("extract_memories").notNull().default(false),
     // The validated shape. The repair migration fills the fields each type
     // gained and refuses a config it cannot make valid; reads still narrow
     // `type`/`config` together through `narrowTriggerConfig`, which reports a

@@ -430,6 +430,38 @@ describe("finish reason instrumentation", () => {
     expect(result.text).toBe("ok");
   });
 
+  // ADR-0044: the sink keeps a Trigger run's Transcript, so it is handed the
+  // reply after the run's own user message, as a Chat turn's sink is.
+  it("hands the sink the unattended run's reply after its user message", async () => {
+    mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
+    mockStreamText.mockReturnValueOnce(streamResultOf(fakeGenerateResult));
+    const queue = new streamHarness.AsyncQueue();
+    streamHarness.queue = queue;
+    const reply = {
+      id: "msg-1",
+      role: "assistant",
+      parts: [{ type: "text", text: "ok" }],
+    };
+    queue.push(reply);
+    queue.end();
+    const user = {
+      id: "u1",
+      role: "user" as const,
+      parts: [{ type: "text" as const, text: "Do something" }],
+    };
+    const sink = new RecordingSink();
+
+    await runner.generate({
+      scope,
+      input: { ...baseInput, messages: [user] },
+      sink,
+      options: { frontendUrl: "http://localhost:3000" },
+    });
+
+    const finish = sink.events.find((e) => e.name === "onFinish");
+    expect(finish?.messages).toEqual([user, reply]);
+  });
+
   it("records the finish reasons on the unattended completion log", async () => {
     mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
     mockStreamText.mockReturnValueOnce(

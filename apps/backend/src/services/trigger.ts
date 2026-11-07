@@ -81,6 +81,7 @@ type TriggerBaseFields = {
   maxRunsToKeep: number;
   search: boolean;
   includeMemories: boolean;
+  extractMemories: boolean;
   config: CronTriggerConfig | EventTriggerConfig | InboundTriggerConfig;
 };
 
@@ -361,6 +362,7 @@ export async function createTrigger(
     maxRunsToKeep: fields.maxRunsToKeep,
     search: fields.search,
     includeMemories: fields.includeMemories,
+    extractMemories: fields.extractMemories,
     config,
     nextRunAt,
     ...tokenFields,
@@ -437,6 +439,8 @@ export async function updateTrigger(
   if (fields.search !== undefined) updateData.search = fields.search;
   if (fields.includeMemories !== undefined)
     updateData.includeMemories = fields.includeMemories;
+  if (fields.extractMemories !== undefined)
+    updateData.extractMemories = fields.extractMemories;
   if (fields.type !== undefined) updateData.type = fields.type;
 
   // `config`, when supplied, is set below alongside validation — normalized

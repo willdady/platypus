@@ -18,6 +18,8 @@ import {
   a2aEndpoint as a2aEndpointTable,
   chat as chatTable,
   memoryDailySummary as memoryDailySummaryTable,
+  trigger as triggerTable,
+  triggerRun as triggerRunTable,
   workspace as workspaceTable,
 } from "../db/schema.ts";
 import { logger } from "../logger.ts";
@@ -492,12 +494,17 @@ const findChatsToProcess = async (): Promise<ChatToProcess[]> => {
       a2aEndpointTable,
       eq(a2aEndpointTable.id, chatTable.a2aEndpointId),
     )
+    .leftJoin(triggerRunTable, eq(triggerRunTable.id, chatTable.triggerRunId))
+    .leftJoin(triggerTable, eq(triggerTable.id, triggerRunTable.triggerId))
     .where(
       and(
         inArray(chatTable.workspaceId, workspaceIds),
+        // An A2A Chat or a Trigger run's Chat (ADR-0044) is read only while
+        // its endpoint or Trigger opts in.
         or(
-          isNull(chatTable.a2aEndpointId),
+          and(isNull(chatTable.a2aEndpointId), isNull(chatTable.triggerRunId)),
           eq(a2aEndpointTable.extractMemories, true),
+          eq(triggerTable.extractMemories, true),
         ),
         ne(chatTable.status, "running"),
         sql`${chatTable.activeLeafId} IS DISTINCT FROM ${chatTable.memoryCursorId}`,

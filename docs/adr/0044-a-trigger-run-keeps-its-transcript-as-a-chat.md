@@ -1,12 +1,9 @@
 ---
-status: accepted-pending-implementation
+status: accepted
 implemented-by: "#1826"
 ---
 
 # A Trigger run keeps its Transcript as a Chat
-
-> **Today** a Trigger run persists `finalText`, stats and a payload-free Run
-> timeline, and no Chat. This ADR describes the target; #1826 builds it.
 
 A **Trigger run** writes its **Transcript** as a **Chat**, the way an A2A call
 already does for an external caller: a Chat row bound to the run from its

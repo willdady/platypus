@@ -43,8 +43,8 @@ export const startChatTurn = async (params: {
   request: ChatSubmitData;
   includeMemories: boolean;
   origin: string;
-  /** Columns a Chat this turn creates starts with (see `ChatSinkParams`). */
-  newChat?: ChatSinkParams["newChat"];
+  /** Columns an A2A Chat this turn creates starts with (see `ChatSinkParams`). */
+  newChat?: Extract<ChatSinkParams["newChat"], { a2aEndpointId: string }>;
   /** Called once the run's terminal status is written (see `ChatSinkParams`). */
   onEnded?: () => void;
   /** Writes the turn's own rows with its claim (see `ChatSinkParams`). */

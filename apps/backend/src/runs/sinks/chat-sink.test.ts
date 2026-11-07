@@ -1201,3 +1201,57 @@ describe("ChatSink", () => {
     });
   });
 });
+
+// ADR-0044: a Trigger run keeps its Transcript as a Chat bound to the run,
+// titled from the Trigger rather than by a model, and never summarised.
+describe("ChatSink — a Trigger run's Chat", () => {
+  beforeEach(() => {
+    resetMockDb();
+    mockGenerateChatMetadata.mockReset();
+    mockAfterTurn.mockReset();
+  });
+
+  const instruction: PlatypusUIMessage = {
+    id: "m-user",
+    role: "user",
+    parts: [{ type: "text", text: "Summarise the board" }],
+  };
+
+  it("creates the Chat bound to its run with the run's messages, and never titles or summarises it", async () => {
+    const fake = seedDb({ workspace }, chatPkey);
+    const sink = submitSink({
+      message: instruction,
+      parentId: null,
+      newChat: {
+        agentId: "a1",
+        triggerRunId: "chat-1",
+        title: "Digest · 2026-11-07 09:00 UTC",
+        tags: ["Digest"],
+      },
+    });
+
+    await runTurn(sink, [instruction], [instruction, reply("done")], {
+      ...planWithAgent,
+      contextWindow: 10,
+    });
+
+    expect(rowOf(fake, "chat", "chat-1")).toMatchObject({
+      triggerRunId: "chat-1",
+      agentId: "a1",
+      title: "Digest · 2026-11-07 09:00 UTC",
+      tags: ["Digest"],
+      status: "succeeded",
+      activeLeafId: "r1",
+    });
+    expect(rowOf(fake, "chat_message", "m-user")).toMatchObject({
+      role: "user",
+      parentId: null,
+    });
+    expect(rowOf(fake, "chat_message", "r1")).toMatchObject({
+      role: "assistant",
+      parentId: "m-user",
+    });
+    expect(mockGenerateChatMetadata).not.toHaveBeenCalled();
+    expect(mockAfterTurn).not.toHaveBeenCalled();
+  });
+});

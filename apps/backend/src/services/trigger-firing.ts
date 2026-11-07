@@ -13,6 +13,9 @@ import { errorMessage } from "../utils/error-message.ts";
 import { agentRunner } from "../runs/agent-runner.ts";
 import { frontendBaseUrl } from "../base-urls.ts";
 import { TriggerSink } from "../runs/sinks/trigger-sink.ts";
+import { ChatSink } from "../runs/sinks/chat-sink.ts";
+import { compositeSink } from "../runs/sinks/composite-sink.ts";
+import { toKebabCase } from "./chat-metadata.ts";
 import { callerDataBlock } from "./caller-data.ts";
 import {
   ownerMayAct,
@@ -232,6 +235,13 @@ export const composeInboundInputs = (
 };
 
 /**
+ * A run's Chat title: its Trigger's name and when it started, to the minute in
+ * UTC. Fixed at the start and never re-titled (ADR-0044).
+ */
+const runChatTitle = (name: string, startedAt: Date): string =>
+  `${name} · ${startedAt.toISOString().slice(0, 16).replace("T", " ")} UTC`;
+
+/**
  * Runs the Trigger's Agent against its instruction. For event Triggers, the
  * event is prepended to the instruction. Throws when the run does.
  */
@@ -320,7 +330,7 @@ const runTrigger = async (
   };
 
   const owner = { workspaceId, ownerId: workspace.ownerId };
-  const sink = inboundContext
+  const runSink = inboundContext
     ? new TriggerSink({ triggerId: id, ...owner, adoptPendingRow: true })
     : new TriggerSink({
         triggerId: id,
@@ -329,6 +339,24 @@ const runTrigger = async (
         eventType: eventContext?.payload.event,
         eventData: eventContext?.payload.data,
       });
+  // The run keeps its Transcript as a Chat bound to it (ADR-0044), under the
+  // run's own id: the run row first, since the Chat references it.
+  const tag = toKebabCase(trigger.name);
+  const sink = compositeSink(
+    runSink,
+    new ChatSink({
+      orgId: workspace.organizationId,
+      ...owner,
+      message: messages[0],
+      parentId: null,
+      newChat: {
+        agentId,
+        triggerRunId: runId,
+        title: runChatTitle(trigger.name, new Date()),
+        tags: tag ? [tag] : [],
+      },
+    }),
+  );
 
   // What caused this firing, read before the run establishes itself as the
   // next cause. On a cron both are empty; on an event Trigger they are the

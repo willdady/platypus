@@ -315,6 +315,56 @@ describe("Chat Routes", () => {
     });
   });
 
+  // ADR-0044: a Trigger run's Chat is kept for reading by id, not listed.
+  describe("Trigger-run Chats", () => {
+    const seedRunChat = () =>
+      seedTenant({
+        chat: [
+          {
+            id: "run-1",
+            workspaceId,
+            title: "Digest · 2026-11-07 09:00 UTC",
+            tags: ["digest"],
+            triggerRunId: "run-1",
+            activeLeafId: null,
+          },
+          {
+            id: "chat-ui",
+            workspaceId,
+            title: "My digest notes",
+            tags: [],
+            triggerRunId: null,
+          },
+        ],
+      });
+
+    // Search narrows the same query, so it leaves them out too.
+    it("are left out of the Chat list", async () => {
+      mockSession();
+      seedRunChat();
+
+      const list = (await (await app.request(baseUrl)).json()) as {
+        results: Row[];
+        totalCount: number;
+      };
+
+      expect(list.results.map((chat) => chat.id)).toEqual(["chat-ui"]);
+      expect(list.totalCount).toBe(1);
+    });
+
+    it("are read by id", async () => {
+      mockSession();
+      seedRunChat();
+
+      const res = await app.request(`${baseUrl}/run-1`);
+
+      expect(res.status).toBe(200);
+      const one = (await res.json()) as Row;
+      expect(one).toMatchObject({ id: "run-1", tags: ["digest"] });
+      expect(one).not.toHaveProperty("triggerRunId");
+    });
+  });
+
   describe("GET /:chatId", () => {
     it("returns the Active path and the tree, and nothing internal", async () => {
       mockSession();
