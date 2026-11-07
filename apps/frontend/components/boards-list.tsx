@@ -22,6 +22,7 @@ import { useScopedList } from "@/hooks/use-scoped-list";
 import { writeEntity } from "@/lib/api-write";
 import { workspaceRoutes } from "@/lib/routes";
 import { replaceSearchParam } from "@/lib/search-params";
+import { sortByName } from "@/lib/utils";
 
 /** Boards per page on the Workspace home. */
 const BOARDS_PAGE_SIZE = 8;
@@ -71,9 +72,9 @@ export function BoardsList({
 
   const query = nameFilter.trim();
   // The Command palette's own scorer, applied to the name.
-  const cards = [...rows]
-    .sort((a, b) => a.name.localeCompare(b.name))
-    .filter((card) => !query || defaultFilter(card.name, query) > 0);
+  const cards = sortByName(rows).filter(
+    (card) => !query || defaultFilter(card.name, query) > 0,
+  );
   const page = pageOf(searchParams.get(PAGE_PARAM), cards, BOARDS_PAGE_SIZE);
 
   const deleteFlow = useDeleteFlow<BoardCard>({

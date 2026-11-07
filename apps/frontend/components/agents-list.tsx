@@ -57,6 +57,7 @@ import {
   type Serialized,
 } from "@/lib/api-write";
 import { splitPinned } from "@/lib/pinned-agents";
+import { sortByName } from "@/lib/utils";
 import {
   ListFooter,
   ListPagination,
@@ -175,9 +176,7 @@ export function AgentsList({
     );
   };
 
-  const agents = pins
-    .apply(allAgents)
-    .sort((a, b) => a.name.localeCompare(b.name));
+  const agents = sortByName(pins.apply(allAgents));
   // A Pinned Agent shows only in the Pinned group, above the rest.
   const { pinned: pinnedAgents, unpinned: unpinnedAgents } =
     splitPinned(agents);

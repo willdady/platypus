@@ -84,6 +84,7 @@ import { AgentAvatar } from "@/components/agent-avatar";
 import { ToolSetsUnavailableNotice } from "@/components/tool-sets-unavailable-notice";
 import type { ToolSetsFailureReason } from "@/lib/tool-sets-request";
 import { orgRoutes, workspaceRoutes } from "@/lib/routes";
+import { sortByName } from "@/lib/utils";
 
 // toolSetIds, skillIds, and subAgentIds are deliberately excluded: this form
 // has no field that retracts an error keyed to them, so including them here
@@ -173,7 +174,7 @@ function AgentForm({
     "skills",
     scope,
   );
-  const skills = [...allSkills].sort((a, b) => a.name.localeCompare(b.name));
+  const skills = sortByName(allSkills);
   const [skillQuery, setSkillQuery] = useState("");
   const query = skillQuery.trim();
   // View-only: hidden Skills keep their place in formData.skillIds. cmdk's

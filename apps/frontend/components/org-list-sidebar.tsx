@@ -12,7 +12,7 @@ import { Building, Plus } from "lucide-react";
 import Link from "next/link";
 import { preload } from "swr";
 import { useEffect } from "react";
-import { fetcher } from "@/lib/utils";
+import { fetcher, sortByName } from "@/lib/utils";
 import { useBackendUrl } from "@/components/auth-provider";
 import { useScopedList } from "@/hooks/use-scoped-list";
 import { scopedUrl } from "@/lib/api-write";
@@ -36,9 +36,7 @@ export function OrgListSidebar({ currentOrgId }: OrgListSidebarProps) {
   // one pulsing forever.
   const isReady = !!data || !!error;
 
-  const organizations = [...results].sort((a, b) =>
-    a.name.localeCompare(b.name),
-  );
+  const organizations = sortByName(results);
 
   // Eagerly preload workspaces for all orgs so switching feels instant
   useEffect(() => {

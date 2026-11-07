@@ -18,6 +18,7 @@ import {
   canCreateWorkspace,
   canOpenOrgSettings,
 } from "@/lib/authorization";
+import { sortByName } from "@/lib/utils";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { useScopedList } from "@/hooks/use-scoped-list";
 import { useEntityForm } from "@/hooks/use-entity-form";
@@ -201,9 +202,7 @@ export function AppSidebar() {
   const shownChatList =
     settledChatList?.scopeKey === chatListScopeKey ? settledChatList : null;
 
-  const workspaces = [...allWorkspaces].sort((a, b) =>
-    a.name.localeCompare(b.name),
-  );
+  const workspaces = sortByName(allWorkspaces);
   const chats = pins.apply(shownChatList?.data.results ?? []);
   const currentWorkspace = workspaces.find((w) => w.id === workspaceId);
 

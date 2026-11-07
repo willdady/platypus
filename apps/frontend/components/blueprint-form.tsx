@@ -34,6 +34,7 @@ import {
 } from "@platypus/schemas";
 import { retractFieldError } from "@/lib/form-errors";
 import { providerModelLabel } from "@/lib/provider-model-label";
+import { sortByName } from "@/lib/utils";
 import { useScopedList } from "@/hooks/use-scoped-list";
 import {
   FieldSkeleton,
@@ -95,7 +96,7 @@ function ResourceGroup({
   const { results, isLoading } = useScopedList<SharedResource>(collection, {
     orgId,
   });
-  const resources = [...results].sort((a, b) => a.name.localeCompare(b.name));
+  const resources = sortByName(results);
 
   return (
     <Card className="mb-4">
