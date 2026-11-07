@@ -193,6 +193,23 @@ describe("TriggerRunRow", () => {
     expect(screen.queryByText("Failed")).not.toBeInTheDocument();
   });
 
+  // #1864: the run header and its timeline read the same durations, so
+  // 90 000 ms is "1m 30s" here, not "1.5m".
+  it("formats the elapsed time the way the run's timeline does", () => {
+    render(
+      <TriggerRunRow
+        run={run({
+          startedAt: new Date("2026-01-01T09:00:00Z").toISOString(),
+          completedAt: new Date("2026-01-01T09:01:30Z").toISOString(),
+        })}
+        orgId="org-1"
+        workspaceId="ws-1"
+      />,
+    );
+
+    expect(screen.getByText("Duration: 1m 30s")).toBeInTheDocument();
+  });
+
   describe("tools the run went without (#1184)", () => {
     it("names each Tool set that loaded no tools, and why, on a successful run", () => {
       render(

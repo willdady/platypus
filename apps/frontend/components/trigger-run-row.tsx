@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { formatDateTime } from "@/lib/format-date";
+import { formatToolDuration } from "@/lib/tool-duration";
 import {
   Ban,
   CircleCheck,
@@ -162,15 +163,6 @@ export function triggerRunDetailHref(
   return workspaceRoutes(orgId, workspaceId).triggerRuns.detail(runId);
 }
 
-function formatDuration(run: Serialized<TriggerRunWithTrigger>) {
-  if (!run.completedAt) return null;
-  const ms =
-    new Date(run.completedAt).getTime() - new Date(run.startedAt).getTime();
-  if (ms < 1000) return `${ms}ms`;
-  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
-  return `${(ms / 60000).toFixed(1)}m`;
-}
-
 /**
  * One run in the workspace-wide Trigger runs list. The list mixes runs from
  * every Trigger, so the row names the Trigger it came from; everything else is
@@ -224,7 +216,11 @@ export function TriggerRunRow({
         )}
         {run.completedAt && (
           <p className="text-sm text-muted-foreground">
-            Duration: {formatDuration(run)}
+            Duration:{" "}
+            {formatToolDuration(
+              new Date(run.completedAt).getTime() -
+                new Date(run.startedAt).getTime(),
+            )}
           </p>
         )}
         {stats && (

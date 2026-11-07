@@ -14,17 +14,7 @@ import type {
   KanbanCardHistoryEntry,
   KanbanCardHistoryRef,
 } from "@platypus/schemas";
-
-function formatDate(value: string | null): string {
-  return value ? new Date(value).toLocaleDateString() : "none";
-}
-
-function formatTimestamp(value: string): string {
-  return new Date(value).toLocaleString(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
-}
+import { formatDate, formatDateTime } from "@/lib/format-date";
 
 function labelNames(labels: KanbanCardHistoryRef[]): string {
   return labels.length > 0
@@ -78,8 +68,9 @@ function describeChange(change: KanbanCardHistoryChange): ReactNode {
     case "dueDate":
       return (
         <>
-          due date <Value>{formatDate(change.before)}</Value> →{" "}
-          <Value>{formatDate(change.after)}</Value>
+          due date{" "}
+          <Value>{change.before ? formatDate(change.before) : "none"}</Value> →{" "}
+          <Value>{change.after ? formatDate(change.after) : "none"}</Value>
         </>
       );
     case "labelIds":
@@ -159,7 +150,7 @@ export function KanbanCardHistory({
                       {entry.actorName ?? "Unknown"}
                     </span>
                     <span className="text-xs text-muted-foreground">
-                      {formatTimestamp(entry.createdAt)}
+                      {formatDateTime(entry.createdAt)}
                     </span>
                   </div>
                   <ul className="text-xs text-muted-foreground flex flex-col gap-0.5">
