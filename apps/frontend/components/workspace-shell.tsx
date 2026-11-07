@@ -20,8 +20,9 @@ type WorkspaceShellProps = {
   orgId: string;
   /**
    * The Workspace the header acts on. Omitted where it couldn't be read (the
-   * not-found and error boundaries): the header then leads to the
-   * Organization home, where the Workspace list lives.
+   * not-found boundary, and the error boundary above the Workspace layout):
+   * the header then leads to the Organization home, where the Workspace list
+   * lives.
    */
   workspaceId?: string;
   /**

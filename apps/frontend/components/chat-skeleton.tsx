@@ -31,6 +31,7 @@ export function ChatSkeleton({
   return (
     <div
       role="status"
+      aria-busy="true"
       aria-label="Loading chat"
       className={cn(
         "relative size-full flex flex-col overflow-hidden h-full",
