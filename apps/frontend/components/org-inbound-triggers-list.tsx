@@ -10,9 +10,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { DisabledBadge } from "@/components/disabled-badge";
 import { ListError } from "@/components/list-state";
 import { EmptyCard } from "@/components/empty-card";
 import { Webhook } from "lucide-react";
@@ -173,11 +173,7 @@ export function OrgInboundTriggersList({ orgId }: { orgId: string }) {
               <TableCell>
                 <div className="flex items-center gap-2">
                   <span className="font-medium">{trigger.name}</span>
-                  {!trigger.enabled && (
-                    <Badge variant="secondary" className="text-xs">
-                      Disabled
-                    </Badge>
-                  )}
+                  {!trigger.enabled && <DisabledBadge />}
                 </div>
               </TableCell>
               <TableCell>

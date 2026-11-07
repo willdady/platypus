@@ -49,6 +49,20 @@ describe("OrgInboundTriggersList", () => {
     expect(within(dataRow).getByText("Never")).toBeInTheDocument();
   });
 
+  it("badges a disabled Trigger with the shared Disabled badge", async () => {
+    mockScopedSWR(
+      { "/inbound-triggers": [row({ enabled: false })] },
+      { strict: true },
+    );
+    await renderList(<OrgInboundTriggersList orgId="org1" />);
+
+    const [, dataRow] = screen.getAllByRole("row");
+    const badge = within(dataRow).getByText("Disabled");
+    // The badge's Pause icon is decorative, so no accessible query sees it.
+    // eslint-disable-next-line testing-library/no-node-access
+    expect(badge.querySelector("svg")).not.toBeNull();
+  });
+
   it("revokes the token the row showed through the Org route and revalidates", async () => {
     const fetchMock = stubAcceptedSave({ message: "Token revoked" });
     mockScopedSWR({ "/inbound-triggers": [row()] }, { strict: true });
