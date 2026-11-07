@@ -13,6 +13,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { useBackendUrl } from "@/components/auth-provider";
+import { useMutation } from "@/hooks/use-mutation";
 import type { WriteOutcome } from "@/lib/api-write";
 
 /**
@@ -52,7 +53,9 @@ export function CloneDialog({
   const [error, setError] = useState<string | null>(null);
   const inputId = `clone-${noun.toLowerCase()}-name`;
 
-  const confirm = async () => {
+  // The ref guard inside drops a second confirm — a double click, or Enter
+  // twice — sent while the first create is still in flight.
+  const { run: confirm, pending } = useMutation(async () => {
     if (!backendUrl) return;
     const outcome = await create(name, backendUrl);
     if (outcome.outcome !== "success") {
@@ -61,11 +64,28 @@ export function CloneDialog({
     }
     onClose();
     onCreated(outcome.data.id);
-  };
+  });
 
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent>
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open && !pending) onClose();
+      }}
+    >
+      <DialogContent
+        onPointerDownOutside={(e) => {
+          if (pending) {
+            e.preventDefault();
+          }
+        }}
+        onEscapeKeyDown={(e) => {
+          if (pending) {
+            e.preventDefault();
+          }
+        }}
+        showCloseButton={!pending}
+      >
         <DialogHeader>
           <DialogTitle>Clone {noun}</DialogTitle>
           <DialogDescription>
@@ -96,10 +116,12 @@ export function CloneDialog({
           </p>
         )}
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={onClose} disabled={pending}>
             Cancel
           </Button>
-          <Button onClick={confirm}>Clone</Button>
+          <Button onClick={confirm} disabled={pending}>
+            {pending ? "Cloning..." : "Clone"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
