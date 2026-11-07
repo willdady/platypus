@@ -387,6 +387,11 @@ export function SkillsList({
   // buttons; the workspace home's Skills section keeps the one-line state.
   const showCard = !workspaceId && skills.length === 0;
 
+  // An EmptyCard screen shows its footer once there are rows; a ListState
+  // section (the workspace home) shows it under every state, loading and
+  // failed included.
+  const showFooter = workspaceId ? true : !isLoading && !error && !showCard;
+
   const actions = (
     <>
       <Button variant={showCard ? "default" : "outline"} asChild>
@@ -438,10 +443,11 @@ export function SkillsList({
               agentLine={Boolean(workspaceId)}
               sharingLines={!workspaceId && canManageOrg}
             />
-            <ButtonRowSkeleton
-              className="mt-4"
-              widths={["w-32", ...(canAttach && workspaceId ? ["w-44"] : [])]}
-            />
+            {/* The Workspace home's footer shows in every state, so only the
+                Organization screen reserves it as a skeleton. */}
+            {!workspaceId && (
+              <ButtonRowSkeleton className="mt-4" widths={["w-32"]} />
+            )}
           </>
         }
         empty={
@@ -510,9 +516,9 @@ export function SkillsList({
         }
       />
 
-      {!isLoading && !error && !showCard && (
+      {showFooter && (
         <ListFooter
-          className="mt-4"
+          className={workspaceId ? undefined : "mt-4"}
           pagination={
             <ListPagination
               page={page}

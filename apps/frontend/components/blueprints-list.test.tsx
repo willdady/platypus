@@ -98,3 +98,23 @@ describe("BlueprintsList empty state", () => {
     expect(screen.getByText(/No blueprints yet/i)).toBeInTheDocument();
   });
 });
+
+describe("BlueprintsList actions", () => {
+  // The same button renders once: solid inside the card while the list is
+  // empty, outlined below the list once it has rows.
+  it("offers Create blueprint solid inside the empty card", async () => {
+    await renderBlueprints([]);
+
+    expect(screen.getByRole("link", { name: /Create blueprint/ })).toHaveClass(
+      "bg-primary",
+    );
+  });
+
+  it("offers Create blueprint outlined under a populated list", async () => {
+    await renderBlueprints([blueprint]);
+
+    const create = screen.getByRole("link", { name: /Create blueprint/ });
+    expect(create).toHaveClass("border");
+    expect(create).not.toHaveClass("bg-primary");
+  });
+});

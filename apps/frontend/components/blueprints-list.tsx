@@ -11,6 +11,7 @@ import {
   SkeletonLine,
 } from "@/components/list-skeletons";
 import { RowActionsMenu } from "@/components/row-actions-menu";
+import { ListFooter } from "@/components/list-pagination";
 import { Layers, Play, Plus } from "lucide-react";
 import type { Blueprint } from "@platypus/schemas";
 import { writeEntity, type Serialized } from "@/lib/api-write";
@@ -41,13 +42,11 @@ export function BlueprintsList({ orgId }: { orgId: string }) {
   });
 
   const actions = (
-    <div className="flex gap-2">
-      <Button variant={blueprints.length ? "outline" : "default"} asChild>
-        <Link href={routes.createBlueprint}>
-          <Plus /> Create blueprint
-        </Link>
-      </Button>
-    </div>
+    <Button variant={blueprints.length ? "outline" : "default"} asChild>
+      <Link href={routes.createBlueprint}>
+        <Plus /> Create blueprint
+      </Link>
+    </Button>
   );
 
   return (
@@ -105,7 +104,7 @@ export function BlueprintsList({ orgId }: { orgId: string }) {
       />
 
       {!isLoading && !error && blueprints.length > 0 && (
-        <div className="mt-4">{actions}</div>
+        <ListFooter className="mt-4">{actions}</ListFooter>
       )}
 
       {blueprintToApply && (

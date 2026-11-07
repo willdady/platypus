@@ -64,3 +64,29 @@ describe("OrgHome empty state", () => {
     expect(screen.getByText("No workspaces yet")).toBeInTheDocument();
   });
 });
+
+describe("OrgHome workspace actions", () => {
+  // The same buttons render once: solid inside the card while the list is
+  // empty, outlined below the list once it has rows.
+  it("offers Add workspace solid inside the empty card", () => {
+    auth.actor = "org-admin";
+    auth.orgMembership = { role: "admin" };
+    reads.workspaces = [];
+    render(<OrgHome orgId="org1" />);
+
+    expect(screen.getByRole("link", { name: /Add workspace/ })).toHaveClass(
+      "bg-primary",
+    );
+  });
+
+  it("offers Add workspace outlined under a populated list", () => {
+    auth.actor = "org-admin";
+    auth.orgMembership = { role: "admin" };
+    reads.workspaces = [{ id: "ws1", name: "Alpha", organizationId: "org1" }];
+    render(<OrgHome orgId="org1" />);
+
+    const add = screen.getByRole("link", { name: /Add workspace/ });
+    expect(add).toHaveClass("border");
+    expect(add).not.toHaveClass("bg-primary");
+  });
+});

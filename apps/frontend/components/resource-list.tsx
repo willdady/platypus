@@ -35,6 +35,7 @@ import {
 } from "./manage-sharing";
 import { RowActionsMenu } from "./row-actions-menu";
 import { Button } from "./ui/button";
+import { ListFooter } from "./list-pagination";
 import {
   AttachSharedAction,
   DeleteBlockedDialog,
@@ -174,10 +175,12 @@ export function ResourceList({
     : orgSettingsRoot;
   const settingsHref = (segment: string) => `${settingsRoot}/${segment}`;
 
+  // One set of buttons, placed by emptiness: solid inside the empty card,
+  // outlined under a populated list.
   const actions = (
-    <div className="flex gap-2">
+    <>
       {canManage && (
-        <Button asChild>
+        <Button variant={resources.length ? "outline" : "default"} asChild>
           <Link href={settingsHref("create")}>
             <Plus /> {config.labels.add}
           </Link>
@@ -193,7 +196,7 @@ export function ResourceList({
           onAttached={mutate}
         />
       )}
-    </div>
+    </>
   );
 
   const EmptyState = config.emptyState;
@@ -324,7 +327,7 @@ export function ResourceList({
         )}
       />
       {!isLoading && !error && resources.length > 0 && (
-        <div className="mt-4">{actions}</div>
+        <ListFooter className="mt-4">{actions}</ListFooter>
       )}
       {resourceToManage && (
         <ManageAttachmentsDialog

@@ -499,6 +499,53 @@ describe("SkillsList empty states", () => {
   });
 });
 
+describe("SkillsList footer", () => {
+  const createSkill = () =>
+    screen.queryByRole("link", { name: /Create skill/ });
+  const footer = () => createSkill()?.closest(".justify-between");
+
+  // The Workspace home is a ListState section, not an EmptyCard screen: its
+  // footer sits under every state, loading and failed included.
+  it("shows Create skill under the Workspace section while it loads", async () => {
+    mockScopedSWR({ "/skills": { isLoading: true }, "/agents": [] });
+    await renderList(<SkillsList orgId="org1" workspaceId="ws1" />);
+
+    expect(createSkill()).toBeInTheDocument();
+    expect(createSkill()).toHaveClass("border");
+  });
+
+  it("shows Create skill under the Workspace section after a failed read", async () => {
+    mockScopedSWR({ "/skills": { error: new Error("500") }, "/agents": [] });
+    await renderList(<SkillsList orgId="org1" workspaceId="ws1" />);
+
+    expect(screen.getByText("Failed to load skills. 500")).toBeInTheDocument();
+    expect(createSkill()).toBeInTheDocument();
+  });
+
+  // The section's parent already spaces its children, so the footer adds no
+  // top gap of its own.
+  it("leaves the Workspace section's gap to its parent", async () => {
+    await renderSkills([workspaceSkill]);
+
+    expect(footer()).not.toHaveClass("mt-4");
+  });
+
+  // The Organization surface is an EmptyCard screen: its footer shows once
+  // there are rows, and keeps the plain settings page's top gap.
+  it("hides the Organization surface's footer while it loads", async () => {
+    mockScopedSWR({ "/skills": { isLoading: true } });
+    await renderList(<SkillsList orgId="org1" />);
+
+    expect(createSkill()).not.toBeInTheDocument();
+  });
+
+  it("draws the Organization surface's footer with a top gap", async () => {
+    await renderOrgSkills([orgSkill]);
+
+    expect(footer()).toHaveClass("mt-4");
+  });
+});
+
 describe("SkillsList paging", () => {
   // Ten skills, "skill-01" … "skill-10": two pages of eight.
   const tenSkills = Array.from({ length: 10 }, (_, i) => {

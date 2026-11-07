@@ -82,6 +82,26 @@ describe("WebhooksList", () => {
     ).toBeInTheDocument();
   });
 
+  // The same button renders once: solid inside the card while the list is
+  // empty, outlined below the list once it has rows.
+  it("offers Add webhook solid inside the empty card", async () => {
+    mockScopedSWR({ webhooks: [] }, { strict: true });
+    await render();
+
+    expect(screen.getByRole("link", { name: /Add webhook/ })).toHaveClass(
+      "bg-primary",
+    );
+  });
+
+  it("offers Add webhook outlined under a populated list", async () => {
+    mockScopedSWR({ webhooks: [webhook] }, { strict: true });
+    await render();
+
+    const add = screen.getByRole("link", { name: /Add webhook/ });
+    expect(add).toHaveClass("border");
+    expect(add).not.toHaveClass("bg-primary");
+  });
+
   it("says the read failed rather than claiming there are none", async () => {
     mockScopedSWR({ webhooks: { error: new Error("500") } }, { strict: true });
     await render();

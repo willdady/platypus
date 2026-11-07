@@ -103,6 +103,26 @@ describe("A2aEndpointsList", () => {
     ).toBeInTheDocument();
   });
 
+  // The same button renders once: solid inside the card while the list is
+  // empty, outlined below the list once it has rows.
+  it("offers Add endpoint solid inside the empty card", async () => {
+    mockScopedSWR({ "/a2a-endpoints": [] }, { strict: true });
+    await renderList(<A2aEndpointsList orgId="org1" workspaceId="ws1" />);
+
+    expect(screen.getByRole("link", { name: /Add endpoint/ })).toHaveClass(
+      "bg-primary",
+    );
+  });
+
+  it("offers Add endpoint outlined under a populated list", async () => {
+    mockScopedSWR({ "/a2a-endpoints": [ENDPOINT] }, { strict: true });
+    await renderList(<A2aEndpointsList orgId="org1" workspaceId="ws1" />);
+
+    const add = screen.getByRole("link", { name: /Add endpoint/ });
+    expect(add).toHaveClass("border");
+    expect(add).not.toHaveClass("bg-primary");
+  });
+
   it("tells an Org Admin in another Owner's workspace only the workspace owner can add one", async () => {
     asOwner(false);
     mockScopedSWR({ "/a2a-endpoints": [] }, { strict: true });
