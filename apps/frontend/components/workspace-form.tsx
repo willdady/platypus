@@ -1,4 +1,5 @@
 "use client";
+import { useOrganization } from "@/hooks/use-organization";
 
 import {
   Field,
@@ -24,11 +25,7 @@ import { DetailFormState } from "@/components/detail-form-state";
 import { hardNavigate } from "@/components/unsaved-changes-guard";
 import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
 import { useRouter } from "next/navigation";
-import {
-  type Organization,
-  type Workspace,
-  type Provider,
-} from "@platypus/schemas";
+import { type Workspace, type Provider } from "@platypus/schemas";
 import {
   CONTEXT_MAX_LENGTH,
   DEFAULT_WORKSPACE_MAX_DAILY_SUMMARIES,
@@ -44,9 +41,7 @@ import {
 import { TransferWorkspaceAction } from "@/components/transfer-workspace-dialog";
 import { useAuth } from "@/components/auth-provider";
 import { toast } from "sonner";
-import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { useScopedList } from "@/hooks/use-scoped-list";
-import { organizationEntity } from "@/lib/api-write";
 import Link from "next/link";
 import {
   FieldSkeleton,
@@ -137,10 +132,9 @@ function WorkspaceForm({ orgId, workspaceId }: WorkspaceFormProps) {
 
   // The Workspace's Inbound Trigger switch only counts under the
   // Organization's "Selected workspaces" gate (ADR-0030).
-  const { data: organization } = useScopedSWR<Organization>(
-    organizationEntity(orgId),
-    canManageDelegation ? {} : null,
-  );
+  const { data: organization } = useOrganization(orgId, {
+    enabled: canManageDelegation,
+  });
   const inboundGate = organization?.inboundTriggerGate;
 
   const {

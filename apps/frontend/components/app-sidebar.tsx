@@ -1,16 +1,16 @@
 "use client";
+import { useOrganization } from "@/hooks/use-organization";
 
 import Link from "next/link";
 import { useParams, usePathname, useRouter } from "next/navigation";
 import { useSWRConfig } from "swr";
 import {
   chatListEntity,
-  organizationEntity,
   scopedUrl,
   writeEntity,
   type Serialized,
 } from "@/lib/api-write";
-import type { Workspace, ChatListItem, Organization } from "@platypus/schemas";
+import type { Workspace, ChatListItem } from "@platypus/schemas";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import {
   canChangeChat,
@@ -175,10 +175,7 @@ export function AppSidebar() {
     workspaceDelegation?.providerSelfManagement === true,
   );
 
-  const { data: orgData, isLoading: isOrgLoading } = useScopedSWR<Organization>(
-    organizationEntity(orgId),
-    {},
-  );
+  const { data: orgData, isLoading: isOrgLoading } = useOrganization(orgId);
 
   // Each search is its own SWR key, so the list would blank (and falsely read
   // as "no matches") on every debounced keystroke. Keep showing the last
