@@ -331,10 +331,17 @@ export type ReasoningChoice = {
   thinkingBudget?: number | null;
 };
 
+/**
+ * Wide enough for a Trigger-run Chat's derived title: the longest Trigger name
+ * plus ` · YYYY-MM-DD HH:MM UTC` (ADR-0044). Model-generated titles stay at 30
+ * characters by their prompt.
+ */
+export const CHAT_TITLE_MAX_LENGTH = 128;
+
 export const chatSchema = z.object({
   id: z.string(),
   workspaceId: z.string(),
-  title: z.string().min(3).max(30),
+  title: z.string().min(3).max(CHAT_TITLE_MAX_LENGTH),
   // The Active path, as `GET /:chatId` returns it (ADR-0026). Typed, not
   // checked: the server writes every stored message, and the AI SDK's
   // `validateUIMessages` owns their part shapes, so a Zod restatement would

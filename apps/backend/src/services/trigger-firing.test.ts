@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { chatSchema, TRIGGER_NAME_MAX_LENGTH } from "@platypus/schemas";
 import {
   cardEvent,
   resetMockDb,
@@ -1258,5 +1259,20 @@ describe("fireTrigger", () => {
         expect(fake.tables.chat_message).toHaveLength(2);
       },
     );
+
+    // The title is derived, so the Chat title bound must hold the longest
+    // Trigger name whole rather than clip it.
+    it("titles the Chat from the longest Trigger name without clipping", async () => {
+      const name = "N".repeat(TRIGGER_NAME_MAX_LENGTH);
+      const trigger = makeTrigger({ name });
+      const fake = world(trigger);
+      driveWithReply("succeeded");
+
+      await fireTrigger(trigger, { kind: "cron" });
+
+      const title = (fake.tables.chat[0] as { title: string }).title;
+      expect(title).toBe(`${name} · 2026-08-30 12:30 UTC`);
+      expect(chatSchema.shape.title.safeParse(title).success).toBe(true);
+    });
   });
 });

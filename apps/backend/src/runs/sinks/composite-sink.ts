@@ -5,7 +5,8 @@ import type { RunSink } from "../types.ts";
  * in reverse, so a sink may reference rows an earlier one wrote. A Trigger
  * run's row comes first, then the Chat that keeps its Transcript (ADR-0044):
  * the Chat references the run, and is complete before the run reads as ended.
- * Every sink is finished, even when another's finish throws.
+ * Every sink is finished, even when another's finish throws. Progress goes
+ * to every sink at once, since no sink's progress depends on another's.
  */
 export const compositeSink = (...sinks: RunSink[]): RunSink => ({
   async onStart(ctx) {

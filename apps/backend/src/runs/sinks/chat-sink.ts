@@ -374,30 +374,32 @@ export class ChatSink implements RunSink {
       // A reply that could not be stored must not leave the Chat `running`.
       if (!written) status = "failed";
 
-      // Fire-and-forget authoritative titling. Runs for every terminal status
-      // (succeeded / failed / cancelled) so a chat is titled even when the
-      // first run errored, was cancelled, or the client tab closed before the
-      // old client-side path could fire. Deliberately not awaited: it must
-      // never block or delay run completion, and any failure is caught and
-      // logged.
-      if (!this.keepsTriggerRun) this.generateMetadata();
+      // A Trigger run's Chat gets neither of the two follow-ups below: its
+      // title is its Trigger's, and its run's model calls are a Chat turn's
+      // concern only (ADR-0044).
+      if (!this.keepsTriggerRun) {
+        // Fire-and-forget authoritative titling. Runs for every terminal
+        // status (succeeded / failed / cancelled) so a chat is titled even
+        // when the first run errored, was cancelled, or the client tab closed
+        // before the old client-side path could fire. Deliberately not
+        // awaited: it must never block or delay run completion, and any
+        // failure is caught and logged.
+        this.generateMetadata();
 
-      // Fire-and-forget Transcript summarising (ADR-0041, issue #1716): the
-      // turn's final Projected occupancy has crossed the trigger, so a summary
-      // is taken OFF the response path — the next turn finds it already
-      // waiting and pays no latency. If the User sends the next message before
-      // it lands, that turn simply runs without it; the row is immutable, so
-      // the race is harmless. Never fatal: a failure logs here and the next
-      // turn's finish-pass retries.
-      //
-      // Gated on `written`, not on `status`: a turn stopped by a cancellation
-      // or a timeout still stored its reply, and that reply's reading is the
-      // one the next turn starts from. A turn whose reply could not be stored
-      // has no reading to trigger on.
-      //
-      // A Trigger run's Chat is neither: its title is its Trigger's, and its
-      // run's model calls are a Chat turn's concern only (ADR-0044).
-      if (written && !this.keepsTriggerRun) this.scheduleTranscriptSummary();
+        // Fire-and-forget Transcript summarising (ADR-0041, issue #1716): the
+        // turn's final Projected occupancy has crossed the trigger, so a
+        // summary is taken OFF the response path — the next turn finds it
+        // already waiting and pays no latency. If the User sends the next
+        // message before it lands, that turn simply runs without it; the row
+        // is immutable, so the race is harmless. Never fatal: a failure logs
+        // here and the next turn's finish-pass retries.
+        //
+        // Gated on `written`, not on `status`: a turn stopped by a
+        // cancellation or a timeout still stored its reply, and that reply's
+        // reading is the one the next turn starts from. A turn whose reply
+        // could not be stored has no reading to trigger on.
+        if (written) this.scheduleTranscriptSummary();
+      }
     }
     // Resolution failed before there was a plan to persist, or the reply
     // could not be stored: only the status, on the row `onStart` claimed.
