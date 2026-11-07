@@ -6,7 +6,6 @@ import { startRun } from "../runs/run-lifecycle.ts";
 import { driveDelegate, failBeforeDrive } from "../runs/drive.ts";
 import type { RunPlan } from "../runs/run-plan.ts";
 import type { GenerationPlan } from "../runs/agent-plan.ts";
-import { FALLBACK_SDK_RETRIES } from "../runs/fallback.ts";
 import { runRegistry } from "../runs/run-registry.ts";
 import { describeSdkError } from "../runs/stream-error.ts";
 import { runEventScopeOf, type RunEventScope } from "../runs/run-events.ts";
@@ -388,10 +387,7 @@ export const createSubAgentDelegate = (
             prompt: task,
             run,
             ...(fallback
-              ? {
-                  fallback: { plan: fallback.plan, system: fallbackSystem },
-                  maxRetries: FALLBACK_SDK_RETRIES,
-                }
+              ? { fallback: { plan: fallback.plan, system: fallbackSystem } }
               : {}),
             onStepFinish: (step) => {
               rawFinishReason = step.rawFinishReason;
