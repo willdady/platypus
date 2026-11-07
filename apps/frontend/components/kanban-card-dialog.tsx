@@ -912,11 +912,19 @@ export function KanbanCardDialog({
   });
 
   // The button each confirm was opened from, so closing it puts focus back
-  // where the reader was rather than on the body.
+  // where the reader was rather than on the body. A comment's own Delete goes
+  // away with the comment it deleted, so focus falls back to the card's.
   const deleteTrigger = useRef<HTMLElement | null>(null);
+  const cardDeleteTrigger = useRef<HTMLButtonElement | null>(null);
   const restoreDeleteFocus = (event: Event) => {
+    const target = deleteTrigger.current?.isConnected
+      ? deleteTrigger.current
+      : cardDeleteTrigger.current?.isConnected
+        ? cardDeleteTrigger.current
+        : null;
+    if (!target) return;
     event.preventDefault();
-    deleteTrigger.current?.focus();
+    target.focus();
   };
 
   if (!card) return null;
@@ -1174,6 +1182,7 @@ export function KanbanCardDialog({
         )}
         <DialogFooter className="shrink-0 flex-row justify-end">
           <Button
+            ref={cardDeleteTrigger}
             variant="secondary"
             onClick={(event) => {
               deleteTrigger.current = event.currentTarget;

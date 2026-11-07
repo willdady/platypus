@@ -385,11 +385,7 @@ describe("KanbanCardDialog delete card", () => {
   });
 
   it("closes the confirm dialog on success", async () => {
-    const onDelete = vi.fn().mockResolvedValue({
-      outcome: "success",
-      data: null,
-      revalidateKeys: [],
-    });
+    const onDelete = vi.fn(acceptedDelete);
     renderDialog(() => {}, onDelete);
 
     const confirmDialog = await openCardDeleteConfirm();
