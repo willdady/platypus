@@ -175,8 +175,6 @@ export function ResourceList({
     : orgSettingsRoot;
   const settingsHref = (segment: string) => `${settingsRoot}/${segment}`;
 
-  // One set of buttons, placed by emptiness: solid inside the empty card,
-  // outlined under a populated list.
   const actions = (
     <>
       {canManage && (

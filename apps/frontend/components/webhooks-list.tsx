@@ -76,8 +76,6 @@ function WebhooksList({
 
   const webhooks: Webhook[] = toggle.apply(results);
 
-  // One button, placed by emptiness: solid inside the empty card, outlined
-  // under a populated list.
   const actions = (
     <Button variant={webhooks.length ? "outline" : "default"} asChild>
       <Link href={routes.settings.createWebhook}>

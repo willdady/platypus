@@ -13,6 +13,7 @@ import {
   stubAcceptedSave,
   stubRejectedSave,
   stubSaveSequence,
+  expectEntryActionVariant,
   mutate,
   menuItemLabels,
   confirmDialog,
@@ -147,23 +148,23 @@ describe.each(RESOURCES)(
       );
     });
 
-    // The same buttons render once: solid inside the card while the list is
-    // empty, outlined below the list once it has rows.
     it("offers the create CTA solid inside the empty card", async () => {
       authState.actor = "org-admin";
       await renderRows([]);
 
-      expect(screen.getByRole("link", { name: /^Add/ })).toHaveClass(
-        "bg-primary",
+      expectEntryActionVariant(
+        screen.getByRole("link", { name: /^Add/ }),
+        "empty",
       );
     });
 
     it("offers the create CTA outlined under a populated list", async () => {
       await renderRows([item]);
 
-      const add = screen.getByRole("link", { name: /^Add/ });
-      expect(add).toHaveClass("border");
-      expect(add).not.toHaveClass("bg-primary");
+      expectEntryActionVariant(
+        screen.getByRole("link", { name: /^Add/ }),
+        "populated",
+      );
     });
 
     it("offers a delegated Workspace Owner the create page when the workspace has none", async () => {

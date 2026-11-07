@@ -10,6 +10,7 @@ import {
   renderList,
   menuItemLabels,
   confirmDialog,
+  expectEntryActionVariant,
   stubAcceptedSave,
 } from "@/test/list-test-harness";
 import { openDropdownMenu } from "@/test/test-utils";
@@ -109,8 +110,9 @@ describe("A2aEndpointsList", () => {
     mockScopedSWR({ "/a2a-endpoints": [] }, { strict: true });
     await renderList(<A2aEndpointsList orgId="org1" workspaceId="ws1" />);
 
-    expect(screen.getByRole("link", { name: /Add endpoint/ })).toHaveClass(
-      "bg-primary",
+    expectEntryActionVariant(
+      screen.getByRole("link", { name: /Add endpoint/ }),
+      "empty",
     );
   });
 
@@ -118,9 +120,10 @@ describe("A2aEndpointsList", () => {
     mockScopedSWR({ "/a2a-endpoints": [ENDPOINT] }, { strict: true });
     await renderList(<A2aEndpointsList orgId="org1" workspaceId="ws1" />);
 
-    const add = screen.getByRole("link", { name: /Add endpoint/ });
-    expect(add).toHaveClass("border");
-    expect(add).not.toHaveClass("bg-primary");
+    expectEntryActionVariant(
+      screen.getByRole("link", { name: /Add endpoint/ }),
+      "populated",
+    );
   });
 
   it("tells an Org Admin in another Owner's workspace only the workspace owner can add one", async () => {

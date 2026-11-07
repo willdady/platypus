@@ -13,6 +13,7 @@ import {
   mutate,
   toastInfo,
   menuItemLabels,
+  expectEntryActionVariant,
 } from "@/test/list-test-harness";
 import { openDropdownMenu } from "@/test/test-utils";
 
@@ -100,21 +101,21 @@ describe("BlueprintsList empty state", () => {
 });
 
 describe("BlueprintsList actions", () => {
-  // The same button renders once: solid inside the card while the list is
-  // empty, outlined below the list once it has rows.
   it("offers Create blueprint solid inside the empty card", async () => {
     await renderBlueprints([]);
 
-    expect(screen.getByRole("link", { name: /Create blueprint/ })).toHaveClass(
-      "bg-primary",
+    expectEntryActionVariant(
+      screen.getByRole("link", { name: /Create blueprint/ }),
+      "empty",
     );
   });
 
   it("offers Create blueprint outlined under a populated list", async () => {
     await renderBlueprints([blueprint]);
 
-    const create = screen.getByRole("link", { name: /Create blueprint/ });
-    expect(create).toHaveClass("border");
-    expect(create).not.toHaveClass("bg-primary");
+    expectEntryActionVariant(
+      screen.getByRole("link", { name: /Create blueprint/ }),
+      "populated",
+    );
   });
 });

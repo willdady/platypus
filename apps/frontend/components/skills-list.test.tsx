@@ -10,6 +10,7 @@ import {
   confirmDialog,
   stubAcceptedSave,
   stubRejectedSave,
+  expectEntryActionVariant,
   mutate,
   toastError,
   toastInfo,
@@ -502,16 +503,22 @@ describe("SkillsList empty states", () => {
 describe("SkillsList footer", () => {
   const createSkill = () =>
     screen.queryByRole("link", { name: /Create skill/ });
-  const footer = () => createSkill()?.closest(".justify-between");
+  // The footer's own box, which no accessible query reaches; the slot
+  // attribute is the handle ListFooter offers.
+  const footer = () =>
+    // eslint-disable-next-line testing-library/no-node-access
+    createSkill()?.closest('[data-slot="list-footer"]');
 
   // The Workspace home is a ListState section, not an EmptyCard screen: its
-  // footer sits under every state, loading and failed included.
-  it("shows Create skill under the Workspace section while it loads", async () => {
+  // footer sits under every state, loading and failed included, outlined.
+  it("shows Create skill outlined under the Workspace section while it loads", async () => {
     mockScopedSWR({ "/skills": { isLoading: true }, "/agents": [] });
     await renderList(<SkillsList orgId="org1" workspaceId="ws1" />);
 
-    expect(createSkill()).toBeInTheDocument();
-    expect(createSkill()).toHaveClass("border");
+    expectEntryActionVariant(
+      screen.getByRole("link", { name: /Create skill/ }),
+      "populated",
+    );
   });
 
   it("shows Create skill under the Workspace section after a failed read", async () => {
@@ -519,14 +526,20 @@ describe("SkillsList footer", () => {
     await renderList(<SkillsList orgId="org1" workspaceId="ws1" />);
 
     expect(screen.getByText("Failed to load skills. 500")).toBeInTheDocument();
-    expect(createSkill()).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /Create skill/ }),
+    ).toBeInTheDocument();
   });
 
   // The section's parent already spaces its children, so the footer adds no
   // top gap of its own.
-  it("leaves the Workspace section's gap to its parent", async () => {
+  it("offers Create skill outlined under a populated Workspace section", async () => {
     await renderSkills([workspaceSkill]);
 
+    expectEntryActionVariant(
+      screen.getByRole("link", { name: /Create skill/ }),
+      "populated",
+    );
     expect(footer()).not.toHaveClass("mt-4");
   });
 

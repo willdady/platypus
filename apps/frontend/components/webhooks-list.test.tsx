@@ -12,6 +12,7 @@ import {
   stubRejectedSave,
   toastError,
   mutate,
+  expectEntryActionVariant,
   setupUser,
 } from "@/test/list-test-harness";
 import { openDropdownMenu } from "@/test/test-utils";
@@ -88,8 +89,9 @@ describe("WebhooksList", () => {
     mockScopedSWR({ webhooks: [] }, { strict: true });
     await render();
 
-    expect(screen.getByRole("link", { name: /Add webhook/ })).toHaveClass(
-      "bg-primary",
+    expectEntryActionVariant(
+      screen.getByRole("link", { name: /Add webhook/ }),
+      "empty",
     );
   });
 
@@ -97,9 +99,10 @@ describe("WebhooksList", () => {
     mockScopedSWR({ webhooks: [webhook] }, { strict: true });
     await render();
 
-    const add = screen.getByRole("link", { name: /Add webhook/ });
-    expect(add).toHaveClass("border");
-    expect(add).not.toHaveClass("bg-primary");
+    expectEntryActionVariant(
+      screen.getByRole("link", { name: /Add webhook/ }),
+      "populated",
+    );
   });
 
   it("says the read failed rather than claiming there are none", async () => {

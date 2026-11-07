@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import type { Actor, OrgRole } from "@/lib/authorization";
+import { expectEntryActionVariant } from "@/test/test-utils";
 
 const auth = vi.hoisted(() => ({
   actor: "org-member" as Actor,
@@ -66,16 +67,15 @@ describe("OrgHome empty state", () => {
 });
 
 describe("OrgHome workspace actions", () => {
-  // The same buttons render once: solid inside the card while the list is
-  // empty, outlined below the list once it has rows.
   it("offers Add workspace solid inside the empty card", () => {
     auth.actor = "org-admin";
     auth.orgMembership = { role: "admin" };
     reads.workspaces = [];
     render(<OrgHome orgId="org1" />);
 
-    expect(screen.getByRole("link", { name: /Add workspace/ })).toHaveClass(
-      "bg-primary",
+    expectEntryActionVariant(
+      screen.getByRole("link", { name: /Add workspace/ }),
+      "empty",
     );
   });
 
@@ -85,8 +85,9 @@ describe("OrgHome workspace actions", () => {
     reads.workspaces = [{ id: "ws1", name: "Alpha", organizationId: "org1" }];
     render(<OrgHome orgId="org1" />);
 
-    const add = screen.getByRole("link", { name: /Add workspace/ });
-    expect(add).toHaveClass("border");
-    expect(add).not.toHaveClass("bg-primary");
+    expectEntryActionVariant(
+      screen.getByRole("link", { name: /Add workspace/ }),
+      "populated",
+    );
   });
 });

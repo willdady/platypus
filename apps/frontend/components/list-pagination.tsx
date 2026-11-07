@@ -132,6 +132,12 @@ export function ListPagination({
 /**
  * A list's footer: its Create controls on the left, its pagination on the
  * right, wrapping below them on a narrow screen.
+ *
+ * A list places its entry buttons by emptiness: the main button is solid
+ * inside the empty card while the list has no rows, and the same buttons, all
+ * `outline`, sit here once it does. A `ListState` section shows this footer in
+ * every state. Leave `className` alone inside a `gap-4` parent; pass `mt-4` on
+ * a plain settings page, where nothing else supplies the top gap.
  */
 export function ListFooter({
   className,
@@ -145,6 +151,7 @@ export function ListFooter({
 }) {
   return (
     <div
+      data-slot="list-footer"
       className={cn(
         "flex flex-wrap items-center justify-between gap-2",
         className,

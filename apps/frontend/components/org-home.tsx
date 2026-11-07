@@ -38,8 +38,6 @@ export function OrgHome({ orgId }: { orgId: string }) {
   // the button row still offers an admin the way to the org settings.
   const isReady = (!!workspacesData || !!workspacesError) && !isAuthLoading;
 
-  // One set of buttons, placed by emptiness: solid inside the empty card,
-  // outlined under a populated list.
   const actions = (
     <>
       {/* ADR-0008: Workspace creation is org-admin-only. */}

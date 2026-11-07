@@ -76,8 +76,6 @@ function A2aEndpointsList({
 
   const endpoints = toggle.apply(results);
 
-  // One button, placed by emptiness: solid inside the empty card, outlined
-  // under a populated list.
   const actions = ownsWorkspace && (
     <Button variant={endpoints.length ? "outline" : "default"} asChild>
       <Link href={routes.settings.createA2aEndpoint}>
