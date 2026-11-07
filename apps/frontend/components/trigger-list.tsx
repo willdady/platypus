@@ -293,6 +293,7 @@ export function TriggerList({
         maxRunsToKeep: original.maxRunsToKeep,
         search: original.search,
         includeMemories: original.includeMemories,
+        extractMemories: original.extractMemories,
         config: original.config,
         enabled: false,
         ...(original.type === "inbound" && { issueToken: false }),

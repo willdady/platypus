@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { chatSchema, TRIGGER_NAME_MAX_LENGTH } from "@platypus/schemas";
 import {
   cardEvent,
   resetMockDb,
@@ -69,6 +70,7 @@ const makeTrigger = (over: Partial<TriggerRow> = {}): TriggerRow => ({
   maxRunsToKeep: 10,
   search: false,
   includeMemories: false,
+  extractMemories: false,
   config: cronConfig,
   lastRunAt: null,
   nextRunAt: null,
@@ -1136,6 +1138,141 @@ describe("fireTrigger", () => {
 
       expect(await deliveries()).toEqual([]);
       expect(mockLogger.error).not.toHaveBeenCalled();
+    });
+  });
+  // ADR-0044: a run keeps its Transcript as a Chat bound to it, hidden from
+  // the Chat list and titled from its Trigger, never by a model.
+  describe("keeping the run's Transcript as a Chat", () => {
+    const reply = {
+      id: "msg-reply",
+      role: "assistant" as const,
+      parts: [{ type: "text" as const, text: "Done." }],
+    };
+
+    /** The Drive, writing a reply before it ends with `status`. */
+    const driveWithReply = (status: "succeeded" | "failed" | "cancelled") => {
+      mockGenerate.mockImplementationOnce(
+        async ({ input, sink }: GenerateArgs) => {
+          await sink.onStart({ runId: input.runId, messages: input.messages });
+          await sink.onResolved({
+            runId: input.runId,
+            plan: {
+              resolved: { agentId: "agent-1", providerId: "p1", modelId: "m1" },
+            },
+          });
+          vi.setSystemTime(COMPLETED);
+          await sink.onFinish({
+            runId: input.runId,
+            status,
+            messages: [...input.messages, reply],
+            stats: {},
+          });
+          return { text: "Done.", stats: {} };
+        },
+      );
+    };
+
+    const inbound = {
+      kind: "inbound" as const,
+      runId: "run-accepted",
+      inputs: {},
+      declared: [],
+      entityId: "trigger-1",
+    };
+
+    it.each([
+      ["cron", makeTrigger(), { kind: "cron" as const }, [], "run-new"],
+      [
+        "event",
+        eventTrigger(),
+        {
+          kind: "event" as const,
+          payload: cardEvent("card.created", { id: "c1" }),
+          entityId: "c1",
+        },
+        [],
+        "run-new",
+      ],
+      [
+        "inbound",
+        makeTrigger({
+          type: "inbound",
+          config: { inputs: [], tokenExpiryDays: 90 },
+        }),
+        inbound,
+        [
+          {
+            id: "run-accepted",
+            triggerId: "trigger-1",
+            status: "pending",
+            entityId: "trigger-1",
+            startedAt: LONG_AGO(0),
+            createdAt: LONG_AGO(0),
+          },
+        ],
+        "run-accepted",
+      ],
+    ] as const)(
+      "keeps a %s run's instruction and reply in a Chat bound to the run",
+      async (_kind, trigger, cause, runs, runId) => {
+        const fake = world(trigger, [...runs]);
+        driveWithReply("succeeded");
+
+        await expect(fireTrigger(trigger, cause)).resolves.toBe("ran");
+
+        expect(fake.tables.chat).toEqual([
+          expect.objectContaining({
+            id: runId,
+            workspaceId: "ws-1",
+            triggerRunId: runId,
+            agentId: "agent-1",
+            title: "Test Trigger · 2026-08-30 12:30 UTC",
+            tags: ["test-trigger"],
+            status: "succeeded",
+            activeLeafId: "msg-reply",
+          }),
+        ]);
+        const messages = fake.tables.chat_message;
+        expect(messages.map((m) => [m.role, m.parentId])).toEqual([
+          ["user", null],
+          ["assistant", messages[0].id],
+        ]);
+        expect(messages[0].parts).toEqual([
+          { type: "text", text: instructionText() },
+        ]);
+        expect(messages[1].parts).toEqual(reply.parts);
+      },
+    );
+
+    it.each(["failed", "cancelled"] as const)(
+      "keeps a %s run's partial Chat with that status",
+      async (status) => {
+        const trigger = makeTrigger();
+        const fake = world(trigger);
+        driveWithReply(status);
+
+        await fireTrigger(trigger, { kind: "cron" });
+
+        expect(fake.tables.chat).toEqual([
+          expect.objectContaining({ id: "run-new", status }),
+        ]);
+        expect(fake.tables.chat_message).toHaveLength(2);
+      },
+    );
+
+    // The title is derived, so the Chat title bound must hold the longest
+    // Trigger name whole rather than clip it.
+    it("titles the Chat from the longest Trigger name without clipping", async () => {
+      const name = "N".repeat(TRIGGER_NAME_MAX_LENGTH);
+      const trigger = makeTrigger({ name });
+      const fake = world(trigger);
+      driveWithReply("succeeded");
+
+      await fireTrigger(trigger, { kind: "cron" });
+
+      const title = (fake.tables.chat[0] as { title: string }).title;
+      expect(title).toBe(`${name} · 2026-08-30 12:30 UTC`);
+      expect(chatSchema.shape.title.safeParse(title).success).toBe(true);
     });
   });
 });

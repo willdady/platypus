@@ -289,7 +289,7 @@ describe("Trigger Routes", () => {
       expect(values.config).toEqual(eventBody.config);
     });
 
-    it("defaults includeMemories off when the create body omits it, and writes it when set", async () => {
+    it("defaults includeMemories and extractMemories off when the create body omits them, and writes them when set", async () => {
       stubAuthLookups();
       mockDb.limit.mockResolvedValueOnce([{ id: "agent-1", workspaceId }]);
       mockValidateCronExpression.mockReturnValueOnce(
@@ -305,6 +305,7 @@ describe("Trigger Routes", () => {
       expect(res.status).toBe(201);
       const values = mockDb.values.mock.calls[0][0] as Record<string, unknown>;
       expect(values.includeMemories).toBe(false);
+      expect(values.extractMemories).toBe(false);
 
       resetMockDb();
       vi.clearAllMocks();
@@ -321,7 +322,11 @@ describe("Trigger Routes", () => {
 
       const optedIn = await app.request(baseUrl, {
         method: "POST",
-        body: JSON.stringify({ ...createBody, includeMemories: true }),
+        body: JSON.stringify({
+          ...createBody,
+          includeMemories: true,
+          extractMemories: true,
+        }),
         headers: { "Content-Type": "application/json" },
       });
       expect(optedIn.status).toBe(201);
@@ -330,6 +335,7 @@ describe("Trigger Routes", () => {
         unknown
       >;
       expect(optedInValues.includeMemories).toBe(true);
+      expect(optedInValues.extractMemories).toBe(true);
       const body = (await optedIn.json()) as { includeMemories: boolean };
       expect(body.includeMemories).toBe(true);
     });

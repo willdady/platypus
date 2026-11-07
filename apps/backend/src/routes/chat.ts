@@ -10,7 +10,7 @@ import {
   chatSubmitSchema,
   chatUpdateSchema,
 } from "@platypus/schemas";
-import { and, count, desc, eq, or, sql } from "drizzle-orm";
+import { and, count, desc, eq, isNull, or, sql } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
 import {
   requireOrgAccess,
@@ -71,6 +71,7 @@ const chatResponse = ({
   a2aTokenId: _a2aTokenId,
   a2aEndpointId: _a2aEndpointId,
   a2aClientName: _a2aClientName,
+  triggerRunId: _triggerRunId,
   ...response
 }: typeof chatTable.$inferSelect) => response;
 
@@ -114,8 +115,11 @@ chat.get(
         )
       : undefined;
 
+    // A Trigger run's Chat is read by id, never listed (ADR-0044): a Cron
+    // Trigger firing every few minutes would bury the User's own Chats.
     const whereClause = and(
       eq(chatTable.workspaceId, workspaceId),
+      isNull(chatTable.triggerRunId),
       searchFilter,
     );
 

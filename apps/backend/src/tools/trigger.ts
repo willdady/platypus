@@ -217,6 +217,12 @@ export function createTriggerTools(
       .describe(
         "If true, the trigger's runs include the user's recent memory summaries in the system prompt. Defaults to false, so a run's prompt does not vary with unrelated chat activity.",
       ),
+    extractMemories: z
+      .boolean()
+      .optional()
+      .describe(
+        "If true, memories are extracted from the trigger's run transcripts as they are from chats. Defaults to false: a run has no user whose preferences a memory would capture.",
+      ),
   };
 
   type TriggerConfigField = z.infer<typeof configField>;

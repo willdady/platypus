@@ -128,7 +128,7 @@ const TRIGGER_TYPE_FIELDS = {
   inbound: TriggerInboundFields,
 } satisfies Record<TriggerType, React.ComponentType<TriggerFieldsProps>>;
 
-// isOneOff, maxRunsToKeep, search, includeMemories,
+// isOneOff, maxRunsToKeep, search, includeMemories, extractMemories,
 // filterBoardId/filterColumnId, and enabled are deliberately excluded: this
 // form has no field that retracts an error keyed to them.
 const RETRACTABLE_FIELDS = [
@@ -150,6 +150,7 @@ type TriggerFormData = {
   maxRunsToKeep: number;
   search: boolean;
   includeMemories: boolean;
+  extractMemories: boolean;
 };
 
 /** The cron layout, which a new trigger opens on and most saved ones use. */
@@ -264,6 +265,7 @@ function TriggerForm({
       maxRunsToKeep: 10,
       search: false,
       includeMemories: false,
+      extractMemories: false,
     },
     entity: "triggers",
     scope: { orgId, workspaceId },
@@ -278,6 +280,7 @@ function TriggerForm({
       maxRunsToKeep: trigger.maxRunsToKeep,
       search: trigger.search ?? false,
       includeMemories: trigger.includeMemories ?? false,
+      extractMemories: trigger.extractMemories ?? false,
     }),
     sideState: { triggerType, configChanged },
     onSeed: (trigger) => setTriggerType(trigger.type),
@@ -294,6 +297,7 @@ function TriggerForm({
       maxRunsToKeep: data.maxRunsToKeep,
       search: data.search,
       includeMemories: data.includeMemories,
+      extractMemories: data.extractMemories,
       type: triggerType,
       config: selectedFields?.config,
     }),
@@ -534,6 +538,29 @@ function TriggerForm({
                       Add your recent memory summaries to this trigger&apos;s
                       system prompt. Off by default, so a run isn&apos;t
                       influenced by chat activity unrelated to it.
+                    </p>
+                  </FieldLabel>
+                </Field>
+                <Field orientation="horizontal" className="pt-2">
+                  <Switch
+                    id="extractMemories"
+                    checked={formData.extractMemories}
+                    onCheckedChange={(checked) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        extractMemories: checked,
+                      }))
+                    }
+                    disabled={isSubmitting}
+                  />
+                  <FieldLabel
+                    htmlFor="extractMemories"
+                    className="flex-col items-stretch gap-0"
+                  >
+                    <p>Extract Memories</p>
+                    <p className="text-xs text-muted-foreground">
+                      Let this trigger&apos;s runs feed your memories. Off by
+                      default, since a run carries no preferences of yours.
                     </p>
                   </FieldLabel>
                 </Field>

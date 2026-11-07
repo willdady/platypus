@@ -570,6 +570,11 @@ export class AgentRunner {
       onFinal: (finalText) => {
         state.finalText = finalText;
       },
+      // Kept current for the sink's flushes and final write, which keep the
+      // run's Transcript (ADR-0044).
+      onSnapshot: (message) => {
+        state.messages = foldSnapshot(input.messages, message);
+      },
     });
 
     return { text, stats };

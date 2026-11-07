@@ -84,10 +84,12 @@ run](/building-with-platypus/triggers#memories-in-a-run).
 
 ### What Memory is built from
 
-Memory is extracted from the text of your Chats, and only that. Attached files,
-tool results and Trigger runs are never remembered. An
+Memory is extracted from the text of your Chats, and only that. Attached files
+and tool results are never remembered. An
 [A2A](/building-with-platypus/a2a-endpoints#memories) Chat is read only when its
-endpoint has **Extract Memories** on. Of a message's
+endpoint has **Extract Memories** on, and a [Trigger
+run](/building-with-platypus/triggers#memories-in-a-run)'s Transcript only when
+its Trigger has **Extract Memories** on. Of a message's
 Alternatives, only the one on screen is read — but anything extracted before
 you switched away from it stays remembered.
 
