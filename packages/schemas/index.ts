@@ -331,10 +331,17 @@ export type ReasoningChoice = {
   thinkingBudget?: number | null;
 };
 
+/**
+ * Wide enough for a Trigger-run Chat's derived title: the longest Trigger name
+ * plus ` · YYYY-MM-DD HH:MM UTC` (ADR-0044). Model-generated titles stay at 30
+ * characters by their prompt.
+ */
+export const CHAT_TITLE_MAX_LENGTH = 128;
+
 export const chatSchema = z.object({
   id: z.string(),
   workspaceId: z.string(),
-  title: z.string().min(3).max(30),
+  title: z.string().min(3).max(CHAT_TITLE_MAX_LENGTH),
   // The Active path, as `GET /:chatId` returns it (ADR-0026). Typed, not
   // checked: the server writes every stored message, and the AI SDK's
   // `validateUIMessages` owns their part shapes, so a Zod restatement would
@@ -3435,6 +3442,9 @@ export const triggerBaseSchema = z.object({
   // headless run should not have a system prompt that drifts with the
   // Workspace User's unrelated interactive-chat activity.
   includeMemories: z.boolean().default(false),
+  // Whether memory extraction reads this Trigger's run Chats. Off by default:
+  // a run has no User whose preferences a Memory would capture.
+  extractMemories: z.boolean().default(false),
   lastRunAt: z.date().nullable().optional(),
   nextRunAt: z.date().nullable().optional(),
   // One-off Triggers only: when it fired. A fired One-off is spent.
@@ -3487,6 +3497,7 @@ const triggerCreateBaseSchema = triggerBaseSchema.pick({
   maxRunsToKeep: true,
   search: true,
   includeMemories: true,
+  extractMemories: true,
 });
 
 /**
@@ -3530,6 +3541,7 @@ export const triggerUpdateSchema = strictRequest(
         maxRunsToKeep: true,
         search: true,
         includeMemories: true,
+        extractMemories: true,
       })
       .extend({ type: triggerTypeSchema }),
   ).extend({

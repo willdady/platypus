@@ -48,6 +48,7 @@ const cronFields = (): TriggerCreateFields => ({
   maxRunsToKeep: 10,
   search: false,
   includeMemories: false,
+  extractMemories: false,
   config: { cronExpression: "0 9 * * *", timezone: "UTC", isOneOff: false },
 });
 

@@ -106,6 +106,7 @@ describe("TriggerList clone", () => {
     maxRunsToKeep: 10,
     search: false,
     includeMemories: true,
+    extractMemories: true,
     lastRunAt: "2026-02-01T08:00:00.000Z",
     nextRunAt: "2026-02-02T08:00:00.000Z",
     lastRunStatus: "success",
@@ -173,6 +174,7 @@ describe("TriggerList clone", () => {
       maxRunsToKeep: 10,
       search: false,
       includeMemories: true,
+      extractMemories: true,
       config: { cronExpression: "0 0 * * *", timezone: "UTC", isOneOff: true },
       enabled: false,
     });
@@ -220,6 +222,7 @@ describe("TriggerList clone", () => {
       maxRunsToKeep: 10,
       search: false,
       includeMemories: true,
+      extractMemories: true,
       config: { inputs: [], tokenExpiryDays: 90 },
       enabled: false,
       issueToken: false,
