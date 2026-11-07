@@ -4,11 +4,7 @@ import { toast } from "sonner";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRightLeft } from "lucide-react";
-import {
-  type OrgMemberListItem,
-  type Provider,
-  type Workspace,
-} from "@platypus/schemas";
+import { type OrgMemberListItem, type Provider } from "@platypus/schemas";
 import {
   Dialog,
   DialogContent,
@@ -20,7 +16,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { FieldGroup } from "@/components/ui/field";
 import { useBackendUrl } from "@/components/auth-provider";
-import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { useScopedList } from "@/hooks/use-scoped-list";
 import { useEntityForm } from "@/hooks/use-entity-form";
 import {
@@ -35,6 +30,7 @@ import {
   TransferFields,
   transferRecipients,
 } from "@/components/workspace-transfer-fields";
+import { useWorkspace } from "@/hooks/use-workspace";
 
 type TransferWorkspaceActionProps = {
   orgId: string;
@@ -56,10 +52,7 @@ export function TransferWorkspaceAction({
 }: TransferWorkspaceActionProps) {
   const backendUrl = useBackendUrl();
   const router = useRouter();
-  const { data: workspace } = useScopedSWR<Workspace>(
-    workspaceEntity(workspaceId),
-    { orgId },
-  );
+  const { data: workspace } = useWorkspace(orgId, workspaceId);
   const { data: membersData, results: members } =
     useScopedList<OrgMemberListItem>("members", { orgId });
 

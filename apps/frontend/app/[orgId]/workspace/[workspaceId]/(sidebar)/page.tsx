@@ -31,18 +31,12 @@ import { WorkspaceNotFound } from "@/components/workspace-not-found";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { useScopedList } from "@/hooks/use-scoped-list";
-import {
-  chatListEntity,
-  organizationEntity,
-  workspaceEntity,
-} from "@/lib/api-write";
-import {
-  type Workspace as WorkspaceType,
-  type Organization,
-} from "@platypus/schemas";
+import { chatListEntity } from "@/lib/api-write";
 import { useParams } from "next/navigation";
 import { orgRoutes } from "@/lib/routes";
 import { cn } from "@/lib/utils";
+import { useOrganization } from "@/hooks/use-organization";
+import { useWorkspace } from "@/hooks/use-workspace";
 
 /** Where each collapsible section persists its open state. */
 const SECTION_KEYS = {
@@ -234,7 +228,7 @@ function Workspace() {
     error: workspaceError,
     isLoading: isLoadingWorkspace,
     mutate: mutateWorkspace,
-  } = useScopedSWR<WorkspaceType>(workspaceEntity(workspaceId), { orgId });
+  } = useWorkspace(orgId, workspaceId);
 
   const scope = { orgId, workspaceId };
 
@@ -246,10 +240,7 @@ function Workspace() {
     mutate: mutateProviders,
   } = useScopedList<unknown>("providers", scope);
 
-  const { data: orgData, isLoading: isLoadingOrg } = useScopedSWR<Organization>(
-    organizationEntity(orgId),
-    {},
-  );
+  const { data: orgData, isLoading: isLoadingOrg } = useOrganization(orgId);
 
   // Each count reads the same key as the section below that lists it, so
   // the two share one request. Chats has no section here, so it reads a

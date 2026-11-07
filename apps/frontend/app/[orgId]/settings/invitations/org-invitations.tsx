@@ -4,17 +4,12 @@ import { invitationLink } from "@/lib/routes";
 import { useParams } from "next/navigation";
 import { InvitationForm } from "@/components/invitation-form";
 import { EmptyCard } from "@/components/empty-card";
-import { organizationEntity, writeEntity } from "@/lib/api-write";
-import {
-  type InvitationListItem,
-  type Organization,
-  type Blueprint,
-} from "@platypus/schemas";
+import { writeEntity } from "@/lib/api-write";
+import { type InvitationListItem, type Blueprint } from "@platypus/schemas";
 import { Button } from "@/components/ui/button";
 import { Trash2, Mail, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { copyWithToast } from "@/lib/clipboard";
-import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { useScopedList } from "@/hooks/use-scoped-list";
 import { formatDate } from "@/lib/format-date";
 import { Badge } from "@/components/ui/badge";
@@ -30,19 +25,15 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import {
   BadgeSkeleton,
   IconButtonSkeleton,
-  InlineSkeleton,
   LoadingRegion,
   SkeletonLine,
   TableSkeleton,
 } from "@/components/list-skeletons";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
+import { OrganizationName } from "@/components/organization-name";
 
 function OrgInvitationsPage() {
   const { orgId } = useParams<{ orgId: string }>();
-  const { data: orgData, isLoading: isLoadingOrg } = useScopedSWR<Organization>(
-    organizationEntity(orgId),
-    {},
-  );
   const {
     data,
     results: invitations,
@@ -106,14 +97,7 @@ function OrgInvitationsPage() {
         <h1 className="text-2xl font-bold mb-4">Invitations</h1>
         <p className="text-muted-foreground mb-6">
           Manage invitations for users to join{" "}
-          {isLoadingOrg ? (
-            <InlineSkeleton className="w-32" />
-          ) : (
-            <span className="font-bold">
-              {orgData?.name || "this organization"}
-            </span>
-          )}
-          .
+          <OrganizationName orgId={orgId} />.
         </p>
         <InvitationForm orgId={orgId} onSuccess={() => mutate()} />
       </div>

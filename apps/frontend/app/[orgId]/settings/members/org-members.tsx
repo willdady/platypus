@@ -1,29 +1,23 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { type OrgMemberListItem, type Organization } from "@platypus/schemas";
+import type { OrgMemberListItem } from "@platypus/schemas";
 import { MembersList } from "@/components/members-list";
 import { ListError } from "@/components/list-state";
 import { Users } from "lucide-react";
 import { EmptyCard } from "@/components/empty-card";
-import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { useScopedList } from "@/hooks/use-scoped-list";
-import { organizationEntity } from "@/lib/api-write";
 import {
   BadgeSkeleton,
   IconButtonSkeleton,
-  InlineSkeleton,
   LoadingRegion,
   TableSkeleton,
   UserCellSkeleton,
 } from "@/components/list-skeletons";
+import { OrganizationName } from "@/components/organization-name";
 
 function OrgMembersPage() {
   const { orgId } = useParams<{ orgId: string }>();
-  const { data: orgData, isLoading: isLoadingOrg } = useScopedSWR<Organization>(
-    organizationEntity(orgId),
-    {},
-  );
   const {
     data,
     results: members,
@@ -37,15 +31,8 @@ function OrgMembersPage() {
       <div>
         <h1 className="text-2xl font-bold mb-4">Members</h1>
         <p className="text-muted-foreground">
-          Manage members of{" "}
-          {isLoadingOrg ? (
-            <InlineSkeleton className="w-32" />
-          ) : (
-            <span className="font-bold">
-              {orgData?.name || "this organization"}
-            </span>
-          )}{" "}
-          and their workspace access.
+          Manage members of <OrganizationName orgId={orgId} /> and their
+          workspace access.
         </p>
       </div>
 

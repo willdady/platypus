@@ -26,7 +26,6 @@ import {
   TextareaSkeleton,
 } from "@/components/form-skeleton";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { useScopedList } from "@/hooks/use-scoped-list";
 import { useCallback, useState } from "react";
 import { deepEqual } from "@/lib/deep-equal";
@@ -45,13 +44,7 @@ import { TriggerCronFields } from "@/components/trigger-cron-fields";
 import { TriggerEventFields } from "@/components/trigger-event-fields";
 import { useEventFilterListsLoading } from "@/hooks/use-event-filter-lists-loading";
 import { TriggerInboundFields } from "@/components/trigger-inbound-fields";
-import {
-  type Trigger,
-  type Agent,
-  type Organization,
-  type TriggerType,
-  type Workspace,
-} from "@platypus/schemas";
+import { type Trigger, type Agent, type TriggerType } from "@platypus/schemas";
 import {
   gateAdmits,
   triggerTypeSchema,
@@ -61,12 +54,10 @@ import {
 } from "@platypus/schemas";
 import type { FormErrors } from "@/lib/form-errors";
 import { workspaceRoutes } from "@/lib/routes";
-import {
-  organizationEntity,
-  workspaceEntity,
-  type Serialized,
-} from "@/lib/api-write";
+import { type Serialized } from "@/lib/api-write";
 import { TRIGGER_TYPE_LABELS } from "@/components/trigger-list";
+import { useOrganization } from "@/hooks/use-organization";
+import { useWorkspace } from "@/hooks/use-workspace";
 
 const INSTRUCTION_PLACEHOLDERS: Record<TriggerType, string> = {
   cron: "Generate a daily report of...",
@@ -229,14 +220,8 @@ function TriggerForm({
 
   // Whether the Organization gate lets this Workspace take calls, so an Owner
   // is told before they wire up a caller that would only ever get 404.
-  const { data: organization } = useScopedSWR<Organization>(
-    organizationEntity(orgId),
-    {},
-  );
-  const { data: workspace } = useScopedSWR<Workspace>(
-    workspaceEntity(workspaceId),
-    { orgId },
-  );
+  const { data: organization } = useOrganization(orgId);
+  const { data: workspace } = useWorkspace(orgId, workspaceId);
 
   const router = useRouter();
 

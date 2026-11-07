@@ -1,14 +1,10 @@
 "use client";
 
 import { Ban } from "lucide-react";
-import {
-  gateAdmits,
-  type Organization,
-  type Workspace,
-} from "@platypus/schemas";
+import { gateAdmits } from "@platypus/schemas";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { useScopedSWR } from "@/hooks/use-scoped-swr";
-import { organizationEntity, workspaceEntity } from "@/lib/api-write";
+import { useOrganization } from "@/hooks/use-organization";
+import { useWorkspace } from "@/hooks/use-workspace";
 
 /**
  * Tells the Owner when the Organization's gate excludes this Workspace, so
@@ -21,14 +17,8 @@ export function A2aEndpointNotices({
   orgId: string;
   workspaceId: string;
 }) {
-  const { data: organization } = useScopedSWR<Organization>(
-    organizationEntity(orgId),
-    {},
-  );
-  const { data: workspace } = useScopedSWR<Workspace>(
-    workspaceEntity(workspaceId),
-    { orgId },
-  );
+  const { data: organization } = useOrganization(orgId);
+  const { data: workspace } = useWorkspace(orgId, workspaceId);
   // Only once everything the answer depends on has loaded: a Workspace still
   // loading is unknown, not excluded.
   const gateClosed =
