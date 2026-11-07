@@ -10,6 +10,7 @@ import {
 import type {
   KanbanBoardState,
   KanbanCard,
+  KanbanCardComment,
   KanbanColumn,
 } from "@platypus/schemas";
 
@@ -65,6 +66,9 @@ let boardState: KanbanBoardState;
 let boardLoaded = true;
 let boardError: unknown;
 const mutateBoard = vi.fn();
+// The open card's comment thread, and the mutate the dialog revalidates it by.
+let cardComments: KanbanCardComment[] = [];
+const mutateCardComments = vi.fn();
 
 vi.mock("swr", () => ({
   useSWRConfig: () => ({ cache: new Map() }),
@@ -76,6 +80,13 @@ vi.mock("swr", () => ({
         data: boardLoaded ? boardState : undefined,
         error: boardError,
         mutate: mutateBoard,
+      };
+    }
+    if (typeof key === "string" && key.includes("/comments")) {
+      return {
+        data: { results: cardComments },
+        error: undefined,
+        mutate: mutateCardComments,
       };
     }
     return { data: { results: [] }, error: undefined, mutate: vi.fn() };
@@ -163,6 +174,18 @@ function makeCard(overrides: Partial<KanbanCard> = {}): KanbanCard {
   };
 }
 
+function makeComment(
+  overrides: Partial<KanbanCardComment> = {},
+): KanbanCardComment {
+  return {
+    id: "cm1",
+    body: "First comment",
+    createdByName: "Bob",
+    createdAt: new Date("2026-01-01"),
+    ...overrides,
+  } as unknown as KanbanCardComment;
+}
+
 function makeColumn(
   overrides: Partial<KanbanColumn> = {},
   cards: KanbanCard[] = [],
@@ -217,7 +240,11 @@ function openColumnMenuItem(columnName: string, itemText: string) {
 
 // The open card lives in the URL, so a dialog a test leaves open must not
 // carry into the next one.
-afterEach(() => window.history.replaceState(null, "", "/"));
+afterEach(() => {
+  window.history.replaceState(null, "", "/");
+  cardComments = [];
+  mutateCardComments.mockReset();
+});
 
 describe("KanbanBoard transport", () => {
   beforeEach(() => {
@@ -676,17 +703,17 @@ describe("KanbanBoard transport", () => {
       boardState = makeBoardState([makeColumn({ id: "col-1" }, [makeCard()])]);
     });
 
+    /** Opens the card and its Delete confirm dialog, returning the latter. */
     async function openCardDeleteConfirm() {
       fireEvent.click(screen.getByText("A card"));
-      const trigger = await screen.findByRole("button", { name: "Delete" });
-      // Radix's Popover trigger opens on pointerdown, not plain click.
-      fireEvent.pointerDown(trigger, { pointerId: 1, button: 0 });
-      fireEvent.pointerUp(trigger, { pointerId: 1, button: 0 });
-      fireEvent.click(trigger);
-      const confirms = await screen.findAllByRole("button", {
-        name: "Delete",
-      });
-      fireEvent.click(confirms[confirms.length - 1]);
+      fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
+      return screen.findByRole("dialog", { name: "Delete Card" });
+    }
+
+    /** Opens the card's Delete confirm dialog and confirms it. */
+    async function deleteCard() {
+      const confirm = await openCardDeleteConfirm();
+      fireEvent.click(within(confirm).getByRole("button", { name: "Delete" }));
     }
 
     /**
@@ -713,8 +740,8 @@ describe("KanbanBoard transport", () => {
       {
         name: "delete",
         method: "DELETE",
-        perform: openCardDeleteConfirm,
-        closed: () => screen.queryByText("Delete this card?"),
+        perform: deleteCard,
+        closed: () => screen.queryByRole("button", { name: "Save" }),
       },
     ];
 
@@ -736,22 +763,45 @@ describe("KanbanBoard transport", () => {
       },
     );
 
-    it.each(CARD_WRITES)(
-      "shows the error and keeps the dialog open when the $name fails",
-      async ({ perform }) => {
-        stubRejectedSave("Card not found", 404);
+    it("shows a failed save as a toast and keeps the card dialog open", async () => {
+      stubRejectedSave("Card not found", 404);
 
-        renderBoard();
-        await perform();
+      renderBoard();
+      fireEvent.click(screen.getByText("A card"));
+      fireEvent.click(await screen.findByRole("button", { name: "Save" }));
 
-        await waitFor(() =>
-          expect(toastError).toHaveBeenCalledWith("Card not found"),
-        );
-        expect(
-          screen.getByRole("button", { name: "Save" }),
-        ).toBeInTheDocument();
-      },
-    );
+      await waitFor(() =>
+        expect(toastError).toHaveBeenCalledWith("Card not found"),
+      );
+      expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
+    });
+
+    it("shows a refused delete inline, keeps both dialogs open, and can retry", async () => {
+      const fetchMock = stubRejectedSave("Card not found", 404);
+
+      renderBoard();
+      const confirm = await openCardDeleteConfirm();
+      fireEvent.click(within(confirm).getByRole("button", { name: "Delete" }));
+
+      expect(
+        await within(confirm).findByText("Card not found"),
+      ).toBeInTheDocument();
+      expect(toastError).not.toHaveBeenCalled();
+      // Both the confirm and the card dialog stay open for a retry. The card
+      // dialog sits behind the modal, so it is hidden from the a11y tree.
+      expect(
+        screen.getByRole("dialog", { name: "Delete Card" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Save", hidden: true }),
+      ).toBeInTheDocument();
+      expect(new URLSearchParams(window.location.search).get("cardId")).toBe(
+        "card-1",
+      );
+
+      fireEvent.click(within(confirm).getByRole("button", { name: "Delete" }));
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    });
 
     describe("with a Column change", () => {
       beforeEach(() => {
@@ -844,6 +894,69 @@ describe("KanbanBoard transport", () => {
         ).toBeInTheDocument();
       });
     });
+  });
+});
+
+describe("KanbanBoard card comment delete", () => {
+  beforeEach(() => {
+    toastError.mockReset();
+    // Desktop: the comment thread lives below the details, not behind the
+    // mobile Comments tab.
+    window.matchMedia = vi.fn((query: string) => ({
+      matches: query.includes("pointer: fine"),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    })) as unknown as typeof window.matchMedia;
+    Element.prototype.scrollIntoView = vi.fn();
+    Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
+    Element.prototype.releasePointerCapture = vi.fn();
+    Element.prototype.setPointerCapture = vi.fn();
+    boardState = makeBoardState([makeColumn({ id: "col-1" }, [makeCard()])]);
+    cardComments = [makeComment()];
+  });
+
+  /** Opens the card and its first comment's Delete confirm dialog. */
+  async function openCommentDeleteConfirm() {
+    fireEvent.click(screen.getByText("A card"));
+    fireEvent.click(
+      await screen.findByRole("button", { name: /^Delete comment by Bob/ }),
+    );
+    return screen.findByRole("dialog", { name: "Delete Comment" });
+  }
+
+  it("sends the delete and closes the confirm dialog on success", async () => {
+    const fetchMock = stubAcceptedSave();
+
+    renderBoard();
+    const confirm = await openCommentDeleteConfirm();
+    fireEvent.click(within(confirm).getByRole("button", { name: "Delete" }));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "http://test/organizations/org1/workspaces/ws1/boards/board-1/cards/card-1/comments/cm1",
+        expect.objectContaining({ method: "DELETE" }),
+      ),
+    );
+    await waitFor(() => expect(mutateCardComments).toHaveBeenCalledOnce());
+    expect(
+      screen.queryByRole("dialog", { name: "Delete Comment" }),
+    ).not.toBeInTheDocument();
+    expect(toastError).not.toHaveBeenCalled();
+  });
+
+  it("shows a refusal inline and keeps the comment in the thread", async () => {
+    stubRejectedSave("Comment already deleted", 409);
+
+    renderBoard();
+    const confirm = await openCommentDeleteConfirm();
+    fireEvent.click(within(confirm).getByRole("button", { name: "Delete" }));
+
+    expect(
+      await within(confirm).findByText("Comment already deleted"),
+    ).toBeInTheDocument();
+    expect(toastError).not.toHaveBeenCalled();
+    expect(mutateCardComments).not.toHaveBeenCalled();
+    expect(screen.getByText("First comment")).toBeInTheDocument();
   });
 });
 
@@ -946,17 +1059,6 @@ describe("KanbanBoard double submit", () => {
     boardState = makeBoardState([makeColumn({ id: "col-1" }, [makeCard()])]);
   });
 
-  async function openPopoverConfirm(triggerName: string) {
-    const trigger = await screen.findByRole("button", { name: triggerName });
-    fireEvent.pointerDown(trigger, { pointerId: 1, button: 0 });
-    fireEvent.pointerUp(trigger, { pointerId: 1, button: 0 });
-    fireEvent.click(trigger);
-    const confirms = await screen.findAllByRole("button", {
-      name: triggerName,
-    });
-    return confirms[confirms.length - 1];
-  }
-
   /** Each gesture opens its dialog and returns the button that submits it. */
   const SUBMITS: {
     name: string;
@@ -1020,7 +1122,11 @@ describe("KanbanBoard double submit", () => {
       name: "card delete",
       open: async () => {
         fireEvent.click(screen.getByText("A card"));
-        return openPopoverConfirm("Delete");
+        fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
+        const confirm = await screen.findByRole("dialog", {
+          name: "Delete Card",
+        });
+        return within(confirm).getByRole("button", { name: "Delete" });
       },
       pendingLabel: "Deleting...",
     },

@@ -3,6 +3,7 @@
 import { readableTextColor } from "@/lib/color";
 import { useState, type FocusEventHandler, type ReactNode } from "react";
 import { useMutation } from "@/hooks/use-mutation";
+import { useDeleteFlow } from "@/hooks/use-delete-flow";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useUnsavedChangesGuard } from "@/components/unsaved-changes-guard";
 import { deepEqual } from "@/lib/deep-equal";
@@ -67,7 +68,12 @@ import {
   Link2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { writeEntity, type Serialized } from "@/lib/api-write";
+import {
+  writeEntity,
+  type Serialized,
+  type WriteOutcome,
+} from "@/lib/api-write";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { formatRelativeTime } from "@/lib/relative-time";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -438,6 +444,7 @@ function CommentsSection({
   onStartEditComment,
   onCancelEditComment,
   commentAction,
+  commentDeleting,
 }: {
   className?: string;
   comments: Serialized<KanbanCardComment>[];
@@ -448,15 +455,19 @@ function CommentsSection({
   onEditingCommentBodyChange: (body: string) => void;
   onAddComment: () => void;
   onSaveComment: (commentId: string) => void;
-  onDeleteComment: (commentId: string) => void;
+  onDeleteComment: (comment: Serialized<KanbanCardComment>) => void;
   onStartEditComment: (comment: Serialized<KanbanCardComment>) => void;
   onCancelEditComment: () => void;
   /**
-   * The comment write in flight — `add`, `edit:<id>` or `delete:<id>` — or
-   * null. Every comment button waits for it; only its own reads as pending.
+   * The comment write in flight — `add` or `edit:<id>` — or null. Every
+   * comment button waits for it; only its own reads as pending.
    */
   commentAction: string | null;
+  /** A comment delete is running in its confirm dialog. */
+  commentDeleting: boolean;
 }) {
+  const commentBusy = !!commentAction || commentDeleting;
+
   return (
     <div className={className}>
       <p className="text-sm font-medium mb-3">Comments</p>
@@ -484,7 +495,7 @@ function CommentsSection({
                     <Button
                       size="sm"
                       onClick={() => onSaveComment(comment.id)}
-                      disabled={!editingCommentBody.trim() || !!commentAction}
+                      disabled={!editingCommentBody.trim() || commentBusy}
                     >
                       {commentAction === `edit:${comment.id}`
                         ? "Saving..."
@@ -507,37 +518,22 @@ function CommentsSection({
                   <div className="flex gap-2">
                     <button
                       type="button"
-                      className="text-xs text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      className="text-xs text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
                       onClick={() => onStartEditComment(comment)}
+                      disabled={commentBusy}
                       aria-label={`Edit comment by ${commentLabel(comment)}`}
                     >
                       Edit
                     </button>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <button
-                          type="button"
-                          className="text-xs text-muted-foreground hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                          aria-label={`Delete comment by ${commentLabel(comment)}`}
-                        >
-                          Delete
-                        </button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-4">
-                        <p className="text-sm mb-3">Delete this comment?</p>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          className="w-full"
-                          onClick={() => onDeleteComment(comment.id)}
-                          disabled={!!commentAction}
-                        >
-                          {commentAction === `delete:${comment.id}`
-                            ? "Deleting..."
-                            : "Delete"}
-                        </Button>
-                      </PopoverContent>
-                    </Popover>
+                    <button
+                      type="button"
+                      className="text-xs text-muted-foreground hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
+                      onClick={() => onDeleteComment(comment)}
+                      disabled={commentBusy}
+                      aria-label={`Delete comment by ${commentLabel(comment)}`}
+                    >
+                      Delete
+                    </button>
                   </div>
                 </>
               )}
@@ -557,7 +553,7 @@ function CommentsSection({
           className="self-start"
           size="sm"
           onClick={onAddComment}
-          disabled={!newCommentBody.trim() || !!commentAction}
+          disabled={!newCommentBody.trim() || commentBusy}
         >
           {commentAction === "add" ? "Commenting..." : "Comment"}
         </Button>
@@ -769,7 +765,8 @@ export function KanbanCardDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSave: (cardId: string, data: CardSaveData) => Promise<void> | void;
-  onDelete: (cardId: string) => Promise<void> | void;
+  /** Deletes the card and resolves to the write's outcome, for the dialog. */
+  onDelete: (cardId: string) => Promise<WriteOutcome<unknown>>;
   orgId: string;
   workspaceId: string;
   boardId: string;
@@ -863,21 +860,12 @@ export function KanbanCardDialog({
       editingCommentId !== null);
   const confirmDiscard = useUnsavedChangesGuard(isDirty);
 
-  // One guard per kind of write, so a double click sends nothing twice. The
-  // card's Save and Delete share one: neither makes sense while the other runs.
-  // Each also records which action is in flight, so only that button reads as
-  // pending while every one it guards is disabled.
-  const [cardAction, setCardAction] = useState<"save" | "delete" | null>(null);
-  const cardWrite = useMutation(
-    async (action: "save" | "delete", write: () => Promise<void> | void) => {
-      setCardAction(action);
-      try {
-        await write();
-      } finally {
-        setCardAction(null);
-      }
-    },
-  );
+  // Save's own guard, so a double click sends nothing twice. The Delete
+  // trigger and the Save button both wait on it and on a card delete: neither
+  // makes sense while the other runs.
+  const cardSave = useMutation(async (write: () => Promise<void> | void) => {
+    await write();
+  });
   const [commentAction, setCommentAction] = useState<string | null>(null);
   const commentWrite = useMutation(
     async (action: string, write: () => Promise<void>) => {
@@ -889,6 +877,29 @@ export function KanbanCardDialog({
       }
     },
   );
+
+  // The card's delete confirm. The board owns the write — on success it clears
+  // the `cardId` param and revalidates — so this flow owns only the dialog and
+  // the refusal it shows inline.
+  const cardDelete = useDeleteFlow<Serialized<KanbanCard>>({
+    delete: (target) => onDelete(target.id),
+    mutate: () => {},
+  });
+
+  const commentsEntity = `boards/${boardId}/cards/${card?.id ?? ""}/comments`;
+
+  // A refused comment delete stays in its dialog, and a successful one
+  // revalidates the thread so the comment disappears.
+  const commentDelete = useDeleteFlow<Serialized<KanbanCardComment>>({
+    delete: (comment, url) =>
+      writeEntity(
+        url,
+        commentsEntity,
+        { orgId, workspaceId },
+        { id: comment.id },
+      ),
+    mutate: mutateComments,
+  });
 
   if (!card) return null;
 
@@ -931,8 +942,6 @@ export function KanbanCardDialog({
     setEditingCommentBody("");
   };
 
-  const commentsEntity = `boards/${boardId}/cards/${card.id}/comments`;
-
   const handleAddComment = () =>
     commentWrite.run("add", async () => {
       if (!newCommentBody.trim() || !backendUrl) return;
@@ -968,22 +977,6 @@ export function KanbanCardDialog({
         return;
       }
       cancelEditingComment();
-      await mutateComments();
-    });
-
-  const handleDeleteComment = (commentId: string) =>
-    commentWrite.run(`delete:${commentId}`, async () => {
-      if (!backendUrl) return;
-      const outcome = await writeEntity(
-        backendUrl,
-        commentsEntity,
-        { orgId, workspaceId },
-        { id: commentId },
-      );
-      if (outcome.outcome !== "success") {
-        toast.error(outcome.message);
-        return;
-      }
       await mutateComments();
     });
 
@@ -1066,10 +1059,11 @@ export function KanbanCardDialog({
                 onEditingCommentBodyChange={setEditingCommentBody}
                 onAddComment={handleAddComment}
                 onSaveComment={handleEditComment}
-                onDeleteComment={handleDeleteComment}
+                onDeleteComment={commentDelete.request}
                 onStartEditComment={startEditingComment}
                 onCancelEditComment={cancelEditingComment}
                 commentAction={commentAction}
+                commentDeleting={commentDelete.deleting}
               />
             </TabsContent>
             <TabsContent
@@ -1088,7 +1082,7 @@ export function KanbanCardDialog({
           <div className="flex flex-row gap-2 min-h-0 flex-1 overflow-hidden">
             {/* Main content - Title, Body, Comments, and History */}
             {/* The gutter pads the pane's children, not the pane, so the
-                body's scrollbar sits in the gutter instead of over the text. */}
+              body's scrollbar sits in the gutter instead of over the text. */}
             <CardDetailsPane
               className="min-w-0 [&>*]:pr-6"
               title={title}
@@ -1112,10 +1106,11 @@ export function KanbanCardDialog({
                 onEditingCommentBodyChange={setEditingCommentBody}
                 onAddComment={handleAddComment}
                 onSaveComment={handleEditComment}
-                onDeleteComment={handleDeleteComment}
+                onDeleteComment={commentDelete.request}
                 onStartEditComment={startEditingComment}
                 onCancelEditComment={cancelEditingComment}
                 commentAction={commentAction}
+                commentDeleting={commentDelete.deleting}
               />
               <div className="mt-2">
                 <KanbanCardHistory
@@ -1152,31 +1147,17 @@ export function KanbanCardDialog({
           </div>
         )}
         <DialogFooter className="shrink-0 flex-row justify-end">
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button variant="secondary">
-                <Trash2 />
-                Delete
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-4">
-              <p className="text-sm mb-3">Delete this card?</p>
-              <Button
-                variant="destructive"
-                size="sm"
-                className="w-full"
-                onClick={() =>
-                  void cardWrite.run("delete", () => onDelete(card.id))
-                }
-                disabled={cardWrite.pending}
-              >
-                {cardAction === "delete" ? "Deleting..." : "Delete"}
-              </Button>
-            </PopoverContent>
-          </Popover>
+          <Button
+            variant="secondary"
+            onClick={() => cardDelete.request(card)}
+            disabled={cardSave.pending || cardDelete.deleting}
+          >
+            <Trash2 />
+            Delete
+          </Button>
           <Button
             onClick={() =>
-              void cardWrite.run("save", () =>
+              void cardSave.run(() =>
                 onSave(card.id, {
                   title,
                   body,
@@ -1191,12 +1172,30 @@ export function KanbanCardDialog({
                 }),
               )
             }
-            disabled={!title.trim() || cardWrite.pending}
+            disabled={!title.trim() || cardSave.pending || cardDelete.deleting}
           >
-            {cardAction === "save" ? "Saving..." : "Save"}
+            {cardSave.pending ? "Saving..." : "Save"}
           </Button>
         </DialogFooter>
       </DialogContent>
+      <DeleteConfirmDialog
+        open={cardDelete.open}
+        onOpenChange={(next) => !next && cardDelete.close()}
+        title="Delete Card"
+        description="Are you sure you want to delete this card? This action cannot be undone."
+        onConfirm={cardDelete.confirm}
+        loading={cardDelete.deleting}
+        error={cardDelete.error}
+      />
+      <DeleteConfirmDialog
+        open={commentDelete.open}
+        onOpenChange={(next) => !next && commentDelete.close()}
+        title="Delete Comment"
+        description="Are you sure you want to delete this comment? This action cannot be undone."
+        onConfirm={commentDelete.confirm}
+        loading={commentDelete.deleting}
+        error={commentDelete.error}
+      />
     </Dialog>
   );
 }

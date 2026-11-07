@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import type { KanbanCard, KanbanCardComment } from "@platypus/schemas";
 
 // --- Module mocks ------------------------------------------------------------
@@ -32,8 +38,12 @@ vi.mock("swr", () => ({
 
 import { KanbanCardDialog } from "./kanban-card-dialog";
 import { UnsavedChangesProvider } from "./unsaved-changes-guard";
-import { jsonResponse, stubPendingSave } from "@/test/test-utils";
-import type { Serialized } from "@/lib/api-write";
+import {
+  jsonResponse,
+  stubAcceptedSave,
+  stubPendingSave,
+} from "@/test/test-utils";
+import type { Serialized, WriteOutcome } from "@/lib/api-write";
 
 // --- Helpers -----------------------------------------------------------------
 
@@ -68,7 +78,18 @@ function setViewportWidth(width: number) {
   }) as unknown as typeof window.matchMedia;
 }
 
-function renderDialog(onOpenChange: (open: boolean) => void = () => {}) {
+function acceptedDelete(): Promise<WriteOutcome<unknown>> {
+  return Promise.resolve({
+    outcome: "success",
+    data: null,
+    revalidateKeys: [],
+  });
+}
+
+function renderDialog(
+  onOpenChange: (open: boolean) => void = () => {},
+  onDelete: (cardId: string) => Promise<WriteOutcome<unknown>> = acceptedDelete,
+) {
   return render(
     <UnsavedChangesProvider>
       <KanbanCardDialog
@@ -79,13 +100,27 @@ function renderDialog(onOpenChange: (open: boolean) => void = () => {}) {
         open={true}
         onOpenChange={onOpenChange}
         onSave={() => {}}
-        onDelete={() => {}}
+        onDelete={onDelete}
         orgId="org1"
         workspaceId="ws1"
         boardId="b1"
       />
     </UnsavedChangesProvider>,
   );
+}
+
+/** Opens the card's Delete confirm dialog and returns it. */
+async function openCardDeleteConfirm() {
+  fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+  return screen.findByRole("dialog", { name: "Delete Card" });
+}
+
+/** Opens the first comment's Delete confirm dialog and returns it. */
+async function openCommentDeleteConfirm() {
+  fireEvent.click(
+    screen.getByRole("button", { name: /^Delete comment by Bob/ }),
+  );
+  return screen.findByRole("dialog", { name: "Delete Comment" });
 }
 
 afterEach(() => {
@@ -141,23 +176,20 @@ describe("KanbanCardDialog comment double submit", () => {
     comments = [existingComment];
     const { fetchMock, resolve } = stubPendingSave();
     renderDialog();
+    const cardDelete = screen.getByRole("button", { name: "Delete" });
 
-    fireEvent.click(
-      screen.getByRole("button", { name: /^Delete comment by Bob/ }),
-    );
-    const deleteButtons = await screen.findAllByRole("button", {
+    const confirmDialog = await openCommentDeleteConfirm();
+    const confirm = within(confirmDialog).getByRole("button", {
       name: "Delete",
     });
-    const confirm = deleteButtons[deleteButtons.length - 1];
     fireEvent.click(confirm);
     fireEvent.click(confirm);
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+    expect(confirm).toBeDisabled();
     expect(confirm).toHaveTextContent("Deleting...");
     // The card's own Delete waits on its own guard, not this one.
-    expect(
-      screen.getAllByRole("button", { name: /Delete/ })[0],
-    ).not.toHaveTextContent("Deleting...");
+    expect(cardDelete).not.toHaveTextContent("Deleting...");
     resolve();
     await waitFor(() => expect(mutateCommentsSpy).toHaveBeenCalledOnce());
   });
@@ -261,7 +293,7 @@ describe("KanbanCardDialog comment actions", () => {
 });
 
 describe("KanbanCardDialog delete comment", () => {
-  it("surfaces the backend's reason and does not revalidate when the delete is refused", async () => {
+  it("shows the backend's reason inline, keeps the dialog open, and does not revalidate when refused", async () => {
     comments = [existingComment];
     const fetchMock = vi
       .fn()
@@ -271,20 +303,113 @@ describe("KanbanCardDialog delete comment", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     renderDialog();
+    const confirmDialog = await openCommentDeleteConfirm();
+    fireEvent.click(
+      within(confirmDialog).getByRole("button", { name: "Delete" }),
+    );
 
-    // The comment's own "Delete" link renders before the card-level Delete
-    // button in document order.
-    fireEvent.click(screen.getAllByText("Delete")[0]);
-    // The confirm button inside the just-opened popover is the last "Delete"
-    // in the document — the card-level Delete popover trigger is also named
-    // "Delete" but stays closed.
-    const deleteButtons = screen.getAllByRole("button", { name: "Delete" });
-    fireEvent.click(deleteButtons[deleteButtons.length - 1]);
+    expect(
+      await within(confirmDialog).findByText("Comment already deleted"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("dialog", { name: "Delete Comment" }),
+    ).toBeInTheDocument();
+    expect(toastErrorSpy).not.toHaveBeenCalled();
+    expect(mutateCommentsSpy).not.toHaveBeenCalled();
+    // The comment stays in the thread to retry against.
+    expect(screen.getByText("First comment")).toBeInTheDocument();
+  });
+
+  it("removes the comment and closes the confirm dialog on success", async () => {
+    comments = [existingComment];
+    stubAcceptedSave();
+    renderDialog();
+
+    const confirmDialog = await openCommentDeleteConfirm();
+    fireEvent.click(
+      within(confirmDialog).getByRole("button", { name: "Delete" }),
+    );
+
+    await waitFor(() => expect(mutateCommentsSpy).toHaveBeenCalledOnce());
+    expect(
+      screen.queryByRole("dialog", { name: "Delete Comment" }),
+    ).not.toBeInTheDocument();
+    expect(toastErrorSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("KanbanCardDialog delete card", () => {
+  it("shows a refusal inline, keeps both dialogs open, and does not toast", async () => {
+    const onDelete = vi.fn().mockResolvedValue({
+      outcome: "forbidden",
+      message: "Only the owner can delete this card",
+    });
+    renderDialog(() => {}, onDelete);
+
+    const confirmDialog = await openCardDeleteConfirm();
+    fireEvent.click(
+      within(confirmDialog).getByRole("button", { name: "Delete" }),
+    );
+
+    expect(
+      await within(confirmDialog).findByText(
+        "Only the owner can delete this card",
+      ),
+    ).toBeInTheDocument();
+    expect(onDelete).toHaveBeenCalledWith("c1");
+    expect(toastErrorSpy).not.toHaveBeenCalled();
+    // The card dialog is still there, so the delete can be retried.
+    expect(screen.getByText("Ship the release")).toBeInTheDocument();
+    expect(
+      screen.getByRole("dialog", { name: "Delete Card" }),
+    ).toBeInTheDocument();
+  });
+
+  it("closes the confirm dialog on success", async () => {
+    const onDelete = vi.fn().mockResolvedValue({
+      outcome: "success",
+      data: null,
+      revalidateKeys: [],
+    });
+    renderDialog(() => {}, onDelete);
+
+    const confirmDialog = await openCardDeleteConfirm();
+    fireEvent.click(
+      within(confirmDialog).getByRole("button", { name: "Delete" }),
+    );
 
     await waitFor(() =>
-      expect(toastErrorSpy).toHaveBeenCalledWith("Comment already deleted"),
+      expect(
+        screen.queryByRole("dialog", { name: "Delete Card" }),
+      ).not.toBeInTheDocument(),
     );
-    expect(mutateCommentsSpy).not.toHaveBeenCalled();
+    expect(onDelete).toHaveBeenCalledWith("c1");
+    expect(toastErrorSpy).not.toHaveBeenCalled();
+  });
+
+  it("cancels back to the card dialog without tripping the unsaved-changes guard", async () => {
+    const onOpenChange = vi.fn();
+    renderDialog(onOpenChange);
+    fireEvent.click(screen.getByRole("button", { name: "Edit card" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Title" }), {
+      target: { value: "Renamed" },
+    });
+
+    const confirmDialog = await openCardDeleteConfirm();
+    fireEvent.click(
+      within(confirmDialog).getByRole("button", { name: "Cancel" }),
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Delete Card" }),
+      ).not.toBeInTheDocument(),
+    );
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(
+      screen.queryByText("Discard unsaved changes?"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("Renamed")).toBeInTheDocument();
   });
 });
 
