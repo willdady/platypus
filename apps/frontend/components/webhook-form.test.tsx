@@ -12,8 +12,10 @@ import {
   push,
   resetFormHarness,
   setData,
+  setDataFor,
   toastError,
   jsonResponse,
+  stubAcceptedSave,
   stubRejectedSave,
   savedBody,
 } from "@/test/form-test-harness";
@@ -165,6 +167,53 @@ describe("WebhookForm validation error surfacing", () => {
       expect(
         screen.queryByText("Header value is too long"),
       ).not.toBeInTheDocument(),
+    );
+  });
+});
+
+describe("WebhookForm regenerate", () => {
+  beforeEach(() => resetFormHarness());
+
+  const record = {
+    id: "wh1",
+    name: "Ops",
+    url: "https://hooks.test/ops",
+    events: ["notification.created"],
+    enabled: true,
+    headers: null,
+    signingSecret: "whsec_old",
+  };
+
+  const renderEdit = () => {
+    setDataFor("/webhooks/wh1", record);
+    render(<WebhookForm orgId="org1" workspaceId="ws1" webhookId="wh1" />);
+  };
+
+  it("keeps a refused regenerate in the dialog with the backend's message", async () => {
+    stubRejectedSave("Signing secret is managed elsewhere", 409);
+    renderEdit();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Regenerate" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Regenerate" }));
+
+    expect(
+      await within(dialog).findByText("Signing secret is managed elsewhere"),
+    ).toBeVisible();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(toastError).not.toHaveBeenCalled();
+  });
+
+  it("closes the dialog after a successful regenerate", async () => {
+    stubAcceptedSave({ message: "ok" });
+    renderEdit();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Regenerate" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Regenerate" }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
     );
   });
 });

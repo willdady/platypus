@@ -65,6 +65,7 @@ export function A2aTokens({
   const [issued, setIssued] = useState<string | null>(null);
   const [tokenToRegenerate, setTokenToRegenerate] =
     useState<Serialized<A2aToken> | null>(null);
+  const [regenerateError, setRegenerateError] = useState<string | null>(null);
 
   // The browser's own jump to #access fires before the endpoint loads, so
   // land on the card URL and token controls once they render.
@@ -120,6 +121,7 @@ export function A2aTokens({
       initialData: {},
       entity: "tokens",
       scope: {},
+      conflictField: null,
       write: () =>
         writeAt<IssuedToken>(
           `${tokensUrl}/${tokenToRegenerate?.id}/regenerate`,
@@ -129,11 +131,14 @@ export function A2aTokens({
         setIssued(token.token);
         await mutate();
       },
+      // A refused regenerate shows in the confirm dialog, not as a toast.
+      onError: (message) => setRegenerateError(message),
     });
 
   const regenerateToken = async () => {
-    await submitRegenerate();
-    setTokenToRegenerate(null);
+    setRegenerateError(null);
+    const result = await submitRegenerate();
+    if (result) setTokenToRegenerate(null);
   };
 
   return (
@@ -190,7 +195,10 @@ export function A2aTokens({
                       variant="outline"
                       size="icon"
                       aria-label={`Regenerate token ${token.name}`}
-                      onClick={() => setTokenToRegenerate(token)}
+                      onClick={() => {
+                        setRegenerateError(null);
+                        setTokenToRegenerate(token);
+                      }}
                     >
                       <RefreshCw />
                     </Button>
@@ -272,12 +280,18 @@ export function A2aTokens({
 
       <ConfirmDialog
         open={tokenToRegenerate !== null}
-        onOpenChange={(open) => !open && setTokenToRegenerate(null)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setTokenToRegenerate(null);
+            setRegenerateError(null);
+          }
+        }}
         title="Regenerate token"
         description={`The current "${tokenToRegenerate?.name}" token stops working straight away. Update the client that uses it with the new one.`}
         confirmLabel="Regenerate"
-        onConfirm={regenerateToken}
+        onConfirm={() => void regenerateToken()}
         loading={isRegenerating}
+        error={regenerateError}
       />
 
       {/* Whenever a token was issued, card URL or not: this is the only time

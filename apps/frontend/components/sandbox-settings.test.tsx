@@ -371,6 +371,40 @@ describe("SandboxSettings save", () => {
       `${SANDBOX_URL}?force=true`,
     ]);
   });
+
+  it("keeps a refused forced switch open with the backend's message, then retries", async () => {
+    stubSaveSequence(
+      {
+        status: 502,
+        body: { error: "Teardown failed, retry with force=true" },
+      },
+      { status: 409, body: { error: "Sandbox backend is busy" } },
+      { status: 200, body: {} },
+    );
+    mockReads({ sandbox: { data: DOCKER_SANDBOX } });
+    await renderSettings();
+
+    save();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Switch anyway" }),
+    );
+
+    const dialog = await screen.findByRole("dialog");
+    expect(
+      await within(dialog).findByText("Sandbox backend is busy"),
+    ).toBeVisible();
+    expect(toastError).not.toHaveBeenCalled();
+    expect(toastSuccess).not.toHaveBeenCalled();
+
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Switch anyway" }),
+    );
+
+    await waitFor(() =>
+      expect(toastSuccess).toHaveBeenCalledWith("Sandbox configured"),
+    );
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
 });
 
 describe("SandboxSettings delete", () => {
@@ -420,6 +454,34 @@ describe("SandboxSettings delete", () => {
       [`${SANDBOX_URL}?force=true`, "DELETE"],
     ]);
     expect(mutate).toHaveBeenCalledWith(null, { revalidate: false });
+  });
+
+  it("keeps a refused forced delete open with the backend's message", async () => {
+    stubSaveSequence(
+      {
+        status: 502,
+        body: { error: "Destroy failed, retry with force=true" },
+      },
+      { status: 409, body: { error: "Sandbox is still running" } },
+    );
+    mockReads({ sandbox: { data: DOCKER_SANDBOX } });
+    await renderSettings();
+
+    const deleteDialog = await openDelete();
+    fireEvent.click(
+      within(deleteDialog).getByRole("button", { name: "Delete" }),
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Delete anyway" }),
+    );
+
+    const dialog = await screen.findByRole("dialog");
+    expect(
+      await within(dialog).findByText("Sandbox is still running"),
+    ).toBeVisible();
+    expect(toastError).not.toHaveBeenCalled();
+    expect(toastSuccess).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 });
 

@@ -405,3 +405,30 @@ describe("A2aTokens delete", () => {
     expect(mutate).not.toHaveBeenCalled();
   });
 });
+
+describe("A2aTokens regenerate", () => {
+  it("keeps a refused regenerate in the dialog with the backend's message", async () => {
+    stubRejectedSave("Token is locked", 409);
+    const mutate = vi.fn().mockResolvedValue(undefined);
+    render(
+      <A2aTokens
+        orgId="org1"
+        endpoint={
+          endpoint as unknown as ComponentProps<typeof A2aTokens>["endpoint"]
+        }
+        mutate={mutate}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Regenerate token Hermes" }),
+    );
+    const dialog = screen.getByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Regenerate" }));
+
+    expect(await within(dialog).findByText("Token is locked")).toBeVisible();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(toastError).not.toHaveBeenCalled();
+    expect(mutate).not.toHaveBeenCalled();
+  });
+});

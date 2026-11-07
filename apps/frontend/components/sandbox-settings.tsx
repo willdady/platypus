@@ -225,7 +225,8 @@ function SandboxSettings({
     open: boolean;
     kind: "save" | "delete" | null;
     message: string;
-  }>({ open: false, kind: null, message: "" });
+    error: string | null;
+  }>({ open: false, kind: null, message: "", error: null });
   const [isForcing, setIsForcing] = useState(false);
 
   // A sandbox is the Workspace's singleton, read from the collection path
@@ -253,6 +254,7 @@ function SandboxSettings({
           kind: "save",
           message:
             "Failed to tear down previous sandbox — switch anyway? External resources may leak.",
+          error: null,
         });
       } else {
         toast.error(message);
@@ -286,6 +288,7 @@ function SandboxSettings({
         open: true,
         kind: "delete",
         message: "Failed to destroy sandbox — delete anyway?",
+        error: null,
       });
       return true;
     },
@@ -453,7 +456,7 @@ function SandboxSettings({
   };
 
   const closeForceDialog = () =>
-    setForceDialog({ open: false, kind: null, message: "" });
+    setForceDialog({ open: false, kind: null, message: "", error: null });
 
   const handleForceConfirm = async () => {
     setIsForcing(true);
@@ -463,23 +466,26 @@ function SandboxSettings({
         if (outcome.outcome === "success") {
           await reseedFromServer();
           toast.success(SAVED_MESSAGE);
+          closeForceDialog();
         } else {
-          toast.error("Failed to switch sandbox backend");
+          // A refused force stays in the open dialog with the backend's
+          // message, so it can be read and retried.
+          setForceDialog((prev) => ({ ...prev, error: outcome.message }));
         }
       } else if (forceDialog.kind === "delete") {
         const outcome = await deleteSandbox({ force: true });
         if (outcome.outcome === "success") {
           await clearDeleted();
           toast.success(DELETED_MESSAGE);
+          closeForceDialog();
         } else {
-          toast.error("Failed to delete sandbox");
+          setForceDialog((prev) => ({ ...prev, error: outcome.message }));
         }
       }
     } catch (err) {
       console.error("Force retry error:", err);
-      toast.error("Operation failed");
+      setForceDialog((prev) => ({ ...prev, error: "Operation failed" }));
     } finally {
-      closeForceDialog();
       setIsForcing(false);
     }
   };
@@ -1032,6 +1038,7 @@ function SandboxSettings({
         confirmVariant="destructive"
         onConfirm={handleForceConfirm}
         loading={isForcing}
+        error={forceDialog.error}
       />
     </div>
   );

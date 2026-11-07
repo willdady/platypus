@@ -9,6 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import {
   Select,
@@ -26,6 +27,7 @@ import {
 } from "@platypus/schemas";
 import { useBackendUrl } from "@/components/auth-provider";
 import { useScopedList } from "@/hooks/use-scoped-list";
+import { ListError } from "@/components/list-state";
 import { scopedUrl, writeAt, type Serialized } from "@/lib/api-write";
 import {
   NoRecipientHint,
@@ -87,11 +89,16 @@ export function RemoveMemberDialog({
   const backendUrl = useBackendUrl();
   const { mutate } = useSWRConfig();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
 
   // An Org Admin's list holds every Workspace in the Organization.
-  const { data: workspacesData, results: workspaces } =
-    useScopedList<Workspace>("workspaces", { orgId });
+  const {
+    data: workspacesData,
+    results: workspaces,
+    error: workspacesError,
+    mutate: retryWorkspaces,
+  } = useScopedList<Workspace>("workspaces", { orgId });
   const owned = workspaces.filter((w) => w.ownerId === member.userId);
   const recipients = transferRecipients(members, member.userId);
   const draftOf = (id: string) => drafts[id] ?? EMPTY_DRAFT;
@@ -111,6 +118,7 @@ export function RemoveMemberDialog({
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
+    setDeleteError(null);
     try {
       const membersUrl = scopedUrl(backendUrl, "members", { orgId });
       const outcome = await writeAt(`${membersUrl}/${member.id}`, {
@@ -126,7 +134,9 @@ export function RemoveMemberDialog({
         toast.success("Member removed from organization");
         onSuccess();
       } else {
-        toast.error(outcome.message);
+        // A refused removal stays in the open dialog, so the message can be
+        // read and retried rather than toasted and lost.
+        setDeleteError(outcome.message);
       }
     } finally {
       setIsSubmitting(false);
@@ -134,7 +144,13 @@ export function RemoveMemberDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) setDeleteError(null);
+        onOpenChange(next);
+      }}
+    >
       <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-destructive">
@@ -146,6 +162,14 @@ export function RemoveMemberDialog({
             They lose access immediately.
           </DialogDescription>
         </DialogHeader>
+
+        {!!workspacesError && !workspacesData && (
+          <ListError
+            error={workspacesError}
+            subject="workspaces"
+            onRetry={() => void retryWorkspaces()}
+          />
+        )}
 
         {owned.length > 0 && (
           <div className="flex flex-col gap-4">
@@ -209,6 +233,12 @@ export function RemoveMemberDialog({
               </Button>
             )}
           </div>
+        )}
+
+        {deleteError && (
+          <Alert variant="destructive">
+            <AlertDescription>{deleteError}</AlertDescription>
+          </Alert>
         )}
 
         <DialogFooter>
