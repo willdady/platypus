@@ -263,6 +263,24 @@ describe("driveOnce", () => {
     expect(runRegistry.has(run.handle.runId)).toBe(false);
   });
 
+  // The fold is storage only: one that throws must not fail the run.
+  it("finishes the run as succeeded when folding the reply throws", async () => {
+    const { run, outcome } = startRecordedRun();
+    const { plan } = causationProbePlan(streamingToolThenStopModel());
+
+    const { text: answer } = await driveOnce({
+      plan,
+      run,
+      prompt: "hi",
+      onSnapshot: () => {
+        throw new Error("fold broke");
+      },
+    });
+
+    expect(answer).toBe("done");
+    expect(outcome[0].status).toBe("succeeded");
+  });
+
   // ADR-0044: a Trigger run keeps its Transcript, so its reply is folded as a
   // Chat turn's is — tool calls, their results and the answer, on one message.
   it("hands over the reply as it grows, tool calls and results included", async () => {

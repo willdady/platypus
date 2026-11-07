@@ -1236,11 +1236,20 @@ const foldReply = (
   })().catch((error: unknown) => {
     logger.error({ err: error }, "Error folding a headless run's reply");
   });
+  // A fold that failed cancels its source, so the feed then throws; the
+  // failure was already logged above, and the run goes on without the fold.
+  const quietly = (write: () => void) => {
+    try {
+      write();
+    } catch {
+      // ignored: see above
+    }
+  };
   return {
     push: (chunk: InferUIMessageChunk<PlatypusUIMessage>) =>
-      feed.enqueue(chunk),
+      quietly(() => feed.enqueue(chunk)),
     end: () => {
-      feed.close();
+      quietly(() => feed.close());
       return reading;
     },
   };
