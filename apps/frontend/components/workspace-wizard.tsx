@@ -109,6 +109,10 @@ export function WorkspaceWizard({ orgId }: { orgId: string }) {
 
   const [withSandbox, setWithSandbox] = useState(false);
 
+  // Re-selecting the caller (the default owner) changes nothing the backend
+  // would send, so it doesn't count as an edit either.
+  const ownerChanged = ownerId !== "" && ownerId !== user?.id;
+
   // The wizard's state is its own, so it registers the whole of it: anything
   // entered, or moving past the first step, would be lost on a link click or
   // refresh. Typing then reverting clears it again.
@@ -116,7 +120,7 @@ export function WorkspaceWizard({ orgId }: { orgId: string }) {
     step > 0 ||
     name !== "" ||
     context !== "" ||
-    ownerId !== "" ||
+    ownerChanged ||
     sharedProviderIds.length > 0 ||
     provider !== undefined ||
     withSandbox;

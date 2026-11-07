@@ -110,6 +110,9 @@ export function OrgGateAccess({
     initialData: {},
     entity: copy.entity,
     scope,
+    // The staged access is guarded above from the saved one; the hook's own
+    // `formData` never changes here.
+    guardUnsavedChanges: false,
     // The staged draft lives outside the hook's form state, so the write
     // reads it directly rather than through `formData`.
     write: () =>

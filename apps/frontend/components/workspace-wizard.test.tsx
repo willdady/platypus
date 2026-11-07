@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import Link from "next/link";
 import {
   authMock,
   swrMock,
@@ -11,6 +10,7 @@ import {
   savedBody,
 } from "@/test/form-test-harness";
 import { selectOption } from "@/test/test-utils";
+import { elsewhereClicked, GuardLink } from "@/test/unsaved-changes-harness";
 import { UnsavedChangesProvider } from "./unsaved-changes-guard";
 
 vi.mock("@/components/auth-provider", () => authMock);
@@ -36,14 +36,7 @@ function renderWizard() {
   return render(
     <UnsavedChangesProvider>
       <WorkspaceWizard orgId="org1" />
-      <Link
-        href="/elsewhere"
-        // jsdom doesn't navigate; stop it complaining, in the bubble phase so
-        // the guard's capture listener still sees the click first.
-        onClick={(event) => event.preventDefault()}
-      >
-        Elsewhere
-      </Link>
+      <GuardLink />
     </UnsavedChangesProvider>,
   );
 }
@@ -55,6 +48,7 @@ function fillWorkspaceStep(name = "Research") {
 
 beforeEach(() => {
   resetFormHarness();
+  elsewhereClicked.mockReset();
   setDataFor("/organizations/org1/providers", {
     results: [{ id: "shared-1", name: "Shared OpenAI" }],
   });
@@ -188,6 +182,7 @@ describe("WorkspaceWizard", () => {
 
     fireEvent.click(screen.getByText("Elsewhere"));
 
+    expect(elsewhereClicked).toHaveBeenCalledTimes(1);
     expect(
       screen.queryByText("Discard unsaved changes?"),
     ).not.toBeInTheDocument();
@@ -199,6 +194,7 @@ describe("WorkspaceWizard", () => {
     fireEvent.change(workspaceName(), { target: { value: "Research" } });
     fireEvent.click(screen.getByText("Elsewhere"));
 
+    expect(elsewhereClicked).not.toHaveBeenCalled();
     expect(screen.getByText("Discard unsaved changes?")).toBeInTheDocument();
   });
 
@@ -209,18 +205,34 @@ describe("WorkspaceWizard", () => {
     fireEvent.change(workspaceName(), { target: { value: "" } });
     fireEvent.click(screen.getByText("Elsewhere"));
 
+    expect(elsewhereClicked).toHaveBeenCalledTimes(1);
     expect(
       screen.queryByText("Discard unsaved changes?"),
     ).not.toBeInTheDocument();
   });
 
-  it("stays dirty after moving past the first step", () => {
+  it("does not count re-picking the default owner as an edit", async () => {
+    setDataFor("/organizations/org1/members", {
+      results: [{ userId: "u2", user: { name: "Bea", email: "bea@x.test" } }],
+    });
+    renderWizard();
+
+    await selectOption(" (you)", "(you)");
+    fireEvent.click(screen.getByText("Elsewhere"));
+
+    expect(elsewhereClicked).toHaveBeenCalledTimes(1);
+    expect(
+      screen.queryByText("Discard unsaved changes?"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("holds a link click after moving to the next step", () => {
     renderWizard();
     fillWorkspaceStep();
 
-    // Back on the first step with the name still entered.
     fireEvent.click(screen.getByText("Elsewhere"));
 
+    expect(elsewhereClicked).not.toHaveBeenCalled();
     expect(screen.getByText("Discard unsaved changes?")).toBeInTheDocument();
   });
 });

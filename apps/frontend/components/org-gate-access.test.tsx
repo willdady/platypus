@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import type { ReactElement } from "react";
-import Link from "next/link";
 import {
   authMock,
   swrMock,
@@ -12,6 +11,7 @@ import {
   mutate,
 } from "@/test/list-test-harness";
 import { selectOption } from "@/test/test-utils";
+import { elsewhereClicked, GuardLink } from "@/test/unsaved-changes-harness";
 import { UnsavedChangesProvider } from "./unsaved-changes-guard";
 
 vi.mock("@/components/auth-provider", () => authMock);
@@ -51,19 +51,15 @@ function renderGuarded(ui: ReactElement) {
   return renderList(
     <UnsavedChangesProvider>
       {ui}
-      <Link
-        href="/elsewhere"
-        // jsdom doesn't navigate; stop it complaining, in the bubble phase so
-        // the guard's capture listener still sees the click first.
-        onClick={(event) => event.preventDefault()}
-      >
-        Elsewhere
-      </Link>
+      <GuardLink />
     </UnsavedChangesProvider>,
   );
 }
 
-beforeEach(resetListHarness);
+beforeEach(() => {
+  resetListHarness();
+  elsewhereClicked.mockReset();
+});
 
 describe("OrgInboundTriggerAccess", () => {
   it("lists no workspaces unless Selected workspaces is chosen", async () => {
@@ -204,6 +200,7 @@ describe("an Organization access gate's unsaved changes", () => {
     fireEvent.click(screen.getByRole("switch", { name: "Allow Support" }));
     fireEvent.click(screen.getByText("Elsewhere"));
 
+    expect(elsewhereClicked).not.toHaveBeenCalled();
     expect(screen.getByText("Discard unsaved changes?")).toBeInTheDocument();
   });
 
@@ -219,6 +216,7 @@ describe("an Organization access gate's unsaved changes", () => {
     fireEvent.click(allow);
     fireEvent.click(screen.getByText("Elsewhere"));
 
+    expect(elsewhereClicked).toHaveBeenCalledTimes(1);
     expect(
       screen.queryByText("Discard unsaved changes?"),
     ).not.toBeInTheDocument();
@@ -237,11 +235,17 @@ describe("an Organization access gate's unsaved changes", () => {
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Save" })).toBeDisabled(),
     );
+    // Let the guard's effect run before the click: the button goes disabled in
+    // the render that clears `draft`, and the provider deregisters after it.
+    await act(async () => {
+      await Promise.resolve();
+    });
 
     fireEvent.click(screen.getByText("Elsewhere"));
 
     expect(
       screen.queryByText("Discard unsaved changes?"),
     ).not.toBeInTheDocument();
+    expect(elsewhereClicked).toHaveBeenCalledTimes(1);
   });
 });
