@@ -460,31 +460,34 @@ function SandboxSettings({
 
   const handleForceConfirm = async () => {
     setIsForcing(true);
+    setForceDialog((prev) => ({ ...prev, error: null }));
     try {
       if (forceDialog.kind === "save") {
         const outcome = await writeSandbox({ force: true });
-        if (outcome.outcome === "success") {
-          await reseedFromServer();
-          toast.success(SAVED_MESSAGE);
-          closeForceDialog();
-        } else {
+        if (outcome.outcome !== "success") {
           // A refused force stays in the open dialog with the backend's
           // message, so it can be read and retried.
           setForceDialog((prev) => ({ ...prev, error: outcome.message }));
+          return;
         }
+        closeForceDialog();
+        await reseedFromServer();
+        toast.success(SAVED_MESSAGE);
       } else if (forceDialog.kind === "delete") {
         const outcome = await deleteSandbox({ force: true });
-        if (outcome.outcome === "success") {
-          await clearDeleted();
-          toast.success(DELETED_MESSAGE);
-          closeForceDialog();
-        } else {
+        if (outcome.outcome !== "success") {
           setForceDialog((prev) => ({ ...prev, error: outcome.message }));
+          return;
         }
+        closeForceDialog();
+        await clearDeleted();
+        toast.success(DELETED_MESSAGE);
       }
     } catch (err) {
+      // A thrown failure is not a refusal with a backend message, so it keeps
+      // the plain toast rather than posing as one inline.
       console.error("Force retry error:", err);
-      setForceDialog((prev) => ({ ...prev, error: "Operation failed" }));
+      toast.error("Operation failed");
     } finally {
       setIsForcing(false);
     }

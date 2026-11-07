@@ -204,6 +204,27 @@ describe("WebhookForm regenerate", () => {
     expect(toastError).not.toHaveBeenCalled();
   });
 
+  it("clears a refusal when the dialog is cancelled", async () => {
+    stubRejectedSave("Signing secret is managed elsewhere", 409);
+    renderEdit();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Regenerate" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Regenerate" }));
+    await within(dialog).findByText("Signing secret is managed elsewhere");
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Regenerate" }));
+    const reopened = await screen.findByRole("dialog");
+    expect(
+      within(reopened).queryByText("Signing secret is managed elsewhere"),
+    ).not.toBeInTheDocument();
+  });
+
   it("closes the dialog after a successful regenerate", async () => {
     stubAcceptedSave({ message: "ok" });
     renderEdit();

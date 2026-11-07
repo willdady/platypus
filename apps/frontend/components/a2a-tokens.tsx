@@ -131,7 +131,9 @@ export function A2aTokens({
         setIssued(token.token);
         await mutate();
       },
-      // A refused regenerate shows in the confirm dialog, not as a toast.
+      // Every refusal, including a validation failure, shows in the confirm
+      // dialog instead of the default toast.
+      onInvalid: (_fieldErrors, message) => setRegenerateError(message),
       onError: (message) => setRegenerateError(message),
     });
 

@@ -163,76 +163,79 @@ export function RemoveMemberDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {!!workspacesError && !workspacesData && (
+        {workspacesError ? (
           <ListError
             error={workspacesError}
             subject="workspaces"
             onRetry={() => void retryWorkspaces()}
           />
-        )}
-
-        {owned.length > 0 && (
-          <div className="flex flex-col gap-4">
-            <p className="text-sm text-muted-foreground">
-              They own {owned.length === 1 ? "a workspace" : "these workspaces"}{" "}
-              here. Transfer each one to another member, or delete it. A
-              transfer switches off its Triggers, revokes its tokens and clears
-              its sign-ins; its Boards and Sandbox files are kept.
-            </p>
-            {recipients.length === 0 && <NoRecipientHint orgId={orgId} />}
-            {owned.map((w) => {
-              const draft = draftOf(w.id);
-              return (
-                <FieldGroup key={w.id} className="rounded-md border p-3">
-                  <Field>
-                    <FieldLabel htmlFor={`action-${w.id}`}>{w.name}</FieldLabel>
-                    <Select
-                      value={draft.action ?? ""}
-                      onValueChange={(value) =>
-                        update(w.id, { action: value as Draft["action"] })
-                      }
-                      disabled={isSubmitting}
-                    >
-                      <SelectTrigger
-                        id={`action-${w.id}`}
-                        aria-label={`Action for ${w.name}`}
+        ) : (
+          owned.length > 0 && (
+            <div className="flex flex-col gap-4">
+              <p className="text-sm text-muted-foreground">
+                They own{" "}
+                {owned.length === 1 ? "a workspace" : "these workspaces"} here.
+                Transfer each one to another member, or delete it. A transfer
+                switches off its Triggers, revokes its tokens and clears its
+                sign-ins; its Boards and Sandbox files are kept.
+              </p>
+              {recipients.length === 0 && <NoRecipientHint orgId={orgId} />}
+              {owned.map((w) => {
+                const draft = draftOf(w.id);
+                return (
+                  <FieldGroup key={w.id} className="rounded-md border p-3">
+                    <Field>
+                      <FieldLabel htmlFor={`action-${w.id}`}>
+                        {w.name}
+                      </FieldLabel>
+                      <Select
+                        value={draft.action ?? ""}
+                        onValueChange={(value) =>
+                          update(w.id, { action: value as Draft["action"] })
+                        }
+                        disabled={isSubmitting}
                       >
-                        <SelectValue placeholder="Choose what happens" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {recipients.length > 0 && (
-                          <SelectItem value="transfer">Transfer</SelectItem>
-                        )}
-                        <SelectItem value="delete">Delete</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </Field>
-                  {draft.action === "transfer" && (
-                    <TransferFields
-                      idPrefix={w.id}
-                      recipients={recipients}
-                      newOwnerId={draft.newOwnerId}
-                      keepHistory={draft.keepHistory}
-                      onChange={(change) => update(w.id, change)}
-                      disabled={isSubmitting}
-                    />
-                  )}
-                </FieldGroup>
-              );
-            })}
-            {owned.length > 1 && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={applyToAll}
-                className="self-start"
-                disabled={isSubmitting || !draftOf(owned[0].id).action}
-              >
-                Apply to all
-              </Button>
-            )}
-          </div>
+                        <SelectTrigger
+                          id={`action-${w.id}`}
+                          aria-label={`Action for ${w.name}`}
+                        >
+                          <SelectValue placeholder="Choose what happens" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {recipients.length > 0 && (
+                            <SelectItem value="transfer">Transfer</SelectItem>
+                          )}
+                          <SelectItem value="delete">Delete</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                    {draft.action === "transfer" && (
+                      <TransferFields
+                        idPrefix={w.id}
+                        recipients={recipients}
+                        newOwnerId={draft.newOwnerId}
+                        keepHistory={draft.keepHistory}
+                        onChange={(change) => update(w.id, change)}
+                        disabled={isSubmitting}
+                      />
+                    )}
+                  </FieldGroup>
+                );
+              })}
+              {owned.length > 1 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={applyToAll}
+                  className="self-start"
+                  disabled={isSubmitting || !draftOf(owned[0].id).action}
+                >
+                  Apply to all
+                </Button>
+              )}
+            </div>
+          )
         )}
 
         {deleteError && (
@@ -252,7 +255,9 @@ export function RemoveMemberDialog({
           <Button
             variant="destructive"
             onClick={handleSubmit}
-            disabled={isSubmitting || !workspacesData || !complete}
+            disabled={
+              isSubmitting || !workspacesData || !!workspacesError || !complete
+            }
           >
             {isSubmitting ? "Removing..." : "Remove"}
           </Button>
