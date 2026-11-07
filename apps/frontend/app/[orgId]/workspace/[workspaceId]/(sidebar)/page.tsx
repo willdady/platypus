@@ -1,5 +1,4 @@
 "use client";
-import { useOrganization, useWorkspace } from "@/hooks/use-organization";
 
 import { AgentCardsSkeleton, AgentsList } from "@/components/agents-list";
 import { SkillCardsSkeleton, SkillsList } from "@/components/skills-list";
@@ -36,6 +35,8 @@ import { chatListEntity } from "@/lib/api-write";
 import { useParams } from "next/navigation";
 import { orgRoutes } from "@/lib/routes";
 import { cn } from "@/lib/utils";
+import { useOrganization } from "@/hooks/use-organization";
+import { useWorkspace } from "@/hooks/use-workspace";
 
 /** Where each collapsible section persists its open state. */
 const SECTION_KEYS = {

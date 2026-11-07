@@ -1,5 +1,4 @@
 "use client";
-import { useOrganization, useWorkspace } from "@/hooks/use-organization";
 
 import {
   Field,
@@ -45,11 +44,7 @@ import { TriggerCronFields } from "@/components/trigger-cron-fields";
 import { TriggerEventFields } from "@/components/trigger-event-fields";
 import { useEventFilterListsLoading } from "@/hooks/use-event-filter-lists-loading";
 import { TriggerInboundFields } from "@/components/trigger-inbound-fields";
-import {
-  type Trigger,
-  type Agent,
-  type TriggerType,
-} from "@platypus/schemas";
+import { type Trigger, type Agent, type TriggerType } from "@platypus/schemas";
 import {
   gateAdmits,
   triggerTypeSchema,
@@ -61,6 +56,8 @@ import type { FormErrors } from "@/lib/form-errors";
 import { workspaceRoutes } from "@/lib/routes";
 import { type Serialized } from "@/lib/api-write";
 import { TRIGGER_TYPE_LABELS } from "@/components/trigger-list";
+import { useOrganization } from "@/hooks/use-organization";
+import { useWorkspace } from "@/hooks/use-workspace";
 
 const INSTRUCTION_PLACEHOLDERS: Record<TriggerType, string> = {
   cron: "Generate a daily report of...",

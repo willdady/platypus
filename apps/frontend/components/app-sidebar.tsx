@@ -1,5 +1,4 @@
 "use client";
-import { useOrganization } from "@/hooks/use-organization";
 
 import Link from "next/link";
 import { useParams, usePathname, useRouter } from "next/navigation";
@@ -94,6 +93,7 @@ import {
   type WatchedChat,
 } from "@/lib/chat-list-poll";
 import { orgRoutes, workspaceRoutes } from "@/lib/routes";
+import { useOrganization } from "@/hooks/use-organization";
 
 export function AppSidebar() {
   const { orgId, workspaceId } = useParams<{

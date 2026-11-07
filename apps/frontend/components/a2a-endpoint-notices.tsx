@@ -1,9 +1,10 @@
 "use client";
-import { useOrganization, useWorkspace } from "@/hooks/use-organization";
 
 import { Ban } from "lucide-react";
 import { gateAdmits } from "@platypus/schemas";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { useOrganization } from "@/hooks/use-organization";
+import { useWorkspace } from "@/hooks/use-workspace";
 
 /**
  * Tells the Owner when the Organization's gate excludes this Workspace, so

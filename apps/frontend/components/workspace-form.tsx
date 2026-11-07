@@ -1,5 +1,4 @@
 "use client";
-import { useOrganization } from "@/hooks/use-organization";
 
 import {
   Field,
@@ -52,6 +51,7 @@ import {
 } from "@/components/form-skeleton";
 import { Skeleton } from "@/components/ui/skeleton";
 import { orgRoutes, withBasePath, workspaceRoutes } from "@/lib/routes";
+import { useOrganization } from "@/hooks/use-organization";
 
 type WorkspaceFormProps = {
   orgId: string;

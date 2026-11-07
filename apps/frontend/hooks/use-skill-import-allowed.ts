@@ -1,5 +1,6 @@
 import { gateAdmits } from "@platypus/schemas";
-import { useOrganization, useWorkspace } from "@/hooks/use-organization";
+import { useOrganization } from "@/hooks/use-organization";
+import { useWorkspace } from "@/hooks/use-workspace";
 import { type Scope } from "@/lib/api-write";
 
 /**

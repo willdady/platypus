@@ -1,5 +1,4 @@
 "use client";
-import { useWorkspace } from "@/hooks/use-organization";
 
 import { toast } from "sonner";
 import { useState } from "react";
@@ -31,6 +30,7 @@ import {
   TransferFields,
   transferRecipients,
 } from "@/components/workspace-transfer-fields";
+import { useWorkspace } from "@/hooks/use-workspace";
 
 type TransferWorkspaceActionProps = {
   orgId: string;

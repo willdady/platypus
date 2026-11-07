@@ -1,6 +1,4 @@
 "use client";
-import { useOrganization } from "@/hooks/use-organization";
-import { OrganizationName } from "@/components/organization-name";
 
 import { invitationLink } from "@/lib/routes";
 import { useParams } from "next/navigation";
@@ -32,10 +30,10 @@ import {
   TableSkeleton,
 } from "@/components/list-skeletons";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
+import { OrganizationName } from "@/components/organization-name";
 
 function OrgInvitationsPage() {
   const { orgId } = useParams<{ orgId: string }>();
-  useOrganization(orgId);
   const {
     data,
     results: invitations,

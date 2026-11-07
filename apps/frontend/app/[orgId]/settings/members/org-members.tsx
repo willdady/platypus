@@ -1,6 +1,4 @@
 "use client";
-import { useOrganization } from "@/hooks/use-organization";
-import { OrganizationName } from "@/components/organization-name";
 
 import { useParams } from "next/navigation";
 import type { OrgMemberListItem } from "@platypus/schemas";
@@ -16,10 +14,10 @@ import {
   TableSkeleton,
   UserCellSkeleton,
 } from "@/components/list-skeletons";
+import { OrganizationName } from "@/components/organization-name";
 
 function OrgMembersPage() {
   const { orgId } = useParams<{ orgId: string }>();
-  useOrganization(orgId);
   const {
     data,
     results: members,

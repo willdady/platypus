@@ -19,7 +19,7 @@ vi.mock("swr", () => ({
   },
 }));
 
-import { useOrganization, useWorkspace } from "./use-organization";
+import { useOrganization } from "./use-organization";
 
 describe("useOrganization", () => {
   afterEach(() => {
@@ -34,18 +34,6 @@ describe("useOrganization", () => {
 
   it("makes no request when disabled", () => {
     renderHook(() => useOrganization("org1", { enabled: false }));
-    expect(capturedKey).toBeNull();
-  });
-});
-
-describe("useWorkspace", () => {
-  it("reads the Workspace row under its Organization's scope", () => {
-    renderHook(() => useWorkspace("org1", "ws1"));
-    expect(capturedKey).toBe("http://test/organizations/org1/workspaces/ws1");
-  });
-
-  it("makes no request when disabled", () => {
-    renderHook(() => useWorkspace("org1", "ws1", { enabled: false }));
     expect(capturedKey).toBeNull();
   });
 });
