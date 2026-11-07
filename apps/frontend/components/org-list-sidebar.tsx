@@ -17,6 +17,7 @@ import { useBackendUrl } from "@/components/auth-provider";
 import { useScopedList } from "@/hooks/use-scoped-list";
 import { scopedUrl } from "@/lib/api-write";
 import { Skeleton } from "@/components/ui/skeleton";
+import { LoadingRegion } from "@/components/list-skeletons";
 import type { Organization } from "@platypus/schemas";
 import { appRoutes, orgRoutes } from "@/lib/routes";
 
@@ -54,35 +55,44 @@ export function OrgListSidebar({ currentOrgId }: OrgListSidebarProps) {
     <SidebarContent>
       <SidebarGroup>
         <SidebarGroupContent>
-          <SidebarMenu>
-            {!isReady ? (
-              Array.from({ length: 3 }).map((_, i) => (
-                <SidebarMenuItem key={i}>
-                  <div className="flex h-8 items-center gap-2 rounded-md px-2">
-                    <Skeleton className="size-4 shrink-0" />
-                    <Skeleton className="h-4 flex-1" />
-                  </div>
+          {!isReady ? (
+            <LoadingRegion label="Loading organizations">
+              <SidebarMenu>
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <SidebarMenuItem key={i}>
+                    <div className="flex h-8 items-center gap-2 rounded-md px-2">
+                      <Skeleton className="size-4 shrink-0" />
+                      <Skeleton className="h-4 flex-1" />
+                    </div>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </LoadingRegion>
+          ) : (
+            <SidebarMenu>
+              {error && !data ? (
+                <SidebarMenuItem>
+                  <p className="px-2 py-1.5 text-sm text-destructive">
+                    Couldn&apos;t load organizations.
+                  </p>
                 </SidebarMenuItem>
-              ))
-            ) : error && !data ? (
-              <SidebarMenuItem>
-                <p className="px-2 py-1.5 text-sm text-destructive">
-                  Couldn&apos;t load organizations.
-                </p>
-              </SidebarMenuItem>
-            ) : (
-              organizations.map((org) => (
-                <SidebarMenuItem key={org.id}>
-                  <SidebarMenuButton asChild isActive={currentOrgId === org.id}>
-                    <Link href={orgRoutes(org.id).root}>
-                      <Building className="size-4" />
-                      <span>{org.name}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))
-            )}
-          </SidebarMenu>
+              ) : (
+                organizations.map((org) => (
+                  <SidebarMenuItem key={org.id}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={currentOrgId === org.id}
+                    >
+                      <Link href={orgRoutes(org.id).root}>
+                        <Building className="size-4" />
+                        <span>{org.name}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))
+              )}
+            </SidebarMenu>
+          )}
         </SidebarGroupContent>
       </SidebarGroup>
 
@@ -90,23 +100,29 @@ export function OrgListSidebar({ currentOrgId }: OrgListSidebarProps) {
         the list once the list arrives. */}
       <SidebarGroup>
         <SidebarGroupContent>
-          <SidebarMenu>
-            <SidebarMenuItem>
-              {isReady ? (
+          {isReady ? (
+            <SidebarMenu>
+              <SidebarMenuItem>
                 <SidebarMenuButton asChild>
                   <Link href={appRoutes.createOrganization}>
                     <Plus className="size-4" />
                     <span>Add organization</span>
                   </Link>
                 </SidebarMenuButton>
-              ) : (
-                <div className="flex h-8 items-center gap-2 rounded-md px-2">
-                  <Skeleton className="size-4 shrink-0" />
-                  <Skeleton className="h-4 w-28" />
-                </div>
-              )}
-            </SidebarMenuItem>
-          </SidebarMenu>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          ) : (
+            <LoadingRegion label="Loading add organization">
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <div className="flex h-8 items-center gap-2 rounded-md px-2">
+                    <Skeleton className="size-4 shrink-0" />
+                    <Skeleton className="h-4 w-28" />
+                  </div>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </LoadingRegion>
+          )}
         </SidebarGroupContent>
       </SidebarGroup>
     </SidebarContent>
