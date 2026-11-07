@@ -206,15 +206,25 @@ function SandboxSettings({
     { fetcher: optionalFetcher },
   );
 
-  const { results: backends, isLoading: backendsLoading } =
-    useScopedList<SandboxBackend>("sandbox-backends", { orgId });
+  const {
+    data: backendsData,
+    results: backends,
+    error: backendsError,
+    isLoading: backendsLoading,
+    mutate: mutateBackends,
+  } = useScopedList<SandboxBackend>("sandbox-backends", { orgId });
 
   // Operator network allowlist — admin-only endpoint (ADR-0005).
-  const { results: allowedNetworks, isLoading: networksLoading } =
-    useScopedList<string>(
-      "sandbox-backends/networks",
-      canConfigure ? { orgId } : null,
-    );
+  const {
+    data: networksData,
+    results: allowedNetworks,
+    error: networksError,
+    isLoading: networksLoading,
+    mutate: mutateNetworks,
+  } = useScopedList<string>(
+    "sandbox-backends/networks",
+    canConfigure ? { orgId } : null,
+  );
 
   const [isConfiguring, setIsConfiguring] = useState(false);
   // Whether the admin chose to replace a stored SSH key, revealing the textarea
@@ -503,8 +513,23 @@ function SandboxSettings({
     data?.backend === SSH_BACKEND && data.hasCredentials && !isReplacingKey;
   const showForm = hasSandbox || isConfiguring || !!draft;
   const noBackends = backends.length === 0;
+  const backendsFailed = Boolean(backendsError && !backendsData);
+  const networksFailed = Boolean(networksError && !networksData);
 
   if (!showForm) {
+    // Without the backends list there is no telling a server with none
+    // registered from one whose list didn't load, so neither the "add a
+    // backend" prompt nor a disabled Configure button is shown.
+    if (backendsFailed) {
+      return (
+        <ListError
+          error={backendsError}
+          subject="sandbox backends"
+          onRetry={() => void mutateBackends()}
+        />
+      );
+    }
+
     return (
       <EmptyCard
         icon={<Box />}
@@ -612,6 +637,12 @@ function SandboxSettings({
                     <Skeleton className="h-4 w-32" />
                     <Skeleton className="h-[1.15rem] w-8 rounded-full" />
                   </div>
+                ) : networksFailed ? (
+                  <ListError
+                    error={networksError}
+                    subject="networks"
+                    onRetry={() => void mutateNetworks()}
+                  />
                 ) : allowedNetworks.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
                     No networks declared by the operator.

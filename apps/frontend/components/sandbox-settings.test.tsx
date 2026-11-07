@@ -122,6 +122,49 @@ describe("SandboxSettings loading", () => {
   });
 });
 
+describe("SandboxSettings secondary reads", () => {
+  it("shows the backends read failure instead of claiming none are registered", async () => {
+    mockReads({
+      sandbox: { data: null },
+      backends: { error: new Error("500") },
+    });
+    await renderSettings();
+
+    expect(
+      screen.getByText(/Failed to load sandbox backends/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+    expect(
+      screen.queryByText(/No sandbox backends are registered/),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("No sandbox configured")).not.toBeInTheDocument();
+  });
+
+  it("still says none are registered once the backends list has loaded empty", async () => {
+    authState.actor = "org-admin";
+    mockReads({ sandbox: { data: null }, backends: [] });
+    await renderSettings();
+
+    expect(
+      screen.getByText(/No sandbox backends are registered/),
+    ).toBeInTheDocument();
+  });
+
+  it("shows the networks read failure instead of claiming none are declared", async () => {
+    mockReads({
+      sandbox: { data: DOCKER_SANDBOX },
+      networks: { error: new Error("500") },
+    });
+    await renderSettings();
+
+    expect(screen.getByText(/Failed to load networks/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+    expect(
+      screen.queryByText("No networks declared by the operator."),
+    ).not.toBeInTheDocument();
+  });
+});
+
 describe("SandboxSettings save", () => {
   it("creates the first sandbox on the first registered backend", async () => {
     const fetchMock = stubAcceptedSave({});

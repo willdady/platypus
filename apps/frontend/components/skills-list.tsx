@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { ListState } from "@/components/list-state";
+import { ListError, ListState } from "@/components/list-state";
 import { EmptyCard } from "@/components/empty-card";
 import {
   ButtonRowSkeleton,
@@ -227,10 +227,20 @@ export function SkillsList({
   } = useScopedList<SerializedSkill>("skills", scope);
 
   // Agent associations are a workspace concern; only fetched on that surface.
-  const { results: agents } = useScopedList<Agent>(
-    "agents",
-    workspaceId ? scope : null,
-  );
+  const {
+    data: agentsData,
+    results: agents,
+    error: agentsError,
+    isLoading: isLoadingAgents,
+    mutate: mutateAgents,
+  } = useScopedList<Agent>("agents", workspaceId ? scope : null);
+
+  // A failed agent read cannot tell "attached to no agents" from "the
+  // associations didn't load", so the per-card indicator stays off until the
+  // list has landed; one read failure above the list replaces it.
+  const agentsFailed = Boolean(workspaceId && agentsError && !agentsData);
+  const agentsUnavailable =
+    Boolean(workspaceId) && (isLoadingAgents || agentsFailed);
 
   const skills = sortByName(skillRows);
 
@@ -366,7 +376,11 @@ export function SkillsList({
         onValueChange={setNameFilter}
         className="w-full sm:w-64"
       />
-      <Select value={activeAgentFilter} onValueChange={setAgentFilter}>
+      <Select
+        value={activeAgentFilter}
+        onValueChange={setAgentFilter}
+        disabled={agentsUnavailable}
+      >
         <SelectTrigger className="w-44" aria-label="Filter by agent">
           <SelectValue />
         </SelectTrigger>
@@ -425,6 +439,15 @@ export function SkillsList({
   return (
     <>
       {controls}
+      {agentsFailed && (
+        <div className="mb-4">
+          <ListError
+            error={agentsError}
+            subject="agents"
+            onRetry={() => void mutateAgents()}
+          />
+        </div>
+      )}
       <EntityCardList
         items={page.items}
         ghosts={page}
@@ -468,7 +491,9 @@ export function SkillsList({
         )}
         meta={(skill) =>
           workspaceId ? (
-            <SkillAgentsIndicator agents={getAgentsForSkill(skill.id)} />
+            agentsUnavailable ? null : (
+              <SkillAgentsIndicator agents={getAgentsForSkill(skill.id)} />
+            )
           ) : (
             canManageOrg && (
               <div className="mt-1">
@@ -495,7 +520,8 @@ export function SkillsList({
                 card({
                   className: (
                     workspaceId
-                      ? getAgentsForSkill(skill.id).length === 0
+                      ? !agentsUnavailable &&
+                        getAgentsForSkill(skill.id).length === 0
                       : count === 0
                   )
                     ? "border-warning"

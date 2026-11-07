@@ -6,6 +6,8 @@ import {
   toastError,
   toastSuccess,
   setData,
+  setError,
+  setLoading,
   resetFormHarness,
   stubAcceptedSave,
   stubRejectedSave,
@@ -118,5 +120,28 @@ describe("InvitationForm Blueprints", () => {
       workspaceName: "Team space",
       blueprintIds: ["b2", "b1"],
     });
+  });
+});
+
+describe("InvitationForm Blueprints read", () => {
+  const noneText = /No blueprints in this organization yet/;
+
+  it("doesn't claim there are no Blueprints while the read is loading", () => {
+    setLoading();
+
+    renderForm();
+
+    expect(screen.queryByText(noneText)).not.toBeInTheDocument();
+  });
+
+  it("shows the read failure instead of claiming there are none", () => {
+    setData(undefined);
+    setError(new Error("500"));
+
+    renderForm();
+
+    expect(screen.getByText(/Failed to load blueprints/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+    expect(screen.queryByText(noneText)).not.toBeInTheDocument();
   });
 });

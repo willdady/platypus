@@ -6,11 +6,13 @@ import {
   push,
   resetFormHarness,
   setDataFor,
+  setError,
   setLoading,
   stubAcceptedSave,
   savedBody,
 } from "@/test/form-test-harness";
 import { selectOption } from "@/test/test-utils";
+import { scopedPath } from "@/lib/api-write";
 
 vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("swr", () => swrMock);
@@ -45,6 +47,36 @@ describe("BlueprintForm shared resource groups", () => {
     expect(screen.getByLabelText("Loading blueprint")).toBeInTheDocument();
     expect(screen.queryByLabelText("Name")).not.toBeInTheDocument();
   });
+});
+
+describe("BlueprintForm shared resource read failures", () => {
+  beforeEach(() => {
+    resetFormHarness();
+    setDataFor("/organizations/org1/providers", { results: [] });
+  });
+
+  // A group's own read failing must not read as "this organization has none".
+  it.each([
+    ["agents", "agents", "No shared agents in this organization yet."],
+    ["skills", "skills", "No shared skills in this organization yet."],
+    ["mcps", "mcp servers", "No shared mcp servers in this organization yet."],
+    ["providers", "providers", "No shared providers in this organization yet."],
+  ])(
+    "shows the %s read failure instead of claiming there are none",
+    (collection, subject, noneText) => {
+      const key = scopedPath(collection, { orgId: "org1" });
+      setDataFor(key, undefined);
+      setError(new Error("500"), key);
+
+      render(<BlueprintForm orgId="org1" />);
+
+      expect(
+        screen.getByText(new RegExp(`Failed to load ${subject}`)),
+      ).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+      expect(screen.queryByText(noneText)).not.toBeInTheDocument();
+    },
+  );
 });
 
 // ADR-0008: a Tier 2 slot may only point at a Provider the Blueprint attaches.

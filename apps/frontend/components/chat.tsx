@@ -142,6 +142,7 @@ export function Chat({
   const {
     data: agentsData,
     results: agents,
+    error: agentsError,
     mutate: mutateAgents,
   } = useScopedList<Agent>("agents", scope);
 
@@ -540,6 +541,23 @@ export function Chat({
 
   if (isTranscriptPending) {
     return <ChatSkeleton transcript readOnly={!canSendMessages} />;
+  }
+
+  // The selection ladder waits for the Agent list before it can resolve an
+  // Agent reference, so a failed cold read would leave the picker pending for
+  // good. The failure takes its place, with a Retry.
+  if (agentsError && !agentsData && !isResolved) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="w-full xl:w-4/5 max-w-4xl">
+          <ListError
+            error={agentsError}
+            subject="agents"
+            onRetry={() => void mutateAgents()}
+          />
+        </div>
+      </div>
+    );
   }
 
   // A dropped connection to a run that is still going: an inline line, and the

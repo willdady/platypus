@@ -341,6 +341,45 @@ describe("AgentsList empty state", () => {
       expect.stringContaining("/agents/create"),
     );
   });
+
+  it("shows the no-providers state only once the providers list has loaded empty", async () => {
+    mockScopedSWR(
+      {
+        "/agents": [workspaceAgent],
+        "/providers": [],
+        "/tools": [],
+        "/skills": [],
+      },
+      { strict: true },
+    );
+
+    await renderList(<AgentsList orgId="org1" workspaceId="ws1" />);
+
+    expect(screen.getByText("No providers configured")).toBeInTheDocument();
+  });
+});
+
+describe("AgentsList secondary reads", () => {
+  it("shows the providers read failure, not a false no-providers prompt", async () => {
+    mockScopedSWR(
+      {
+        "/agents": [workspaceAgent],
+        "/providers": { error: new Error("500") },
+        "/tools": [],
+        "/skills": [],
+      },
+      { strict: true },
+    );
+
+    await renderList(<AgentsList orgId="org1" workspaceId="ws1" />);
+
+    expect(screen.getByText(/Failed to load providers/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+    expect(
+      screen.queryByText("No providers configured"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("No agents yet")).not.toBeInTheDocument();
+  });
 });
 
 describe("AgentsList reference counts", () => {
@@ -528,6 +567,45 @@ describe("AgentsList clone of a shared agent", () => {
       toolSetIds: ["t1"],
     });
   });
+
+  it.each([
+    ["tool sets", "/tools"],
+    ["skills", "/skills"],
+  ])(
+    "cannot create a clone while the %s read is loading",
+    async (_subject, collection) => {
+      mockScopedSWR({ [collection]: { isLoading: true } });
+      const fetchMock = stubAcceptedSave({ id: "a3", name: "Cloned" }, 201);
+
+      await renderAgents([orgAgent], "Clone");
+
+      expect(screen.getByRole("button", { name: "Clone" })).toBeDisabled();
+      fireEvent.click(screen.getByRole("button", { name: "Clone" }));
+      expect(fetchMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ["tool sets", "/tools"],
+    ["skills", "/skills"],
+  ])(
+    "shows the %s read failure and cannot create a clone",
+    async (subject, collection) => {
+      mockScopedSWR({ [collection]: { error: new Error("500") } });
+      const fetchMock = stubAcceptedSave({ id: "a3", name: "Cloned" }, 201);
+
+      await renderAgents([orgAgent], "Clone");
+
+      expect(
+        screen.getByText(new RegExp(`Failed to load ${subject}`)),
+      ).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+      expect(screen.queryByText(/Not included/)).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Clone" })).toBeDisabled();
+      fireEvent.click(screen.getByRole("button", { name: "Clone" }));
+      expect(fetchMock).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe("AgentsList paging", () => {
