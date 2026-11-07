@@ -44,3 +44,12 @@ the first thing anyone asks of a headless run and it is exactly one value per
 run rather than a stream. Both exceptions are bounded and named; anything
 further is the OTEL boundary, and this ADR is what a future reader should be
 pointed at before widening it.
+
+## Amended by ADR-0044
+
+A Trigger run now keeps its Transcript as a Chat (ADR-0044). The decision that
+the Run timeline records no payloads stands; what is withdrawn is the claim that
+`trigger_run` being readable by any Workspace member makes payload storage a
+way around ADR-0006 — a Chat's Transcript is readable by the same members and
+already holds those payloads. "Reproduce it in a Chat" is no longer where
+debugging a headless run ends: the run's own Chat is.
