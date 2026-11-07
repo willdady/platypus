@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { fetcher, joinUrl, optionalFetcher } from "./utils";
+import { fetcher, joinUrl, optionalFetcher, sortByName } from "./utils";
 
 describe("joinUrl", () => {
   it.each([
@@ -91,5 +91,28 @@ describe("optionalFetcher", () => {
     await expect(
       optionalFetcher("http://test/chat/chat-1"),
     ).rejects.toMatchObject({ status: 403 });
+  });
+});
+
+describe("sortByName", () => {
+  it("returns the rows sorted by name with localeCompare ordering", () => {
+    const rows = [{ name: "beta" }, { name: "Zebra" }, { name: "apple" }];
+
+    expect(sortByName(rows).map((row) => row.name)).toEqual([
+      "apple",
+      "beta",
+      "Zebra",
+    ]);
+  });
+
+  it("returns a new array and leaves the input unchanged", () => {
+    const rows = [{ name: "c" }, { name: "a" }, { name: "b" }];
+    const inputCopy = [...rows];
+
+    const sorted = sortByName(rows);
+
+    expect(sorted).not.toBe(rows);
+    expect(rows).toEqual(inputCopy);
+    expect(sorted.map((row) => row.name)).toEqual(["a", "b", "c"]);
   });
 });

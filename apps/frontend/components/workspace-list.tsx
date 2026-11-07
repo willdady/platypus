@@ -8,7 +8,7 @@ import {
   ItemGroup,
   ItemTitle,
 } from "./ui/item";
-import { cn } from "../lib/utils";
+import { cn, sortByName } from "../lib/utils";
 import { useScopedList } from "@/hooks/use-scoped-list";
 import { ChevronRight, FolderClosed } from "lucide-react";
 import Link from "next/link";
@@ -64,22 +64,20 @@ function WorkspaceList({
 
   return (
     <ItemGroup className={cn("mb-4", className)}>
-      {[...results]
-        .sort((a, b) => a.name.localeCompare(b.name))
-        .map((workspace) => (
-          <Item key={workspace.id} variant="outline" asChild className="mb-2">
-            <Link href={workspaceRoutes(orgId, workspace.id).root}>
-              <ItemContent>
-                <ItemTitle>
-                  <FolderClosed size={18} /> {workspace.name}
-                </ItemTitle>
-              </ItemContent>
-              <ItemActions>
-                <ChevronRight className="size-4" />
-              </ItemActions>
-            </Link>
-          </Item>
-        ))}
+      {sortByName(results).map((workspace) => (
+        <Item key={workspace.id} variant="outline" asChild className="mb-2">
+          <Link href={workspaceRoutes(orgId, workspace.id).root}>
+            <ItemContent>
+              <ItemTitle>
+                <FolderClosed size={18} /> {workspace.name}
+              </ItemTitle>
+            </ItemContent>
+            <ItemActions>
+              <ChevronRight className="size-4" />
+            </ItemActions>
+          </Link>
+        </Item>
+      ))}
     </ItemGroup>
   );
 }

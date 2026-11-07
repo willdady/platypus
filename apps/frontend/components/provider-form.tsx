@@ -57,7 +57,7 @@ import {
   type ProviderResponse,
 } from "@platypus/schemas";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
-import { cn, joinUrl } from "@/lib/utils";
+import { cn, joinUrl, sortByName } from "@/lib/utils";
 import { toastGuidanceOrError } from "@/lib/apply-write-outcome";
 import type { FormDraft } from "@/lib/api-write";
 import {
@@ -617,9 +617,7 @@ function ProviderForm({
   // Sorted by display name: the route returns registration order, which follows
   // `PLATYPUS_PLUGINS` and so reshuffles the dropdown when an Operator edits that
   // list. Display order is the frontend's to choose.
-  const availableWebBackends = [...(webBackendsData?.results ?? [])].sort(
-    (a, b) => a.name.localeCompare(b.name),
-  );
+  const availableWebBackends = sortByName(webBackendsData?.results ?? []);
   // An empty list means "this deployment installed none" only once the catalog
   // actually arrived. While it is in flight or after it failed, the list is empty
   // for a reason that says nothing about the deployment — so the field must not

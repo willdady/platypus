@@ -19,6 +19,7 @@ import { useDeleteFlow } from "@/hooks/use-delete-flow";
 import Link from "next/link";
 import { ApplyBlueprintDialog } from "@/components/apply-blueprint-dialog";
 import { orgRoutes } from "@/lib/routes";
+import { sortByName } from "@/lib/utils";
 
 export function BlueprintsList({ orgId }: { orgId: string }) {
   const routes = orgRoutes(orgId).settings;
@@ -31,7 +32,7 @@ export function BlueprintsList({ orgId }: { orgId: string }) {
     { orgId },
   );
 
-  const blueprints = [...results].sort((a, b) => a.name.localeCompare(b.name));
+  const blueprints = sortByName(results);
 
   const deleteFlow = useDeleteFlow<Serialized<Blueprint>>({
     mutate,

@@ -5,6 +5,13 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+/** A copy of `rows` sorted by name; the input array is never mutated. */
+export function sortByName<T extends { name: string }>(
+  rows: readonly T[],
+): T[] {
+  return [...rows].sort((a, b) => a.name.localeCompare(b.name));
+}
+
 /**
  * Joins a base URL and a path, ensuring no double slashes or missing slashes.
  * @param base - The base URL
