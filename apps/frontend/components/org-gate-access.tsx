@@ -28,6 +28,7 @@ import { ListError } from "@/components/list-state";
 import { useBackendUrl } from "@/components/auth-provider";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { useEntityForm } from "@/hooks/use-entity-form";
+import { useUnsavedChangesGuard } from "@/components/unsaved-changes-guard";
 import { scopedUrl, writeAt } from "@/lib/api-write";
 
 const GATE_OPTIONS: { value: OrgGate; label: string }[] = [
@@ -91,10 +92,19 @@ export function OrgGateAccess({
   const savedAllowed = new Set(
     data?.workspaces.filter((ws) => ws.allowed).map((ws) => ws.id),
   );
+  const savedGate = data?.gate ?? "off";
   const { gate, allowed } = draft ?? {
-    gate: data?.gate ?? "off",
+    gate: savedGate,
     allowed: savedAllowed,
   };
+
+  // Whether the staged gate and switches differ from the saved access. The
+  // hook's `sideState` can't carry `draft` here: clearing it after a save
+  // would leave the hook's clean snapshot holding the staged value.
+  const dirty =
+    gate !== savedGate ||
+    (gate === "selected" && !sameSet(allowed, savedAllowed));
+  useUnsavedChangesGuard(dirty);
 
   const { isSubmitting: isSaving, submit } = useEntityForm<object, Access>({
     initialData: {},
@@ -141,9 +151,6 @@ export function OrgGateAccess({
   if (!data) return null;
 
   // The switches only count under Selected; elsewhere they are left as saved.
-  const dirty =
-    gate !== data.gate ||
-    (gate === "selected" && !sameSet(allowed, savedAllowed));
   const cutOff =
     gate === "selected"
       ? data.workspaces.filter((ws) => ws.count > 0 && !allowed.has(ws.id))

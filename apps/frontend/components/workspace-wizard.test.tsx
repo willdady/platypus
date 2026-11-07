@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import Link from "next/link";
 import {
   authMock,
   swrMock,
@@ -10,6 +11,7 @@ import {
   savedBody,
 } from "@/test/form-test-harness";
 import { selectOption } from "@/test/test-utils";
+import { UnsavedChangesProvider } from "./unsaved-changes-guard";
 
 vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("swr", () => swrMock);
@@ -28,6 +30,22 @@ function click(name: string) {
 // The Provider step has a Name field too; the Workspace's is first.
 function workspaceName() {
   return screen.getAllByLabelText("Name")[0];
+}
+
+function renderWizard() {
+  return render(
+    <UnsavedChangesProvider>
+      <WorkspaceWizard orgId="org1" />
+      <Link
+        href="/elsewhere"
+        // jsdom doesn't navigate; stop it complaining, in the bubble phase so
+        // the guard's capture listener still sees the click first.
+        onClick={(event) => event.preventDefault()}
+      >
+        Elsewhere
+      </Link>
+    </UnsavedChangesProvider>,
+  );
 }
 
 function fillWorkspaceStep(name = "Research") {
@@ -96,7 +114,7 @@ describe("WorkspaceWizard", () => {
       results: [{ userId: "u2", user: { name: "Bea", email: "bea@x.test" } }],
     });
     const fetchMock = stubAcceptedSave({ id: "ws9" });
-    render(<WorkspaceWizard orgId="org1" />);
+    renderWizard();
 
     fireEvent.change(workspaceName(), {
       target: { value: "Research" },
@@ -114,6 +132,9 @@ describe("WorkspaceWizard", () => {
     await waitFor(() =>
       expect(push).toHaveBeenCalledWith("/org1/workspace/ws9"),
     );
+    expect(
+      screen.queryByText("Discard unsaved changes?"),
+    ).not.toBeInTheDocument();
     expect(fetchMock.mock.calls[0][0]).toBe(
       "http://test/organizations/org1/workspaces",
     );
@@ -160,5 +181,46 @@ describe("WorkspaceWizard", () => {
     click("Back");
 
     expect(workspaceName()).toHaveValue("Research");
+  });
+
+  it("navigates freely before anything has been entered", () => {
+    renderWizard();
+
+    fireEvent.click(screen.getByText("Elsewhere"));
+
+    expect(
+      screen.queryByText("Discard unsaved changes?"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("holds a link click once something has been entered", () => {
+    renderWizard();
+
+    fireEvent.change(workspaceName(), { target: { value: "Research" } });
+    fireEvent.click(screen.getByText("Elsewhere"));
+
+    expect(screen.getByText("Discard unsaved changes?")).toBeInTheDocument();
+  });
+
+  it("is clean again once a typed name is cleared", () => {
+    renderWizard();
+
+    fireEvent.change(workspaceName(), { target: { value: "Research" } });
+    fireEvent.change(workspaceName(), { target: { value: "" } });
+    fireEvent.click(screen.getByText("Elsewhere"));
+
+    expect(
+      screen.queryByText("Discard unsaved changes?"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("stays dirty after moving past the first step", () => {
+    renderWizard();
+    fillWorkspaceStep();
+
+    // Back on the first step with the name still entered.
+    fireEvent.click(screen.getByText("Elsewhere"));
+
+    expect(screen.getByText("Discard unsaved changes?")).toBeInTheDocument();
   });
 });
