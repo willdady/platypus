@@ -1,5 +1,5 @@
 import { beforeAll, describe, it, expect } from "vitest";
-import { generateText } from "ai";
+import { InvalidPromptError, TypeValidationError } from "ai";
 import { Writable } from "node:stream";
 import pino from "pino";
 import { z } from "zod";
@@ -9,18 +9,23 @@ import { errorSerializers, serializeLoggedError } from "./log-serializers.ts";
 const sizeOf = (value: unknown) => JSON.stringify(value)?.length ?? 0;
 
 /**
- * The production failure, rebuilt through the SDK rather than hand-assembled.
+ * The production failure, rebuilt from the SDK's own error classes.
  *
- * A tool result carrying Drizzle `Date` values fails `standardizePrompt()`, so
- * the whole `InvalidPromptError` → `TypeValidationError` → `ZodError` chain is
- * the SDK's own. Validation happens before the model is resolved, so this makes
- * no network call.
+ * A tool result carrying Drizzle `Date` values used to fail
+ * `standardizePrompt()`, producing the whole `InvalidPromptError` →
+ * `TypeValidationError` → `ZodError` chain inside `generateText`. `ai` 7.0.164
+ * removed that pre-call validation — the same prompt now reaches the provider —
+ * so the fixture builds the links directly, keeping the chain the serializer
+ * handles.
  */
-const invalidPromptError = async () => {
+const invalidPromptError = () => {
   const at = new Date("2026-01-01T00:00:00.000Z");
   const card = (n: number) => ({
     id: `card-${n}`,
     title: `Card ${n}`,
+    // Padding so the rejected value is the payload-sized failure the cap
+    // exists for, not a handful of fields.
+    notes: "x".repeat(1_000),
     createdAt: at,
     updatedAt: at,
   });
@@ -35,37 +40,78 @@ const invalidPromptError = async () => {
     id: "board-1",
     createdAt: at,
     updatedAt: at,
-    columns: [column(0), column(1), column(2)],
+    columns: Array.from({ length: 40 }, (_, n) => column(n)),
   };
-
-  try {
-    await generateText({
-      model: "openai/gpt-4o" as never,
-      messages: [
+  const messages = [
+    {
+      role: "tool",
+      content: [
         {
-          role: "tool",
-          content: [
-            {
-              type: "tool-result",
-              toolCallId: "call_1",
-              toolName: "list_boards",
-              output: { type: "json", value: board as never },
-            },
-          ],
+          type: "tool-result",
+          toolCallId: "call_1",
+          toolName: "list_boards",
+          output: { type: "json", value: board },
         },
       ],
-    });
-  } catch (error) {
-    return error;
-  }
-  throw new Error("expected the prompt to be rejected");
+    },
+  ];
+
+  // The field types `ModelMessage[]` required, with every `Date` a string.
+  const messageSchema = z.array(
+    z.object({
+      role: z.literal("tool"),
+      content: z.array(
+        z.object({
+          type: z.literal("tool-result"),
+          toolCallId: z.string(),
+          toolName: z.string(),
+          output: z.object({
+            type: z.literal("json"),
+            value: z.object({
+              id: z.string(),
+              createdAt: z.string(),
+              updatedAt: z.string(),
+              columns: z.array(
+                z.object({
+                  id: z.string(),
+                  name: z.string(),
+                  createdAt: z.string(),
+                  updatedAt: z.string(),
+                  cards: z.array(
+                    z.object({
+                      id: z.string(),
+                      title: z.string(),
+                      notes: z.string(),
+                      createdAt: z.string(),
+                      updatedAt: z.string(),
+                    }),
+                  ),
+                }),
+              ),
+            }),
+          }),
+        }),
+      ),
+    }),
+  );
+
+  const parsed = messageSchema.safeParse(messages);
+  if (parsed.success) throw new Error("expected the prompt to be rejected");
+  return new InvalidPromptError({
+    prompt: messages,
+    message: "The messages do not match the ModelMessage[] schema.",
+    cause: new TypeValidationError({
+      value: messages,
+      cause: parsed.error,
+    }),
+  });
 };
 
-// Built once: the SDK round-trip costs hundreds of milliseconds, and nothing
+// Built once: parsing the fixture costs hundreds of milliseconds, and nothing
 // here mutates the error.
 let promptError: unknown;
-beforeAll(async () => {
-  promptError = await invalidPromptError();
+beforeAll(() => {
+  promptError = invalidPromptError();
 });
 
 /**

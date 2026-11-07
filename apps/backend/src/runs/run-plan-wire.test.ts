@@ -671,7 +671,9 @@ describe("native Reasoning wire shape", () => {
   const byType = (providerType: (typeof NATIVE)[number]["providerType"]) =>
     NATIVE.find((v) => v.providerType === providerType)!;
 
-  it("Bedrock: Thinking off sends no thinking, Claude's default", async () => {
+  it("Bedrock: Thinking off disables thinking", async () => {
+    // The Bedrock provider now makes Claude's default explicit, matching
+    // Anthropic (pinned below) rather than leaving the field out.
     expect(
       byType("Bedrock").reasoningOf(
         await send(byType("Bedrock"), {
@@ -679,7 +681,7 @@ describe("native Reasoning wire shape", () => {
           reasoningEffort: "high",
         }),
       ),
-    ).toBeUndefined();
+    ).toEqual({ thinking: { type: "disabled" } });
   });
 
   it("Anthropic: Thinking off disables thinking", async () => {

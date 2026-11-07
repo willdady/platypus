@@ -81,6 +81,10 @@ export const resolveReasoning = (
   for (const key of Object.keys(sampling) as (keyof SamplingSettings)[]) {
     delete body[SAMPLING_WIRE_KEYS[key]];
   }
+  // `reasoning_effort` is the SDK's own top-level field (#1689). It is removed
+  // for the same reason as the sampling keys: a fragment must not override the
+  // turn's resolved Reasoning setting after the SDK has written it.
+  delete body.reasoning_effort;
   // JSON by construction: every fragment was stored as JSON and parsed back.
   return Object.keys(body).length > 0 ? (body as JSONObject) : undefined;
 };
