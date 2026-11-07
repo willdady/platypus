@@ -33,6 +33,11 @@ type ConfirmDialogProps = {
   confirmPhrase?: string;
   // Keeps the confirm button disabled, e.g. while the action is not allowed.
   confirmDisabled?: boolean;
+  /**
+   * Where focus lands when the dialog closes. A dialog with no trigger of its
+   * own otherwise drops focus to the body.
+   */
+  onCloseAutoFocus?: (event: Event) => void;
 };
 
 export function ConfirmDialog({
@@ -50,6 +55,7 @@ export function ConfirmDialog({
   error = null,
   confirmPhrase,
   confirmDisabled = false,
+  onCloseAutoFocus,
 }: ConfirmDialogProps) {
   const [typedPhrase, setTypedPhrase] = useState("");
 
@@ -79,6 +85,7 @@ export function ConfirmDialog({
       }}
     >
       <DialogContent
+        onCloseAutoFocus={onCloseAutoFocus}
         onPointerDownOutside={(e) => {
           if (loading) {
             e.preventDefault();

@@ -1,7 +1,12 @@
 "use client";
 
 import { readableTextColor } from "@/lib/color";
-import { useState, type FocusEventHandler, type ReactNode } from "react";
+import {
+  useRef,
+  useState,
+  type FocusEventHandler,
+  type ReactNode,
+} from "react";
 import { useMutation } from "@/hooks/use-mutation";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
@@ -455,7 +460,10 @@ function CommentsSection({
   onEditingCommentBodyChange: (body: string) => void;
   onAddComment: () => void;
   onSaveComment: (commentId: string) => void;
-  onDeleteComment: (comment: Serialized<KanbanCardComment>) => void;
+  onDeleteComment: (
+    comment: Serialized<KanbanCardComment>,
+    trigger: HTMLElement | null,
+  ) => void;
   onStartEditComment: (comment: Serialized<KanbanCardComment>) => void;
   onCancelEditComment: () => void;
   /**
@@ -528,7 +536,9 @@ function CommentsSection({
                     <button
                       type="button"
                       className="text-xs text-muted-foreground hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
-                      onClick={() => onDeleteComment(comment)}
+                      onClick={(event) =>
+                        onDeleteComment(comment, event.currentTarget)
+                      }
                       disabled={commentBusy}
                       aria-label={`Delete comment by ${commentLabel(comment)}`}
                     >
@@ -792,10 +802,12 @@ export function KanbanCardDialog({
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingCommentBody, setEditingCommentBody] = useState("");
 
-  // No card yet means no comment thread to name, so nothing is read.
+  // The thread's key, shared by its read and its delete so the two can't
+  // drift onto different spellings. No card yet means nothing is read.
+  const commentsEntity = `boards/${boardId}/cards/${card?.id ?? ""}/comments`;
   const { results: comments, mutate: mutateComments } =
     useScopedList<KanbanCardComment>(
-      `boards/${boardId}/cards/${card?.id ?? ""}/comments`,
+      commentsEntity,
       card ? { orgId, workspaceId } : null,
     );
 
@@ -863,9 +875,9 @@ export function KanbanCardDialog({
   // Save's own guard, so a double click sends nothing twice. The Delete
   // trigger and the Save button both wait on it and on a card delete: neither
   // makes sense while the other runs.
-  const cardSave = useMutation(async (write: () => Promise<void> | void) => {
-    await write();
-  });
+  const cardSave = useMutation(async (cardId: string, data: CardSaveData) =>
+    onSave(cardId, data),
+  );
   const [commentAction, setCommentAction] = useState<string | null>(null);
   const commentWrite = useMutation(
     async (action: string, write: () => Promise<void>) => {
@@ -886,20 +898,26 @@ export function KanbanCardDialog({
     mutate: () => {},
   });
 
-  const commentsEntity = `boards/${boardId}/cards/${card?.id ?? ""}/comments`;
-
   // A refused comment delete stays in its dialog, and a successful one
   // revalidates the thread so the comment disappears.
   const commentDelete = useDeleteFlow<Serialized<KanbanCardComment>>({
-    delete: (comment, url) =>
+    delete: (comment, backendUrl) =>
       writeEntity(
-        url,
+        backendUrl,
         commentsEntity,
         { orgId, workspaceId },
         { id: comment.id },
       ),
     mutate: mutateComments,
   });
+
+  // The button each confirm was opened from, so closing it puts focus back
+  // where the reader was rather than on the body.
+  const deleteTrigger = useRef<HTMLElement | null>(null);
+  const restoreDeleteFocus = (event: Event) => {
+    event.preventDefault();
+    deleteTrigger.current?.focus();
+  };
 
   if (!card) return null;
 
@@ -940,6 +958,14 @@ export function KanbanCardDialog({
   const cancelEditingComment = () => {
     setEditingCommentId(null);
     setEditingCommentBody("");
+  };
+
+  const requestCommentDelete = (
+    comment: Serialized<KanbanCardComment>,
+    trigger: HTMLElement | null,
+  ) => {
+    deleteTrigger.current = trigger;
+    commentDelete.request(comment);
   };
 
   const handleAddComment = () =>
@@ -1059,7 +1085,7 @@ export function KanbanCardDialog({
                 onEditingCommentBodyChange={setEditingCommentBody}
                 onAddComment={handleAddComment}
                 onSaveComment={handleEditComment}
-                onDeleteComment={commentDelete.request}
+                onDeleteComment={requestCommentDelete}
                 onStartEditComment={startEditingComment}
                 onCancelEditComment={cancelEditingComment}
                 commentAction={commentAction}
@@ -1106,7 +1132,7 @@ export function KanbanCardDialog({
                 onEditingCommentBodyChange={setEditingCommentBody}
                 onAddComment={handleAddComment}
                 onSaveComment={handleEditComment}
-                onDeleteComment={commentDelete.request}
+                onDeleteComment={requestCommentDelete}
                 onStartEditComment={startEditingComment}
                 onCancelEditComment={cancelEditingComment}
                 commentAction={commentAction}
@@ -1149,7 +1175,10 @@ export function KanbanCardDialog({
         <DialogFooter className="shrink-0 flex-row justify-end">
           <Button
             variant="secondary"
-            onClick={() => cardDelete.request(card)}
+            onClick={(event) => {
+              deleteTrigger.current = event.currentTarget;
+              cardDelete.request(card);
+            }}
             disabled={cardSave.pending || cardDelete.deleting}
           >
             <Trash2 />
@@ -1157,20 +1186,18 @@ export function KanbanCardDialog({
           </Button>
           <Button
             onClick={() =>
-              void cardSave.run(() =>
-                onSave(card.id, {
-                  title,
-                  body,
-                  labelIds: selectedLabelIds,
-                  assignees: selectedAssignees,
-                  dueDate: selectedDueDate,
-                  priority: selectedPriority,
-                  ...(selectedColumnId &&
-                    selectedColumnId !== initialColumnId && {
-                      columnId: selectedColumnId,
-                    }),
-                }),
-              )
+              void cardSave.run(card.id, {
+                title,
+                body,
+                labelIds: selectedLabelIds,
+                assignees: selectedAssignees,
+                dueDate: selectedDueDate,
+                priority: selectedPriority,
+                ...(selectedColumnId &&
+                  selectedColumnId !== initialColumnId && {
+                    columnId: selectedColumnId,
+                  }),
+              })
             }
             disabled={!title.trim() || cardSave.pending || cardDelete.deleting}
           >
@@ -1186,6 +1213,7 @@ export function KanbanCardDialog({
         onConfirm={cardDelete.confirm}
         loading={cardDelete.deleting}
         error={cardDelete.error}
+        onCloseAutoFocus={restoreDeleteFocus}
       />
       <DeleteConfirmDialog
         open={commentDelete.open}
@@ -1195,6 +1223,7 @@ export function KanbanCardDialog({
         onConfirm={commentDelete.confirm}
         loading={commentDelete.deleting}
         error={commentDelete.error}
+        onCloseAutoFocus={restoreDeleteFocus}
       />
     </Dialog>
   );

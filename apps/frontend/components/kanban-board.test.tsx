@@ -716,17 +716,11 @@ describe("KanbanBoard transport", () => {
       fireEvent.click(within(confirm).getByRole("button", { name: "Delete" }));
     }
 
-    /**
-     * The card dialog's two writes, against the same endpoint. Each names the
-     * method it sends and its own proof the dialog went away, since the save
-     * and the delete close different things.
-     */
+    /** The card dialog's two writes, against the same endpoint. */
     const CARD_WRITES: {
       name: string;
       method: string;
       perform: () => Promise<void>;
-      /** Gone once the write is accepted. */
-      closed: () => HTMLElement | null;
     }[] = [
       {
         name: "save",
@@ -735,19 +729,17 @@ describe("KanbanBoard transport", () => {
           fireEvent.click(screen.getByText("A card"));
           fireEvent.click(await screen.findByRole("button", { name: "Save" }));
         },
-        closed: () => screen.queryByRole("button", { name: "Save" }),
       },
       {
         name: "delete",
         method: "DELETE",
         perform: deleteCard,
-        closed: () => screen.queryByRole("button", { name: "Save" }),
       },
     ];
 
     it.each(CARD_WRITES)(
-      "sends the card $name and closes the dialog on success",
-      async ({ method, perform, closed }) => {
+      "sends the card $name and closes the card dialog on success",
+      async ({ method, perform }) => {
         const fetchMock = stubAcceptedSave({ id: "card-1" });
 
         renderBoard();
@@ -759,9 +751,33 @@ describe("KanbanBoard transport", () => {
             expect.objectContaining({ method }),
           ),
         );
-        await waitFor(() => expect(closed()).not.toBeInTheDocument());
+        await waitFor(() =>
+          expect(
+            screen.queryByRole("button", { name: "Save" }),
+          ).not.toBeInTheDocument(),
+        );
       },
     );
+
+    it("closes both dialogs, clears the card from the URL, and revalidates on a successful delete", async () => {
+      const fetchMock = stubAcceptedSave();
+
+      renderBoard();
+      const confirm = await openCardDeleteConfirm();
+      fireEvent.click(within(confirm).getByRole("button", { name: "Delete" }));
+
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+      await waitFor(() =>
+        expect(
+          screen.queryByRole("dialog", { name: "Delete Card" }),
+        ).not.toBeInTheDocument(),
+      );
+      expect(
+        screen.queryByRole("button", { name: "Save" }),
+      ).not.toBeInTheDocument();
+      expect(window.location.search).toBe("");
+      expect(mutateBoard).toHaveBeenCalled();
+    });
 
     it("shows a failed save as a toast and keeps the card dialog open", async () => {
       stubRejectedSave("Card not found", 404);

@@ -320,6 +320,25 @@ describe("KanbanCardDialog delete comment", () => {
     expect(screen.getByText("First comment")).toBeInTheDocument();
   });
 
+  it("returns focus to the comment's Delete button when cancelled", async () => {
+    comments = [existingComment];
+    renderDialog();
+
+    const confirmDialog = await openCommentDeleteConfirm();
+    fireEvent.click(
+      within(confirmDialog).getByRole("button", { name: "Cancel" }),
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Delete Comment" }),
+      ).not.toBeInTheDocument(),
+    );
+    expect(
+      screen.getByRole("button", { name: /^Delete comment by Bob/ }),
+    ).toHaveFocus();
+  });
+
   it("removes the comment and closes the confirm dialog on success", async () => {
     comments = [existingComment];
     stubAcceptedSave();
@@ -410,6 +429,8 @@ describe("KanbanCardDialog delete card", () => {
       screen.queryByText("Discard unsaved changes?"),
     ).not.toBeInTheDocument();
     expect(screen.getByText("Renamed")).toBeInTheDocument();
+    // Focus goes back to the button that opened the confirm.
+    expect(screen.getByRole("button", { name: "Delete" })).toHaveFocus();
   });
 });
 
