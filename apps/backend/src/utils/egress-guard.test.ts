@@ -90,6 +90,79 @@ describe("checkEgress", () => {
     });
   });
 
+  describe("reserved, multicast and translated ranges", () => {
+    it.each([
+      ["AWS IPv6 metadata", "fd00:ec2::254"],
+      ["NAT64 embedding metadata", "64:ff9b::a9fe:a9fe"],
+      ["local-use NAT64", "64:ff9b:1::a9fe:a9fe"],
+      ["6to4 embedding metadata", "2002:a9fe:a9fe::1"],
+      ["IPv4-translated loopback", "::ffff:0:127.0.0.1"],
+      ["IPv4 multicast", "224.0.0.1"],
+      ["IPv4 reserved", "240.0.0.1"],
+      ["IPv4 broadcast", "255.255.255.255"],
+      ["IETF protocol assignments", "192.0.0.1"],
+      ["benchmarking", "198.18.0.1"],
+      ["IPv6 site-local", "fec0::1"],
+      ["IPv6 multicast", "ff02::1"],
+    ])("blocks %s even when private networks are allowed", async (_l, ip) => {
+      const host = ip.includes(":") ? `[${ip}]` : ip;
+      expectBlocked(
+        await checkEgress(`http://${host}/`, { allowPrivateNetworks: true }),
+      );
+    });
+
+    it.each([
+      ["NAT64", "64:ff9b::a00:1"],
+      ["6to4", "2002:0a00:0001::1"],
+    ])(
+      "judges a %s address by the private IPv4 it embeds",
+      async (_label, ip) => {
+        const url = `http://[${ip}]/`;
+        const reason = expectBlocked(
+          await checkEgress(url, { allowPrivateNetworks: false }),
+        );
+        expect(reason).toContain("embeds 10.0.0.1");
+        expect(await checkEgress(url, { allowPrivateNetworks: true })).toEqual({
+          allowed: true,
+        });
+      },
+    );
+
+    it.each(["2606:4700::1111", "64:ff9b::808:808", "2002:808:808::1"])(
+      "allows public IPv6 %s",
+      async (ip) => {
+        expect(
+          await checkEgress(`http://[${ip}]/`, { allowPrivateNetworks: false }),
+        ).toEqual({ allowed: true });
+      },
+    );
+  });
+
+  describe("allowLoopback", () => {
+    it.each(["127.0.0.1", "[::1]", "[::ffff:127.0.0.1]"])(
+      "allows loopback %s when set",
+      async (host) => {
+        expect(
+          await checkEgress(`http://${host}:8080/mcp`, {
+            allowPrivateNetworks: true,
+            allowLoopback: true,
+          }),
+        ).toEqual({ allowed: true });
+      },
+    );
+
+    it("still blocks metadata and this-host when set", async () => {
+      for (const url of ["http://169.254.169.254/", "http://0.0.0.0/"]) {
+        expectBlocked(
+          await checkEgress(url, {
+            allowPrivateNetworks: true,
+            allowLoopback: true,
+          }),
+        );
+      }
+    });
+  });
+
   describe("numeric encodings normalised by URL parsing", () => {
     // These need no guard logic — WHATWG URL rewrites the host before we look.
     it.each([

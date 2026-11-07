@@ -3676,7 +3676,7 @@ describe("POST /a2a/:endpointId — push notifications", () => {
     "http://10.1.2.3/push",
     "http://172.16.5.4/push",
     "http://192.168.1.1/push",
-    "http://[fd00:ec2::254]/push",
+    "http://[fd12:3456::1]/push",
   ];
 
   describe("an end no one pushed", () => {

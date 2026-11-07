@@ -6,7 +6,8 @@ import { db } from "../index.ts";
 import { mcp as mcpTable } from "../db/schema.ts";
 import type { mcpCreateSchema, mcpUpdateSchema } from "@platypus/schemas";
 import type { ScopeContext } from "../scope.ts";
-import { NotFoundError } from "../errors.ts";
+import { NotFoundError, ValidationError } from "../errors.ts";
+import { MCP_URL_BLOCKED_MESSAGE, mcpUrlPermitted } from "./mcp-client.ts";
 import { scrubDeletedAgentReference } from "./agent-references.ts";
 import {
   OAUTH_CLIENT_CLEAR_FIELDS,
@@ -55,6 +56,19 @@ export type McpScope =
   | { kind: "organization"; orgId: string };
 
 /**
+ * Refuses a URL the egress guard blocks, as a 400 that does not say why — the
+ * reason (which may name an internal address) goes to the server log.
+ */
+const assertMcpUrlPermitted = async (
+  url: string | null | undefined,
+  mcpId?: string,
+) => {
+  if (url && !(await mcpUrlPermitted(url, mcpId))) {
+    throw new ValidationError(MCP_URL_BLOCKED_MESSAGE);
+  }
+};
+
+/**
  * Creates a new MCP at the given scope. The scope comes from `scope`, never
  * the body — a caller cannot name another Workspace, or mint a Shared MCP
  * from the Workspace surface, by setting `organizationId`/`workspaceId` in
@@ -68,6 +82,7 @@ export async function createMcp(
   scope: McpScope,
   fields: McpCreateFields,
 ): Promise<McpRow> {
+  await assertMcpUrlPermitted(fields.url);
   const orgId = scope.kind === "workspace" ? scope.ctx.orgId : scope.orgId;
   const slug = deriveMcpSlug(fields.name);
   await assertMcpSlugAvailable(slug, { orgId });
@@ -181,6 +196,11 @@ export async function updateMcp(
       !isDeepStrictEqual(fields[field] ?? null, existing[field] ?? null),
   );
 
+  // Only a new URL: a stored one is checked on every connect, and a row saved
+  // before MCP URLs were guarded must still be renameable or re-pointed.
+  if (fields.url !== existing.url) {
+    await assertMcpUrlPermitted(fields.url, mcpId);
+  }
   const slug = deriveMcpSlug(fields.name);
   await assertMcpSlugAvailable(slug, { orgId }, mcpId);
 

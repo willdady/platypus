@@ -14,11 +14,55 @@ import {
   OAUTH_TOKEN_CLEAR_FIELDS,
   type McpRecord,
 } from "./mcp-oauth-provider.ts";
-import { openMcpClient } from "./mcp-client.ts";
+import {
+  MCP_UNREACHABLE_MESSAGE,
+  MCP_URL_BLOCKED_MESSAGE,
+  McpEgressBlockedError,
+  mcpUrlPermitted,
+  openMcpClient,
+} from "./mcp-client.ts";
 import { resolveMcpTestToolNames } from "./mcp-test-tools.ts";
 import { logger } from "../logger.ts";
 import { TOOL_SET_RESOLVE_TIMEOUT_MS } from "../tools/index.ts";
 import { withDeadline } from "../utils/abort-race.ts";
+
+/**
+ * What `/test` tells the client about a failed probe. An HTTP error reports
+ * its status only: the library's message carries the response body, which on
+ * an internal host would let the probe read it.
+ */
+const probeErrorMessage = (error: unknown): string => {
+  if (!isServerAnswer(error) || !(error instanceof Error)) {
+    return MCP_UNREACHABLE_MESSAGE;
+  }
+  const { statusCode } = error as { statusCode?: unknown };
+  return typeof statusCode === "number"
+    ? `The MCP server responded with HTTP ${statusCode}.`
+    : error.message;
+};
+
+/**
+ * Whether `error` came from a server that answered — an MCP or HTTP-level
+ * error worth showing as is — rather than from failing to reach one.
+ */
+const isServerAnswer = (error: unknown): boolean => {
+  for (let e = error; e instanceof Error; e = e.cause) {
+    if (
+      e instanceof McpEgressBlockedError ||
+      // undici's wrapper for every connect/DNS/TLS failure.
+      e.message === "fetch failed" ||
+      // A Node system error (ECONNREFUSED, ENOTFOUND, …); JSON-RPC codes are numbers.
+      typeof (e as { code?: unknown }).code === "string"
+    ) {
+      return false;
+    }
+  }
+  // @ai-sdk/mcp's errors for a server that replied (bad status, bad JSON-RPC, auth).
+  return (
+    error instanceof Error &&
+    (error.name === "MCPClientError" || error.name === "UnauthorizedError")
+  );
+};
 
 /**
  * The MCP-connection choreography — probe / authorize / revoke — that both
@@ -167,14 +211,7 @@ export const probeMcpConnection = async (
 
     logger.error({ error }, "MCP test connection error");
 
-    let errorMessage = "Unknown error connecting to MCP server";
-    if (error instanceof Error) {
-      errorMessage = error.message;
-    } else if (typeof error === "string") {
-      errorMessage = error;
-    }
-
-    return { success: false, error: errorMessage, status: 400 };
+    return { success: false, error: probeErrorMessage(error), status: 400 };
   }
 };
 
@@ -240,6 +277,9 @@ export const authorizeMcpOAuth = async (
     return { kind: "error", message: "MCP URL is not configured", status: 400 };
   }
   const serverUrl = mcpRecord.url;
+  if (!(await mcpUrlPermitted(serverUrl, mcpRecord.id))) {
+    return { kind: "error", message: MCP_URL_BLOCKED_MESSAGE, status: 400 };
+  }
 
   let record = mcpRecord;
   if (opts.force) {

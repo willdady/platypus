@@ -221,3 +221,18 @@ a message stored before this issue's marker-and-normalize scheme existed now
 renders on the generic renderer, permanently. Accepted as a narrow regression
 — nothing is lost from the Transcript, since the raw part is unchanged, only
 its presentation reverts to what a truly unrecognised tool always got.
+
+## Amendment — core's own fetches follow redirects hop by hop
+
+Supersedes, for fetches **core** makes, the "pre-flight check only — redirects
+unobserved" position under _Egress from `read_url`_ and _Egress guard_ above.
+Core's fetch of a model-supplied URL (`fetchUrl` and its robots.txt probe) now
+goes through one guarded-fetch helper beside the guard: it never lets `fetch()`
+follow a redirect, follows `Location` itself, runs the guard on every hop, stops
+after a fixed number of hops, and reads the body only up to a byte cap. The cost
+this ADR rejected — every caller driving redirects by hand — is paid once, in
+that helper, rather than per caller.
+
+Unchanged: a `read_url` executor runs inside its plugin, which core cannot
+constrain (ADR-0013), so it keeps the pre-flight check and nothing more.
+Re-resolution (DNS rebinding) also stays a stated limitation for every caller.

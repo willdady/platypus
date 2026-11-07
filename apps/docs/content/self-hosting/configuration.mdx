@@ -446,6 +446,11 @@ call your code makes, because a prompt-injected model can pick the target.
 any Workspace Owner can set one. For Webhooks the guard is checked when the URL
 is saved and again on every delivery, and redirects are never followed.
 
+MCP server URLs go through it too. The URL is checked when an MCP is saved, when
+it is tested, before an OAuth sign-in starts, and again every time a turn
+connects to it. An MCP that fails the check at turn time drops out of the turn
+the same way an unreachable one does, and the Chat carries on without its tools.
+
 ### The egress guard
 
 Every such fetch goes through a guard first. It resolves the hostname and refuses
@@ -453,29 +458,47 @@ the fetch if **any** resolved address is blocked, so a name with one public and 
 internal record is refused rather than raced. Non-`http(s)` schemes are refused,
 and a hostname that fails to resolve fails closed.
 
+The `fetchUrl` tool follows redirects one hop at a time and checks each hop the
+same way, up to **5 redirects**. A redirect into a blocked range is refused like
+a blocked first URL. It reads at most **5 MiB** of a page; a longer page is cut
+there, and the tool tells the model the rest was not read.
+
 Some ranges are blocked whatever you configure, because no legitimate page read
 targets them:
 
-| Range                         | Why                                                          |
-| ----------------------------- | ------------------------------------------------------------ |
-| `127.0.0.0/8`, `::1`          | Loopback — the backend's own process                         |
-| `0.0.0.0/8`                   | Reaches localhost on Linux                                   |
-| `169.254.0.0/16`, `fe80::/10` | Link-local, where AWS, Azure and GCP serve instance metadata |
-| `100.64.0.0/10`               | Home to Alibaba Cloud's metadata service                     |
+| Range                                                       | Why                                                          |
+| ----------------------------------------------------------- | ------------------------------------------------------------ |
+| `127.0.0.0/8`, `::1`                                        | Loopback — the backend's own process                         |
+| `0.0.0.0/8`                                                 | Reaches localhost on Linux                                   |
+| `169.254.0.0/16`, `fe80::/10`                               | Link-local, where AWS, Azure and GCP serve instance metadata |
+| `fd00:ec2::254`                                             | AWS's IPv6 instance metadata                                 |
+| `100.64.0.0/10`                                             | Home to Alibaba Cloud's metadata service                     |
+| `224.0.0.0/4`, `ff00::/8`                                   | Multicast                                                    |
+| `240.0.0.0/4`, `192.0.0.0/24`, `198.18.0.0/15`, `fec0::/10` | Reserved, broadcast and benchmarking ranges                  |
+| `64:ff9b:1::/48`                                            | Local-use NAT64                                              |
+
+An IPv6 address that carries an IPv4 address inside it — NAT64
+(`64:ff9b::/96`), 6to4 (`2002::/16`), or the IPv4-mapped and IPv4-translated
+forms — is judged by the IPv4 address it carries, so it cannot be used to slip
+past the table above or the private-network setting below.
 
 Private networks — `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `fc00::/7` —
 are **allowed by default**, which is the opposite of a textbook default-deny.
 That is deliberate: reading an internal wiki or intranet page is a first-class use
 case for a self-hosted deployment. Set `EGRESS_ALLOW_PRIVATE_NETWORKS=false` on an
 internet-facing deployment whose Agents have no reason to read internal hosts
-and whose Webhooks have no reason to target them.
+and whose Webhooks and MCP servers have no reason to target them.
+
+An MCP server running on the same host as the backend — a sidecar in the same
+pod, or Docker host networking — is on loopback, so the guard refuses it. Set
+`EGRESS_ALLOW_LOOPBACK_MCP=true` to allow loopback for MCP URLs only. Model-chosen
+URLs and Webhooks stay blocked from loopback either way.
 
 <Callout type="warning">
-  The guard is a **pre-flight check on the URL**, so it removes the easy path
-  rather than every path. Redirects are followed by the HTTP client after the
-  check, and the fetch resolves the hostname again independently — so a host
-  that passes and then redirects inward, or whose DNS records change in between,
-  is not caught. Treat it as defence against a prompt-injected model, not as an
+  The guard checks the address a hostname resolves to when it checks it, and the
+  fetch then resolves the hostname again on its own — so a host whose DNS
+  records change in between is not caught. It removes the easy path rather than
+  every path. Treat it as defence against a prompt-injected model, not as an
   SSRF boundary. If you need a boundary, put one in the network.
 </Callout>
 

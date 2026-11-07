@@ -6,10 +6,11 @@ import { beforeEach, vi } from "vitest";
  *
  * A test that asserts on either mock imports the exported spy instead of
  * re-declaring its own `vi.mock`, so the whole suite agrees on one logger and
- * one deterministic `nanoid`. `child` is part of the logger because the plugin
+ * one deterministic `nanoid` — and one DNS, so the egress guard never resolves
+ * a real name. `child` is part of the logger because the plugin
  * loader derives each plugin's own logger from it.
  */
-const { mockLogger, mockNanoid } = vi.hoisted(() => {
+const { mockLogger, mockNanoid, mockLookup } = vi.hoisted(() => {
   const child = {
     debug: vi.fn(),
     info: vi.fn(),
@@ -30,6 +31,25 @@ const { mockLogger, mockNanoid } = vi.hoisted(() => {
     // length so tests that assert on id shape (e.g. an invitation token) still
     // hold. Tests that need a specific id override it with `mockReturnValue`.
     mockNanoid: vi.fn(() => "test-id-1234567890abc"),
+    // The egress guard resolves every hostname. `localhost` is loopback, a name
+    // starting `internal` is the metadata service, a `.invalid` name does not
+    // resolve, and any other name is a public address. Called as
+    // `lookup(name, { all: true })`.
+    mockLookup: vi.fn((hostname: string) =>
+      hostname.endsWith(".invalid")
+        ? Promise.reject(new Error(`getaddrinfo ENOTFOUND ${hostname}`))
+        : Promise.resolve([
+            {
+              address:
+                hostname === "localhost"
+                  ? "127.0.0.1"
+                  : hostname.startsWith("internal")
+                    ? "169.254.169.254"
+                    : "93.184.215.14",
+              family: 4,
+            },
+          ]),
+    ),
   };
 });
 
@@ -41,6 +61,8 @@ vi.mock("nanoid", async (importOriginal) => {
   return { ...actual, nanoid: mockNanoid };
 });
 
+vi.mock("node:dns/promises", () => ({ lookup: mockLookup }));
+
 // These mocks live for the whole file, so clear their call history between
 // tests: the per-file copies they replace were fresh per file, and a test that
 // spies on the logger assumes a clean slate.
@@ -49,6 +71,7 @@ beforeEach(() => {
     spy.mockClear();
   }
   mockNanoid.mockClear();
+  mockLookup.mockClear();
 });
 
-export { mockLogger, mockNanoid };
+export { mockLogger, mockNanoid, mockLookup };

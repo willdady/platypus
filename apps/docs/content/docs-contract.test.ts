@@ -2044,6 +2044,20 @@ const BACKEND_CONSTANTS = [
     cost: "A reader installing from a large repository is refused at a size the page never warned of.",
   },
   {
+    source: "apps/backend/src/utils/egress-guard.ts",
+    name: "MAX_REDIRECTS",
+    phrase: (count: number) => `**${count} redirects**`,
+    files: ["self-hosting/configuration.mdx"],
+    cost: "A reader expecting a longer redirect chain to be followed sees the fetch fail.",
+  },
+  {
+    source: "apps/backend/src/utils/egress-guard.ts",
+    name: "MAX_FETCH_BODY_BYTES",
+    phrase: (bytes: number) => `**${bytes / 1024 / 1024} MiB**`,
+    files: ["self-hosting/configuration.mdx"],
+    cost: "A reader expecting a whole large page to be read gets it cut at a size the page never stated.",
+  },
+  {
     source: "packages/schemas/index.ts",
     name: "CHAT_COMPACT_INSTRUCTION_MAX_LENGTH",
     phrase: (chars: number) =>

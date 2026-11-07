@@ -6,7 +6,12 @@ import TurndownService from "turndown";
 import robotsParser from "robots-parser";
 import { WEB_BACKEND_TOOL_MARKER } from "@platypus/schemas";
 import { logger } from "../logger.ts";
-import { checkEgress, EGRESS_BLOCKED_MESSAGE } from "../utils/egress-guard.ts";
+import {
+  checkEgress,
+  EGRESS_BLOCKED_MESSAGE,
+  guardedFetch,
+  MAX_FETCH_BODY_BYTES,
+} from "../utils/egress-guard.ts";
 
 const USER_AGENT = "PlatypusBot/1.0";
 
@@ -20,15 +25,17 @@ async function checkRobotsTxt(
   try {
     const { origin } = new URL(url);
     const robotsUrl = `${origin}/robots.txt`;
-    const response = await fetch(robotsUrl, {
+    // A hop into a blocked range only means robots.txt could not be fetched;
+    // the page's own fetch is guarded hop by hop as well.
+    const fetched = await guardedFetch(robotsUrl, {
       headers: { "User-Agent": USER_AGENT },
       signal: AbortSignal.timeout(10000),
     });
-    if (!response.ok) {
+    if (!fetched.allowed || !fetched.response.ok) {
       // If robots.txt can't be fetched, assume allowed
       return true;
     }
-    const text = await response.text();
+    const { text } = fetched;
     const robots = robotsParser(robotsUrl, text);
     return robots.isAllowed(url, "PlatypusBot") ?? true;
   } catch {
@@ -99,38 +106,51 @@ export const createWebFetchTools = (ignoreRobotsTxt: boolean) => ({
         };
       }
 
-      const response = await fetch(url, {
+      const fetched = await guardedFetch(url, {
         headers: {
           Accept: "text/markdown, text/html, */*",
           "User-Agent": USER_AGENT,
         },
         signal: AbortSignal.timeout(30000),
       });
+      if (!fetched.allowed) {
+        logger.warn(
+          { tool: "fetchUrl", url, reason: fetched.reason },
+          "Blocked a model-supplied URL or its redirect by network policy",
+        );
+        return { error: EGRESS_BLOCKED_MESSAGE };
+      }
 
-      const finalUrl = response.url;
-      const contentType = response.headers.get("content-type") ?? "";
+      const finalUrl = fetched.url;
+      const contentType = fetched.response.headers.get("content-type") ?? "";
+      const body = fetched.text;
 
       let content: string;
 
-      if (contentType.includes("text/markdown")) {
-        content = await response.text();
-      } else if (contentType.includes("text/html") && !raw) {
-        const html = await response.text();
-        const dom = new JSDOM(html, { url: finalUrl });
+      if (contentType.includes("text/html") && !raw) {
+        const dom = new JSDOM(body, { url: finalUrl });
         const reader = new Readability(dom.window.document);
         const article = reader.parse();
         if (article?.content) {
           content = turndown.turndown(article.content);
         } else {
-          content = turndown.turndown(html);
+          content = turndown.turndown(body);
         }
       } else {
-        content = await response.text();
+        content = body;
       }
 
       const slice = content.slice(start_index, start_index + max_length);
       const truncated = start_index + max_length < content.length;
       const next_start_index = start_index + max_length;
+
+      // The page itself was cut at the download cap: said where a reader would
+      // otherwise take the content as complete.
+      const note = truncated
+        ? `\n\n[Content truncated. Pass start_index=${next_start_index} to continue reading.]`
+        : fetched.truncated
+          ? `\n\n[Content incomplete: the page exceeded the ${MAX_FETCH_BODY_BYTES}-byte download limit and the remainder was not read.]`
+          : "";
 
       const result: {
         content: string;
@@ -138,10 +158,9 @@ export const createWebFetchTools = (ignoreRobotsTxt: boolean) => ({
         content_type: string;
         truncated: boolean;
         next_start_index?: number;
+        incomplete?: true;
       } = {
-        content: truncated
-          ? `${slice}\n\n[Content truncated. Pass start_index=${next_start_index} to continue reading.]`
-          : slice,
+        content: slice + note,
         url: finalUrl,
         content_type: contentType,
         truncated,
@@ -149,6 +168,9 @@ export const createWebFetchTools = (ignoreRobotsTxt: boolean) => ({
 
       if (truncated) {
         result.next_start_index = next_start_index;
+      }
+      if (fetched.truncated) {
+        result.incomplete = true;
       }
 
       return result;

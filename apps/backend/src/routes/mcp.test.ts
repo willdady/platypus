@@ -161,6 +161,19 @@ describe("MCP Routes", () => {
     // Org Admin may do that, ADR-0006/0007) is `createMcp`'s job now; see
     // `services/mcp-write.test.ts`'s createMcp tests.
 
+    it("returns 400 for a URL resolving to the metadata service", async () => {
+      mockSession();
+      fake = world({ rows: { mcp: [] } });
+
+      const res = await post({ ...createBody, url: "http://169.254.169.254/" });
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({
+        error: expect.not.stringContaining("169.254") as unknown,
+      });
+      expect(fake.tables.mcp).toEqual([]);
+    });
+
     it("409s on a tool-namespace slug clash within this Organization only", async () => {
       // Guards `assertMcpSlugAvailable`'s Organization filter: `new_mcp` is
       // taken in another Organization's Workspace, which must not block this
@@ -415,6 +428,19 @@ describe("MCP Routes", () => {
       });
     });
 
+    it("returns 400 for a URL resolving to the metadata service", async () => {
+      mockSession();
+      fake = world({ rows: { mcp: [workspaceMcp()] } });
+
+      const res = await app.request(
+        `${baseUrl}/mcp-1`,
+        json("PUT", { ...updateBody, url: "http://internal.example/mcp" }),
+      );
+
+      expect(res.status).toBe(400);
+      expect(fake.tables.mcp[0]).not.toMatchObject({ name: "Renamed" });
+    });
+
     it("returns 403 (locked) when updating an attached org-scoped MCP", async () => {
       mockSession();
       fake = world({
@@ -518,6 +544,19 @@ describe("MCP Routes", () => {
         toolNames: ["my_server__tool1"],
         invalidToolNames: [],
       });
+    });
+
+    it("returns 400 for a URL resolving to the metadata service", async () => {
+      mockSession();
+      world();
+
+      const res = await probe({
+        url: "http://169.254.169.254/",
+        authType: "None",
+        name: "My Server",
+      });
+
+      expect(res.status).toBe(400);
     });
 
     it("namespaces tool names under the slug derived from the given name", async () => {

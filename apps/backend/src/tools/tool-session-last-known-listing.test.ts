@@ -86,7 +86,9 @@ vi.mock("../services/mcp-oauth-provider.ts", async (importOriginal) => ({
   ...(await importOriginal<
     typeof import("../services/mcp-oauth-provider.ts")
   >()),
-  buildMcpTransportConfig: () => fakeTransport(),
+  // The URL is what the egress guard checks before connecting.
+  buildMcpTransportConfig: () =>
+    Object.assign(fakeTransport(), { url: "https://mcp.example.com" }),
 }));
 
 import { TOOL_SET_RESOLVE_TIMEOUT_MS } from "./index.ts";

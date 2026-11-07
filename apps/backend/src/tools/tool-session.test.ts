@@ -983,6 +983,25 @@ describe("openToolSession", () => {
       ]);
     });
 
+    it("never connects to an MCP saved with a URL now blocked, and fails it soft", async () => {
+      // A row saved before MCP URLs were guarded on save.
+      const queries = queriesFor([
+        mcpRow({ name: "Jira", url: "http://169.254.169.254/mcp" }),
+      ]);
+
+      const session = await openSession(scope, grantedAgent("mcp-1"), queries);
+
+      expect(session.tools).toEqual({});
+      expect(session.unloadedToolSets).toEqual([
+        { toolSetId: "mcp-1", name: "Jira", reason: "unreachable" },
+      ]);
+      expect(mockCreateMCPClient).not.toHaveBeenCalled();
+      expect(queries.setMcpFetchFailedAt).toHaveBeenCalledWith(
+        "mcp-1",
+        expect.any(Date),
+      );
+    });
+
     it("lists an MCP that never answers as unreachable", async () => {
       vi.useFakeTimers();
       try {

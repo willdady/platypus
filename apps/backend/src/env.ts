@@ -94,6 +94,7 @@ const envSchema = z
     ),
     TRIGGER_PER_RUN_TIMEOUT_MS: positiveInt(DEFAULT_TRIGGER_PER_RUN_TIMEOUT_MS),
     EGRESS_ALLOW_PRIVATE_NETWORKS: boolean(true),
+    EGRESS_ALLOW_LOOPBACK_MCP: boolean(false),
     A2A_PUSH_ALLOW_PRIVATE_NETWORKS: boolean(false),
     STORAGE_BACKEND: z.enum(["disk", "s3"]).default("disk"),
     STORAGE_DISK_PATH: z.string().default("./data/files"),

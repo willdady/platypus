@@ -128,6 +128,19 @@ describe("Organization MCP Routes", () => {
       expect(fake.tables.mcp).toHaveLength(4);
     });
 
+    it("returns 400 for a URL resolving to the metadata service", async () => {
+      mockSession();
+      const fake = world("admin");
+
+      const res = await app.request(
+        baseUrl,
+        json("POST", { ...createBody, url: "http://169.254.169.254/" }),
+      );
+
+      expect(res.status).toBe(400);
+      expect(fake.tables.mcp).toHaveLength(3);
+    });
+
     it("returns 403 if not org admin", async () => {
       mockSession();
       const fake = world("member");
@@ -250,6 +263,19 @@ describe("Organization MCP Routes", () => {
       url: "http://mcp.example.com",
       authType: "None",
     };
+
+    it("returns 400 for a URL resolving to the metadata service", async () => {
+      mockSession();
+      const fake = world("admin");
+
+      const res = await app.request(
+        `${baseUrl}/mcp-1`,
+        json("PUT", { ...updateBody, url: "http://internal.example/" }),
+      );
+
+      expect(res.status).toBe(400);
+      expect(namesOf(fake)).not.toContain("Renamed MCP");
+    });
 
     it("updates an org MCP if org admin", async () => {
       mockSession();
@@ -405,6 +431,19 @@ describe("Organization MCP Routes", () => {
         toolNames: ["org_mcp__tool1"],
         invalidToolNames: [],
       });
+    });
+
+    it("returns 400 for a URL resolving to the metadata service", async () => {
+      mockSession();
+      world("admin");
+
+      const res = await probe({
+        url: "http://169.254.169.254/",
+        authType: "None",
+        name: "Org MCP",
+      });
+
+      expect(res.status).toBe(400);
     });
 
     it("probes a stored OAuth MCP of this org", async () => {

@@ -43,6 +43,23 @@ Two more things worth doing every time:
 - **Bump both images together.** The backend and frontend are released as a pair
   and are only tested against each other.
 
+## Coming from 4.2
+
+### MCP servers on blocked addresses stop connecting
+
+MCP server URLs now go through [the egress
+guard](/self-hosting/configuration#the-egress-guard), the same one that guards
+Webhooks. An MCP whose URL resolves to loopback, a cloud metadata address or a
+reserved range can no longer be saved, tested or signed in to, and a turn no
+longer connects to one saved before the upgrade: it drops out of the turn as
+unreachable. A hostname that does not resolve when you save is refused the same
+way, so save an MCP once its DNS is in place.
+
+The one you are likely to hit is an MCP server on the same host as the backend,
+at `localhost` or `127.0.0.1`. Set `EGRESS_ALLOW_LOOPBACK_MCP=true` to keep it
+working. An MCP on a private network keeps working unless you have set
+`EGRESS_ALLOW_PRIVATE_NETWORKS=false`.
+
 ## Coming from 3.30
 
 ### Some MCP servers must be signed in to again

@@ -12,6 +12,11 @@ import {
   clearOAuthTokens,
   probeMcpConnection,
 } from "./mcp-connection.ts";
+import {
+  MCP_UNREACHABLE_MESSAGE,
+  MCP_URL_BLOCKED_MESSAGE,
+} from "./mcp-client.ts";
+import { mockLookup } from "../test-setup.ts";
 
 /** A real SQL fragment — the functions under test just pass it through to `.where(...)`. */
 const someWhere = eq(mcpTable.id, "mcp-1");
@@ -120,7 +125,7 @@ describe("mcp-connection", () => {
       });
     });
 
-    it("closes the client and reports the error on a failed connection", async () => {
+    it("closes the client and reports a generic error on a failed connection", async () => {
       const close = vi.fn().mockResolvedValue(undefined);
       vi.mocked(createMCPClient).mockResolvedValueOnce({
         tools: vi.fn().mockRejectedValue(new Error("boom")),
@@ -131,14 +136,17 @@ describe("mcp-connection", () => {
         null,
       );
 
-      expect(result).toEqual({ success: false, error: "boom", status: 400 });
+      expect(result).toEqual({
+        success: false,
+        error: MCP_UNREACHABLE_MESSAGE,
+        status: 400,
+      });
       expect(close).toHaveBeenCalled();
     });
 
     it("still reports the original error when closing the client also fails", async () => {
       const closeError = new Error("close failed");
       vi.mocked(createMCPClient).mockResolvedValueOnce({
-        // A thrown string, not an Error, is reported verbatim.
         tools: vi.fn().mockRejectedValue("server said no"),
         close: vi.fn().mockRejectedValue(closeError),
       } as never);
@@ -150,7 +158,7 @@ describe("mcp-connection", () => {
 
       expect(result).toEqual({
         success: false,
-        error: "server said no",
+        error: MCP_UNREACHABLE_MESSAGE,
         status: 400,
       });
       await vi.waitFor(() =>
@@ -176,12 +184,89 @@ describe("mcp-connection", () => {
         await vi.advanceTimersByTimeAsync(TOOL_SET_RESOLVE_TIMEOUT_MS);
         expect(await probing).toEqual({
           success: false,
-          error: `timed out after ${TOOL_SET_RESOLVE_TIMEOUT_MS}ms`,
+          error: MCP_UNREACHABLE_MESSAGE,
           status: 400,
         });
         expect(close).toHaveBeenCalled();
       } finally {
         vi.useRealTimers();
+      }
+    });
+
+    it("reports only the status of an HTTP error from a server that answered", async () => {
+      const answered = Object.assign(
+        new Error(
+          "MCP HTTP Transport Error: POSTing to endpoint (HTTP 405): <html>internal page</html>",
+        ),
+        { name: "MCPClientError", statusCode: 405 },
+      );
+      vi.mocked(createMCPClient).mockRejectedValueOnce(answered);
+
+      expect(
+        await probeMcpConnection(
+          { url: "http://mcp.example.com", authType: "None" } as never,
+          null,
+        ),
+      ).toEqual({
+        success: false,
+        error: "The MCP server responded with HTTP 405.",
+        status: 400,
+      });
+    });
+
+    it("reports a closed port and an unresolvable host identically", async () => {
+      vi.mocked(createMCPClient).mockRejectedValueOnce(
+        new TypeError("fetch failed", {
+          cause: Object.assign(new Error("connect ECONNREFUSED"), {
+            code: "ECONNREFUSED",
+          }),
+        }),
+      );
+      const closed = await probeMcpConnection(
+        { url: "http://mcp.example.com:9", authType: "None" } as never,
+        null,
+      );
+      mockLookup.mockRejectedValueOnce(new Error("getaddrinfo ENOTFOUND"));
+      const unresolvable = await probeMcpConnection(
+        { url: "http://nx.example.com", authType: "None" } as never,
+        null,
+      );
+
+      expect(closed).toEqual(unresolvable);
+      expect(closed).toEqual({
+        success: false,
+        error: MCP_UNREACHABLE_MESSAGE,
+        status: 400,
+      });
+    });
+
+    it.each([
+      ["the metadata service", "http://169.254.169.254/mcp"],
+      ["a host resolving to it", "http://internal.example/mcp"],
+      ["loopback", "http://127.0.0.1:8080/mcp"],
+    ])("refuses %s without connecting", async (_label, url) => {
+      expect(
+        await probeMcpConnection({ url, authType: "None" } as never, null),
+      ).toEqual({
+        success: false,
+        error: MCP_UNREACHABLE_MESSAGE,
+        status: 400,
+      });
+      expect(createMCPClient).not.toHaveBeenCalled();
+    });
+
+    it("connects to loopback when EGRESS_ALLOW_LOOPBACK_MCP is set", async () => {
+      vi.stubEnv("EGRESS_ALLOW_LOOPBACK_MCP", "true");
+      try {
+        expect(
+          await probeMcpConnection(
+            { url: "http://localhost:8080/mcp", authType: "None" } as never,
+            null,
+          ),
+        ).toMatchObject({ success: true });
+        expect(createMCPClient).toHaveBeenCalled();
+      } finally {
+        vi.unstubAllEnvs();
       }
     });
 
@@ -247,6 +332,20 @@ describe("mcp-connection", () => {
   });
 
   describe("authorizeMcpOAuth", () => {
+    it("refuses a URL the egress guard blocks, before any metadata fetch", async () => {
+      const result = await authorizeMcpOAuth(
+        asDb(mockDb),
+        { ...baseMcp, authType: "OAuth", url: "http://169.254.169.254/mcp" },
+        { force: false, clearTokensWhere: someWhere, userId: "user-1" },
+      );
+      expect(result).toEqual({
+        kind: "error",
+        message: MCP_URL_BLOCKED_MESSAGE,
+        status: 400,
+      });
+      expect(mcpAuth).not.toHaveBeenCalled();
+    });
+
     it("errors when the resolved row's auth type is not OAuth", async () => {
       const result = await authorizeMcpOAuth(
         asDb(mockDb),
