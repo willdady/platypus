@@ -168,8 +168,8 @@ Set **Max Runs to Keep** (the fewest recent run records to keep), optionally
 enable **Web Search** (web search on the resolved Provider — its built-in tool,
 or a Web-search backend selected on it; see [Providers &
 models](/concepts/providers#web-search)), and leave **Enabled** on. Expand
-**Advanced settings** if the run needs your Memory summaries — see [Memories in
-a run](#memories-in-a-run). Click **Save** (**Update** when editing). A new
+**Advanced settings** if the run needs your Memory summaries, or should feed
+your Memories — see [Memories in a run](#memories-in-a-run). Click **Save** (**Update** when editing). A new
 Inbound trigger then shows its token and endpoint once, in **Copy the token
 now**. Copy both, then click **I've copied it**, the only way to close it.
 
@@ -250,6 +250,22 @@ handed the stuck one.
 - Older run records are pruned automatically, keeping at least the newest **Max
   Runs to Keep**.
 
+### The run's Transcript
+
+Each run keeps its Transcript as a Chat: the Instruction it was given (with the
+event payload or call inputs above it), and every reply, tool call and tool
+result the Agent produced, written as the run goes. A run that fails or is
+cancelled keeps what it wrote up to that point. A _Suppressed_ run never started,
+so it has none.
+
+- **It isn't in your Chat list.** The sidebar and its search leave run Chats out,
+  so a Trigger firing every few minutes doesn't bury your own. Anyone who can
+  read Chats in the Workspace can read one.
+- **Its title is the Trigger's name and the run's start time** in UTC, with the
+  Trigger's name as a tag. Platypus never re-titles it.
+- **It is deleted with its run.** Pruning under **Max Runs to Keep** deletes the
+  pruned runs' Chats, and deleting the Trigger deletes them all.
+
 ### Run limits
 
 An Event Trigger has a ceiling on how often it may run for the same record — the
@@ -294,6 +310,13 @@ The control governs the summaries in the system prompt, nothing else. An Agent
 with the **Memory** Tool set keeps its memory tools either way and can
 look a memory up during the run. See [Memory &
 context](/concepts/memory-and-context).
+
+**Advanced settings → Extract Memories** works the other way round: it lets the
+Trigger's [run Transcripts](#the-runs-transcript) feed your Memories, as your
+own Chats do. It is **off** by default, because a run carries no preferences of
+yours to capture: with it on, whatever an event payload or an Inbound caller put
+in front of the Agent can land in your Memories. Turning it on applies to the
+Trigger's runs that are still kept, not only new ones.
 
 ## Event payloads
 

@@ -484,6 +484,25 @@ describe("processMemoryExtractionBatch chat selection", () => {
     expect((await run()).sort()).toEqual(["extracting", "ui"]);
   });
 
+  // ADR-0044: a run has no User whose preferences a Memory would capture.
+  it("reads a Trigger run's Chat only while its Trigger extracts memories", async () => {
+    seedChats(
+      chat("ui"),
+      chat("extracting", { triggerRunId: "run-on" }),
+      chat("not-extracting", { triggerRunId: "run-off" }),
+    );
+    fake.tables.trigger_run = [
+      { id: "run-on", triggerId: "t-on" },
+      { id: "run-off", triggerId: "t-off" },
+    ];
+    fake.tables.trigger = [
+      { id: "t-on", extractMemories: true },
+      { id: "t-off", extractMemories: false },
+    ];
+
+    expect((await run()).sort()).toEqual(["extracting", "ui"]);
+  });
+
   it("skips a Chat that is mid-turn", async () => {
     seedChats(
       chat("never-read", { status: "running" }),

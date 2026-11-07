@@ -185,6 +185,7 @@ describe("createTriggerTools", () => {
         await callTool(tools.createTrigger, {
           ...cronCreate,
           includeMemories: true,
+          extractMemories: true,
         }),
       ).toEqual({
         success: true,
@@ -203,6 +204,7 @@ describe("createTriggerTools", () => {
           maxRunsToKeep: 10,
           search: false,
           includeMemories: true,
+          extractMemories: true,
           config: {
             cronExpression: "0 9 * * *",
             timezone,
@@ -279,6 +281,21 @@ describe("createTriggerTools", () => {
         expect(createTrigger).not.toHaveBeenCalled();
       },
     );
+
+    it("keeps Extract Memories in the create and update inputs", () => {
+      const parsed = (tools.createTrigger.inputSchema as z.ZodType).parse({
+        ...cronCreate,
+        extractMemories: true,
+      });
+      expect(parsed).toMatchObject({ extractMemories: true });
+      expect(
+        (tools.updateTrigger.inputSchema as z.ZodType).parse({
+          triggerId: "t1",
+          label: "Daily",
+          extractMemories: true,
+        }),
+      ).toMatchObject({ extractMemories: true });
+    });
   });
 
   describe("updateTrigger", () => {
@@ -291,6 +308,7 @@ describe("createTriggerTools", () => {
           label: "Daily",
           description: "Runs every day",
           includeMemories: true,
+          extractMemories: true,
         }),
       ).toEqual({
         success: true,
@@ -302,7 +320,11 @@ describe("createTriggerTools", () => {
         "t1",
         // Only what the call carried: a patch never rewrites a field it was
         // not given.
-        { description: "Runs every day", includeMemories: true },
+        {
+          description: "Runs every day",
+          includeMemories: true,
+          extractMemories: true,
+        },
         { allowInbound: false },
       );
       expect(createTrigger).not.toHaveBeenCalled();

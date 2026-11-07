@@ -196,6 +196,30 @@ describe("TriggerForm — Include Memories", () => {
   });
 });
 
+describe("TriggerForm — Extract Memories", () => {
+  it("saves it off by default, and on once Advanced settings is expanded and the switch turned on", async () => {
+    const fetchMock = stubAcceptedSave({ id: "trigger-1" });
+    render(<TriggerForm orgId="org1" workspaceId="ws1" />);
+    expect(await screen.findByText("Agent")).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Extract Memories/)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Advanced settings"));
+    fireEvent.click(screen.getByLabelText(/Extract Memories/));
+
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "My Trigger" },
+    });
+    fireEvent.change(screen.getByLabelText("Instruction"), {
+      target: { value: "Do something" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(savedBody(fetchMock).extractMemories).toBe(true);
+    expect(savedBody(fetchMock).includeMemories).toBe(false);
+  });
+});
+
 describe("TriggerForm — default timezone", () => {
   it("moves a new Trigger onto the User timezone when the session lands after mount", async () => {
     const fetchMock = stubAcceptedSave({ id: "trigger-1" });

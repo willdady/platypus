@@ -1,4 +1,5 @@
 import {
+  createIdGenerator,
   readUIMessageStream,
   streamText,
   toUIMessageStream,
@@ -1201,12 +1202,58 @@ export type DriveOnceOptions = DriveBase &
      *  terminal write can persist it. */
     onFinal?: (text: string) => void;
     /**
+     * The reply folded so far, each time it grows: one assistant message
+     * carrying every attempt's text, reasoning and tool parts, so the sink
+     * can keep the run's Transcript as a Chat (ADR-0044).
+     */
+    onSnapshot?: (message: PlatypusUIMessage) => void;
+    /**
      * The Agent's Fallback model (ADR-0043). A Trigger run passes one when the
      * Agent has one; the drive switches on a Provider failure and stays on the
      * fallback for the rest of the run.
      */
     fallback?: FallbackTurn;
   };
+
+/**
+ * Folds UI message chunks onto `seed` as they are pushed, handing each fold to
+ * `onFold`. `end` resolves once every pushed chunk has been folded.
+ */
+const foldReply = (
+  seed: PlatypusUIMessage,
+  onFold: (message: PlatypusUIMessage) => void,
+) => {
+  let feed!: ReadableStreamDefaultController<
+    InferUIMessageChunk<PlatypusUIMessage>
+  >;
+  const reading = (async () => {
+    for await (const message of readUIMessageStream<PlatypusUIMessage>({
+      message: structuredClone(seed),
+      stream: new ReadableStream({ start: (c) => void (feed = c) }),
+    })) {
+      onFold(normalizeWebToolMessage(message));
+    }
+  })().catch((error: unknown) => {
+    logger.error({ err: error }, "Error folding a headless run's reply");
+  });
+  // A fold that failed cancels its source, so the feed then throws; the
+  // failure was already logged above, and the run goes on without the fold.
+  const quietly = (write: () => void) => {
+    try {
+      write();
+    } catch {
+      // ignored: see above
+    }
+  };
+  return {
+    push: (chunk: InferUIMessageChunk<PlatypusUIMessage>) =>
+      quietly(() => feed.enqueue(chunk)),
+    end: () => {
+      quietly(() => feed.close());
+      return reading;
+    },
+  };
+};
 
 /**
  * The one record of how a headless run ended: nobody is watching an unattended
@@ -1267,6 +1314,7 @@ export const driveOnce = async (
   const {
     agentId,
     onFinal,
+    onSnapshot,
     events: recorder,
     fallback,
     plan: initialPlan,
@@ -1295,6 +1343,13 @@ export const driveOnce = async (
       run,
       events: scope,
     });
+    // One reply across attempts: a Fallback switch folds onto what the
+    // primary already streamed, as the streamed drives do.
+    let reply: PlatypusUIMessage = {
+      id: createIdGenerator({ prefix: "msg", size: 16 })(),
+      role: "assistant",
+      parts: [],
+    };
     const finalOutcome = await (async (): Promise<ModelLoopOutcome> => {
       for (;;) {
         const { conversation, ...attempt } = attempts.current();
@@ -1311,9 +1366,20 @@ export const driveOnce = async (
         );
 
         // Drained through the UI message stream so the Run events are read off
-        // the same chunks a delegate's are. Nothing else reads it.
-        for await (const chunk of loop.chunks) {
-          if (scope) recordUiChunk(scope, chunk);
+        // the same chunks a delegate's are, and fed to a fold of the reply
+        // beside it. The fold never throws into this loop: a stream that fails
+        // fails the drive exactly as it did before the fold existed.
+        const fold = foldReply(reply, (message) => {
+          reply = message;
+          onSnapshot?.(message);
+        });
+        try {
+          for await (const chunk of loop.chunks) {
+            if (scope) recordUiChunk(scope, chunk);
+            fold.push(chunk);
+          }
+        } finally {
+          await fold.end();
         }
         const outcome = await loop.outcome();
         const settled = attempts.settle(outcome);
