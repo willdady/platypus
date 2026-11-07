@@ -27,6 +27,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { ListError } from "@/components/list-state";
 import {
   BadgeSkeleton,
   IconButtonSkeleton,
@@ -46,6 +47,7 @@ function OrgInvitationsPage() {
   const {
     data,
     results: invitations,
+    error,
     mutate,
     isLoading,
   } = useScopedList<InvitationListItem>("invitations", { orgId });
@@ -150,6 +152,12 @@ function OrgInvitationsPage() {
               ]}
             />
           </LoadingRegion>
+        ) : error && !data ? (
+          <ListError
+            error={error}
+            subject="invitations"
+            onRetry={() => mutate()}
+          />
         ) : data && invitations.length === 0 ? (
           <EmptyCard
             icon={<Mail />}

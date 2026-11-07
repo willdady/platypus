@@ -46,6 +46,44 @@ describe("UserInvitationsPage", () => {
     expect(screen.getByText("Invited by: Bob")).toBeInTheDocument();
   });
 
+  it("shows a failed read as an error with a retry, not an empty grid", async () => {
+    mockScopedSWR(
+      {
+        "/invitations": { error: { status: 500, message: "Server error" } },
+      },
+      { strict: true },
+    );
+    await renderList(<UserInvitationsPage />);
+
+    expect(
+      screen.getByText("Failed to load invitations. Server error"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("No pending invitations"),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(mutate).toHaveBeenCalled();
+  });
+
+  it("keeps showing cached rows when a revalidation fails", async () => {
+    mockScopedSWR(
+      {
+        "/invitations": {
+          data: { results: [invitation] },
+          error: { status: 500, message: "Server error" },
+        },
+      },
+      { strict: true },
+    );
+    await renderList(<UserInvitationsPage />);
+
+    expect(screen.getByText("Acme")).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Failed to load invitations/),
+    ).not.toBeInTheDocument();
+  });
+
   it("says there is nothing pending when the list is empty", async () => {
     mockScopedSWR({ "/invitations": [] }, { strict: true });
     await renderList(<UserInvitationsPage />);
