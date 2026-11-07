@@ -22,6 +22,7 @@ import { Field, FieldLabel } from "@/components/ui/field";
 import type { Workspace } from "@platypus/schemas";
 import { useScopedList } from "@/hooks/use-scoped-list";
 import { scopedUrl, writeAt } from "@/lib/api-write";
+import { sortByName } from "@/lib/utils";
 import { useBackendUrl } from "@/components/auth-provider";
 
 // Apply a Blueprint to an existing Workspace (ADR-0008). The macro is additive
@@ -54,7 +55,7 @@ export function ApplyBlueprintDialog({
     "workspaces",
     open ? { orgId } : null,
   );
-  const workspaces = [...results].sort((a, b) => a.name.localeCompare(b.name));
+  const workspaces = sortByName(results);
 
   const reset = () => {
     setWorkspaceId("");

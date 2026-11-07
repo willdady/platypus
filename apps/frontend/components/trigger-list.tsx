@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { CloneDialog } from "@/components/clone-dialog";
 import { replaceSearchParam } from "@/lib/search-params";
 import { TOKEN_STATUS_LABELS, TOKEN_STATUS_VARIANTS } from "@/lib/bearer-token";
+import { sortByName } from "@/lib/utils";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ListState } from "@/components/list-state";
 import { CardGridSkeleton, SkeletonLine } from "@/components/list-skeletons";
@@ -265,9 +266,9 @@ export function TriggerList({
   // Fired One-offs are read too and hidden here, so the list knows whether
   // the Workspace has any triggers at all.
   const allTriggers = toggle.apply(triggerRows);
-  const triggers = allTriggers
-    .filter((trigger) => showFired || !trigger.firedAt)
-    .sort((a, b) => a.name.localeCompare(b.name));
+  const triggers = sortByName(
+    allTriggers.filter((trigger) => showFired || !trigger.firedAt),
+  );
 
   const deleteFlow = useDeleteFlow<Serialized<Trigger>>({
     mutate,

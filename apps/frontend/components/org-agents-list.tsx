@@ -26,6 +26,7 @@ import { DeleteBlockedDialog } from "@/components/shared-resource-actions";
 import { writeEntity, type Scope, type Serialized } from "@/lib/api-write";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
 import { orgRoutes } from "@/lib/routes";
+import { sortByName } from "@/lib/utils";
 import { useSharedDeleteGuard } from "@/hooks/use-shared-resource-actions";
 
 // The Organization surface for Shared Agents (ADR-0007): Org Admins see and
@@ -51,7 +52,7 @@ export function OrgAgentsList({ orgId }: { orgId: string }) {
     mutate,
   } = useScopedList<Agent>("agents", scope);
 
-  const agents = [...rows].sort((a, b) => a.name.localeCompare(b.name));
+  const agents = sortByName(rows);
 
   const deleteFlow = useDeleteFlow<Serialized<Agent>>({
     mutate,

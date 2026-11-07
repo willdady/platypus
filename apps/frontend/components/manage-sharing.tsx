@@ -25,7 +25,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useState, type ReactNode } from "react";
-import { cn } from "@/lib/utils";
+import { cn, sortByName } from "@/lib/utils";
 import { attachmentsEntity, scopedUrl, writeAt } from "@/lib/api-write";
 import { useScopedList } from "@/hooks/use-scoped-list";
 import { useBackendUrl } from "@/components/auth-provider";
@@ -211,9 +211,7 @@ export function ManageAttachmentsDialog({
     id: string;
     name: string;
   }>("workspaces", open ? { orgId } : null);
-  const workspaces = [...allWorkspaces].sort((a, b) =>
-    a.name.localeCompare(b.name),
-  );
+  const workspaces = sortByName(allWorkspaces);
 
   const toggle = async (workspaceId: string, isAttached: boolean) => {
     if (!backendUrl) return;
