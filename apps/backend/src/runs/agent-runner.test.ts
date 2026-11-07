@@ -684,15 +684,20 @@ describe("AgentRunner.generate", () => {
   // — are both cross-step sums.
   it("records Context occupancy from the final step, not the sum across steps", async () => {
     mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
-    mockStreamText.mockReturnValueOnce(
-      streamResultOf({
-        text: "ok",
-        steps: [
-          { toolCalls: [], usage: { inputTokens: 1_000, outputTokens: 40 } },
-          { toolCalls: [], usage: { inputTokens: 3_500, outputTokens: 60 } },
-        ],
-        usage: { inputTokens: 4_500, outputTokens: 100 },
-      }),
+    const steps = [
+      { toolCalls: [], usage: { inputTokens: 1_000, outputTokens: 40 } },
+      { toolCalls: [], usage: { inputTokens: 3_500, outputTokens: 60 } },
+    ];
+    // The run's stats fold each step as the SDK ends it.
+    mockStreamText.mockImplementationOnce(
+      ({ onStepEnd }: { onStepEnd: (s: unknown) => void }) => {
+        steps.forEach(onStepEnd);
+        return streamResultOf({
+          text: "ok",
+          steps,
+          usage: { inputTokens: 4_500, outputTokens: 100 },
+        });
+      },
     );
 
     const sink = new RecordingSink();

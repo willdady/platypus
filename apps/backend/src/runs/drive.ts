@@ -14,15 +14,20 @@ import {
   NoProgressError,
   type NoProgressDetector,
 } from "./no-progress.ts";
-import { buildModelInvocation, type RunPlan } from "./run-plan.ts";
+import {
+  buildModelInvocation,
+  GENERATION_FIELDS,
+  pickPlanFields,
+  TURN_FIELDS,
+  type RunPlan,
+} from "./run-plan.ts";
 import {
   createOverflowRecovery,
   type OverflowRecovery,
 } from "./context-overflow-recovery.ts";
 import type { RunLifecycle } from "./run-lifecycle.ts";
 import { describeTimeout, TimeoutError } from "./run-registry.ts";
-import type { RunStep, UsageModel } from "./run-stats.ts";
-import { computeStats } from "./run-stats.ts";
+import type { computeStats, RunStep, UsageModel } from "./run-stats.ts";
 import { describeSdkError, formatStreamError } from "./stream-error.ts";
 import { applyToolDurations } from "./tool-durations.ts";
 import {
@@ -92,12 +97,6 @@ type DriveConversation =
 type DriveBase = {
   plan: RunPlan;
   run: RunLifecycle;
-  /**
-   * The SDK retry budget for the model calls. Absent leaves the SDK's default;
-   * a run with a Fallback model passes one, so the switch happens after two
-   * attempts rather than after three (ADR-0043).
-   */
-  maxRetries?: number;
 };
 
 /** The conversation as the SDK takes it — exactly one of the two keys. */
@@ -112,7 +111,7 @@ const conversationArgs = (conversation: DriveConversation) =>
  * condition when there is one, and the conversation.
  */
 const modelArgs = (
-  opts: DriveBase & DriveConversation,
+  opts: DriveBase & DriveConversation & { maxRetries?: number },
   noProgress: NoProgressDetector | null,
   overflowRecovery: OverflowRecovery,
 ) => ({
@@ -349,6 +348,11 @@ type ModelLoopOptions = DriveBase &
     continued?: PlatypusUIMessage;
     /** The folded final messages, handed over by the terminal finish. */
     onEnd?: (messages: PlatypusUIMessage[]) => void;
+    /**
+     * The SDK retry budget for the model calls. Absent leaves the SDK's
+     * default; the attempt sequence sets it (ADR-0043).
+     */
+    maxRetries?: number;
   };
 
 /** The SDK result slice `computeStats` folds — what a headless run reports. */
@@ -380,7 +384,7 @@ type LoopStep = LoopStats["steps"][number] & {
  * too — a tripped detector owns its stop and is never relabelled as a step
  * ceiling.
  */
-type ModelLoopOutcome = {
+export type ModelLoopOutcome = {
   /** The first failure the stream reported, in a caller-facing sentence. */
   failure?: string;
   /** The terminal finish hit the model's output ceiling. */
@@ -635,13 +639,12 @@ type SwitchDecision = {
 
 /**
  * Whether this ended loop is the primary's Provider failing in the class a
- * Fallback model may answer (ADR-0043). False when there is no fallback, one
- * has already been used, the run was stopped, the failure is not the
+ * Fallback model may answer (ADR-0043). False when there is no fallback (or it
+ * has already been used), the run was stopped, the failure is not the
  * Provider's, or either pair is unnamed (a hand-built test plan).
  */
 const fallbackSwitchFor = ({
   fallback,
-  switched,
   run,
   outcome,
   from,
@@ -649,14 +652,13 @@ const fallbackSwitchFor = ({
   maxSteps,
 }: {
   fallback: FallbackTurn | undefined;
-  switched: boolean;
   run: RunLifecycle;
   outcome: ModelLoopOutcome;
   from: UsageModel | undefined;
   stepsUsed: number;
   maxSteps: number;
 }): SwitchDecision | null => {
-  if (!fallback || switched || run.handle.signal.aborted) return null;
+  if (!fallback || run.handle.signal.aborted) return null;
   // The step ceiling counts across the whole run: a primary that already spent
   // it leaves nothing for the fallback, so the run ends as it failed.
   if (stepsUsed >= maxSteps) return null;
@@ -708,31 +710,18 @@ const recordModelSwitch = ({
 
 /**
  * The same plan on the fallback, with the step ceiling counting across the
- * whole run (ADR-0043). Fields that describe the turn rather than the model —
- * tools, the gate's scope, occupancy readings — stay the primary's; everything
- * the model decides comes from the fallback's resolved plan, so the primary's
- * Reasoning options and ceilings cannot leak into it.
+ * whole run (ADR-0043): the fallback's generation fields and the primary's
+ * turn fields.
  */
 const fallbackPlan = (
   plan: RunPlan,
   fallback: FallbackTurn,
   stepsUsed: number,
 ): RunPlan => ({
-  ...fallback.plan,
+  ...pickPlanFields(fallback.plan, GENERATION_FIELDS),
+  ...pickPlanFields(plan, TURN_FIELDS),
   maxSteps: Math.max(1, plan.maxSteps - stepsUsed),
-  tools: plan.tools,
   system: fallback.system,
-  ...(plan.gateScope ? { gateScope: plan.gateScope } : {}),
-  ...(plan.readOnlyToolNames
-    ? { readOnlyToolNames: plan.readOnlyToolNames }
-    : {}),
-  ...(plan.initialOccupancy !== undefined
-    ? { initialOccupancy: plan.initialOccupancy }
-    : {}),
-  ...(plan.priorOccupancyReadings
-    ? { priorOccupancyReadings: plan.priorOccupancyReadings }
-    : {}),
-  ...(plan.summaryId ? { summaryId: plan.summaryId } : {}),
 });
 
 /** The messages a loop's request carried, in the shape a switch continues from. */
@@ -786,6 +775,113 @@ export const fallbackFailureMessage = (
 ): string =>
   `The primary model failed: ${capFailure(primaryFailure)} The Fallback model also failed: ${capFailure(fallbackFailure)}`;
 
+/** The Fallback attempt sequence of one run (ADR-0043). */
+export type AttemptSequence = {
+  /** What the next loop runs on. Called once before each loop is built. */
+  current: () => {
+    plan: RunPlan;
+    conversation: DriveConversation;
+    maxRetries?: number;
+  };
+  /**
+   * Hands over an ended loop. Either the sequence switched to the fallback —
+   * the switch recorded on the run, and the caller builds a new loop from
+   * `current()` — or it settled.
+   */
+  settle: (outcome: ModelLoopOutcome) =>
+    | { next: true }
+    | {
+        next: false;
+        /**
+         * The caller-facing sentence for a non-clean end — both failures when
+         * the run switched. A rejection of a stopped run is the stop's to
+         * explain, so it is left out.
+         */
+        failure?: string;
+        /** The switch this run made, when it made one. */
+        modelSwitch?: ModelSwitch;
+      };
+};
+
+/**
+ * The attempts one run makes: the primary, then at most one switch to its
+ * Fallback model on a Provider failure (ADR-0043). Owns everything around a
+ * loop but its consumption, which differs per Drive shape.
+ */
+export const attemptSequence = (opts: {
+  plan: RunPlan;
+  conversation: DriveConversation;
+  fallback: FallbackTurn | undefined;
+  run: RunLifecycle;
+  events: RunEventScope | undefined;
+}): AttemptSequence => {
+  const { run, events } = opts;
+  let { plan, conversation } = opts;
+  /** Cleared once used: a run switches at most once. */
+  let fallback = opts.fallback;
+  let switched: { modelSwitch: ModelSwitch; primaryFailure: string } | null =
+    null;
+  // One SDK retry before a switch, rather than the default two. Absent a
+  // fallback the SDK's default stands.
+  const maxRetries = opts.fallback ? FALLBACK_SDK_RETRIES : undefined;
+
+  return {
+    current: () => ({
+      plan,
+      conversation,
+      ...(maxRetries !== undefined ? { maxRetries } : {}),
+    }),
+    settle: (outcome) => {
+      // A loop that failed mid-run has an empty `steps` (its terminal promise
+      // rejected); the steps it completed before that are still billed and
+      // still count towards the ceiling.
+      const steps =
+        outcome.steps.length > 0 ? outcome.steps : outcome.completedSteps;
+      const decision = fallbackSwitchFor({
+        fallback,
+        run,
+        outcome,
+        from: plan.usageModel,
+        stepsUsed: steps.length,
+        maxSteps: plan.maxSteps,
+      });
+      if (decision) {
+        const { modelSwitch, primaryFailure } = decision;
+        switched = { modelSwitch, primaryFailure };
+        fallback = undefined;
+        recordModelSwitch({ run, events, modelSwitch, primaryFailure });
+        // The next loop runs on the fallback with the step ceiling counting
+        // across the whole run, and continues from what the primary already
+        // sent — reasoning and vendor-only metadata stripped.
+        ({ plan, conversation } = switchToFallback({
+          plan,
+          conversation,
+          fallback: decision.fallback,
+          stepMessages: outcome.stepMessages,
+          stepsUsed: steps.length,
+        }));
+        return { next: true };
+      }
+      const failure =
+        outcome.failure ??
+        (outcome.rejection && !run.handle.signal.aborted
+          ? describeSdkError(outcome.rejection.error)
+          : undefined);
+      return {
+        next: false,
+        ...(failure !== undefined
+          ? {
+              failure: switched
+                ? fallbackFailureMessage(switched.primaryFailure, failure)
+                : failure,
+            }
+          : {}),
+        ...(switched ? { modelSwitch: switched.modelSwitch } : {}),
+      };
+    },
+  };
+};
+
 /**
  * Runs the shared model loop inside its registered lifecycle and folds the
  * streamed parts into `PlatypusUIMessage`s — metadata, tool durations, stream
@@ -831,17 +927,20 @@ const runStreamedDrive = (
     resolveDone = resolve;
   });
 
-  /** The request's conversation, replaced by the accumulated one on a switch. */
-  let conversation: DriveConversation =
-    givenPrompt !== undefined
-      ? { prompt: givenPrompt }
-      : { modelMessages: givenMessages };
+  // Only a delegate under a Trigger carries a fallback.
+  const attempts = attemptSequence({
+    plan: opts.plan,
+    conversation:
+      givenPrompt !== undefined
+        ? { prompt: givenPrompt }
+        : { modelMessages: givenMessages },
+    fallback,
+    run,
+    events,
+  });
   /** The UI conversation the stream folds onto. */
   let foldMessages = originalMessages;
   let seed: PlatypusUIMessage | undefined = continued;
-  let plan = opts.plan;
-  let switched = false;
-  let primaryFailure: string | undefined;
 
   /**
    * Starts a model loop and its chunk stream. Called once before the snapshot
@@ -853,13 +952,12 @@ const runStreamedDrive = (
     loop: ModelLoop;
     consume: ReadableStream<InferUIMessageChunk<PlatypusUIMessage>>;
   } => {
+    const { conversation, ...attempt } = attempts.current();
     const build = () =>
       modelLoop({
         ...loopOpts,
-        ...(conversation.prompt !== undefined
-          ? { prompt: conversation.prompt }
-          : { modelMessages: conversation.modelMessages }),
-        plan,
+        ...conversation,
+        ...attempt,
         run,
         originalMessages: foldMessages,
         continued: seed,
@@ -936,46 +1034,9 @@ const runStreamedDrive = (
       // The cutoffs were decided once, as the loop's terminal finish passed
       // through its metadata extractor; the run records them from here.
       const outcome = await loop.outcome();
-      const outcomeSteps =
-        outcome.steps.length > 0 ? outcome.steps : outcome.completedSteps;
-      // Only a delegate under a Trigger carries a fallback, and only until it
-      // has switched once. A stream that ended with no stream failure (a
-      // ceiling stop, or a clean finish) never switches.
-      const switchable = fallbackSwitchFor({
-        fallback,
-        switched,
-        run,
-        outcome,
-        from: plan.usageModel,
-        stepsUsed: outcomeSteps.length,
-        maxSteps: plan.maxSteps,
-      });
-      if (switchable) {
-        const {
-          primaryFailure: captured,
-          modelSwitch,
-          fallback: switchedTo,
-        } = switchable;
-        primaryFailure = captured;
-        switched = true;
-        recordModelSwitch({
-          run,
-          events,
-          modelSwitch,
-          primaryFailure: captured,
-        });
-        // The next loop runs on the fallback with the step ceiling counting
-        // across the whole run, and continues from what the primary already
-        // sent — reasoning and vendor-only metadata stripped (ADR-0043).
-        const next = switchToFallback({
-          plan,
-          conversation,
-          fallback: switchedTo,
-          stepMessages: outcome.stepMessages,
-          stepsUsed: outcomeSteps.length,
-        });
-        plan = next.plan;
-        conversation = next.conversation;
+      const settled = attempts.settle(outcome);
+      if (settled.next) {
+        // The fallback's loop folds onto what the primary already streamed.
         foldMessages = latest ? [latest] : [];
         seed = latest;
         finalHandedOver = false;
@@ -986,18 +1047,8 @@ const runStreamedDrive = (
       if (outcome.truncated || outcome.stoppedAtStepLimit) {
         run.setStats(withCutoffs(run.stats, outcome));
       }
-      const activeFailure =
-        outcome.failure ??
-        (outcome.rejection && !run.handle.signal.aborted
-          ? describeSdkError(outcome.rejection.error)
-          : undefined);
       const decision = decideTerminalStatus(run, {
-        failure:
-          primaryFailure !== undefined &&
-          switched &&
-          activeFailure !== undefined
-            ? fallbackFailureMessage(primaryFailure, activeFailure)
-            : activeFailure,
+        failure: settled.failure,
         noProgress,
         failOnStreamError: behavior.failOnStreamError,
       });
@@ -1225,49 +1276,37 @@ export const driveOnce = async (
     ? { recorder, parentEventId: null }
     : undefined;
 
-  /** The request's conversation, replaced by the accumulated one on a switch. */
-  let conversation: DriveConversation =
-    loopOpts.prompt !== undefined
-      ? { prompt: loopOpts.prompt }
-      : { modelMessages: loopOpts.modelMessages };
   const {
     prompt: _prompt,
     modelMessages: _modelMessages,
     ...baseOpts
   } = loopOpts;
-  let plan = initialPlan;
-  let switched = false;
-  let modelSwitch: ModelSwitch | undefined;
-  let primaryFailure: string | undefined;
-
-  // Every completed step of every attempt, and the summed usage, so a run that
-  // switched still reports the whole run — its Step ceiling and its billing
-  // count across the switch (ADR-0043).
-  const steps: LoopStats["steps"] = [];
-  let totalInput = 0;
-  let totalOutput = 0;
-  let cacheRead: number | undefined;
-  let cacheWrite: number | undefined;
 
   // The plan's tool wrapping is inside the `try` too: nothing above this drive
   // finishes the run if it throws (issue #1122).
   try {
+    const attempts = attemptSequence({
+      plan: initialPlan,
+      conversation:
+        loopOpts.prompt !== undefined
+          ? { prompt: loopOpts.prompt }
+          : { modelMessages: loopOpts.modelMessages },
+      fallback,
+      run,
+      events: scope,
+    });
     const finalOutcome = await (async (): Promise<ModelLoopOutcome> => {
       for (;;) {
+        const { conversation, ...attempt } = attempts.current();
         // Built inside the causation chain so the SDK's stream keeps it alive for
         // every tool execution it drives (ADR-0022).
         const loop = withAgentCausation(agentId, () =>
           modelLoop({
             ...baseOpts,
             ...conversation,
-            plan,
+            ...attempt,
             noProgress,
             events: scope,
-            // One SDK retry before a switch, rather than the default two
-            // (ADR-0043). Absent a fallback the SDK's default stands.
-            maxRetries: fallback
-              ? (baseOpts.maxRetries ?? FALLBACK_SDK_RETRIES)
-              : baseOpts.maxRetries,
           }),
         );
 
@@ -1277,96 +1316,32 @@ export const driveOnce = async (
           if (scope) recordUiChunk(scope, chunk);
         }
         const outcome = await loop.outcome();
-        // A loop that failed mid-run has an empty `steps` (its terminal promise
-        // rejected); the steps it completed before that are still billed and
-        // still count towards the ceiling.
-        const outcomeSteps =
-          outcome.steps.length > 0 ? outcome.steps : outcome.completedSteps;
-        steps.push(...outcomeSteps);
-        for (const step of outcomeSteps) {
-          totalInput += step.usage?.inputTokens ?? 0;
-          totalOutput += step.usage?.outputTokens ?? 0;
-          const stepDetails = step.usage?.inputTokenDetails;
-          if (stepDetails?.cacheReadTokens !== undefined) {
-            cacheRead = (cacheRead ?? 0) + stepDetails.cacheReadTokens;
-          }
-          if (stepDetails?.cacheWriteTokens !== undefined) {
-            cacheWrite = (cacheWrite ?? 0) + stepDetails.cacheWriteTokens;
-          }
-        }
-
-        const switchable = fallbackSwitchFor({
-          fallback,
-          switched,
-          run,
-          outcome,
-          from: plan.usageModel,
-          stepsUsed: outcomeSteps.length,
-          maxSteps: plan.maxSteps,
-        });
-        if (switchable) {
-          primaryFailure = switchable.primaryFailure;
-          modelSwitch = switchable.modelSwitch;
-          switched = true;
-          recordModelSwitch({
-            run,
-            events: scope,
-            modelSwitch: switchable.modelSwitch,
-            primaryFailure,
-          });
-          const next = switchToFallback({
-            plan,
-            conversation,
-            fallback: switchable.fallback,
-            stepMessages: outcome.stepMessages,
-            stepsUsed: outcomeSteps.length,
-          });
-          plan = next.plan;
-          conversation = next.conversation;
-          continue;
-        }
+        const settled = attempts.settle(outcome);
+        if (settled.next) continue;
 
         // What the stream reported outranks what the result's promises rejected
         // with: a provider that throws before producing anything rejects them
         // with a generic "no output" error, and the reason is in the report.
-        if (outcome.failure) {
-          throw new Error(
-            primaryFailure !== undefined && switched
-              ? fallbackFailureMessage(primaryFailure, outcome.failure)
-              : outcome.failure,
-          );
+        // A switched run's error names both failures; an unswitched
+        // rejection is rethrown as it was.
+        if (
+          settled.failure !== undefined &&
+          (outcome.failure !== undefined || settled.modelSwitch)
+        ) {
+          throw new Error(settled.failure);
         }
         if (outcome.rejection) {
-          const reason = describeSdkError(outcome.rejection.error);
-          if (primaryFailure !== undefined && switched) {
-            throw new Error(fallbackFailureMessage(primaryFailure, reason));
-          }
           throw outcome.rejection.error instanceof Error
             ? outcome.rejection.error
-            : new Error(reason);
+            : new Error(describeSdkError(outcome.rejection.error));
         }
         return outcome;
       }
     })();
 
-    const mergedStats = computeStats({
-      steps,
-      totalUsage: {
-        inputTokens: totalInput,
-        outputTokens: totalOutput,
-        inputTokenDetails: {
-          ...(cacheRead !== undefined ? { cacheReadTokens: cacheRead } : {}),
-          ...(cacheWrite !== undefined ? { cacheWriteTokens: cacheWrite } : {}),
-        },
-      },
-    });
-    const stats = withCutoffs(
-      {
-        ...mergedStats,
-        ...(modelSwitch ? { fallback: modelSwitch } : {}),
-      },
-      finalOutcome,
-    );
+    // Every step of every attempt was folded into the run's stats as it ended,
+    // billed to the model that served it (ADR-0043).
+    const stats = withCutoffs(run.stats, finalOutcome);
     run.setStats(stats);
 
     // The no-progress stop condition halts the loop cleanly (the SDK resolves

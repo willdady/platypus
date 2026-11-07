@@ -10,7 +10,7 @@ import type {
 import type { WorkspaceScope } from "../scope.ts";
 import type { RunTimeouts } from "./run-registry.ts";
 import type { RunEventRecorder } from "./run-events.ts";
-import type { RunPlan } from "./run-plan.ts";
+import type { GenerationField, RunPlan } from "./run-plan.ts";
 
 export type RunId = string;
 
@@ -84,7 +84,7 @@ export type RunStatus = "running" | "succeeded" | "failed" | "cancelled";
  * switch changes the Provider's security directives with the model.
  */
 export type FallbackTurn = {
-  plan: Omit<RunPlan, "system" | "tools">;
+  plan: Pick<RunPlan, Exclude<GenerationField, "system">>;
   system: string;
 };
 

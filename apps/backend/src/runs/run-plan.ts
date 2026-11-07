@@ -151,6 +151,57 @@ export type RunPlan = {
   gateScope?: ToolGateScope;
 };
 
+/**
+ * `RunPlan` fields that describe the turn, not the model. A switch keeps the
+ * primary's: a resolver has no turn context, so the fallback's plan has none.
+ */
+export const TURN_FIELDS = {
+  tools: true,
+  gateScope: true,
+  readOnlyToolNames: true,
+  initialOccupancy: true,
+  priorOccupancyReadings: true,
+  summaryId: true,
+} as const satisfies Partial<Record<keyof RunPlan, true>>;
+type TurnField = keyof typeof TURN_FIELDS;
+
+/**
+ * Every other `RunPlan` field, which a switch takes from the fallback's
+ * resolved plan so the primary's Reasoning options and ceilings cannot leak
+ * into it. Listed so a new `RunPlan` field fails typecheck until it is placed
+ * in one of the two lists, rather than being silently dropped on a switch.
+ */
+export const GENERATION_FIELDS = {
+  model: true,
+  usageModel: true,
+  system: true,
+  maxSteps: true,
+  maxOutputTokens: true,
+  temperature: true,
+  topP: true,
+  topK: true,
+  frequencyPenalty: true,
+  presencePenalty: true,
+  seed: true,
+  reasoning: true,
+  providerOptions: true,
+  contextWindow: true,
+} as const satisfies Record<Exclude<keyof RunPlan, TurnField>, true>;
+
+/** What a Fallback model's resolver supplies: the generation half of a plan. */
+export type GenerationField = keyof typeof GENERATION_FIELDS;
+
+/** The `keys` of `from` that are set. */
+export const pickPlanFields = <K extends keyof RunPlan>(
+  from: Partial<RunPlan>,
+  keys: Record<K, true>,
+): Pick<RunPlan, K> =>
+  Object.fromEntries(
+    Object.keys(keys)
+      .map((key) => [key, from[key as K]] as const)
+      .filter(([, value]) => value !== undefined),
+  ) as Pick<RunPlan, K>;
+
 /** The generation settings, minus any the plan never set. */
 const declaredSettings = (plan: RunPlan): Partial<RunPlan> =>
   Object.fromEntries(
