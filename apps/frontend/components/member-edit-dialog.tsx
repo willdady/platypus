@@ -100,7 +100,6 @@ export function MemberEditDialog({
           <Button
             onClick={() => submit()}
             disabled={isSubmitting || role === member.role}
-            className={isSubmitting ? "opacity-50" : ""}
           >
             {isSubmitting ? "Saving..." : "Save"}
           </Button>

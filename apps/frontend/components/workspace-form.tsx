@@ -526,6 +526,7 @@ function WorkspaceForm({ orgId, workspaceId }: WorkspaceFormProps) {
           <FormFooterButtons
             type="submit"
             submitText="Save"
+            pending={isSubmitting}
             submitDisabled={isSubmitting || !canSubmit}
             deleteVisible
             deleteDisabled={isSubmitting}

@@ -1238,6 +1238,7 @@ function ProviderForm({
           <FormFooterButtons
             type="submit"
             submitText={providerId ? "Update" : "Save"}
+            pending={isSubmitting}
             submitDisabled={
               isSubmitting || !!headersError || !!extraBodyError
               // No `canSubmit` gate: several fields here (apiMode, organization,

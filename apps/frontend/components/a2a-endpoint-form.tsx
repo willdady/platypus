@@ -288,6 +288,7 @@ function A2aEndpointForm({
         <FormFooterButtons
           type="submit"
           submitText={isEditMode ? "Update" : "Save"}
+          pending={isSubmitting}
           submitDisabled={isSubmitting || !canSubmit || !formData.agentId}
           deleteVisible={isEditMode}
           deleteDisabled={isSubmitting}

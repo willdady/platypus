@@ -564,6 +564,7 @@ function TriggerForm({
       <FormFooterButtons
         type="submit"
         submitText={triggerId ? "Update" : "Save"}
+        pending={isSubmitting}
         submitDisabled={
           isSubmitting || !canSubmit || !typeFieldsValid || inboundBlocked
         }

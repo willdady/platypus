@@ -793,6 +793,7 @@ function McpForm({
       <FormFooterButtons
         type="submit"
         submitText={mcpId ? "Update" : "Save"}
+        pending={isSubmitting}
         submitDisabled={isSubmitting || isTesting || !canSubmit}
         deleteVisible={!!mcpId}
         deleteDisabled={isSubmitting || isTesting}

@@ -246,6 +246,7 @@ export function KanbanBoardForm({
         <FormFooterButtons
           type="submit"
           submitText="Save"
+          pending={isSubmitting}
           submitDisabled={
             isSubmitting || isDeleting || !formData.name.trim() || !canSubmit
           }

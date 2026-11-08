@@ -451,6 +451,7 @@ function WebhookForm({ orgId, workspaceId, webhookId }: WebhookFormProps) {
       <FormFooterButtons
         type="submit"
         submitText={isEditMode ? "Update" : "Save"}
+        pending={isSubmitting}
         submitDisabled={isSubmitting || !canSubmit}
         deleteVisible={isEditMode}
         deleteDisabled={isSubmitting}

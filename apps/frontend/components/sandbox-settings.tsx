@@ -50,7 +50,10 @@ import {
 import { EmptyCard } from "@/components/empty-card";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { FormFooterButtons } from "@/components/form-footer-buttons";
+import {
+  FormFooterButtons,
+  PENDING_SUBMIT_TEXT,
+} from "@/components/form-footer-buttons";
 import { ListError } from "@/components/list-state";
 import { LoadingRegion } from "@/components/list-skeletons";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -1026,7 +1029,9 @@ function SandboxSettings({
             Back
           </Button>
           <Button type="button" onClick={handleSave} disabled={isSubmitting}>
-            {draft.submitText}
+            {isSubmitting && draft.submitText === "Save"
+              ? PENDING_SUBMIT_TEXT.Save
+              : draft.submitText}
           </Button>
         </div>
       ) : (
@@ -1034,6 +1039,7 @@ function SandboxSettings({
           <FormFooterButtons
             type="submit"
             submitText="Save"
+            pending={isSubmitting}
             submitDisabled={isSubmitting}
             deleteVisible={hasSandbox && canConfigure}
             deleteDisabled={isSubmitting}

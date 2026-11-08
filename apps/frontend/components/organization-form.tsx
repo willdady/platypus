@@ -169,6 +169,7 @@ function OrganizationForm({ classNames, orgId }: OrganizationFormProps) {
         <FormFooterButtons
           type="submit"
           submitText="Save"
+          pending={isSubmitting}
           submitDisabled={isSubmitting || !canSubmit}
           deleteVisible={!!orgId}
           deleteDisabled={isSubmitting}

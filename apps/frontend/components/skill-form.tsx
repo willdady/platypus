@@ -339,6 +339,7 @@ function SkillForm({
       <FormFooterButtons
         type="submit"
         submitText={skillId ? "Update" : "Save"}
+        pending={isSubmitting}
         submitDisabled={isSubmitting || !canSubmit}
         deleteVisible={!!skillId}
         deleteDisabled={isSubmitting || agentsDirty}

@@ -1063,6 +1063,7 @@ function AgentForm({
       <FormFooterButtons
         type="submit"
         submitText={agentId ? "Update" : "Save"}
+        pending={isSubmitting}
         submitDisabled={isSubmitting || readOnly || !canSubmit}
         deleteVisible={!!agentId && !isOrgScoped}
         deleteDisabled={isSubmitting}
