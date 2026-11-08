@@ -1,9 +1,30 @@
 ---
 name: ui-conventions
-description: Which Platypus frontend component a UI state uses, and how it reads — empty states (EmptyCard vs ListState), their icon, title, description and buttons. Use when adding or changing a screen, list or section in apps/frontend that can be empty or fail to load.
+description: Which Platypus frontend primitive a screen uses, and how it reads — the need → primitive table, and empty states (EmptyCard vs ListState). Use when building or changing any screen, list or section in apps/frontend.
 ---
 
 # Frontend UI Conventions
+
+## Shared primitives
+
+Reach for the shared primitive before building the need by hand. The last
+column points at the rules that govern it; empty states have their own picker
+under [§ Empty states](#empty-states).
+
+| Need                                         | Primitive                                                                    | Governed by                                                               |
+| -------------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| A list of entity cards                       | `EntityCardList`                                                             | [`card-conventions`](../card-conventions/SKILL.md)                        |
+| A row's ⋮ menu                               | `RowActionsMenu`                                                             | [`card-conventions`](../card-conventions/SKILL.md) § The ⋮ menu order     |
+| A disabled item's title-row badge            | `DisabledBadge`                                                              | [`card-conventions`](../card-conventions/SKILL.md) § Icons and badges     |
+| A count that lists its names on hover        | `CountTooltip`                                                               | [`card-conventions`](../card-conventions/SKILL.md) § Card height          |
+| A list's create controls and pagination      | `ListFooter`                                                                 | [§ Empty states](#empty-states)                                           |
+| A loading skeleton that announces what loads | `LoadingRegion`                                                              | —                                                                         |
+| A labelled text field, textarea or select    | `FormTextField` / `FormTextareaField` / `FormSelectField`                    | —                                                                         |
+| A collapsed "Advanced settings" block        | `FormAdvancedSection`                                                        | [`form-conventions`](../form-conventions/SKILL.md) § How the form submits |
+| A write-backed entity form                   | `useEntityForm`                                                              | [`form-conventions`](../form-conventions/SKILL.md)                        |
+| A one-shot write with a pending state        | `useMutation`                                                                | —                                                                         |
+| A read-only value with a copy button         | `CopyRow`                                                                    | —                                                                         |
+| A delete behind a confirm dialog             | `DeleteConfirmDialog` + `useDeleteFlow` (lists) or `useEntityDelete` (forms) | [`form-conventions`](../form-conventions/SKILL.md) § When a delete fails  |
 
 ## Empty states
 
