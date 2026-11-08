@@ -1,8 +1,7 @@
 "use client";
 
-import { useParams, usePathname } from "next/navigation";
 import { WorkspaceShell } from "@/components/workspace-shell";
-import { isWorkspaceSidebarRoute } from "@/lib/routes";
+import { useWorkspaceShellProps } from "@/hooks/use-workspace-shell-props";
 
 // The Workspace layout awaits the workspace on the server, and a segment's
 // own `loading` can't cover its layout — so the fallback lives here, one
@@ -13,18 +12,10 @@ import { isWorkspaceSidebarRoute } from "@/lib/routes";
 // then swapped for the page's own skeleton. It shows when entering or
 // switching Workspaces; navigation within one keeps the page up.
 export default function WorkspaceLoading() {
-  const { orgId, workspaceId } = useParams<{
-    orgId: string;
-    workspaceId?: string;
-  }>();
-  const pathname = usePathname();
+  const shell = useWorkspaceShellProps();
 
   return (
-    <WorkspaceShell
-      orgId={orgId}
-      workspaceId={workspaceId}
-      sidebar={isWorkspaceSidebarRoute(pathname)}
-    >
+    <WorkspaceShell {...shell}>
       <div
         role="status"
         aria-busy="true"
