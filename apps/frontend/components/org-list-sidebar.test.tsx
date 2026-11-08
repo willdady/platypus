@@ -39,6 +39,23 @@ beforeEach(() => {
 });
 
 describe("OrgListSidebar", () => {
+  it("announces both placeholders while the organizations load", () => {
+    read.data = undefined;
+
+    render(
+      <SidebarProvider>
+        <OrgListSidebar currentOrgId="org1" />
+      </SidebarProvider>,
+    );
+
+    expect(
+      screen.getByRole("status", { name: "Loading organizations" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("status", { name: "Loading add organization" }),
+    ).toBeInTheDocument();
+  });
+
   it("lists organizations by name without reordering the cached results", () => {
     read.data = {
       results: [

@@ -50,6 +50,7 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
+import { LoadingRegion } from "@/components/list-skeletons";
 import { workspaceRoutes } from "@/lib/routes";
 import { replaceSearchParam } from "@/lib/search-params";
 
@@ -355,9 +356,9 @@ export function KanbanBoard({
   }
   if (!data) {
     return (
-      <div
+      <LoadingRegion
+        label="Loading board"
         className="flex flex-col h-full min-w-0 overflow-hidden"
-        aria-label="Loading board"
       >
         <div className="flex items-center justify-between px-4 py-2 border-b shrink-0">
           <Skeleton className="h-7 w-40" />
@@ -404,7 +405,7 @@ export function KanbanBoard({
             <div className="w-40 min-w-40 shrink-0 bg-muted/30 rounded-lg border border-dashed border-muted-foreground/30" />
           </div>
         </div>
-      </div>
+      </LoadingRegion>
     );
   }
 

@@ -7,6 +7,7 @@ import {
   within,
 } from "@testing-library/react";
 import type { Trigger } from "@platypus/schemas";
+import { triggerCreateSchema } from "@platypus/schemas";
 import {
   authMock,
   swrMock,
@@ -131,6 +132,27 @@ describe("TriggerList clone", () => {
   const sentBody = (fetchMock: ReturnType<typeof stubAcceptedSave>): unknown =>
     JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
 
+  /** The create variant `type` is validated against. */
+  const createShape = (type: Trigger["type"]) => {
+    const option = triggerCreateSchema.options.find(
+      (candidate) => candidate.shape.type.value === type,
+    );
+    if (!option) throw new Error(`No create schema for ${type}`);
+    return option.shape;
+  };
+
+  /**
+   * The keys a clone must send: the create's own keys the original carries,
+   * plus the clone's own Inbound `issueToken` override.
+   */
+  const cloneKeys = (original: Trigger) =>
+    [
+      ...Object.keys(createShape(original.type)).filter((key) =>
+        Object.hasOwn(original, key),
+      ),
+      ...(original.type === "inbound" ? ["issueToken"] : []),
+    ].sort();
+
   it("names the copy after the original", async () => {
     await renderTriggers([cronTrigger], "Clone");
 
@@ -144,14 +166,13 @@ describe("TriggerList clone", () => {
     const fetchMock = stubAcceptedSave({ id: "t9" }, 201);
 
     // A fired One-off: its clone is a pending One-off, unfired.
-    await renderTriggers([
-      {
-        ...cronTrigger,
-        ...runState,
-        config: { ...cronTrigger.config, isOneOff: true },
-        firedAt: "2026-02-01T08:00:00.000Z",
-      } as unknown as Trigger,
-    ]);
+    const firedOneOff = {
+      ...cronTrigger,
+      ...runState,
+      config: { ...cronTrigger.config, isOneOff: true },
+      firedAt: "2026-02-01T08:00:00.000Z",
+    } as unknown as Trigger;
+    await renderTriggers([firedOneOff]);
     const user = setupUser();
     await user.click(screen.getByRole("switch", { name: "Show fired" }));
     await openDropdownMenu();
@@ -165,8 +186,10 @@ describe("TriggerList clone", () => {
       "http://test/organizations/org1/workspaces/ws1/triggers",
       expect.objectContaining({ method: "POST" }),
     );
-    expect(sentBody(fetchMock)).toEqual({
-      workspaceId: "ws1",
+    const body = sentBody(fetchMock) as Record<string, unknown>;
+    expect(triggerCreateSchema.safeParse(body).success).toBe(true);
+    expect(Object.keys(body).sort()).toEqual(cloneKeys(firedOneOff));
+    expect(body).toMatchObject({
       agentId: "agent1",
       type: "cron",
       name: "Nightly job (copy)",
@@ -177,31 +200,34 @@ describe("TriggerList clone", () => {
       extractMemories: true,
       config: { cronExpression: "0 0 * * *", timezone: "UTC", isOneOff: true },
       enabled: false,
+      workspaceId: "ws1",
     });
+    expect(body).not.toHaveProperty("firedAt");
+    expect(body).not.toHaveProperty("lastRunAt");
+    expect(body).not.toHaveProperty("nextRunAt");
   });
 
   it("creates a disabled Event copy that sends no token flag", async () => {
     const fetchMock = stubAcceptedSave({ id: "t9" }, 201);
 
-    await renderTriggers(
-      [
-        {
-          ...cronTrigger,
-          ...runState,
-          type: "event",
-          config: { events: ["card.created"] },
-        } as unknown as Trigger,
-      ],
-      "Clone",
-    );
+    const eventTrigger = {
+      ...cronTrigger,
+      ...runState,
+      type: "event",
+      config: { events: ["card.created"] },
+    } as unknown as Trigger;
+    await renderTriggers([eventTrigger], "Clone");
     await confirmDialog("Clone");
 
     await waitFor(() => expect(push).toHaveBeenCalled());
-    expect(sentBody(fetchMock)).toMatchObject({
+    const body = sentBody(fetchMock) as Record<string, unknown>;
+    expect(triggerCreateSchema.safeParse(body).success).toBe(true);
+    expect(Object.keys(body).sort()).toEqual(cloneKeys(eventTrigger));
+    expect(body).toMatchObject({
       type: "event",
       enabled: false,
     });
-    expect(sentBody(fetchMock)).not.toHaveProperty("issueToken");
+    expect(body).not.toHaveProperty("issueToken");
   });
 
   it("creates an Inbound copy that asks for no token", async () => {
@@ -213,8 +239,10 @@ describe("TriggerList clone", () => {
     await confirmDialog("Clone");
 
     await waitFor(() => expect(push).toHaveBeenCalled());
-    expect(sentBody(fetchMock)).toEqual({
-      workspaceId: "ws1",
+    const body = sentBody(fetchMock) as Record<string, unknown>;
+    expect(triggerCreateSchema.safeParse(body).success).toBe(true);
+    expect(Object.keys(body).sort()).toEqual(cloneKeys(inboundTrigger));
+    expect(body).toMatchObject({
       agentId: "agent1",
       type: "inbound",
       name: "Renamed",
@@ -226,7 +254,11 @@ describe("TriggerList clone", () => {
       config: { inputs: [], tokenExpiryDays: 90 },
       enabled: false,
       issueToken: false,
+      workspaceId: "ws1",
     });
+    expect(body).not.toHaveProperty("tokenStatus");
+    expect(body).not.toHaveProperty("tokenCreatedAt");
+    expect(body).not.toHaveProperty("tokenExpiresAt");
   });
 
   it("keeps the dialog open with the backend's reason when the create fails", async () => {

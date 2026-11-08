@@ -29,6 +29,7 @@ import { cn, sortByName } from "@/lib/utils";
 import { attachmentsEntity, scopedUrl, writeAt } from "@/lib/api-write";
 import { useScopedList } from "@/hooks/use-scoped-list";
 import { useBackendUrl } from "@/components/auth-provider";
+import { LoadingRegion } from "@/components/list-skeletons";
 import { Skeleton } from "@/components/ui/skeleton";
 
 type ResourceType = "mcp" | "provider" | "skill" | "agent";
@@ -268,13 +269,13 @@ export function ManageAttachmentsDialog({
 
         {/* Currently-attached workspaces as removable chips. */}
         {attLoading ? (
-          <div
+          <LoadingRegion
+            label="Loading attachments"
             className="flex flex-wrap gap-1"
-            aria-label="Loading attachments"
           >
             <Skeleton className="h-badge w-24 rounded-full" />
             <Skeleton className="h-badge w-20 rounded-full" />
-          </div>
+          </LoadingRegion>
         ) : count > 0 ? (
           <div className="flex flex-wrap gap-1">
             {attached.map((a) => (
@@ -305,14 +306,14 @@ export function ManageAttachmentsDialog({
             {/* Rows in place of the false "No workspaces found." while the
                 list is still loading. */}
             {wsLoading ? (
-              <div className="p-1" aria-label="Loading workspaces">
+              <LoadingRegion label="Loading workspaces" className="p-1">
                 {[0, 1, 2].map((i) => (
                   <div key={i} className="flex items-center gap-2 px-2 py-1.5">
                     <Skeleton className="mr-2 size-4" />
                     <Skeleton className="h-4 w-32" />
                   </div>
                 ))}
-              </div>
+              </LoadingRegion>
             ) : (
               <CommandEmpty>No workspaces found.</CommandEmpty>
             )}

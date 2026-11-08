@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { TriggerRunRowSkeleton } from "@/components/trigger-run-row-skeleton";
+import { LoadingRegion } from "@/components/list-skeletons";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { fetcher } from "@/lib/utils";
 
@@ -205,14 +206,14 @@ function TriggerRunsPage({
           session resolves, when `getKey` has no key yet and SWR reports
           `isLoading: false`. Reading `isLoading` alone flashed "No runs yet". */}
         {!data && !error ? (
-          <div
+          <LoadingRegion
+            label="Loading trigger runs"
             className="border rounded-lg divide-y"
-            aria-label="Loading trigger runs"
           >
             {Array.from({ length: 3 }).map((_, i) => (
               <TriggerRunRowSkeleton key={i} />
             ))}
-          </div>
+          </LoadingRegion>
         ) : error && runs.length === 0 ? (
           // A read that failed is not an empty result. Saying "nothing matched"
           // here would be a claim about data the page never received — and the

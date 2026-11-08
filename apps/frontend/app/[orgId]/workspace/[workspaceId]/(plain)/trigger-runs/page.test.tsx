@@ -297,7 +297,9 @@ describe("Trigger runs empty states", () => {
     state.resolved = false;
     await renderPage();
 
-    expect(screen.getByLabelText("Loading trigger runs")).toBeInTheDocument();
+    expect(
+      screen.getByRole("status", { name: "Loading trigger runs" }),
+    ).toBeInTheDocument();
     expect(screen.queryByText(/No runs yet/)).not.toBeInTheDocument();
   });
 

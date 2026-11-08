@@ -1066,7 +1066,9 @@ describe("KanbanBoard load states", () => {
     boardLoaded = false;
     renderBoard();
 
-    expect(screen.getByLabelText("Loading board")).toBeInTheDocument();
+    expect(
+      screen.getByRole("status", { name: "Loading board" }),
+    ).toBeInTheDocument();
   });
 
   it("reports a failed board read with a retry and a way back", () => {

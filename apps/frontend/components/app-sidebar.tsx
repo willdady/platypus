@@ -39,6 +39,7 @@ import {
   SidebarSeparator,
 } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
+import { LoadingRegion } from "@/components/list-skeletons";
 import { ListState } from "@/components/list-state";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { Button } from "@/components/ui/button";
@@ -636,20 +637,22 @@ export function AppSidebar() {
 /** Stands in for the first chat-history group until the list first loads. */
 function ChatHistorySkeleton() {
   return (
-    <SidebarGroup role="status" aria-label="Loading chats">
-      <SidebarGroupLabel>
-        <Skeleton className="mr-2 size-4" />
-        <Skeleton className="h-3 w-20" />
-      </SidebarGroupLabel>
-      <SidebarGroupContent>
-        <SidebarMenu>
-          {Array.from({ length: 5 }, (_, i) => (
-            <SidebarMenuItem key={i}>
-              <SidebarMenuSkeleton />
-            </SidebarMenuItem>
-          ))}
-        </SidebarMenu>
-      </SidebarGroupContent>
-    </SidebarGroup>
+    <LoadingRegion label="Loading chats">
+      <SidebarGroup>
+        <SidebarGroupLabel>
+          <Skeleton className="mr-2 size-4" />
+          <Skeleton className="h-3 w-20" />
+        </SidebarGroupLabel>
+        <SidebarGroupContent>
+          <SidebarMenu>
+            {Array.from({ length: 5 }, (_, i) => (
+              <SidebarMenuItem key={i}>
+                <SidebarMenuSkeleton />
+              </SidebarMenuItem>
+            ))}
+          </SidebarMenu>
+        </SidebarGroupContent>
+      </SidebarGroup>
+    </LoadingRegion>
   );
 }

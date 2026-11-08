@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from "./ui/dialog";
 import { Item, ItemActions, ItemContent, ItemTitle } from "./ui/item";
+import { LoadingRegion } from "./list-skeletons";
 import { ListState } from "./list-state";
 import { Skeleton } from "./ui/skeleton";
 import { useState } from "react";
@@ -106,20 +107,22 @@ function AttachSharedResourceDialog({
         {isLoading ? (
           // Rows shaped like the loaded ones, in place of the false "none
           // available" while the list is still loading.
-          <ul aria-label={`Loading shared ${label}s`}>
-            {[0, 1, 2].map((i) => (
-              <li key={i} className="mb-2">
-                <Item variant="outline">
-                  <ItemContent>
-                    <Skeleton className="h-5 w-40" />
-                  </ItemContent>
-                  <ItemActions>
-                    <Skeleton className="h-8 w-[70px]" />
-                  </ItemActions>
-                </Item>
-              </li>
-            ))}
-          </ul>
+          <LoadingRegion label={`Loading shared ${label}s`}>
+            <ul>
+              {[0, 1, 2].map((i) => (
+                <li key={i} className="mb-2">
+                  <Item variant="outline">
+                    <ItemContent>
+                      <Skeleton className="h-5 w-40" />
+                    </ItemContent>
+                    <ItemActions>
+                      <Skeleton className="h-8 w-[70px]" />
+                    </ItemActions>
+                  </Item>
+                </li>
+              ))}
+            </ul>
+          </LoadingRegion>
         ) : available.length === 0 ? (
           <ListState variant="empty">
             No shared {label}s available to attach.

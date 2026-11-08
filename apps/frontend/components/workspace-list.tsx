@@ -13,6 +13,7 @@ import { useScopedList } from "@/hooks/use-scoped-list";
 import { ChevronRight, FolderClosed } from "lucide-react";
 import Link from "next/link";
 import { Skeleton } from "@/components/ui/skeleton";
+import { LoadingRegion } from "@/components/list-skeletons";
 import { ListError } from "@/components/list-state";
 import { workspaceRoutes } from "@/lib/routes";
 
@@ -41,24 +42,26 @@ function WorkspaceList({
 
   if (isLoading || !data) {
     return (
-      <ItemGroup className={cn("mb-4", className)}>
-        {Array.from({ length: 3 }).map((_, i) => (
-          <Item key={i} variant="outline" className="mb-2">
-            <ItemContent>
-              {/* The 18px folder icon beside one line of title text. */}
-              <ItemTitle>
-                <Skeleton className="size-[18px] shrink-0 rounded" />
-                <span className="flex h-lh items-center">
-                  <Skeleton className="h-4 w-40 rounded" />
-                </span>
-              </ItemTitle>
-            </ItemContent>
-            <ItemActions>
-              <Skeleton className="size-4 rounded" />
-            </ItemActions>
-          </Item>
-        ))}
-      </ItemGroup>
+      <LoadingRegion label="Loading workspaces">
+        <ItemGroup className={cn("mb-4", className)}>
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Item key={i} variant="outline" className="mb-2">
+              <ItemContent>
+                {/* The 18px folder icon beside one line of title text. */}
+                <ItemTitle>
+                  <Skeleton className="size-[18px] shrink-0 rounded" />
+                  <span className="flex h-lh items-center">
+                    <Skeleton className="h-4 w-40 rounded" />
+                  </span>
+                </ItemTitle>
+              </ItemContent>
+              <ItemActions>
+                <Skeleton className="size-4 rounded" />
+              </ItemActions>
+            </Item>
+          ))}
+        </ItemGroup>
+      </LoadingRegion>
     );
   }
 

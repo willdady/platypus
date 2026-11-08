@@ -325,7 +325,9 @@ describe("TriggerRunDetailPage", () => {
   it("shows the placeholder, never a blank page, before the run has loaded", async () => {
     await renderPage();
 
-    expect(screen.getByLabelText("Loading trigger run")).toBeInTheDocument();
+    expect(
+      screen.getByRole("status", { name: "Loading trigger run" }),
+    ).toBeInTheDocument();
   });
 
   it("says so when the run cannot be read", async () => {

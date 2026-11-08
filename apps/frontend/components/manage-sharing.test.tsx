@@ -114,8 +114,12 @@ describe("loading states", () => {
       />,
     );
 
-    expect(screen.getByLabelText("Loading attachments")).toBeInTheDocument();
-    expect(screen.getByLabelText("Loading workspaces")).toBeInTheDocument();
+    expect(
+      screen.getByRole("status", { name: "Loading attachments" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("status", { name: "Loading workspaces" }),
+    ).toBeInTheDocument();
     expect(
       screen.queryByText("Not shared with any workspace yet."),
     ).not.toBeInTheDocument();

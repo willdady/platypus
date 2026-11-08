@@ -14,6 +14,7 @@ import {
 import { FetchErrorNotice } from "@/components/fetch-error-notice";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TriggerRunRowSkeleton } from "@/components/trigger-run-row-skeleton";
+import { LoadingRegion } from "@/components/list-skeletons";
 import { fetcher } from "@/lib/utils";
 import { workspaceRoutes } from "@/lib/routes";
 import { mergeRunEvents, nextSinceSeq } from "@/lib/run-timeline";
@@ -152,7 +153,10 @@ function TriggerRunDetailPage({
         ) : (
           // Anything short of data or an error is still loading, the frames
           // before the session resolves included — never a blank page.
-          <div className="flex flex-col gap-6" aria-label="Loading trigger run">
+          <LoadingRegion
+            label="Loading trigger run"
+            className="flex flex-col gap-6"
+          >
             <div className="border rounded-lg">
               <TriggerRunRowSkeleton />
             </div>
@@ -162,7 +166,7 @@ function TriggerRunDetailPage({
               </div>
               <Skeleton className="h-40 w-full rounded-lg" />
             </section>
-          </div>
+          </LoadingRegion>
         )}
       </div>
     </div>

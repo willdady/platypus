@@ -4,6 +4,7 @@ import { useState, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 import { useScopedList } from "@/hooks/use-scoped-list";
 import { ListError, ListState } from "@/components/list-state";
+import { LoadingRegion, SkeletonLine } from "@/components/list-skeletons";
 import {
   Collapsible,
   CollapsibleContent,
@@ -136,7 +137,34 @@ export function KanbanCardHistory({
               onRetry={() => mutate()}
             />
           ) : !data ? (
-            <p className="text-xs text-muted-foreground">Loading…</p>
+            <LoadingRegion label="Loading history">
+              <ol className="flex flex-col gap-3">
+                {[0, 1, 2].map((i) => (
+                  <li key={i} className="flex flex-col gap-1">
+                    <div className="flex items-center gap-2">
+                      <SkeletonLine lineClassName="h-4" className="h-3 w-16" />
+                      <SkeletonLine lineClassName="h-4" className="h-3 w-24" />
+                    </div>
+                    <ul className="flex flex-col gap-0.5">
+                      <li>
+                        <SkeletonLine
+                          lineClassName="h-4"
+                          className="h-3 w-3/4"
+                        />
+                      </li>
+                      {i === 0 && (
+                        <li>
+                          <SkeletonLine
+                            lineClassName="h-4"
+                            className="h-3 w-1/2"
+                          />
+                        </li>
+                      )}
+                    </ul>
+                  </li>
+                ))}
+              </ol>
+            </LoadingRegion>
           ) : entries.length === 0 ? (
             <ListState variant="empty">No changes recorded yet.</ListState>
           ) : (

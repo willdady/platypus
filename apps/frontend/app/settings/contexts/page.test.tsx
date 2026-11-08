@@ -63,7 +63,9 @@ describe("ContextsPage global context field", () => {
     swrState.response = { data: undefined, isLoading: true };
     render(<ContextsPage />);
 
-    expect(screen.getByLabelText("Loading global context")).toBeInTheDocument();
+    expect(
+      screen.getByRole("status", { name: "Loading global context" }),
+    ).toBeInTheDocument();
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   });

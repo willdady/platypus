@@ -79,7 +79,9 @@ describe("SandboxSettings loading", () => {
     mockReads({ sandbox: { isLoading: true } });
     await renderSettings();
 
-    expect(screen.getByLabelText("Loading sandbox")).toBeInTheDocument();
+    expect(
+      screen.getByRole("status", { name: "Loading sandbox" }),
+    ).toBeInTheDocument();
     expect(screen.queryByText("No sandbox configured")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Name")).not.toBeInTheDocument();
   });
@@ -88,7 +90,9 @@ describe("SandboxSettings loading", () => {
     mockReads({ sandbox: { data: null }, backends: { isLoading: true } });
     await renderSettings();
 
-    expect(screen.getByLabelText("Loading sandbox")).toBeInTheDocument();
+    expect(
+      screen.getByRole("status", { name: "Loading sandbox" }),
+    ).toBeInTheDocument();
   });
 
   it("shows a networks placeholder, not a false 'none declared', while the allowlist loads", async () => {
@@ -98,7 +102,9 @@ describe("SandboxSettings loading", () => {
     });
     await renderSettings();
 
-    expect(screen.getByLabelText("Loading networks")).toBeInTheDocument();
+    expect(
+      screen.getByRole("status", { name: "Loading networks" }),
+    ).toBeInTheDocument();
     expect(
       screen.queryByText("No networks declared by the operator."),
     ).not.toBeInTheDocument();
