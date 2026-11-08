@@ -49,6 +49,7 @@ export function BoardsList({
   workspaceId: string;
 }) {
   const {
+    data,
     results: rows,
     error,
     isLoading,
@@ -109,6 +110,7 @@ export function BoardsList({
         ghosts={page}
         isLoading={isLoading}
         error={error}
+        data={data}
         subject="boards"
         onRetry={() => void mutate()}
         skeleton={<CardGridSkeleton descriptionLines={1} />}

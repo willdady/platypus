@@ -7,6 +7,7 @@ import {
   mockScopedSWR,
   resetListHarness,
   renderList,
+  expectEntryActionVariant,
 } from "@/test/list-test-harness";
 
 // --- Module mocks ------------------------------------------------------------
@@ -19,10 +20,10 @@ import { WorkspaceList } from "./workspace-list";
 import { PluginsList } from "./plugins-list";
 
 /**
- * The lists with no row actions — nothing to delete, so the whole of their
- * behaviour is which of loading, empty, failed and populated they render.
- * Each answers those four differently on purpose (a skeleton here, a silent
- * null there), and until now none of them had a test saying so.
+ * The lists with no destructive row action — nothing to delete, so the whole
+ * of their behaviour is which of loading, empty, failed and populated they
+ * render. Each answers those four differently on purpose (a skeleton here, a
+ * silent null there), and until now none of them had a test saying so.
  */
 
 beforeEach(resetListHarness);
@@ -35,12 +36,27 @@ describe("ContextsList", () => {
     organizationName: "Acme",
   };
 
+  const addContext = () =>
+    screen.getByRole("link", { name: /Add workspace context/ });
+
   it("lists each workspace context under its organization", async () => {
     mockScopedSWR({ contexts: [workspaceContext] }, { strict: true });
     await renderList(<ContextsList />);
 
-    expect(screen.getByText("Engineering")).toBeInTheDocument();
+    expect(screen.getByText("Engineering").closest("a")).toHaveAttribute(
+      "href",
+      "/settings/contexts/ctx1",
+    );
     expect(screen.getByText("Acme")).toBeInTheDocument();
+  });
+
+  it("offers Edit in the card's menu", async () => {
+    mockScopedSWR({ contexts: [workspaceContext] }, { strict: true });
+    await renderList(<ContextsList />);
+
+    expect(
+      screen.getByRole("button", { name: "Actions for Engineering" }),
+    ).toBeInTheDocument();
   });
 
   // A personal context has no workspace, and this list is the workspace one.
@@ -53,17 +69,24 @@ describe("ContextsList", () => {
     );
     await renderList(<ContextsList />);
 
-    expect(screen.getByText("No workspace contexts yet")).toBeInTheDocument();
+    expect(screen.getByText("No workspace contexts yet.")).toBeInTheDocument();
   });
 
   it("offers the create CTA when there are none", async () => {
     mockScopedSWR({ contexts: [] }, { strict: true });
     await renderList(<ContextsList />);
 
-    expect(screen.getByText("No workspace contexts yet")).toBeInTheDocument();
-    expect(
-      screen.getByRole("link", { name: /Add workspace context/ }),
-    ).toBeInTheDocument();
+    expect(screen.getByText("No workspace contexts yet.")).toBeInTheDocument();
+    expect(addContext()).toBeInTheDocument();
+  });
+
+  // A section's footer never blinks out: the entry button sits below the list
+  // in every state, including loading and a failed read.
+  it("keeps the create CTA below a populated list, outlined", async () => {
+    mockScopedSWR({ contexts: [workspaceContext] }, { strict: true });
+    await renderList(<ContextsList />);
+
+    expectEntryActionVariant(addContext(), "populated");
   });
 
   it("holds the row space with skeletons while the read is in flight", async () => {
@@ -71,10 +94,11 @@ describe("ContextsList", () => {
     await renderList(<ContextsList />);
 
     expect(
-      screen.getByLabelText("Loading workspace contexts"),
+      screen.getByRole("status", { name: "Loading workspace contexts" }),
     ).toBeInTheDocument();
+    expect(addContext()).toBeInTheDocument();
     expect(
-      screen.queryByText("No workspace contexts yet"),
+      screen.queryByText("No workspace contexts yet."),
     ).not.toBeInTheDocument();
   });
 
@@ -85,8 +109,27 @@ describe("ContextsList", () => {
     expect(
       screen.getByText("Failed to load workspace contexts. 500"),
     ).toBeInTheDocument();
+    expect(addContext()).toBeInTheDocument();
     expect(
-      screen.queryByText("No workspace contexts yet"),
+      screen.queryByText("No workspace contexts yet."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps the rows when only a revalidation fails", async () => {
+    mockScopedSWR(
+      {
+        contexts: {
+          data: { results: [workspaceContext] },
+          error: new Error("500"),
+        },
+      },
+      { strict: true },
+    );
+    await renderList(<ContextsList />);
+
+    expect(screen.getByText("Engineering")).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Failed to load workspace contexts/),
     ).not.toBeInTheDocument();
   });
 });

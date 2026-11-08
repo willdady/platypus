@@ -137,6 +137,7 @@ export function AgentsList({
   const routes = workspaceRoutes(orgId, workspaceId);
 
   const {
+    data: agentsData,
     results: allAgents,
     error: agentsError,
     isLoading: isLoadingAgents,
@@ -456,6 +457,7 @@ export function AgentsList({
         ghosts={page}
         isLoading={isLoading}
         error={agentsError}
+        data={agentsData}
         subject="agents"
         onRetry={() => void mutate()}
         skeleton={

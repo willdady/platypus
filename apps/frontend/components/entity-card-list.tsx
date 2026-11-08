@@ -185,13 +185,15 @@ export type EntityCardGroup<T extends EntityCard> = {
 
 /**
  * The `grid-cols-1 lg:grid-cols-2` card list of outline `Item` cards, with
- * its loading, failed and empty states. The caller fetches, sorts, and owns
- * the dialogs and controls around it; the slots fill in what differs.
+ * its loading, failed and empty states. A failed revalidation over `data`
+ * already in hand leaves the cards as they are. The caller fetches, sorts, and
+ * owns the dialogs and controls around it; the slots fill in what differs.
  */
 export function EntityCardList<T extends EntityCard>({
   items,
   isLoading,
   error,
+  data,
   subject,
   skeleton,
   empty,
@@ -207,6 +209,11 @@ export function EntityCardList<T extends EntityCard>({
   ghosts?: Pick<Page<unknown>, "ghosts" | "rowGhosts">;
   isLoading: boolean;
   error: unknown;
+  /**
+   * The read's data. Absent with an error means the read failed cold; present
+   * with one means only a revalidation failed, so the cards stay.
+   */
+  data?: unknown;
   /** The plural noun loading or failing to load: "boards", "shared agents". */
   subject: string;
   /** Drawn in the loading region. */
@@ -228,7 +235,7 @@ export function EntityCardList<T extends EntityCard>({
     );
   }
 
-  if (error) {
+  if (error && !data) {
     return <ListError error={error} subject={subject} onRetry={onRetry} />;
   }
 

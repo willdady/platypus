@@ -28,7 +28,7 @@ export function BlueprintsList({ orgId }: { orgId: string }) {
   const [blueprintToApply, setBlueprintToApply] =
     useState<Serialized<Blueprint> | null>(null);
 
-  const { results, error, isLoading, mutate } = useScopedList<Blueprint>(
+  const { data, results, error, isLoading, mutate } = useScopedList<Blueprint>(
     "blueprints",
     { orgId },
   );
@@ -55,6 +55,7 @@ export function BlueprintsList({ orgId }: { orgId: string }) {
         items={blueprints}
         isLoading={isLoading}
         error={error}
+        data={data}
         subject="blueprints"
         onRetry={() => void mutate()}
         skeleton={
