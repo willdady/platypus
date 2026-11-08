@@ -299,8 +299,8 @@ function A2aEndpointForm({
       <DeleteConfirmDialog
         open={isDeleteDialogOpen}
         onOpenChange={setIsDeleteDialogOpen}
-        title="Delete A2A endpoint"
-        description="Its URL and every one of its tokens stop working straight away."
+        noun="A2A endpoint"
+        consequence="Its URL and every one of its tokens stop working straight away."
         onConfirm={handleDelete}
         loading={isDeleting}
         error={deleteError}

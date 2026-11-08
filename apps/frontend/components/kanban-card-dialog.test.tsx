@@ -112,7 +112,7 @@ function renderDialog(
 /** Opens the card's Delete confirm dialog and returns it. */
 async function openCardDeleteConfirm() {
   fireEvent.click(screen.getByRole("button", { name: "Delete" }));
-  return screen.findByRole("dialog", { name: "Delete Card" });
+  return screen.findByRole("dialog", { name: "Delete card" });
 }
 
 /** Opens the first comment's Delete confirm dialog and returns it. */
@@ -120,7 +120,7 @@ async function openCommentDeleteConfirm() {
   fireEvent.click(
     screen.getByRole("button", { name: /^Delete comment by Bob/ }),
   );
-  return screen.findByRole("dialog", { name: "Delete Comment" });
+  return screen.findByRole("dialog", { name: "Delete comment" });
 }
 
 afterEach(() => {
@@ -312,7 +312,7 @@ describe("KanbanCardDialog delete comment", () => {
       await within(confirmDialog).findByText("Comment already deleted"),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("dialog", { name: "Delete Comment" }),
+      screen.getByRole("dialog", { name: "Delete comment" }),
     ).toBeInTheDocument();
     expect(toastErrorSpy).not.toHaveBeenCalled();
     expect(mutateCommentsSpy).not.toHaveBeenCalled();
@@ -331,7 +331,7 @@ describe("KanbanCardDialog delete comment", () => {
 
     await waitFor(() =>
       expect(
-        screen.queryByRole("dialog", { name: "Delete Comment" }),
+        screen.queryByRole("dialog", { name: "Delete comment" }),
       ).not.toBeInTheDocument(),
     );
     expect(
@@ -351,7 +351,7 @@ describe("KanbanCardDialog delete comment", () => {
 
     await waitFor(() => expect(mutateCommentsSpy).toHaveBeenCalledOnce());
     expect(
-      screen.queryByRole("dialog", { name: "Delete Comment" }),
+      screen.queryByRole("dialog", { name: "Delete comment" }),
     ).not.toBeInTheDocument();
     expect(toastErrorSpy).not.toHaveBeenCalled();
   });
@@ -380,7 +380,7 @@ describe("KanbanCardDialog delete card", () => {
     // The card dialog is still there, so the delete can be retried.
     expect(screen.getByText("Ship the release")).toBeInTheDocument();
     expect(
-      screen.getByRole("dialog", { name: "Delete Card" }),
+      screen.getByRole("dialog", { name: "Delete card" }),
     ).toBeInTheDocument();
   });
 
@@ -395,7 +395,7 @@ describe("KanbanCardDialog delete card", () => {
 
     await waitFor(() =>
       expect(
-        screen.queryByRole("dialog", { name: "Delete Card" }),
+        screen.queryByRole("dialog", { name: "Delete card" }),
       ).not.toBeInTheDocument(),
     );
     expect(onDelete).toHaveBeenCalledWith("c1");
@@ -417,7 +417,7 @@ describe("KanbanCardDialog delete card", () => {
 
     await waitFor(() =>
       expect(
-        screen.queryByRole("dialog", { name: "Delete Card" }),
+        screen.queryByRole("dialog", { name: "Delete card" }),
       ).not.toBeInTheDocument(),
     );
     expect(onOpenChange).not.toHaveBeenCalled();

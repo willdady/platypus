@@ -121,8 +121,9 @@ export function BlueprintsList({ orgId }: { orgId: string }) {
       <DeleteConfirmDialog
         open={deleteFlow.open}
         onOpenChange={(open) => !open && deleteFlow.close()}
-        title="Delete Blueprint"
-        description={`Are you sure you want to delete "${deleteFlow.target?.name}"? Workspaces already provisioned from it are unaffected.`}
+        noun="blueprint"
+        name={deleteFlow.target?.name}
+        consequence="Workspaces already provisioned from it are unaffected."
         onConfirm={deleteFlow.confirm}
         loading={deleteFlow.deleting}
         error={deleteFlow.error}

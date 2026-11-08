@@ -571,7 +571,7 @@ export function AppSidebar() {
           showCloseButton={false}
         >
           <DialogHeader>
-            <DialogTitle>Edit Chat</DialogTitle>
+            <DialogTitle>Edit chat</DialogTitle>
             <DialogDescription>
               Update the chat title and tags.
             </DialogDescription>
@@ -621,8 +621,7 @@ export function AppSidebar() {
       <DeleteConfirmDialog
         open={chatDelete.open}
         onOpenChange={(open) => !open && chatDelete.close()}
-        title="Delete Chat"
-        description="Are you sure you want to delete this chat? This action cannot be undone."
+        noun="chat"
         onConfirm={chatDelete.confirm}
         loading={chatDelete.deleting}
         error={chatDelete.error}

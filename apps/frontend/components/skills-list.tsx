@@ -577,8 +577,8 @@ export function SkillsList({
       <DeleteConfirmDialog
         open={deleteFlow.open}
         onOpenChange={(open) => !open && deleteFlow.close()}
-        title="Delete Skill"
-        description={`Are you sure you want to delete "${deleteFlow.target?.name}"? This action cannot be undone.`}
+        noun="skill"
+        name={deleteFlow.target?.name}
         onConfirm={deleteFlow.confirm}
         loading={deleteFlow.deleting}
         error={deleteFlow.error}

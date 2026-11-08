@@ -150,7 +150,7 @@ export function RemoveMemberDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-destructive">
             <AlertTriangle className="size-5" />
-            Remove Member
+            Remove member
           </DialogTitle>
           <DialogDescription>
             Remove <strong>{member.user.name}</strong> from this organization?

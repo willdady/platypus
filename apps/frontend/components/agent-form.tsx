@@ -1049,8 +1049,7 @@ function AgentForm({
       <DeleteConfirmDialog
         open={isDeleteDialogOpen}
         onOpenChange={setIsDeleteDialogOpen}
-        title="Delete Agent"
-        description="Are you sure you want to delete this agent? This action cannot be undone."
+        noun="agent"
         onConfirm={handleDelete}
         loading={isDeleting}
         error={deleteError}

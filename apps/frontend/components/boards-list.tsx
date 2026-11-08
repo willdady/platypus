@@ -137,17 +137,10 @@ export function BoardsList({
       <DeleteConfirmDialog
         open={deleteFlow.open}
         onOpenChange={(open) => !open && deleteFlow.close()}
-        title="Delete Board"
-        description={
-          <>
-            This action cannot be undone. This will permanently delete the board{" "}
-            <span className="font-semibold">
-              {deleteFlow.target?.name ?? ""}
-            </span>{" "}
-            and all of its data.
-          </>
-        }
-        confirmPhrase="delete board"
+        noun="board"
+        name={deleteFlow.target?.name}
+        consequence="This also deletes all of its data."
+        requireTypedConfirmation
         onConfirm={deleteFlow.confirm}
         loading={deleteFlow.deleting}
         error={deleteFlow.error}

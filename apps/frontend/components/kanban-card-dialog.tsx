@@ -1217,8 +1217,7 @@ export function KanbanCardDialog({
       <DeleteConfirmDialog
         open={cardDelete.open}
         onOpenChange={(next) => !next && cardDelete.close()}
-        title="Delete Card"
-        description="Are you sure you want to delete this card? This action cannot be undone."
+        noun="card"
         onConfirm={cardDelete.confirm}
         loading={cardDelete.deleting}
         error={cardDelete.error}
@@ -1227,8 +1226,7 @@ export function KanbanCardDialog({
       <DeleteConfirmDialog
         open={commentDelete.open}
         onOpenChange={(next) => !next && commentDelete.close()}
-        title="Delete Comment"
-        description="Are you sure you want to delete this comment? This action cannot be undone."
+        noun="comment"
         onConfirm={commentDelete.confirm}
         loading={commentDelete.deleting}
         error={commentDelete.error}

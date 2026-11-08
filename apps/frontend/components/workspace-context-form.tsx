@@ -349,8 +349,7 @@ export function WorkspaceContextForm({ contextId }: { contextId?: string }) {
         <DeleteConfirmDialog
           open={isDeleteDialogOpen}
           onOpenChange={setIsDeleteDialogOpen}
-          title="Delete Context"
-          description="Are you sure you want to delete this context? This action cannot be undone."
+          noun="context"
           onConfirm={handleDelete}
           loading={isDeleting}
           error={deleteError}

@@ -31,7 +31,7 @@ export function CloneDialog({
   note,
   disabled = false,
 }: {
-  /** The item's kind, capitalised, as in "Clone Agent". */
+  /** The item's kind, lowercase, as in "Clone agent". */
   noun: string;
   /** The name of the item being cloned. */
   original: string;
@@ -58,7 +58,8 @@ export function CloneDialog({
   const backendUrl = useBackendUrl();
   const [name, setName] = useState(`${original} (copy)`);
   const [error, setError] = useState<string | null>(null);
-  const inputId = `clone-${noun.toLowerCase()}-name`;
+  const inputId = `clone-${noun}-name`;
+  const nounLabel = noun.charAt(0).toUpperCase() + noun.slice(1);
 
   // The ref guard inside drops a second confirm — a double click, or Enter
   // twice — sent while the first create is still in flight.
@@ -109,7 +110,7 @@ export function CloneDialog({
               setName(e.target.value);
               setError(null);
             }}
-            placeholder={`${noun} name`}
+            placeholder={`${nounLabel} name`}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !disabled) {
                 void confirm();

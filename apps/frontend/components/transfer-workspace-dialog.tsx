@@ -121,7 +121,7 @@ export function TransferWorkspaceAction({
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Transfer Workspace</DialogTitle>
+            <DialogTitle>Transfer workspace</DialogTitle>
             <DialogDescription>
               {step === "choose"
                 ? `Make another member the owner of ${workspace.name}.`

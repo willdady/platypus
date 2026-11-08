@@ -21,7 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import {
   BadgeSkeleton,
   IconButtonSkeleton,
@@ -211,14 +211,10 @@ function OrgInvitationsPage() {
         </TableList>
       </div>
 
-      <ConfirmDialog
+      <DeleteConfirmDialog
         open={invitationDelete.open}
         onOpenChange={(open) => !open && invitationDelete.close()}
-        title="Delete Invitation"
-        description="Are you sure you want to delete this invitation? This action cannot be undone."
-        confirmLabel="Delete"
-        loadingLabel="Deleting..."
-        confirmVariant="destructive"
+        noun="invitation"
         onConfirm={invitationDelete.confirm}
         loading={invitationDelete.deleting}
         error={invitationDelete.error}

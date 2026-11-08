@@ -65,8 +65,6 @@ export type ResourceListLabels = {
   readonly add: string;
   /** Attach CTA: "Attach shared provider" / "Attach shared MCP server". */
   readonly attach: string;
-  /** Delete dialog title: "Delete Provider" / "Delete MCP server". */
-  readonly deleteTitle: string;
   /** The resource named mid-sentence: "provider" / "MCP server". */
   readonly noun: string;
   /** The resource named in a fetch failure: "providers" / "MCP servers". */
@@ -341,8 +339,8 @@ export function ResourceList({
       <DeleteConfirmDialog
         open={deleteFlow.open}
         onOpenChange={(open) => !open && deleteFlow.close()}
-        title={config.labels.deleteTitle}
-        description={`Are you sure you want to delete "${deleteFlow.target?.name}"? This action cannot be undone.`}
+        noun={config.labels.noun}
+        name={deleteFlow.target?.name}
         onConfirm={deleteFlow.confirm}
         loading={deleteFlow.deleting}
         error={deleteFlow.error}
