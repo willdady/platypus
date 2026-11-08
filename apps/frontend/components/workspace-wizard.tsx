@@ -136,10 +136,10 @@ export function WorkspaceWizard({ orgId }: { orgId: string }) {
   });
   // Hold the default tab until the read settles: falling to New while it is
   // loading or failed would claim the organization has no shared providers.
-  const providersLoaded = !isLoadingSharedProviders && !sharedProvidersError;
+  const providersReadable = !isLoadingSharedProviders && !sharedProvidersError;
   const providerSource =
     pickedSource ??
-    (providersLoaded && sharedProviders.length === 0 ? "new" : "shared");
+    (providersReadable && sharedProviders.length === 0 ? "new" : "shared");
   const hasSandboxBackends = backends.length > 0;
   const backendsFailed = Boolean(backendsError && !backendsData);
 

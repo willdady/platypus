@@ -18,7 +18,13 @@ import {
 } from "ai";
 import { GlobeIcon, Info, Settings2 } from "lucide-react";
 import { AnimatePresence } from "motion/react";
-import { useEffect, useCallback, useMemo, useState } from "react";
+import {
+  useEffect,
+  useCallback,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import type { Provider, Agent, ToolSet, Skill } from "@platypus/schemas";
 import {
   BUILT_IN_CHAT_COMMANDS,
@@ -95,6 +101,18 @@ const ESCAPE_OWNERS =
 
 /** The status line a `/compact` shows while its summary is being taken. */
 const COMPACTING_STATUS = "Summarising the conversation…";
+
+/**
+ * A full-surface message — a failed read, no Providers — in the Chat's own
+ * column, so the copy lines up with the composer and the transcript.
+ */
+function ChatNotice({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex items-center justify-center h-full p-8">
+      <div className="w-full xl:w-4/5 max-w-4xl">{children}</div>
+    </div>
+  );
+}
 
 /**
  * Where the composer's context meter — or the hint that stands in for it when
@@ -501,15 +519,13 @@ export function Chat({
   // A failed cold read would otherwise hold the skeleton up for good.
   if (providersError && !providersData) {
     return (
-      <div className="flex items-center justify-center h-full p-8">
-        <div className="w-full xl:w-4/5 max-w-4xl">
-          <ListError
-            error={providersError}
-            subject="providers"
-            onRetry={() => void mutateProviders()}
-          />
-        </div>
-      </div>
+      <ChatNotice>
+        <ListError
+          error={providersError}
+          subject="providers"
+          onRetry={() => void mutateProviders()}
+        />
+      </ChatNotice>
     );
   }
 
@@ -531,11 +547,9 @@ export function Chat({
   // Show alert if no providers are configured
   if (providers.length === 0) {
     return (
-      <div className="flex items-center justify-center h-full p-8">
-        <div className="w-full xl:w-4/5 max-w-4xl">
-          <NoProvidersEmptyState orgId={orgId} workspaceId={workspaceId} />
-        </div>
-      </div>
+      <ChatNotice>
+        <NoProvidersEmptyState orgId={orgId} workspaceId={workspaceId} />
+      </ChatNotice>
     );
   }
 
@@ -548,15 +562,13 @@ export function Chat({
   // good. The failure takes its place, with a Retry.
   if (agentsError && !agentsData && !isResolved) {
     return (
-      <div className="flex items-center justify-center h-full p-8">
-        <div className="w-full xl:w-4/5 max-w-4xl">
-          <ListError
-            error={agentsError}
-            subject="agents"
-            onRetry={() => void mutateAgents()}
-          />
-        </div>
-      </div>
+      <ChatNotice>
+        <ListError
+          error={agentsError}
+          subject="agents"
+          onRetry={() => void mutateAgents()}
+        />
+      </ChatNotice>
     );
   }
 

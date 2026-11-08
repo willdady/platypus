@@ -112,11 +112,18 @@ function UserInvocableBadge({ skill }: { skill: SerializedSkill }) {
 // with an "N agent(s)" count whose tooltip lists the agents, or a warning when
 // the Skill is attached to no agents. Rendered for both workspace-scoped and
 // attached org-scoped (Shared) Skills (#296). The trigger uses preventDefault
-// so tapping the count does not follow the card's link.
-function SkillAgentsIndicator({ agents }: { agents: Serialized<Agent>[] }) {
+// so tapping the count does not follow the card's link. While the agent read is
+// unavailable the line is drawn empty, so the card keeps its height.
+function SkillAgentsIndicator({
+  agents,
+  unavailable = false,
+}: {
+  agents: Serialized<Agent>[];
+  unavailable?: boolean;
+}) {
   return (
     <div className="mt-1 flex h-4 items-center text-xs text-muted-foreground">
-      {agents.length > 0 ? (
+      {unavailable ? null : agents.length > 0 ? (
         <Tooltip>
           <TooltipTrigger
             className="flex items-center gap-1 cursor-default whitespace-nowrap"
@@ -491,9 +498,10 @@ export function SkillsList({
         )}
         meta={(skill) =>
           workspaceId ? (
-            agentsUnavailable ? null : (
-              <SkillAgentsIndicator agents={getAgentsForSkill(skill.id)} />
-            )
+            <SkillAgentsIndicator
+              agents={getAgentsForSkill(skill.id)}
+              unavailable={agentsUnavailable}
+            />
           ) : (
             canManageOrg && (
               <div className="mt-1">

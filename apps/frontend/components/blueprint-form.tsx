@@ -55,15 +55,36 @@ import { orgRoutes } from "@/lib/routes";
 const RESOURCE_GROUPS: {
   type: AttachmentResourceType;
   label: string;
+  /** The plural noun a failed read names: "MCP servers". */
+  subject: string;
   collection: string;
   icon: typeof Bot;
 }[] = [
-  { type: "agent", label: "Agents", collection: "agents", icon: Bot },
-  { type: "skill", label: "Skills", collection: "skills", icon: Sparkles },
-  { type: "mcp", label: "MCP servers", collection: "mcps", icon: Wrench },
+  {
+    type: "agent",
+    label: "Agents",
+    subject: "agents",
+    collection: "agents",
+    icon: Bot,
+  },
+  {
+    type: "skill",
+    label: "Skills",
+    subject: "skills",
+    collection: "skills",
+    icon: Sparkles,
+  },
+  {
+    type: "mcp",
+    label: "MCP servers",
+    subject: "MCP servers",
+    collection: "mcps",
+    icon: Wrench,
+  },
   {
     type: "provider",
     label: "Providers",
+    subject: "providers",
     collection: "providers",
     icon: Unplug,
   },
@@ -79,6 +100,7 @@ function ResourceGroup({
   orgId,
   type,
   label,
+  subject,
   collection,
   icon: Icon,
   selected,
@@ -88,6 +110,7 @@ function ResourceGroup({
   orgId: string;
   type: AttachmentResourceType;
   label: string;
+  subject: string;
   collection: string;
   icon: typeof Bot;
   selected: Set<string>;
@@ -117,7 +140,7 @@ function ResourceGroup({
         ) : error && !data ? (
           <ListError
             error={error}
-            subject={label.toLowerCase()}
+            subject={subject}
             onRetry={() => void mutate()}
           />
         ) : resources.length === 0 ? (
@@ -410,6 +433,7 @@ function BlueprintForm({
           orgId={orgId}
           type={group.type}
           label={group.label}
+          subject={group.subject}
           collection={group.collection}
           icon={group.icon}
           selected={selected}

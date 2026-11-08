@@ -59,7 +59,7 @@ describe("BlueprintForm shared resource read failures", () => {
   it.each([
     ["agents", "agents", "No shared agents in this organization yet."],
     ["skills", "skills", "No shared skills in this organization yet."],
-    ["mcps", "mcp servers", "No shared mcp servers in this organization yet."],
+    ["mcps", "MCP servers", "No shared mcp servers in this organization yet."],
     ["providers", "providers", "No shared providers in this organization yet."],
   ])(
     "shows the %s read failure instead of claiming there are none",
