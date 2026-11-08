@@ -14,6 +14,7 @@ import {
   stubSaveSequence,
   savedBody,
 } from "@/test/form-test-harness";
+import { selectOption } from "@/test/test-utils";
 
 // --- Module mocks ------------------------------------------------------------
 
@@ -699,4 +700,41 @@ describe("AgentForm Fallback model", () => {
       fallbackModelId: null,
     });
   });
+
+  it("clears both fallback fields when None is picked", async () => {
+    setDataFor("/agents/a1", stored);
+    const fetchMock = stubSaveSequence({ status: 200, body: { id: "a1" } });
+    renderEdit();
+
+    expect(await screen.findByText("Fallback model")).toBeInTheDocument();
+    await selectOption(
+      screen.getByRole("combobox", { name: "Fallback model" }),
+      "None",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(savedBody(fetchMock)).toMatchObject({
+      fallbackProviderId: null,
+      fallbackModelId: null,
+    });
+  });
+
+  it.each([
+    ["fallbackProviderId", "Provider unavailable"],
+    ["fallbackModelId", "Model is required"],
+  ])(
+    "shows an error keyed to %s on the one control",
+    async (field, message) => {
+      setDataFor("/agents/a1", stored);
+      stubRejectedSave([{ path: [field], message }]);
+      renderEdit();
+
+      fireEvent.click(await screen.findByRole("button", { name: "Update" }));
+
+      expect(await screen.findByText(message)).toBeInTheDocument();
+      expect(
+        screen.getByRole("combobox", { name: "Fallback model" }),
+      ).toHaveAttribute("aria-invalid", "true");
+    },
+  );
 });

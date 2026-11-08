@@ -11,6 +11,7 @@ import {
   setError,
   setLoading,
   stubAcceptedSave,
+  stubRejectedSave,
   savedBody,
 } from "@/test/form-test-harness";
 import { selectOption } from "@/test/test-utils";
@@ -142,6 +143,26 @@ describe("WorkspaceForm provider selects", () => {
     expect(
       screen.getByRole("combobox", { name: "Task Model Provider" }),
     ).toHaveTextContent(/^OpenRouter$/);
+  });
+
+  it("retracts a rejected provider's error when the pointer changes", async () => {
+    stubRejectedSave([
+      { path: ["taskModelProviderId"], message: "Provider unavailable" },
+    ]);
+    renderForm();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText("Provider unavailable")).toBeInTheDocument();
+    const save = screen.getByRole("button", { name: "Save" });
+    expect(save).toBeDisabled();
+
+    await selectOption(
+      screen.getByRole("combobox", { name: "Task Model Provider" }),
+      "OpenRouter (openai/gpt-4o-mini)",
+    );
+
+    expect(screen.queryByText("Provider unavailable")).not.toBeInTheDocument();
+    expect(save).toBeEnabled();
   });
 });
 

@@ -22,3 +22,11 @@ export function providerModelLabel(
   const modelId = provider[ROLE_MODEL_ID[role]];
   return modelId ? `${provider.name} (${modelId})` : provider.name;
 }
+
+/** Whether the provider declares a model id for `role`. */
+export function providerHasModelFor(
+  provider: Serialized<Provider>,
+  role: ProviderModelRole,
+): boolean {
+  return Boolean(provider[ROLE_MODEL_ID[role]]);
+}

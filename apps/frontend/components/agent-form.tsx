@@ -7,10 +7,10 @@ import {
   FieldSet,
   FieldLegend,
   FieldDescription,
-  FieldError,
 } from "@/components/ui/field";
 import { ExpandableTextarea } from "@/components/expandable-textarea";
 import { FormTextField } from "@/components/form-text-field";
+import { FormSelectField } from "@/components/form-select-field";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { FormAdvancedSection } from "@/components/form-advanced-section";
@@ -21,22 +21,20 @@ import { ListState } from "@/components/list-state";
 import { defaultFilter } from "cmdk";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
 import { AgentFormSkeleton } from "@/components/agent-form-skeleton";
-import { useState, useEffect, useRef, useCallback } from "react";
+import {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  type ReactNode,
+} from "react";
 import { useRouter } from "next/navigation";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
 import Link from "next/link";
 import { ImageIcon, Camera, X, Building } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SelectGroup, SelectItem, SelectLabel } from "@/components/ui/select";
 import {
   AGENT_DESCRIPTION_MAX_LENGTH,
   AGENT_INPUT_PLACEHOLDER_MAX_LENGTH,
@@ -65,6 +63,7 @@ import {
   toastGuidanceOrError,
   FIX_FORM_ERRORS_MESSAGE,
 } from "@/lib/apply-write-outcome";
+import type { FormErrors } from "@/lib/form-errors";
 import { findModelOption, getModelOptions } from "@/lib/model-config";
 import { resolveModel } from "@/lib/resolve-model";
 import {
@@ -130,6 +129,93 @@ type AgentFormData = {
   presencePenalty?: number;
   frequencyPenalty?: number;
 } & ReasoningValue;
+
+/** A provider coupled with the model reference it resolves through. */
+type AgentModelSelection = {
+  providerId: string;
+  modelId: string;
+};
+
+/**
+ * The Agent's Provider/model picker, shared by its primary and Fallback model
+ * (ADR-0043). They differ only in whether `None` is offered beside the
+ * providers; the stored pair is matched by model ENTRY so an aliased model
+ * still selects (ADR-0017).
+ */
+function AgentModelSelect({
+  allowNone,
+  label,
+  modelFieldId,
+  providerFieldId,
+  selection,
+  providers,
+  errors,
+  description,
+  disabled,
+  onChange,
+}: {
+  allowNone: boolean;
+  label: string;
+  /** The Select's id, and the field its label points at. */
+  modelFieldId: "modelId" | "fallbackModelId";
+  /** The Provider field chosen alongside it, whose error shows here too. */
+  providerFieldId: "providerId" | "fallbackProviderId";
+  selection: AgentModelSelection;
+  providers: Serialized<Provider>[];
+  errors: FormErrors;
+  description?: ReactNode;
+  disabled?: boolean;
+  onChange: (selection: AgentModelSelection | null) => void;
+}) {
+  const selectedProvider = providers.find((p) => p.id === selection.providerId);
+  const option =
+    selectedProvider && selection.modelId
+      ? findModelOption(selectedProvider, selection.modelId)
+      : undefined;
+  const value = option
+    ? encodeProviderSelection(selection.providerId, option.value)
+    : allowNone
+      ? "none"
+      : "";
+
+  return (
+    <FormSelectField
+      label={label}
+      name={modelFieldId}
+      value={value}
+      onValueChange={(next) => {
+        const decoded = decodeSelectionReference(next);
+        onChange(
+          decoded?.type === "provider"
+            ? {
+                providerId: decoded.providerId,
+                modelId: decoded.modelReference,
+              }
+            : null,
+        );
+      }}
+      error={errors[modelFieldId] || errors[providerFieldId]}
+      description={description}
+      placeholder={allowNone ? "None" : "Select a model"}
+      disabled={disabled}
+    >
+      {allowNone && <SelectItem value="none">None</SelectItem>}
+      {providers.map((provider) => (
+        <SelectGroup key={provider.id}>
+          <SelectLabel>{provider.name}</SelectLabel>
+          {getModelOptions(provider).map((model) => (
+            <SelectItem
+              key={encodeProviderSelection(provider.id, model.value)}
+              value={encodeProviderSelection(provider.id, model.value)}
+            >
+              {model.label}
+            </SelectItem>
+          ))}
+        </SelectGroup>
+      ))}
+    </FormSelectField>
+  );
+}
 
 function AgentForm({
   classNames,
@@ -458,41 +544,31 @@ function AgentForm({
     return () => document.removeEventListener("paste", handlePaste);
   }, [setAvatarFromFile]);
 
-  const handleModelChange = (value: string) => {
-    const decoded = decodeSelectionReference(value);
-    if (decoded?.type !== "provider") return;
+  const handleModelChange = (selection: AgentModelSelection | null) => {
     clearErrors("providerId", "modelId");
     setFormData((prevData) => ({
       ...prevData,
-      providerId: decoded.providerId,
-      modelId: decoded.modelReference,
+      providerId: selection?.providerId ?? "",
+      modelId: selection?.modelId ?? "",
     }));
   };
 
-  const handleFallbackModelChange = (value: string) => {
+  const handleFallbackModelChange = (selection: AgentModelSelection | null) => {
     clearErrors("fallbackProviderId", "fallbackModelId");
-    const decoded = decodeSelectionReference(value);
-    if (decoded?.type !== "provider") {
-      setFormData((prevData) => ({
-        ...prevData,
-        fallbackProviderId: "",
-        fallbackModelId: "",
-      }));
-      return;
-    }
     setFormData((prevData) => ({
       ...prevData,
-      fallbackProviderId: decoded.providerId,
-      fallbackModelId: decoded.modelReference,
+      fallbackProviderId: selection?.providerId ?? "",
+      fallbackModelId: selection?.modelId ?? "",
     }));
   };
 
   // The selected model's Reasoning map, where its Provider honours one: the
   // Reasoning section shows only the controls it declares (ADR-0040).
-  const reasoningMap = resolveModel({
+  const selectedModel = resolveModel({
     providers,
     selection: { providerId: formData.providerId, modelId: formData.modelId },
-  })?.reasoning;
+  });
+  const reasoningMap = selectedModel?.reasoning;
 
   const form = (
     <div className={classNames}>
@@ -627,145 +703,45 @@ function AgentForm({
           </Field>
           {/* Provider and model are chosen from one control, so surface either
               field's server error on the single Model field. */}
-          {(() => {
-            const modelError =
-              validationErrors.modelId || validationErrors.providerId;
-            // Match the stored reference to a model ENTRY, then build the
-            // option value from that entry. A bare `gpt-4` on a model since
-            // given an alias would otherwise match no option and render the
-            // "Select a model" placeholder over a configured Agent (ADR-0017).
-            const provider = providers.find(
-              (p) => p.id === formData.providerId,
-            );
-            const option =
-              provider && formData.modelId
-                ? findModelOption(provider, formData.modelId)
-                : undefined;
-            const selectedModelValue = option
-              ? encodeProviderSelection(formData.providerId, option.value)
-              : undefined;
-            const resolvedModel = resolveModel({
-              providers,
-              selection: {
+          <div className="flex flex-col gap-3">
+            <AgentModelSelect
+              allowNone={false}
+              label="Model"
+              modelFieldId="modelId"
+              providerFieldId="providerId"
+              selection={{
                 providerId: formData.providerId,
                 modelId: formData.modelId,
-              },
-            });
-            return (
-              <Field data-invalid={!!modelError}>
-                <FieldLabel htmlFor="modelId">Model</FieldLabel>
-                <Select
-                  value={selectedModelValue}
-                  onValueChange={handleModelChange}
-                  disabled={isSubmitting || readOnly}
-                >
-                  <SelectTrigger
-                    id="modelId"
-                    disabled={isSubmitting || readOnly}
-                    aria-invalid={!!modelError}
-                  >
-                    <SelectValue placeholder="Select a model" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {providers.map((provider) => (
-                      <SelectGroup key={provider.id}>
-                        <SelectLabel>{provider.name}</SelectLabel>
-                        {getModelOptions(provider).map((model) => (
-                          <SelectItem
-                            key={encodeProviderSelection(
-                              provider.id,
-                              model.value,
-                            )}
-                            value={encodeProviderSelection(
-                              provider.id,
-                              model.value,
-                            )}
-                          >
-                            {model.label}
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {modelError && <FieldError>{modelError}</FieldError>}
-                {resolvedModel && (
-                  <ModelCapabilityNotice
-                    passthroughFileTypes={resolvedModel.passthroughFileTypes}
-                  />
-                )}
-              </Field>
-            );
-          })()}
+              }}
+              providers={providers}
+              errors={validationErrors}
+              disabled={isSubmitting || readOnly}
+              onChange={handleModelChange}
+            />
+            {selectedModel && (
+              <ModelCapabilityNotice
+                passthroughFileTypes={selectedModel.passthroughFileTypes}
+              />
+            )}
+          </div>
           {/* The optional Fallback model (ADR-0043), chosen with the same
               Provider/model control as the primary. Only a Trigger run
               consults it, and only when the primary Provider is unavailable. */}
-          {(() => {
-            const fallbackError =
-              validationErrors.fallbackProviderId ||
-              validationErrors.fallbackModelId;
-            const fallbackProvider = providers.find(
-              (p) => p.id === formData.fallbackProviderId,
-            );
-            const fallbackOption =
-              fallbackProvider && formData.fallbackModelId
-                ? findModelOption(fallbackProvider, formData.fallbackModelId)
-                : undefined;
-            return (
-              <Field data-invalid={!!fallbackError}>
-                <FieldLabel htmlFor="fallbackModelId">
-                  Fallback model
-                </FieldLabel>
-                <Select
-                  value={
-                    fallbackOption
-                      ? encodeProviderSelection(
-                          formData.fallbackProviderId,
-                          fallbackOption.value,
-                        )
-                      : "none"
-                  }
-                  onValueChange={handleFallbackModelChange}
-                  disabled={isSubmitting || readOnly}
-                >
-                  <SelectTrigger
-                    id="fallbackModelId"
-                    disabled={isSubmitting || readOnly}
-                    aria-invalid={!!fallbackError}
-                  >
-                    <SelectValue placeholder="None" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
-                    {providers.map((provider) => (
-                      <SelectGroup key={provider.id}>
-                        <SelectLabel>{provider.name}</SelectLabel>
-                        {getModelOptions(provider).map((model) => (
-                          <SelectItem
-                            key={encodeProviderSelection(
-                              provider.id,
-                              model.value,
-                            )}
-                            value={encodeProviderSelection(
-                              provider.id,
-                              model.value,
-                            )}
-                          >
-                            {model.label}
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {fallbackError && <FieldError>{fallbackError}</FieldError>}
-                <FieldDescription>
-                  Used by Trigger runs when this Agent&apos;s primary Provider
-                  is unavailable. Chat turns never switch models.
-                </FieldDescription>
-              </Field>
-            );
-          })()}
+          <AgentModelSelect
+            allowNone
+            label="Fallback model"
+            modelFieldId="fallbackModelId"
+            providerFieldId="fallbackProviderId"
+            selection={{
+              providerId: formData.fallbackProviderId,
+              modelId: formData.fallbackModelId,
+            }}
+            providers={providers}
+            errors={validationErrors}
+            disabled={isSubmitting || readOnly}
+            onChange={handleFallbackModelChange}
+            description="Used by Trigger runs when this Agent's primary Provider is unavailable. Chat turns never switch models."
+          />
           <FormTextField
             className="w-1/2"
             label="Max steps"

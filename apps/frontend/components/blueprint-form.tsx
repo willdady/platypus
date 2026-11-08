@@ -9,11 +9,10 @@ import {
   FieldError,
 } from "@/components/ui/field";
 import { FormTextField } from "@/components/form-text-field";
-import { FormSelectField } from "@/components/form-select-field";
+import { ProviderPointerSelect } from "@/components/provider-pointer-select";
 import { ExpandableTextarea } from "@/components/expandable-textarea";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { SelectItem } from "@/components/ui/select";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { DetailFormState } from "@/components/detail-form-state";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
@@ -33,8 +32,6 @@ import {
   BLUEPRINT_NAME_MAX_LENGTH,
   CONTEXT_MAX_LENGTH,
 } from "@platypus/schemas";
-import { retractFieldError } from "@/lib/form-errors";
-import { providerModelLabel } from "@/lib/provider-model-label";
 import { sortByName } from "@/lib/utils";
 import { useScopedList } from "@/hooks/use-scoped-list";
 import {
@@ -274,11 +271,11 @@ function BlueprintForm({
     formData,
     setFormData,
     validationErrors,
-    setValidationErrors,
     isSubmitting,
     canSubmit,
     handleChange,
     toFieldChange,
+    setField,
     submit,
   } = useEntityForm<typeof INITIAL_DATA, unknown, Blueprint>({
     initialData: INITIAL_DATA,
@@ -374,16 +371,11 @@ function BlueprintForm({
 
   // Tier 2 settings may only reference a provider the blueprint attaches (a
   // selected "provider:<id>" item). The memory slots additionally require the
-  // provider to expose the relevant model. Each select is disabled when it has
-  // no eligible provider, so an empty "Leave unset"-only dropdown never shows.
+  // provider to expose the relevant model, and each select is disabled when it
+  // has no eligible provider, so an empty "Leave unset"-only dropdown never
+  // shows.
   const attachedProviders = providers.filter((p) =>
     selected.has(itemKey("provider", p.id)),
-  );
-  const memoryExtractionProviders = attachedProviders.filter(
-    (p) => p.memoryExtractionModelId,
-  );
-  const memoryEmbeddingProviders = attachedProviders.filter(
-    (p) => (p as { embeddingModelId?: string }).embeddingModelId,
   );
 
   const form = (
@@ -469,83 +461,44 @@ function BlueprintForm({
             </FieldDescription>
           </Field>
 
-          <FormSelectField
+          <ProviderPointerSelect
+            kind="task"
             label="Task model provider"
-            name="taskModelProviderId"
-            value={formData.taskModelProviderId || "none"}
-            onValueChange={(value) => {
-              setValidationErrors((prev) =>
-                retractFieldError(prev, "taskModelProviderId"),
-              );
-              setFormData((prev) => ({
-                ...prev,
-                taskModelProviderId: value === "none" ? null : value,
-              }));
-            }}
-            disabled={isSubmitting || attachedProviders.length === 0}
-            placeholder="Select a provider"
+            noneLabel="Leave unset"
+            value={formData.taskModelProviderId}
+            onChange={(value) => setField("taskModelProviderId", value)}
+            disabled={isSubmitting}
+            disableWhenEmpty
             error={validationErrors.taskModelProviderId}
+            providers={attachedProviders}
             description="Provider used for generating chat titles and tags. Attach a provider under Shared resources to enable this."
-          >
-            <SelectItem value="none">Leave unset</SelectItem>
-            {attachedProviders.map((provider) => (
-              <SelectItem key={provider.id} value={provider.id}>
-                {providerModelLabel(provider, "task")}
-              </SelectItem>
-            ))}
-          </FormSelectField>
+          />
 
-          <FormSelectField
+          <ProviderPointerSelect
+            kind="memoryExtraction"
             label="Memory extraction provider"
-            name="memoryExtractionProviderId"
-            value={formData.memoryExtractionProviderId || "none"}
-            onValueChange={(value) => {
-              setValidationErrors((prev) =>
-                retractFieldError(prev, "memoryExtractionProviderId"),
-              );
-              setFormData((prev) => ({
-                ...prev,
-                memoryExtractionProviderId: value === "none" ? null : value,
-              }));
-            }}
-            disabled={isSubmitting || memoryExtractionProviders.length === 0}
-            placeholder="Select a provider"
+            noneLabel="Leave unset"
+            value={formData.memoryExtractionProviderId}
+            onChange={(value) => setField("memoryExtractionProviderId", value)}
+            disabled={isSubmitting}
+            disableWhenEmpty
             error={validationErrors.memoryExtractionProviderId}
+            providers={attachedProviders}
             description="Provider used to extract memories from conversations. Must be attached by this blueprint and expose a memory-extraction model."
-          >
-            <SelectItem value="none">Leave unset</SelectItem>
-            {memoryExtractionProviders.map((provider) => (
-              <SelectItem key={provider.id} value={provider.id}>
-                {providerModelLabel(provider, "memoryExtraction")}
-              </SelectItem>
-            ))}
-          </FormSelectField>
+          />
 
-          <FormSelectField
+          <ProviderPointerSelect
+            kind="embedding"
             label="Memory embedding provider"
-            name="memoryEmbeddingProviderId"
-            value={formData.memoryEmbeddingProviderId || "none"}
-            onValueChange={(value) => {
-              setValidationErrors((prev) =>
-                retractFieldError(prev, "memoryEmbeddingProviderId"),
-              );
-              setFormData((prev) => ({
-                ...prev,
-                memoryEmbeddingProviderId: value === "none" ? null : value,
-              }));
-            }}
-            disabled={isSubmitting || memoryEmbeddingProviders.length === 0}
-            placeholder="Select a provider"
+            noneLabel="Leave unset"
+            value={formData.memoryEmbeddingProviderId}
+            onChange={(value) => setField("memoryEmbeddingProviderId", value)}
+            disabled={isSubmitting}
+            disableWhenEmpty
             error={validationErrors.memoryEmbeddingProviderId}
+            providers={attachedProviders}
             description="Provider used for memory embeddings. Must be attached by this blueprint and expose an embedding model."
-          >
-            <SelectItem value="none">Leave unset</SelectItem>
-            {memoryEmbeddingProviders.map((provider) => (
-              <SelectItem key={provider.id} value={provider.id}>
-                {providerModelLabel(provider, "embedding")}
-              </SelectItem>
-            ))}
-          </FormSelectField>
+          />
         </FieldGroup>
       </FieldSet>
 

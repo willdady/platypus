@@ -9,6 +9,7 @@ import {
   setError,
   setLoading,
   stubAcceptedSave,
+  stubRejectedSave,
   savedBody,
 } from "@/test/form-test-harness";
 import { selectOption } from "@/test/test-utils";
@@ -167,5 +168,23 @@ describe("BlueprintForm Tier 2 provider slots", () => {
     await selectOption(extraction, "OpenAI (gpt-4o)");
 
     expect(extraction).toHaveTextContent("OpenAI (gpt-4o)");
+  });
+
+  it("retracts a rejected provider's error when the pointer changes", async () => {
+    stubRejectedSave([
+      { path: ["taskModelProviderId"], message: "Provider unavailable" },
+    ]);
+    render(<BlueprintForm orgId="org1" />);
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Starter" },
+    });
+    fireEvent.click(screen.getByRole("switch", { name: "OpenAI" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText("Provider unavailable")).toBeInTheDocument();
+
+    await selectOption(taskModelSelect(), "OpenAI");
+
+    expect(screen.queryByText("Provider unavailable")).not.toBeInTheDocument();
   });
 });
