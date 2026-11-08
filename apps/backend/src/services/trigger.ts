@@ -26,13 +26,13 @@ import {
 } from "./bearer-token.ts";
 import { resolveScoped } from "./scoped-resource.ts";
 import {
-  deleteOwned,
   listOwned,
+  ownedWhere,
   requireOwned,
-  resolveOwned,
   updateOwned,
 } from "./workspace-resource.ts";
 import { oneRow } from "../db/one-row.ts";
+import { deleteTriggerRunFiles } from "./trigger-run-files.ts";
 
 /** Makes a leaked Inbound Trigger token recognisable; see `generateBearerToken`. */
 const INBOUND_TOKEN_PREFIX = "pit_";
@@ -584,13 +584,39 @@ export const deleteTrigger = async (
   { allowInbound }: TriggerWriteOptions,
 ): Promise<boolean> => {
   const ref = { id: triggerId, workspaceId: ctx.workspaceId };
-  if (!allowInbound) {
-    const existing = await resolveOwned(db, "trigger", ref);
-    if (existing?.type === "inbound") {
+  // Read the run ids and delete in one transaction, with the Trigger row
+  // locked: its runs cascade away with it, and their Chat ids are what name the
+  // storage prefixes to clear. The lock keeps a new run from appearing between
+  // the read and the delete, where its files would outlive the row.
+  const runIds = await db.transaction(async (tx) => {
+    const [existing] = await tx
+      .select()
+      .from(triggerTable)
+      .where(ownedWhere("trigger", ref))
+      .for("update");
+    if (!existing) return null;
+    if (!allowInbound && existing.type === "inbound") {
       throw new ValidationError(INBOUND_ONLY_IN_UI);
     }
-  }
-  return deleteOwned(db, "trigger", ref);
+
+    const ids = (
+      await tx
+        .select({ id: triggerRunTable.id })
+        .from(triggerRunTable)
+        .where(eq(triggerRunTable.triggerId, triggerId))
+    ).map(({ id }) => id);
+
+    await tx.delete(triggerTable).where(ownedWhere("trigger", ref));
+    return ids;
+  });
+
+  if (!runIds) return false;
+
+  await deleteTriggerRunFiles(
+    { orgId: ctx.orgId, workspaceId: ctx.workspaceId },
+    runIds,
+  );
+  return true;
 };
 
 /**

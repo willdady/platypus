@@ -410,8 +410,18 @@ const runTrigger = async (
 const recordFiring = async (triggerId: string): Promise<void> => {
   try {
     const [current] = await db
-      .select()
+      .select({
+        id: triggerTable.id,
+        workspaceId: triggerTable.workspaceId,
+        type: triggerTable.type,
+        maxRunsToKeep: triggerTable.maxRunsToKeep,
+        orgId: workspaceTable.organizationId,
+      })
       .from(triggerTable)
+      // Left, not inner: a missing Workspace must not stop the bookkeeping that
+      // still owes this Trigger its `lastRunAt`. A present one names the scope
+      // the run Chats' files sit under, sparing retention a second lookup.
+      .leftJoin(workspaceTable, eq(workspaceTable.id, triggerTable.workspaceId))
       .where(eq(triggerTable.id, triggerId))
       .limit(1);
     if (!current) {
@@ -427,7 +437,13 @@ const recordFiring = async (triggerId: string): Promise<void> => {
 
     // The newest maxRunsToKeep rows, plus everything inside the run-rate
     // breaker's window so its count is never pruned out from under it.
-    await retainTriggerRuns(triggerId, current.maxRunsToKeep);
+    await retainTriggerRuns(
+      triggerId,
+      current.maxRunsToKeep,
+      current.orgId
+        ? { orgId: current.orgId, workspaceId: current.workspaceId }
+        : undefined,
+    );
 
     logger.info({ triggerId, type: current.type }, "Updated trigger after run");
   } catch (error) {
