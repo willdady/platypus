@@ -366,7 +366,7 @@ export function SkillsList({
   const controls = !isLoading && !error && workspaceId && skills.length > 0 && (
     <ListToolbar>
       <SearchInput
-        placeholder="Search skills…"
+        placeholder="Search skills..."
         aria-label="Search skills"
         value={nameFilter}
         onValueChange={setNameFilter}

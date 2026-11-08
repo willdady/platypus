@@ -163,6 +163,7 @@ describe("OrgInboundTriggersList", () => {
     mockScopedSWR({ "/inbound-triggers": [] }, { strict: true });
     await renderList(<OrgInboundTriggersList orgId="org1" />);
 
+    expect(screen.getByText("No inbound triggers yet")).toBeInTheDocument();
     expect(
       screen.getByText(
         /No workspace in this organization has an Inbound Trigger/,
