@@ -25,6 +25,7 @@ import { ProviderForm } from "@/components/provider-form";
 import { SandboxSettings } from "@/components/sandbox-settings";
 import { useUnsavedChangesGuard } from "@/components/unsaved-changes-guard";
 import { FormTextField } from "@/components/form-text-field";
+import { FormSelectField } from "@/components/form-select-field";
 import { ExpandableTextarea } from "@/components/expandable-textarea";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -50,13 +51,7 @@ import {
   FieldLabel,
   FieldSet,
 } from "@/components/ui/field";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SelectItem } from "@/components/ui/select";
 
 const STEPS = ["Workspace", "Provider", "Sandbox"] as const;
 
@@ -294,25 +289,21 @@ export function WorkspaceWizard({ orgId }: { orgId: string }) {
             />
 
             {/* ADR-0008: on creation an admin assigns the workspace owner. */}
-            <Field>
-              <FieldLabel htmlFor="ownerId">Owner</FieldLabel>
-              <Select value={ownerId || user?.id} onValueChange={setOwnerId}>
-                <SelectTrigger id="ownerId">
-                  <SelectValue placeholder="Select an owner" />
-                </SelectTrigger>
-                <SelectContent>
-                  {ownerOptions.map((m) => (
-                    <SelectItem key={m.userId} value={m.userId}>
-                      {m.user.name || m.user.email}
-                      {m.userId === user?.id ? " (you)" : ""}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <FieldDescription>
-                The member who will own this workspace. Defaults to you.
-              </FieldDescription>
-            </Field>
+            <FormSelectField
+              label="Owner"
+              name="ownerId"
+              value={ownerId || user?.id || ""}
+              onValueChange={setOwnerId}
+              placeholder="Select an owner"
+              description="The member who will own this workspace. Defaults to you."
+            >
+              {ownerOptions.map((m) => (
+                <SelectItem key={m.userId} value={m.userId}>
+                  {m.user.name || m.user.email}
+                  {m.userId === user?.id ? " (you)" : ""}
+                </SelectItem>
+              ))}
+            </FormSelectField>
 
             <Field data-invalid={!!workspaceErrors.context}>
               <ExpandableTextarea

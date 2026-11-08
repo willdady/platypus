@@ -6,10 +6,6 @@ import {
   DialogTitle,
 } from "./ui/dialog";
 import { Button } from "./ui/button";
-import { Input } from "./ui/input";
-import { Textarea } from "./ui/textarea";
-import { Label } from "./ui/label";
-import { FieldDescription } from "./ui/field";
 import {
   Collapsible,
   CollapsibleContent,
@@ -17,6 +13,8 @@ import {
 } from "./ui/collapsible";
 import { ChevronsUpDown } from "lucide-react";
 import { useState } from "react";
+import { FormTextareaField } from "./form-textarea-field";
+import { FormTextField } from "./form-text-field";
 import {
   CHAT_MAX_STEPS_MAX,
   CHAT_MAX_STEPS_MIN,
@@ -47,6 +45,14 @@ type ChatSettingsDialogProps = {
   onChange: (patch: Partial<ChatSettings>) => void;
   onClose?: () => void;
 };
+
+/** A numeric setting is unset when its field is emptied, and parsed otherwise. */
+function numberOrUndefined(
+  value: string,
+  parse: (value: string) => number,
+): number | undefined {
+  return value === "" ? undefined : parse(value);
+}
 
 export function ChatSettingsDialog({
   settings,
@@ -87,7 +93,7 @@ export function ChatSettingsDialog({
   };
 
   const handleMaxStepsChange = (value: string) => {
-    onChange({ maxSteps: value === "" ? undefined : parseInt(value) });
+    onChange({ maxSteps: numberOrUndefined(value, parseInt) });
   };
 
   return (
@@ -102,22 +108,22 @@ export function ChatSettingsDialog({
         </DialogDescription>
       </DialogHeader>
       <div className="grid gap-4 py-4">
-        <div className="grid gap-2">
-          <Label htmlFor="instructions">Instructions</Label>
-          <Textarea
-            id="instructions"
-            placeholder="You are a helpful assistant..."
-            value={instructions}
-            onChange={(e) => onChange({ instructions: e.target.value })}
-            rows={3}
-            className="max-h-[15em] resize-none"
-          />
-          <FieldDescription>
-            How the assistant should behave in this chat. Platypus builds the
-            full system prompt around it, adding workspace and user context,
-            memories, and your Provider&apos;s security guardrails.
-          </FieldDescription>
-        </div>
+        <FormTextareaField
+          label="Instructions"
+          name="instructions"
+          placeholder="You are a helpful assistant..."
+          value={instructions}
+          onChange={(value) => onChange({ instructions: value })}
+          rows={3}
+          textareaClassName="max-h-[15em] resize-none"
+          description={
+            <>
+              How the assistant should behave in this chat. Platypus builds the
+              full system prompt around it, adding workspace and user context,
+              memories, and your Provider&apos;s security guardrails.
+            </>
+          }
+        />
         <Collapsible open={isAdvancedOpen} onOpenChange={setIsAdvancedOpen}>
           <CollapsibleTrigger asChild>
             <div className="flex text-sm justify-between items-center">
@@ -144,168 +150,101 @@ export function ChatSettingsDialog({
               }
             />
             <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="temperature">Temperature</Label>
-                <Input
-                  id="temperature"
-                  aria-invalid={!!errors.temperature}
-                  type="number"
-                  min={TEMPERATURE_MIN}
-                  step="0.1"
-                  value={temperature ?? ""}
-                  onChange={(e) =>
-                    onChange({
-                      temperature:
-                        e.target.value === ""
-                          ? undefined
-                          : parseFloat(e.target.value),
-                    })
-                  }
-                />
-                {errors.temperature && (
-                  <p role="alert" className="text-destructive text-sm">
-                    {errors.temperature}
-                  </p>
-                )}
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="seed">Seed</Label>
-                <Input
-                  id="seed"
-                  aria-invalid={!!errors.seed}
-                  type="number"
-                  value={seed ?? ""}
-                  onChange={(e) =>
-                    onChange({
-                      seed:
-                        e.target.value === ""
-                          ? undefined
-                          : parseInt(e.target.value),
-                    })
-                  }
-                />
-                {errors.seed && (
-                  <p role="alert" className="text-destructive text-sm">
-                    {errors.seed}
-                  </p>
-                )}
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="topP">Top-p</Label>
-                <Input
-                  id="topP"
-                  aria-invalid={!!errors.topP}
-                  type="number"
-                  min={TOP_P_MIN}
-                  max={TOP_P_MAX}
-                  step="0.1"
-                  value={topP ?? ""}
-                  onChange={(e) =>
-                    onChange({
-                      topP:
-                        e.target.value === ""
-                          ? undefined
-                          : parseFloat(e.target.value),
-                    })
-                  }
-                />
-                {errors.topP && (
-                  <p role="alert" className="text-destructive text-sm">
-                    {errors.topP}
-                  </p>
-                )}
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="topK">Top-k</Label>
-                <Input
-                  id="topK"
-                  aria-invalid={!!errors.topK}
-                  type="number"
-                  min={TOP_K_MIN}
-                  value={topK ?? ""}
-                  onChange={(e) =>
-                    onChange({
-                      topK:
-                        e.target.value === ""
-                          ? undefined
-                          : parseInt(e.target.value),
-                    })
-                  }
-                />
-                {errors.topK && (
-                  <p role="alert" className="text-destructive text-sm">
-                    {errors.topK}
-                  </p>
-                )}
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="presencePenalty">Presence Penalty</Label>
-                <Input
-                  id="presencePenalty"
-                  aria-invalid={!!errors.presencePenalty}
-                  type="number"
-                  min={PENALTY_MIN}
-                  max={PENALTY_MAX}
-                  step="0.1"
-                  value={presencePenalty ?? ""}
-                  onChange={(e) =>
-                    onChange({
-                      presencePenalty:
-                        e.target.value === ""
-                          ? undefined
-                          : parseFloat(e.target.value),
-                    })
-                  }
-                />
-                {errors.presencePenalty && (
-                  <p role="alert" className="text-destructive text-sm">
-                    {errors.presencePenalty}
-                  </p>
-                )}
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="frequencyPenalty">Frequency Penalty</Label>
-                <Input
-                  id="frequencyPenalty"
-                  aria-invalid={!!errors.frequencyPenalty}
-                  type="number"
-                  min={PENALTY_MIN}
-                  max={PENALTY_MAX}
-                  step="0.1"
-                  value={frequencyPenalty ?? ""}
-                  onChange={(e) =>
-                    onChange({
-                      frequencyPenalty:
-                        e.target.value === ""
-                          ? undefined
-                          : parseFloat(e.target.value),
-                    })
-                  }
-                />
-                {errors.frequencyPenalty && (
-                  <p role="alert" className="text-destructive text-sm">
-                    {errors.frequencyPenalty}
-                  </p>
-                )}
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="maxSteps">Max steps</Label>
-                <Input
-                  id="maxSteps"
-                  type="number"
-                  min={CHAT_MAX_STEPS_MIN}
-                  max={CHAT_MAX_STEPS_MAX}
-                  step="1"
-                  aria-invalid={maxStepsInvalid}
-                  value={maxSteps ?? ""}
-                  onChange={(e) => handleMaxStepsChange(e.target.value)}
-                />
-                {maxStepsInvalid && (
-                  <p role="alert" className="text-destructive text-sm">
-                    {CHAT_MAX_STEPS_ERROR}
-                  </p>
-                )}
-              </div>
+              <FormTextField
+                label="Temperature"
+                name="temperature"
+                type="number"
+                min={TEMPERATURE_MIN}
+                step="0.1"
+                value={String(temperature ?? "")}
+                onChange={(value) =>
+                  onChange({
+                    temperature: numberOrUndefined(value, parseFloat),
+                  })
+                }
+                error={errors.temperature}
+              />
+              <FormTextField
+                label="Seed"
+                name="seed"
+                type="number"
+                value={String(seed ?? "")}
+                onChange={(value) =>
+                  onChange({
+                    seed: numberOrUndefined(value, parseInt),
+                  })
+                }
+                error={errors.seed}
+              />
+              <FormTextField
+                label="Top-p"
+                name="topP"
+                type="number"
+                min={TOP_P_MIN}
+                max={TOP_P_MAX}
+                step="0.1"
+                value={String(topP ?? "")}
+                onChange={(value) =>
+                  onChange({
+                    topP: numberOrUndefined(value, parseFloat),
+                  })
+                }
+                error={errors.topP}
+              />
+              <FormTextField
+                label="Top-k"
+                name="topK"
+                type="number"
+                min={TOP_K_MIN}
+                value={String(topK ?? "")}
+                onChange={(value) =>
+                  onChange({
+                    topK: numberOrUndefined(value, parseInt),
+                  })
+                }
+                error={errors.topK}
+              />
+              <FormTextField
+                label="Presence Penalty"
+                name="presencePenalty"
+                type="number"
+                min={PENALTY_MIN}
+                max={PENALTY_MAX}
+                step="0.1"
+                value={String(presencePenalty ?? "")}
+                onChange={(value) =>
+                  onChange({
+                    presencePenalty: numberOrUndefined(value, parseFloat),
+                  })
+                }
+                error={errors.presencePenalty}
+              />
+              <FormTextField
+                label="Frequency Penalty"
+                name="frequencyPenalty"
+                type="number"
+                min={PENALTY_MIN}
+                max={PENALTY_MAX}
+                step="0.1"
+                value={String(frequencyPenalty ?? "")}
+                onChange={(value) =>
+                  onChange({
+                    frequencyPenalty: numberOrUndefined(value, parseFloat),
+                  })
+                }
+                error={errors.frequencyPenalty}
+              />
+              <FormTextField
+                label="Max steps"
+                name="maxSteps"
+                type="number"
+                min={CHAT_MAX_STEPS_MIN}
+                max={CHAT_MAX_STEPS_MAX}
+                step="1"
+                value={String(maxSteps ?? "")}
+                onChange={handleMaxStepsChange}
+                error={maxStepsInvalid ? CHAT_MAX_STEPS_ERROR : null}
+              />
             </div>
           </CollapsibleContent>
         </Collapsible>
