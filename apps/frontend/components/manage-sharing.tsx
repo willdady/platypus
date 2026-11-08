@@ -281,8 +281,8 @@ function ManageAttachmentsContent({
         <DialogDescription>
           {/* Keep the apostrophe literal, not `&apos;` — see
               jsx-entity-whitespace.node.test.ts. */}
-          Choose which workspaces this {label} appears in. It runs
-          against each workspace’s own resources.
+          Choose which workspaces this {label} appears in. It runs against each
+          workspace’s own resources.
         </DialogDescription>
       </DialogHeader>
 
