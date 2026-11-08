@@ -296,6 +296,18 @@ describe("EntityCardList list states", () => {
     expect(screen.queryByText("Alpha")).not.toBeInTheDocument();
   });
 
+  it("keeps the cards when only a revalidation fails", () => {
+    renderCards({
+      error: new Error("500"),
+      data: { results: [item] },
+    });
+
+    expect(screen.getByText("Alpha")).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Failed to load widgets/),
+    ).not.toBeInTheDocument();
+  });
+
   it("renders `empty` when there are no items", () => {
     renderCards({ items: [] });
 

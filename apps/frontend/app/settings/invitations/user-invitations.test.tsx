@@ -46,6 +46,18 @@ describe("UserInvitationsPage", () => {
     expect(screen.getByText("Invited by: Bob")).toBeInTheDocument();
   });
 
+  it("holds the card space with skeletons while the read is in flight", async () => {
+    mockScopedSWR({ "/invitations": { isLoading: true } }, { strict: true });
+    await renderList(<UserInvitationsPage />);
+
+    expect(
+      screen.getByRole("status", { name: "Loading invitations" }),
+    ).toHaveAttribute("aria-busy", "true");
+    expect(
+      screen.queryByText("No pending invitations"),
+    ).not.toBeInTheDocument();
+  });
+
   it("shows a failed read as an error with a retry, not an empty grid", async () => {
     mockScopedSWR(
       {

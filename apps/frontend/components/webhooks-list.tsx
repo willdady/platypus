@@ -1,26 +1,21 @@
 "use client";
 
-import { Item, ItemActions, ItemContent, ItemTitle } from "./ui/item";
-import { useScopedList } from "@/hooks/use-scoped-list";
 import { Plus, Radio } from "lucide-react";
 import Link from "next/link";
 import { Button } from "./ui/button";
 import { EmptyCard } from "@/components/empty-card";
-import { ListError } from "@/components/list-state";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { DisabledBadge } from "@/components/disabled-badge";
+import { EntityCardList } from "@/components/entity-card-list";
 import { RowActionsMenu } from "@/components/row-actions-menu";
 import { writeEntity } from "@/lib/api-write";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
 import { useEnabledToggle } from "@/hooks/use-enabled-toggle";
+import { useScopedList } from "@/hooks/use-scoped-list";
 import { ListFooter } from "@/components/list-pagination";
 
 import { workspaceRoutes } from "@/lib/routes";
-import {
-  ButtonSkeleton,
-  ItemRowsSkeleton,
-  LoadingRegion,
-} from "./list-skeletons";
+import { ButtonRowSkeleton, CardGridSkeleton } from "./list-skeletons";
 
 type Webhook = {
   id: string;
@@ -40,7 +35,7 @@ function WebhooksList({
   const routes = workspaceRoutes(orgId, workspaceId);
 
   const scope = { orgId, workspaceId };
-  const { results, error, isLoading, mutate } = useScopedList<Webhook>(
+  const { data, results, error, isLoading, mutate } = useScopedList<Webhook>(
     "webhooks",
     scope,
   );
@@ -56,25 +51,7 @@ function WebhooksList({
     mutate,
   });
 
-  if (isLoading) {
-    return (
-      <LoadingRegion label="Loading webhooks">
-        <ItemRowsSkeleton rows={2} secondLine />
-        <ButtonSkeleton className="w-36" />
-      </LoadingRegion>
-    );
-  }
-  if (error) {
-    return (
-      <ListError
-        error={error}
-        subject="webhooks"
-        onRetry={() => void mutate()}
-      />
-    );
-  }
-
-  const webhooks: Webhook[] = toggle.apply(results);
+  const webhooks = toggle.apply(results);
 
   const actions = (
     <Button variant={webhooks.length ? "outline" : "default"} asChild>
@@ -84,56 +61,57 @@ function WebhooksList({
     </Button>
   );
 
-  if (!webhooks.length) {
-    return (
-      <EmptyCard
-        icon={<Radio />}
-        title="No webhooks configured"
-        description="Add a webhook to deliver this workspace's events to a URL you control."
-        action={actions}
-      />
-    );
-  }
-
   return (
     <>
-      <ul className="mb-4">
-        {webhooks.map((webhook) => (
-          <li key={webhook.id} className="mb-2">
-            <Item variant="outline" asChild>
-              <Link href={routes.settings.webhookDetail(webhook.id)}>
-                <ItemContent>
-                  <div className="flex items-center gap-2">
-                    <ItemTitle>{webhook.name}</ItemTitle>
-                    {!webhook.enabled && <DisabledBadge />}
-                  </div>
-                  <p
-                    className="text-sm text-muted-foreground truncate"
-                    title={webhook.url}
-                  >
-                    {webhook.url}
-                  </p>
-                </ItemContent>
-                <ItemActions>
-                  <RowActionsMenu
-                    name={webhook.name}
-                    edit={{ href: routes.settings.webhookDetail(webhook.id) }}
-                    toggle={{
-                      enabled: webhook.enabled,
-                      onSelect: () => void toggle.toggle(webhook),
-                      disabled: toggle.isToggling(webhook.id),
-                    }}
-                    remove={{
-                      onSelect: () => deleteFlow.request(webhook),
-                    }}
-                  />
-                </ItemActions>
-              </Link>
-            </Item>
-          </li>
-        ))}
-      </ul>
-      <ListFooter className="mt-4">{actions}</ListFooter>
+      <EntityCardList
+        singleColumn
+        items={webhooks.map((webhook) => ({
+          ...webhook,
+          description: webhook.url,
+        }))}
+        isLoading={isLoading}
+        error={error}
+        data={data}
+        subject="webhooks"
+        onRetry={() => void mutate()}
+        skeleton={
+          <>
+            <CardGridSkeleton singleColumn descriptionLines={1} />
+            <ButtonRowSkeleton className="mt-4" widths={["w-36"]} />
+          </>
+        }
+        empty={
+          <EmptyCard
+            icon={<Radio />}
+            title="No webhooks configured"
+            description="Add a webhook to deliver this workspace's events to a URL you control."
+            action={actions}
+          />
+        }
+        // The URL is the card's second line and nothing follows it.
+        descriptionLines={1}
+        href={(webhook) => routes.settings.webhookDetail(webhook.id)}
+        badges={(webhook) => !webhook.enabled && <DisabledBadge />}
+        menu={(webhook) => (
+          <RowActionsMenu
+            name={webhook.name}
+            edit={{ href: routes.settings.webhookDetail(webhook.id) }}
+            toggle={{
+              enabled: webhook.enabled,
+              onSelect: () => void toggle.toggle(webhook),
+              disabled: toggle.isToggling(webhook.id),
+            }}
+            remove={{
+              onSelect: () => deleteFlow.request(webhook),
+            }}
+          />
+        )}
+      />
+
+      {webhooks.length > 0 && (
+        <ListFooter className="mt-4">{actions}</ListFooter>
+      )}
+
       <DeleteConfirmDialog
         open={deleteFlow.open}
         onOpenChange={(open) => !open && deleteFlow.close()}

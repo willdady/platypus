@@ -11,10 +11,10 @@ import { useBackendUrl } from "@/components/auth-provider";
 import { useScopedList } from "@/hooks/use-scoped-list";
 import { formatDate } from "@/lib/format-date";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { ListError } from "@/components/list-state";
+import { EntityCardList } from "@/components/entity-card-list";
 import {
   ButtonSkeleton,
-  LoadingRegion,
+  CardGridSkeleton,
   SkeletonLine,
 } from "@/components/list-skeletons";
 import { useSWRConfig } from "swr";
@@ -57,6 +57,14 @@ function UserInvitationsPage() {
     onSuccess: () => toast.success("Invitation declined"),
   });
 
+  const cards = invitations.map((invite) => ({
+    ...invite,
+    name: invite.organizationName || "Unknown Organization",
+    description: invite.invitedByName
+      ? `Invited by: ${invite.invitedByName}`
+      : undefined,
+  }));
+
   return (
     <div>
       <h1 className="text-2xl font-bold mb-4">Invitations</h1>
@@ -64,77 +72,60 @@ function UserInvitationsPage() {
         Pending invitations to join organizations.
       </p>
 
-      {isLoading ? (
-        <LoadingRegion label="Loading invitations" className="grid gap-4">
-          {[0, 1].map((i) => (
-            <div
-              key={i}
-              className="p-4 border rounded-lg flex flex-col md:flex-row md:items-center justify-between gap-4 bg-card"
-            >
-              {/* Organization name, then invited-by and expiry. */}
-              <div className="flex flex-col gap-1">
-                <SkeletonLine lineClassName="h-6" className="h-4 w-40" />
-                <div className="flex flex-col gap-1">
-                  <SkeletonLine className="w-36" />
-                  <SkeletonLine className="w-32" />
-                </div>
-              </div>
+      <EntityCardList
+        singleColumn
+        items={cards}
+        isLoading={isLoading}
+        error={error}
+        data={data}
+        subject="invitations"
+        onRetry={() => void mutate()}
+        skeleton={
+          <CardGridSkeleton
+            singleColumn
+            extra={
+              <SkeletonLine lineClassName="mt-1 h-4" className="h-3 w-32" />
+            }
+            actions={
               <div className="flex gap-2">
-                <ButtonSkeleton className="flex-1 md:flex-none md:w-24" />
-                <ButtonSkeleton className="flex-1 md:flex-none md:w-24" />
+                <ButtonSkeleton className="w-24" />
+                <ButtonSkeleton className="w-24" />
               </div>
-            </div>
-          ))}
-        </LoadingRegion>
-      ) : error && !data ? (
-        <ListError
-          error={error}
-          subject="invitations"
-          onRetry={() => mutate()}
-        />
-      ) : data && invitations.length === 0 ? (
-        <EmptyCard
-          icon={<Mail />}
-          title="No pending invitations"
-          description="Invitations to join an organization appear here."
-        />
-      ) : (
-        <div className="grid gap-4">
-          {invitations.map((invite) => (
-            <div
-              key={invite.id}
-              className="p-4 border rounded-lg flex flex-col md:flex-row md:items-center justify-between gap-4 bg-card"
+            }
+          />
+        }
+        empty={
+          <EmptyCard
+            icon={<Mail />}
+            title="No pending invitations"
+            description="Invitations to join an organization appear here."
+          />
+        }
+        meta={(invite) => (
+          <div className="mt-1 text-xs text-muted-foreground">
+            Expires: {formatDate(invite.expiresAt)}
+          </div>
+        )}
+        actions={(invite) => (
+          <>
+            <Button
+              variant="default"
+              className="flex-1 md:flex-none"
+              onClick={() => void accept.run(invite.id)}
+              disabled={accept.pending}
             >
-              <div className="flex flex-col gap-1">
-                <h3 className="font-semibold">{invite.organizationName}</h3>
-                <div className="text-sm text-muted-foreground flex flex-col gap-1">
-                  {invite.invitedByName && (
-                    <p>Invited by: {invite.invitedByName}</p>
-                  )}
-                  <p>Expires: {formatDate(invite.expiresAt)}</p>
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  variant="default"
-                  className="flex-1 md:flex-none"
-                  onClick={() => void accept.run(invite.id)}
-                  disabled={accept.pending}
-                >
-                  <Check /> {accept.pending ? "Accepting..." : "Accept"}
-                </Button>
-                <Button
-                  variant="outline"
-                  className="flex-1 md:flex-none"
-                  onClick={() => decline.request(invite.id)}
-                >
-                  <X /> Decline
-                </Button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+              <Check /> {accept.pending ? "Accepting..." : "Accept"}
+            </Button>
+            <Button
+              variant="outline"
+              className="flex-1 md:flex-none"
+              onClick={() => decline.request(invite.id)}
+            >
+              <X /> Decline
+            </Button>
+          </>
+        )}
+      />
 
       <ConfirmDialog
         open={decline.open}

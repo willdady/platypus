@@ -227,6 +227,7 @@ export function SkillsList({
     : orgRoutes(orgId).settings.skills;
 
   const {
+    data,
     results: skillRows,
     error,
     isLoading,
@@ -466,6 +467,7 @@ export function SkillsList({
         ghosts={page}
         isLoading={isLoading}
         error={error}
+        data={data}
         subject="skills"
         onRetry={() => void mutate()}
         skeleton={

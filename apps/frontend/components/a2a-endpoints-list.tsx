@@ -4,12 +4,11 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { Network, Plus } from "lucide-react";
 import type { A2aEndpointListItem } from "@platypus/schemas";
-import { Item, ItemActions, ItemContent, ItemTitle } from "./ui/item";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { useAuth } from "./auth-provider";
-import { ListError } from "./list-state";
 import { EmptyCard } from "@/components/empty-card";
+import { EntityCardList } from "@/components/entity-card-list";
 
 import { useScopedList } from "@/hooks/use-scoped-list";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -20,11 +19,7 @@ import { useDeleteFlow } from "@/hooks/use-delete-flow";
 import { useEnabledToggle } from "@/hooks/use-enabled-toggle";
 import { ListFooter } from "@/components/list-pagination";
 import { workspaceRoutes } from "@/lib/routes";
-import {
-  ButtonSkeleton,
-  ItemRowsSkeleton,
-  LoadingRegion,
-} from "./list-skeletons";
+import { ButtonRowSkeleton, CardGridSkeleton } from "./list-skeletons";
 
 function StatusBadge({ children }: { children: ReactNode }) {
   return <Badge variant="pill">{children}</Badge>;
@@ -56,24 +51,6 @@ function A2aEndpointsList({
     mutate,
   });
 
-  if (isLoading) {
-    return (
-      <LoadingRegion label="Loading A2A endpoints">
-        <ItemRowsSkeleton rows={2} secondLine />
-        <ButtonSkeleton className="w-36" />
-      </LoadingRegion>
-    );
-  }
-  if (error && !data) {
-    return (
-      <ListError
-        error={error}
-        subject="A2A endpoints"
-        onRetry={() => void mutate()}
-      />
-    );
-  }
-
   const endpoints = toggle.apply(results);
 
   const actions = ownsWorkspace && (
@@ -84,72 +61,80 @@ function A2aEndpointsList({
     </Button>
   );
 
-  if (!endpoints.length) {
-    return (
-      <EmptyCard
-        icon={<Network />}
-        title="No A2A endpoints configured"
-        description={
-          ownsWorkspace
-            ? "Add an endpoint to expose an agent in this workspace over A2A."
-            : "There are no A2A endpoints in this workspace. Only the workspace owner can add one."
-        }
-        action={actions}
-      />
-    );
-  }
-
   return (
     <>
-      <ul className="mb-4">
-        {endpoints.map((endpoint) => (
-          <li key={endpoint.id} className="mb-2">
-            <Item variant="outline" asChild>
-              <Link href={routes.settings.a2aEndpointDetail(endpoint.id)}>
-                <ItemContent>
-                  <div className="flex items-center gap-2">
-                    <ItemTitle>{endpoint.name}</ItemTitle>
-                    {!endpoint.enabled && <DisabledBadge />}
-                    {endpoint.liveTokenCount === 0 && (
-                      <StatusBadge>No active tokens</StatusBadge>
-                    )}
-                  </div>
-                  <p className="text-sm text-muted-foreground truncate">
-                    {endpoint.agentName}
-                  </p>
-                </ItemContent>
-                <ItemActions>
-                  {/* Only the Owner writes an endpoint; anyone else gets Edit,
-                      which opens the form read-only. */}
-                  <RowActionsMenu
-                    name={endpoint.name}
-                    edit={{
-                      href: routes.settings.a2aEndpointDetail(endpoint.id),
-                    }}
-                    toggle={
-                      ownsWorkspace
-                        ? {
-                            enabled: endpoint.enabled,
-                            onSelect: () => void toggle.toggle(endpoint),
-                            disabled: toggle.isToggling(endpoint.id),
-                          }
-                        : undefined
-                    }
-                    remove={
-                      ownsWorkspace
-                        ? {
-                            onSelect: () => deleteFlow.request(endpoint),
-                          }
-                        : undefined
-                    }
-                  />
-                </ItemActions>
-              </Link>
-            </Item>
-          </li>
-        ))}
-      </ul>
-      <ListFooter className="mt-4">{actions}</ListFooter>
+      <EntityCardList
+        singleColumn
+        items={endpoints.map((endpoint) => ({
+          ...endpoint,
+          description: endpoint.agentName,
+        }))}
+        isLoading={isLoading}
+        error={error}
+        data={data}
+        subject="A2A endpoints"
+        onRetry={() => void mutate()}
+        skeleton={
+          <>
+            <CardGridSkeleton singleColumn descriptionLines={1} />
+            <ButtonRowSkeleton className="mt-4" widths={["w-36"]} />
+          </>
+        }
+        empty={
+          <EmptyCard
+            icon={<Network />}
+            title="No A2A endpoints configured"
+            description={
+              ownsWorkspace
+                ? "Add an endpoint to expose an agent in this workspace over A2A."
+                : "There are no A2A endpoints in this workspace. Only the workspace owner can add one."
+            }
+            action={actions}
+          />
+        }
+        // The agent name is the card's second line and nothing follows it.
+        descriptionLines={1}
+        href={(endpoint) => routes.settings.a2aEndpointDetail(endpoint.id)}
+        badges={(endpoint) => (
+          <>
+            {!endpoint.enabled && <DisabledBadge />}
+            {endpoint.liveTokenCount === 0 && (
+              <StatusBadge>No active tokens</StatusBadge>
+            )}
+          </>
+        )}
+        menu={(endpoint) => (
+          // Only the Owner writes an endpoint; anyone else gets Edit,
+          // which opens the form read-only.
+          <RowActionsMenu
+            name={endpoint.name}
+            edit={{
+              href: routes.settings.a2aEndpointDetail(endpoint.id),
+            }}
+            toggle={
+              ownsWorkspace
+                ? {
+                    enabled: endpoint.enabled,
+                    onSelect: () => void toggle.toggle(endpoint),
+                    disabled: toggle.isToggling(endpoint.id),
+                  }
+                : undefined
+            }
+            remove={
+              ownsWorkspace
+                ? {
+                    onSelect: () => deleteFlow.request(endpoint),
+                  }
+                : undefined
+            }
+          />
+        )}
+      />
+
+      {endpoints.length > 0 && (
+        <ListFooter className="mt-4">{actions}</ListFooter>
+      )}
+
       <DeleteConfirmDialog
         open={deleteFlow.open}
         onOpenChange={(open) => !open && deleteFlow.close()}

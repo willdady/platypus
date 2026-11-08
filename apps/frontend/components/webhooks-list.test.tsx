@@ -51,12 +51,12 @@ describe("WebhooksList", () => {
 
   // A long URL is cut off with an ellipsis inside the card, so the full URL
   // stays readable on hover.
-  it("truncates the URL, keeping the full URL on hover", async () => {
+  it("clamps the URL to one line, keeping the full URL on hover", async () => {
     mockScopedSWR({ webhooks: [webhook] }, { strict: true });
     await render();
 
     const url = screen.getByText("https://hooks.example.com/deploy");
-    expect(url).toHaveClass("truncate");
+    expect(url).toHaveClass("line-clamp-1", "min-h-[1lh]");
     expect(url).toHaveAttribute("title", "https://hooks.example.com/deploy");
   });
 

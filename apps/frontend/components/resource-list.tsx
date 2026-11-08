@@ -218,6 +218,7 @@ export function ResourceList({
         items={cards}
         isLoading={isLoading}
         error={error}
+        data={data}
         subject={config.labels.plural}
         onRetry={() => void mutate()}
         skeleton={
