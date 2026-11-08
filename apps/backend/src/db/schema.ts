@@ -280,7 +280,6 @@ export const chat = pgTable(
     // chat row pre-status was the result of a completed run.
     status: t.text("status").$type<ChatStatus>().notNull().default("succeeded"),
     isPinned: t.boolean("is_pinned").notNull().default(false),
-    tags: t.jsonb("tags").$type<string[]>().notNull().default([]),
     // How many titling attempts failed while the Chat was still Untitled.
     // Titling stops once it reaches its bound, so a Chat whose model keeps
     // producing an unusable title is not re-sent after every turn (#1618).

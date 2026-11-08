@@ -1227,11 +1227,11 @@ describe("fireTrigger", () => {
             triggerRunId: runId,
             agentId: "agent-1",
             title: "Test Trigger · 2026-08-30 12:30 UTC",
-            tags: ["test-trigger"],
             status: "succeeded",
             activeLeafId: "msg-reply",
           }),
         ]);
+        expect(fake.tables.chat[0]).not.toHaveProperty("tags");
         const messages = fake.tables.chat_message;
         expect(messages.map((m) => [m.role, m.parentId])).toEqual([
           ["user", null],

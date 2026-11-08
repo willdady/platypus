@@ -198,6 +198,31 @@ const isNested = (value: unknown): value is Record<string, unknown> =>
 const isAggregate = (value: unknown): boolean =>
   isCountMarker(value) || isMaxMarker(value);
 
+/** Escapes the characters a regular expression would otherwise read as syntax. */
+const escapeRegex = (text: string): string =>
+  text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * Whether `value` matches a SQL `LIKE`/`ILIKE` pattern, where `%` matches any
+ * run of characters, `_` matches one, and `\` escapes the next character.
+ */
+const likeMatches = (value: string, pattern: string): boolean => {
+  let source = "";
+  for (let i = 0; i < pattern.length; i++) {
+    const char = pattern[i];
+    if (char === "\\" && i + 1 < pattern.length) {
+      source += escapeRegex(pattern[++i]);
+    } else if (char === "%") {
+      source += ".*";
+    } else if (char === "_") {
+      source += ".";
+    } else {
+      source += escapeRegex(char);
+    }
+  }
+  return new RegExp(`^${source}$`, "i").test(value);
+};
+
 /**
  * Evaluates the handful of raw-SQL fragments the code under test composes into
  * a `WHERE`. Anything else throws: a fragment this fake silently treated as
@@ -214,6 +239,10 @@ const matchesSql = (
   if (shape === "lower(?)=?") {
     const value = resolve(refOf(left));
     return typeof value === "string" && value.toLowerCase() === right;
+  }
+  if (shape === "?ILIKE?") {
+    const value = resolve(refOf(left));
+    return typeof value === "string" && likeMatches(value, right as string);
   }
   if (shape === "?>=?") {
     // A column against a literal, as memory retrieval's date cutoff is.

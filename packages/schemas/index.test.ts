@@ -40,6 +40,7 @@ import {
   attachmentCreateSchema,
   chatSubmitSchema,
   chatSchema,
+  chatListItemSchema,
   triggerRunSchema,
   chatUpdateSchema,
   agentCreateSchema,
@@ -2554,6 +2555,26 @@ describe("chatUpdateSchema", () => {
     expect(chatUpdateSchema.parse({ isPinned: true })).toEqual({
       isPinned: true,
     });
+  });
+
+  it("accepts a title on its own", () => {
+    expect(chatUpdateSchema.parse({ title: "A new title" })).toEqual({
+      title: "A new title",
+    });
+  });
+
+  it("rejects the removed tags field", () => {
+    expect(
+      chatUpdateSchema.safeParse({ title: "A new title", tags: ["ops"] })
+        .success,
+    ).toBe(false);
+  });
+});
+
+describe("chat tags are gone (#1873)", () => {
+  it("keeps tags out of the Chat read and list shapes", () => {
+    expect(chatSchema.shape).not.toHaveProperty("tags");
+    expect(chatListItemSchema.shape).not.toHaveProperty("tags");
   });
 });
 

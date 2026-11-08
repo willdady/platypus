@@ -64,7 +64,6 @@ function chat(id: string, title: string) {
     title,
     status: "idle",
     isPinned: false,
-    tags: [],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -383,7 +382,7 @@ describe("AppSidebar chat actions", () => {
   it("orders Edit, Pin, then a destructive Delete", () => {
     seedHeader();
     setRead("ws1", CHAT_LIST, {
-      results: [{ ...chat("c1", "First chat"), tags: ["ops"] }],
+      results: [chat("c1", "First chat")],
     });
     renderSidebar();
 
@@ -396,7 +395,26 @@ describe("AppSidebar chat actions", () => {
     expect(
       within(menu).getByRole("menuitem", { name: "Delete" }),
     ).toHaveAttribute("data-variant", "destructive");
-    expect(within(menu).getByText("ops")).toBeInTheDocument();
+  });
+
+  it("opens Edit chat with only the title field", () => {
+    seedHeader();
+    setRead("ws1", CHAT_LIST, {
+      results: [chat("c1", "First chat")],
+    });
+    renderSidebar();
+
+    fireEvent.click(
+      within(openChatMenu("First chat")).getByRole("menuitem", {
+        name: "Edit",
+      }),
+    );
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByLabelText("Title")).toBeInTheDocument();
+    expect(within(dialog).queryByLabelText("Tags")).not.toBeInTheDocument();
+    expect(
+      within(dialog).getByText("Update the chat title."),
+    ).toBeInTheDocument();
   });
 
   // A field left out of the update is left unchanged, so pinning sends only
@@ -406,7 +424,7 @@ describe("AppSidebar chat actions", () => {
     vi.stubGlobal("fetch", fetchMock);
     seedHeader();
     setRead("ws1", CHAT_LIST, {
-      results: [{ ...chat("c1", "First chat"), tags: ["ops"] }],
+      results: [chat("c1", "First chat")],
     });
     renderSidebar();
 
@@ -476,25 +494,20 @@ describe("AppSidebar chat actions", () => {
 
   // The backend refuses every one of these to anyone but the Workspace Owner
   // — an Org Admin included — so offering them would only produce an error.
-  it("offers a non-owner no Pin, Edit or Delete", () => {
+  it("offers a non-owner no chat actions", () => {
     auth.ownsWorkspace = false;
     seedHeader();
     setRead("ws1", CHAT_LIST, {
-      results: [
-        chat("c1", "Untagged chat"),
-        { ...chat("c2", "Tagged chat"), tags: ["ops"] },
-      ],
+      results: [chat("c1", "First chat"), chat("c2", "Second chat")],
     });
     renderSidebar();
 
-    expect(
-      within(screen.getByText("Untagged chat").closest("li")!).queryByRole(
-        "button",
-        { name: "Actions for Untagged chat" },
-      ),
-    ).not.toBeInTheDocument();
-    const menu = openChatMenu("Tagged chat");
-    expect(within(menu).getByText("ops")).toBeInTheDocument();
-    expect(within(menu).queryByRole("menuitem")).not.toBeInTheDocument();
+    for (const title of ["First chat", "Second chat"]) {
+      expect(
+        within(screen.getByText(title).closest("li")!).queryByRole("button", {
+          name: `Actions for ${title}`,
+        }),
+      ).not.toBeInTheDocument();
+    }
   });
 });

@@ -20,12 +20,11 @@ import { withDeadline } from "../utils/abort-race.ts";
 
 /**
  * Bounds on titling (issue #1618). A title needs the start of a conversation,
- * not all of it, and a sample of the Workspace's tags, not every one. The
- * deadline covers the call's retries. After `MAX_TITLE_FAILURES` failed
- * attempts a Chat stays Untitled until the User names it.
+ * not all of it. The deadline covers the call's retries. After
+ * `MAX_TITLE_FAILURES` failed attempts a Chat stays Untitled until the User
+ * names it.
  */
 const MAX_CONVERSATION_CHARS = 8_000;
-const MAX_EXISTING_TAGS = 100;
 const TITLE_TIMEOUT_MS = 30_000;
 const TITLE_MAX_OUTPUT_TOKENS = 2_048;
 const TITLE_MAX_RETRIES = 1;
@@ -44,19 +43,6 @@ export type GenerateChatMetadataParams = {
   providerId: string;
 };
 
-/**
- * A model-supplied tag, normalised to kebab-case. Splits camelCase, folds
- * whitespace and underscores to hyphens, and drops anything else — models
- * return "Machine Learning", "machineLearning" and "machine_learning" for the
- * same tag, and tags only dedupe if they agree on a spelling.
- */
-export const toKebabCase = (str: string): string =>
-  str
-    .replace(/([a-z])([A-Z])/g, "$1-$2")
-    .replace(/[\s_]+/g, "-")
-    .replace(/[^a-zA-Z0-9-]/g, "")
-    .toLowerCase();
-
 /** Whether the messages contain at least one user message carrying text. */
 const hasUserText = (messages: PlatypusUIMessage[]): boolean =>
   messages.some(
@@ -66,8 +52,8 @@ const hasUserText = (messages: PlatypusUIMessage[]): boolean =>
   );
 
 /**
- * Generates and persists a chat's title + tags with the task model, then
- * returns the updated row (or `null` when nothing was written).
+ * Generates and persists a chat's title with the task model, then returns the
+ * updated row (or `null` when nothing was written).
  *
  * This is the single, authoritative titling path. It is safe to call from the
  * run lifecycle for any terminal status and safe under concurrency:
@@ -84,7 +70,7 @@ const hasUserText = (messages: PlatypusUIMessage[]): boolean =>
  */
 export const generateChatMetadata = async (
   params: GenerateChatMetadataParams,
-): Promise<{ id: string; title: string; tags: string[] | null } | null> => {
+): Promise<{ id: string; title: string } | null> => {
   const { chatId, workspaceId, orgId, providerId } = params;
 
   // Fetch chat record: only what titling reads, not its memory snapshot.
@@ -112,7 +98,7 @@ export const generateChatMetadata = async (
   const { messages } = await loadActivePath(chat.id, chat.activeLeafId);
   if (!hasUserText(messages)) return null;
 
-  // Fetch workspace to check for a task-model provider override.
+  // Fetch the workspace to check for a task-model provider override.
   const workspaceRows = await db
     .select()
     .from(workspaceTable)
@@ -153,18 +139,6 @@ export const generateChatMetadata = async (
   }
   const provider = taskProvider.provider;
 
-  // Fetch the workspace's most-used tags so the model can reuse them rather
-  // than minting near-duplicate variants.
-  const existingTagsResult = await db.execute(sql`
-    SELECT value as tag
-    FROM ${chatTable}, jsonb_array_elements_text(${chatTable.tags})
-    WHERE ${chatTable.workspaceId} = ${workspaceId}
-    GROUP BY value
-    ORDER BY count(*) DESC, value
-    LIMIT ${MAX_EXISTING_TAGS}
-  `);
-  const existingTags = existingTagsResult.rows.map((row) => row.tag as string);
-
   const model = openProvider(provider, { sessionId: chatId }).languageModel(
     pointerSettingModelId(provider.taskModelId),
   );
@@ -182,20 +156,7 @@ export const generateChatMetadata = async (
 
   const promptParts = [
     `Generate a short, descriptive title for this chat conversation. You MAY use at most one emoji. The complete title MUST NOT exceed 30 characters.`,
-    `Also generate between 1 and 5 kebab-case tags relevant to the chat.`,
-    `Each tag should ideally be a single word but no more than two words.`,
-    `IMPORTANT: Avoid ambiguous words that lack context when viewed alone. For example, prefer "web-browser" over "chrome", "metal-finish" over "chrome", "programming-language" over "python", or "file-format" over "pdf". Tags should be descriptive enough to be understood without seeing the conversation.`,
   ];
-
-  // Add existing tags context if available.
-  if (existingTags.length > 0) {
-    promptParts.push(
-      `Existing tags in this workspace: ${existingTags.join(", ")}`,
-    );
-    promptParts.push(
-      `Prefer using tags from the existing list when they accurately describe the conversation. Only create new tags if none of the existing tags are applicable.`,
-    );
-  }
 
   promptParts.push(`Conversation:\n${conversationText}`);
 
@@ -217,7 +178,7 @@ export const generateChatMetadata = async (
     }
   };
 
-  let output: { title: string; tags: string[] };
+  let output: { title: string };
   try {
     ({ output } = await withDeadline(
       (abortSignal) =>
@@ -226,7 +187,6 @@ export const generateChatMetadata = async (
           output: Output.object({
             schema: z.object({
               title: z.string(),
-              tags: z.array(z.string()),
             }),
           }),
           prompt: promptParts.join("\n"),
@@ -256,15 +216,12 @@ export const generateChatMetadata = async (
     return null;
   }
 
-  // Enforce kebab-case tags and dedupe.
-  const newTags = [...new Set(output.tags.map(toKebabCase))];
-
   // Conditional write: only apply while the row is still "Untitled". This is
   // the atomic concurrency backstop — the first writer wins, later writers
   // (a second overlapping run, or the client fast-path) match zero rows.
   const updateResult = await db
     .update(chatTable)
-    .set({ title: newTitle, tags: newTags, updatedAt: new Date() })
+    .set({ title: newTitle, updatedAt: new Date() })
     .where(
       and(
         eq(chatTable.id, chatId),
@@ -275,7 +232,6 @@ export const generateChatMetadata = async (
     .returning({
       id: chatTable.id,
       title: chatTable.title,
-      tags: chatTable.tags,
     });
 
   return updateResult[0] ?? null;

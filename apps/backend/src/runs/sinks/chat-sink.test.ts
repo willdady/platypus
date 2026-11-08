@@ -1226,7 +1226,6 @@ describe("ChatSink — a Trigger run's Chat", () => {
         agentId: "a1",
         triggerRunId: "chat-1",
         title: "Digest · 2026-11-07 09:00 UTC",
-        tags: ["Digest"],
       },
     });
 
@@ -1239,10 +1238,10 @@ describe("ChatSink — a Trigger run's Chat", () => {
       triggerRunId: "chat-1",
       agentId: "a1",
       title: "Digest · 2026-11-07 09:00 UTC",
-      tags: ["Digest"],
       status: "succeeded",
       activeLeafId: "r1",
     });
+    expect(rowOf(fake, "chat", "chat-1")).not.toHaveProperty("tags");
     expect(rowOf(fake, "chat_message", "m-user")).toMatchObject({
       role: "user",
       parentId: null,
