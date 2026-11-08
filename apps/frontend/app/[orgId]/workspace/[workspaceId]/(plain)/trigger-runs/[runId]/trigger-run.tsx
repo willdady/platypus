@@ -3,7 +3,6 @@
 import { use, useCallback, useRef } from "react";
 import type { ReactNode } from "react";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
-import { TriangleAlert } from "lucide-react";
 import type { RunEvent, TriggerRunDetailResponse } from "@platypus/schemas";
 import { TriggerRunRow } from "@/components/trigger-run-row";
 import { RunTimeline } from "@/components/run-timeline";
@@ -12,11 +11,12 @@ import {
   MessageContent,
   MessageResponse,
 } from "@/components/ai-elements/message";
-import { EmptyCard } from "@/components/empty-card";
+import { FetchErrorNotice } from "@/components/fetch-error-notice";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TriggerRunRowSkeleton } from "@/components/trigger-run-row-skeleton";
 import { LoadingRegion } from "@/components/list-skeletons";
 import { fetcher } from "@/lib/utils";
+import { workspaceRoutes } from "@/lib/routes";
 import { mergeRunEvents, nextSinceSeq } from "@/lib/run-timeline";
 import type { Serialized } from "@/lib/api-write";
 
@@ -75,7 +75,7 @@ function TriggerRunDetailPage({
     [],
   );
 
-  const { data, error } = useScopedSWR<TriggerRunDetailResponse>(
+  const { data, error, mutate } = useScopedSWR<TriggerRunDetailResponse>(
     `trigger-runs/${runId}`,
     { orgId, workspaceId },
     {
@@ -102,10 +102,13 @@ function TriggerRunDetailPage({
         </p>
 
         {error && !data ? (
-          <EmptyCard
-            icon={<TriangleAlert />}
-            title="Couldn't load this run"
+          <FetchErrorNotice
+            error={error}
+            subject="run"
             description={RUN_DETAIL_ERROR_NOTICE}
+            backHref={workspaceRoutes(orgId, workspaceId).triggerRuns.root}
+            backLabel="Trigger runs"
+            onRetry={() => void mutate()}
           />
         ) : data ? (
           <div className="flex flex-col gap-6">

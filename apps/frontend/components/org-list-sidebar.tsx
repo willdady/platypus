@@ -16,6 +16,7 @@ import { fetcher, sortByName } from "@/lib/utils";
 import { useBackendUrl } from "@/components/auth-provider";
 import { useScopedList } from "@/hooks/use-scoped-list";
 import { scopedUrl } from "@/lib/api-write";
+import { ListError } from "@/components/list-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LoadingRegion } from "@/components/list-skeletons";
 import type { Organization } from "@platypus/schemas";
@@ -28,7 +29,7 @@ type OrgListSidebarProps = {
 export function OrgListSidebar({ currentOrgId }: OrgListSidebarProps) {
   const backendUrl = useBackendUrl();
 
-  const { data, results, error } = useScopedList<Organization>(
+  const { data, results, error, mutate } = useScopedList<Organization>(
     "organizations",
     {},
   );
@@ -72,9 +73,11 @@ export function OrgListSidebar({ currentOrgId }: OrgListSidebarProps) {
             <SidebarMenu>
               {error && !data ? (
                 <SidebarMenuItem>
-                  <p className="px-2 py-1.5 text-sm text-destructive">
-                    Couldn&apos;t load organizations.
-                  </p>
+                  <ListError
+                    error={error}
+                    subject="organizations"
+                    onRetry={() => void mutate()}
+                  />
                 </SidebarMenuItem>
               ) : (
                 organizations.map((org) => (

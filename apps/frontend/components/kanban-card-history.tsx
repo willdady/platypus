@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 import { useScopedList } from "@/hooks/use-scoped-list";
-import { ListError } from "@/components/list-state";
+import { ListError, ListState } from "@/components/list-state";
 import { LoadingRegion, SkeletonLine } from "@/components/list-skeletons";
 import {
   Collapsible,
@@ -166,9 +166,7 @@ export function KanbanCardHistory({
               </ol>
             </LoadingRegion>
           ) : entries.length === 0 ? (
-            <p className="text-xs text-muted-foreground">
-              No changes recorded yet.
-            </p>
+            <ListState variant="empty">No changes recorded yet.</ListState>
           ) : (
             <ol className="flex flex-col gap-3">
               {entries.map((entry) => (

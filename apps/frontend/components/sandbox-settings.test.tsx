@@ -128,6 +128,34 @@ describe("SandboxSettings loading", () => {
   });
 });
 
+describe("SandboxSettings read failure", () => {
+  it("shows a cold read failure with a retry, not the form", async () => {
+    mockReads({ sandbox: { error: { status: 500, message: "Server error" } } });
+    await renderSettings();
+
+    expect(screen.getByText("Couldn't load sandbox")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Name")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(mutate).toHaveBeenCalled();
+  });
+
+  // `null` is "no sandbox configured", and a failed revalidation over loaded
+  // data must keep the form being edited rather than swap it for an error.
+  it("keeps the form when a revalidation fails over loaded data", async () => {
+    mockReads({
+      sandbox: {
+        data: DOCKER_SANDBOX,
+        error: { status: 500, message: "Server error" },
+      },
+    });
+    await renderSettings();
+
+    expect(screen.getByLabelText("Name")).toBeInTheDocument();
+    expect(screen.queryByText("Couldn't load sandbox")).not.toBeInTheDocument();
+  });
+});
+
 describe("SandboxSettings save", () => {
   it("creates the first sandbox on the first registered backend", async () => {
     const fetchMock = stubAcceptedSave({});

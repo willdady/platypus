@@ -24,7 +24,7 @@ import { SelectItem } from "@/components/ui/select";
 import { FormSelectField } from "@/components/form-select-field";
 import { FieldSkeleton } from "@/components/form-skeleton";
 import { LoadingRegion } from "@/components/list-skeletons";
-import { ListError } from "@/components/list-state";
+import { ListError, ListState } from "@/components/list-state";
 import { useBackendUrl } from "@/components/auth-provider";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { useEntityForm } from "@/hooks/use-entity-form";
@@ -184,9 +184,9 @@ export function OrgGateAccess({
           </FieldTitle>
           <FieldDescription>{copy.allowedDescription}</FieldDescription>
           {data.workspaces.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
+            <ListState variant="empty">
               This organization has no workspaces yet.
-            </p>
+            </ListState>
           ) : (
             <Table bordered>
               <TableHeader>
