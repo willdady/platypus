@@ -134,6 +134,9 @@ describe("WorkspaceList", () => {
     const { container } = await renderList(<WorkspaceList orgId="org1" />);
 
     expect(
+      screen.getByRole("status", { name: "Loading workspaces" }),
+    ).toBeInTheDocument();
+    expect(
       container.querySelectorAll('[data-slot="skeleton"]').length,
     ).toBeGreaterThan(0);
   });
@@ -189,7 +192,9 @@ describe("PluginsList", () => {
     mockScopedSWR({ plugins: { data: undefined } }, { strict: true });
     await renderList(<PluginsList orgId="org1" />);
 
-    expect(screen.getByLabelText("Loading plugins")).toBeInTheDocument();
+    expect(
+      screen.getByRole("status", { name: "Loading plugins" }),
+    ).toBeInTheDocument();
     expect(screen.queryByText("No plugins installed")).not.toBeInTheDocument();
   });
 

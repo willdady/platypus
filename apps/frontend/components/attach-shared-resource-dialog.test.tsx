@@ -40,7 +40,9 @@ describe("AttachSharedResourceDialog", () => {
     mockScopedSWR({ "/skills": { isLoading: true } }, { strict: true });
     await renderDialog();
 
-    expect(screen.getByLabelText("Loading shared skills")).toBeInTheDocument();
+    expect(
+      screen.getByRole("status", { name: "Loading shared skills" }),
+    ).toBeInTheDocument();
     expect(
       screen.queryByText("No shared skills available to attach."),
     ).not.toBeInTheDocument();

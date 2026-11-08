@@ -12,6 +12,7 @@ import {
   ItemTitle,
 } from "@/components/ui/item";
 import { EmptyCard } from "@/components/empty-card";
+import { LoadingRegion } from "@/components/list-skeletons";
 import { Skeleton } from "@/components/ui/skeleton";
 
 // Mirrors the read-only `GET /organizations/:orgId/plugins` payload (ADR-0013).
@@ -46,28 +47,30 @@ function PluginsList({
   // `isLoading` alone keeps "No plugins installed" from flashing first.
   if (!data && !error) {
     return (
-      <ul className={cn(className)} aria-label="Loading plugins">
-        {[0, 1, 2].map((i) => (
-          <li key={i} className="mb-2">
-            <Item variant="outline" className="items-start">
-              <Skeleton className="size-8 shrink-0 rounded-sm" />
-              <ItemContent>
-                {/* Name, version badge, origin badge */}
-                <div className="flex items-center gap-2">
-                  <Skeleton className="h-4 w-32" />
-                  <Skeleton className="h-badge w-12 rounded-full" />
-                  <Skeleton className="h-badge w-12 rounded-full" />
-                </div>
-                {/* One contribution row: its label, then an id badge */}
-                <div className="mt-1 flex items-center gap-1.5">
-                  <Skeleton className="mr-1 h-3 w-16" />
-                  <Skeleton className="h-badge w-20 rounded-full" />
-                </div>
-              </ItemContent>
-            </Item>
-          </li>
-        ))}
-      </ul>
+      <LoadingRegion label="Loading plugins">
+        <ul className={cn(className)}>
+          {[0, 1, 2].map((i) => (
+            <li key={i} className="mb-2">
+              <Item variant="outline" className="items-start">
+                <Skeleton className="size-8 shrink-0 rounded-sm" />
+                <ItemContent>
+                  {/* Name, version badge, origin badge */}
+                  <div className="flex items-center gap-2">
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-badge w-12 rounded-full" />
+                    <Skeleton className="h-badge w-12 rounded-full" />
+                  </div>
+                  {/* One contribution row: its label, then an id badge */}
+                  <div className="mt-1 flex items-center gap-1.5">
+                    <Skeleton className="mr-1 h-3 w-16" />
+                    <Skeleton className="h-badge w-20 rounded-full" />
+                  </div>
+                </ItemContent>
+              </Item>
+            </li>
+          ))}
+        </ul>
+      </LoadingRegion>
     );
   }
 
