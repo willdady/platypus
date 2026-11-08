@@ -11,6 +11,7 @@ import { useBackendUrl } from "@/components/auth-provider";
 import { useScopedList } from "@/hooks/use-scoped-list";
 import { formatDate } from "@/lib/format-date";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { ListError } from "@/components/list-state";
 import {
   ButtonSkeleton,
   LoadingRegion,
@@ -25,6 +26,7 @@ function UserInvitationsPage() {
   const {
     data,
     results: invitations,
+    error,
     mutate,
     isLoading,
   } = useScopedList<InvitationListItem>("users/me/invitations", {});
@@ -84,6 +86,12 @@ function UserInvitationsPage() {
             </div>
           ))}
         </LoadingRegion>
+      ) : error && !data ? (
+        <ListError
+          error={error}
+          subject="invitations"
+          onRetry={() => mutate()}
+        />
       ) : data && invitations.length === 0 ? (
         <EmptyCard
           icon={<Mail />}
