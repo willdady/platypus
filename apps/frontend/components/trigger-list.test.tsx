@@ -7,7 +7,11 @@ import {
   within,
 } from "@testing-library/react";
 import type { Trigger } from "@platypus/schemas";
-import { triggerCreateSchema, triggerUpdateSchema } from "@platypus/schemas";
+import {
+  triggerCreateSchema,
+  triggerUpdateSchema,
+  TRIGGER_NAME_MAX_LENGTH,
+} from "@platypus/schemas";
 import {
   authMock,
   swrMock,
@@ -274,6 +278,39 @@ describe("TriggerList clone", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("dialog", { name: "Clone trigger" })).toBeVisible();
     expect(push).not.toHaveBeenCalled();
+  });
+
+  it("names a too-long copy's name on the field, then clones once shortened", async () => {
+    const fetchMock = stubAcceptedSave({ id: "t9" }, 201);
+    const longName = "T".repeat(TRIGGER_NAME_MAX_LENGTH);
+
+    await renderTriggers(
+      [{ ...cronTrigger, ...runState, name: longName } as unknown as Trigger],
+      "Clone",
+    );
+    const name = screen.getByRole<HTMLInputElement>("textbox", {
+      name: "Name",
+    });
+    expect(name).toHaveValue(`${longName} (copy)`);
+    expect(name).toHaveAttribute("maxlength", String(TRIGGER_NAME_MAX_LENGTH));
+
+    await confirmDialog("Clone");
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      `${TRIGGER_NAME_MAX_LENGTH} characters`,
+    );
+    expect(
+      screen.queryByText("This cron Trigger cannot be cloned."),
+    ).not.toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    fireEvent.change(name, { target: { value: "Short copy" } });
+    await confirmDialog("Clone");
+
+    await waitFor(() => expect(push).toHaveBeenCalled());
+    expect(
+      expectSentBodyToMatchSchema(fetchMock, triggerCreateSchema),
+    ).toMatchObject({ name: "Short copy" });
   });
 });
 
