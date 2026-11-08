@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
+import { useMutation } from "@/hooks/use-mutation";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { useScopedList } from "@/hooks/use-scoped-list";
@@ -234,7 +235,6 @@ function SandboxSettings({
     message: string;
     error: string | null;
   }>({ open: false, kind: null, message: "", error: null });
-  const [isForcing, setIsForcing] = useState(false);
 
   // A sandbox is the Workspace's singleton, read from the collection path
   // itself with no id, so the hook only writes and the read above seeds.
@@ -465,40 +465,39 @@ function SandboxSettings({
   const closeForceDialog = () =>
     setForceDialog({ open: false, kind: null, message: "", error: null });
 
-  const handleForceConfirm = async () => {
-    setIsForcing(true);
-    setForceDialog((prev) => ({ ...prev, error: null }));
-    try {
-      if (forceDialog.kind === "save") {
-        const outcome = await writeSandbox({ force: true });
-        if (outcome.outcome !== "success") {
-          // A refused force stays in the open dialog with the backend's
-          // message, so it can be read and retried.
-          setForceDialog((prev) => ({ ...prev, error: outcome.message }));
-          return;
+  const { run: handleForceConfirm, pending: isForcing } = useMutation(
+    async () => {
+      setForceDialog((prev) => ({ ...prev, error: null }));
+      try {
+        if (forceDialog.kind === "save") {
+          const outcome = await writeSandbox({ force: true });
+          if (outcome.outcome !== "success") {
+            // A refused force stays in the open dialog with the backend's
+            // message, so it can be read and retried.
+            setForceDialog((prev) => ({ ...prev, error: outcome.message }));
+            return;
+          }
+          closeForceDialog();
+          await reseedFromServer();
+          toast.success(SAVED_MESSAGE);
+        } else if (forceDialog.kind === "delete") {
+          const outcome = await deleteSandbox({ force: true });
+          if (outcome.outcome !== "success") {
+            setForceDialog((prev) => ({ ...prev, error: outcome.message }));
+            return;
+          }
+          closeForceDialog();
+          await clearDeleted();
+          toast.success(DELETED_MESSAGE);
         }
-        closeForceDialog();
-        await reseedFromServer();
-        toast.success(SAVED_MESSAGE);
-      } else if (forceDialog.kind === "delete") {
-        const outcome = await deleteSandbox({ force: true });
-        if (outcome.outcome !== "success") {
-          setForceDialog((prev) => ({ ...prev, error: outcome.message }));
-          return;
-        }
-        closeForceDialog();
-        await clearDeleted();
-        toast.success(DELETED_MESSAGE);
+      } catch (err) {
+        // A thrown failure is not a refusal with a backend message, so it keeps
+        // the plain toast rather than posing as one inline.
+        console.error("Force retry error:", err);
+        toast.error("Operation failed");
       }
-    } catch (err) {
-      // A thrown failure is not a refusal with a backend message, so it keeps
-      // the plain toast rather than posing as one inline.
-      console.error("Force retry error:", err);
-      toast.error("Operation failed");
-    } finally {
-      setIsForcing(false);
-    }
-  };
+    },
+  );
 
   if (isLoading || backendsLoading) {
     return <SandboxSettingsSkeleton canConfigure={canConfigure} />;

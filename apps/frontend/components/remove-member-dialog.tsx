@@ -27,6 +27,7 @@ import {
 } from "@platypus/schemas";
 import { useBackendUrl } from "@/components/auth-provider";
 import { useScopedList } from "@/hooks/use-scoped-list";
+import { useMutation } from "@/hooks/use-mutation";
 import { ListError } from "@/components/list-state";
 import { scopedUrl, writeAt, type Serialized } from "@/lib/api-write";
 import {
@@ -88,7 +89,6 @@ export function RemoveMemberDialog({
 }: RemoveMemberDialogProps) {
   const backendUrl = useBackendUrl();
   const { mutate } = useSWRConfig();
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
 
@@ -116,32 +116,27 @@ export function RemoveMemberDialog({
     setDrafts(Object.fromEntries(owned.map((w) => [w.id, first])));
   };
 
-  const handleSubmit = async () => {
-    setIsSubmitting(true);
+  const { run: handleSubmit, pending } = useMutation(async () => {
     setDeleteError(null);
-    try {
-      const membersUrl = scopedUrl(backendUrl, "members", { orgId });
-      const outcome = await writeAt(`${membersUrl}/${member.id}`, {
-        method: "DELETE",
-        data: { workspaces: decisions },
-        revalidateKeys: [
-          membersUrl,
-          scopedUrl(backendUrl, "workspaces", { orgId }),
-        ],
-      });
-      if (outcome.outcome === "success") {
-        outcome.revalidateKeys.forEach((key) => void mutate(key));
-        toast.success("Member removed from organization");
-        onSuccess();
-      } else {
-        // A refused removal stays in the open dialog, so the message can be
-        // read and retried rather than toasted and lost.
-        setDeleteError(outcome.message);
-      }
-    } finally {
-      setIsSubmitting(false);
+    const membersUrl = scopedUrl(backendUrl, "members", { orgId });
+    const outcome = await writeAt(`${membersUrl}/${member.id}`, {
+      method: "DELETE",
+      data: { workspaces: decisions },
+      revalidateKeys: [
+        membersUrl,
+        scopedUrl(backendUrl, "workspaces", { orgId }),
+      ],
+    });
+    if (outcome.outcome === "success") {
+      outcome.revalidateKeys.forEach((key) => void mutate(key));
+      toast.success("Member removed from organization");
+      onSuccess();
+    } else {
+      // A refused removal stays in the open dialog, so the message can be
+      // read and retried rather than toasted and lost.
+      setDeleteError(outcome.message);
     }
-  };
+  });
 
   return (
     <Dialog
@@ -193,7 +188,7 @@ export function RemoveMemberDialog({
                         onValueChange={(value) =>
                           update(w.id, { action: value as Draft["action"] })
                         }
-                        disabled={isSubmitting}
+                        disabled={pending}
                       >
                         <SelectTrigger
                           id={`action-${w.id}`}
@@ -216,7 +211,7 @@ export function RemoveMemberDialog({
                         newOwnerId={draft.newOwnerId}
                         keepHistory={draft.keepHistory}
                         onChange={(change) => update(w.id, change)}
-                        disabled={isSubmitting}
+                        disabled={pending}
                       />
                     )}
                   </FieldGroup>
@@ -229,7 +224,7 @@ export function RemoveMemberDialog({
                   size="sm"
                   onClick={applyToAll}
                   className="self-start"
-                  disabled={isSubmitting || !draftOf(owned[0].id).action}
+                  disabled={pending || !draftOf(owned[0].id).action}
                 >
                   Apply to all
                 </Button>
@@ -248,7 +243,7 @@ export function RemoveMemberDialog({
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}
-            disabled={isSubmitting}
+            disabled={pending}
           >
             Cancel
           </Button>
@@ -256,10 +251,10 @@ export function RemoveMemberDialog({
             variant="destructive"
             onClick={handleSubmit}
             disabled={
-              isSubmitting || !workspacesData || !!workspacesError || !complete
+              pending || !workspacesData || !!workspacesError || !complete
             }
           >
-            {isSubmitting ? "Removing..." : "Remove"}
+            {pending ? "Removing..." : "Remove"}
           </Button>
         </DialogFooter>
       </DialogContent>

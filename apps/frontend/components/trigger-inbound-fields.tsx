@@ -19,6 +19,7 @@ import {
   inboundEndpointUrl,
 } from "@/components/inbound-token-dialog";
 import { useBackendUrl } from "@/components/auth-provider";
+import { useMutation } from "@/hooks/use-mutation";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, RefreshCw, X } from "lucide-react";
@@ -105,7 +106,6 @@ function TriggerInboundFields({
   );
   const [shownToken, setShownToken] = useState<ShownToken | null>(null);
   const [isRegenerateDialogOpen, setIsRegenerateDialogOpen] = useState(false);
-  const [isRegenerating, setIsRegenerating] = useState(false);
   const [regenerateError, setRegenerateError] = useState<string | null>(null);
 
   const requiredInputNames = inboundInputs
@@ -179,29 +179,32 @@ function TriggerInboundFields({
       prev.map((input, i) => (i === index ? { ...input, ...patch } : input)),
     );
 
-  const handleRegenerateToken = async () => {
-    if (!backendUrl || !trigger) return;
-    setIsRegenerating(true);
-    setRegenerateError(null);
-    const outcome = await writeAt<{ token: string; tokenExpiresAt: string }>(
-      joinUrl(scopedUrl(backendUrl, "triggers", scope), `/${trigger.id}/token`),
-      { method: "POST" },
-    );
-    if (outcome.outcome === "success") {
-      setShownToken({
-        token: outcome.data.token,
-        triggerId: trigger.id,
-        expiresAt: outcome.data.tokenExpiresAt,
-        leaveOnClose: false,
-      });
-      await mutateRecord();
-      setIsRegenerateDialogOpen(false);
-    } else {
-      // A refused regenerate stays in the open dialog rather than closing it.
-      setRegenerateError(outcome.message);
-    }
-    setIsRegenerating(false);
-  };
+  const { run: handleRegenerateToken, pending: isRegenerating } = useMutation(
+    async () => {
+      if (!backendUrl || !trigger) return;
+      setRegenerateError(null);
+      const outcome = await writeAt<{ token: string; tokenExpiresAt: string }>(
+        joinUrl(
+          scopedUrl(backendUrl, "triggers", scope),
+          `/${trigger.id}/token`,
+        ),
+        { method: "POST" },
+      );
+      if (outcome.outcome === "success") {
+        setShownToken({
+          token: outcome.data.token,
+          triggerId: trigger.id,
+          expiresAt: outcome.data.tokenExpiresAt,
+          leaveOnClose: false,
+        });
+        await mutateRecord();
+        setIsRegenerateDialogOpen(false);
+      } else {
+        // A refused regenerate stays in the open dialog rather than closing it.
+        setRegenerateError(outcome.message);
+      }
+    },
+  );
 
   const closeTokenDialog = () => {
     const leave = shownToken?.leaveOnClose;
