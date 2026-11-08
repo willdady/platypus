@@ -61,12 +61,17 @@ const clearedIds = (result: ModelMessage[]): string[] =>
     .map((part) => part.toolCallId);
 
 describe("isClearableToolName", () => {
-  it.each(["web_search", "read_url", "fetchUrl", "fsRead", "fsList"])(
-    "allows the core read-only, disposable-result tool %s",
-    (name) => {
-      expect(isClearableToolName(name)).toBe(true);
-    },
-  );
+  it.each([
+    "web_search",
+    "read_url",
+    "fetchUrl",
+    "fsRead",
+    "fsList",
+    "listChats",
+    "readTranscript",
+  ])("allows the core read-only, disposable-result tool %s", (name) => {
+    expect(isClearableToolName(name)).toBe(true);
+  });
 
   // Denied by default — mutating tools, delegation, and skill loading.
   it.each([

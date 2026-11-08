@@ -381,7 +381,12 @@ const joinedResolver =
   };
 
 /** A `(column, direction)` pair as `asc()`/`desc()` record it. */
-type OrderMarker = { op: "asc" | "desc"; column: ColumnRef };
+type OrderMarker = {
+  op: "asc" | "desc";
+  column: ColumnRef;
+  /** Where nulls go, when the query says so (`... desc nulls last`). */
+  nulls?: "first" | "last";
+};
 
 /** The ordering operators, kept apart from the comparison ones for clarity. */
 export const orderOperators = () => ({
@@ -390,6 +395,33 @@ export const orderOperators = () => ({
   desc: (column: unknown) =>
     ({ op: "desc", column: refOf(column) }) as OrderMarker,
 });
+
+/**
+ * A `.orderBy()` argument as the fake sorts by it. A plain `asc`/`desc` marker
+ * is already the shape; a raw SQL fragment is read for the one form the code
+ * under test uses — `<column> [asc|desc] [nulls first|last]` — so an explicit
+ * null placement is honoured rather than silently dropped.
+ */
+const orderMarkerOf = (marker: unknown): OrderMarker => {
+  if (!isMarker(marker) || marker.op !== "sql") {
+    return marker as OrderMarker;
+  }
+  const shape = marker.strings.join("?").replace(/\s+/g, "").toLowerCase();
+  const match = /^\?((?:asc|desc))(nulls(?:first|last))?$/.exec(shape);
+  const column = marker.values[0];
+  if (!match || !isColumn(column)) {
+    throw new Error(
+      `fake db cannot interpret this order fragment: \`${marker.strings.join("?")}\``,
+    );
+  }
+  return {
+    op: match[1] as "asc" | "desc",
+    column: refOf(column),
+    ...(match[2]
+      ? { nulls: match[2].slice("nulls".length) as "first" | "last" }
+      : {}),
+  };
+};
 
 /** A unique index, as the fake enforces it on insert. */
 type UniqueConstraint = {
@@ -650,13 +682,22 @@ export const createFakeDb = (
           satisfies(resolverFor(row), condition),
         );
 
-        for (const { column, op } of [...order].reverse()) {
+        for (const { column, op, nulls } of [...order].reverse()) {
           matched = matched.slice().sort((a, b) => {
             // Two Dates at the same moment tie, as in Postgres.
-            const valueOf = (v: unknown) =>
-              (v instanceof Date ? v.getTime() : v) as number;
-            const left = valueOf(resolverFor(a)(column));
-            const right = valueOf(resolverFor(b)(column));
+            const valueOf = (v: unknown): unknown =>
+              v instanceof Date ? v.getTime() : v;
+            const leftValue = valueOf(resolverFor(a)(column));
+            const rightValue = valueOf(resolverFor(b)(column));
+            const leftNull = leftValue == null;
+            const rightNull = rightValue == null;
+            if (nulls === "last") {
+              if (leftNull !== rightNull) return leftNull ? 1 : -1;
+            } else if (nulls === "first") {
+              if (leftNull !== rightNull) return leftNull ? -1 : 1;
+            }
+            const left = leftValue as number;
+            const right = rightValue as number;
             if (left === right) return 0;
             const ascending = left < right ? -1 : 1;
             return op === "asc" ? ascending : -ascending;
@@ -765,8 +806,8 @@ export const createFakeDb = (
           condition = c;
           return builder;
         },
-        orderBy(...markers: OrderMarker[]) {
-          order = markers.filter(Boolean);
+        orderBy(...markers: unknown[]) {
+          order = markers.filter(Boolean).map(orderMarkerOf);
           return builder;
         },
         groupBy(...columns: unknown[]) {

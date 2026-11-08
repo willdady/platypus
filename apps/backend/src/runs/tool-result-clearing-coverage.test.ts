@@ -163,6 +163,10 @@ const EXPECTED_CLEARABLE: Record<string, boolean> = {
   fsList: true,
   // The model can view the file again; the saved result is metadata anyway.
   fsView: true,
+  // Paged reads of a long Transcript are large and disposable; the model can
+  // read the next page again.
+  listChats: true,
+  readTranscript: true,
 
   // Not clearable: a download button's result is tiny, and is the User's.
   fsDownload: false,

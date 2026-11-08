@@ -1785,7 +1785,23 @@ export const CLEARABLE_TOOL_NAMES: ReadonlySet<string> = new Set([
   "fsList",
   "fsView",
   "readSkillFile",
+  "listChats",
+  "readTranscript",
 ]);
+
+/**
+ * Bounds on one page of a Chat's Transcript, read by the **Chats** Tool set's
+ * `readTranscript` (issue #1005). A page holds at most this many messages and
+ * at most this many bytes of them; it never cuts inside a message, so one
+ * message over the byte budget comes back whole on a page of its own.
+ *
+ * 50 messages and 32 KiB sit between the other read tools' page sizes — a
+ * `fetchUrl` page defaults to 5,000 characters, and a Sandbox `fsRead` is
+ * capped at 1 MB — while keeping a long Transcript a handful of pages rather
+ * than hundreds.
+ */
+export const CHAT_TRANSCRIPT_PAGE_MAX_MESSAGES = 50;
+export const CHAT_TRANSCRIPT_PAGE_MAX_BYTES = 32 * 1024;
 
 /**
  * The fraction of the declared Context window at which Tool-result clearing

@@ -37,6 +37,7 @@ const EXPECTED_IDS = [
   "skill-management",
   "agent-management",
   "notifications",
+  "chats",
   "memory",
 ];
 
