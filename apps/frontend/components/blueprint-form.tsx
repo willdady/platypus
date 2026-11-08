@@ -17,7 +17,7 @@ import { SelectItem } from "@/components/ui/select";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { DetailFormState } from "@/components/detail-form-state";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
-import { ListState } from "@/components/list-state";
+import { ListError, ListState } from "@/components/list-state";
 import { useState } from "react";
 import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
 import { useRouter } from "next/navigation";
@@ -55,15 +55,36 @@ import { orgRoutes } from "@/lib/routes";
 const RESOURCE_GROUPS: {
   type: AttachmentResourceType;
   label: string;
+  /** The plural noun a failed read names: "MCP servers". */
+  subject: string;
   collection: string;
   icon: typeof Bot;
 }[] = [
-  { type: "agent", label: "Agents", collection: "agents", icon: Bot },
-  { type: "skill", label: "Skills", collection: "skills", icon: Sparkles },
-  { type: "mcp", label: "MCP servers", collection: "mcps", icon: Wrench },
+  {
+    type: "agent",
+    label: "Agents",
+    subject: "agents",
+    collection: "agents",
+    icon: Bot,
+  },
+  {
+    type: "skill",
+    label: "Skills",
+    subject: "skills",
+    collection: "skills",
+    icon: Sparkles,
+  },
+  {
+    type: "mcp",
+    label: "MCP servers",
+    subject: "MCP servers",
+    collection: "mcps",
+    icon: Wrench,
+  },
   {
     type: "provider",
     label: "Providers",
+    subject: "providers",
     collection: "providers",
     icon: Unplug,
   },
@@ -79,6 +100,7 @@ function ResourceGroup({
   orgId,
   type,
   label,
+  subject,
   collection,
   icon: Icon,
   selected,
@@ -88,15 +110,17 @@ function ResourceGroup({
   orgId: string;
   type: AttachmentResourceType;
   label: string;
+  subject: string;
   collection: string;
   icon: typeof Bot;
   selected: Set<string>;
   onToggle: (type: AttachmentResourceType, id: string, on: boolean) => void;
   disabled: boolean;
 }) {
-  const { results, isLoading } = useScopedList<SharedResource>(collection, {
-    orgId,
-  });
+  const { data, results, error, isLoading, mutate } =
+    useScopedList<SharedResource>(collection, {
+      orgId,
+    });
   const resources = sortByName(results);
 
   return (
@@ -108,9 +132,17 @@ function ResourceGroup({
       </CardHeader>
       <CardContent>
         {/* Each group reads on its own, so each holds its own placeholder —
-            until its list lands, "none yet" would be a false claim. */}
+            until its list lands, "none yet" would be a false claim. A failed
+            read says so, and offers to read again, rather than claiming the
+            organization has none. */}
         {isLoading ? (
           <SwitchGridSkeleton rows={2} />
+        ) : error && !data ? (
+          <ListError
+            error={error}
+            subject={subject}
+            onRetry={() => void mutate()}
+          />
         ) : resources.length === 0 ? (
           <ListState variant="empty">
             No shared {label.toLowerCase()} in this organization yet.
@@ -401,6 +433,7 @@ function BlueprintForm({
           orgId={orgId}
           type={group.type}
           label={group.label}
+          subject={group.subject}
           collection={group.collection}
           icon={group.icon}
           selected={selected}

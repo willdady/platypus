@@ -29,6 +29,7 @@ export function CloneDialog({
   create,
   onCreated,
   note,
+  disabled = false,
 }: {
   /** The item's kind, capitalised, as in "Clone Agent". */
   noun: string;
@@ -47,6 +48,12 @@ export function CloneDialog({
   onCreated: (id: string) => void;
   /** Shown above the name, such as what the copy leaves out. */
   note?: ReactNode;
+  /**
+   * Whether Clone is unavailable. A caller that cannot assemble the copy's
+   * references (a read still loading, or failed) passes this rather than
+   * creating a clone with them silently dropped.
+   */
+  disabled?: boolean;
 }) {
   const backendUrl = useBackendUrl();
   const [name, setName] = useState(`${original} (copy)`);
@@ -104,7 +111,7 @@ export function CloneDialog({
             }}
             placeholder={`${noun} name`}
             onKeyDown={(e) => {
-              if (e.key === "Enter") {
+              if (e.key === "Enter" && !disabled) {
                 void confirm();
               }
             }}
@@ -119,7 +126,7 @@ export function CloneDialog({
           <Button variant="outline" onClick={onClose} disabled={pending}>
             Cancel
           </Button>
-          <Button onClick={confirm} disabled={pending}>
+          <Button onClick={confirm} disabled={pending || disabled}>
             {pending ? "Cloning..." : "Clone"}
           </Button>
         </DialogFooter>

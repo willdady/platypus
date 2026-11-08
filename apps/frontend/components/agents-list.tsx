@@ -45,6 +45,7 @@ import {
   canPinAgent,
 } from "@/lib/authorization";
 import { NoProvidersEmptyState } from "@/components/no-providers-empty-state";
+import { ListError } from "@/components/list-state";
 import {
   AttachSharedAction,
   DetachSharedDialog,
@@ -142,12 +143,27 @@ export function AgentsList({
     mutate,
   } = useScopedList<SerializedAgent>("agents", scope);
 
-  const { results: providers, isLoading: isLoadingProviders } =
-    useScopedList<Provider>("providers", scope);
+  const {
+    data: providersData,
+    results: providers,
+    error: providersError,
+    isLoading: isLoadingProviders,
+    mutate: mutateProviders,
+  } = useScopedList<Provider>("providers", scope);
 
-  const { results: toolSets } = useScopedList<ToolSet>("tools", scope);
+  const {
+    results: toolSets,
+    error: toolSetsError,
+    isLoading: isLoadingToolSets,
+    mutate: mutateToolSets,
+  } = useScopedList<ToolSet>("tools", scope);
 
-  const { results: skills } = useScopedList<Skill>("skills", scope);
+  const {
+    results: skills,
+    error: skillsError,
+    isLoading: isLoadingSkills,
+    mutate: mutateSkills,
+  } = useScopedList<Skill>("skills", scope);
 
   const orgAgentDetach = useSharedDetach<SerializedAgent>({
     resourceType: "agent",
@@ -270,6 +286,28 @@ export function AgentsList({
   };
 
   const isLoading = isLoadingAgents || isLoadingProviders;
+
+  // A failed providers read cannot tell a workspace with no Providers from one
+  // whose Providers didn't load, so neither the "add a provider" prompt nor the
+  // list behind it is shown.
+  if (providersError && !providersData) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="w-full xl:w-4/5 max-w-4xl">
+          <ListError
+            error={providersError}
+            subject="providers"
+            onRetry={() => void mutateProviders()}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // A clone keeps only references found in lists that have actually landed:
+  // filtering against a failed or in-flight read would drop every one of them.
+  const referencesReady =
+    !isLoadingToolSets && !isLoadingSkills && !toolSetsError && !skillsError;
 
   // A Workspace with no Provider can't run an Agent: say so before the list's
   // own ladder, and don't offer to create one.
@@ -494,12 +532,36 @@ export function AgentsList({
           create={(name, url) =>
             createClone(agentToClone, cloneRefs.kept, name, url)
           }
+          disabled={!referencesReady}
           note={
-            cloneRefs.dropped.length > 0 && (
+            toolSetsError || skillsError ? (
+              <div className="flex flex-col gap-2">
+                {toolSetsError ? (
+                  <ListError
+                    error={toolSetsError}
+                    subject="tool sets"
+                    onRetry={() => void mutateToolSets()}
+                  />
+                ) : null}
+                {skillsError ? (
+                  <ListError
+                    error={skillsError}
+                    subject="skills"
+                    onRetry={() => void mutateSkills()}
+                  />
+                ) : null}
+              </div>
+            ) : !referencesReady ? (
               <p className="text-sm text-muted-foreground">
-                Not included, as not attached to this workspace:{" "}
-                {cloneRefs.dropped.join(", ")}.
+                Loading references…
               </p>
+            ) : (
+              cloneRefs.dropped.length > 0 && (
+                <p className="text-sm text-muted-foreground">
+                  Not included, as not attached to this workspace:{" "}
+                  {cloneRefs.dropped.join(", ")}.
+                </p>
+              )
             )
           }
           onCreated={(id) => {

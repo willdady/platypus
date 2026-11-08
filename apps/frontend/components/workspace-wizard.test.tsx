@@ -6,6 +6,8 @@ import {
   push,
   resetFormHarness,
   setDataFor,
+  setError,
+  setLoading,
   stubAcceptedSave,
   savedBody,
 } from "@/test/form-test-harness";
@@ -234,5 +236,65 @@ describe("WorkspaceWizard", () => {
 
     expect(elsewhereClicked).not.toHaveBeenCalled();
     expect(screen.getByText("Discard unsaved changes?")).toBeInTheDocument();
+  });
+});
+
+describe("WorkspaceWizard secondary reads", () => {
+  const SHARED_PROVIDERS = "/organizations/org1/providers";
+  const BACKENDS = "/organizations/org1/sandbox-backends";
+
+  /** Walks the first two steps with the shared provider picked. */
+  function reachSandboxStep() {
+    fillWorkspaceStep();
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Shared provider" }));
+    fireEvent.click(screen.getByRole("switch", { name: "Shared OpenAI" }));
+    click("Next");
+  }
+
+  it("doesn't claim there are no shared providers while the read is loading", () => {
+    setLoading(SHARED_PROVIDERS);
+    render(<WorkspaceWizard orgId="org1" />);
+    fillWorkspaceStep();
+
+    expect(screen.queryByText("No shared providers")).not.toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Loading shared providers"),
+    ).toBeInTheDocument();
+  });
+
+  it("shows the shared providers read failure instead of claiming there are none", () => {
+    setDataFor(SHARED_PROVIDERS, undefined);
+    setError(new Error("500"), SHARED_PROVIDERS);
+    render(<WorkspaceWizard orgId="org1" />);
+    fillWorkspaceStep();
+
+    expect(screen.getByText(/Failed to load providers/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+    expect(screen.queryByText("No shared providers")).not.toBeInTheDocument();
+  });
+
+  it("doesn't claim no sandbox backends are installed while the read is loading", () => {
+    setLoading(BACKENDS);
+    render(<WorkspaceWizard orgId="org1" />);
+    reachSandboxStep();
+
+    expect(
+      screen.queryByText("No sandbox backends are installed on this server."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows the sandbox backends read failure instead of claiming none are installed", () => {
+    setDataFor(BACKENDS, undefined);
+    setError(new Error("500"), BACKENDS);
+    render(<WorkspaceWizard orgId="org1" />);
+    reachSandboxStep();
+
+    expect(
+      screen.getByText(/Failed to load sandbox backends/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+    expect(
+      screen.queryByText("No sandbox backends are installed on this server."),
+    ).not.toBeInTheDocument();
   });
 });

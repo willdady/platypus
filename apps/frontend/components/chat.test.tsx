@@ -1633,6 +1633,7 @@ describe("restoring the selection on a new Chat", () => {
 describe("loading", () => {
   const PROVIDERS_KEY =
     "http://test/organizations/org1/workspaces/ws1/providers";
+  const AGENTS_KEY = "http://test/organizations/org1/workspaces/ws1/agents";
   const loadingSkeleton = () =>
     screen.queryByRole("status", { name: "Loading chat" });
   const composer = () =>
@@ -1672,6 +1673,26 @@ describe("loading", () => {
 
     expect(loadingSkeleton()).not.toBeInTheDocument();
     expect(screen.getByText(/Failed to load providers/)).toBeInTheDocument();
+  });
+
+  it("shows the agents read failure instead of a picker that never resolves", () => {
+    harness.responses.set(AGENTS_KEY, {
+      data: undefined,
+      error: new Error("500"),
+      isLoading: false,
+      mutate: harness.agentsMutate,
+    });
+    // An Agent-bound Chat cannot resolve its selection without the Agent list.
+    harness.data.set(`/chat/${CHAT_ID}`, {
+      status: "succeeded",
+      messages: [],
+      agentId: "a1",
+    });
+
+    renderChat();
+
+    expect(screen.getByText(/Failed to load agents/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
   });
 
   it("shows the transcript skeleton for an existing Chat while providers load", () => {

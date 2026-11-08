@@ -36,6 +36,12 @@ import {
 } from "@/components/ui/item";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmptyCard } from "@/components/empty-card";
+import { ListError } from "@/components/list-state";
+import {
+  ItemRowsSkeleton,
+  LoadingRegion,
+  SkeletonLine,
+} from "@/components/list-skeletons";
 import {
   Field,
   FieldDescription,
@@ -128,15 +134,32 @@ export function WorkspaceWizard({ orgId }: { orgId: string }) {
 
   // Only admins reach this page (ADR-0008), and these reads are admin-only.
   const { results: members } = useScopedList<Member>("members", { orgId });
-  const { results: sharedProviders } = useScopedList<Provider>("providers", {
+  const {
+    data: sharedProvidersData,
+    results: sharedProviders,
+    error: sharedProvidersError,
+    isLoading: isLoadingSharedProviders,
+    mutate: mutateSharedProviders,
+  } = useScopedList<Provider>("providers", {
     orgId,
   });
-  const { results: backends } = useScopedList<unknown>("sandbox-backends", {
+  const {
+    data: backendsData,
+    results: backends,
+    error: backendsError,
+    isLoading: isLoadingBackends,
+    mutate: mutateBackends,
+  } = useScopedList<unknown>("sandbox-backends", {
     orgId,
   });
+  // Hold the default tab until the read settles: falling to New while it is
+  // loading or failed would claim the organization has no shared providers.
+  const providersReadable = !isLoadingSharedProviders && !sharedProvidersError;
   const providerSource =
-    pickedSource ?? (sharedProviders.length > 0 ? "shared" : "new");
+    pickedSource ??
+    (providersReadable && sharedProviders.length === 0 ? "new" : "shared");
   const hasSandboxBackends = backends.length > 0;
+  const backendsFailed = Boolean(backendsError && !backendsData);
 
   // A super-admin acting on an org they're not enrolled in won't appear in
   // /members, but the backend lets them own a workspace by defaulting to
@@ -351,7 +374,19 @@ export function WorkspaceWizard({ orgId }: { orgId: string }) {
             forceMount
             className="data-[state=inactive]:hidden"
           >
-            {sharedProviders.length === 0 ? (
+            {isLoadingSharedProviders ? (
+              <LoadingRegion label="Loading shared providers" className="mb-6">
+                <ItemRowsSkeleton rows={2} />
+              </LoadingRegion>
+            ) : sharedProvidersError && !sharedProvidersData ? (
+              <div className="mb-6">
+                <ListError
+                  error={sharedProvidersError}
+                  subject="providers"
+                  onRetry={() => void mutateSharedProviders()}
+                />
+              </div>
+            ) : sharedProviders.length === 0 ? (
               <EmptyCard
                 className="mb-6"
                 icon={<Unplug />}
@@ -409,11 +444,21 @@ export function WorkspaceWizard({ orgId }: { orgId: string }) {
         >
           <div>
             <FieldLabel htmlFor="withSandbox">Configure a sandbox</FieldLabel>
-            <FieldDescription>
-              {hasSandboxBackends
-                ? "Optional. Gives agents shell and filesystem tools in an isolated environment. You can add one later in the workspace settings."
-                : "No sandbox backends are installed on this server."}
-            </FieldDescription>
+            {isLoadingBackends ? (
+              <SkeletonLine className="w-80 max-w-full" />
+            ) : backendsFailed ? (
+              <ListError
+                error={backendsError}
+                subject="sandbox backends"
+                onRetry={() => void mutateBackends()}
+              />
+            ) : (
+              <FieldDescription>
+                {hasSandboxBackends
+                  ? "Optional. Gives agents shell and filesystem tools in an isolated environment. You can add one later in the workspace settings."
+                  : "No sandbox backends are installed on this server."}
+              </FieldDescription>
+            )}
           </div>
           <Switch
             id="withSandbox"

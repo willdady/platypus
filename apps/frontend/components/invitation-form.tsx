@@ -10,8 +10,9 @@ import {
 } from "@/components/ui/field";
 import { FormTextField } from "@/components/form-text-field";
 import { Button } from "@/components/ui/button";
-import { ListState } from "@/components/list-state";
+import { ListError, ListState } from "@/components/list-state";
 import { Switch } from "@/components/ui/switch";
+import { SwitchGridSkeleton } from "@/components/form-skeleton";
 import Link from "next/link";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { useEntityForm } from "@/hooks/use-entity-form";
@@ -71,12 +72,15 @@ export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
     },
   });
 
-  const { data: blueprintsData } = useScopedSWR<{ results: Blueprint[] }>(
-    "blueprints",
-    { orgId },
-  );
+  const {
+    data: blueprintsData,
+    error: blueprintsError,
+    isLoading: blueprintsLoading,
+    mutate: mutateBlueprints,
+  } = useScopedSWR<{ results: Blueprint[] }>("blueprints", { orgId });
   const blueprints = blueprintsData?.results || [];
   const blueprintsById = new Map(blueprints.map((b) => [b.id, b]));
+  const blueprintsFailed = Boolean(blueprintsError && !blueprintsData);
 
   const toggleBlueprint = (id: string, on: boolean) => {
     clearErrors("blueprintIds");
@@ -146,7 +150,19 @@ export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
               workspace setting, the later one wins.
             </FieldDescription>
 
-            {blueprints.length === 0 ? (
+            {blueprintsLoading ? (
+              <div className="mt-2">
+                <SwitchGridSkeleton rows={2} />
+              </div>
+            ) : blueprintsFailed ? (
+              <div className="mt-2">
+                <ListError
+                  error={blueprintsError}
+                  subject="blueprints"
+                  onRetry={() => void mutateBlueprints()}
+                />
+              </div>
+            ) : blueprints.length === 0 ? (
               <ListState
                 variant="empty"
                 action={

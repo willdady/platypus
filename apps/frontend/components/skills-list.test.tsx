@@ -227,6 +227,33 @@ describe("SkillsList card meta", () => {
   });
 });
 
+describe("SkillsList agent read", () => {
+  const warning = () =>
+    screen.queryByTitle("WARNING: Skill not associated with any agents.");
+
+  it("shows one read failure above the list, not a warning on every card", async () => {
+    mockScopedSWR({
+      "/skills": [workspaceSkill],
+      "/agents": { error: new Error("500") },
+    });
+    await renderList(<SkillsList orgId="org1" workspaceId="ws1" />);
+
+    expect(screen.getByText(/Failed to load agents/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+    expect(warning()).not.toBeInTheDocument();
+  });
+
+  it("shows no agent line while the agents read is still loading", async () => {
+    mockScopedSWR({
+      "/skills": [workspaceSkill],
+      "/agents": { isLoading: true },
+    });
+    await renderList(<SkillsList orgId="org1" workspaceId="ws1" />);
+
+    expect(warning()).not.toBeInTheDocument();
+  });
+});
+
 describe("SkillsList unattached warning", () => {
   const card = () =>
     screen.getByText(orgSkill.name).closest('[data-slot="item"]');

@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { ListState } from "@/components/list-state";
+import { ListError, ListState } from "@/components/list-state";
 import { EmptyCard } from "@/components/empty-card";
 import {
   ButtonRowSkeleton,
@@ -112,11 +112,18 @@ function UserInvocableBadge({ skill }: { skill: SerializedSkill }) {
 // with an "N agent(s)" count whose tooltip lists the agents, or a warning when
 // the Skill is attached to no agents. Rendered for both workspace-scoped and
 // attached org-scoped (Shared) Skills (#296). The trigger uses preventDefault
-// so tapping the count does not follow the card's link.
-function SkillAgentsIndicator({ agents }: { agents: Serialized<Agent>[] }) {
+// so tapping the count does not follow the card's link. While the agent read is
+// unavailable the line is drawn empty, so the card keeps its height.
+function SkillAgentsIndicator({
+  agents,
+  unavailable = false,
+}: {
+  agents: Serialized<Agent>[];
+  unavailable?: boolean;
+}) {
   return (
     <div className="mt-1 flex h-4 items-center text-xs text-muted-foreground">
-      {agents.length > 0 ? (
+      {unavailable ? null : agents.length > 0 ? (
         <Tooltip>
           <TooltipTrigger
             className="flex items-center gap-1 cursor-default whitespace-nowrap"
@@ -227,10 +234,20 @@ export function SkillsList({
   } = useScopedList<SerializedSkill>("skills", scope);
 
   // Agent associations are a workspace concern; only fetched on that surface.
-  const { results: agents } = useScopedList<Agent>(
-    "agents",
-    workspaceId ? scope : null,
-  );
+  const {
+    data: agentsData,
+    results: agents,
+    error: agentsError,
+    isLoading: isLoadingAgents,
+    mutate: mutateAgents,
+  } = useScopedList<Agent>("agents", workspaceId ? scope : null);
+
+  // A failed agent read cannot tell "attached to no agents" from "the
+  // associations didn't load", so the per-card indicator stays off until the
+  // list has landed; one read failure above the list replaces it.
+  const agentsFailed = Boolean(workspaceId && agentsError && !agentsData);
+  const agentsUnavailable =
+    Boolean(workspaceId) && (isLoadingAgents || agentsFailed);
 
   const skills = sortByName(skillRows);
 
@@ -366,7 +383,11 @@ export function SkillsList({
         onValueChange={setNameFilter}
         className="w-full sm:w-64"
       />
-      <Select value={activeAgentFilter} onValueChange={setAgentFilter}>
+      <Select
+        value={activeAgentFilter}
+        onValueChange={setAgentFilter}
+        disabled={agentsUnavailable}
+      >
         <SelectTrigger className="w-44" aria-label="Filter by agent">
           <SelectValue />
         </SelectTrigger>
@@ -431,6 +452,15 @@ export function SkillsList({
   return (
     <>
       {controls}
+      {agentsFailed && (
+        <div className="mb-4">
+          <ListError
+            error={agentsError}
+            subject="agents"
+            onRetry={() => void mutateAgents()}
+          />
+        </div>
+      )}
       <EntityCardList
         items={page.items}
         ghosts={page}
@@ -475,7 +505,10 @@ export function SkillsList({
         )}
         meta={(skill) =>
           workspaceId ? (
-            <SkillAgentsIndicator agents={getAgentsForSkill(skill.id)} />
+            <SkillAgentsIndicator
+              agents={getAgentsForSkill(skill.id)}
+              unavailable={agentsUnavailable}
+            />
           ) : (
             canManageOrg && (
               <div className="mt-1">
@@ -502,7 +535,8 @@ export function SkillsList({
                 card({
                   className: (
                     workspaceId
-                      ? getAgentsForSkill(skill.id).length === 0
+                      ? !agentsUnavailable &&
+                        getAgentsForSkill(skill.id).length === 0
                       : count === 0
                   )
                     ? "border-warning"
