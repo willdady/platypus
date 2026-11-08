@@ -19,8 +19,13 @@ import {
   trigger as triggerTable,
   triggerRun as triggerRunTable,
   triggerRunEvent as triggerRunEventTable,
+  workspace as workspaceTable,
 } from "../db/schema.ts";
 import { fireTrigger } from "../services/trigger-firing.ts";
+import {
+  deleteTriggerRunFiles,
+  type TriggerRunScope,
+} from "../services/trigger-run-files.ts";
 import { sendInboundTokenReminders } from "../services/inbound-trigger.ts";
 import { sendA2aTokenReminders } from "../services/a2a-token.ts";
 import {
@@ -371,19 +376,75 @@ export async function recoverStuckTriggers(): Promise<void> {
  */
 export async function reapFiredOneOffTriggers(): Promise<void> {
   const cutoff = new Date(Date.now() - FIRED_ONE_OFF_TTL_DAYS * DAY_MS);
-  const reaped = await db
-    .delete(triggerTable)
-    .where(
-      and(
-        isNotNull(triggerTable.firedAt),
-        sql`not exists (select 1 from ${triggerRunTable} where ${triggerRunTable.triggerId} = ${triggerTable.id} and ${triggerRunTable.status} in ('pending', 'running'))`,
-        sql`coalesce((select max(${triggerRunTable.completedAt}) from ${triggerRunTable} where ${triggerRunTable.triggerId} = ${triggerTable.id}), ${triggerTable.firedAt}) < ${cutoff}`,
-      ),
-    )
-    .returning({ id: triggerTable.id });
-  if (reaped.length > 0) {
-    logger.info({ count: reaped.length }, "Reaped expired One-off Triggers");
+  const expired = and(
+    isNotNull(triggerTable.firedAt),
+    sql`not exists (select 1 from ${triggerRunTable} where ${triggerRunTable.triggerId} = ${triggerTable.id} and ${triggerRunTable.status} in ('pending', 'running'))`,
+    sql`coalesce((select max(${triggerRunTable.completedAt}) from ${triggerRunTable} where ${triggerRunTable.triggerId} = ${triggerTable.id}), ${triggerTable.firedAt}) < ${cutoff}`,
+  );
+
+  // Read the runs before the delete: they cascade with the Trigger, and their
+  // Chat ids name the storage prefixes to clear afterwards. One transaction
+  // keeps the rows this reads and deletes the same set.
+  const reaped = await db.transaction(async (tx) => {
+    const expiring = await tx
+      .select({
+        triggerId: triggerTable.id,
+        runId: triggerRunTable.id,
+        orgId: workspaceTable.organizationId,
+        workspaceId: triggerTable.workspaceId,
+      })
+      .from(triggerTable)
+      // Left join: a Trigger whose Workspace row is already gone (or, in a
+      // fixture, never seeded) must still be reaped. It simply has no Chat
+      // prefix to clear.
+      .leftJoin(workspaceTable, eq(workspaceTable.id, triggerTable.workspaceId))
+      .leftJoin(triggerRunTable, eq(triggerRunTable.triggerId, triggerTable.id))
+      .where(expired);
+    if (expiring.length === 0) return [];
+
+    const deleted = await tx
+      .delete(triggerTable)
+      .where(
+        and(
+          expired,
+          inArray(triggerTable.id, [
+            ...new Set(expiring.map(({ triggerId }) => triggerId)),
+          ]),
+        ),
+      )
+      .returning({ id: triggerTable.id });
+    const deletedIds = new Set(deleted.map(({ id }) => id));
+    return expiring.filter(({ triggerId }) => deletedIds.has(triggerId));
+  });
+
+  if (reaped.length === 0) return;
+
+  // One prefix delete per run Chat, grouped by the Workspace whose keys they
+  // sit under.
+  const runsByScope = new Map<
+    string,
+    { scope: TriggerRunScope; runIds: string[] }
+  >();
+  for (const { runId, orgId, workspaceId } of reaped) {
+    if (!runId || !orgId) continue;
+    const key = `${orgId}/${workspaceId}`;
+    const group = runsByScope.get(key) ?? {
+      scope: { orgId, workspaceId },
+      runIds: [],
+    };
+    group.runIds.push(runId);
+    runsByScope.set(key, group);
   }
+  await Promise.all(
+    [...runsByScope.values()].map(({ scope, runIds }) =>
+      deleteTriggerRunFiles(scope, runIds),
+    ),
+  );
+
+  logger.info(
+    { count: new Set(reaped.map(({ triggerId }) => triggerId)).size },
+    "Reaped expired One-off Triggers",
+  );
 }
 
 /**

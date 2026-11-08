@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { mockNanoid } from "../test-setup.ts";
+import { mockLogger, mockNanoid } from "../test-setup.ts";
 import { resetMockDb, seedDb, type Row, type Store } from "../test-utils.ts";
 
 vi.mock("../utils/cron.ts", () => {
@@ -29,6 +29,7 @@ import {
   type TriggerUpdateFields,
 } from "./trigger.ts";
 import { hashBearerToken } from "./bearer-token.ts";
+import { getStorage } from "../storage/index.ts";
 import { NotFoundError, ValidationError } from "../errors.ts";
 
 const ctx = { orgId: "org-1", workspaceId: "ws-1" };
@@ -853,6 +854,60 @@ describe("trigger module", () => {
 
       expect(await deleteTrigger(ctx, "trig-1", asTool)).toBe(false);
       expect(fake.tables.trigger).toHaveLength(1);
+    });
+
+    it("deletes the stored files under each run Chat's prefix", async () => {
+      world({
+        trigger: [triggerRow()],
+        trigger_run: [
+          { id: "run-1", triggerId: "trig-1" },
+          { id: "run-2", triggerId: "trig-1" },
+        ],
+      });
+      const deletePrefix = vi
+        .spyOn(getStorage(), "deletePrefix")
+        .mockResolvedValue(undefined);
+
+      expect(await deleteTrigger(ctx, "trig-1", asTool)).toBe(true);
+
+      expect(deletePrefix.mock.calls.map(([prefix]) => prefix).sort()).toEqual([
+        "org-1/ws-1/run-1/",
+        "org-1/ws-1/run-2/",
+      ]);
+      deletePrefix.mockRestore();
+    });
+
+    it("leaves another workspace's run files alone", async () => {
+      world({
+        trigger: [triggerRow({ workspaceId: "ws-2" })],
+        trigger_run: [{ id: "run-1", triggerId: "trig-1" }],
+      });
+      const deletePrefix = vi
+        .spyOn(getStorage(), "deletePrefix")
+        .mockResolvedValue(undefined);
+
+      expect(await deleteTrigger(ctx, "trig-1", asTool)).toBe(false);
+
+      expect(deletePrefix).not.toHaveBeenCalled();
+      deletePrefix.mockRestore();
+    });
+
+    it("logs a storage failure without failing the delete", async () => {
+      world({
+        trigger: [triggerRow()],
+        trigger_run: [{ id: "run-1", triggerId: "trig-1" }],
+      });
+      const deletePrefix = vi
+        .spyOn(getStorage(), "deletePrefix")
+        .mockRejectedValue(new Error("storage down"));
+
+      await expect(deleteTrigger(ctx, "trig-1", asTool)).resolves.toBe(true);
+
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({ prefix: "org-1/ws-1/run-1/" }),
+        "Failed to delete files from storage",
+      );
+      deletePrefix.mockRestore();
     });
 
     it("refuses an Inbound Trigger unless the caller is the Owner's surface", async () => {

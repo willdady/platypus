@@ -7,6 +7,11 @@ import {
   announceTriggerRunsEnded,
   endedTriggerRunColumns,
 } from "./trigger-run-announce.ts";
+import {
+  deleteTriggerRunFiles,
+  deleteTriggerRunFilesForTrigger,
+  type TriggerRunScope,
+} from "./trigger-run-files.ts";
 import type {
   EventTriggerEvent,
   EventTriggerEventPayload,
@@ -208,9 +213,14 @@ export const suppressTriggerRun = async (input: {
 export const retainTriggerRuns = async (
   triggerId: string,
   maxRunsToKeep: number,
+  scope?: TriggerRunScope,
 ): Promise<void> => {
   const { windowSeconds, suppressedRunsToKeep } = triggerBreakerConfig();
-  let deleted = 0;
+  let deletedCount = 0;
+  // Only a normal run has a Chat, and so stored files: a suppressed row records
+  // a firing that never started one (ADR-0044). Keep its deletion counted for
+  // the log, but out of the prefix cleanup.
+  const deletedRunIds: string[] = [];
 
   // Nothing to prune when the Trigger holds fewer than the budget: the newest
   // query returning a short page means it returned every normal row there is.
@@ -255,7 +265,8 @@ export const retainTriggerRuns = async (
           ),
         )
         .returning({ id: triggerRunTable.id });
-      deleted += removed.length;
+      deletedCount += removed.length;
+      deletedRunIds.push(...removed.map(({ id }) => id));
     }
   }
 
@@ -285,14 +296,22 @@ export const retainTriggerRuns = async (
         ),
       )
       .returning({ id: triggerRunTable.id });
-    deleted += removedSuppressed.length;
+    deletedCount += removedSuppressed.length;
   }
 
-  if (deleted > 0) {
+  if (deletedCount > 0) {
+    // The rows are gone; their run Chats cascade with them. Their stored files
+    // sit under prefixes nothing else reaches, so clear those too.
+    if (scope) {
+      await deleteTriggerRunFiles(scope, deletedRunIds);
+    } else {
+      await deleteTriggerRunFilesForTrigger(triggerId, deletedRunIds);
+    }
+
     logger.info(
       {
         triggerId,
-        deletedCount: deleted,
+        deletedCount,
         maxRunsToKeep,
         windowSeconds,
         suppressedRunsToKeep,

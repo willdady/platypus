@@ -508,15 +508,17 @@ export const acceptInboundCall = async (
     if (suppressedRun) void announceTriggerRunsEnded([suppressedRun]);
     // A suppressed row is bounded by its own budget; applied here as
     // `suppressTriggerRun` applies it for an Event Trigger.
-    await retainTriggerRuns(trigger.id, trigger.maxRunsToKeep).catch(
-      (error: unknown) =>
-        logger.error(
-          {
-            triggerId: trigger.id,
-            error: errorMessage(error),
-          },
-          "Failed to apply retention after a suppressed inbound call",
-        ),
+    await retainTriggerRuns(trigger.id, trigger.maxRunsToKeep, {
+      orgId: target.organizationId,
+      workspaceId: target.workspaceId,
+    }).catch((error: unknown) =>
+      logger.error(
+        {
+          triggerId: trigger.id,
+          error: errorMessage(error),
+        },
+        "Failed to apply retention after a suppressed inbound call",
+      ),
     );
   }
   if (decision.outcome === "accepted") {
