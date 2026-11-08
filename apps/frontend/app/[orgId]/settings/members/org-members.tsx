@@ -14,6 +14,7 @@ import {
 } from "@/components/list-skeletons";
 import { TableList } from "@/components/table-list";
 import { OrganizationName } from "@/components/organization-name";
+import { PageHeader } from "@/components/page-header";
 
 function OrgMembersPage() {
   const { orgId } = useParams<{ orgId: string }>();
@@ -26,14 +27,16 @@ function OrgMembersPage() {
   } = useScopedList<OrgMemberListItem>("members", { orgId });
 
   return (
-    <div className="flex flex-col gap-8">
-      <div>
-        <h1 className="text-2xl font-bold mb-4">Members</h1>
-        <p className="text-muted-foreground">
-          Manage members of <OrganizationName orgId={orgId} /> and their
-          workspace access.
-        </p>
-      </div>
+    <div>
+      <PageHeader
+        title="Members"
+        description={
+          <>
+            Manage members of <OrganizationName orgId={orgId} /> and their
+            workspace access.
+          </>
+        }
+      />
 
       <TableList
         isLoading={isLoading}

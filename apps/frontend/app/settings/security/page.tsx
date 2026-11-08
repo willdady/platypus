@@ -1,14 +1,16 @@
 import type { Metadata } from "next";
 import { ChangePasswordForm } from "@/components/change-password-form";
+import { PageHeader } from "@/components/page-header";
+import { SettingsSectionHeading } from "@/components/settings-section-heading";
 
 export const metadata: Metadata = { title: "Security Settings" };
 
 function SecuritySettingsPage() {
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-4">Security Settings</h1>
+      <PageHeader title="Security Settings" />
       <div className="max-w-md">
-        <h2 className="text-lg font-semibold mb-4">Change Password</h2>
+        <SettingsSectionHeading>Change Password</SettingsSectionHeading>
         <ChangePasswordForm />
       </div>
     </div>

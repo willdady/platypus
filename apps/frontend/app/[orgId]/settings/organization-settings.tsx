@@ -4,11 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Copy } from "lucide-react";
 import { copyWithToast } from "@/lib/clipboard";
 import { OrganizationForm } from "@/components/organization-form";
+import { PageHeader } from "@/components/page-header";
 
 function OrgSettingsPage({ orgId }: { orgId: string }) {
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-4">Organization Settings</h1>
+      <PageHeader title="Organization Settings" />
       <div className="grid grid-cols-2 gap-6 mb-4">
         <div>
           <p className="text-sm mb-2">Organization ID</p>

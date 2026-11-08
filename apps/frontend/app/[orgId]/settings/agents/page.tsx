@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { OrgAgentsList } from "@/components/org-agents-list";
+import { PageHeader } from "@/components/page-header";
 
 export const metadata: Metadata = { title: "Organization Agents" };
 
@@ -12,12 +13,10 @@ async function OrgAgentsPage({
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-4">Organization Agents</h1>
-      <p className="text-muted-foreground mb-6">
-        Shared agents are promoted from a workspace and run in any workspace
-        they are attached to. They are managed here on the organization surface
-        and can only be deleted once detached from every workspace.
-      </p>
+      <PageHeader
+        title="Organization Agents"
+        description="Shared agents are promoted from a workspace and run in any workspace they are attached to. They are managed here on the organization surface and can only be deleted once detached from every workspace."
+      />
       <OrgAgentsList orgId={orgId} />
     </div>
   );
