@@ -89,6 +89,20 @@ describe("CommandMenu", () => {
     },
   );
 
+  it.each([
+    ["Create agent", "New agent"],
+    ["Create skill", "New skill"],
+    ["Create board", "New board"],
+    ["Create trigger", "New trigger"],
+  ])("offers %s and not %s", async (label, oldLabel) => {
+    await openMenu();
+
+    expect(screen.getByRole("option", { name: label })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: oldLabel }),
+    ).not.toBeInTheDocument();
+  });
+
   it("disables New chat once the workspace is known to have no providers", async () => {
     mockScopedSWR({ "/providers": [] });
     await openMenu();

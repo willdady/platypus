@@ -56,7 +56,7 @@ function A2aEndpointsList({
   const actions = ownsWorkspace && (
     <Button variant={endpoints.length ? "outline" : "default"} asChild>
       <Link href={routes.settings.createA2aEndpoint}>
-        <Plus /> Add endpoint
+        <Plus /> Add A2A endpoint
       </Link>
     </Button>
   );

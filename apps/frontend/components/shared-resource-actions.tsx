@@ -42,7 +42,7 @@ export function AttachSharedAction<
   orgId: string;
   workspaceId: string;
   resourceType: AttachmentResourceType;
-  /** Attach CTA: "Attach shared skill" / "Attach shared MCP". */
+  /** Attach CTA: "Attach shared skill" / "Attach shared MCP server". */
   label: string;
   resources: readonly T[];
   onAttached: () => void;

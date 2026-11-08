@@ -36,9 +36,9 @@ function ContentSkeleton() {
   );
 }
 
-// Stands in for the Create Workspace page and the first step of its wizard,
+// Stands in for the Add Workspace page and the first step of its wizard,
 // placeholder for placeholder, so nothing jumps when the wizard arrives.
-function CreateWorkspaceSkeleton() {
+function AddWorkspaceSkeleton() {
   return (
     <div className="h-dvh overflow-y-auto pb-4">
       <div
@@ -127,7 +127,7 @@ export default function OrganizationLoading() {
   }
 
   if (section === "create") {
-    return <CreateWorkspaceSkeleton />;
+    return <AddWorkspaceSkeleton />;
   }
 
   // The Organization home draws itself: it reads only client-cached data, so
