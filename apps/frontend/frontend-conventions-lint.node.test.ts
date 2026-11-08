@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { ESLint } from "eslint";
+import tseslint from "typescript-eslint";
 import path from "node:path";
 
 type LintResult = ESLint.LintResult;
@@ -203,10 +204,21 @@ function conventionMessages(result: LintResult) {
 
 describe("frontend convention lint rules", () => {
   let eslint: ESLint;
+  let probeEslint: ESLint;
   let fileResults: LintResult[];
 
   beforeAll(async () => {
     eslint = new ESLint({ cwd: APP_ROOT });
+    // Probes lint text under a real file's path. With type information the
+    // parser can hand back that file's on-disk AST instead of the probe's,
+    // crashing other rules; the rules under test are syntactic, so drop it.
+    probeEslint = new ESLint({
+      cwd: APP_ROOT,
+      overrideConfig: {
+        files: ["**/*.tsx"],
+        ...tseslint.configs.disableTypeChecked,
+      },
+    });
     const realFiles = [
       ...EXEMPT_PRIMITIVES.map(({ file }) => path.join(APP_ROOT, file)),
       ...EXEMPT_LEGITIMATE_USES.map(({ file }) => path.join(APP_ROOT, file)),
@@ -217,7 +229,7 @@ describe("frontend convention lint rules", () => {
   it.each(PROBES)(
     "fails $name with the primitive's message",
     async ({ source, message }) => {
-      const [result] = await eslint.lintText(source, {
+      const [result] = await probeEslint.lintText(source, {
         filePath: PROBE_FILE,
       });
       expect(conventionMessages(result).map(({ message }) => message)).toEqual([
