@@ -227,7 +227,12 @@ function WorkspaceForm({ orgId, workspaceId }: WorkspaceFormProps) {
       backHref={workspaceRoutes(orgId, workspaceId).root}
       backLabel="Back to workspace"
     >
-      <div>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          void submit();
+        }}
+      >
         <FieldSet className="mb-6">
           <FieldGroup>
             <FormTextField
@@ -518,8 +523,8 @@ function WorkspaceForm({ orgId, workspaceId }: WorkspaceFormProps) {
 
         <div className="flex flex-wrap items-start gap-2">
           <FormFooterButtons
+            type="submit"
             submitText="Save"
-            onSubmit={() => void submit()}
             submitDisabled={isSubmitting || !canSubmit}
             deleteVisible
             deleteDisabled={isSubmitting}
@@ -544,7 +549,7 @@ function WorkspaceForm({ orgId, workspaceId }: WorkspaceFormProps) {
           loading={isDeleting}
           error={deleteError}
         />
-      </div>
+      </form>
     </DetailFormState>
   );
 }

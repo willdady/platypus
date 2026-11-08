@@ -11,7 +11,7 @@ import {
   stubAcceptedSave,
   savedBody,
 } from "@/test/form-test-harness";
-import { selectOption } from "@/test/test-utils";
+import { selectOption, setupUser } from "@/test/test-utils";
 import { scopedPath } from "@/lib/api-write";
 
 vi.mock("@/components/auth-provider", () => authMock);
@@ -46,6 +46,25 @@ describe("BlueprintForm shared resource groups", () => {
 
     expect(screen.getByLabelText("Loading blueprint")).toBeInTheDocument();
     expect(screen.queryByLabelText("Name")).not.toBeInTheDocument();
+  });
+});
+
+describe("BlueprintForm form submission", () => {
+  beforeEach(() => {
+    resetFormHarness();
+    setDataFor("/organizations/org1/providers", { results: [] });
+  });
+
+  it("saves on Enter in the Name field", async () => {
+    const fetchMock = stubAcceptedSave({ id: "b1" });
+    render(<BlueprintForm orgId="org1" />);
+
+    const name = screen.getByLabelText("Name");
+    fireEvent.change(name, { target: { value: "Starter" } });
+    await setupUser().type(name, "{Enter}");
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(savedBody(fetchMock)).toMatchObject({ name: "Starter" });
   });
 });
 

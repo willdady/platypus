@@ -13,7 +13,7 @@ import {
   stubAcceptedSave,
   savedBody,
 } from "@/test/form-test-harness";
-import { selectOption } from "@/test/test-utils";
+import { selectOption, setupUser } from "@/test/test-utils";
 
 vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("swr", () => swrMock);
@@ -147,6 +147,19 @@ describe("WorkspaceForm provider selects", () => {
 
 describe("WorkspaceForm save", () => {
   beforeEach(() => resetFormHarness());
+
+  it("saves on Enter in the Name field", async () => {
+    setDataFor(WORKSPACE_KEY, RESEARCH);
+    const fetchMock = stubAcceptedSave(RESEARCH);
+    renderForm();
+
+    const name = screen.getByLabelText("Name");
+    fireEvent.change(name, { target: { value: "Renamed" } });
+    await setupUser().type(name, "{Enter}");
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(savedBody(fetchMock)).toMatchObject({ name: "Renamed" });
+  });
 
   it("sends the edited settings, with an unset provider as null, and refreshes", async () => {
     setDataFor(WORKSPACE_KEY, RESEARCH);

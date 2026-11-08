@@ -283,7 +283,12 @@ function WebhookForm({ orgId, workspaceId, webhookId }: WebhookFormProps) {
   );
 
   const form = (
-    <div>
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        void submit();
+      }}
+    >
       <FieldSet className="mb-6">
         <FieldGroup>
           <FormTextField
@@ -443,8 +448,8 @@ function WebhookForm({ orgId, workspaceId, webhookId }: WebhookFormProps) {
       </FieldSet>
 
       <FormFooterButtons
+        type="submit"
         submitText={isEditMode ? "Update" : "Save"}
-        onSubmit={() => void submit()}
         submitDisabled={isSubmitting || !canSubmit}
         deleteVisible={isEditMode}
         deleteDisabled={isSubmitting}
@@ -475,7 +480,7 @@ function WebhookForm({ orgId, workspaceId, webhookId }: WebhookFormProps) {
         loading={isRegenerating}
         error={regenerateError}
       />
-    </div>
+    </form>
   );
 
   return (

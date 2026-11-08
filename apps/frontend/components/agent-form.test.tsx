@@ -10,6 +10,7 @@ import {
   setDataFor,
   resetFormHarness,
   setLoading,
+  setupUser,
   stubRejectedSave,
   stubSaveSequence,
   savedBody,
@@ -125,6 +126,26 @@ describe("AgentForm validation error surfacing", () => {
       expect(toastError).toHaveBeenCalledWith(FIX_FORM_ERRORS_MESSAGE),
     );
     expect(saveButton).toBeEnabled();
+  });
+});
+
+// #1840: a real form means Enter in a single-line field saves once.
+describe("AgentForm form submission", () => {
+  beforeEach(() => {
+    resetFormHarness();
+    registerSwrData();
+  });
+
+  it("saves on Enter in the Name field", async () => {
+    const fetchMock = stubSaveSequence({ status: 200, body: { id: "a1" } });
+    renderCreateForm();
+
+    const name = screen.getByLabelText("Name");
+    fireEvent.change(name, { target: { value: "Bot" } });
+    await setupUser().type(name, "{Enter}");
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(savedBody(fetchMock)).toMatchObject({ name: "Bot" });
   });
 });
 
@@ -458,6 +479,17 @@ describe("AgentForm Skills search", () => {
     expect(
       screen.queryByRole("searchbox", { name: "Search skills" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("does not save the Agent when Enter is pressed in the skill search", async () => {
+    const fetchMock = stubSaveSequence({ status: 200, body: { id: "a1" } });
+    renderCreateForm();
+
+    const search = screen.getByRole("searchbox", { name: "Search skills" });
+    fireEvent.change(search, { target: { value: "writ" } });
+    await setupUser().type(search, "{Enter}");
+
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("keeps a selected Skill in skillIds on Save after the search hides it", async () => {

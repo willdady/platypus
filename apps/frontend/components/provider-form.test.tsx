@@ -20,7 +20,7 @@ import {
   stubRejectedSave,
   savedBody,
 } from "@/test/form-test-harness";
-import { selectOption } from "@/test/test-utils";
+import { selectOption, setupUser } from "@/test/test-utils";
 
 // --- Module mocks ------------------------------------------------------------
 
@@ -109,6 +109,22 @@ beforeEach(() => {
 });
 
 // --- Tests -------------------------------------------------------------------
+
+describe("ProviderForm form submission", () => {
+  beforeEach(() => resetFormHarness());
+
+  it("saves on Enter in the Name field", async () => {
+    const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
+    render(<ProviderForm orgId="org1" />);
+
+    const name = screen.getByLabelText("Name");
+    fireEvent.change(name, { target: { value: "Local" } });
+    await setupUser().type(name, "{Enter}");
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(savedBody(fetchMock)).toMatchObject({ name: "Local" });
+  });
+});
 
 describe("ProviderForm model cards", () => {
   it("shows each model as a card, with no inputs outside a dialog", () => {
@@ -319,9 +335,9 @@ describe("ProviderForm model dialog", () => {
   });
 
   // The dialog is portalled out of the DOM tree but not the React tree, so its
-  // submit would otherwise bubble to a form the provider form sits in.
-  it("saves the model on Enter without submitting an enclosing form", () => {
-    const outerSubmit = vi.fn((e: React.FormEvent) => e.preventDefault());
+  // submit would otherwise bubble to the Provider form it sits in.
+  it("saves the model on Enter without submitting the Provider form", () => {
+    const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
     setData({
       id: "p1",
       name: "OpenAI",
@@ -332,11 +348,7 @@ describe("ProviderForm model dialog", () => {
       taskModelId: "gpt-4o",
       memoryExtractionModelId: "gpt-4o",
     } as unknown as Provider);
-    render(
-      <form onSubmit={outerSubmit}>
-        <ProviderForm orgId="org1" providerId="p1" />
-      </form>,
-    );
+    render(<ProviderForm orgId="org1" providerId="p1" />);
 
     const dialog = openEditDialog("gpt-4o");
     type(dialog, "Model ID", "gpt-5");
@@ -344,7 +356,7 @@ describe("ProviderForm model dialog", () => {
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(modelCard("gpt-5")).toBeInTheDocument();
-    expect(outerSubmit).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("focuses Model ID when the dialog opens", () => {

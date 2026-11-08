@@ -830,7 +830,13 @@ function ProviderForm({
     formScope === "workspace" && provider?.scope === "organization";
 
   const form = (
-    <div className={classNames}>
+    <form
+      className={classNames}
+      onSubmit={(e) => {
+        e.preventDefault();
+        handleSubmit();
+      }}
+    >
       {error && (
         <Alert variant="destructive" className="mb-6">
           <OctagonX />
@@ -1211,6 +1217,7 @@ function ProviderForm({
       {draft ? (
         <div className="flex gap-2">
           <Button
+            type="button"
             variant="outline"
             onClick={draft.onBack}
             disabled={isSubmitting}
@@ -1218,6 +1225,7 @@ function ProviderForm({
             Back
           </Button>
           <Button
+            type="button"
             onClick={handleSubmit}
             disabled={isSubmitting || !!headersError || !!extraBodyError}
           >
@@ -1227,8 +1235,8 @@ function ProviderForm({
       ) : (
         !isReadOnly && (
           <FormFooterButtons
+            type="submit"
             submitText={providerId ? "Update" : "Save"}
-            onSubmit={handleSubmit}
             submitDisabled={
               isSubmitting || !!headersError || !!extraBodyError
               // No `canSubmit` gate: several fields here (apiMode, organization,
@@ -1266,7 +1274,7 @@ function ProviderForm({
           void doSubmit();
         }}
       />
-    </div>
+    </form>
   );
 
   return (

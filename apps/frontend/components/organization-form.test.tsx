@@ -9,6 +9,7 @@ import {
   setData,
   setError,
   setLoading,
+  setupUser,
   stubAcceptedSave,
   savedBody,
 } from "@/test/form-test-harness";
@@ -71,6 +72,16 @@ describe("OrganizationForm create", () => {
     await waitFor(() => expect(push).toHaveBeenCalledWith("/org9"));
     expect(toastSuccess).toHaveBeenCalledWith("Organization created");
     expect(fetchMock.mock.calls[0][0]).toBe("http://test/organizations");
+    expect(savedBody(fetchMock)).toEqual({ name: "Acme" });
+  });
+
+  it("saves on Enter in the Name field", async () => {
+    const fetchMock = stubAcceptedSave({ id: "org9", name: "Acme" });
+    render(<OrganizationForm />);
+
+    await setupUser().type(screen.getByLabelText("Name"), "Acme{Enter}");
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     expect(savedBody(fetchMock)).toEqual({ name: "Acme" });
   });
 });

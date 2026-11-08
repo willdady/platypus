@@ -11,7 +11,7 @@ import {
   stubSaveSequence,
   savedBody,
 } from "@/test/form-test-harness";
-import { selectOption } from "@/test/test-utils";
+import { selectOption, setupUser } from "@/test/test-utils";
 import {
   OAUTH_MCP_ERROR_EVENT,
   OAUTH_MCP_SUCCESS_EVENT,
@@ -188,6 +188,22 @@ describe("McpForm detail read failures", () => {
     expect(
       screen.queryByRole("button", { name: "Update" }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("McpForm form submission", () => {
+  afterEach(() => {
+    resetFormHarness();
+  });
+
+  it("saves on Enter in the Name field", async () => {
+    const fetchMock = stubAcceptedSave({ id: "m1" });
+    render(<McpForm orgId="org1" workspaceId="ws1" />);
+
+    await setupUser().type(screen.getByLabelText("Name"), "Docs{Enter}");
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(savedBody(fetchMock)).toMatchObject({ name: "Docs" });
   });
 });
 

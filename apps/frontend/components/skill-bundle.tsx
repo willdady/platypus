@@ -187,6 +187,7 @@ export function SkillBundleCard({
         <>
           {upload.input(`${skillUrl}/bundle`)}
           <Button
+            type="button"
             variant="outline"
             onClick={upload.pick}
             disabled={upload.uploading}

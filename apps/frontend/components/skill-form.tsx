@@ -188,7 +188,13 @@ function SkillForm({
     savedAgentIds.some((id) => !selectedAgentIds.includes(id));
 
   const form = (
-    <div className={classNames}>
+    <form
+      className={classNames}
+      onSubmit={(e) => {
+        e.preventDefault();
+        void submit();
+      }}
+    >
       <FieldSet className="mb-6">
         <FieldGroup className="gap-4">
           <FormTextField
@@ -330,8 +336,8 @@ function SkillForm({
       )}
 
       <FormFooterButtons
+        type="submit"
         submitText={skillId ? "Update" : "Save"}
-        onSubmit={() => void submit()}
         submitDisabled={isSubmitting || !canSubmit}
         deleteVisible={!!skillId}
         deleteDisabled={isSubmitting || agentsDirty}
@@ -352,7 +358,7 @@ function SkillForm({
         loading={isDeleting}
         error={deleteError}
       />
-    </div>
+    </form>
   );
 
   return (

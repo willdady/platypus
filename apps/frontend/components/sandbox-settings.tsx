@@ -569,7 +569,12 @@ function SandboxSettings({
   }
 
   return (
-    <div>
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        handleSave();
+      }}
+    >
       <FieldSet className="mb-6">
         <FieldGroup>
           <Field data-invalid={!!validationErrors.name}>
@@ -1012,21 +1017,22 @@ function SandboxSettings({
       {draft ? (
         <div className="flex gap-2">
           <Button
+            type="button"
             variant="outline"
             onClick={draft.onBack}
             disabled={isSubmitting}
           >
             Back
           </Button>
-          <Button onClick={handleSave} disabled={isSubmitting}>
+          <Button type="button" onClick={handleSave} disabled={isSubmitting}>
             {draft.submitText}
           </Button>
         </div>
       ) : (
         <div className="flex gap-2">
           <FormFooterButtons
+            type="submit"
             submitText="Save"
-            onSubmit={handleSave}
             submitDisabled={isSubmitting}
             deleteVisible={hasSandbox && canConfigure}
             deleteDisabled={isSubmitting}
@@ -1035,6 +1041,7 @@ function SandboxSettings({
 
           {!hasSandbox && (
             <Button
+              type="button"
               variant="ghost"
               onClick={() => {
                 setIsConfiguring(false);
@@ -1078,7 +1085,7 @@ function SandboxSettings({
         loading={isForcing}
         error={forceDialog.error}
       />
-    </div>
+    </form>
   );
 }
 

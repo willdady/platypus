@@ -495,7 +495,13 @@ function AgentForm({
   })?.reasoning;
 
   const form = (
-    <div className={classNames}>
+    <form
+      className={classNames}
+      onSubmit={(e) => {
+        e.preventDefault();
+        void submit();
+      }}
+    >
       {readOnly && (
         <Alert className="mb-6">
           <Building />
@@ -1054,8 +1060,8 @@ function AgentForm({
       </FieldSet>
 
       <FormFooterButtons
+        type="submit"
         submitText={agentId ? "Update" : "Save"}
-        onSubmit={() => void submit()}
         submitDisabled={isSubmitting || readOnly || !canSubmit}
         deleteVisible={!!agentId && !isOrgScoped}
         deleteDisabled={isSubmitting}
@@ -1071,7 +1077,7 @@ function AgentForm({
         loading={isDeleting}
         error={deleteError}
       />
-    </div>
+    </form>
   );
 
   return (
