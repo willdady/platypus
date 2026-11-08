@@ -10,9 +10,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { DisabledBadge } from "@/components/disabled-badge";
 import { ListError } from "@/components/list-state";
 import { EmptyCard } from "@/components/empty-card";
 import { Network } from "lucide-react";
@@ -157,11 +157,7 @@ export function OrgA2aEndpointsList({ orgId }: { orgId: string }) {
                   <div className="flex flex-col">
                     <div className="flex items-center gap-2">
                       <span className="font-medium">{endpoint.name}</span>
-                      {!endpoint.enabled && (
-                        <Badge variant="secondary" className="text-xs">
-                          Disabled
-                        </Badge>
-                      )}
+                      {!endpoint.enabled && <DisabledBadge />}
                     </div>
                     <span className="text-xs text-muted-foreground">
                       Agent: {endpoint.agentName}

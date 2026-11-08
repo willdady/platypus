@@ -67,7 +67,10 @@ describe("OrgA2aEndpointsList", () => {
     expect(within(endpointRow).getByText("Agent: Helper")).toBeInTheDocument();
     expect(within(endpointRow).getByText("Support")).toBeInTheDocument();
     expect(within(endpointRow).getByText("Dana Owner")).toBeInTheDocument();
-    expect(within(endpointRow).getByText("Disabled")).toBeInTheDocument();
+    const badge = within(endpointRow).getByText("Disabled");
+    // The badge's Pause icon is decorative, so no accessible query sees it.
+    // eslint-disable-next-line testing-library/no-node-access
+    expect(badge.querySelector("svg")).not.toBeNull();
     expect(within(tokenRow).getByText("Telegram")).toBeInTheDocument();
     expect(within(tokenRow).getByText("Expiring soon")).toBeInTheDocument();
     expect(within(tokenRow).getByText("Never")).toBeInTheDocument();
