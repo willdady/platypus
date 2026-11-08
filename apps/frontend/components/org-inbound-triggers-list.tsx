@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { toast } from "sonner";
 import {
   Table,
@@ -23,8 +22,8 @@ import {
   LoadingRegion,
   TableSkeleton,
 } from "@/components/list-skeletons";
-import { useBackendUrl } from "@/components/auth-provider";
 import { useScopedList } from "@/hooks/use-scoped-list";
+import { useDeleteFlow } from "@/hooks/use-delete-flow";
 import { scopedUrl, writeAt } from "@/lib/api-write";
 import { joinUrl } from "@/lib/utils";
 import type { BearerTokenStatus } from "@platypus/schemas";
@@ -67,7 +66,6 @@ const COLUMNS = [
  * Triggers setting is the lasting off switch.
  */
 export function OrgInboundTriggersList({ orgId }: { orgId: string }) {
-  const backendUrl = useBackendUrl();
   const scope = { orgId };
   const {
     data,
@@ -76,35 +74,29 @@ export function OrgInboundTriggersList({ orgId }: { orgId: string }) {
     isLoading,
     mutate,
   } = useScopedList<OrgInboundTrigger>("inbound-triggers", scope);
-  const [toRevoke, setToRevoke] = useState<OrgInboundTrigger | null>(null);
-  const [isRevoking, setIsRevoking] = useState(false);
 
-  const handleRevoke = async () => {
-    if (!backendUrl || !toRevoke) return;
-    setIsRevoking(true);
-    // Names the token this row showed, so a token the Owner regenerated since
-    // the list loaded is refused rather than revoked unseen.
-    const seen = new URLSearchParams({
-      tokenCreatedAt: toRevoke.tokenCreatedAt ?? "",
-    });
-    const outcome = await writeAt(
-      joinUrl(
-        scopedUrl(backendUrl, "inbound-triggers", scope),
-        `/${toRevoke.id}/token?${seen}`,
-      ),
-      { method: "DELETE" },
-    );
-    if (outcome.outcome === "success") {
-      toast.success("Token revoked");
-    } else {
-      toast.error(outcome.message);
-    }
-    // After a failure too: a token replaced since the list loaded is refused,
-    // and the list should show the one that is current now.
-    await mutate();
-    setIsRevoking(false);
-    setToRevoke(null);
-  };
+  const revoke = useDeleteFlow<OrgInboundTrigger>({
+    delete: async (trigger, backendUrl) => {
+      // Names the token this row showed, so a token the Owner regenerated
+      // since the list loaded is refused rather than revoked unseen.
+      const seen = new URLSearchParams({
+        tokenCreatedAt: trigger.tokenCreatedAt ?? "",
+      });
+      const outcome = await writeAt(
+        joinUrl(
+          scopedUrl(backendUrl, "inbound-triggers", scope),
+          `/${trigger.id}/token?${seen}`,
+        ),
+        { method: "DELETE" },
+      );
+      // After a failure too: a token replaced since the list loaded is
+      // refused, and the list should show the one that is current now.
+      if (outcome.outcome !== "success") await mutate();
+      return outcome;
+    },
+    mutate,
+    onSuccess: () => toast.success("Token revoked"),
+  });
 
   if (isLoading) {
     return (
@@ -193,7 +185,7 @@ export function OrgInboundTriggersList({ orgId }: { orgId: string }) {
                   variant="outline"
                   size="sm"
                   disabled={trigger.tokenStatus === "none"}
-                  onClick={() => setToRevoke(trigger)}
+                  onClick={() => revoke.request(trigger)}
                 >
                   Revoke token
                 </Button>
@@ -204,14 +196,15 @@ export function OrgInboundTriggersList({ orgId }: { orgId: string }) {
       </Table>
 
       <ConfirmDialog
-        open={toRevoke !== null}
-        onOpenChange={(open) => !open && setToRevoke(null)}
+        open={revoke.open}
+        onOpenChange={(open) => !open && revoke.close()}
         title="Revoke token"
-        description={`Calls with the token for "${toRevoke?.name}" are refused from now on, and ${toRevoke?.ownerName ?? "the workspace owner"} gets a notification. The owner can issue a new token; to stop the workspace taking calls for good, change the organization's Inbound Triggers setting.`}
+        description={`Calls with the token for "${revoke.target?.name}" are refused from now on, and ${revoke.target?.ownerName ?? "the workspace owner"} gets a notification. The owner can issue a new token; to stop the workspace taking calls for good, change the organization's Inbound Triggers setting.`}
         confirmLabel="Revoke token"
         confirmVariant="destructive"
-        onConfirm={() => void handleRevoke()}
-        loading={isRevoking}
+        onConfirm={() => void revoke.confirm()}
+        loading={revoke.deleting}
+        error={revoke.error}
       />
     </>
   );

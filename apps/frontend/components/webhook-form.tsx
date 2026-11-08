@@ -156,6 +156,7 @@ function WebhookForm({ orgId, workspaceId, webhookId }: WebhookFormProps) {
 
   const [isRegenerateDialogOpen, setIsRegenerateDialogOpen] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
+  const [regenerateError, setRegenerateError] = useState<string | null>(null);
   const [showSecret, setShowSecret] = useState(false);
 
   const isEditMode = !!webhookId;
@@ -230,6 +231,7 @@ function WebhookForm({ orgId, workspaceId, webhookId }: WebhookFormProps) {
 
   const handleRegenerateSecret = async () => {
     setIsRegenerating(true);
+    setRegenerateError(null);
     const outcome = await writeAt(
       scopedUrl(backendUrl, `webhooks/${webhookId}/regenerate-secret`, {
         orgId,
@@ -241,10 +243,11 @@ function WebhookForm({ orgId, workspaceId, webhookId }: WebhookFormProps) {
     if (outcome.outcome === "success") {
       toast.success("Signing secret regenerated");
       await mutateRecord();
+      setIsRegenerateDialogOpen(false);
     } else {
-      toast.error(outcome.message);
+      // A refused regenerate stays in the open dialog rather than closing it.
+      setRegenerateError(outcome.message);
     }
-    setIsRegenerateDialogOpen(false);
     setIsRegenerating(false);
   };
 
@@ -460,13 +463,17 @@ function WebhookForm({ orgId, workspaceId, webhookId }: WebhookFormProps) {
 
       <ConfirmDialog
         open={isRegenerateDialogOpen}
-        onOpenChange={setIsRegenerateDialogOpen}
+        onOpenChange={(open) => {
+          setIsRegenerateDialogOpen(open);
+          if (!open) setRegenerateError(null);
+        }}
         title="Regenerate signing secret"
         description="Are you sure you want to regenerate the signing secret? The current secret will be invalidated immediately."
         confirmLabel="Regenerate"
         confirmVariant="destructive"
         onConfirm={handleRegenerateSecret}
         loading={isRegenerating}
+        error={regenerateError}
       />
     </div>
   );

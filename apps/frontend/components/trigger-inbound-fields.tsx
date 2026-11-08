@@ -30,7 +30,6 @@ import {
   INBOUND_TRIGGER_MAX_INPUTS,
   inboundTriggerInputNameRegex,
 } from "@platypus/schemas";
-import { toast } from "sonner";
 import { formatDateTime } from "@/lib/format-date";
 import { workspaceRoutes } from "@/lib/routes";
 import { scopedUrl, writeAt } from "@/lib/api-write";
@@ -107,6 +106,7 @@ function TriggerInboundFields({
   const [shownToken, setShownToken] = useState<ShownToken | null>(null);
   const [isRegenerateDialogOpen, setIsRegenerateDialogOpen] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
+  const [regenerateError, setRegenerateError] = useState<string | null>(null);
 
   const requiredInputNames = inboundInputs
     .filter((input) => input.required && input.name.trim())
@@ -182,6 +182,7 @@ function TriggerInboundFields({
   const handleRegenerateToken = async () => {
     if (!backendUrl || !trigger) return;
     setIsRegenerating(true);
+    setRegenerateError(null);
     const outcome = await writeAt<{ token: string; tokenExpiresAt: string }>(
       joinUrl(scopedUrl(backendUrl, "triggers", scope), `/${trigger.id}/token`),
       { method: "POST" },
@@ -194,10 +195,11 @@ function TriggerInboundFields({
         leaveOnClose: false,
       });
       await mutateRecord();
+      setIsRegenerateDialogOpen(false);
     } else {
-      toast.error(outcome.message);
+      // A refused regenerate stays in the open dialog rather than closing it.
+      setRegenerateError(outcome.message);
     }
-    setIsRegenerateDialogOpen(false);
     setIsRegenerating(false);
   };
 
@@ -416,7 +418,10 @@ function TriggerInboundFields({
 
       <ConfirmDialog
         open={isRegenerateDialogOpen}
-        onOpenChange={setIsRegenerateDialogOpen}
+        onOpenChange={(open) => {
+          setIsRegenerateDialogOpen(open);
+          if (!open) setRegenerateError(null);
+        }}
         title={hasToken ? "Regenerate token" : "Issue token"}
         description={
           hasToken
@@ -426,6 +431,7 @@ function TriggerInboundFields({
         confirmLabel={hasToken ? "Regenerate" : "Issue token"}
         onConfirm={() => void handleRegenerateToken()}
         loading={isRegenerating}
+        error={regenerateError}
       />
 
       {shownToken && (
