@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/field";
 import { FormTextField } from "@/components/form-text-field";
 import { Button } from "@/components/ui/button";
+import { ListState } from "@/components/list-state";
 import { Switch } from "@/components/ui/switch";
 import Link from "next/link";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
@@ -146,16 +147,18 @@ export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
             </FieldDescription>
 
             {blueprints.length === 0 ? (
-              <p className="text-sm text-muted-foreground mt-2">
-                No blueprints in this organization yet.{" "}
-                <Link
-                  href={orgRoutes(orgId).settings.blueprints}
-                  className="underline underline-offset-2"
-                >
-                  Create one
-                </Link>{" "}
-                to pre-provision new members&apos; workspaces.
-              </p>
+              <ListState
+                variant="empty"
+                action={
+                  <Button asChild variant="outline" size="sm">
+                    <Link href={orgRoutes(orgId).settings.blueprints}>
+                      Create one
+                    </Link>
+                  </Button>
+                }
+              >
+                No blueprints in this organization yet.
+              </ListState>
             ) : (
               <>
                 <FieldGroup className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">

@@ -1,4 +1,5 @@
 import { Skeleton } from "@/components/ui/skeleton";
+import { LoadingRegion } from "@/components/list-skeletons";
 import { cn } from "@/lib/utils";
 
 // Line widths for each placeholder assistant reply, and the width of the user
@@ -29,10 +30,8 @@ export function ChatSkeleton({
   readOnly: boolean;
 }) {
   return (
-    <div
-      role="status"
-      aria-busy="true"
-      aria-label="Loading chat"
+    <LoadingRegion
+      label="Loading chat"
       className={cn(
         "relative size-full flex flex-col overflow-hidden h-full",
         !transcript && "justify-center",
@@ -91,6 +90,6 @@ export function ChatSkeleton({
           </div>
         </div>
       </div>
-    </div>
+    </LoadingRegion>
   );
 }

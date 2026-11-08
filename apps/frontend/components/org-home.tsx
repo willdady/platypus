@@ -8,8 +8,9 @@ import { useAuth } from "@/components/auth-provider";
 import { useScopedList } from "@/hooks/use-scoped-list";
 import { canCreateWorkspace, canOpenOrgSettings } from "@/lib/authorization";
 import { EmptyCard } from "@/components/empty-card";
+import { ButtonRowSkeleton } from "@/components/list-skeletons";
+import { ListFooter } from "@/components/list-pagination";
 import type { Workspace } from "@platypus/schemas";
-import { Skeleton } from "@/components/ui/skeleton";
 import { orgRoutes } from "@/lib/routes";
 
 // The Organization home, drawn by its page and by the Organization loading
@@ -37,6 +38,26 @@ export function OrgHome({ orgId }: { orgId: string }) {
   // the button row still offers an admin the way to the org settings.
   const isReady = (!!workspacesData || !!workspacesError) && !isAuthLoading;
 
+  const actions = (
+    <>
+      {/* ADR-0008: Workspace creation is org-admin-only. */}
+      {canCreate && (
+        <Button variant={workspaces.length ? "outline" : "default"} asChild>
+          <Link href={routes.createWorkspace}>
+            <Plus /> Add workspace
+          </Link>
+        </Button>
+      )}
+      {canOpenSettings && (
+        <Button variant="outline" asChild>
+          <Link href={routes.settings.root}>
+            <Settings /> Organization settings
+          </Link>
+        </Button>
+      )}
+    </>
+  );
+
   return (
     <div className="flex flex-col gap-6">
       <h1 className="sr-only">Workspaces</h1>
@@ -46,35 +67,17 @@ export function OrgHome({ orgId }: { orgId: string }) {
           {/* The button row, reserved so it doesn't pop in below the list.
             Until the membership resolves, whether either button shows is
             unknown, so both are drawn. */}
-          <div className="flex items-center gap-2">
-            {(isAuthLoading || canCreate) && (
-              <Skeleton className="h-9 w-36 rounded-md" />
-            )}
-            {(isAuthLoading || canOpenSettings) && (
-              <Skeleton className="h-9 w-48 rounded-md" />
-            )}
-          </div>
+          <ButtonRowSkeleton
+            widths={[
+              ...(isAuthLoading || canCreate ? ["w-36"] : []),
+              ...(isAuthLoading || canOpenSettings ? ["w-48"] : []),
+            ]}
+          />
         </div>
       ) : workspaces.length > 0 || workspacesError ? (
         <div className="flex flex-col gap-4">
           <WorkspaceList orgId={orgId} />
-          <div className="flex items-center gap-2">
-            {/* ADR-0008: Workspace creation is org-admin-only. */}
-            {canCreate && (
-              <Button asChild>
-                <Link href={routes.createWorkspace}>
-                  <Plus /> Add workspace
-                </Link>
-              </Button>
-            )}
-            {canOpenSettings && (
-              <Button variant="outline" asChild>
-                <Link href={routes.settings.root}>
-                  <Settings /> Organization settings
-                </Link>
-              </Button>
-            )}
-          </div>
+          <ListFooter>{actions}</ListFooter>
         </div>
       ) : (
         <EmptyCard
@@ -85,25 +88,7 @@ export function OrgHome({ orgId }: { orgId: string }) {
               ? "Create your first workspace in this organization to start building agents."
               : "You don't have a workspace yet. An organization admin can provision one for you."
           }
-          action={
-            <>
-              {/* ADR-0008: Workspace creation is org-admin-only. */}
-              {canCreate && (
-                <Button asChild>
-                  <Link href={routes.createWorkspace}>
-                    <Plus /> Add workspace
-                  </Link>
-                </Button>
-              )}
-              {canOpenSettings && (
-                <Button variant="outline" asChild>
-                  <Link href={routes.settings.root}>
-                    <Settings /> Organization settings
-                  </Link>
-                </Button>
-              )}
-            </>
-          }
+          action={actions}
         />
       )}
     </div>

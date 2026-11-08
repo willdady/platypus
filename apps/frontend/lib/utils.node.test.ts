@@ -1,5 +1,11 @@
 import { describe, it, expect, vi } from "vitest";
-import { fetcher, joinUrl, optionalFetcher, sortByName } from "./utils";
+import {
+  fetcher,
+  joinUrl,
+  optionalFetcher,
+  pickKeys,
+  sortByName,
+} from "./utils";
 
 describe("joinUrl", () => {
   it.each([
@@ -9,6 +15,25 @@ describe("joinUrl", () => {
     ["", "/api/test", "/api/test"],
   ])("joins %j and %j as %j", (base, path, expected) => {
     expect(joinUrl(base, path)).toBe(expected);
+  });
+});
+
+describe("pickKeys", () => {
+  it("copies only the keys the shape declares", () => {
+    const record = { id: "a1", name: "Agent", scope: "workspace", extra: 1 };
+    const shape = { name: {}, instructions: {}, scope: {} };
+
+    expect(pickKeys(record, shape)).toEqual({
+      name: "Agent",
+      scope: "workspace",
+    });
+  });
+
+  it("leaves out a declared key the record does not carry", () => {
+    const record = { name: "Agent" };
+    const shape = { name: {}, description: {} };
+
+    expect(pickKeys(record, shape)).toEqual({ name: "Agent" });
   });
 });
 

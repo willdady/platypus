@@ -12,6 +12,7 @@ import {
   stubRejectedSave,
   toastError,
   mutate,
+  expectEntryActionVariant,
   setupUser,
 } from "@/test/list-test-harness";
 import { openDropdownMenu } from "@/test/test-utils";
@@ -80,6 +81,28 @@ describe("WebhooksList", () => {
     expect(
       screen.getByRole("link", { name: /Add webhook/ }),
     ).toBeInTheDocument();
+  });
+
+  // The same button renders once: solid inside the card while the list is
+  // empty, outlined below the list once it has rows.
+  it("offers Add webhook solid inside the empty card", async () => {
+    mockScopedSWR({ webhooks: [] }, { strict: true });
+    await render();
+
+    expectEntryActionVariant(
+      screen.getByRole("link", { name: /Add webhook/ }),
+      "empty",
+    );
+  });
+
+  it("offers Add webhook outlined under a populated list", async () => {
+    mockScopedSWR({ webhooks: [webhook] }, { strict: true });
+    await render();
+
+    expectEntryActionVariant(
+      screen.getByRole("link", { name: /Add webhook/ }),
+      "populated",
+    );
   });
 
   it("says the read failed rather than claiming there are none", async () => {

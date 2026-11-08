@@ -1066,15 +1066,37 @@ describe("KanbanBoard load states", () => {
     boardLoaded = false;
     renderBoard();
 
-    expect(screen.getByLabelText("Loading board")).toBeInTheDocument();
+    expect(
+      screen.getByRole("status", { name: "Loading board" }),
+    ).toBeInTheDocument();
   });
 
-  it("reports a board that failed to load", () => {
+  it("reports a failed board read with a retry and a way back", () => {
     boardLoaded = false;
-    boardError = new Error("boom");
+    boardError = Object.assign(new Error("boom"), { status: 500 });
     renderBoard();
 
-    expect(screen.getByText("Failed to load board.")).toBeInTheDocument();
+    expect(screen.getByText("Couldn't load")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(mutateBoard).toHaveBeenCalled();
+
+    expect(
+      screen.getByRole("link", { name: "Back to workspace" }),
+    ).toHaveAttribute("href", "/org1/workspace/ws1");
+  });
+
+  // A deleted board is not a network blip: reading again won't bring it back,
+  // so there is nothing to retry.
+  it("names a deleted board and offers no pointless retry", () => {
+    boardLoaded = false;
+    boardError = Object.assign(new Error("gone"), { status: 404 });
+    renderBoard();
+
+    expect(screen.getByText("Not found")).toBeInTheDocument();
+    expect(screen.getByText(/no longer exists/)).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Retry" }),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps a loaded board on screen when a background poll fails", () => {
@@ -1084,6 +1106,6 @@ describe("KanbanBoard load states", () => {
     expect(
       screen.getByRole("heading", { name: "Test Board" }),
     ).toBeInTheDocument();
-    expect(screen.queryByText("Failed to load board.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Couldn't load")).not.toBeInTheDocument();
   });
 });

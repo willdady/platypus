@@ -51,7 +51,7 @@ import { EmptyCard } from "@/components/empty-card";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
-import { ListError } from "@/components/list-state";
+import { LoadingRegion } from "@/components/list-skeletons";
 import { Skeleton } from "@/components/ui/skeleton";
 
 type SandboxBackend = { backend: string; name: string };
@@ -166,7 +166,7 @@ function FieldSkeleton({
 // rather than the Empty card: name, backend, the env editors, then Save.
 function SandboxSettingsSkeleton({ canConfigure }: { canConfigure: boolean }) {
   return (
-    <div aria-label="Loading sandbox">
+    <LoadingRegion label="Loading sandbox">
       <div className="mb-6 flex flex-col gap-7">
         <FieldSkeleton control="h-9 w-full" description={false} />
         <FieldSkeleton control="h-9 w-full" />
@@ -174,7 +174,7 @@ function SandboxSettingsSkeleton({ canConfigure }: { canConfigure: boolean }) {
         <FieldSkeleton control="h-8 w-32" />
       </div>
       <Skeleton className="h-9 w-16" />
-    </div>
+    </LoadingRegion>
   );
 }
 
@@ -488,12 +488,15 @@ function SandboxSettings({
     return <SandboxSettingsSkeleton canConfigure={canConfigure} />;
   }
 
-  if (error) {
+  // Only a cold failure replaces the form; a failed revalidation keeps the
+  // loaded sandbox (or the "none configured" state) on screen.
+  if (error && data === undefined) {
     return (
-      <ListError
-        error={error}
-        subject="sandbox"
-        onRetry={() => void mutate()}
+      <EmptyCard
+        icon={<Box />}
+        title="Couldn't load sandbox"
+        description="The sandbox settings could not be read. Try again in a moment."
+        action={<Button onClick={() => void mutate()}>Retry</Button>}
       />
     );
   }
@@ -605,13 +608,13 @@ function SandboxSettings({
                 {networksLoading ? (
                   // A network row, in place of the false "none declared"
                   // while the allowlist is still loading.
-                  <div
+                  <LoadingRegion
+                    label="Loading networks"
                     className="flex items-center justify-between gap-2"
-                    aria-label="Loading networks"
                   >
                     <Skeleton className="h-4 w-32" />
                     <Skeleton className="h-[1.15rem] w-8 rounded-full" />
-                  </div>
+                  </LoadingRegion>
                 ) : allowedNetworks.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
                     No networks declared by the operator.

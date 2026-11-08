@@ -10,6 +10,8 @@ import {
   savedBody,
 } from "@/test/form-test-harness";
 import { selectOption } from "@/test/test-utils";
+import { elsewhereClicked, GuardLink } from "@/test/unsaved-changes-harness";
+import { UnsavedChangesProvider } from "./unsaved-changes-guard";
 
 vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("swr", () => swrMock);
@@ -30,6 +32,15 @@ function workspaceName() {
   return screen.getAllByLabelText("Name")[0];
 }
 
+function renderWizard() {
+  return render(
+    <UnsavedChangesProvider>
+      <WorkspaceWizard orgId="org1" />
+      <GuardLink />
+    </UnsavedChangesProvider>,
+  );
+}
+
 function fillWorkspaceStep(name = "Research") {
   fireEvent.change(workspaceName(), { target: { value: name } });
   click("Next");
@@ -37,6 +48,7 @@ function fillWorkspaceStep(name = "Research") {
 
 beforeEach(() => {
   resetFormHarness();
+  elsewhereClicked.mockReset();
   setDataFor("/organizations/org1/providers", {
     results: [{ id: "shared-1", name: "Shared OpenAI" }],
   });
@@ -96,7 +108,7 @@ describe("WorkspaceWizard", () => {
       results: [{ userId: "u2", user: { name: "Bea", email: "bea@x.test" } }],
     });
     const fetchMock = stubAcceptedSave({ id: "ws9" });
-    render(<WorkspaceWizard orgId="org1" />);
+    renderWizard();
 
     fireEvent.change(workspaceName(), {
       target: { value: "Research" },
@@ -114,6 +126,9 @@ describe("WorkspaceWizard", () => {
     await waitFor(() =>
       expect(push).toHaveBeenCalledWith("/org1/workspace/ws9"),
     );
+    expect(
+      screen.queryByText("Discard unsaved changes?"),
+    ).not.toBeInTheDocument();
     expect(fetchMock.mock.calls[0][0]).toBe(
       "http://test/organizations/org1/workspaces",
     );
@@ -160,5 +175,64 @@ describe("WorkspaceWizard", () => {
     click("Back");
 
     expect(workspaceName()).toHaveValue("Research");
+  });
+
+  it("navigates freely before anything has been entered", () => {
+    renderWizard();
+
+    fireEvent.click(screen.getByText("Elsewhere"));
+
+    expect(elsewhereClicked).toHaveBeenCalledTimes(1);
+    expect(
+      screen.queryByText("Discard unsaved changes?"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("holds a link click once something has been entered", () => {
+    renderWizard();
+
+    fireEvent.change(workspaceName(), { target: { value: "Research" } });
+    fireEvent.click(screen.getByText("Elsewhere"));
+
+    expect(elsewhereClicked).not.toHaveBeenCalled();
+    expect(screen.getByText("Discard unsaved changes?")).toBeInTheDocument();
+  });
+
+  it("is clean again once a typed name is cleared", () => {
+    renderWizard();
+
+    fireEvent.change(workspaceName(), { target: { value: "Research" } });
+    fireEvent.change(workspaceName(), { target: { value: "" } });
+    fireEvent.click(screen.getByText("Elsewhere"));
+
+    expect(elsewhereClicked).toHaveBeenCalledTimes(1);
+    expect(
+      screen.queryByText("Discard unsaved changes?"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not count re-picking the default owner as an edit", async () => {
+    setDataFor("/organizations/org1/members", {
+      results: [{ userId: "u2", user: { name: "Bea", email: "bea@x.test" } }],
+    });
+    renderWizard();
+
+    await selectOption(" (you)", "(you)");
+    fireEvent.click(screen.getByText("Elsewhere"));
+
+    expect(elsewhereClicked).toHaveBeenCalledTimes(1);
+    expect(
+      screen.queryByText("Discard unsaved changes?"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("holds a link click after moving to the next step", () => {
+    renderWizard();
+    fillWorkspaceStep();
+
+    fireEvent.click(screen.getByText("Elsewhere"));
+
+    expect(elsewhereClicked).not.toHaveBeenCalled();
+    expect(screen.getByText("Discard unsaved changes?")).toBeInTheDocument();
   });
 });

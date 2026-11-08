@@ -41,4 +41,22 @@ describe("FetchErrorNotice", () => {
       screen.getByRole("link", { name: "Back to Organization" }),
     ).toHaveAttribute("href", "/org1");
   });
+
+  // Some records explain their own failure better than the shared copy (a
+  // pruned run, say), so the caller can supply the description.
+  it("uses a caller's description in place of the default one", () => {
+    render(
+      <FetchErrorNotice
+        {...noticeProps}
+        error={{ status: 500 }}
+        description="It may have been pruned by the trigger's Max Runs to Keep."
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        "It may have been pruned by the trigger's Max Runs to Keep.",
+      ),
+    ).toBeInTheDocument();
+  });
 });

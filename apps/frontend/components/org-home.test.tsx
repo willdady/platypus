@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import type { Actor, OrgRole } from "@/lib/authorization";
+import { expectEntryActionVariant } from "@/test/test-utils";
 
 const auth = vi.hoisted(() => ({
   actor: "org-member" as Actor,
@@ -62,5 +63,31 @@ describe("OrgHome empty state", () => {
     render(<OrgHome orgId="org1" />);
 
     expect(screen.getByText("No workspaces yet")).toBeInTheDocument();
+  });
+});
+
+describe("OrgHome workspace actions", () => {
+  it("offers Add workspace solid inside the empty card", () => {
+    auth.actor = "org-admin";
+    auth.orgMembership = { role: "admin" };
+    reads.workspaces = [];
+    render(<OrgHome orgId="org1" />);
+
+    expectEntryActionVariant(
+      screen.getByRole("link", { name: /Add workspace/ }),
+      "empty",
+    );
+  });
+
+  it("offers Add workspace outlined under a populated list", () => {
+    auth.actor = "org-admin";
+    auth.orgMembership = { role: "admin" };
+    reads.workspaces = [{ id: "ws1", name: "Alpha", organizationId: "org1" }];
+    render(<OrgHome orgId="org1" />);
+
+    expectEntryActionVariant(
+      screen.getByRole("link", { name: /Add workspace/ }),
+      "populated",
+    );
   });
 });

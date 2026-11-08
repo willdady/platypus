@@ -15,6 +15,7 @@ const state = {
   config: undefined as Record<string, unknown> | undefined,
   size: 1,
   setSize: vi.fn(),
+  mutate: vi.fn(),
   isLoading: false,
   /** False stands for no key yet (the session still resolving): no data. */
   resolved: true,
@@ -40,6 +41,7 @@ vi.mock("swr/infinite", () => ({
       data: state.resolved ? state.pages : undefined,
       size: state.size,
       setSize: state.setSize,
+      mutate: state.mutate,
       isLoading: state.isLoading,
       error: state.error,
       isValidating: false,
@@ -295,7 +297,9 @@ describe("Trigger runs empty states", () => {
     state.resolved = false;
     await renderPage();
 
-    expect(screen.getByLabelText("Loading trigger runs")).toBeInTheDocument();
+    expect(
+      screen.getByRole("status", { name: "Loading trigger runs" }),
+    ).toBeInTheDocument();
     expect(screen.queryByText(/No runs yet/)).not.toBeInTheDocument();
   });
 
@@ -314,6 +318,9 @@ describe("Trigger runs empty states", () => {
 
     expect(screen.getByText(/No runs match/)).toBeInTheDocument();
     expect(screen.queryByText(/No runs yet/)).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Clear filters" }),
+    ).toBeInTheDocument();
   });
 
   // A rejected filter — a hand-edited or stale URL the endpoint 400s — must not
@@ -330,6 +337,29 @@ describe("Trigger runs empty states", () => {
     expect(
       screen.getByRole("button", { name: "Clear filters" }),
     ).toBeInTheDocument();
+  });
+
+  it("offers a retry beside the filters when the read fails", async () => {
+    searchParams.current = new URLSearchParams({ status: "bogus" });
+    state.error = new Error("Bad Request");
+    await renderRuns([]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+    expect(state.mutate).toHaveBeenCalledOnce();
+  });
+
+  // Unfiltered, the clear-filters escape is meaningless; the read's own retry
+  // is the only way forward.
+  it("offers a retry even when no filter is active", async () => {
+    state.error = new Error("Server error");
+    await renderRuns([]);
+
+    expect(screen.getByText(/Couldn't load runs/)).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Clear filters" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
   });
 
   it("keeps showing the runs it has when a later refresh fails", async () => {

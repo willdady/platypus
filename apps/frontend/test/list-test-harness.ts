@@ -8,6 +8,7 @@ import { openDropdownMenu, resetSharedSpies, setupUser } from "./test-utils";
 export {
   jsonResponse,
   setupUser,
+  expectEntryActionVariant,
   stubAcceptedSave,
   stubRejectedSave,
   stubSaveSequence,

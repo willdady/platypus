@@ -15,6 +15,7 @@ import {
 import { TriggerRunRow } from "@/components/trigger-run-row";
 import { Button } from "@/components/ui/button";
 import { EmptyCard } from "@/components/empty-card";
+import { ListState } from "@/components/list-state";
 import {
   Select,
   SelectContent,
@@ -23,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { TriggerRunRowSkeleton } from "@/components/trigger-run-row-skeleton";
+import { LoadingRegion } from "@/components/list-skeletons";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { fetcher } from "@/lib/utils";
 
@@ -85,7 +87,7 @@ function TriggerRunsPage({
     [backendUrl, user, orgId, workspaceId, triggerFilter, statusFilter],
   );
 
-  const { data, error, size, setSize, isLoading } = useSWRInfinite<
+  const { data, error, size, setSize, isLoading, mutate } = useSWRInfinite<
     RunPage,
     unknown
   >(
@@ -204,14 +206,14 @@ function TriggerRunsPage({
           session resolves, when `getKey` has no key yet and SWR reports
           `isLoading: false`. Reading `isLoading` alone flashed "No runs yet". */}
         {!data && !error ? (
-          <div
+          <LoadingRegion
+            label="Loading trigger runs"
             className="border rounded-lg divide-y"
-            aria-label="Loading trigger runs"
           >
             {Array.from({ length: 3 }).map((_, i) => (
               <TriggerRunRowSkeleton key={i} />
             ))}
-          </div>
+          </LoadingRegion>
         ) : error && runs.length === 0 ? (
           // A read that failed is not an empty result. Saying "nothing matched"
           // here would be a claim about data the page never received — and the
@@ -225,32 +227,38 @@ function TriggerRunsPage({
                 : "The list could not be read. Try again in a moment."
             }
             action={
-              isFiltered && (
-                <Button variant="outline" onClick={clearFilters}>
-                  Clear filters
-                </Button>
-              )
+              <>
+                <Button onClick={() => void mutate()}>Retry</Button>
+                {isFiltered && (
+                  <Button variant="outline" onClick={clearFilters}>
+                    Clear filters
+                  </Button>
+                )}
+              </>
             }
           />
         ) : runs.length === 0 ? (
           // Two empty states: a workspace that has never run anything is a
-          // different thing from a filter that matches nothing.
-          <EmptyCard
-            icon={<History />}
-            title={isFiltered ? "No runs match these filters" : "No runs yet"}
-            description={
-              isFiltered
-                ? "Nothing in this workspace matches what you asked for. Widen the filters to see more."
-                : "Runs appear here as the triggers in this workspace fire."
-            }
-            action={
-              isFiltered && (
+          // different thing from a filter that matches nothing. The first is
+          // the screen's empty state; the second is a section within it.
+          isFiltered ? (
+            <ListState
+              variant="empty"
+              action={
                 <Button variant="outline" onClick={clearFilters}>
                   Clear filters
                 </Button>
-              )
-            }
-          />
+              }
+            >
+              No runs match these filters.
+            </ListState>
+          ) : (
+            <EmptyCard
+              icon={<History />}
+              title="No runs yet"
+              description="Runs appear here as the triggers in this workspace fire."
+            />
+          )
         ) : (
           <>
             <div className="border rounded-lg divide-y">

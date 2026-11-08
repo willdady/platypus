@@ -4,10 +4,9 @@ import { MAIN_CONTENT_ID } from "@/components/skip-link";
 import type { Organization } from "@platypus/schemas";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { AlertCircle, Building, Plus } from "lucide-react";
+import { Building, Plus } from "lucide-react";
 import { PageSpinner } from "@/components/page-spinner";
 import { useScopedList } from "@/hooks/use-scoped-list";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ProtectedRoute } from "@/components/protected-route";
 import { Header } from "@/components/header";
 import { EmptyCard } from "@/components/empty-card";
@@ -21,9 +20,11 @@ export default function Home() {
   const router = useRouter();
 
   const {
+    data,
     results: organizations,
     error,
     isLoading,
+    mutate,
   } = useScopedList<Organization>("organizations", {});
 
   // Redirect to first organization if available
@@ -37,15 +38,27 @@ export default function Home() {
     return <PageSpinner />;
   }
 
-  if (error) {
+  // A failed read is not "no organizations": name the read, offer another,
+  // and keep the page frame the empty state uses.
+  if (error && !data) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen p-8">
-        <Alert variant="destructive" className="max-w-md">
-          <AlertCircle />
-          <AlertTitle>Error</AlertTitle>
-          <AlertDescription>Failed to load organizations</AlertDescription>
-        </Alert>
-      </div>
+      <ProtectedRoute>
+        <div className="min-h-screen flex flex-col">
+          <Header />
+          <main
+            id={MAIN_CONTENT_ID}
+            className="flex-1 flex flex-col items-center justify-center p-8"
+          >
+            <h1 className="sr-only">Organizations</h1>
+            <EmptyCard
+              icon={<Building />}
+              title="Couldn't load organizations"
+              description="The list of organizations could not be read. Try again in a moment."
+              action={<Button onClick={() => void mutate()}>Retry</Button>}
+            />
+          </main>
+        </div>
+      </ProtectedRoute>
     );
   }
 

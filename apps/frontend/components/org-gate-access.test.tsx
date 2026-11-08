@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
+import type { ReactElement } from "react";
 import {
   authMock,
   swrMock,
@@ -10,6 +11,8 @@ import {
   mutate,
 } from "@/test/list-test-harness";
 import { selectOption } from "@/test/test-utils";
+import { elsewhereClicked, GuardLink } from "@/test/unsaved-changes-harness";
+import { UnsavedChangesProvider } from "./unsaved-changes-guard";
 
 vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("swr", () => swrMock);
@@ -44,7 +47,19 @@ function sentBody(fetchMock: ReturnType<typeof stubAcceptedSave>) {
   return JSON.parse(fetchMock.mock.calls[0][1].body as string);
 }
 
-beforeEach(resetListHarness);
+function renderGuarded(ui: ReactElement) {
+  return renderList(
+    <UnsavedChangesProvider>
+      {ui}
+      <GuardLink />
+    </UnsavedChangesProvider>,
+  );
+}
+
+beforeEach(() => {
+  resetListHarness();
+  elsewhereClicked.mockReset();
+});
 
 describe("OrgInboundTriggerAccess", () => {
   it("lists no workspaces unless Selected workspaces is chosen", async () => {
@@ -155,5 +170,82 @@ describe("OrgA2aAccess", () => {
       gate: "selected",
       allowedWorkspaceIds: ["ws-1"],
     });
+  });
+});
+
+describe("an Organization access gate's unsaved changes", () => {
+  function selectedAccess(over: Record<string, unknown> = {}) {
+    return {
+      gate: "selected",
+      workspaces: [
+        {
+          id: "ws-1",
+          name: "Support",
+          ownerName: "Dana Owner",
+          allowed: true,
+          count: 0,
+          ...over,
+        },
+      ],
+    };
+  }
+
+  it("holds a link click while a switch differs from the saved access", async () => {
+    mockScopedSWR(
+      { "/a2a/access": { data: selectedAccess() } },
+      { strict: true },
+    );
+    await renderGuarded(<OrgA2aAccess orgId="org1" />);
+
+    fireEvent.click(screen.getByRole("switch", { name: "Allow Support" }));
+    fireEvent.click(screen.getByText("Elsewhere"));
+
+    expect(elsewhereClicked).not.toHaveBeenCalled();
+    expect(screen.getByText("Discard unsaved changes?")).toBeInTheDocument();
+  });
+
+  it("navigates freely once a switch is toggled back to the saved access", async () => {
+    mockScopedSWR(
+      { "/a2a/access": { data: selectedAccess() } },
+      { strict: true },
+    );
+    await renderGuarded(<OrgA2aAccess orgId="org1" />);
+
+    const allow = screen.getByRole("switch", { name: "Allow Support" });
+    fireEvent.click(allow);
+    fireEvent.click(allow);
+    fireEvent.click(screen.getByText("Elsewhere"));
+
+    expect(elsewhereClicked).toHaveBeenCalledTimes(1);
+    expect(
+      screen.queryByText("Discard unsaved changes?"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("navigates freely after a successful save", async () => {
+    stubAcceptedSave(selectedAccess());
+    mockScopedSWR(
+      { "/a2a/access": { data: selectedAccess() } },
+      { strict: true },
+    );
+    await renderGuarded(<OrgA2aAccess orgId="org1" />);
+
+    fireEvent.click(screen.getByRole("switch", { name: "Allow Support" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Save" })).toBeDisabled(),
+    );
+    // Let the guard's effect run before the click: the button goes disabled in
+    // the render that clears `draft`, and the provider deregisters after it.
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    fireEvent.click(screen.getByText("Elsewhere"));
+
+    expect(
+      screen.queryByText("Discard unsaved changes?"),
+    ).not.toBeInTheDocument();
+    expect(elsewhereClicked).toHaveBeenCalledTimes(1);
   });
 });

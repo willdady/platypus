@@ -29,6 +29,16 @@ async function openHistory() {
 beforeEach(() => resetListHarness());
 
 describe("KanbanCardHistory", () => {
+  it("shows skeleton rows, not a bare 'Loading…', while the history loads", async () => {
+    mockScopedSWR({ "/history": { data: undefined } }, { strict: true });
+    await openHistory();
+
+    expect(
+      screen.getByRole("status", { name: "Loading history" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Loading…")).not.toBeInTheDocument();
+  });
+
   it("says so when the card has no recorded changes", async () => {
     mockScopedSWR({ "/history": [] }, { strict: true });
     await openHistory();
@@ -48,7 +58,9 @@ describe("KanbanCardHistory", () => {
     expect(
       screen.getByText("Failed to load history. Server error"),
     ).toBeInTheDocument();
-    expect(screen.queryByText("Loading…")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("status", { name: "Loading history" }),
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByText("No changes recorded yet."),
     ).not.toBeInTheDocument();
