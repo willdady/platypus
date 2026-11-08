@@ -1,17 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import type { OrgMemberListItem } from "@platypus/schemas";
+import {
+  organizationMemberUpdateSchema,
+  type OrgMemberListItem,
+} from "@platypus/schemas";
 import {
   authMock,
   swrMock,
   resetFormHarness,
-  savedBody,
   stubAcceptedSave,
   stubRejectedSave,
   toastError,
   toastSuccess,
 } from "@/test/form-test-harness";
-import { selectOption } from "@/test/test-utils";
+import { expectSentBodyToMatchSchema, selectOption } from "@/test/test-utils";
 import type { Serialized } from "@/lib/api-write";
 
 vi.mock("@/components/auth-provider", () => authMock);
@@ -71,7 +73,9 @@ describe("MemberEditDialog", () => {
       "http://test/organizations/org1/members/m1",
       expect.objectContaining({ method: "PATCH" }),
     );
-    expect(savedBody(fetchMock)).toEqual({ role: "admin" });
+    expect(
+      expectSentBodyToMatchSchema(fetchMock, organizationMemberUpdateSchema),
+    ).toEqual({ role: "admin" });
     expect(toastSuccess).toHaveBeenCalledWith("Member role updated");
   });
 

@@ -6,8 +6,13 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import type { Skill, SkillGithubUpdateCheck } from "@platypus/schemas";
+import {
+  skillGithubUpdateRequestSchema,
+  type Skill,
+  type SkillGithubUpdateCheck,
+} from "@platypus/schemas";
 import type { Serialized } from "@/lib/api-write";
+import { expectSentBodyToMatchSchema } from "@/test/test-utils";
 import { SkillGithubUpdate } from "./skill-github-update";
 
 const FROM = "a".repeat(40);
@@ -89,9 +94,16 @@ describe("SkillGithubUpdate", () => {
     const onUpdated = renderUpdate(false);
     fireEvent.click(await screen.findByRole("button", { name: "Update" }));
     await waitFor(() => expect(onUpdated).toHaveBeenCalled());
-    expect(JSON.parse(updateCalls()[0][1].body as string)).toEqual({
-      commitSha: TO,
-    });
+    const updateIndex = fetchMock.mock.calls.findIndex(([url]) =>
+      String(url).endsWith("/update"),
+    );
+    expect(
+      expectSentBodyToMatchSchema(
+        fetchMock,
+        skillGithubUpdateRequestSchema,
+        updateIndex,
+      ),
+    ).toEqual({ commitSha: TO });
   });
 
   it("warns a Modified Skill's edits will be lost before updating", async () => {

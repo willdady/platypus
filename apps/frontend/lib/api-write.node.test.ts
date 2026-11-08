@@ -14,6 +14,26 @@ import { jsonResponse } from "@/test/test-utils";
 
 const BACKEND_URL = "http://localhost:4000";
 
+/** An Agent body the shared create schema accepts, for transport tests. */
+const agentBody = {
+  name: "Bot",
+  description: "A test Agent",
+  providerId: "p1",
+  modelId: "gpt-4o",
+};
+
+/** A Provider body the shared create schema accepts, for transport tests. */
+const providerBody = {
+  name: "OpenAI",
+  providerType: "OpenAI" as const,
+  apiKey: "sk-test",
+  apiMode: "chat" as const,
+  searchSource: "none",
+  modelIds: [{ id: "gpt-4o" }],
+  taskModelId: "gpt-4o",
+  memoryExtractionModelId: "gpt-4o",
+};
+
 /** Stubs `fetch` to answer every request with `status` and `body`. */
 function respond(status: number, body: unknown = {}) {
   const fetchMock = vi.fn().mockResolvedValue(jsonResponse(status, body));
@@ -50,6 +70,49 @@ describe("Serialized — what JSON.parse makes of a type", () => {
 });
 
 describe("writeEntity — transport", () => {
+  it("types a create body from the entity's create schema", async () => {
+    const fetchMock = respond(201, { id: "a1" });
+
+    await writeEntity(
+      BACKEND_URL,
+      "agents",
+      { orgId: "org1" },
+      {
+        data: {
+          // @ts-expect-error `workspaceId` is not an Agent create field; the
+          // path carries the scope, and the strict schema refuses it.
+          workspaceId: "ws1",
+          name: "Bot",
+          description: "A test Agent",
+          providerId: "p1",
+          modelId: "gpt-4o",
+        },
+      },
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("types an update body from the entity's update schema", async () => {
+    const fetchMock = respond(200);
+
+    await writeEntity(
+      BACKEND_URL,
+      "workspaces",
+      { orgId: "org1" },
+      {
+        id: "ws1",
+        data: {
+          // @ts-expect-error a Provider is created with the Workspace; an
+          // update cannot carry one.
+          provider: { name: "OpenAI" },
+        },
+      },
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("POSTs to the org-scoped collection path when creating with no workspace scope", async () => {
     const fetchMock = respond(201, { id: "a1" });
 
@@ -57,7 +120,7 @@ describe("writeEntity — transport", () => {
       BACKEND_URL,
       "agents",
       { orgId: "org1" },
-      { data: { name: "Bot" } },
+      { data: agentBody },
     );
 
     expect(fetchMock).toHaveBeenCalledWith(
@@ -66,7 +129,7 @@ describe("writeEntity — transport", () => {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: "Bot" }),
+        body: JSON.stringify(agentBody),
       }),
     );
   });
@@ -78,7 +141,7 @@ describe("writeEntity — transport", () => {
       BACKEND_URL,
       "agents",
       { orgId: "org1", workspaceId: "ws1" },
-      { data: { name: "Bot" } },
+      { data: agentBody },
     );
 
     expect(fetchMock).toHaveBeenCalledWith(
@@ -94,14 +157,14 @@ describe("writeEntity — transport", () => {
       BACKEND_URL,
       "agents",
       { orgId: "org1", workspaceId: "ws1" },
-      { id: "a1", data: { name: "Renamed" } },
+      { id: "a1", data: { ...agentBody, name: "Renamed" } },
     );
 
     expect(fetchMock).toHaveBeenCalledWith(
       "http://localhost:4000/organizations/org1/workspaces/ws1/agents/a1",
       expect.objectContaining({
         method: "PUT",
-        body: JSON.stringify({ name: "Renamed" }),
+        body: JSON.stringify({ ...agentBody, name: "Renamed" }),
       }),
     );
   });
@@ -149,7 +212,7 @@ describe("writeEntity — transport", () => {
       BACKEND_URL,
       "organizations",
       {},
-      { id: "org1", data: { name: "Renamed" } },
+      { id: "org1", data: { name: "Renamed", identityContext: null } },
     );
 
     expect(fetchMock).toHaveBeenCalledWith(
@@ -265,7 +328,7 @@ describe("writeEntity — outcomes", () => {
       BACKEND_URL,
       "agents",
       { orgId: "org1" },
-      { data: { name: "Bot" } },
+      { data: agentBody },
     );
 
     expect(result).toEqual({
@@ -282,7 +345,7 @@ describe("writeEntity — outcomes", () => {
       BACKEND_URL,
       "agents",
       { orgId: "org1" },
-      { id: "a1", data: { name: "Renamed" } },
+      { id: "a1", data: { ...agentBody, name: "Renamed" } },
     );
 
     expect(result).toMatchObject({
@@ -370,7 +433,7 @@ describe("writeEntity — outcomes", () => {
       BACKEND_URL,
       "agents",
       { orgId: "org1" },
-      { id: "a1", data: { name: "x" } },
+      { id: "a1", data: { ...agentBody, name: "x" } },
     );
 
     expect(result).toEqual(expected);
@@ -390,7 +453,7 @@ describe("writeEntity — outcomes", () => {
       BACKEND_URL,
       "providers",
       { orgId: "org1" },
-      { data: {} },
+      { data: providerBody },
     );
 
     expect(result).toEqual({
@@ -432,7 +495,7 @@ describe("writeEntity — outcomes", () => {
       BACKEND_URL,
       "agents",
       { orgId: "org1" },
-      { data: {} },
+      { data: agentBody },
     );
 
     expect(result).toEqual({

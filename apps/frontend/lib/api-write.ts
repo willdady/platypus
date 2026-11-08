@@ -1,9 +1,134 @@
+import type { z } from "zod";
 import type {
+  a2aEndpointCreateSchema,
+  a2aEndpointUpdateSchema,
+  a2aTokenCreateSchema,
+  agentCreateSchema,
+  agentUpdateSchema,
+  attachmentCreateSchema,
+  blueprintCreateSchema,
+  blueprintUpdateSchema,
+  chatUpdateSchema,
+  contextCreateSchema,
+  contextUpdateSchema,
+  invitationCreateSchema,
+  kanbanBoardCreateSchema,
+  kanbanBoardUpdateSchema,
+  mcpCreateSchema,
+  mcpUpdateSchema,
+  organizationCreateSchema,
+  organizationMemberUpdateSchema,
+  organizationUpdateSchema,
+  providerCreateSchema,
+  providerUpdateSchema,
+  sandboxCreateSchema,
+  sandboxUpdateSchema,
+  skillCreateSchema,
+  skillUpdateSchema,
+  triggerCreateSchema,
+  triggerUpdateSchema,
+  webhookCreateSchema,
+  webhookUpdateSchema,
+  workspaceCreateSchema,
+  workspaceUpdateSchema,
   AttachmentResourceType,
   PlatypusUIMessage,
 } from "@platypus/schemas";
 import { joinUrl } from "./utils";
 import { parseValidationErrors } from "./form-errors";
+
+/**
+ * Every entity whose create and/or update body has a shared request schema in
+ * `@platypus/schemas`, keyed by the collection name `writeEntity` takes. The
+ * backend validates these with `strictRequest`, so an unknown key — a stale
+ * `workspaceId` on an Agent, a read-only `isPinned` on a Chat — is a 400. A
+ * literal entity name reaches this map and types the body; a dynamic one
+ * falls back to `unknown`.
+ *
+ * Deliberately absent, so their bodies stay loose: sub-resource paths such as
+ * `comments` or `attachments/:type`, `notifications` and its actions, and the
+ * one-off action endpoints (`inbound-triggers/access`, `a2a/access`,
+ * `skill-import/access`, …) that `writeAt` owns. The entity name alone cannot
+ * select one of their schemas, and several carry no body at all.
+ */
+type EntityRequestSchemas = {
+  agents: {
+    create: typeof agentCreateSchema;
+    update: typeof agentUpdateSchema;
+  };
+  "a2a-endpoints": {
+    create: typeof a2aEndpointCreateSchema;
+    update: typeof a2aEndpointUpdateSchema;
+  };
+  attachments: { create: typeof attachmentCreateSchema };
+  blueprints: {
+    create: typeof blueprintCreateSchema;
+    update: typeof blueprintUpdateSchema;
+  };
+  boards: {
+    create: typeof kanbanBoardCreateSchema;
+    update: typeof kanbanBoardUpdateSchema;
+  };
+  chat: { update: typeof chatUpdateSchema };
+  invitations: { create: typeof invitationCreateSchema };
+  mcps: { create: typeof mcpCreateSchema; update: typeof mcpUpdateSchema };
+  members: { update: typeof organizationMemberUpdateSchema };
+  organizations: {
+    create: typeof organizationCreateSchema;
+    update: typeof organizationUpdateSchema;
+  };
+  providers: {
+    create: typeof providerCreateSchema;
+    update: typeof providerUpdateSchema;
+  };
+  sandbox: {
+    create: typeof sandboxCreateSchema;
+    update: typeof sandboxUpdateSchema;
+  };
+  skills: {
+    create: typeof skillCreateSchema;
+    update: typeof skillUpdateSchema;
+  };
+  tokens: { create: typeof a2aTokenCreateSchema };
+  triggers: {
+    create: typeof triggerCreateSchema;
+    update: typeof triggerUpdateSchema;
+  };
+  "users/me/contexts": {
+    create: typeof contextCreateSchema;
+    update: typeof contextUpdateSchema;
+  };
+  webhooks: {
+    create: typeof webhookCreateSchema;
+    update: typeof webhookUpdateSchema;
+  };
+  workspaces: {
+    create: typeof workspaceCreateSchema;
+    update: typeof workspaceUpdateSchema;
+  };
+};
+
+type EntityWithRequestSchemas = keyof EntityRequestSchemas;
+
+/** A schema's accepted input, or `never` when the entity has no such schema. */
+type EntityBody<
+  TEntity extends EntityWithRequestSchemas,
+  TWrite extends "create" | "update",
+> = TWrite extends keyof EntityRequestSchemas[TEntity]
+  ? z.input<EntityRequestSchemas[TEntity][TWrite]>
+  : never;
+
+/** The body an entity's create accepts, or `unknown` without a shared schema. */
+type EntityCreateData<TEntity extends string> =
+  TEntity extends EntityWithRequestSchemas
+    ? EntityBody<TEntity, "create">
+    : unknown;
+
+/** The body an entity's update accepts, or `unknown` without one. */
+type EntityUpdateData<TEntity extends string> =
+  TEntity extends EntityWithRequestSchemas
+    ? EntityBody<TEntity, "update">
+    : unknown;
 
 /**
  * A write's target scope (ADR-0007): an Organization-level (Shared) resource,
@@ -17,17 +142,41 @@ export type Scope =
   | { readonly orgId: string; readonly workspaceId?: undefined }
   | { readonly orgId: string; readonly workspaceId: string };
 
-export type WriteOptions<TData> = {
+export type WriteOptions<TEntity extends string = string> =
+  // A dynamic entity name has no schema to derive the body from; a literal one
+  // outside the map above has none either.
+  string extends TEntity
+    ? LooseWriteOptions
+    : TEntity extends EntityWithRequestSchemas
+      ? EntityWriteOptions<TEntity>
+      : LooseWriteOptions;
+
+type LooseWriteOptions = {
   /** Omit to create; provide to update or delete an existing entity. */
   readonly id?: string;
   /** Omit only when `id` is set and the write is a delete. */
-  readonly data?: TData;
-  /**
-   * An update's verb: `PUT` replaces the resource wholesale (the default),
-   * `PATCH` sends a partial body.
-   */
+  readonly data?: unknown;
+  /** An update's verb: `PUT` (default) replaces, `PATCH` sends a partial. */
   readonly method?: "PUT" | "PATCH";
 };
+
+/**
+ * Split by the presence of `id`, because that is what decides whether the
+ * backend validates the body as a create or an update. A create cannot carry
+ * an id, and an update's body comes from the update schema — which may differ
+ * from the create's (a Chat's title and pin state, a Workspace's resources).
+ */
+type EntityWriteOptions<TEntity extends EntityWithRequestSchemas> =
+  | {
+      readonly id?: undefined;
+      readonly data?: EntityCreateData<TEntity>;
+      readonly method?: "PUT" | "PATCH";
+    }
+  | {
+      readonly id: string;
+      readonly data?: EntityUpdateData<TEntity>;
+      readonly method?: "PUT" | "PATCH";
+    };
 
 /**
  * What `JSON.parse` makes of `T`: every `Date` arrives as its ISO string.
@@ -319,14 +468,21 @@ async function performWrite<TResult, TData>(
  * seam. Callers pass `id`/`data` rather than a method: `id` absent means
  * create (POST), `id` present with `data` means update (PUT), `id` present
  * without `data` means delete (DELETE).
+ *
+ * The entity type parameter comes first so a caller that names its result
+ * type must name the entity too — otherwise supplying only `TResult` would
+ * fall back to a `string` entity and silently lose the body check.
  */
-export async function writeEntity<TResult = unknown, TData = unknown>(
+export async function writeEntity<
+  TEntity extends string = string,
+  TResult = unknown,
+>(
   backendUrl: string,
-  entity: string,
+  entity: TEntity,
   scope: Scope,
-  options: WriteOptions<TData> = {},
+  options?: WriteOptions<TEntity>,
 ): Promise<WriteOutcome<TResult>> {
-  const { id, data, method: updateMethod = "PUT" } = options;
+  const { id, data, method: updateMethod = "PUT" } = options ?? {};
   const method: "POST" | "PUT" | "PATCH" | "DELETE" =
     id === undefined ? "POST" : data === undefined ? "DELETE" : updateMethod;
 
@@ -339,7 +495,7 @@ export async function writeEntity<TResult = unknown, TData = unknown>(
       ? [collectionUrl]
       : [collectionUrl, url];
 
-  return performWrite<TResult, TData>(url, method, data, revalidateKeys);
+  return performWrite<TResult, unknown>(url, method, data, revalidateKeys);
 }
 
 export type WriteAtOptions<TData> = {

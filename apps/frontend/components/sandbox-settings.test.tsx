@@ -15,7 +15,8 @@ import {
   toastError,
   toastSuccess,
 } from "@/test/list-test-harness";
-import { savedBody } from "@/test/form-test-harness";
+import { sandboxCreateSchema, sandboxUpdateSchema } from "@platypus/schemas";
+import { expectSentBodyToMatchSchema } from "@/test/test-utils";
 import type { WriteOutcome } from "@/lib/api-write";
 
 // --- Module mocks ------------------------------------------------------------
@@ -26,6 +27,14 @@ vi.mock("swr", () => swrMock);
 import { SandboxSettings } from "./sandbox-settings";
 
 // --- Helpers -----------------------------------------------------------------
+
+/** The sandbox body the form put on the wire, checked against the strict schema. */
+function savedSandboxBody(
+  fetchMock: ReturnType<typeof vi.fn>,
+  schema = sandboxUpdateSchema,
+) {
+  return expectSentBodyToMatchSchema(fetchMock, schema);
+}
 
 const DOCKER_SANDBOX = {
   id: "sb1",
@@ -240,7 +249,7 @@ describe("SandboxSettings save", () => {
     await setupUser().type(name, "{Enter}");
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    expect(savedBody(fetchMock)).toMatchObject({ name: "Edited box" });
+    expect(savedSandboxBody(fetchMock)).toMatchObject({ name: "Edited box" });
   });
 
   it("creates the first sandbox on the first registered backend", async () => {
@@ -261,7 +270,7 @@ describe("SandboxSettings save", () => {
       SANDBOX_URL,
       expect.objectContaining({ method: "POST" }),
     );
-    expect(savedBody(fetchMock)).toEqual({
+    expect(savedSandboxBody(fetchMock, sandboxCreateSchema)).toEqual({
       workspaceId: "ws1",
       name: "Dev box",
       backend: "docker",
@@ -299,7 +308,7 @@ describe("SandboxSettings save", () => {
       SANDBOX_URL,
       expect.objectContaining({ method: "PUT" }),
     );
-    expect(savedBody(fetchMock)).toEqual({
+    expect(savedSandboxBody(fetchMock)).toEqual({
       name: "Dev box",
       backend: "docker",
       config: { networks: ["bridge-a"], extraHosts: ["v6:::1"] },
@@ -335,7 +344,7 @@ describe("SandboxSettings save", () => {
     save();
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    expect(savedBody(fetchMock)).toEqual({
+    expect(savedSandboxBody(fetchMock)).toEqual({
       name: "Dev box",
       backend: "docker",
       userEnv: {},
@@ -388,7 +397,7 @@ describe("SandboxSettings save", () => {
       save();
 
       await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-      expect(savedBody(fetchMock)).toEqual({
+      expect(savedSandboxBody(fetchMock)).toEqual({
         name: "Dev box",
         backend: "ssh",
         config: { host: "ssh.example.com", port: 2222, user: "platypus" },
@@ -415,7 +424,7 @@ describe("SandboxSettings save", () => {
       save();
 
       await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-      expect(savedBody(fetchMock)).not.toHaveProperty("credentials");
+      expect(savedSandboxBody(fetchMock)).not.toHaveProperty("credentials");
     });
 
     it("enables the passphrase only while a new key is entered, clearing it with the key", async () => {
@@ -452,7 +461,7 @@ describe("SandboxSettings save", () => {
       save();
 
       await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-      expect(savedBody(fetchMock)).toMatchObject({
+      expect(savedSandboxBody(fetchMock)).toMatchObject({
         config: {
           host: "ssh.example.com",
           port: 2222,

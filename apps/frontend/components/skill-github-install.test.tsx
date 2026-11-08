@@ -1,12 +1,16 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type { SkillGithubPreview } from "@platypus/schemas";
+import {
+  skillGithubInstallRequestSchema,
+  type SkillGithubPreview,
+} from "@platypus/schemas";
 import {
   authMock,
   swrMock,
   mockScopedSWR,
   resetListHarness,
 } from "@/test/list-test-harness";
+import { expectSentBodyToMatchSchema } from "@/test/test-utils";
 
 vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("swr", () => swrMock);
@@ -136,7 +140,13 @@ describe("SkillGithubInstall", () => {
     await screen.findByRole("link", { name: "pdf" });
     const [url, init] = fetchMock.mock.calls[1] as [string, RequestInit];
     expect(url).toMatch(/\/workspaces\/ws1\/skills\/github\/install$/);
-    expect(JSON.parse(init.body as string)).toEqual({
+    expect(
+      expectSentBodyToMatchSchema(
+        fetchMock,
+        skillGithubInstallRequestSchema,
+        1,
+      ),
+    ).toEqual({
       owner: "anthropics",
       repo: "skills",
       ref: null,

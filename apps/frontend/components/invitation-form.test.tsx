@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { invitationCreateSchema } from "@platypus/schemas";
+import { expectSentBodyToMatchSchema } from "@/test/test-utils";
 import {
   authMock,
   swrMock,
@@ -11,7 +13,6 @@ import {
   resetFormHarness,
   stubAcceptedSave,
   stubRejectedSave,
-  savedBody,
 } from "@/test/form-test-harness";
 
 // --- Module mocks ------------------------------------------------------------
@@ -88,7 +89,9 @@ describe("InvitationForm conflict handling", () => {
     expect(fetchMock.mock.calls[0][0]).toBe(
       "http://test/organizations/org1/invitations",
     );
-    expect(savedBody(fetchMock)).toEqual({ email: "user@example.com" });
+    expect(
+      expectSentBodyToMatchSchema(fetchMock, invitationCreateSchema),
+    ).toEqual({ email: "user@example.com" });
   });
 });
 
@@ -115,7 +118,9 @@ describe("InvitationForm Blueprints", () => {
     submit();
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    expect(savedBody(fetchMock)).toEqual({
+    expect(
+      expectSentBodyToMatchSchema(fetchMock, invitationCreateSchema),
+    ).toEqual({
       email: "user@example.com",
       workspaceName: "Team space",
       blueprintIds: ["b2", "b1"],

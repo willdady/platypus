@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { fireEvent, screen, waitFor } from "@testing-library/react";
-import type { OrgMemberListItem, Provider } from "@platypus/schemas";
+import {
+  workspaceTransferSchema,
+  type OrgMemberListItem,
+  type Provider,
+} from "@platypus/schemas";
 import {
   authMock,
   mockScopedSWR,
@@ -10,7 +14,7 @@ import {
   swrMock,
   toastSuccess,
 } from "@/test/list-test-harness";
-import { selectOption } from "@/test/test-utils";
+import { expectSentBodyToMatchSchema, selectOption } from "@/test/test-utils";
 
 vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("swr", () => swrMock);
@@ -107,7 +111,9 @@ describe("TransferWorkspaceAction", () => {
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("http://test/organizations/org1/workspaces/ws-1/transfer");
     expect(init.method).toBe("POST");
-    expect(JSON.parse(String(init.body))).toEqual({
+    expect(
+      expectSentBodyToMatchSchema(fetchMock, workspaceTransferSchema),
+    ).toEqual({
       newOwnerId: "u-new",
       keepHistory: true,
     });

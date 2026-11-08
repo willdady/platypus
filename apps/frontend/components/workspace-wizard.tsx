@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import type { z } from "zod";
 import { useRouter } from "next/navigation";
 import { useSWRConfig } from "swr";
 import { toast } from "sonner";
@@ -105,7 +106,8 @@ export function WorkspaceWizard({ orgId }: { orgId: string }) {
   // Unset until the user picks a tab, so it can default to Shared once the
   // org's Shared Providers load.
   const [pickedSource, setProviderSource] = useState<"new" | "shared">();
-  const [provider, setProvider] = useState<Record<string, unknown>>();
+  const [provider, setProvider] =
+    useState<z.output<typeof providerStepSchema>>();
   const [sharedProviderIds, setSharedProviderIds] = useState<string[]>([]);
 
   const [withSandbox, setWithSandbox] = useState(false);
@@ -184,7 +186,7 @@ export function WorkspaceWizard({ orgId }: { orgId: string }) {
   ): Promise<WriteOutcome<undefined>> => {
     const parsed = providerStepSchema.safeParse(payload);
     if (!parsed.success) return Promise.resolve(invalid(parsed.error.issues));
-    setProvider(payload);
+    setProvider(parsed.data);
     setStep(2);
     return Promise.resolve(accepted);
   };
@@ -192,11 +194,13 @@ export function WorkspaceWizard({ orgId }: { orgId: string }) {
   const create = async (
     sandbox?: Record<string, unknown>,
   ): Promise<WriteOutcome<undefined>> => {
+    let parsedSandbox: z.output<typeof sandboxStepSchema> | undefined;
     if (sandbox) {
       const parsed = sandboxStepSchema.safeParse(sandbox);
       if (!parsed.success) return invalid(parsed.error.issues);
+      parsedSandbox = parsed.data;
     }
-    const outcome = await writeEntity<Workspace>(
+    const outcome = await writeEntity<"workspaces", Workspace>(
       backendUrl,
       "workspaces",
       { orgId },
@@ -206,7 +210,7 @@ export function WorkspaceWizard({ orgId }: { orgId: string }) {
           context: context || null,
           ownerId: ownerId || undefined,
           ...(providerSource === "new" ? { provider } : { sharedProviderIds }),
-          sandbox,
+          sandbox: parsedSandbox,
         },
       },
     );

@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { contextCreateSchema, contextUpdateSchema } from "@platypus/schemas";
 import {
+  expectSentBodyToMatchSchema,
   stubAcceptedSave,
   stubRejectedSave,
   toastError,
@@ -127,7 +129,9 @@ describe("ContextsPage saving the global context", () => {
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe("http://test/users/me/contexts/ctx1");
     expect(init).toMatchObject({ method: "PUT" });
-    expect(JSON.parse(init.body)).toEqual({ content: "updated" });
+    expect(expectSentBodyToMatchSchema(fetchMock, contextUpdateSchema)).toEqual(
+      { content: "updated" },
+    );
     expect(configuredMutate).toHaveBeenCalledWith(
       "http://test/users/me/contexts",
     );
@@ -146,10 +150,12 @@ describe("ContextsPage saving the global context", () => {
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe("http://test/users/me/contexts");
     expect(init).toMatchObject({ method: "POST" });
-    expect(JSON.parse(init.body)).toEqual({
-      content: "first",
-      workspaceId: null,
-    });
+    expect(expectSentBodyToMatchSchema(fetchMock, contextCreateSchema)).toEqual(
+      {
+        content: "first",
+        workspaceId: null,
+      },
+    );
   });
 
   it.each([

@@ -9,9 +9,9 @@ import {
   setError,
   setLoading,
   stubAcceptedSave,
-  savedBody,
 } from "@/test/form-test-harness";
-import { selectOption } from "@/test/test-utils";
+import { workspaceCreateSchema } from "@platypus/schemas";
+import { expectSentBodyToMatchSchema, selectOption } from "@/test/test-utils";
 import { elsewhereClicked, GuardLink } from "@/test/unsaved-changes-harness";
 import { UnsavedChangesProvider } from "./unsaved-changes-guard";
 
@@ -134,7 +134,9 @@ describe("WorkspaceWizard", () => {
     expect(fetchMock.mock.calls[0][0]).toBe(
       "http://test/organizations/org1/workspaces",
     );
-    expect(savedBody(fetchMock)).toEqual({
+    expect(
+      expectSentBodyToMatchSchema(fetchMock, workspaceCreateSchema),
+    ).toEqual({
       name: "Research",
       context: null,
       ownerId: "u2",
@@ -165,7 +167,9 @@ describe("WorkspaceWizard", () => {
     await waitFor(() =>
       expect(push).toHaveBeenCalledWith("/org1/workspace/ws9"),
     );
-    expect(savedBody(fetchMock).sandbox).toMatchObject({
+    expect(
+      expectSentBodyToMatchSchema(fetchMock, workspaceCreateSchema).sandbox,
+    ).toMatchObject({
       name: "Dev box",
       backend: "docker",
     });

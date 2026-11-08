@@ -2,9 +2,11 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { SWRConfig } from "swr";
 import type { UIMessageChunk } from "ai";
+import { chatSubmitSchema } from "@platypus/schemas";
 import {
   authMock,
   authState,
+  expectSentBodyToMatchSchema,
   jsonResponse,
   setupUser,
 } from "@/test/test-utils";
@@ -103,11 +105,16 @@ describe("Chat streaming", () => {
     expect(await screen.findByText("Hello")).toBeInTheDocument();
     expect(screen.getByText("Hi there")).toBeInTheDocument();
 
-    const post = fetchMock.mock.calls.find(
+    const postIndex = fetchMock.mock.calls.findIndex(
       ([, init]) => (init as RequestInit | undefined)?.method === "POST",
     );
+    const post = fetchMock.mock.calls[postIndex];
     expect(post?.[0]).toBe(`${BASE}/chat/${CHAT_ID}/turns`);
-    const body = JSON.parse((post?.[1] as RequestInit).body as string);
+    const body = expectSentBodyToMatchSchema(
+      fetchMock,
+      chatSubmitSchema,
+      postIndex,
+    );
     expect(body).toMatchObject({
       trigger: "submit",
       parentId: null,

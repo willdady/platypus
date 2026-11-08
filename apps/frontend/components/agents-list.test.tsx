@@ -30,7 +30,11 @@ vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("swr", () => swrMock);
 
 import userEvent from "@testing-library/user-event";
-import { openDropdownMenu, stubPendingSave } from "@/test/test-utils";
+import {
+  expectSentBodyToMatchSchema,
+  openDropdownMenu,
+  stubPendingSave,
+} from "@/test/test-utils";
 import { AgentsList } from "./agents-list";
 
 // --- Fixtures ----------------------------------------------------------------
@@ -62,12 +66,6 @@ const workspaceAgent: AgentWithScope = {
 } as unknown as AgentWithScope;
 
 const provider: Provider = { id: "p1", name: "OpenAI" } as unknown as Provider;
-
-/** The JSON body of the create the Clone sent. */
-function sentBody(fetchMock: ReturnType<typeof stubAcceptedSave>) {
-  const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-  return JSON.parse(init.body as string) as Record<string, unknown>;
-}
 
 /** Renders the Workspace surface with `agents` in the list. */
 function renderAgents(agents: AgentWithScope[], menuItem?: string) {
@@ -186,9 +184,9 @@ describe("AgentsList clone", () => {
       "http://test/organizations/org1/workspaces/ws1/agents",
       expect.objectContaining({ method: "POST" }),
     );
-    expect(agentCreateSchema.safeParse(sentBody(fetchMock)).success).toBe(true);
-    expect(sentBody(fetchMock)).not.toHaveProperty("workspaceId");
-    expect(sentBody(fetchMock)).not.toHaveProperty("isPinned");
+    const body = expectSentBodyToMatchSchema(fetchMock, agentCreateSchema);
+    expect(body).not.toHaveProperty("workspaceId");
+    expect(body).not.toHaveProperty("isPinned");
   });
 
   it("surfaces the backend's reason when clone fails", async () => {
@@ -548,8 +546,7 @@ describe("AgentsList clone of a shared agent", () => {
     await waitFor(() =>
       expect(push).toHaveBeenCalledWith("/org1/workspace/ws1/agents/a3"),
     );
-    const body = sentBody(fetchMock);
-    expect(agentCreateSchema.safeParse(body).success).toBe(true);
+    const body = expectSentBodyToMatchSchema(fetchMock, agentCreateSchema);
     expect(body).toMatchObject({
       name: "Shared Agent (copy)",
       providerId: "p1",
@@ -585,8 +582,7 @@ describe("AgentsList clone of a shared agent", () => {
     await confirmDialog("Clone");
 
     await waitFor(() => expect(push).toHaveBeenCalled());
-    const body = sentBody(fetchMock);
-    expect(agentCreateSchema.safeParse(body).success).toBe(true);
+    const body = expectSentBodyToMatchSchema(fetchMock, agentCreateSchema);
     expect(body).toMatchObject({
       subAgentIds: ["a2"],
       skillIds: [],

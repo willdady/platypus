@@ -7,7 +7,7 @@ import {
   within,
 } from "@testing-library/react";
 import type { Trigger } from "@platypus/schemas";
-import { triggerCreateSchema } from "@platypus/schemas";
+import { triggerCreateSchema, triggerUpdateSchema } from "@platypus/schemas";
 import {
   authMock,
   swrMock,
@@ -23,7 +23,12 @@ import {
   menuItemLabels,
 } from "@/test/list-test-harness";
 import userEvent from "@testing-library/user-event";
-import { openDropdownMenu, selectOption, setupUser } from "@/test/test-utils";
+import {
+  expectSentBodyToMatchSchema,
+  openDropdownMenu,
+  selectOption,
+  setupUser,
+} from "@/test/test-utils";
 
 // --- Module mocks ------------------------------------------------------------
 
@@ -129,9 +134,6 @@ describe("TriggerList clone", () => {
     lastRejectedAt: null,
   } as unknown as Trigger;
 
-  const sentBody = (fetchMock: ReturnType<typeof stubAcceptedSave>): unknown =>
-    JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
-
   /** The create variant `type` is validated against. */
   const createShape = (type: Trigger["type"]) => {
     const option = triggerCreateSchema.options.find(
@@ -186,8 +188,7 @@ describe("TriggerList clone", () => {
       "http://test/organizations/org1/workspaces/ws1/triggers",
       expect.objectContaining({ method: "POST" }),
     );
-    const body = sentBody(fetchMock) as Record<string, unknown>;
-    expect(triggerCreateSchema.safeParse(body).success).toBe(true);
+    const body = expectSentBodyToMatchSchema(fetchMock, triggerCreateSchema);
     expect(Object.keys(body).sort()).toEqual(cloneKeys(firedOneOff));
     expect(body).toMatchObject({
       agentId: "agent1",
@@ -220,8 +221,7 @@ describe("TriggerList clone", () => {
     await confirmDialog("Clone");
 
     await waitFor(() => expect(push).toHaveBeenCalled());
-    const body = sentBody(fetchMock) as Record<string, unknown>;
-    expect(triggerCreateSchema.safeParse(body).success).toBe(true);
+    const body = expectSentBodyToMatchSchema(fetchMock, triggerCreateSchema);
     expect(Object.keys(body).sort()).toEqual(cloneKeys(eventTrigger));
     expect(body).toMatchObject({
       type: "event",
@@ -239,8 +239,7 @@ describe("TriggerList clone", () => {
     await confirmDialog("Clone");
 
     await waitFor(() => expect(push).toHaveBeenCalled());
-    const body = sentBody(fetchMock) as Record<string, unknown>;
-    expect(triggerCreateSchema.safeParse(body).success).toBe(true);
+    const body = expectSentBodyToMatchSchema(fetchMock, triggerCreateSchema);
     expect(Object.keys(body).sort()).toEqual(cloneKeys(inboundTrigger));
     expect(body).toMatchObject({
       agentId: "agent1",
@@ -264,7 +263,10 @@ describe("TriggerList clone", () => {
   it("keeps the dialog open with the backend's reason when the create fails", async () => {
     stubRejectedSave("Too many pending one-off triggers", 400);
 
-    await renderTriggers([cronTrigger], "Clone");
+    await renderTriggers(
+      [{ ...cronTrigger, ...runState } as unknown as Trigger],
+      "Clone",
+    );
     await confirmDialog("Clone");
 
     expect(
@@ -288,6 +290,11 @@ describe("TriggerList toggle enabled", () => {
         method: "PATCH",
         body: JSON.stringify({ enabled: false }),
       }),
+    );
+    expect(expectSentBodyToMatchSchema(fetchMock, triggerUpdateSchema)).toEqual(
+      {
+        enabled: false,
+      },
     );
   });
 

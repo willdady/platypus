@@ -16,11 +16,11 @@ import {
   setupUser,
   stubAcceptedSave,
   stubRejectedSave,
-  savedBody,
   push,
   toastError,
 } from "@/test/form-test-harness";
-import { selectOption } from "@/test/test-utils";
+import { triggerCreateSchema, triggerUpdateSchema } from "@platypus/schemas";
+import { expectSentBodyToMatchSchema, selectOption } from "@/test/test-utils";
 import { getBrowserTimezone } from "@/lib/timezones";
 
 // --- Module mocks ------------------------------------------------------------
@@ -52,9 +52,14 @@ import { TriggerForm } from "./trigger-form";
 const agents = [{ id: "agent-1", name: "Agent One" }];
 const boards = [{ id: "board-1", name: "Board One" }];
 
-/** The `config` the form put on the wire for the last save. */
-function savedConfig(fetchMock: ReturnType<typeof vi.fn>) {
-  return savedBody(fetchMock).config as Record<string, unknown>;
+/** The create body the form put on the wire, checked against the strict schema. */
+function savedCreateBody(fetchMock: ReturnType<typeof vi.fn>) {
+  return expectSentBodyToMatchSchema(fetchMock, triggerCreateSchema);
+}
+
+/** The update body the form put on the wire, checked against the strict schema. */
+function savedUpdateBody(fetchMock: ReturnType<typeof vi.fn>) {
+  return expectSentBodyToMatchSchema(fetchMock, triggerUpdateSchema);
 }
 
 beforeEach(() => {
@@ -85,7 +90,7 @@ describe("TriggerForm — form submission", () => {
     await setupUser().type(name, "{Enter}");
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    expect(savedBody(fetchMock)).toMatchObject({ name: "Nightly" });
+    expect(savedCreateBody(fetchMock)).toMatchObject({ name: "Nightly" });
   });
 
   it("opens Advanced settings without saving the Trigger", async () => {
@@ -185,7 +190,7 @@ describe("TriggerForm — changed-fields filter", () => {
     fireEvent.click(screen.getByRole("button", { name: /save/i }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    expect(savedConfig(fetchMock)).toMatchObject({
+    expect(savedCreateBody(fetchMock).config).toMatchObject({
       events: ["card.updated"],
       filters: { changedFields: ["assignees"] },
     });
@@ -210,7 +215,7 @@ describe("TriggerForm — Include Memories", () => {
     fireEvent.click(screen.getByRole("button", { name: /save/i }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    expect(savedBody(fetchMock).includeMemories).toBe(false);
+    expect(savedCreateBody(fetchMock).includeMemories).toBe(false);
   });
 
   it("saves the opt-in once Advanced settings is expanded and the switch turned on", async () => {
@@ -230,7 +235,7 @@ describe("TriggerForm — Include Memories", () => {
     fireEvent.click(screen.getByRole("button", { name: /save/i }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    expect(savedBody(fetchMock).includeMemories).toBe(true);
+    expect(savedCreateBody(fetchMock).includeMemories).toBe(true);
   });
 });
 
@@ -253,8 +258,8 @@ describe("TriggerForm — Extract Memories", () => {
     fireEvent.click(screen.getByRole("button", { name: /save/i }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    expect(savedBody(fetchMock).extractMemories).toBe(true);
-    expect(savedBody(fetchMock).includeMemories).toBe(false);
+    expect(savedCreateBody(fetchMock).extractMemories).toBe(true);
+    expect(savedCreateBody(fetchMock).includeMemories).toBe(false);
   });
 });
 
@@ -277,7 +282,9 @@ describe("TriggerForm — default timezone", () => {
     fireEvent.click(screen.getByRole("button", { name: /save/i }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    expect(savedConfig(fetchMock).timezone).toBe("Pacific/Chatham");
+    expect(savedCreateBody(fetchMock).config).toMatchObject({
+      timezone: "Pacific/Chatham",
+    });
   });
 
   it("keeps a browser zone the User picked before the session lands", async () => {
@@ -304,7 +311,9 @@ describe("TriggerForm — default timezone", () => {
     fireEvent.click(screen.getByRole("button", { name: /save/i }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    expect(savedConfig(fetchMock).timezone).toBe(browserZone);
+    expect(savedCreateBody(fetchMock).config).toMatchObject({
+      timezone: browserZone,
+    });
   });
 });
 
@@ -347,7 +356,7 @@ describe("TriggerForm — editing a saved trigger", () => {
     update();
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    expect(savedConfig(fetchMock)).toEqual({
+    expect(savedUpdateBody(fetchMock).config).toEqual({
       cronExpression,
       timezone: "UTC",
       isOneOff: false,
@@ -399,7 +408,7 @@ describe("TriggerForm — editing a saved trigger", () => {
     update();
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    expect(savedBody(fetchMock)).toMatchObject({ type: "event", config });
+    expect(savedUpdateBody(fetchMock)).toMatchObject({ type: "event", config });
   });
 });
 
@@ -477,7 +486,7 @@ describe("TriggerForm — default agent", () => {
     fireEvent.click(screen.getByRole("button", { name: /save/i }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    expect(savedBody(fetchMock).agentId).toBe("agent-1");
+    expect(savedCreateBody(fetchMock).agentId).toBe("agent-1");
   });
 });
 
@@ -532,7 +541,7 @@ describe("TriggerForm — Inbound Triggers", () => {
     fireEvent.click(screen.getByRole("button", { name: /save/i }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    expect(savedBody(fetchMock)).toMatchObject({
+    expect(savedCreateBody(fetchMock)).toMatchObject({
       type: "inbound",
       config: {
         inputs: [
@@ -612,7 +621,7 @@ describe("TriggerForm — Inbound Triggers", () => {
     fireEvent.click(screen.getByRole("button", { name: /save/i }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    expect(savedConfig(fetchMock)).not.toHaveProperty("recordKey");
+    expect(savedCreateBody(fetchMock).config).not.toHaveProperty("recordKey");
   });
 
   it("holds the save back while an input name is invalid", async () => {
@@ -654,7 +663,7 @@ describe("TriggerForm — Inbound Triggers", () => {
     fireEvent.click(screen.getByRole("button", { name: "Update" }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    expect(savedBody(fetchMock)).toMatchObject({
+    expect(savedUpdateBody(fetchMock)).toMatchObject({
       type: "inbound",
       config: {
         inputs: [{ name: "issueKey", required: true }],

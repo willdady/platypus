@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { workspaceUpdateSchema } from "@platypus/schemas";
+import { expectSentBodyToMatchSchema } from "@/test/test-utils";
 import {
   authMock,
   swrMock,
@@ -13,7 +15,6 @@ import {
   setupUser,
   stubAcceptedSave,
   stubRejectedSave,
-  savedBody,
 } from "@/test/form-test-harness";
 import { selectOption } from "@/test/test-utils";
 
@@ -180,7 +181,9 @@ describe("WorkspaceForm save", () => {
     await setupUser().type(name, "{Enter}");
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    expect(savedBody(fetchMock)).toMatchObject({ name: "Renamed" });
+    expect(
+      expectSentBodyToMatchSchema(fetchMock, workspaceUpdateSchema),
+    ).toMatchObject({ name: "Renamed" });
   });
 
   it("sends the edited settings, with an unset provider as null, and refreshes", async () => {
@@ -197,7 +200,9 @@ describe("WorkspaceForm save", () => {
       expect(toastSuccess).toHaveBeenCalledWith("Workspace updated"),
     );
     expect(refresh).toHaveBeenCalled();
-    expect(savedBody(fetchMock)).toEqual({
+    expect(
+      expectSentBodyToMatchSchema(fetchMock, workspaceUpdateSchema),
+    ).toEqual({
       name: "Research",
       context: null,
       taskModelProviderId: null,

@@ -13,7 +13,11 @@ import {
   expectEntryActionVariant,
   stubAcceptedSave,
 } from "@/test/list-test-harness";
-import { openDropdownMenu } from "@/test/test-utils";
+import { a2aEndpointUpdateSchema } from "@platypus/schemas";
+import {
+  expectSentBodyToMatchSchema,
+  openDropdownMenu,
+} from "@/test/test-utils";
 
 vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("swr", () => swrMock);
@@ -192,6 +196,9 @@ describe("A2aEndpointsList", () => {
         body: JSON.stringify({ enabled: true }),
       }),
     );
+    expect(
+      expectSentBodyToMatchSchema(fetchMock, a2aEndpointUpdateSchema),
+    ).toEqual({ enabled: true });
   });
 
   it("deletes after confirmation and revalidates", async () => {

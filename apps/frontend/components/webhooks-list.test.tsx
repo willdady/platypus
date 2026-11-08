@@ -15,7 +15,11 @@ import {
   expectEntryActionVariant,
   setupUser,
 } from "@/test/list-test-harness";
-import { openDropdownMenu } from "@/test/test-utils";
+import { webhookUpdateSchema } from "@platypus/schemas";
+import {
+  expectSentBodyToMatchSchema,
+  openDropdownMenu,
+} from "@/test/test-utils";
 
 vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("swr", () => swrMock);
@@ -178,6 +182,9 @@ describe("WebhooksList", () => {
         method: "PATCH",
         body: JSON.stringify({ enabled: false }),
       }),
+    );
+    expect(expectSentBodyToMatchSchema(fetchMock, webhookUpdateSchema)).toEqual(
+      { enabled: false },
     );
   });
 
