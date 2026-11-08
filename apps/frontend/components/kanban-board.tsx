@@ -317,12 +317,20 @@ export function KanbanBoard({
     ],
   );
 
+  // The card dialog's delete confirm shows the outcome inline, so a refusal
+  // is returned rather than toasted. A successful delete leaves the card it
+  // destroyed: clear the `cardId` param and revalidate the board.
   const handleCardDelete = useCallback(
     async (cardId: string) => {
       const column = columns.find((col) =>
         col.cards.some((c) => c.id === cardId),
       );
-      if (!column) return;
+      if (!column) {
+        return {
+          outcome: "notFound" as const,
+          message: "Card not found",
+        };
+      }
       const outcome = await writeEntity(
         backendUrl,
         `${boardPath}/cards`,
@@ -332,9 +340,8 @@ export function KanbanBoard({
       if (outcome.outcome === "success") {
         updateCardIdParam(null);
         await mutate();
-      } else {
-        toast.error(outcome.message);
       }
+      return outcome;
     },
     [columns, backendUrl, boardPath, scope, mutate, updateCardIdParam],
   );

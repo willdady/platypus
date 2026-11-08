@@ -21,6 +21,8 @@ type DeleteConfirmDialogProps = {
   readonly loading?: boolean;
   /** A failed delete's message, shown in the dialog rather than a toast. */
   readonly error?: string | null;
+  /** Where focus lands when the dialog closes. */
+  readonly onCloseAutoFocus?: (event: Event) => void;
 };
 
 /**
@@ -40,6 +42,7 @@ export function DeleteConfirmDialog({
   onConfirm,
   loading = false,
   error = null,
+  onCloseAutoFocus,
 }: DeleteConfirmDialogProps) {
   return (
     <ConfirmDialog
@@ -56,6 +59,7 @@ export function DeleteConfirmDialog({
       onConfirm={onConfirm}
       loading={loading}
       error={error}
+      onCloseAutoFocus={onCloseAutoFocus}
     />
   );
 }
