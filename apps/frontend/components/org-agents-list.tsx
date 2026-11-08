@@ -149,16 +149,12 @@ export function OrgAgentsList({ orgId }: { orgId: string }) {
         )}
       />
 
-      {agentToManage && (
-        <ManageAttachmentsDialog
-          orgId={orgId}
-          resourceType="agent"
-          resourceId={agentToManage.id}
-          resourceName={agentToManage.name}
-          open={!!agentToManage}
-          onOpenChange={(open) => !open && setAgentToManage(null)}
-        />
-      )}
+      <ManageAttachmentsDialog
+        orgId={orgId}
+        resourceType="agent"
+        resource={agentToManage}
+        onClose={() => setAgentToManage(null)}
+      />
 
       <DeleteConfirmDialog
         open={deleteFlow.open}

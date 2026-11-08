@@ -38,10 +38,8 @@ function renderDialog({
     <ManageAttachmentsDialog
       orgId="org1"
       resourceType="agent"
-      resourceId="a1"
-      resourceName="Support Bot"
-      open={true}
-      onOpenChange={() => {}}
+      resource={{ id: "a1", name: "Support Bot" }}
+      onClose={() => {}}
     />,
   );
 }
@@ -97,6 +95,37 @@ describe("ManageAttachmentsDialog detach", () => {
   });
 });
 
+describe("ManageAttachmentsDialog lifecycle", () => {
+  it("does not carry a failure from the previous resource into the next", async () => {
+    stubRejectedSave("Already attached", 409);
+    mockScopedSWR({
+      "/attachments?": [],
+      "/workspaces": [{ id: "ws1", name: "Engineering" }],
+    });
+
+    const dialog = (resource: { id: string; name: string } | null) => (
+      <ManageAttachmentsDialog
+        orgId="org1"
+        resourceType="agent"
+        resource={resource}
+        onClose={() => {}}
+      />
+    );
+
+    const { rerender } = await renderList(
+      dialog({ id: "a1", name: "Support Bot" }),
+    );
+    fireEvent.click(screen.getByText("Engineering"));
+    expect(await screen.findByText("Already attached")).toBeInTheDocument();
+
+    rerender(dialog(null));
+    rerender(dialog({ id: "a2", name: "Other Bot" }));
+
+    expect(screen.queryByText("Already attached")).not.toBeInTheDocument();
+    expect(screen.getByText("Share “Other Bot”")).toBeInTheDocument();
+  });
+});
+
 describe("loading states", () => {
   it("shows a placeholder, not a false empty, while the dialog's reads load", async () => {
     mockScopedSWR({
@@ -107,10 +136,8 @@ describe("loading states", () => {
       <ManageAttachmentsDialog
         orgId="org1"
         resourceType="agent"
-        resourceId="a1"
-        resourceName="Support Bot"
-        open={true}
-        onOpenChange={() => {}}
+        resource={{ id: "a1", name: "Support Bot" }}
+        onClose={() => {}}
       />,
     );
 

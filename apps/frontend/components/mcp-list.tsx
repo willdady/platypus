@@ -11,7 +11,6 @@ const mcpConfig: ResourceListConfig = {
   labels: {
     add: "Add MCP server",
     attach: "Attach shared MCP",
-    detachTitle: "Detach shared MCP server",
     deleteTitle: "Delete MCP server",
     noun: "MCP server",
     plural: "MCP servers",

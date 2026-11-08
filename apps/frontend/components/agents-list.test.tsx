@@ -100,6 +100,15 @@ describe("AgentsList detach", () => {
     );
   });
 
+  it("points the detach dialog's Org settings link at that agent's organization page", async () => {
+    await renderAgents([orgAgent], "Detach");
+
+    expect(screen.getByRole("link", { name: /Org settings/ })).toHaveAttribute(
+      "href",
+      "/org1/settings/agents/a1",
+    );
+  });
+
   it("revalidates and closes the dialog when detach succeeds", async () => {
     stubAcceptedSave();
 

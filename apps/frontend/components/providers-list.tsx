@@ -11,7 +11,6 @@ const providersConfig: ResourceListConfig = {
   labels: {
     add: "Add provider",
     attach: "Attach shared provider",
-    detachTitle: "Detach shared provider",
     deleteTitle: "Delete Provider",
     noun: "provider",
     plural: "providers",
