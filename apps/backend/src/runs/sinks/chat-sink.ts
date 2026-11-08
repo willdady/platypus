@@ -50,8 +50,8 @@ export type ChatSinkParams = {
   /**
    * Columns a Chat this turn creates starts with, beside the defaults: an A2A
    * Chat is bound to its endpoint, its Agent and its token from its first row
-   * (ADR-0032); a Trigger run's Chat to its run, titled and tagged from its
-   * Trigger (ADR-0044). Ignored when the Chat already exists.
+   * (ADR-0032); a Trigger run's Chat to its run, titled from its Trigger
+   * (ADR-0044). Ignored when the Chat already exists.
    */
   newChat?:
     | {
@@ -64,7 +64,6 @@ export type ChatSinkParams = {
         agentId: string;
         triggerRunId: string;
         title: string;
-        tags: string[];
       };
   /**
    * Called once the run's terminal status is written, with that status. Not

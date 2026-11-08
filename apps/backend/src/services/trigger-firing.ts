@@ -15,7 +15,6 @@ import { frontendBaseUrl } from "../base-urls.ts";
 import { TriggerSink } from "../runs/sinks/trigger-sink.ts";
 import { ChatSink } from "../runs/sinks/chat-sink.ts";
 import { compositeSink } from "../runs/sinks/composite-sink.ts";
-import { toKebabCase } from "./chat-metadata.ts";
 import { callerDataBlock } from "./caller-data.ts";
 import {
   ownerMayAct,
@@ -341,7 +340,6 @@ const runTrigger = async (
       });
   // The run keeps its Transcript as a Chat bound to it (ADR-0044), under the
   // run's own id: the run row first, since the Chat references it.
-  const tag = toKebabCase(trigger.name);
   const sink = compositeSink(
     runSink,
     new ChatSink({
@@ -353,7 +351,6 @@ const runTrigger = async (
         agentId,
         triggerRunId: runId,
         title: runChatTitle(trigger.name, new Date()),
-        tags: tag ? [tag] : [],
       },
     }),
   );

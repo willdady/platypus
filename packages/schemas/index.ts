@@ -2,8 +2,6 @@ import { z } from "zod";
 import type { PlatypusUIMessage } from "./chat-ui-message.ts";
 import { transcriptSummarySchema } from "./chat-summary.ts";
 
-const kebabCaseRegex = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-
 // Every partial update schema is built with this rather than `.partial()`: in
 // Zod 4 a `.default()` still fills an absent key after `.partial()`, so an
 // update touching one field would write every other defaulted field back to its
@@ -359,9 +357,6 @@ export const chatSchema = z.object({
   summaries: z.array(transcriptSummarySchema).optional(),
   status: chatStatusSchema,
   isPinned: z.boolean(),
-  tags: z
-    .array(z.string().regex(kebabCaseRegex, "Tags must be kebab-case"))
-    .max(5, "A chat can have at most 5 tags"),
   agentId: z.string().optional(),
   providerId: z.string().optional(),
   modelId: z.string().optional(),
@@ -573,7 +568,6 @@ export const chatUpdateSchema = strictRequest(
     chatSchema.pick({
       title: true,
       isPinned: true,
-      tags: true,
     }),
   ),
 );
@@ -585,7 +579,6 @@ export const chatListItemSchema = chatSchema.pick({
   title: true,
   status: true,
   isPinned: true,
-  tags: true,
   agentId: true,
   providerId: true,
   modelId: true,

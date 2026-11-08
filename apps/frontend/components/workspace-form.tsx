@@ -266,7 +266,7 @@ function WorkspaceForm({ orgId, workspaceId }: WorkspaceFormProps) {
               kind="task"
               label="Task Model Provider"
               noneLabel="None (use chat provider)"
-              description="Provider to use for generating chat titles and tags. If not set, each chat will use its own provider for metadata generation."
+              description="Provider to use for generating chat titles. If not set, each chat will use its own provider for metadata generation."
               value={formData.taskModelProviderId}
               onChange={(value) => setField("taskModelProviderId", value)}
               error={validationErrors.taskModelProviderId}

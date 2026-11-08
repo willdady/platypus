@@ -10,7 +10,7 @@ import {
   chatSubmitSchema,
   chatUpdateSchema,
 } from "@platypus/schemas";
-import { and, count, desc, eq, isNull, or, sql } from "drizzle-orm";
+import { and, count, desc, eq, isNull, sql } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
 import {
   requireOrgAccess,
@@ -104,15 +104,12 @@ chat.get(
     const { workspaceId } = workspaceScopeOf(c);
     const { limit, offset, search } = c.req.valid("query");
 
-    // Build search filter using ILIKE on title and tags. `\` is Postgres's
-    // default LIKE escape, so escaping `%`, `_` and `\` matches them literally.
+    // Build search filter using ILIKE on the title. `\` is Postgres's default
+    // LIKE escape, so escaping `%`, `_` and `\` matches them literally.
     const term = search?.trim().replace(/[\\%_]/g, "\\$&");
     const pattern = `%${term}%`;
     const searchFilter = term
-      ? or(
-          sql`${chatTable.title} ILIKE ${pattern}`,
-          sql`EXISTS (SELECT 1 FROM jsonb_array_elements_text(${chatTable.tags}) AS t WHERE t ILIKE ${pattern})`,
-        )
+      ? sql`${chatTable.title} ILIKE ${pattern}`
       : undefined;
 
     // A Trigger run's Chat is read by id, never listed (ADR-0044): a Cron
@@ -129,7 +126,6 @@ chat.get(
         title: chatTable.title,
         status: chatTable.status,
         isPinned: chatTable.isPinned,
-        tags: chatTable.tags,
         agentId: chatTable.agentId,
         providerId: chatTable.providerId,
         modelId: chatTable.modelId,
@@ -356,7 +352,7 @@ chat.patch(
   async (c) => {
     const chatId = c.req.param("chatId");
     const { workspaceId } = workspaceScopeOf(c);
-    const { title, isPinned, tags } = c.req.valid("json");
+    const { title, isPinned } = c.req.valid("json");
 
     const result = await updateOwned(
       db,
@@ -365,7 +361,6 @@ chat.patch(
       {
         title,
         isPinned,
-        tags,
         updatedAt: new Date(),
       },
     );

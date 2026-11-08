@@ -56,6 +56,8 @@ describe("the 0100 backfill", () => {
     ).toEqual([{ tool_set_ids: [], skill_ids: [], sub_agent_ids: [] }]);
   });
 
+  // 0100 backfilled `chat.tags`, a column 0104 later drops. This test stops at
+  // 0100, so it still exercises that historical backfill.
   it("gives Chat tags an empty array", async () => {
     expect(await rows(`SELECT "tags" FROM "chat" ORDER BY "id"`)).toEqual([
       { tags: [] },

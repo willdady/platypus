@@ -1,7 +1,18 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { mockDb, resetMockDb, seedDb } from "./test-utils.ts";
 import { db } from "./index.ts";
-import { and, asc, count, desc, eq, isNull, lt, max, ne } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  isNull,
+  lt,
+  max,
+  ne,
+  sql,
+} from "drizzle-orm";
 import { workspace as workspaceTable } from "./db/schema.ts";
 
 /**
@@ -96,6 +107,28 @@ describe("the seeded fake beside the chainable mock", () => {
         ),
       );
     expect(shared).toEqual([expect.objectContaining({ id: "a1" })]);
+  });
+
+  it("matches an ILIKE pattern case-insensitively, with `%` and escapes", async () => {
+    seedDb({
+      workspace: [
+        { id: "ws-1", name: "Alpha", organizationId: "org-1" },
+        { id: "ws-2", name: "100%_done", organizationId: "org-2" },
+      ],
+    });
+
+    const alpha = await db
+      .select({ id: workspaceTable.id })
+      .from(workspaceTable)
+      .where(sql`${workspaceTable.name} ILIKE ${"%alpha%"}`);
+    expect(alpha).toEqual([{ id: "ws-1" }]);
+
+    // An escaped `%` and `_` match literally, not as wildcards.
+    const literal = await db
+      .select({ id: workspaceTable.id })
+      .from(workspaceTable)
+      .where(sql`${workspaceTable.name} ILIKE ${"%100\\%\\_done%"}`);
+    expect(literal).toEqual([{ id: "ws-2" }]);
   });
 
   it("reads `ne` as inequality and `lt` as a strict less-than", async () => {
