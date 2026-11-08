@@ -158,7 +158,7 @@ export function organizationEntity(orgId: string): string {
  * spelling lives here rather than in each of them.
  */
 export function attachmentsEntity(
-  resourceType: string,
+  resourceType: AttachmentResourceType,
   resourceId: string,
 ): string {
   const query = new URLSearchParams({ resourceType, resourceId });
@@ -180,8 +180,7 @@ export async function attachResource(
   resourceType: AttachmentResourceType,
   resourceId: string,
 ): Promise<WriteOutcome<unknown>> {
-  return writeAt(scopedUrl(backendUrl, "attachments", scope), {
-    method: "POST",
+  return writeEntity(backendUrl, "attachments", scope, {
     data: { resourceType, resourceId },
   });
 }
@@ -193,10 +192,9 @@ export async function detachResource(
   resourceType: AttachmentResourceType,
   resourceId: string,
 ): Promise<WriteOutcome<unknown>> {
-  return writeAt(
-    scopedUrl(backendUrl, `attachments/${resourceType}/${resourceId}`, scope),
-    { method: "DELETE" },
-  );
+  return writeEntity(backendUrl, `attachments/${resourceType}`, scope, {
+    id: resourceId,
+  });
 }
 
 /**

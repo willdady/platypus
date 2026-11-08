@@ -32,9 +32,8 @@ export type SharedDetach<T> = {
 
 /**
  * The detach half of the Shared-resource actions (#880): `useDetachDialog`'s
- * state plus the `attachments/<type>` write the four lists each re-implemented
- * around it — in-flight flag, revalidate-and-close on success, the backend's
- * reason inline on refusal.
+ * state plus the shared Attachment delete — the in-flight flag, revalidate and
+ * close on success, and the backend's reason inline on refusal.
  */
 export function useSharedDetach<T extends NamedResource>({
   resourceType,
