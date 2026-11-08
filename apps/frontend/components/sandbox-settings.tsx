@@ -1019,13 +1019,16 @@ function SandboxSettings({
             Back
           </Button>
           <Button onClick={handleSave} disabled={isSubmitting}>
-            {draft.submitText}
+            {isSubmitting && draft.submitText === "Save"
+              ? "Saving..."
+              : draft.submitText}
           </Button>
         </div>
       ) : (
         <div className="flex gap-2">
           <FormFooterButtons
             submitText="Save"
+            pending={isSubmitting}
             onSubmit={handleSave}
             submitDisabled={isSubmitting}
             deleteVisible={hasSandbox && canConfigure}

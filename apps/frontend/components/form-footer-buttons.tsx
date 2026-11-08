@@ -2,7 +2,8 @@ import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export type FormFooterButtonsProps = {
-  submitText: string;
+  submitText: "Save" | "Update";
+  pending?: boolean;
   onSubmit?: () => void;
   submitDisabled?: boolean;
   submitClassName?: string;
@@ -15,6 +16,7 @@ export type FormFooterButtonsProps = {
 
 export function FormFooterButtons({
   submitText,
+  pending = false,
   onSubmit,
   submitDisabled,
   submitClassName,
@@ -30,9 +32,13 @@ export function FormFooterButtons({
         type={type}
         className={submitClassName}
         onClick={type === "button" ? onSubmit : undefined}
-        disabled={submitDisabled}
+        disabled={submitDisabled || pending}
       >
-        {submitText}
+        {pending
+          ? submitText === "Save"
+            ? "Saving..."
+            : "Updating..."
+          : submitText}
       </Button>
 
       {deleteVisible && (

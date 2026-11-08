@@ -123,7 +123,6 @@ export function ChangePasswordDialog({
           <Button
             onClick={() => submit()}
             disabled={isSubmitting || !newPassword}
-            className={isSubmitting ? "opacity-50" : ""}
           >
             {isSubmitting ? "Updating..." : "Update password"}
           </Button>
