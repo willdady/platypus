@@ -478,44 +478,38 @@ export function AppSidebar() {
                                   side="right"
                                   align="start"
                                 >
-                                  {canChange && (
-                                    <>
-                                      <DropdownMenuItem
-                                        onSelect={() => {
-                                          setRenameChatId(chat.id);
-                                          setRenameData({
-                                            title: chat.title,
-                                          });
-                                          setRenameValidationErrors({});
-                                        }}
-                                      >
-                                        <Pencil className="size-4" /> Edit
-                                      </DropdownMenuItem>
-                                      <DropdownMenuItem
-                                        onSelect={() => handleTogglePin(chat)}
-                                        disabled={pins.isPending(chat.id)}
-                                      >
-                                        {chat.isPinned ? (
-                                          <>
-                                            <PinOff className="size-4" /> Unpin
-                                          </>
-                                        ) : (
-                                          <>
-                                            <Pin className="size-4" /> Pin
-                                          </>
-                                        )}
-                                      </DropdownMenuItem>
-                                      <DropdownMenuSeparator />
-                                      <DropdownMenuItem
-                                        variant="destructive"
-                                        onSelect={() =>
-                                          chatDelete.request(chat.id)
-                                        }
-                                      >
-                                        <Trash2 className="size-4" /> Delete
-                                      </DropdownMenuItem>
-                                    </>
-                                  )}
+                                  <DropdownMenuItem
+                                    onSelect={() => {
+                                      setRenameChatId(chat.id);
+                                      setRenameData({
+                                        title: chat.title,
+                                      });
+                                      setRenameValidationErrors({});
+                                    }}
+                                  >
+                                    <Pencil className="size-4" /> Edit
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onSelect={() => handleTogglePin(chat)}
+                                    disabled={pins.isPending(chat.id)}
+                                  >
+                                    {chat.isPinned ? (
+                                      <>
+                                        <PinOff className="size-4" /> Unpin
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Pin className="size-4" /> Pin
+                                      </>
+                                    )}
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    variant="destructive"
+                                    onSelect={() => chatDelete.request(chat.id)}
+                                  >
+                                    <Trash2 className="size-4" /> Delete
+                                  </DropdownMenuItem>
                                 </DropdownMenuContent>
                               </DropdownMenu>
                             )}

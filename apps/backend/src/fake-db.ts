@@ -220,7 +220,7 @@ const likeMatches = (value: string, pattern: string): boolean => {
       source += escapeRegex(char);
     }
   }
-  return new RegExp(`^${source}$`, "i").test(value);
+  return new RegExp(`^${source}$`, "is").test(value);
 };
 
 /**

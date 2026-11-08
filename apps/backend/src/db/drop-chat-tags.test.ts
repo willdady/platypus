@@ -26,21 +26,19 @@ beforeAll(async () => {
 }, 120_000);
 afterAll(() => pg.close());
 
-const rows = async <T>(sql: string) => (await pg.query<T>(sql)).rows;
-
 describe(MIGRATION, () => {
   it("drops the chat tags column", async () => {
-    expect(
-      await rows(
-        `SELECT "column_name" FROM information_schema.columns
-           WHERE "table_name" = 'chat' AND "column_name" = 'tags'`,
-      ),
-    ).toEqual([]);
+    const { rows } = await pg.query<{ column_name: string }>(
+      `SELECT "column_name" FROM information_schema.columns
+         WHERE "table_name" = 'chat' AND "column_name" = 'tags'`,
+    );
+    expect(rows).toEqual([]);
   });
 
   it("keeps the Chat row and its title", async () => {
-    expect(
-      await rows(`SELECT "id", "title" FROM "chat" WHERE "id" = 'chat-1'`),
-    ).toEqual([{ id: "chat-1", title: "Kept" }]);
+    const { rows } = await pg.query<{ id: string; title: string }>(
+      `SELECT "id", "title" FROM "chat" WHERE "id" = 'chat-1'`,
+    );
+    expect(rows).toEqual([{ id: "chat-1", title: "Kept" }]);
   });
 });
