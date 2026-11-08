@@ -36,13 +36,13 @@ import {
   deleteMessage,
   loadActivePath,
   switchActivePath,
+  type StoredChatMessage,
 } from "../services/chat-messages.ts";
 import {
   compactTranscript,
   loadChatSummaries,
   summaryAnchorIndex,
 } from "../services/chat-summary.ts";
-import type { PlatypusUIMessage } from "../types.ts";
 import { oneRow } from "../db/one-row.ts";
 
 /**
@@ -52,9 +52,18 @@ import { oneRow } from "../db/one-row.ts";
  * #525), and this is the read-path counterpart to the live stream's
  * normalization in `runs/drive.ts` — no migration, no change to the stored
  * part.
+ *
+ * `createdAt` is the server's bookkeeping (the Chats Tool set reads it); the
+ * Chat response's message contract has never carried it, so it is dropped
+ * here rather than widening what a client receives.
  */
-const servedMessages = (messages: PlatypusUIMessage[], origin: string) =>
-  normalizeWebToolParts(rewriteStorageUrls(messages, origin));
+const servedMessages = (messages: StoredChatMessage[], origin: string) =>
+  normalizeWebToolParts(
+    rewriteStorageUrls(
+      messages.map(({ createdAt: _createdAt, ...message }) => message),
+      origin,
+    ),
+  );
 
 /**
  * A Chat row as a reader gets it. The pinned Memories block and previous-turn

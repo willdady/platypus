@@ -60,15 +60,16 @@ describe("chat messages", () => {
       const { messages } = await loadActivePath("chat-1", "a2");
 
       expect(messages).toEqual([
-        { id: "u1", role: "user", parts: [text("u1")] },
+        { id: "u1", role: "user", parts: [text("u1")], createdAt: at(1) },
         {
           id: "a1",
           role: "assistant",
           parts: [text("a1")],
           metadata: { contextOccupancy: 10 },
+          createdAt: at(2),
         },
-        { id: "u2", role: "user", parts: [text("u2")] },
-        { id: "a2", role: "assistant", parts: [text("a2")] },
+        { id: "u2", role: "user", parts: [text("u2")], createdAt: at(3) },
+        { id: "a2", role: "assistant", parts: [text("a2")], createdAt: at(4) },
       ]);
     });
 
@@ -376,6 +377,7 @@ describe("chat messages", () => {
           responded("tc1", "ap1", true),
           responded("tc2", "ap2", false, USER_DENIED_REASON),
         ],
+        createdAt: at(4),
       };
       expect(turn.messages.map((m) => m.id)).toEqual(["u1", "a1", "u2", "a2"]);
       expect(turn.messages.at(-1)).toEqual(reply);
@@ -441,6 +443,7 @@ describe("chat messages", () => {
           responded("tc1", "ap1", false, MOVED_ON_REASON),
           responded("tc2", "ap2", false, MOVED_ON_REASON),
         ],
+        createdAt: at(4),
       };
       expect(turn.messages.at(-2)).toEqual(reply);
       expect(turn.answered).toEqual([reply]);

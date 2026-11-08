@@ -15,9 +15,16 @@ import { errorMessage } from "../utils/error-message.ts";
 /** A live message's place in the tree. */
 export type ChatTreeNode = { id: string; parentId: string | null };
 
+/**
+ * A stored message as the server reads it: the Chat UI message, plus the row's
+ * own `createdAt` — the tree walk already holds it, and a reader that shows a
+ * Transcript (the **Chats** Tool set, issue #1005) needs it per message.
+ */
+export type StoredChatMessage = PlatypusUIMessage & { createdAt: Date };
+
 /** A path through a Chat's tree, and every live message's place in it. */
 export type ActivePath = {
-  messages: PlatypusUIMessage[];
+  messages: StoredChatMessage[];
   tree: ChatTreeNode[];
 };
 
@@ -50,6 +57,9 @@ export const loadActivePath = async (
   leafId: string | null,
 ): Promise<ActivePath> => pathThrough(chatId, await loadTree(chatId), leafId);
 
+/** One row of a Chat's tree, as {@link loadTree} reads it. */
+type ChatTreeRow = Awaited<ReturnType<typeof loadTree>>[number];
+
 /** `loadActivePath` over a tree already loaded: reads only the path's content. */
 const pathThrough = async (
   chatId: string,
@@ -57,16 +67,16 @@ const pathThrough = async (
   leafId: string | null,
 ): Promise<ActivePath> => {
   const byId = new Map(nodes.map((node) => [node.id, node]));
-  const pathIds: string[] = [];
+  const path: ChatTreeRow[] = [];
   for (
     let node = leafId ? byId.get(leafId) : undefined;
     node;
     node = node.parentId ? byId.get(node.parentId) : undefined
   ) {
-    if (!node.deletedAt) pathIds.unshift(node.id);
+    if (!node.deletedAt) path.unshift(node);
   }
 
-  const rows = pathIds.length
+  const rows = path.length
     ? await db
         .select({
           id: chatMessage.id,
@@ -76,18 +86,29 @@ const pathThrough = async (
         })
         .from(chatMessage)
         .where(
-          and(eq(chatMessage.chatId, chatId), inArray(chatMessage.id, pathIds)),
+          and(
+            eq(chatMessage.chatId, chatId),
+            inArray(
+              chatMessage.id,
+              path.map((node) => node.id),
+            ),
+          ),
         )
     : [];
   const rowById = new Map(rows.map((row) => [row.id, row]));
 
   return {
-    messages: pathIds.map((id) => {
-      const row = rowById.get(id);
-      if (!row) throw new Error(`Message '${id}' on the path was not read`);
+    messages: path.map((node) => {
+      const row = rowById.get(node.id);
+      if (!row)
+        throw new Error(`Message '${node.id}' on the path was not read`);
       const { metadata, ...message } = row;
       // Absent rather than null, the shape a streamed message has.
-      return metadata == null ? message : { ...message, metadata };
+      return {
+        ...message,
+        createdAt: node.createdAt,
+        ...(metadata == null ? {} : { metadata }),
+      };
     }),
     tree: nodes
       .filter((node) => !node.deletedAt)

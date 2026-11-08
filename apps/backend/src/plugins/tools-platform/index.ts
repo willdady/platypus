@@ -8,6 +8,7 @@ import { createSkillManagementTools } from "../../tools/skill-management.ts";
 import { createAgentManagementTools } from "../../tools/agent-management.ts";
 import { createNotificationTools } from "../../tools/notification.ts";
 import { createMemoryTools } from "../../tools/memory.ts";
+import { createChatTools } from "../../tools/chats.ts";
 
 // Core plugin: the Platypus-domain Tool sets — the ones that touch Platypus's
 // own data (kanban boards, triggers, memory, notifications, agent
@@ -89,6 +90,15 @@ export const plugin: PlatypusPlugin = {
           "Post notifications the Workspace Owner reads in the in-app bell, then list, edit or delete its own",
         tools: ({ workspaceId, agentId, orgId }) =>
           createNotificationTools(workspaceId, agentId, orgId),
+      },
+      {
+        id: "chats",
+        name: "Chats",
+        category: "Productivity",
+        description:
+          "Read-only tools for listing the workspace's chats and reading a chat's transcript",
+        tools: ({ workspaceId, sessionId }) =>
+          createChatTools(workspaceId, sessionId),
       },
       {
         id: "memory",
