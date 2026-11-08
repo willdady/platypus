@@ -18,6 +18,7 @@ import { formatRelativeTime } from "@/lib/relative-time";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { useScopedList } from "@/hooks/use-scoped-list";
 import { useOptimisticRows } from "@/hooks/use-optimistic-rows";
+import { useRevalidateOnRestore } from "@/hooks/use-revalidate-on-restore";
 import {
   type InvitationListItem,
   type NotificationListItem,
@@ -65,6 +66,10 @@ export function NotificationsDropdown({
   }>("notifications/unread-count", scope, {
     refreshInterval: isOpen ? 30000 : 0,
   });
+
+  // The badge's poll only runs while the bell is open, so a restored page would
+  // otherwise keep the count it had when the page was put away.
+  useRevalidateOnRestore(() => void mutateUnreadCount());
 
   const { results: invitations } = useScopedList<InvitationListItem>(
     "users/me/invitations",

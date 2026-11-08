@@ -140,6 +140,7 @@ vi.mock("@dnd-kit/sortable", async (importOriginal) => {
 
 import { KanbanBoard } from "./kanban-board";
 import {
+  firePageShow,
   selectOption,
   stubAcceptedSave,
   stubPendingSave,
@@ -1298,5 +1299,23 @@ describe("KanbanBoard load states", () => {
       screen.getByRole("heading", { name: "Test Board" }),
     ).toBeInTheDocument();
     expect(screen.queryByText("Couldn't load")).not.toBeInTheDocument();
+  });
+
+  // A page restored from the back/forward cache was frozen, so the board poll
+  // did not run and the board is as old as the moment it was put away.
+  it("revalidates when the page is restored from the back/forward cache", () => {
+    renderBoard();
+
+    firePageShow(true);
+
+    expect(mutateBoard).toHaveBeenCalledOnce();
+  });
+
+  it("does not revalidate on an ordinary page load", () => {
+    renderBoard();
+
+    firePageShow(false);
+
+    expect(mutateBoard).not.toHaveBeenCalled();
   });
 });

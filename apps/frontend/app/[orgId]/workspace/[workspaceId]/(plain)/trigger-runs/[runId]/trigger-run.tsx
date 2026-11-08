@@ -3,6 +3,7 @@
 import { use, useCallback, useRef } from "react";
 import type { ReactNode } from "react";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useRevalidateOnRestore } from "@/hooks/use-revalidate-on-restore";
 import type { RunEvent, TriggerRunDetailResponse } from "@platypus/schemas";
 import { TriggerRunRow } from "@/components/trigger-run-row";
 import { RunTimeline } from "@/components/run-timeline";
@@ -89,6 +90,8 @@ function TriggerRunDetailPage({
       revalidateOnFocus: false,
     },
   );
+
+  useRevalidateOnRestore(() => void mutate());
 
   return (
     <div className="flex justify-center py-8">

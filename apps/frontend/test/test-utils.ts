@@ -131,6 +131,17 @@ export async function selectOption(from: string | HTMLElement, option: string) {
 }
 
 /**
+ * Fires a `pageshow` as the browser does. jsdom has no `PageTransitionEvent`,
+ * so the property is defined on a plain event; `persisted` is what separates a
+ * bfcache restore from an ordinary page load.
+ */
+export function firePageShow(persisted: boolean) {
+  const event = new Event("pageshow");
+  Object.defineProperty(event, "persisted", { value: persisted });
+  window.dispatchEvent(event);
+}
+
+/**
  * Builds a fetch-shaped `Response` resolving to `body` with `status`. Carries
  * an empty `statusText`: the request module falls back to it when a failure
  * body names no reason, and a real `Response` has one.
