@@ -1,5 +1,23 @@
 # Changelog
 
+## [4.4.0](https://github.com/willdady/platypus/compare/v4.3.0...v4.4.0) (2026-11-08)
+
+
+### Features
+
+* **backend:** add Chats tool set for reading past transcripts ([#1924](https://github.com/willdady/platypus/issues/1924)) ([d2e85d1](https://github.com/willdady/platypus/commit/d2e85d1a87826086051f315629c2aef626b7f247))
+* remove Chat tags end to end ([#1920](https://github.com/willdady/platypus/issues/1920)) ([394886b](https://github.com/willdady/platypus/commit/394886b38c0f9b631e31eb50865fbcadce3ee76e))
+
+
+### Bug Fixes
+
+* **backend:** delete stored files with pruned or deleted Trigger runs ([#1921](https://github.com/willdady/platypus/issues/1921)) ([0499796](https://github.com/willdady/platypus/commit/04997965ec91d2f3361734ca83a57fc469f947d5))
+* close remaining building-with-platypus docs gaps ([#1928](https://github.com/willdady/platypus/issues/1928)) ([f05e843](https://github.com/willdady/platypus/commit/f05e843e680a88251f5c5a24457a61a8d3e7d990))
+* correct Administering docs and clear Trigger-run files on transfer ([#1925](https://github.com/willdady/platypus/issues/1925)) ([2e44f33](https://github.com/willdady/platypus/commit/2e44f332c669a36f6f17f284285c132806b90cbd))
+* **frontend:** name a clone's too-long name on the field ([#1919](https://github.com/willdady/platypus/issues/1919)) ([3458cac](https://github.com/willdady/platypus/commit/3458cac8ff7f04ced3513ed0ad328812a391c38d))
+* **frontend:** stop New chat flashing the transcript skeleton ([#1926](https://github.com/willdady/platypus/issues/1926)) ([2804c88](https://github.com/willdady/platypus/commit/2804c88509d3e5ffa216ebd2a2b1a607887e1676))
+* scope Chats tool file sizes and tidy clone and transfer edges ([#1929](https://github.com/willdady/platypus/issues/1929)) ([5202a30](https://github.com/willdady/platypus/commit/5202a30dc4e839c52b91a5f06f88fe5728edad92))
+
 ## [4.3.0](https://github.com/willdady/platypus/compare/v4.2.2...v4.3.0) (2026-11-08)
 
 
