@@ -7,6 +7,7 @@ import {
   mockScopedSWR,
   resetListHarness,
   renderList,
+  expectEntryActionVariant,
 } from "@/test/list-test-harness";
 
 // --- Module mocks ------------------------------------------------------------
@@ -19,10 +20,10 @@ import { WorkspaceList } from "./workspace-list";
 import { PluginsList } from "./plugins-list";
 
 /**
- * The lists with no row actions — nothing to delete, so the whole of their
- * behaviour is which of loading, empty, failed and populated they render.
- * Each answers those four differently on purpose (a skeleton here, a silent
- * null there), and until now none of them had a test saying so.
+ * The lists with no destructive row action — nothing to delete, so the whole
+ * of their behaviour is which of loading, empty, failed and populated they
+ * render. Each answers those four differently on purpose (a skeleton here, a
+ * silent null there), and until now none of them had a test saying so.
  */
 
 beforeEach(resetListHarness);
@@ -85,8 +86,7 @@ describe("ContextsList", () => {
     mockScopedSWR({ contexts: [workspaceContext] }, { strict: true });
     await renderList(<ContextsList />);
 
-    expect(addContext()).toHaveClass("border");
-    expect(addContext()).not.toHaveClass("bg-primary");
+    expectEntryActionVariant(addContext(), "populated");
   });
 
   it("holds the row space with skeletons while the read is in flight", async () => {

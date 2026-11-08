@@ -10,7 +10,7 @@ import { ListState } from "./list-state";
 import { EntityCardList } from "@/components/entity-card-list";
 import { RowActionsMenu } from "@/components/row-actions-menu";
 import { ListFooter } from "@/components/list-pagination";
-import { ButtonRowSkeleton, CardGridSkeleton } from "./list-skeletons";
+import { CardGridSkeleton } from "./list-skeletons";
 
 type ContextWithNames = {
   workspaceName?: string | null;
@@ -52,12 +52,7 @@ function ContextsList() {
         data={data}
         subject="workspace contexts"
         onRetry={() => void mutate()}
-        skeleton={
-          <>
-            <CardGridSkeleton singleColumn descriptionLines={1} />
-            <ButtonRowSkeleton className="mt-4" widths={["w-52"]} />
-          </>
-        }
+        skeleton={<CardGridSkeleton singleColumn descriptionLines={1} />}
         empty={
           <ListState variant="empty">No workspace contexts yet.</ListState>
         }
