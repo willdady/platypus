@@ -4243,10 +4243,13 @@ export type KanbanBoardState = z.infer<typeof kanbanBoardStateSchema>;
 
 // Webhook
 
+/** The Webhook form's Name input reads it as `maxLength`. */
+export const WEBHOOK_NAME_MAX_LENGTH = 100;
+
 export const webhookSchema = z.object({
   id: z.string(),
   workspaceId: z.string(),
-  name: z.string().min(1).max(100),
+  name: z.string().min(1).max(WEBHOOK_NAME_MAX_LENGTH),
   url: z.url().refine((url) => url.startsWith("https://"), {
     message: "Webhook URL must use HTTPS",
   }),
@@ -4264,7 +4267,7 @@ export type Webhook = z.infer<typeof webhookSchema>;
 // handler has no fallback of its own; an update is the same shape with every
 // key optional, so a PATCH touches exactly what it sends.
 const webhookWriteSchema = z.object({
-  name: z.string().min(1).max(100),
+  name: z.string().min(1).max(WEBHOOK_NAME_MAX_LENGTH),
   url: z.url().refine((url) => url.startsWith("https://"), {
     message: "Webhook URL must use HTTPS",
   }),

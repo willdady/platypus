@@ -18,8 +18,9 @@ are three types:
   a CI pipeline, calls it over HTTP with the Trigger's token. See
   [Inbound Triggers](#inbound-triggers).
 
-You'll find Triggers in the **Triggers** section of the Workspace home, which
-starts collapsed until you expand it. The list
+You'll find Triggers in the **Triggers** section of the Workspace home. It
+starts collapsed the first time, then opens as you last left it in that
+browser. The list
 shows every type; pick **Cron**, **Event** or **Inbound** in the menu above it,
 which reads **All types** by default, to see only that type. A long list is
 split into pages; use the arrows under the list to move between them.
@@ -629,7 +630,7 @@ models, even if it ended _Success_:
 - **2 tool calls failed**: tool calls that ended in an error, including calls
   the model made with input the tool rejected. Each is ringed red on the run's
   [timeline](#inspect-a-run).
-- **Fell back from _model_ to _model_**: the primary Provider could not serve
+- A fallback from one model to another: the primary Provider could not serve
   the run, so it switched to the Agent's
   [Fallback model](/building-with-platypus/agents#add-a-fallback-model) and
   stayed on it for the rest of the run. A Chat turn never switches.

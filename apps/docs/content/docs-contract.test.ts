@@ -65,6 +65,7 @@ import {
   eventTriggerEventSchema,
   webhookEventDataSchemas,
   webhookEventSchema,
+  webhookSchema,
   type WebhookEvent,
   workspaceSchema,
 } from "@platypus/schemas";
@@ -1635,7 +1636,7 @@ const LIMIT_CLAIMS: LimitClaim[] = [
   },
   {
     doc: "building-with-platypus/boards.mdx",
-    anchor: "**Name** — what to call the board",
+    anchor: "**Name** — what to call the Board",
     source: "packages/schemas/index.ts (kanbanBoardSchema.name)",
     expected: stringField(kanbanBoardSchema, "name"),
   },
@@ -1650,6 +1651,12 @@ const LIMIT_CLAIMS: LimitClaim[] = [
     anchor: "**Instruction** — the message sent to the Agent",
     source: "packages/schemas/index.ts (triggerBaseSchema.instruction)",
     expected: { max: stringField(triggerBaseSchema, "instruction").max },
+  },
+  {
+    doc: "building-with-platypus/webhooks.mdx",
+    anchor: "**Name** — a label for the Webhook",
+    source: "packages/schemas/index.ts (webhookSchema.name)",
+    expected: stringField(webhookSchema, "name"),
   },
   {
     doc: "administering/workspaces.mdx",

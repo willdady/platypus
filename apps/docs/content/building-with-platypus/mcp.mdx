@@ -31,8 +31,7 @@ set** you can grant to any Agent. For the concept, see
 
 ### Open the MCP form
 
-Open the gear in the header and choose **MCP Servers**, then click **Add MCP
-server**.
+Go to **Workspace settings → MCP Servers** and click **Add MCP server**.
 
 ### Enter the connection
 
@@ -182,6 +181,12 @@ An MCP lives at exactly one scope:
 In **MCP Servers**, each card shows the server's name and URL. Clicking a
 Workspace MCP opens it for editing; its three-dot menu has **Edit** and, for
 someone who can manage it, **Delete**.
+
+<Callout type="warning">
+  Unlike a Skill, a Workspace MCP can be deleted while Agents still use it.
+  Nothing warns you: it disappears from every Agent's **Tools** card, and those
+  Agents run without its tools from then on.
+</Callout>
 
 An MCP has **no Promote action** — unlike an Agent or a Skill, it can't be
 re-scoped after the fact. An Org Admin creates it at Organization scope in the

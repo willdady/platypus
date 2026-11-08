@@ -21,6 +21,7 @@ import { Input } from "@/components/ui/input";
 import {
   eventTriggerEventSchema,
   triggerRunWebhookEventSchema,
+  WEBHOOK_NAME_MAX_LENGTH,
   type Webhook,
 } from "@platypus/schemas";
 import { FormTextField } from "@/components/form-text-field";
@@ -300,6 +301,7 @@ function WebhookForm({ orgId, workspaceId, webhookId }: WebhookFormProps) {
             onChange={toFieldChange("name")}
             disabled={isSubmitting}
             error={validationErrors.name}
+            maxLength={WEBHOOK_NAME_MAX_LENGTH}
             autoFocus
           />
 
