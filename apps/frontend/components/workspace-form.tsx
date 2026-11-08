@@ -228,6 +228,7 @@ function WorkspaceForm({ orgId, workspaceId }: WorkspaceFormProps) {
       backLabel="Back to workspace"
     >
       <form
+        noValidate
         onSubmit={(e) => {
           e.preventDefault();
           void submit();

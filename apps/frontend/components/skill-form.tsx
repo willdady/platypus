@@ -189,6 +189,7 @@ function SkillForm({
 
   const form = (
     <form
+      noValidate
       className={classNames}
       onSubmit={(e) => {
         e.preventDefault();

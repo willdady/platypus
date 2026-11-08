@@ -10,10 +10,11 @@ import {
   setDataFor,
   setError,
   setLoading,
+  setupUser,
   stubAcceptedSave,
   savedBody,
 } from "@/test/form-test-harness";
-import { selectOption, setupUser } from "@/test/test-utils";
+import { selectOption } from "@/test/test-utils";
 
 vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("swr", () => swrMock);

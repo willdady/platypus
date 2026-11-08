@@ -330,6 +330,7 @@ function TriggerForm({
 
   const form = (
     <form
+      noValidate
       onSubmit={(e) => {
         e.preventDefault();
         void submit();

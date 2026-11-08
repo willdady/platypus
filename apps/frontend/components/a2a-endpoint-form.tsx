@@ -156,6 +156,7 @@ function A2aEndpointForm({
 
   const form = (
     <form
+      noValidate
       onSubmit={(e) => {
         e.preventDefault();
         void submit();

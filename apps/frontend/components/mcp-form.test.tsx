@@ -6,12 +6,13 @@ import {
   setData,
   setError,
   resetFormHarness,
+  setupUser,
   stubAcceptedSave,
   stubRejectedSave,
   stubSaveSequence,
   savedBody,
 } from "@/test/form-test-harness";
-import { selectOption, setupUser } from "@/test/test-utils";
+import { selectOption } from "@/test/test-utils";
 import {
   OAUTH_MCP_ERROR_EVENT,
   OAUTH_MCP_SUCCESS_EVENT,

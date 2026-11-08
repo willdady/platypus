@@ -15,12 +15,13 @@ import {
   setDataFor,
   setError,
   resetFormHarness,
+  setupUser,
   stubAcceptedSave,
   stubPendingSave,
   stubRejectedSave,
   savedBody,
 } from "@/test/form-test-harness";
-import { selectOption, setupUser } from "@/test/test-utils";
+import { selectOption } from "@/test/test-utils";
 
 // --- Module mocks ------------------------------------------------------------
 

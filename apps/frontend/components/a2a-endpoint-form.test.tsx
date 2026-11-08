@@ -14,13 +14,14 @@ import {
   push,
   resetFormHarness,
   setDataFor,
+  setupUser,
   stubAcceptedSave,
   stubRejectedSave,
   savedBody,
   toastError,
   toastSuccess,
 } from "@/test/form-test-harness";
-import { selectOption, setupUser } from "@/test/test-utils";
+import { selectOption } from "@/test/test-utils";
 import { formatDateTime } from "@/lib/format-date";
 
 // The backend URL a test may blank, to stand for one not configured yet.

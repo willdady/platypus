@@ -119,6 +119,7 @@ function OrganizationForm({ classNames, orgId }: OrganizationFormProps) {
       backLabel="Back to organization"
     >
       <form
+        noValidate
         className={classNames}
         onSubmit={(e) => {
           e.preventDefault();

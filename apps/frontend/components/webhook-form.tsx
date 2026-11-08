@@ -284,6 +284,7 @@ function WebhookForm({ orgId, workspaceId, webhookId }: WebhookFormProps) {
 
   const form = (
     <form
+      noValidate
       onSubmit={(e) => {
         e.preventDefault();
         void submit();

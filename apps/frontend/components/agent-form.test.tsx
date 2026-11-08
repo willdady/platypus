@@ -147,6 +147,22 @@ describe("AgentForm form submission", () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     expect(savedBody(fetchMock)).toMatchObject({ name: "Bot" });
   });
+
+  // The schema owns validation, so the browser's own step/type checks must not
+  // block a save now that these fields live in a real form.
+  it("does not let browser constraint validation block a schema-valid save", async () => {
+    const fetchMock = stubSaveSequence({ status: 200, body: { id: "a1" } });
+    renderCreateForm();
+
+    fireEvent.click(screen.getByText("Advanced settings"));
+    fireEvent.change(screen.getByLabelText("Top-p"), {
+      target: { value: "0.95" },
+    });
+    await setupUser().type(screen.getByLabelText("Name"), "Bot{Enter}");
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(savedBody(fetchMock)).toMatchObject({ topP: 0.95 });
+  });
 });
 
 // #595: the Agent itself already saved by the time either avatar write runs,

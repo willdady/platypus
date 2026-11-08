@@ -570,6 +570,7 @@ function SandboxSettings({
 
   return (
     <form
+      noValidate
       onSubmit={(e) => {
         e.preventDefault();
         handleSave();

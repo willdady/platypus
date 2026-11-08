@@ -831,6 +831,7 @@ function ProviderForm({
 
   const form = (
     <form
+      noValidate
       className={classNames}
       onSubmit={(e) => {
         e.preventDefault();
