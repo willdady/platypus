@@ -23,6 +23,7 @@ import { workspaceRoutes } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 import { ProviderForm } from "@/components/provider-form";
 import { SandboxSettings } from "@/components/sandbox-settings";
+import { useUnsavedChangesGuard } from "@/components/unsaved-changes-guard";
 import { FormTextField } from "@/components/form-text-field";
 import { ExpandableTextarea } from "@/components/expandable-textarea";
 import { Button } from "@/components/ui/button";
@@ -107,6 +108,23 @@ export function WorkspaceWizard({ orgId }: { orgId: string }) {
   const [sharedProviderIds, setSharedProviderIds] = useState<string[]>([]);
 
   const [withSandbox, setWithSandbox] = useState(false);
+
+  // Re-selecting the caller (the default owner) changes nothing the backend
+  // would send, so it doesn't count as an edit either.
+  const ownerChanged = ownerId !== "" && ownerId !== user?.id;
+
+  // The wizard's state is its own, so it registers the whole of it: anything
+  // entered, or moving past the first step, would be lost on a link click or
+  // refresh. Typing then reverting clears it again.
+  const isDirty =
+    step > 0 ||
+    name !== "" ||
+    context !== "" ||
+    ownerChanged ||
+    sharedProviderIds.length > 0 ||
+    provider !== undefined ||
+    withSandbox;
+  useUnsavedChangesGuard(isDirty);
 
   // Only admins reach this page (ADR-0008), and these reads are admin-only.
   const { results: members } = useScopedList<Member>("members", { orgId });
