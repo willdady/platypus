@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { ExternalLink, Link2, Unlink } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -20,8 +20,8 @@ import type {
   PromoteBlocker,
   PromoteFlow,
   SharedDetach,
-  SharedResourceType,
 } from "@/hooks/use-shared-resource-actions";
+import type { AttachmentResourceType } from "@platypus/schemas";
 
 /**
  * The attach half of the Shared-resource actions (#880): the CTA, the picker
@@ -41,7 +41,7 @@ export function AttachSharedAction<
 }: {
   orgId: string;
   workspaceId: string;
-  resourceType: SharedResourceType;
+  resourceType: AttachmentResourceType;
   /** Attach CTA: "Attach shared skill" / "Attach shared MCP". */
   label: string;
   resources: readonly T[];
@@ -76,18 +76,17 @@ export function AttachSharedAction<
 /**
  * The dialog a locked org-scoped row opens in a Workspace: it explains where
  * the resource is managed and offers Detach plus a link to the organization
- * settings. Only the copy and the settings link differ per resource.
+ * settings. Only the noun and the settings link differ per resource.
  */
 export function DetachSharedDialog<T extends NamedResource>({
   detach,
-  title,
-  description,
+  noun,
   canDetach,
   orgSettingsHref,
 }: {
   detach: SharedDetach<T>;
-  title: string;
-  description: (selected: T) => ReactNode;
+  /** The resource named in the title and mid-sentence: "agent" / "skill". */
+  noun: string;
   canDetach: boolean;
   /** Where the Shared resource is actually edited. */
   orgSettingsHref: (selected: T) => string;
@@ -101,9 +100,15 @@ export function DetachSharedDialog<T extends NamedResource>({
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
+          <DialogTitle>Detach shared {noun}</DialogTitle>
           <DialogDescription>
-            {detach.selected && description(detach.selected)}
+            {detach.selected && (
+              <>
+                Detach <strong>{detach.selected.name}</strong> from this
+                workspace? The shared {noun} itself is not deleted; it just
+                stops appearing here.
+              </>
+            )}
           </DialogDescription>
         </DialogHeader>
         {detach.error && (

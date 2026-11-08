@@ -8,7 +8,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Pencil, Shield, User } from "lucide-react";
+import { Pencil, Shield } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { type OrgMemberListItem } from "@platypus/schemas";
 import { useState } from "react";
@@ -16,6 +16,7 @@ import { MemberEditDialog } from "@/components/member-edit-dialog";
 import { RemoveMemberDialog } from "@/components/remove-member-dialog";
 import { RowActionsMenu } from "@/components/row-actions-menu";
 import type { Serialized } from "@/lib/api-write";
+import { UserCell } from "@/components/user-cell";
 
 type MembersListProps = {
   orgId: string;
@@ -45,32 +46,11 @@ export function MembersList({ orgId, members, onUpdate }: MembersListProps) {
             return (
               <TableRow key={member.id}>
                 <TableCell>
-                  <div className="flex items-center gap-3">
-                    <div className="size-8 rounded-full bg-muted flex items-center justify-center overflow-hidden">
-                      {member.user.image ? (
-                        // Avatar URL comes from an arbitrary OAuth/external
-                        // host; not routable through the Next image optimizer.
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={member.user.image}
-                          alt={member.user.name}
-                          className="size-full object-cover"
-                          width={32}
-                          height={32}
-                          loading="lazy"
-                          decoding="async"
-                        />
-                      ) : (
-                        <User className="size-4 text-muted-foreground" />
-                      )}
-                    </div>
-                    <div className="flex flex-col">
-                      <span className="font-medium">{member.user.name}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {member.user.email}
-                      </span>
-                    </div>
-                  </div>
+                  <UserCell
+                    name={member.user.name}
+                    email={member.user.email}
+                    image={member.user.image}
+                  />
                 </TableCell>
                 <TableCell>
                   <Badge

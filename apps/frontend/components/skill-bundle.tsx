@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef } from "react";
 import {
   Download,
   FileArchive,
@@ -26,6 +26,7 @@ import {
 import { SkillGithubUpdate } from "@/components/skill-github-update";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { useSkillImportAllowed } from "@/hooks/use-skill-import-allowed";
+import { useMutation } from "@/hooks/use-mutation";
 import { optionalFetcher } from "@/lib/utils";
 
 /** Marks a Skill whose scripts or binary files only a Sandbox can use. */
@@ -77,7 +78,16 @@ function useZipUpload<TResult>(
   onSuccess: (result: Serialized<TResult>) => void,
 ) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
+  const { run: upload, pending: uploading } = useMutation(
+    async (url: string, file: File) => {
+      const outcome = await writeAt<TResult, Blob>(url, {
+        method,
+        data: file,
+      });
+      if (outcome.outcome === "success") onSuccess(outcome.data);
+      else toast.error(outcome.message);
+    },
+  );
 
   const input = (url: string) => (
     <input
@@ -85,18 +95,11 @@ function useZipUpload<TResult>(
       type="file"
       accept=".zip,application/zip"
       className="hidden"
-      onChange={async (event) => {
+      onChange={(event) => {
         const file = event.target.files?.[0];
         event.target.value = "";
         if (!file) return;
-        setUploading(true);
-        const outcome = await writeAt<TResult, Blob>(url, {
-          method,
-          data: file,
-        });
-        setUploading(false);
-        if (outcome.outcome === "success") onSuccess(outcome.data);
-        else toast.error(outcome.message);
+        void upload(url, file);
       }}
     />
   );
@@ -187,6 +190,7 @@ export function SkillBundleCard({
         <>
           {upload.input(`${skillUrl}/bundle`)}
           <Button
+            type="button"
             variant="outline"
             onClick={upload.pick}
             disabled={upload.uploading}

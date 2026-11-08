@@ -68,6 +68,7 @@ import {
 } from "./context-meter";
 import { useMessageEditing } from "@/hooks/use-message-editing";
 import { useChatTurn } from "@/hooks/use-chat-turn";
+import { useMutation } from "@/hooks/use-mutation";
 import { Dialog, DialogTrigger } from "./ui/dialog";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { canSendChatMessages } from "@/lib/authorization";
@@ -331,7 +332,16 @@ export function Chat({
   };
   const [search, setSearch] = useState(false);
   // A `/compact` waiting on its summary; the composer holds until it lands.
-  const [compacting, setCompacting] = useState(false);
+  const { run: compactChat, pending: compacting } = useMutation(
+    async (argument?: string) => {
+      const outcome = await compact(argument);
+      if (outcome.outcome !== "success") {
+        toast.error(outcome.message);
+        throw new Error(outcome.message);
+      }
+      refreshChat();
+    },
+  );
 
   // The Chat search toggle's one invariant (#624): search may not be on when
   // the resolved selection cannot search. Keyed on `canSearch` itself — not on
@@ -602,15 +612,7 @@ export function Chat({
       ? null
       : builtInCommandOf(message.text);
     if (builtIn?.name === "compact") {
-      setCompacting(true);
-      const outcome = await compact(builtIn.argument).finally(() =>
-        setCompacting(false),
-      );
-      if (outcome.outcome !== "success") {
-        toast.error(outcome.message);
-        throw new Error(outcome.message);
-      }
-      refreshChat();
+      await compactChat(builtIn.argument);
       return;
     }
     const sandboxFiles = message.sandboxFiles ?? [];

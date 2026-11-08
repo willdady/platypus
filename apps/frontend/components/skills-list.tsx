@@ -227,6 +227,7 @@ export function SkillsList({
     : orgRoutes(orgId).settings.skills;
 
   const {
+    data,
     results: skillRows,
     error,
     isLoading,
@@ -466,6 +467,7 @@ export function SkillsList({
         ghosts={page}
         isLoading={isLoading}
         error={error}
+        data={data}
         subject="skills"
         onRetry={() => void mutate()}
         skeleton={
@@ -566,26 +568,16 @@ export function SkillsList({
         </ListFooter>
       )}
 
-      {skillToManage && (
-        <ManageAttachmentsDialog
-          orgId={orgId}
-          resourceType="skill"
-          resourceId={skillToManage.id}
-          resourceName={skillToManage.name}
-          open={!!skillToManage}
-          onOpenChange={(open) => !open && setSkillToManage(null)}
-        />
-      )}
+      <ManageAttachmentsDialog
+        orgId={orgId}
+        resourceType="skill"
+        resource={skillToManage}
+        onClose={() => setSkillToManage(null)}
+      />
 
       <DetachSharedDialog
         detach={orgSkillDetach}
-        title="Detach shared skill"
-        description={(selected) => (
-          <>
-            Detach <strong>{selected.name}</strong> from this workspace? The
-            shared skill itself is not deleted; it just stops appearing here.
-          </>
-        )}
+        noun="skill"
         canDetach={canAttach}
         orgSettingsHref={(selected) =>
           orgRoutes(orgId).settings.skillDetail(selected.id)

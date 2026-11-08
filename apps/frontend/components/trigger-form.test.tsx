@@ -13,6 +13,7 @@ import {
   setLoading,
   resetFormHarness,
   authState,
+  setupUser,
   stubAcceptedSave,
   stubRejectedSave,
   savedBody,
@@ -69,6 +70,35 @@ async function renderEventTriggerForm() {
   // Trigger Type is a Radix Select defaulting to "Cron".
   await selectOption("Cron", "Event");
 }
+
+describe("TriggerForm — form submission", () => {
+  it("saves on Enter in the Name field", async () => {
+    const fetchMock = stubAcceptedSave({ id: "t1" });
+    render(<TriggerForm orgId="org1" workspaceId="ws1" />);
+    expect(await screen.findByText("Agent")).toBeInTheDocument();
+
+    const name = screen.getByLabelText("Name");
+    fireEvent.change(name, { target: { value: "Nightly" } });
+    fireEvent.change(screen.getByLabelText("Instruction"), {
+      target: { value: "Do it" },
+    });
+    await setupUser().type(name, "{Enter}");
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(savedBody(fetchMock)).toMatchObject({ name: "Nightly" });
+  });
+
+  it("opens Advanced settings without saving the Trigger", async () => {
+    const fetchMock = stubAcceptedSave({ id: "t1" });
+    render(<TriggerForm orgId="org1" workspaceId="ws1" />);
+    expect(await screen.findByText("Agent")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Toggle" }));
+
+    expect(screen.getByLabelText(/Include Memories/)).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
 
 describe("TriggerForm — event picker", () => {
   it("offers no Trigger run events, which only a Webhook can subscribe to", async () => {
@@ -425,8 +455,12 @@ describe("TriggerForm — default agent", () => {
     setDataFor("/agents", { results: twoAgents.map((a) => ({ ...a })) });
     rerender(<TriggerForm orgId="org1" workspaceId="ws1" />);
 
-    expect(screen.getByText("Agent Two")).toBeInTheDocument();
-    expect(screen.queryByText("Agent One")).not.toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Agent" })).toHaveTextContent(
+      "Agent Two",
+    );
+    expect(
+      screen.getByRole("combobox", { name: "Agent" }),
+    ).not.toHaveTextContent("Agent One");
   });
 
   it("saves the first agent when the user picks none", async () => {

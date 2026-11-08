@@ -24,14 +24,10 @@ describe("FormFooterButtons", () => {
   it("does not wire onClick when type is 'submit', leaving the form's onSubmit in control", () => {
     const onSubmit = vi.fn();
     render(
-      <FormFooterButtons
-        submitText="Create"
-        onSubmit={onSubmit}
-        type="submit"
-      />,
+      <FormFooterButtons submitText="Save" onSubmit={onSubmit} type="submit" />,
     );
 
-    const button = screen.getByRole("button", { name: "Create" });
+    const button = screen.getByRole("button", { name: "Save" });
     expect(button).toHaveAttribute("type", "submit");
 
     fireEvent.click(button);
@@ -48,6 +44,18 @@ describe("FormFooterButtons", () => {
     fireEvent.click(screen.getByRole("button", { name: /Delete/ }));
 
     expect(onDelete).toHaveBeenCalledTimes(1);
+  });
+
+  it("says Saving... while pending under a Save button", () => {
+    render(<FormFooterButtons submitText="Save" pending />);
+
+    expect(screen.getByRole("button", { name: "Saving..." })).toBeDisabled();
+  });
+
+  it("says Updating... while pending under an Update button", () => {
+    render(<FormFooterButtons submitText="Update" pending />);
+
+    expect(screen.getByRole("button", { name: "Updating..." })).toBeDisabled();
   });
 
   it("respects submitDisabled and deleteDisabled", () => {

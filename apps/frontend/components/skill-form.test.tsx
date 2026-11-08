@@ -1,10 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import {
   authMock,
   swrMock,
   resetFormHarness,
+  savedBody,
   setDataFor,
+  setupUser,
+  stubAcceptedSave,
 } from "@/test/form-test-harness";
 
 vi.mock("@/components/auth-provider", () => authMock);
@@ -30,6 +33,23 @@ function renderEditForm() {
   });
   return render(<SkillForm orgId="o1" workspaceId="ws1" skillId="s1" />);
 }
+
+describe("SkillForm form submission", () => {
+  beforeEach(() => {
+    resetFormHarness();
+    setDataFor("/agents", { results: [] });
+  });
+
+  it("saves on Enter in the Name field", async () => {
+    const fetchMock = stubAcceptedSave({ id: "s1" });
+    render(<SkillForm orgId="o1" workspaceId="ws1" />);
+
+    await setupUser().type(screen.getByLabelText("Name"), "new-skill{Enter}");
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(savedBody(fetchMock)).toMatchObject({ name: "new-skill" });
+  });
+});
 
 describe("SkillForm Delete", () => {
   beforeEach(() => {

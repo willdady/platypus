@@ -46,6 +46,7 @@ export function OrgAgentsList({ orgId }: { orgId: string }) {
   const scope: Scope = { orgId };
 
   const {
+    data,
     results: rows,
     error,
     isLoading,
@@ -71,6 +72,7 @@ export function OrgAgentsList({ orgId }: { orgId: string }) {
         items={agents}
         isLoading={isLoading}
         error={error}
+        data={data}
         subject="shared agents"
         onRetry={() => void mutate()}
         skeleton={
@@ -149,16 +151,12 @@ export function OrgAgentsList({ orgId }: { orgId: string }) {
         )}
       />
 
-      {agentToManage && (
-        <ManageAttachmentsDialog
-          orgId={orgId}
-          resourceType="agent"
-          resourceId={agentToManage.id}
-          resourceName={agentToManage.name}
-          open={!!agentToManage}
-          onOpenChange={(open) => !open && setAgentToManage(null)}
-        />
-      )}
+      <ManageAttachmentsDialog
+        orgId={orgId}
+        resourceType="agent"
+        resource={agentToManage}
+        onClose={() => setAgentToManage(null)}
+      />
 
       <DeleteConfirmDialog
         open={deleteFlow.open}

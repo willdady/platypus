@@ -506,6 +506,7 @@ export function TriggerList({
         ghosts={page}
         isLoading={isLoading && !triggersData}
         error={error}
+        data={triggersData}
         subject="triggers"
         onRetry={() => void mutate()}
         skeleton={<TriggerCardsSkeleton />}

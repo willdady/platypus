@@ -78,6 +78,25 @@ goes straight through; a failed save stays dirty.
 - Programmatic navigation (`router.push` after save or delete) and browser
   Back are never held. The App Router cannot block Back.
 
+## How the form submits
+
+Every entity form is a real `<form>` whose `onSubmit` runs the same save the
+footer button does: `preventDefault()`, then the form's submit. The footer
+passes `type="submit"` to `FormFooterButtons`, so Enter in any single-line
+field saves once.
+
+- Give every other button inside the form an explicit `type="button"` —
+  Advanced settings, reveal/copy, Add model, Test connection, Regenerate,
+  and a draft step's Back/Next. An untyped `Button` defaults to submit.
+- A draft step in the Workspace wizard keeps its own Back/Next buttons and
+  steps through `draft.write`; the wizard must not save twice.
+- A dialog that renders its own `<form>` (the Add/Edit model dialog) stops
+  the submit event, because React bubbles it through the portal to the
+  surrounding form.
+- A search field must not submit the form around it.
+- Set `noValidate` on the form. The shared schemas own validation and their
+  messages, so the browser's step/type bubbles must not block a save.
+
 ## What the button says
 
 The label names the outcome, so it follows from the destination:

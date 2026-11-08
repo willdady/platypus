@@ -83,6 +83,31 @@ describe("OrgInboundTriggersList", () => {
     );
   });
 
+  it("guards with the row's creation time as one serialised instant", async () => {
+    const fetchMock = stubAcceptedSave({ message: "Token revoked" });
+    mockScopedSWR(
+      {
+        "/inbound-triggers": [
+          row({ tokenCreatedAt: "2026-07-01T12:00:00+02:00" }),
+        ],
+      },
+      { strict: true },
+    );
+    await renderList(<OrgInboundTriggersList orgId="org1" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Revoke token" }));
+    const buttons = await screen.findAllByRole("button", {
+      name: "Revoke token",
+    });
+    fireEvent.click(buttons[buttons.length - 1]);
+
+    await waitFor(() => expect(mutate).toHaveBeenCalled());
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://test/organizations/org1/inbound-triggers/trig-1/token?tokenCreatedAt=2026-07-01T10%3A00%3A00.000Z",
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
+
   it("keeps a refused revoke in the dialog and still revalidates", async () => {
     stubRejectedSave("A newer token was issued since this list loaded", 409);
     mockScopedSWR({ "/inbound-triggers": [row()] }, { strict: true });

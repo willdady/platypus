@@ -137,6 +137,7 @@ export function AgentsList({
   const routes = workspaceRoutes(orgId, workspaceId);
 
   const {
+    data: agentsData,
     results: allAgents,
     error: agentsError,
     isLoading: isLoadingAgents,
@@ -456,6 +457,7 @@ export function AgentsList({
         ghosts={page}
         isLoading={isLoading}
         error={agentsError}
+        data={agentsData}
         subject="agents"
         onRetry={() => void mutate()}
         skeleton={
@@ -511,15 +513,11 @@ export function AgentsList({
 
       <DetachSharedDialog
         detach={orgAgentDetach}
-        title="Detach shared agent"
-        description={(selected) => (
-          <>
-            Detach <strong>{selected.name}</strong> from this workspace? The
-            shared agent itself is not deleted; it just stops appearing here.
-          </>
-        )}
+        noun="agent"
         canDetach={canManageShared}
-        orgSettingsHref={() => `/${orgId}/settings/agents`}
+        orgSettingsHref={(selected) =>
+          orgRoutes(orgId).settings.agentDetail(selected.id)
+        }
       />
 
       <PromoteSharedDialog promote={promote} noun="agent" />

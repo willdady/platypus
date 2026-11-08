@@ -22,14 +22,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { ListError } from "@/components/list-state";
 import {
   BadgeSkeleton,
   IconButtonSkeleton,
-  LoadingRegion,
   SkeletonLine,
   TableSkeleton,
 } from "@/components/list-skeletons";
+import { TableList } from "@/components/table-list";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
 import { OrganizationName } from "@/components/organization-name";
 
@@ -106,8 +105,12 @@ function OrgInvitationsPage() {
 
       <div>
         <h2 className="text-xl font-semibold mb-4">Sent Invitations</h2>
-        {isLoading ? (
-          <LoadingRegion label="Loading invitations">
+        <TableList
+          isLoading={isLoading}
+          data={data}
+          error={error}
+          subject="invitations"
+          skeleton={
             <TableSkeleton
               tableClassName="min-w-[600px]"
               columns={[
@@ -135,20 +138,17 @@ function OrgInvitationsPage() {
                 },
               ]}
             />
-          </LoadingRegion>
-        ) : error && !data ? (
-          <ListError
-            error={error}
-            subject="invitations"
-            onRetry={() => mutate()}
-          />
-        ) : data && invitations.length === 0 ? (
-          <EmptyCard
-            icon={<Mail />}
-            title="No invitations sent yet"
-            description="Invitations you send with the form above appear here until they're accepted."
-          />
-        ) : (
+          }
+          empty={
+            <EmptyCard
+              icon={<Mail />}
+              title="No invitations sent yet"
+              description="Invitations you send with the form above appear here until they're accepted."
+            />
+          }
+          isEmpty={invitations.length === 0}
+          onRetry={() => mutate()}
+        >
           <Table bordered className="min-w-[600px]">
             <TableHeader>
               <TableRow>
@@ -208,7 +208,7 @@ function OrgInvitationsPage() {
               ))}
             </TableBody>
           </Table>
-        )}
+        </TableList>
       </div>
 
       <ConfirmDialog

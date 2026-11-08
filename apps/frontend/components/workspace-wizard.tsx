@@ -13,6 +13,7 @@ import {
 } from "@platypus/schemas";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { useScopedList } from "@/hooks/use-scoped-list";
+import { useMutation } from "@/hooks/use-mutation";
 import { writeEntity, type WriteOutcome } from "@/lib/api-write";
 import {
   parseValidationErrors,
@@ -25,6 +26,7 @@ import { ProviderForm } from "@/components/provider-form";
 import { SandboxSettings } from "@/components/sandbox-settings";
 import { useUnsavedChangesGuard } from "@/components/unsaved-changes-guard";
 import { FormTextField } from "@/components/form-text-field";
+import { FormSelectField } from "@/components/form-select-field";
 import { ExpandableTextarea } from "@/components/expandable-textarea";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -50,13 +52,7 @@ import {
   FieldLabel,
   FieldSet,
 } from "@/components/ui/field";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SelectItem } from "@/components/ui/select";
 
 const STEPS = ["Workspace", "Provider", "Sandbox"] as const;
 
@@ -98,7 +94,6 @@ export function WorkspaceWizard({ orgId }: { orgId: string }) {
   const router = useRouter();
 
   const [step, setStep] = useState(0);
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [name, setName] = useState("");
   const [context, setContext] = useState("");
@@ -236,15 +231,10 @@ export function WorkspaceWizard({ orgId }: { orgId: string }) {
     return outcome;
   };
 
-  const createWithoutSandbox = async () => {
-    setIsSubmitting(true);
-    try {
-      const outcome = await create();
-      if (outcome.outcome !== "success") toast.error(outcome.message);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+  const { run: createWithoutSandbox, pending } = useMutation(async () => {
+    const outcome = await create();
+    if (outcome.outcome !== "success") toast.error(outcome.message);
+  });
 
   const back = () => setStep((s) => s - 1);
 
@@ -294,25 +284,21 @@ export function WorkspaceWizard({ orgId }: { orgId: string }) {
             />
 
             {/* ADR-0008: on creation an admin assigns the workspace owner. */}
-            <Field>
-              <FieldLabel htmlFor="ownerId">Owner</FieldLabel>
-              <Select value={ownerId || user?.id} onValueChange={setOwnerId}>
-                <SelectTrigger id="ownerId">
-                  <SelectValue placeholder="Select an owner" />
-                </SelectTrigger>
-                <SelectContent>
-                  {ownerOptions.map((m) => (
-                    <SelectItem key={m.userId} value={m.userId}>
-                      {m.user.name || m.user.email}
-                      {m.userId === user?.id ? " (you)" : ""}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <FieldDescription>
-                The member who will own this workspace. Defaults to you.
-              </FieldDescription>
-            </Field>
+            <FormSelectField
+              label="Owner"
+              name="ownerId"
+              value={ownerId || user?.id || ""}
+              onValueChange={setOwnerId}
+              placeholder="Select an owner"
+              description="The member who will own this workspace. Defaults to you."
+            >
+              {ownerOptions.map((m) => (
+                <SelectItem key={m.userId} value={m.userId}>
+                  {m.user.name || m.user.email}
+                  {m.userId === user?.id ? " (you)" : ""}
+                </SelectItem>
+              ))}
+            </FormSelectField>
 
             <Field data-invalid={!!workspaceErrors.context}>
               <ExpandableTextarea
@@ -464,7 +450,7 @@ export function WorkspaceWizard({ orgId }: { orgId: string }) {
             id="withSandbox"
             checked={withSandbox}
             onCheckedChange={setWithSandbox}
-            disabled={!hasSandboxBackends || isSubmitting}
+            disabled={!hasSandboxBackends || pending}
           />
         </Field>
         {withSandbox ? (
@@ -481,11 +467,11 @@ export function WorkspaceWizard({ orgId }: { orgId: string }) {
               description="Agents in this workspace won't have shell or filesystem tools."
             />
             <div className="flex gap-2">
-              <Button variant="outline" onClick={back} disabled={isSubmitting}>
+              <Button variant="outline" onClick={back} disabled={pending}>
                 Back
               </Button>
-              <Button onClick={createWithoutSandbox} disabled={isSubmitting}>
-                {isSubmitting ? "Saving..." : "Save"}
+              <Button onClick={createWithoutSandbox} disabled={pending}>
+                {pending ? "Saving..." : "Save"}
               </Button>
             </div>
           </>
