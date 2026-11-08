@@ -9,7 +9,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { MoreHorizontal, Shield, User, Trash2, Edit } from "lucide-react";
+import { MoreHorizontal, Shield, Trash2, Edit } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,6 +24,7 @@ import { useState } from "react";
 import { MemberEditDialog } from "@/components/member-edit-dialog";
 import { RemoveMemberDialog } from "@/components/remove-member-dialog";
 import type { Serialized } from "@/lib/api-write";
+import { UserCell } from "@/components/user-cell";
 
 type MembersListProps = {
   orgId: string;
@@ -51,32 +52,11 @@ export function MembersList({ orgId, members, onUpdate }: MembersListProps) {
           {members.map((member) => (
             <TableRow key={member.id}>
               <TableCell>
-                <div className="flex items-center gap-3">
-                  <div className="size-8 rounded-full bg-muted flex items-center justify-center overflow-hidden">
-                    {member.user.image ? (
-                      // Avatar URL comes from an arbitrary OAuth/external
-                      // host; not routable through the Next image optimizer.
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={member.user.image}
-                        alt={member.user.name}
-                        className="size-full object-cover"
-                        width={32}
-                        height={32}
-                        loading="lazy"
-                        decoding="async"
-                      />
-                    ) : (
-                      <User className="size-4 text-muted-foreground" />
-                    )}
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="font-medium">{member.user.name}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {member.user.email}
-                    </span>
-                  </div>
-                </div>
+                <UserCell
+                  name={member.user.name}
+                  email={member.user.email}
+                  image={member.user.image}
+                />
               </TableCell>
               <TableCell>
                 <Badge
