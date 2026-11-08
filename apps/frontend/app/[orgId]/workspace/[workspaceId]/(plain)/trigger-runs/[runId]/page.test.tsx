@@ -82,7 +82,7 @@ import TriggerRunDetailPage, {
   RUN_DETAIL_POLL_MS,
 } from "./trigger-run";
 import { RUN_TIMELINE_EMPTY_NOTICE } from "@/components/run-timeline";
-import { openDropdownMenu } from "@/test/test-utils";
+import { firePageShow, openDropdownMenu } from "@/test/test-utils";
 
 const T0 = 1_767_258_000_000;
 
@@ -290,6 +290,26 @@ describe("TriggerRunDetailPage", () => {
     );
     expect(refresh({ run: run({ status: "success" }) })).toBe(0);
     expect(refresh({ run: run({ status: "cancelled" }) })).toBe(0);
+  });
+
+  // A restored page's poll was frozen the whole time it was away, so the run
+  // on screen is as old as the moment the page was put away.
+  it("revalidates when the page is restored from the back/forward cache", async () => {
+    state.data = { run: run(), events: [] };
+    await renderPage();
+
+    firePageShow(true);
+
+    expect(state.mutate).toHaveBeenCalledOnce();
+  });
+
+  it("does not revalidate on an ordinary page load", async () => {
+    state.data = { run: run(), events: [] };
+    await renderPage();
+
+    firePageShow(false);
+
+    expect(state.mutate).not.toHaveBeenCalled();
   });
 
   it("renders a run with no events and no final text — one that predates timelines", async () => {

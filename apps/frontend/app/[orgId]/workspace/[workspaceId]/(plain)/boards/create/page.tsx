@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { KanbanBoardForm } from "@/components/kanban-board-form";
 import { ResourcePage } from "@/components/resource-page";
 
-export const metadata: Metadata = { title: "New Board" };
+export const metadata: Metadata = { title: "Create Board" };
 
 async function CreateBoardPage({
   params,
@@ -12,7 +12,7 @@ async function CreateBoardPage({
   const { orgId, workspaceId } = await params;
 
   return (
-    <ResourcePage title="New Board" variant="narrow">
+    <ResourcePage title="Create Board" variant="narrow">
       <KanbanBoardForm orgId={orgId} workspaceId={workspaceId} />
     </ResourcePage>
   );

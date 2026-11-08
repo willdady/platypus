@@ -799,8 +799,7 @@ function McpForm({
       <DeleteConfirmDialog
         open={isDeleteDialogOpen}
         onOpenChange={setIsDeleteDialogOpen}
-        title="Delete MCP server"
-        description="Are you sure you want to delete this MCP server? This action cannot be undone."
+        noun="MCP server"
         onConfirm={handleDelete}
         loading={isDeleting}
         error={deleteError}

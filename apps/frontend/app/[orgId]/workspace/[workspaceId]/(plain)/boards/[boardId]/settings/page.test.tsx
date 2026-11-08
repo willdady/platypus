@@ -17,10 +17,11 @@ import {
   setError,
   stubAcceptedSave,
   stubRejectedSave,
-  savedBody,
   push,
   toastError,
 } from "@/test/form-test-harness";
+import { kanbanBoardUpdateSchema } from "@platypus/schemas";
+import { expectSentBodyToMatchSchema } from "@/test/test-utils";
 
 vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("swr", () => swrMock);
@@ -76,7 +77,9 @@ describe("BoardSettingsPage", () => {
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     expect(fetchMock.mock.calls[0][0]).toBe(BOARD);
-    expect(savedBody(fetchMock)).toEqual({
+    expect(
+      expectSentBodyToMatchSchema(fetchMock, kanbanBoardUpdateSchema),
+    ).toEqual({
       name: "Roadmap 2",
       description: null,
       labels: [{ id: "l1", name: "Bug", color: "#ef4444" }],
@@ -91,8 +94,8 @@ describe("BoardSettingsPage", () => {
       fireEvent.click(screen.getByRole("button", { name: /Delete/ }));
       const dialog = screen.getByRole("dialog");
       fireEvent.change(
-        within(dialog).getByPlaceholderText("Type 'delete board' to confirm"),
-        { target: { value: "delete board" } },
+        within(dialog).getByPlaceholderText("Type 'Delete board' to confirm"),
+        { target: { value: "Delete board" } },
       );
       fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
     };

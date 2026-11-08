@@ -7,12 +7,19 @@ import {
   act,
   within,
 } from "@testing-library/react";
-import type {
-  KanbanBoardState,
-  KanbanCard,
-  KanbanCardComment,
-  KanbanColumn,
+import {
+  kanbanCardCreateSchema,
+  kanbanCardMoveSchema,
+  kanbanCardUpdateSchema,
+  kanbanColumnCreateSchema,
+  kanbanColumnReorderSchema,
+  kanbanColumnUpdateSchema,
+  type KanbanBoardState,
+  type KanbanCard,
+  type KanbanCardComment,
+  type KanbanColumn,
 } from "@platypus/schemas";
+import type { z } from "zod";
 
 // --- Module mocks ------------------------------------------------------------
 
@@ -140,6 +147,8 @@ vi.mock("@dnd-kit/sortable", async (importOriginal) => {
 
 import { KanbanBoard } from "./kanban-board";
 import {
+  expectSentBodyToMatchSchema,
+  firePageShow,
   selectOption,
   stubAcceptedSave,
   stubPendingSave,
@@ -265,6 +274,20 @@ describe("KanbanBoard transport", () => {
     Element.prototype.setPointerCapture = vi.fn();
   });
 
+  it("offers Create board in the board switcher", async () => {
+    boardState = makeBoardState([makeColumn()]);
+    renderBoard();
+
+    const trigger = screen.getByRole("button", { name: "Test Board" });
+    fireEvent.pointerDown(trigger, { pointerId: 1, button: 0 });
+    fireEvent.pointerUp(trigger, { pointerId: 1, button: 0 });
+    fireEvent.click(trigger);
+
+    expect(
+      await screen.findByRole("menuitem", { name: "Create board" }),
+    ).toHaveAttribute("href", "/org1/workspace/ws1/boards/create");
+  });
+
   /**
    * Every dialog on the board is the same pair of claims — an accepted write
    * goes to the right endpoint and closes the dialog, a refused one names the
@@ -286,12 +309,14 @@ describe("KanbanBoard transport", () => {
     input: { accepted: string; refused: string };
     /** The accepted request, asserted on the accepted run only. */
     request: Record<string, unknown>;
+    /** The shared request schema the accepted body must satisfy, when it has one. */
+    schema?: z.ZodType;
     accepted: { status: number; body: unknown };
     refused: { status: number; error: string };
   }[] = [
     {
       name: "column create",
-      heading: "Add Column",
+      heading: "Add column",
       perform: (value) => {
         fireEvent.click(screen.getByRole("button", { name: /add column/i }));
         fireEvent.change(screen.getByPlaceholderText("Enter column name"), {
@@ -308,6 +333,7 @@ describe("KanbanBoard transport", () => {
         credentials: "include",
         body: JSON.stringify({ name: "In Review" }),
       },
+      schema: kanbanColumnCreateSchema,
       accepted: { status: 201, body: { id: "col-2", name: "In Review" } },
       refused: {
         status: 409,
@@ -316,7 +342,7 @@ describe("KanbanBoard transport", () => {
     },
     {
       name: "card create",
-      heading: "Add Card",
+      heading: "Add card",
       perform: (value) => {
         fireEvent.click(screen.getByRole("button", { name: /add card/i }));
         fireEvent.change(screen.getByPlaceholderText("Enter card title"), {
@@ -330,13 +356,14 @@ describe("KanbanBoard transport", () => {
         method: "POST",
         body: JSON.stringify({ title: "New task" }),
       },
+      schema: kanbanCardCreateSchema,
       accepted: { status: 201, body: { id: "card-2" } },
       // The column went away between opening the dialog and submitting it.
       refused: { status: 404, error: "Column not found" },
     },
     {
       name: "column edit",
-      heading: "Edit Column",
+      heading: "Edit column",
       perform: async (value) => {
         await openColumnMenuItem("To Do", "Edit");
         fireEvent.change(
@@ -348,6 +375,7 @@ describe("KanbanBoard transport", () => {
       url: "http://test/organizations/org1/workspaces/ws1/boards/board-1/columns/col-1",
       input: { accepted: "Doing", refused: "Duplicate" },
       request: { method: "PUT", body: JSON.stringify({ name: "Doing" }) },
+      schema: kanbanColumnUpdateSchema,
       accepted: { status: 200, body: { id: "col-1", name: "Doing" } },
       refused: {
         status: 409,
@@ -356,7 +384,7 @@ describe("KanbanBoard transport", () => {
     },
     {
       name: "column delete",
-      heading: "Delete Column",
+      heading: "Delete column",
       perform: async () => {
         await openColumnMenuItem("To Do", "Delete");
         fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
@@ -371,7 +399,17 @@ describe("KanbanBoard transport", () => {
 
   describe.each(DIALOG_FLOWS)(
     "$name",
-    ({ name, heading, perform, url, input, request, accepted, refused }) => {
+    ({
+      name,
+      heading,
+      perform,
+      url,
+      input,
+      request,
+      schema,
+      accepted,
+      refused,
+    }) => {
       beforeEach(() => {
         boardState = makeBoardState([makeColumn()]);
       });
@@ -388,6 +426,7 @@ describe("KanbanBoard transport", () => {
             expect.objectContaining(request),
           ),
         );
+        if (schema) expectSentBodyToMatchSchema(fetchMock, schema);
         await waitFor(() =>
           expect(
             screen.queryByRole("heading", { name: heading }),
@@ -549,6 +588,9 @@ describe("KanbanBoard transport", () => {
           }),
         ),
       );
+      expect(
+        expectSentBodyToMatchSchema(fetchMock, kanbanColumnReorderSchema),
+      ).toEqual({ columnIds: ["col-2", "col-1"] });
       await waitFor(() => expect(columnOrder()).toEqual(["Done", "To Do"]));
       expect(toastError).not.toHaveBeenCalled();
     });
@@ -581,6 +623,9 @@ describe("KanbanBoard transport", () => {
           }),
         ),
       );
+      expect(
+        expectSentBodyToMatchSchema(fetchMock, kanbanColumnReorderSchema),
+      ).toEqual({ columnIds: ["col-2", "col-1"] });
       await waitFor(() => expect(columnOrder()).toEqual(["Done", "To Do"]));
     });
 
@@ -648,8 +693,11 @@ describe("KanbanBoard transport", () => {
       });
 
       await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-      const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-      expect(JSON.parse(init.body as string)).toMatchObject({
+      const [url] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(url).toContain("/cards/card-1/move");
+      expect(
+        expectSentBodyToMatchSchema(fetchMock, kanbanCardMoveSchema),
+      ).toMatchObject({
         columnId: "col-2",
         expectedColumnId: "col-1",
       });
@@ -662,9 +710,11 @@ describe("KanbanBoard transport", () => {
       dropCardOnDoneColumn();
 
       await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-      const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+      const [url] = fetchMock.mock.calls[0] as [string, RequestInit];
       expect(url).toContain("/cards/card-1/move");
-      expect(JSON.parse(init.body as string)).toMatchObject({
+      expect(
+        expectSentBodyToMatchSchema(fetchMock, kanbanCardMoveSchema),
+      ).toMatchObject({
         columnId: "col-2",
         expectedColumnId: "col-1",
       });
@@ -762,7 +812,7 @@ describe("KanbanBoard transport", () => {
     async function openCardDeleteConfirm() {
       fireEvent.click(screen.getByText("A card"));
       fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
-      return screen.findByRole("dialog", { name: "Delete Card" });
+      return screen.findByRole("dialog", { name: "Delete card" });
     }
 
     /** Opens the card's Delete confirm dialog and confirms it. */
@@ -824,7 +874,7 @@ describe("KanbanBoard transport", () => {
       await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
       await waitFor(() =>
         expect(
-          screen.queryByRole("dialog", { name: "Delete Card" }),
+          screen.queryByRole("dialog", { name: "Delete card" }),
         ).not.toBeInTheDocument(),
       );
       expect(
@@ -861,7 +911,7 @@ describe("KanbanBoard transport", () => {
       // Both the confirm and the card dialog stay open for a retry. The card
       // dialog sits behind the modal, so it is hidden from the a11y tree.
       expect(
-        screen.getByRole("dialog", { name: "Delete Card" }),
+        screen.getByRole("dialog", { name: "Delete card" }),
       ).toBeInTheDocument();
       expect(
         screen.getByRole("button", { name: "Save", hidden: true }),
@@ -896,7 +946,7 @@ describe("KanbanBoard transport", () => {
         await saveInDoneColumn();
 
         await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
-        const [[updateUrl, update], [moveUrl, move]] = fetchMock.mock.calls as [
+        const [[updateUrl, update], [moveUrl]] = fetchMock.mock.calls as [
           string,
           RequestInit,
         ][];
@@ -904,10 +954,13 @@ describe("KanbanBoard transport", () => {
           "http://test/organizations/org1/workspaces/ws1/boards/board-1/cards/card-1",
         );
         expect(update.method).toBe("PATCH");
+        expectSentBodyToMatchSchema(fetchMock, kanbanCardUpdateSchema, 0);
         expect(moveUrl).toBe(
           "http://test/organizations/org1/workspaces/ws1/boards/board-1/cards/card-1/move",
         );
-        expect(JSON.parse(move.body as string)).toEqual({
+        expect(
+          expectSentBodyToMatchSchema(fetchMock, kanbanCardMoveSchema, 1),
+        ).toEqual({
           columnId: "col-2",
           afterCardId: null,
           expectedColumnId: "col-1",
@@ -992,7 +1045,7 @@ describe("KanbanBoard card comment delete", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: /^Delete comment by Bob/ }),
     );
-    return screen.findByRole("dialog", { name: "Delete Comment" });
+    return screen.findByRole("dialog", { name: "Delete comment" });
   }
 
   it("sends the delete and closes the confirm dialog on success", async () => {
@@ -1010,7 +1063,7 @@ describe("KanbanBoard card comment delete", () => {
     );
     await waitFor(() => expect(mutateCardComments).toHaveBeenCalledOnce());
     expect(
-      screen.queryByRole("dialog", { name: "Delete Comment" }),
+      screen.queryByRole("dialog", { name: "Delete comment" }),
     ).not.toBeInTheDocument();
     expect(toastError).not.toHaveBeenCalled();
   });
@@ -1195,7 +1248,7 @@ describe("KanbanBoard double submit", () => {
         fireEvent.click(screen.getByText("A card"));
         fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
         const confirm = await screen.findByRole("dialog", {
-          name: "Delete Card",
+          name: "Delete card",
         });
         return within(confirm).getByRole("button", { name: "Delete" });
       },
@@ -1284,5 +1337,23 @@ describe("KanbanBoard load states", () => {
       screen.getByRole("heading", { name: "Test Board" }),
     ).toBeInTheDocument();
     expect(screen.queryByText("Couldn't load")).not.toBeInTheDocument();
+  });
+
+  // A page restored from the back/forward cache was frozen, so the board poll
+  // did not run and the board is as old as the moment it was put away.
+  it("revalidates when the page is restored from the back/forward cache", () => {
+    renderBoard();
+
+    firePageShow(true);
+
+    expect(mutateBoard).toHaveBeenCalledOnce();
+  });
+
+  it("does not revalidate on an ordinary page load", () => {
+    renderBoard();
+
+    firePageShow(false);
+
+    expect(mutateBoard).not.toHaveBeenCalled();
   });
 });

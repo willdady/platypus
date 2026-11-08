@@ -524,8 +524,8 @@ function BlueprintForm({
       <DeleteConfirmDialog
         open={isDeleteDialogOpen}
         onOpenChange={setIsDeleteDialogOpen}
-        title="Delete Blueprint"
-        description="Are you sure you want to delete this blueprint? Workspaces already provisioned from it are unaffected."
+        noun="blueprint"
+        consequence="Workspaces already provisioned from it are unaffected."
         onConfirm={handleDelete}
         loading={isDeleting}
         error={deleteError}

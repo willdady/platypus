@@ -10,9 +10,13 @@ import {
   stubAcceptedSave,
   stubRejectedSave,
   stubSaveSequence,
-  savedBody,
 } from "@/test/form-test-harness";
-import { selectOption } from "@/test/test-utils";
+import {
+  mcpCreateSchema,
+  mcpTestSchema,
+  mcpUpdateSchema,
+} from "@platypus/schemas";
+import { expectSentBodyToMatchSchema, selectOption } from "@/test/test-utils";
 import {
   OAUTH_MCP_ERROR_EVENT,
   OAUTH_MCP_SUCCESS_EVENT,
@@ -25,6 +29,12 @@ vi.mock("swr", () => swrMock);
 
 import { McpForm } from "./mcp-form";
 import { toast } from "sonner";
+
+/** The body the form put on the wire for the last save, checked against the
+ * strict update schema the backend validates it with. */
+function savedMcpBody(fetchMock: ReturnType<typeof vi.fn>) {
+  return expectSentBodyToMatchSchema(fetchMock, mcpUpdateSchema);
+}
 
 // --- Tests -------------------------------------------------------------------
 
@@ -201,10 +211,15 @@ describe("McpForm form submission", () => {
     const fetchMock = stubAcceptedSave({ id: "m1" });
     render(<McpForm orgId="org1" workspaceId="ws1" />);
 
+    fireEvent.change(screen.getByLabelText("URL"), {
+      target: { value: "http://mcp.test" },
+    });
     await setupUser().type(screen.getByLabelText("Name"), "Docs{Enter}");
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    expect(savedBody(fetchMock)).toMatchObject({ name: "Docs" });
+    expect(
+      expectSentBodyToMatchSchema(fetchMock, mcpCreateSchema),
+    ).toMatchObject({ name: "Docs" });
   });
 });
 
@@ -244,7 +259,7 @@ describe("McpForm save payload", () => {
     expect(fetchMock.mock.calls[0][0]).toBe(
       "http://test/organizations/org1/workspaces/ws1/mcps/m1",
     );
-    expect(savedBody(fetchMock)).toEqual({
+    expect(savedMcpBody(fetchMock)).toEqual({
       name: "Docs",
       url: "http://mcp.test",
       headers: { "X-Api": "1" },
@@ -276,7 +291,7 @@ describe("McpForm save payload", () => {
     expect(fetchMock.mock.calls[0][0]).toBe(
       "http://test/organizations/org1/mcps/m1",
     );
-    expect(savedBody(fetchMock)).toEqual({
+    expect(savedMcpBody(fetchMock)).toEqual({
       name: "Docs",
       url: "http://mcp.test",
       authType: "OAuth",
@@ -302,7 +317,9 @@ describe("McpForm save payload", () => {
     fireEvent.click(screen.getByRole("button", { name: "Update" }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    expect(savedBody(fetchMock)).toMatchObject({ oauthClientId: "new-client" });
+    expect(savedMcpBody(fetchMock)).toMatchObject({
+      oauthClientId: "new-client",
+    });
   });
 });
 
@@ -342,7 +359,7 @@ describe("McpForm test connection", () => {
     expect(fetchMock.mock.calls[0][0]).toBe(
       "http://test/organizations/org1/workspaces/ws1/mcps/m1/test",
     );
-    expect(savedBody(fetchMock)).toEqual({
+    expect(expectSentBodyToMatchSchema(fetchMock, mcpTestSchema)).toEqual({
       url: "http://mcp.test",
       authType: "Bearer",
       bearerToken: "secret-token",
@@ -440,14 +457,14 @@ describe("McpForm OAuth", () => {
     await waitFor(() =>
       expect(toast.success).toHaveBeenCalledWith("Already authorized"),
     );
-    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toMatchObject({
-      oauthClientId: "",
-    });
+    expect(
+      expectSentBodyToMatchSchema(fetchMock, mcpUpdateSchema, 0),
+    ).toMatchObject({ oauthClientId: "" });
 
     fireEvent.click(screen.getByRole("button", { name: "Update" }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
-    expect(savedBody(fetchMock)).not.toHaveProperty("oauthClientId");
+    expect(savedMcpBody(fetchMock)).not.toHaveProperty("oauthClientId");
   });
 
   // A new URL clears the client server-side while the form stays open; the
@@ -474,7 +491,9 @@ describe("McpForm OAuth", () => {
     fireEvent.click(screen.getByRole("button", { name: "Update" }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
-    expect(savedBody(fetchMock)).toMatchObject({ oauthClientId: "client-id" });
+    expect(savedMcpBody(fetchMock)).toMatchObject({
+      oauthClientId: "client-id",
+    });
   });
 
   // The form polls the popup until it closes. That poll belongs to the form:

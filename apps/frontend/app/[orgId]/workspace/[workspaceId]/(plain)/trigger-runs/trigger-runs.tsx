@@ -3,6 +3,7 @@
 import { use, useCallback } from "react";
 import { useListParams } from "@/hooks/use-list-params";
 import { useScopedList } from "@/hooks/use-scoped-list";
+import { useRevalidateOnRestore } from "@/hooks/use-revalidate-on-restore";
 import { scopedUrl, type Serialized } from "@/lib/api-write";
 import useSWRInfinite from "swr/infinite";
 import { History, TriangleAlert } from "lucide-react";
@@ -29,6 +30,7 @@ import { TriggerRunRowSkeleton } from "@/components/trigger-run-row-skeleton";
 import { LoadingRegion } from "@/components/list-skeletons";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { fetcher } from "@/lib/utils";
+import { PageHeader } from "@/components/page-header";
 
 /**
  * How many runs a page of the list holds. The endpoint caps a request at 100;
@@ -98,6 +100,8 @@ function TriggerRunsPage({
     { refreshInterval: 10000, refreshWhenHidden: false, revalidateAll: true },
   );
 
+  useRevalidateOnRestore(() => void mutate());
+
   const runs = data?.flatMap((page) => page.results) ?? [];
   const lastPage = data?.[data.length - 1];
   const hasMore = lastPage ? lastPage.results.length === PAGE_SIZE : false;
@@ -128,10 +132,10 @@ function TriggerRunsPage({
       touched the viewport edges. The widths are the workspace home page's, so
       the two read as one app. */}
       <div className="w-full px-4 md:px-8 xl:w-4/5 max-w-4xl">
-        <h1 className="text-2xl mb-1 font-bold">Trigger runs</h1>
-        <p className="text-muted-foreground mb-4">
-          Recent runs from every trigger in this workspace, newest first.
-        </p>
+        <PageHeader
+          title="Trigger runs"
+          description="Recent runs from every trigger in this workspace, newest first."
+        />
 
         {/* The parent supplies the space below the toolbar. */}
         <div className="mb-4">

@@ -48,10 +48,10 @@ describe("ChatErrorDialog", () => {
     },
   );
 
-  it("closes on Ok", async () => {
+  it("closes on OK", async () => {
     const onOpenChange = renderDialog();
 
-    await setupUser().click(screen.getByRole("button", { name: "Ok" }));
+    await setupUser().click(screen.getByRole("button", { name: "OK" }));
 
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });

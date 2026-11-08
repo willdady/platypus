@@ -1,5 +1,9 @@
 import { describe, it, expect, vi } from "vitest";
-import type { KanbanCard } from "@platypus/schemas";
+import {
+  kanbanCardMoveSchema,
+  kanbanColumnReorderSchema,
+  type KanbanCard,
+} from "@platypus/schemas";
 import {
   applyCardMove,
   moveCard,
@@ -8,6 +12,7 @@ import {
   type ColumnWithCards,
 } from "./board-moves";
 import {
+  expectSentBodyToMatchSchema,
   stubAcceptedSave,
   stubRejectedSave,
   stubSaveSequence,
@@ -214,9 +219,11 @@ describe("writes", () => {
 
       expect(await moveCard(baseUrl, move, s)).toEqual({ outcome: "moved" });
 
-      const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+      const [url] = fetchMock.mock.calls[0] as [string, RequestInit];
       expect(url).toBe(`${baseUrl}/cards/card-1/move`);
-      expect(JSON.parse(init.body as string)).toEqual({
+      expect(
+        expectSentBodyToMatchSchema(fetchMock, kanbanCardMoveSchema),
+      ).toEqual({
         columnId: "col-2",
         afterCardId: null,
         expectedColumnId: "col-1",
@@ -270,7 +277,9 @@ describe("writes", () => {
       const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
       expect(url).toBe(`${baseUrl}/columns/reorder`);
       expect(init.method).toBe("PUT");
-      expect(JSON.parse(init.body as string)).toEqual({
+      expect(
+        expectSentBodyToMatchSchema(fetchMock, kanbanColumnReorderSchema),
+      ).toEqual({
         columnIds: ["col-2", "col-1"],
       });
       expect(s.refetch).toHaveBeenCalled();

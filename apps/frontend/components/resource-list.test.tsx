@@ -1,7 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { screen, fireEvent, waitFor } from "@testing-library/react";
 import type { ComponentType } from "react";
-import type { MCP, Provider } from "@platypus/schemas";
+import {
+  attachmentCreateSchema,
+  type MCP,
+  type Provider,
+} from "@platypus/schemas";
 import type { WorkspaceDelegationFlags } from "@/lib/authorization";
 import {
   authMock,
@@ -18,7 +22,10 @@ import {
   menuItemLabels,
   confirmDialog,
 } from "@/test/list-test-harness";
-import { openDropdownMenu } from "@/test/test-utils";
+import {
+  expectSentBodyToMatchSchema,
+  openDropdownMenu,
+} from "@/test/test-utils";
 
 // --- Module mocks ------------------------------------------------------------
 
@@ -74,6 +81,8 @@ const RESOURCES: {
   item: ScopedResource;
   workspaceItem: ScopedResource;
   dialogTitle: string;
+  /** The shared row's attach CTA. */
+  attachLabel: string;
   fetchErrorNoun: string;
   /** What the card's second line shows for `workspaceItem`. */
   secondLine: string;
@@ -88,6 +97,7 @@ const RESOURCES: {
     item: orgProvider,
     workspaceItem: workspaceProvider,
     dialogTitle: "Detach shared provider",
+    attachLabel: "Attach shared provider",
     fetchErrorNoun: "providers",
     secondLine: "OpenAI",
   },
@@ -101,6 +111,7 @@ const RESOURCES: {
     item: orgMcp,
     workspaceItem: workspaceMcp,
     dialogTitle: "Detach shared MCP server",
+    attachLabel: "Attach shared MCP server",
     fetchErrorNoun: "MCP servers",
     secondLine: "https://local.example.com/mcp",
   },
@@ -121,6 +132,7 @@ describe.each(RESOURCES)(
     item,
     workspaceItem,
     dialogTitle,
+    attachLabel,
     fetchErrorNoun,
     secondLine,
   }) => {
@@ -202,7 +214,7 @@ describe.each(RESOURCES)(
         `/org1/workspace/ws1/${settingsPath}/create`,
       );
       expect(
-        screen.getByRole("button", { name: /^Attach shared/ }),
+        screen.getByRole("button", { name: attachLabel }),
       ).toBeInTheDocument();
     });
 
@@ -389,6 +401,9 @@ describe.each(RESOURCES)(
             }),
           ),
         );
+        expect(
+          expectSentBodyToMatchSchema(fetchMock, attachmentCreateSchema),
+        ).toEqual({ resourceType, resourceId: item.id });
       });
 
       it("shows an Org Admin how many Workspaces each row is shared with", async () => {

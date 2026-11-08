@@ -192,18 +192,16 @@ export function UsersList() {
         <DeleteConfirmDialog
           open={deleteFlow.open}
           onOpenChange={(open) => !open && deleteFlow.close()}
-          title="Delete User"
-          description={
+          noun="user"
+          name={deleteFlow.target.name}
+          consequence={
             <>
-              This action cannot be undone. This will permanently delete the
-              user{" "}
-              <span className="font-semibold">{deleteFlow.target.name}</span> (
-              {deleteFlow.target.email}) and remove all of their data from the
-              system.
+              Their email is {deleteFlow.target.email}, and all of their data is
+              removed from the system.
             </>
           }
+          requireTypedConfirmation
           confirmLabel="Delete user"
-          confirmPhrase="delete user"
           onConfirm={deleteFlow.confirm}
           loading={deleteFlow.deleting}
           error={deleteFlow.error}

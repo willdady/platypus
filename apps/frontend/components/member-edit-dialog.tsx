@@ -62,7 +62,7 @@ export function MemberEditDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Edit Member Role</DialogTitle>
+          <DialogTitle>Edit member role</DialogTitle>
           <DialogDescription>
             Change the organization-level role for {member.user.name}.
           </DialogDescription>

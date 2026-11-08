@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import type { Context } from "@platypus/schemas";
+import { contextCreateSchema, type Context } from "@platypus/schemas";
 import {
   authMock,
   configuredMutate,
@@ -11,7 +11,7 @@ import {
   stubAcceptedSave,
   stubRejectedSave,
 } from "@/test/form-test-harness";
-import { selectOption } from "@/test/test-utils";
+import { expectSentBodyToMatchSchema, selectOption } from "@/test/test-utils";
 
 // --- Module mocks ------------------------------------------------------------
 
@@ -145,10 +145,12 @@ describe("WorkspaceContextForm writes", () => {
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe(CONTEXTS_URL);
     expect(init.method).toBe("POST");
-    expect(JSON.parse(String(init.body))).toEqual({
-      content: "",
-      workspaceId: "ws1",
-    });
+    expect(expectSentBodyToMatchSchema(fetchMock, contextCreateSchema)).toEqual(
+      {
+        content: "",
+        workspaceId: "ws1",
+      },
+    );
     expect(configuredMutate).toHaveBeenCalledWith(CONTEXTS_URL);
     expect(toastSuccess).toHaveBeenCalledWith("Workspace context created");
     expect(push).toHaveBeenCalledWith("/settings/contexts");

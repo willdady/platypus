@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { skillCreateSchema } from "@platypus/schemas";
+import { expectSentBodyToMatchSchema } from "@/test/test-utils";
 import {
   authMock,
   swrMock,
   resetFormHarness,
-  savedBody,
   setDataFor,
   setupUser,
   stubAcceptedSave,
@@ -44,10 +45,21 @@ describe("SkillForm form submission", () => {
     const fetchMock = stubAcceptedSave({ id: "s1" });
     render(<SkillForm orgId="o1" workspaceId="ws1" />);
 
-    await setupUser().type(screen.getByLabelText("Name"), "new-skill{Enter}");
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "new-skill" },
+    });
+    fireEvent.change(screen.getByLabelText("Description"), {
+      target: { value: "A long enough description for the skill." },
+    });
+    fireEvent.change(screen.getByLabelText("Body"), {
+      target: { value: "A long enough body for the skill." },
+    });
+    await setupUser().type(screen.getByLabelText("Name"), "{Enter}");
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    expect(savedBody(fetchMock)).toMatchObject({ name: "new-skill" });
+    expect(
+      expectSentBodyToMatchSchema(fetchMock, skillCreateSchema),
+    ).toMatchObject({ name: "new-skill" });
   });
 });
 

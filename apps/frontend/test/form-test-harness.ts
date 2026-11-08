@@ -139,16 +139,3 @@ export function resetFormHarness() {
   defaultResponse = nullResponse;
   responsesByKeySuffix.clear();
 }
-
-/**
- * The JSON body the form put on the wire for the last save. Typed on the one
- * thing it reads rather than `Mock`, whose generic varies with how the caller
- * spelled `vi.fn()`.
- */
-export function savedBody(fetchMock: { mock: { calls: unknown[][] } }) {
-  const [, init] = fetchMock.mock.calls.at(-1) as unknown as [
-    string,
-    RequestInit,
-  ];
-  return JSON.parse(init.body as string) as Record<string, unknown>;
-}

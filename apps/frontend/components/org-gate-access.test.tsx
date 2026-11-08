@@ -10,7 +10,8 @@ import {
   stubAcceptedSave,
   mutate,
 } from "@/test/list-test-harness";
-import { selectOption } from "@/test/test-utils";
+import { orgGateAccessUpdateSchema } from "@platypus/schemas";
+import { expectSentBodyToMatchSchema, selectOption } from "@/test/test-utils";
 import { elsewhereClicked, GuardLink } from "@/test/unsaved-changes-harness";
 import { UnsavedChangesProvider } from "./unsaved-changes-guard";
 
@@ -44,7 +45,7 @@ function access(over: Record<string, unknown> = {}) {
 }
 
 function sentBody(fetchMock: ReturnType<typeof stubAcceptedSave>) {
-  return JSON.parse(fetchMock.mock.calls[0][1].body as string);
+  return expectSentBodyToMatchSchema(fetchMock, orgGateAccessUpdateSchema);
 }
 
 function renderGuarded(ui: ReactElement) {

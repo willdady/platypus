@@ -319,7 +319,7 @@ export function useEntityForm<
       try {
         const result = write
           ? await write(formData)
-          : await writeEntity<TResult>(backendUrl, entity, scope, {
+          : await writeEntity<string, TResult>(backendUrl, entity, scope, {
               id,
               method,
               data: buildPayload?.(formData),
@@ -478,7 +478,9 @@ export function useEntityDelete<TResult = unknown>({
     try {
       const result = write
         ? await write()
-        : await writeEntity<TResult>(backendUrl, entity, scope, { id });
+        : await writeEntity<string, TResult>(backendUrl, entity, scope, {
+            id,
+          });
 
       await applyDeleteOutcome(result, {
         mutate,

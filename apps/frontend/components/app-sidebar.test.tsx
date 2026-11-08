@@ -8,7 +8,8 @@ import {
   within,
 } from "@testing-library/react";
 import { SidebarProvider } from "@/components/ui/sidebar";
-import { jsonResponse } from "@/test/test-utils";
+import { chatUpdateSchema } from "@platypus/schemas";
+import { expectSentBodyToMatchSchema, jsonResponse } from "@/test/test-utils";
 import type { Actor } from "@/lib/authorization";
 
 // --- Module mocks ------------------------------------------------------------
@@ -420,6 +421,9 @@ describe("AppSidebar chat actions", () => {
     expect(url).toBe("http://test/organizations/org1/workspaces/ws1/chat/c1");
     expect(init.method).toBe("PUT");
     expect(JSON.parse(init.body)).toEqual({ isPinned: true });
+    expect(expectSentBodyToMatchSchema(fetchMock, chatUpdateSchema)).toEqual({
+      isPinned: true,
+    });
   });
 
   it("shows a pin at once and reverts it if refused", async () => {

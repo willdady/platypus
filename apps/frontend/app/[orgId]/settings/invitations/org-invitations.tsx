@@ -21,7 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import {
   BadgeSkeleton,
   IconButtonSkeleton,
@@ -31,6 +31,8 @@ import {
 import { TableList } from "@/components/table-list";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
 import { OrganizationName } from "@/components/organization-name";
+import { PageHeader } from "@/components/page-header";
+import { SettingsSectionHeading } from "@/components/settings-section-heading";
 
 function OrgInvitationsPage() {
   const { orgId } = useParams<{ orgId: string }>();
@@ -95,16 +97,20 @@ function OrgInvitationsPage() {
   return (
     <div className="flex flex-col gap-8">
       <div>
-        <h1 className="text-2xl font-bold mb-4">Invitations</h1>
-        <p className="text-muted-foreground mb-6">
-          Manage invitations for users to join{" "}
-          <OrganizationName orgId={orgId} />.
-        </p>
+        <PageHeader
+          title="Invitations"
+          description={
+            <>
+              Manage invitations for users to join{" "}
+              <OrganizationName orgId={orgId} />.
+            </>
+          }
+        />
         <InvitationForm orgId={orgId} onSuccess={() => mutate()} />
       </div>
 
       <div>
-        <h2 className="text-xl font-semibold mb-4">Sent Invitations</h2>
+        <SettingsSectionHeading>Sent Invitations</SettingsSectionHeading>
         <TableList
           isLoading={isLoading}
           data={data}
@@ -211,14 +217,10 @@ function OrgInvitationsPage() {
         </TableList>
       </div>
 
-      <ConfirmDialog
+      <DeleteConfirmDialog
         open={invitationDelete.open}
         onOpenChange={(open) => !open && invitationDelete.close()}
-        title="Delete Invitation"
-        description="Are you sure you want to delete this invitation? This action cannot be undone."
-        confirmLabel="Delete"
-        loadingLabel="Deleting..."
-        confirmVariant="destructive"
+        noun="invitation"
         onConfirm={invitationDelete.confirm}
         loading={invitationDelete.deleting}
         error={invitationDelete.error}

@@ -97,7 +97,7 @@ export const CUT_SHORT_NOTICE =
  * on its last step to answer from what it had (issue #1730), so this means it
  * called a tool again instead. **Max steps** is the remedy on every turn that
  * shows it: an Agent has the field, and a direct Chat has the same setting in
- * Chat Settings.
+ * Chat settings.
  */
 export const STEP_LIMIT_NOTICE =
   "Response cut short at the step limit. Raise Max steps to let it finish.";
@@ -302,6 +302,57 @@ function partRenderer<P extends MessagePart>(
     matches,
     render: (part, i) => (matches(part) ? render(part, i) : null),
   };
+}
+
+type ToolPartCardProps = {
+  /** The dynamic (MCP) or generic tool part to draw. */
+  part: MessageToolPart | DynamicToolUIPart;
+  /** The message's metadata, which carries the duration mid-turn. */
+  messageMetadata: PlatypusUIMessage["metadata"];
+  /**
+   * The row's title, shown verbatim. An MCP tool's name is its identity —
+   * namespace and all — so it is passed rather than humanised; `ToolHeader`
+   * truncates it because a name can be long (issue #691).
+   */
+  title?: string;
+  /** A human-readable label shown after the name. */
+  label?: string;
+  /** Whether clearing would leave this result or input out of the next call. */
+  cleared?: boolean;
+};
+
+/**
+ * One tool call's disclosure. The dynamic (MCP) and generic renderers draw the
+ * same tree; they differ only in what the row is called and whether clearing
+ * applies.
+ */
+function ToolPartCard({
+  part,
+  messageMetadata,
+  title,
+  label,
+  cleared,
+}: ToolPartCardProps) {
+  return (
+    <Tool>
+      <ToolHeader
+        state={part.state}
+        type={part.type}
+        title={title}
+        label={label}
+        durationMs={toolCallDurationMs(
+          part.toolMetadata,
+          messageMetadata,
+          part.toolCallId,
+        )}
+        cleared={cleared}
+      />
+      <ToolContent>
+        <ToolInput input={part.input} />
+        <ToolOutput output={part.output} errorText={toolErrorText(part)} />
+      </ToolContent>
+    </Tool>
+  );
 }
 
 type ChatMessageProps = {
@@ -510,28 +561,12 @@ export const ChatMessage = memo(function ChatMessage({
       </Reasoning>
     )),
     partRenderer(isDynamicToolPart, (toolPart, i) => (
-      <Tool key={`${message.id}-${i}`}>
-        {/* An MCP tool's name is its identity — namespace and all — so it
-            is shown verbatim rather than humanised (issue #691 is why it has
-            to truncate). */}
-        <ToolHeader
-          state={toolPart.state}
-          type={toolPart.type}
-          title={toolPart.toolName}
-          durationMs={toolCallDurationMs(
-            toolPart.toolMetadata,
-            message.metadata,
-            toolPart.toolCallId,
-          )}
-        />
-        <ToolContent>
-          <ToolInput input={toolPart.input} />
-          <ToolOutput
-            output={toolPart.output}
-            errorText={toolErrorText(toolPart)}
-          />
-        </ToolContent>
-      </Tool>
+      <ToolPartCard
+        key={`${message.id}-${i}`}
+        part={toolPart}
+        messageMetadata={message.metadata}
+        title={toolPart.toolName}
+      />
     )),
     partRenderer(isLoadSkillPart, (part, i) => (
       <LoadSkillTool key={`${message.id}-${i}`} toolPart={part} />
@@ -559,26 +594,13 @@ export const ChatMessage = memo(function ChatMessage({
       const toolLabel = (toolInput?.label ?? toolInput?.name) as
         string | undefined;
       return (
-        <Tool key={`${message.id}-${i}`}>
-          <ToolHeader
-            state={toolPart.state}
-            type={toolPart.type}
-            label={toolLabel}
-            durationMs={toolCallDurationMs(
-              toolPart.toolMetadata,
-              message.metadata,
-              toolPart.toolCallId,
-            )}
-            cleared={staleToolCallIds?.has(toolPart.toolCallId)}
-          />
-          <ToolContent>
-            <ToolInput input={toolPart.input} />
-            <ToolOutput
-              output={toolPart.output}
-              errorText={toolErrorText(toolPart)}
-            />
-          </ToolContent>
-        </Tool>
+        <ToolPartCard
+          key={`${message.id}-${i}`}
+          part={toolPart}
+          messageMetadata={message.metadata}
+          label={toolLabel}
+          cleared={staleToolCallIds?.has(toolPart.toolCallId)}
+        />
       );
     }),
     partRenderer(isImageFilePart, (filePart, i) => (

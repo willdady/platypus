@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { organizationCreateSchema } from "@platypus/schemas";
+import { expectSentBodyToMatchSchema } from "@/test/test-utils";
 import {
   authMock,
   swrMock,
@@ -11,7 +13,6 @@ import {
   setLoading,
   setupUser,
   stubAcceptedSave,
-  savedBody,
 } from "@/test/form-test-harness";
 
 vi.mock("@/components/auth-provider", () => authMock);
@@ -72,7 +73,9 @@ describe("OrganizationForm create", () => {
     await waitFor(() => expect(push).toHaveBeenCalledWith("/org9"));
     expect(toastSuccess).toHaveBeenCalledWith("Organization created");
     expect(fetchMock.mock.calls[0][0]).toBe("http://test/organizations");
-    expect(savedBody(fetchMock)).toEqual({ name: "Acme" });
+    expect(
+      expectSentBodyToMatchSchema(fetchMock, organizationCreateSchema),
+    ).toEqual({ name: "Acme" });
   });
 
   it("saves on Enter in the Name field", async () => {
@@ -82,6 +85,8 @@ describe("OrganizationForm create", () => {
     await setupUser().type(screen.getByLabelText("Name"), "Acme{Enter}");
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    expect(savedBody(fetchMock)).toEqual({ name: "Acme" });
+    expect(
+      expectSentBodyToMatchSchema(fetchMock, organizationCreateSchema),
+    ).toEqual({ name: "Acme" });
   });
 });

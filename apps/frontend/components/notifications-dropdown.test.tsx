@@ -8,7 +8,11 @@ import {
   within,
 } from "@testing-library/react";
 
-import { jsonResponse, openDropdownMenu } from "@/test/test-utils";
+import {
+  firePageShow,
+  jsonResponse,
+  openDropdownMenu,
+} from "@/test/test-utils";
 
 vi.mock("@/components/auth-provider", () => ({
   useBackendUrl: () => "http://test",
@@ -20,11 +24,14 @@ type SwrCall = {
   config?: { refreshInterval?: number };
 };
 
-const { swrCalls, feeds, mutate, toastError } = vi.hoisted(() => ({
+const { swrCalls, feeds, mutate, mutatedKeys, toastError } = vi.hoisted(() => ({
   swrCalls: [] as SwrCall[],
   // What each read returns, keyed by the tail of its URL.
   feeds: {} as Record<string, unknown>,
   mutate: vi.fn(),
+  // Which read's own `mutate` was called, so a test can tell the badge's
+  // count read from the list beside it.
+  mutatedKeys: [] as (string | null)[],
   toastError: vi.fn(),
 }));
 
@@ -38,7 +45,10 @@ vi.mock("swr", () => ({
     const tail = Object.keys(feeds).find((t) => key?.endsWith(t));
     return {
       data: tail ? feeds[tail] : { results: [], count: 0 },
-      mutate,
+      mutate: (...args: unknown[]): void => {
+        mutatedKeys.push(key);
+        mutate(...args);
+      },
     };
   },
 }));
@@ -55,6 +65,7 @@ function lastConfigFor(keyFragment: string): SwrCall["config"] {
 
 beforeEach(() => {
   swrCalls.length = 0;
+  mutatedKeys.length = 0;
   for (const tail of Object.keys(feeds)) delete feeds[tail];
   mutate.mockReset();
   toastError.mockReset();
@@ -71,6 +82,16 @@ const unread = {
   isRead: false,
   createdAt: new Date().toISOString(),
 };
+
+describe("NotificationsDropdown trigger", () => {
+  it("uses the header's icon-xs size on the bell", () => {
+    render(<NotificationsDropdown orgId="org1" workspaceId="ws1" />);
+
+    expect(screen.getByRole("button", { name: "Notifications" })).toHaveClass(
+      "size-7",
+    );
+  });
+});
 
 describe("NotificationsDropdown polling", () => {
   it("does not poll any feed while the dropdown is closed", () => {
@@ -110,6 +131,27 @@ describe("NotificationsDropdown polling", () => {
           "http://test/organizations/org1/workspaces/ws1/notifications",
       ),
     ).toBe(true);
+  });
+
+  // A page restored from the back/forward cache was frozen, so the count read
+  // did not poll and the badge still shows what it showed when the page was
+  // put away.
+  it("revalidates the unread count when the page is restored", () => {
+    render(<NotificationsDropdown orgId="org1" workspaceId="ws1" />);
+
+    firePageShow(true);
+
+    expect(mutatedKeys).toEqual([
+      "http://test/organizations/org1/workspaces/ws1/notifications/unread-count",
+    ]);
+  });
+
+  it("does not revalidate on an ordinary page load", () => {
+    render(<NotificationsDropdown orgId="org1" workspaceId="ws1" />);
+
+    firePageShow(false);
+
+    expect(mutatedKeys).toEqual([]);
   });
 });
 

@@ -102,7 +102,7 @@ export function ChatSettingsDialog({
       showCloseButton={false}
     >
       <DialogHeader>
-        <DialogTitle>Chat Settings</DialogTitle>
+        <DialogTitle>Chat settings</DialogTitle>
         <DialogDescription>
           Configure advanced settings for this chat session.
         </DialogDescription>

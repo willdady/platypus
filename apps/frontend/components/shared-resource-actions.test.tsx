@@ -18,7 +18,8 @@ vi.mock("swr", () => ({
 }));
 
 import { AttachSharedAction } from "./shared-resource-actions";
-import { jsonResponse } from "@/test/test-utils";
+import { attachmentCreateSchema } from "@platypus/schemas";
+import { expectSentBodyToMatchSchema, jsonResponse } from "@/test/test-utils";
 
 afterEach(() => {
   orgRows = [];
@@ -79,6 +80,9 @@ describe.each([
         body: JSON.stringify({ resourceType, resourceId: "r2" }),
       }),
     );
+    expect(
+      expectSentBodyToMatchSchema(fetchMock, attachmentCreateSchema),
+    ).toEqual({ resourceType, resourceId: "r2" });
   });
 
   it("surfaces the backend's reason when the attach is refused", async () => {

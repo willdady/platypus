@@ -161,8 +161,8 @@ export function OrgAgentsList({ orgId }: { orgId: string }) {
       <DeleteConfirmDialog
         open={deleteFlow.open}
         onOpenChange={(open) => !open && deleteFlow.close()}
-        title="Delete shared agent"
-        description={`Delete "${deleteFlow.target?.name}"? This cannot be undone.`}
+        noun="shared agent"
+        name={deleteFlow.target?.name}
         onConfirm={deleteFlow.confirm}
         loading={deleteFlow.deleting}
         error={deleteFlow.error}

@@ -2,6 +2,7 @@ import { useMemo, useSyncExternalStore } from "react";
 import { expect, vi, type Mock } from "vitest";
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { z } from "zod";
 
 /**
  * The spies and module mocks both harnesses hand to `vi.mock`, and that
@@ -131,6 +132,17 @@ export async function selectOption(from: string | HTMLElement, option: string) {
 }
 
 /**
+ * Fires a `pageshow` as the browser does. jsdom has no `PageTransitionEvent`,
+ * so the property is defined on a plain event; `persisted` is what separates a
+ * bfcache restore from an ordinary page load.
+ */
+export function firePageShow(persisted: boolean) {
+  const event = new Event("pageshow");
+  Object.defineProperty(event, "persisted", { value: persisted });
+  window.dispatchEvent(event);
+}
+
+/**
  * Builds a fetch-shaped `Response` resolving to `body` with `status`. Carries
  * an empty `statusText`: the request module falls back to it when a failure
  * body names no reason, and a real `Response` has one.
@@ -158,6 +170,55 @@ export function expectEntryActionVariant(
   }
   expect(link).toHaveClass("border");
   expect(link).not.toHaveClass("bg-primary");
+}
+
+/** The sliver of a Vitest mock the sent-body helpers read. */
+type SentBodyFetchMock = { mock: { calls: unknown[][] } };
+
+/**
+ * Asserts the JSON body of the fetch call at `callIndex` (the last by default)
+ * parses against the `@platypus/schemas` request schema a create or update is
+ * validated by. A component can build its body with `Object.fromEntries`, which
+ * the compiler cannot inspect; this catches the same unknown key the backend's
+ * `strictRequest` would refuse, with the Zod issues in the failure.
+ *
+ * Returns the body as it was sent — not the schema's output, whose `.default()`s
+ * would add keys the request never carried — so a test can still assert on it.
+ */
+export function expectSentBodyToMatchSchema<T extends z.ZodType>(
+  fetchMock: SentBodyFetchMock,
+  schema: T,
+  callIndex = -1,
+): z.input<T> {
+  const [, init] = fetchMock.mock.calls.at(callIndex) as unknown as [
+    string,
+    RequestInit,
+  ];
+  const raw = init.body;
+  if (typeof raw !== "string") {
+    throw new Error(
+      `Fetch call ${callIndex} carried no JSON body (got ${
+        raw === undefined ? "undefined" : typeof raw
+      })`,
+    );
+  }
+  const body: unknown = JSON.parse(raw);
+  const result = schema.safeParse(body);
+  if (!result.success) {
+    const issues = result.error.issues
+      .map(
+        (issue) => `  - ${issue.path.join(".") || "(root)"}: ${issue.message}`,
+      )
+      .join("\n");
+    throw new Error(
+      `Sent body does not match the request schema:\n${issues}\n${JSON.stringify(
+        body,
+        null,
+        2,
+      )}`,
+    );
+  }
+  return body as z.input<T>;
 }
 
 /** Stubs global `fetch` to resolve with an accepted (2xx) save. */

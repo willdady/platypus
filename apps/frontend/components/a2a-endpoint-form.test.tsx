@@ -17,11 +17,15 @@ import {
   setupUser,
   stubAcceptedSave,
   stubRejectedSave,
-  savedBody,
   toastError,
   toastSuccess,
 } from "@/test/form-test-harness";
-import { selectOption } from "@/test/test-utils";
+import {
+  a2aEndpointCreateSchema,
+  a2aEndpointUpdateSchema,
+  a2aTokenCreateSchema,
+} from "@platypus/schemas";
+import { expectSentBodyToMatchSchema, selectOption } from "@/test/test-utils";
 import { formatDateTime } from "@/lib/format-date";
 
 // The backend URL a test may blank, to stand for one not configured yet.
@@ -131,7 +135,9 @@ describe("A2aEndpointForm", () => {
         "/org1/workspace/ws1/settings/a2a-endpoints/ep-1#access",
       ),
     );
-    expect(savedBody(fetchMock)).toEqual({
+    expect(
+      expectSentBodyToMatchSchema(fetchMock, a2aEndpointCreateSchema),
+    ).toEqual({
       agentId: "agent-1",
       name: "Helper",
       description: "Internal",
@@ -149,7 +155,9 @@ describe("A2aEndpointForm", () => {
     await setupUser().type(screen.getByLabelText("Name"), "{Enter}");
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    expect(savedBody(fetchMock)).toMatchObject({ name: "Helper" });
+    expect(
+      expectSentBodyToMatchSchema(fetchMock, a2aEndpointCreateSchema),
+    ).toMatchObject({ name: "Helper" });
   });
 
   it("lands on the token name when opened just after create", async () => {
@@ -190,7 +198,9 @@ describe("A2aEndpointForm", () => {
     fireEvent.click(screen.getByRole("button", { name: "Update" }));
 
     await waitFor(() =>
-      expect(savedBody(fetchMock)).toEqual({
+      expect(
+        expectSentBodyToMatchSchema(fetchMock, a2aEndpointUpdateSchema),
+      ).toEqual({
         name: "Acme helpdesk",
         description: "Ask about your order",
         enabled: true,
@@ -230,7 +240,9 @@ describe("A2aEndpointForm", () => {
       "http://test/organizations/org1/workspaces/ws1/a2a-endpoints/ep-1/tokens",
       expect.objectContaining({ method: "POST" }),
     );
-    expect(savedBody(fetchMock)).toEqual({ name: "Rovo", expiryDays: 90 });
+    expect(
+      expectSentBodyToMatchSchema(fetchMock, a2aTokenCreateSchema),
+    ).toEqual({ name: "Rovo", expiryDays: 90 });
 
     fireEvent.click(screen.getByRole("button", { name: "I've copied it" }));
     expect(screen.queryByDisplayValue("pa2a_secret")).not.toBeInTheDocument();
@@ -322,7 +334,9 @@ describe("A2aEndpointForm", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add token" }));
 
     await waitFor(() =>
-      expect(savedBody(fetchMock)).toEqual({ name: "Rovo", expiryDays: 365 }),
+      expect(
+        expectSentBodyToMatchSchema(fetchMock, a2aTokenCreateSchema),
+      ).toEqual({ name: "Rovo", expiryDays: 365 }),
     );
   });
 

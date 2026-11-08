@@ -58,6 +58,7 @@ import {
   type Scope,
   type Serialized,
 } from "@/lib/api-write";
+import { parseCloneBody } from "@/lib/parse-write-body";
 import { splitPinned } from "@/lib/pinned-agents";
 import { pickKeys, sortByName } from "@/lib/utils";
 import { ListFooter, ListPagination } from "@/components/list-pagination";
@@ -276,7 +277,19 @@ export function AgentsList({
       }).map(([key, value]) => [key, value === null ? undefined : value]),
     );
 
-    return writeEntity<Agent>(url, "agents", scope, { data: sanitizedData });
+    // `Object.fromEntries` erases its keys, so the compiler can't see the
+    // body. Check it against the same strict schema the backend validates the
+    // create with, then pass the parsed body on.
+    const parsed = parseCloneBody(
+      agentCreateSchema,
+      sanitizedData,
+      "This Agent cannot be cloned.",
+    );
+    if (!parsed.ok) return Promise.resolve(parsed.outcome);
+
+    return writeEntity<"agents", Agent>(url, "agents", scope, {
+      data: parsed.data,
+    });
   };
 
   const isLoading = isLoadingAgents || isLoadingProviders;
@@ -517,7 +530,7 @@ export function AgentsList({
 
       {cloneRefs && agentToClone && (
         <CloneDialog
-          noun="Agent"
+          noun="agent"
           original={agentToClone.name}
           onClose={() => setAgentToClone(null)}
           create={(name, url) =>
@@ -565,8 +578,8 @@ export function AgentsList({
       <DeleteConfirmDialog
         open={deleteFlow.open}
         onOpenChange={(open) => !open && deleteFlow.close()}
-        title="Delete Agent"
-        description={`Are you sure you want to delete "${deleteFlow.target?.name}"? This action cannot be undone.`}
+        noun="agent"
+        name={deleteFlow.target?.name}
         onConfirm={deleteFlow.confirm}
         loading={deleteFlow.deleting}
         error={deleteFlow.error}

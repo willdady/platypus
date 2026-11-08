@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { SkillsList } from "@/components/skills-list";
 import { OrgSkillImportAccess } from "@/components/org-gate-access";
+import { PageHeader } from "@/components/page-header";
+import { SettingsSectionHeading } from "@/components/settings-section-heading";
 
 export const metadata: Metadata = { title: "Organization Skills" };
 
@@ -13,16 +15,15 @@ async function OrgSkillsPage({
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-4">Organization Skills</h1>
-      <p className="text-muted-foreground mb-6">
-        Skills defined here are shared resources. They appear in a workspace
-        only where an admin attaches them, and are edited only here.
-      </p>
+      <PageHeader
+        title="Organization Skills"
+        description="Skills defined here are shared resources. They appear in a workspace only where an admin attaches them, and are edited only here."
+      />
       <SkillsList orgId={orgId} />
 
-      <h2 className="text-lg font-semibold mt-8 mb-3">
+      <SettingsSectionHeading className="mt-8">
         Importing in workspaces
-      </h2>
+      </SettingsSectionHeading>
       <OrgSkillImportAccess orgId={orgId} />
     </div>
   );
