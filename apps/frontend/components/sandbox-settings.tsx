@@ -40,7 +40,10 @@ import { SelectGroup, SelectItem, SelectLabel } from "@/components/ui/select";
 import { EmptyCard } from "@/components/empty-card";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { FormFooterButtons } from "@/components/form-footer-buttons";
+import {
+  FormFooterButtons,
+  PENDING_SUBMIT_TEXT,
+} from "@/components/form-footer-buttons";
 import { FormSelectField } from "@/components/form-select-field";
 import { FormTextField } from "@/components/form-text-field";
 import { FormTextareaField } from "@/components/form-textarea-field";
@@ -562,7 +565,13 @@ function SandboxSettings({
   }
 
   return (
-    <div>
+    <form
+      noValidate
+      onSubmit={(e) => {
+        e.preventDefault();
+        handleSave();
+      }}
+    >
       <FieldSet className="mb-6">
         <FieldGroup>
           <FormTextField
@@ -955,21 +964,25 @@ function SandboxSettings({
       {draft ? (
         <div className="flex gap-2">
           <Button
+            type="button"
             variant="outline"
             onClick={draft.onBack}
             disabled={isSubmitting}
           >
             Back
           </Button>
-          <Button onClick={handleSave} disabled={isSubmitting}>
-            {draft.submitText}
+          <Button type="button" onClick={handleSave} disabled={isSubmitting}>
+            {isSubmitting && draft.submitText === "Save"
+              ? PENDING_SUBMIT_TEXT.Save
+              : draft.submitText}
           </Button>
         </div>
       ) : (
         <div className="flex gap-2">
           <FormFooterButtons
+            type="submit"
             submitText="Save"
-            onSubmit={handleSave}
+            pending={isSubmitting}
             submitDisabled={isSubmitting}
             deleteVisible={hasSandbox && canConfigure}
             deleteDisabled={isSubmitting}
@@ -978,6 +991,7 @@ function SandboxSettings({
 
           {!hasSandbox && (
             <Button
+              type="button"
               variant="ghost"
               onClick={() => {
                 setIsConfiguring(false);
@@ -1021,7 +1035,7 @@ function SandboxSettings({
         loading={isForcing}
         error={forceDialog.error}
       />
-    </div>
+    </form>
   );
 }
 

@@ -14,6 +14,7 @@ import {
   push,
   resetFormHarness,
   setDataFor,
+  setupUser,
   stubAcceptedSave,
   stubRejectedSave,
   savedBody,
@@ -138,6 +139,17 @@ describe("A2aEndpointForm", () => {
       includeMemories: false,
       extractMemories: false,
     });
+  });
+
+  it("saves on Enter in the Name field", async () => {
+    const fetchMock = stubAcceptedSave({ ...endpoint, tokens: undefined });
+    render(<A2aEndpointForm orgId="org1" workspaceId="ws1" />);
+
+    await selectOption("Select an agent", "Helper");
+    await setupUser().type(screen.getByLabelText("Name"), "{Enter}");
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(savedBody(fetchMock)).toMatchObject({ name: "Helper" });
   });
 
   it("lands on the token name when opened just after create", async () => {

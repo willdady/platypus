@@ -11,10 +11,12 @@ import {
   stubAcceptedSave,
   stubRejectedSave,
   stubSaveSequence,
+  setupUser,
   toastError,
   toastSuccess,
 } from "@/test/list-test-harness";
 import { savedBody } from "@/test/form-test-harness";
+import type { WriteOutcome } from "@/lib/api-write";
 
 // --- Module mocks ------------------------------------------------------------
 
@@ -199,7 +201,48 @@ describe("SandboxSettings read failure", () => {
   });
 });
 
+describe("SandboxSettings draft", () => {
+  it("says Saving... while the wizard collects the sandbox", async () => {
+    let finishWrite: (outcome: WriteOutcome<undefined>) => void = () => {};
+    const write = vi.fn(
+      () =>
+        new Promise<WriteOutcome<undefined>>((resolve) => {
+          finishWrite = resolve;
+        }),
+    );
+    mockReads({ sandbox: { data: null } });
+    await renderList(
+      <SandboxSettings
+        orgId="org1"
+        draft={{ write, onBack: vi.fn(), submitText: "Save" }}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Dev box" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(screen.getByRole("button", { name: "Saving..." })).toBeDisabled();
+
+    finishWrite({ outcome: "success", data: undefined, revalidateKeys: [] });
+  });
+});
+
 describe("SandboxSettings save", () => {
+  it("saves on Enter in the Name field", async () => {
+    const fetchMock = stubAcceptedSave({});
+    mockReads({ sandbox: { data: DOCKER_SANDBOX } });
+    await renderSettings();
+
+    const name = screen.getByLabelText("Name");
+    fireEvent.change(name, { target: { value: "Edited box" } });
+    await setupUser().type(name, "{Enter}");
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(savedBody(fetchMock)).toMatchObject({ name: "Edited box" });
+  });
+
   it("creates the first sandbox on the first registered backend", async () => {
     const fetchMock = stubAcceptedSave({});
     mockReads({ sandbox: { data: null } });

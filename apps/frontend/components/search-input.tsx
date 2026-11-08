@@ -21,6 +21,7 @@ function SearchInput({
   onValueChange,
   className,
   inputClassName,
+  onKeyDown,
   ...props
 }: SearchInputProps) {
   return (
@@ -30,6 +31,12 @@ function SearchInput({
         type="search"
         value={value}
         onChange={(e) => onValueChange(e.target.value)}
+        onKeyDown={(e) => {
+          // A search filters as it is typed, so Enter must not save the form
+          // this field happens to sit in.
+          if (e.key === "Enter") e.preventDefault();
+          onKeyDown?.(e);
+        }}
         // Hide the browser's own clear button; the X below replaces it.
         className={cn(
           "px-8 [&::-webkit-search-cancel-button]:appearance-none",

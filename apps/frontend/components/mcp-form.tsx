@@ -503,7 +503,14 @@ function McpForm({
   const oauthAuthorized = mcp?.oauthAuthorized === true;
 
   const form = (
-    <div className={classNames}>
+    <form
+      noValidate
+      className={classNames}
+      onSubmit={(e) => {
+        e.preventDefault();
+        void handleSubmit();
+      }}
+    >
       <FieldSet className="mb-6">
         <FieldGroup>
           <FormTextField
@@ -784,8 +791,9 @@ function McpForm({
       </FieldSet>
 
       <FormFooterButtons
+        type="submit"
         submitText={mcpId ? "Update" : "Save"}
-        onSubmit={() => void handleSubmit()}
+        pending={isSubmitting}
         submitDisabled={isSubmitting || isTesting || !canSubmit}
         deleteVisible={!!mcpId}
         deleteDisabled={isSubmitting || isTesting}
@@ -801,7 +809,7 @@ function McpForm({
         loading={isDeleting}
         error={deleteError}
       />
-    </div>
+    </form>
   );
 
   return (
