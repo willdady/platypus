@@ -109,13 +109,13 @@ export function OrgListSidebar({ currentOrgId }: OrgListSidebarProps) {
                 <SidebarMenuButton asChild>
                   <Link href={appRoutes.createOrganization}>
                     <Plus className="size-4" />
-                    <span>Add organization</span>
+                    <span>Create organization</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>
           ) : (
-            <LoadingRegion label="Loading add organization">
+            <LoadingRegion label="Loading create organization">
               <SidebarMenu>
                 <SidebarMenuItem>
                   <div className="flex h-8 items-center gap-2 rounded-md px-2">

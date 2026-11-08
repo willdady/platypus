@@ -84,7 +84,7 @@ export function BoardsList({
       {rows.length > 0 && (
         <ListToolbar>
           <SearchInput
-            placeholder={"Search boards…"}
+            placeholder={"Search boards..."}
             aria-label={"Search boards"}
             value={nameFilter}
             onValueChange={setNameFilter}

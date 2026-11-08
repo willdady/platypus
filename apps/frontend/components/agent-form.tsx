@@ -865,7 +865,7 @@ function AgentForm({
             </CardHeader>
             <CardContent>
               <SearchInput
-                placeholder="Search skills…"
+                placeholder="Search skills..."
                 aria-label="Search skills"
                 value={skillQuery}
                 onValueChange={setSkillQuery}

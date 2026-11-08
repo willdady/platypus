@@ -265,6 +265,20 @@ describe("KanbanBoard transport", () => {
     Element.prototype.setPointerCapture = vi.fn();
   });
 
+  it("offers Create board in the board switcher", async () => {
+    boardState = makeBoardState([makeColumn()]);
+    renderBoard();
+
+    const trigger = screen.getByRole("button", { name: "Test Board" });
+    fireEvent.pointerDown(trigger, { pointerId: 1, button: 0 });
+    fireEvent.pointerUp(trigger, { pointerId: 1, button: 0 });
+    fireEvent.click(trigger);
+
+    expect(
+      await screen.findByRole("menuitem", { name: "Create board" }),
+    ).toHaveAttribute("href", "/org1/workspace/ws1/boards/create");
+  });
+
   /**
    * Every dialog on the board is the same pair of claims — an accepted write
    * goes to the right endpoint and closes the dialog, a refused one names the

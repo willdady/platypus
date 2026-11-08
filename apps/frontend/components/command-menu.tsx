@@ -165,7 +165,7 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
             }}
           >
             <Bot />
-            <span>New agent</span>
+            <span>Create agent</span>
           </CommandItem>
           <CommandItem
             onSelect={() => {
@@ -173,7 +173,7 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
             }}
           >
             <Sparkles />
-            <span>New skill</span>
+            <span>Create skill</span>
           </CommandItem>
           <CommandItem
             onSelect={() => {
@@ -181,7 +181,7 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
             }}
           >
             <KanbanSquare />
-            <span>New board</span>
+            <span>Create board</span>
           </CommandItem>
           <CommandItem
             onSelect={() => {
@@ -189,7 +189,7 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
             }}
           >
             <Zap />
-            <span>New trigger</span>
+            <span>Create trigger</span>
           </CommandItem>
           <CommandItem
             onSelect={() => {

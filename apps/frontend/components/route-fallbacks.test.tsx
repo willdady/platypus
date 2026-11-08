@@ -59,4 +59,17 @@ describe("OrgSettingsNotFound", () => {
       screen.getByRole("link", { name: "Back to settings" }),
     ).toHaveAttribute("href", "/org1/settings");
   });
+
+  it("frames the card in the route fallback, like a failed page", () => {
+    render(<OrgSettingsNotFound />);
+
+    // The shared fallback's frame is the observable contract: a narrow card
+    // centred in the content area. A bare EmptyCard would have no such wrapper.
+    /* eslint-disable testing-library/no-node-access */
+    const card = screen
+      .getByText("Page not found")
+      .closest("[data-slot='empty']");
+    expect(card?.parentElement).toHaveClass("min-h-[50vh]", "justify-center");
+    /* eslint-enable testing-library/no-node-access */
+  });
 });

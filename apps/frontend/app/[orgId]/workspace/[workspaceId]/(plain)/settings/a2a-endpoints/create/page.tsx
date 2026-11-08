@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { A2aEndpointForm } from "@/components/a2a-endpoint-form";
 import { ResourcePage } from "@/components/resource-page";
 
-export const metadata: Metadata = { title: "Create A2A endpoint" };
+export const metadata: Metadata = { title: "Add A2A endpoint" };
 
 async function A2aEndpointCreatePage({
   params,
@@ -12,7 +12,7 @@ async function A2aEndpointCreatePage({
   const { orgId, workspaceId } = await params;
 
   return (
-    <ResourcePage title="Create A2A endpoint">
+    <ResourcePage title="Add A2A endpoint">
       <A2aEndpointForm orgId={orgId} workspaceId={workspaceId} />
     </ResourcePage>
   );

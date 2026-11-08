@@ -63,7 +63,7 @@ type EmptyStateProps = {
 export type ResourceListLabels = {
   /** Create CTA: "Add provider" / "Add MCP server". */
   readonly add: string;
-  /** Attach CTA: "Attach shared provider" / "Attach shared MCP". */
+  /** Attach CTA: "Attach shared provider" / "Attach shared MCP server". */
   readonly attach: string;
   /** The resource named mid-sentence: "provider" / "MCP server". */
   readonly noun: string;

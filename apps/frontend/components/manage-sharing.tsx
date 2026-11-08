@@ -326,7 +326,7 @@ function ManageAttachmentsContent({
 
       {/* Searchable multi-select — scales to many workspaces. */}
       <Command>
-        <CommandInput placeholder="Search workspaces…" />
+        <CommandInput placeholder="Search workspaces..." />
         <CommandList>
           {/* Rows in place of the false "No workspaces found." while the
               list is still loading. */}
