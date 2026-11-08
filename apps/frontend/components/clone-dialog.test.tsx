@@ -15,7 +15,7 @@ const onCreated = vi.fn();
 // pending UI (and the ref guard's in-flight window) is observable on demand.
 let resolveCreate!: (outcome: WriteOutcome<{ id: string }>) => void;
 
-function renderDialog() {
+function renderDialog(nameMaxLength = 30) {
   const create = vi.fn(
     () =>
       new Promise<WriteOutcome<{ id: string }>>((resolve) => {
@@ -29,6 +29,7 @@ function renderDialog() {
       onClose={onClose}
       create={create}
       onCreated={onCreated}
+      nameMaxLength={nameMaxLength}
     />,
   );
   return create;
@@ -123,5 +124,101 @@ describe("CloneDialog", () => {
     expect(onClose).not.toHaveBeenCalled();
     expect(onCreated).not.toHaveBeenCalled();
     expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("shows a name issue on the name field, not the entity's refusal", async () => {
+    renderDialog();
+    const user = setupUser();
+
+    await user.click(screen.getByRole("button", { name: "Clone" }));
+    await settle({
+      outcome: "invalid",
+      message: "This Agent cannot be cloned.",
+      fieldErrors: {
+        name: "Too big: expected string to have <=30 characters",
+      },
+    });
+
+    const name = screen.getByLabelText("Name");
+    expect(name).toHaveAttribute("aria-invalid", "true");
+    expect(name).toHaveAccessibleDescription(
+      "Too big: expected string to have <=30 characters",
+    );
+    expect(
+      screen.queryByText("This Agent cannot be cloned."),
+    ).not.toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("clears the name issue when the name is edited", async () => {
+    renderDialog();
+    const user = setupUser();
+
+    await user.click(screen.getByRole("button", { name: "Clone" }));
+    await settle({
+      outcome: "invalid",
+      message: "This Agent cannot be cloned.",
+      fieldErrors: {
+        name: "Too big: expected string to have <=30 characters",
+      },
+    });
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+
+    const name = screen.getByLabelText("Name");
+    await user.clear(name);
+    await user.type(name, "Short");
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(name).not.toHaveAttribute("aria-invalid", "true");
+  });
+
+  it("keeps the entity's refusal for a schema failure elsewhere", async () => {
+    renderDialog();
+    const user = setupUser();
+
+    await user.click(screen.getByRole("button", { name: "Clone" }));
+    await settle({
+      outcome: "invalid",
+      message: "This Agent cannot be cloned.",
+      fieldErrors: {
+        description: "Too big: expected string to have <=128 characters",
+      },
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "This Agent cannot be cloned.",
+    );
+    expect(screen.getByLabelText("Name")).toHaveAttribute(
+      "aria-invalid",
+      "false",
+    );
+  });
+
+  it("keeps the entity's refusal when the name and another field both fail", async () => {
+    renderDialog();
+    const user = setupUser();
+
+    await user.click(screen.getByRole("button", { name: "Clone" }));
+    await settle({
+      outcome: "invalid",
+      message: "This Agent cannot be cloned.",
+      fieldErrors: {
+        name: "Too big: expected string to have <=30 characters",
+        description: "Too big: expected string to have <=128 characters",
+      },
+    });
+
+    expect(
+      screen.getByText("Too big: expected string to have <=30 characters"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("This Agent cannot be cloned."),
+    ).toBeInTheDocument();
+  });
+
+  it("enforces the Name limit on the input", () => {
+    renderDialog(30);
+
+    expect(screen.getByLabelText("Name")).toHaveAttribute("maxlength", "30");
   });
 });

@@ -41,6 +41,7 @@ import {
 } from "lucide-react";
 import {
   triggerCreateSchema,
+  TRIGGER_NAME_MAX_LENGTH,
   type Trigger,
   type Agent,
   type TriggerType,
@@ -516,6 +517,7 @@ export function TriggerList({
         <CloneDialog
           noun="trigger"
           original={triggerToClone.name}
+          nameMaxLength={TRIGGER_NAME_MAX_LENGTH}
           onClose={() => setTriggerToClone(null)}
           create={(name, url) => createClone(triggerToClone, name, url)}
           onCreated={(id) => {

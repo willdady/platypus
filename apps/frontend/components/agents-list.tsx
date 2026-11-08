@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import {
   agentCreateSchema,
+  AGENT_NAME_MAX_LENGTH,
   type Agent,
   type AgentResponse,
   type Provider,
@@ -532,6 +533,7 @@ export function AgentsList({
         <CloneDialog
           noun="agent"
           original={agentToClone.name}
+          nameMaxLength={AGENT_NAME_MAX_LENGTH}
           onClose={() => setAgentToClone(null)}
           create={(name, url) =>
             createClone(agentToClone, cloneRefs.kept, name, url)

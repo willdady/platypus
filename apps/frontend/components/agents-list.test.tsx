@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import {
   agentCreateSchema,
+  AGENT_NAME_MAX_LENGTH,
   type Agent,
   type Provider,
 } from "@platypus/schemas";
@@ -197,6 +198,41 @@ describe("AgentsList clone", () => {
 
     expect(await screen.findByText("Name already in use")).toBeInTheDocument();
     expect(push).not.toHaveBeenCalled();
+  });
+
+  it("names a too-long copy's name on the field, then clones once shortened", async () => {
+    const fetchMock = stubAcceptedSave({ id: "a3", name: "Cloned" }, 201);
+    const longName = "A".repeat(AGENT_NAME_MAX_LENGTH);
+
+    await renderAgents([{ ...workspaceAgent, name: longName }], "Clone");
+    const name = screen.getByRole<HTMLInputElement>("textbox", {
+      name: "Name",
+    });
+    expect(name).toHaveValue(`${longName} (copy)`);
+    expect(name).toHaveAttribute("maxlength", String(AGENT_NAME_MAX_LENGTH));
+
+    await confirmDialog("Clone");
+
+    // The copy's name is over the limit: say so on the field, not that the
+    // Agent can't be cloned, and don't send a body the backend refuses.
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      `${AGENT_NAME_MAX_LENGTH} characters`,
+    );
+    expect(
+      screen.queryByText("This Agent cannot be cloned."),
+    ).not.toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: "Clone agent" })).toBeVisible();
+
+    fireEvent.change(name, { target: { value: "Short copy" } });
+    await confirmDialog("Clone");
+
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith("/org1/workspace/ws1/agents/a3"),
+    );
+    expect(
+      expectSentBodyToMatchSchema(fetchMock, agentCreateSchema),
+    ).toMatchObject({ name: "Short copy" });
   });
 });
 
