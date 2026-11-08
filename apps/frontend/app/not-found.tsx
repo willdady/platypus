@@ -15,7 +15,7 @@ export default function NotFound() {
       <EmptyCard
         className="max-w-md"
         icon={<FileQuestion />}
-        title="Page Not Found"
+        title="Page not found"
         description="The page you are looking for does not exist or has been moved."
         action={
           <Button asChild>

@@ -561,8 +561,8 @@ function TriggerForm({
       <DeleteConfirmDialog
         open={isDeleteDialogOpen}
         onOpenChange={setIsDeleteDialogOpen}
-        title="Delete Trigger"
-        description="Are you sure you want to delete this trigger? This will also delete all run history for this trigger. This action cannot be undone."
+        noun="trigger"
+        consequence="This will also delete all run history for this trigger."
         onConfirm={handleDelete}
         loading={isDeleting}
         error={deleteError}

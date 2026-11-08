@@ -1,5 +1,6 @@
 import { type ReactNode } from "react";
 import { BackButton } from "@/components/back-button";
+import { PageHeader } from "@/components/page-header";
 
 export type ResourcePageVariant = "bare" | "narrow" | "stacked" | "wide";
 
@@ -16,32 +17,28 @@ export type ResourcePageProps = {
   actions?: ReactNode;
 };
 
-const narrowTitleClass = "text-2xl mb-4 font-bold";
 const narrowColumnClass = "w-full px-4 md:px-0 md:w-4/5 max-w-3xl";
 
 // Exported so a loading fallback can take the same column as the page it stands
 // in for.
 export const resourcePageLayout: Record<
   ResourcePageVariant,
-  { outer?: string; inner: string; title: string; back?: string }
+  { outer?: string; inner: string; back?: string }
 > = {
-  bare: { inner: "", title: narrowTitleClass },
+  bare: { inner: "" },
   narrow: {
     outer: "flex justify-center py-8",
     inner: narrowColumnClass,
-    title: narrowTitleClass,
   },
   stacked: {
     outer: "flex justify-center py-8",
     inner: `${narrowColumnClass} flex flex-col gap-8`,
-    title: "text-2xl font-bold",
     // The column's gap already spaces the button from the title.
     back: "mb-0 self-start",
   },
   wide: {
     outer: "flex justify-center w-full p-4",
     inner: "w-lg",
-    title: narrowTitleClass,
   },
 };
 
@@ -54,21 +51,16 @@ export function ResourcePage({
 }: ResourcePageProps) {
   const layout = resourcePageLayout[variant];
 
-  const heading = <h1 className={layout.title}>{title}</h1>;
-
   const inner = (
     <div className={layout.inner}>
       {backFallbackHref && (
         <BackButton fallbackHref={backFallbackHref} className={layout.back} />
       )}
-      {actions ? (
-        <div className="flex items-start justify-between gap-4">
-          {heading}
-          <div className="flex shrink-0 items-center gap-2">{actions}</div>
-        </div>
-      ) : (
-        heading
-      )}
+      <PageHeader
+        title={title}
+        actions={actions}
+        titleSpacing={variant === "stacked" ? "flush" : "default"}
+      />
       {children}
     </div>
   );

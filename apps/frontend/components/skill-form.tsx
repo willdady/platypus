@@ -354,8 +354,7 @@ function SkillForm({
       <DeleteConfirmDialog
         open={isDeleteDialogOpen}
         onOpenChange={setIsDeleteDialogOpen}
-        title="Delete Skill"
-        description="Are you sure you want to delete this skill? This action cannot be undone."
+        noun="skill"
         onConfirm={handleDelete}
         loading={isDeleting}
         error={deleteError}

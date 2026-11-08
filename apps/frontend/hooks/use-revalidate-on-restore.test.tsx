@@ -1,16 +1,10 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { renderHook } from "@testing-library/react";
+import { firePageShow } from "@/test/test-utils";
 import {
   RESTORE_THROTTLE_MS,
   useRevalidateOnRestore,
 } from "./use-revalidate-on-restore";
-
-/** A `pageshow` as the browser fires it; jsdom has no PageTransitionEvent. */
-function pageshow(persisted: boolean) {
-  const event = new Event("pageshow");
-  Object.defineProperty(event, "persisted", { value: persisted });
-  window.dispatchEvent(event);
-}
 
 describe("useRevalidateOnRestore", () => {
   afterEach(() => {
@@ -24,7 +18,7 @@ describe("useRevalidateOnRestore", () => {
     const revalidate = vi.fn();
     renderHook(() => useRevalidateOnRestore(revalidate));
 
-    pageshow(true);
+    firePageShow(true);
 
     expect(revalidate).toHaveBeenCalledTimes(1);
   });
@@ -35,7 +29,7 @@ describe("useRevalidateOnRestore", () => {
     const revalidate = vi.fn();
     renderHook(() => useRevalidateOnRestore(revalidate));
 
-    pageshow(false);
+    firePageShow(false);
 
     expect(revalidate).not.toHaveBeenCalled();
   });
@@ -46,9 +40,9 @@ describe("useRevalidateOnRestore", () => {
     const revalidate = vi.fn();
     renderHook(() => useRevalidateOnRestore(revalidate));
 
-    pageshow(true);
-    pageshow(true);
-    pageshow(true);
+    firePageShow(true);
+    firePageShow(true);
+    firePageShow(true);
 
     expect(revalidate).toHaveBeenCalledTimes(1);
   });
@@ -58,9 +52,9 @@ describe("useRevalidateOnRestore", () => {
     const revalidate = vi.fn();
     renderHook(() => useRevalidateOnRestore(revalidate));
 
-    pageshow(true);
+    firePageShow(true);
     vi.advanceTimersByTime(RESTORE_THROTTLE_MS + 1);
-    pageshow(true);
+    firePageShow(true);
 
     expect(revalidate).toHaveBeenCalledTimes(2);
   });
@@ -74,7 +68,7 @@ describe("useRevalidateOnRestore", () => {
     );
 
     rerender({ fn: second });
-    pageshow(true);
+    firePageShow(true);
 
     expect(first).not.toHaveBeenCalled();
     expect(second).toHaveBeenCalledTimes(1);
@@ -85,7 +79,7 @@ describe("useRevalidateOnRestore", () => {
     const { unmount } = renderHook(() => useRevalidateOnRestore(revalidate));
 
     unmount();
-    pageshow(true);
+    firePageShow(true);
 
     expect(revalidate).not.toHaveBeenCalled();
   });

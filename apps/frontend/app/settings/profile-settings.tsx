@@ -12,6 +12,7 @@ import { TimezoneCombobox } from "@/components/timezone-combobox";
 import { getBrowserTimezone } from "@/lib/timezones";
 import { toast } from "sonner";
 import { Pencil } from "lucide-react";
+import { PageHeader } from "@/components/page-header";
 
 // `updateUser` is an auth-client call, not a REST write — mapped onto the
 // shared outcome shape so the form hook can drive it.
@@ -87,7 +88,7 @@ function UserSettingsPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-4">Profile Settings</h1>
+      <PageHeader title="Profile Settings" />
       <div className="grid grid-cols-1 gap-6 mb-4 max-w-md">
         <div className="flex flex-col gap-2">
           <Label htmlFor="name" className="text-sm text-muted-foreground">

@@ -39,7 +39,7 @@ message box says which one went missing. The picker shows what it switched to.
 Pick anything there and the notice goes away.
 
 With an Agent selected, an info button — tooltip **Agent info** — opens
-**Agent Information**, which shows what that Agent is bringing to the
+**Agent information**, which shows what that Agent is bringing to the
 conversation: its Provider and model, Instructions, tools, Skills and
 Sub-Agents, and its sampling parameters.
 
@@ -417,7 +417,7 @@ of room to write the reply it was writing; **step limit** means it ran out of
 steps before the work was done. For a Chat that uses an Agent, the number of
 steps is that Agent's **Max steps** — see
 [Tune generation](/building-with-platypus/agents#tune-generation). For a Chat
-that picks a Provider and model directly, it is **Max steps** in Chat Settings,
+that picks a Provider and model directly, it is **Max steps** in Chat settings,
 described below. Raising that number gives the next turn more room; asking for
 less in one message, so fewer tool calls are needed, is the other way to stay
 under it.
@@ -746,7 +746,7 @@ started it a fortnight ago.
 
 Each Chat's menu offers:
 
-- **Edit** — opens **Edit Chat**, where you set the **Title** and the **Tags**.
+- **Edit** — opens **Edit chat**, where you set the **Title** and the **Tags**.
   Its current tags are also listed at the bottom of the menu.
 - **Pin** / **Unpin** — moves it into or out of the **Pinned** group.
 - **Delete** — permanent, and it says so before doing it.
@@ -807,7 +807,7 @@ untouched.
 <Callout type="warning">
   **A lost connection is not a failed turn, and the difference is visible.** The
   interrupted line above means the run is fine and the reply is on its way. A
-  **Chat Error** dialog means something actually failed — the turn errored, or
+  **Chat error** dialog means something actually failed — the turn errored, or
   the request was refused before it started — and that one is worth reading.
   Reloading the page on the interrupted line does no harm, but it also buys you
   nothing.
@@ -825,7 +825,7 @@ untouched.
 ## Per-Chat settings, and when they exist
 
 When you have picked a Provider and model directly, or nothing yet, a gear button — tooltip
-**Settings** — opens **Chat Settings**: an **Instructions** box, and under
+**Settings** — opens **Chat settings**: an **Instructions** box, and under
 **Advanced settings** the sampling parameters — **Temperature**, **Seed**,
 **Top-p**, **Top-k**, **Presence Penalty** and **Frequency Penalty** — plus
 **Max steps**, and the [Reasoning

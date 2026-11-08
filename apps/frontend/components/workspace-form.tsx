@@ -450,9 +450,8 @@ function WorkspaceForm({ orgId, workspaceId }: WorkspaceFormProps) {
         <DeleteConfirmDialog
           open={isDeleteDialogOpen}
           onOpenChange={setIsDeleteDialogOpen}
-          title="Delete Workspace"
-          description="Are you sure you want to delete this workspace? This action cannot be undone."
-          confirmPhrase="Delete workspace"
+          noun="workspace"
+          requireTypedConfirmation
           onConfirm={handleDelete}
           loading={isDeleting}
           error={deleteError}

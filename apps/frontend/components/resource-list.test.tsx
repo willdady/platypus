@@ -81,6 +81,8 @@ const RESOURCES: {
   item: ScopedResource;
   workspaceItem: ScopedResource;
   dialogTitle: string;
+  /** The shared row's attach CTA. */
+  attachLabel: string;
   fetchErrorNoun: string;
   /** What the card's second line shows for `workspaceItem`. */
   secondLine: string;
@@ -95,6 +97,7 @@ const RESOURCES: {
     item: orgProvider,
     workspaceItem: workspaceProvider,
     dialogTitle: "Detach shared provider",
+    attachLabel: "Attach shared provider",
     fetchErrorNoun: "providers",
     secondLine: "OpenAI",
   },
@@ -108,6 +111,7 @@ const RESOURCES: {
     item: orgMcp,
     workspaceItem: workspaceMcp,
     dialogTitle: "Detach shared MCP server",
+    attachLabel: "Attach shared MCP server",
     fetchErrorNoun: "MCP servers",
     secondLine: "https://local.example.com/mcp",
   },
@@ -128,6 +132,7 @@ describe.each(RESOURCES)(
     item,
     workspaceItem,
     dialogTitle,
+    attachLabel,
     fetchErrorNoun,
     secondLine,
   }) => {
@@ -209,7 +214,7 @@ describe.each(RESOURCES)(
         `/org1/workspace/ws1/${settingsPath}/create`,
       );
       expect(
-        screen.getByRole("button", { name: /^Attach shared/ }),
+        screen.getByRole("button", { name: attachLabel }),
       ).toBeInTheDocument();
     });
 

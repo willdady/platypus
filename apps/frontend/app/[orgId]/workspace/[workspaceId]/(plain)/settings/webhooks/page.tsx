@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { WebhooksList } from "@/components/webhooks-list";
+import { PageHeader } from "@/components/page-header";
 
 export const metadata: Metadata = { title: "Webhooks" };
 
@@ -12,7 +13,7 @@ async function WebhooksPage({
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-4">Webhooks</h1>
+      <PageHeader title="Webhooks" />
       <WebhooksList orgId={orgId} workspaceId={workspaceId} />
     </div>
   );

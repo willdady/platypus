@@ -162,16 +162,16 @@ describe("turnRequest", () => {
     ).toEqual({ ok: false, reason: CHAT_SAMPLING_ERRORS[field] });
   });
 
-  it("names the field and points to Chat Settings in each refusal", () => {
+  it("names the field and points to Chat settings in each refusal", () => {
     expect(CHAT_SAMPLING_ERRORS).toEqual({
-      temperature: "Temperature in Chat Settings must be at least 0.",
-      topP: "Top-p in Chat Settings must be between 0 and 1.",
-      topK: "Top-k in Chat Settings must be a whole number of at least 1.",
-      seed: "Seed in Chat Settings must be a whole number.",
+      temperature: "Temperature in Chat settings must be at least 0.",
+      topP: "Top-p in Chat settings must be between 0 and 1.",
+      topK: "Top-k in Chat settings must be a whole number of at least 1.",
+      seed: "Seed in Chat settings must be a whole number.",
       presencePenalty:
-        "Presence Penalty in Chat Settings must be between -2 and 2.",
+        "Presence Penalty in Chat settings must be between -2 and 2.",
       frequencyPenalty:
-        "Frequency Penalty in Chat Settings must be between -2 and 2.",
+        "Frequency Penalty in Chat settings must be between -2 and 2.",
     });
   });
 

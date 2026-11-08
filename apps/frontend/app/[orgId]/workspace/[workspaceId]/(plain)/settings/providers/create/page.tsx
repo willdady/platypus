@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { ProviderForm } from "@/components/provider-form";
 import { ResourcePage } from "@/components/resource-page";
 
-export const metadata: Metadata = { title: "Create Provider" };
+export const metadata: Metadata = { title: "Add Provider" };
 
 async function ProviderCreatePage({
   params,
@@ -12,7 +12,7 @@ async function ProviderCreatePage({
   const { orgId, workspaceId } = await params;
 
   return (
-    <ResourcePage title="Create Provider">
+    <ResourcePage title="Add Provider">
       <ProviderForm orgId={orgId} workspaceId={workspaceId} />
     </ResourcePage>
   );

@@ -158,7 +158,7 @@ describe("TriggerList clone", () => {
   it("names the copy after the original", async () => {
     await renderTriggers([cronTrigger], "Clone");
 
-    expect(screen.getByRole("dialog", { name: "Clone Trigger" })).toBeVisible();
+    expect(screen.getByRole("dialog", { name: "Clone trigger" })).toBeVisible();
     expect(screen.getByRole("textbox", { name: "Name" })).toHaveValue(
       "Nightly job (copy)",
     );
@@ -272,7 +272,7 @@ describe("TriggerList clone", () => {
     expect(
       await screen.findByText("Too many pending one-off triggers"),
     ).toBeInTheDocument();
-    expect(screen.getByRole("dialog", { name: "Clone Trigger" })).toBeVisible();
+    expect(screen.getByRole("dialog", { name: "Clone trigger" })).toBeVisible();
     expect(push).not.toHaveBeenCalled();
   });
 });

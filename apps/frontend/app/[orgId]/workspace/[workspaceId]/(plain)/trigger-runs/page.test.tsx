@@ -97,7 +97,11 @@ import {
   RUN_STEP_LIMIT_NOTICE,
 } from "@/components/turn-notice";
 import { RUN_SUPPRESSED_NOTICE } from "@/components/trigger-run-row";
-import { openDropdownMenu, selectOption } from "@/test/test-utils";
+import {
+  firePageShow,
+  openDropdownMenu,
+  selectOption,
+} from "@/test/test-utils";
 
 // Radix Tooltip content measures itself on focus, which jsdom has no
 // ResizeObserver for. The row's ⋮ menu needs the pointer polyfills.
@@ -437,6 +441,27 @@ describe("Trigger runs paging", () => {
 
     expect(state.keys[1]).toContain("offset=50");
     expect(screen.getByText("Card watcher")).toBeVisible();
+  });
+});
+
+// A page restored from the back/forward cache was frozen, so its poll did not
+// run and the list is as old as the moment the page was put away.
+describe("Trigger runs restore", () => {
+  it("revalidates when the page is restored from the back/forward cache", async () => {
+    await renderRuns([run()]);
+
+    firePageShow(true);
+
+    expect(state.mutate).toHaveBeenCalledOnce();
+  });
+
+  // An ordinary navigation already revalidates on mount.
+  it("does not revalidate on an ordinary page load", async () => {
+    await renderRuns([run()]);
+
+    firePageShow(false);
+
+    expect(state.mutate).not.toHaveBeenCalled();
   });
 });
 

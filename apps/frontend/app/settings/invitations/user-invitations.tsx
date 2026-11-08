@@ -20,6 +20,7 @@ import {
 import { useSWRConfig } from "swr";
 import { useMutation } from "@/hooks/use-mutation";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
+import { PageHeader } from "@/components/page-header";
 
 function UserInvitationsPage() {
   const backendUrl = useBackendUrl();
@@ -67,10 +68,10 @@ function UserInvitationsPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-4">Invitations</h1>
-      <p className="text-muted-foreground mb-8">
-        Pending invitations to join organizations.
-      </p>
+      <PageHeader
+        title="Invitations"
+        description="Pending invitations to join organizations."
+      />
 
       <EntityCardList
         singleColumn
@@ -130,7 +131,7 @@ function UserInvitationsPage() {
       <ConfirmDialog
         open={decline.open}
         onOpenChange={(open) => !open && decline.close()}
-        title="Decline Invitation"
+        title="Decline invitation"
         description="Are you sure you want to decline this invitation?"
         confirmLabel="Decline"
         loadingLabel="Declining..."

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { McpList } from "@/components/mcp-list";
+import { PageHeader } from "@/components/page-header";
 
 export const metadata: Metadata = { title: "MCP Servers" };
 
@@ -12,7 +13,7 @@ async function McpPage({
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-4">MCP Servers</h1>
+      <PageHeader title="MCP Servers" />
       <McpList orgId={orgId} workspaceId={workspaceId} />
     </div>
   );

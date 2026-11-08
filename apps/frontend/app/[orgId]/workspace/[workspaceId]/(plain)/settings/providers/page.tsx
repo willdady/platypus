@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { ProvidersList } from "@/components/providers-list";
+import { PageHeader } from "@/components/page-header";
 
 export const metadata: Metadata = { title: "Providers" };
 
@@ -12,7 +13,7 @@ async function ProvidersPage({
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-4">Providers</h1>
+      <PageHeader title="Providers" />
       <ProvidersList orgId={orgId} workspaceId={workspaceId} />
     </div>
   );

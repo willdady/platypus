@@ -1008,8 +1008,7 @@ function SandboxSettings({
       <DeleteConfirmDialog
         open={isDeleteDialogOpen}
         onOpenChange={setIsDeleteDialogOpen}
-        title="Delete sandbox"
-        description="Are you sure you want to delete this sandbox? This action cannot be undone."
+        noun="sandbox"
         onConfirm={handleDelete}
         loading={isDeleting}
         error={deleteError}

@@ -43,7 +43,7 @@ const RESOURCES: {
     name: "boards",
     List: BoardsList,
     entity: "boards",
-    confirmPhrase: "delete board",
+    confirmPhrase: "Delete board",
     queryParam: "boardQuery",
   },
 ];

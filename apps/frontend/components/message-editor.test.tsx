@@ -181,7 +181,7 @@ describe("MessageEditor", () => {
     renderEditor();
 
     expect(screen.getByRole("button", { name: "m1" })).toBeInTheDocument();
-    for (const gone of ["Settings", "Search", "Agent Information"]) {
+    for (const gone of ["Settings", "Search", "Agent info"]) {
       expect(
         screen.queryByRole("button", { name: gone }),
       ).not.toBeInTheDocument();

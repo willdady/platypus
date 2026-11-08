@@ -54,7 +54,7 @@ describe("A2aEndpointsList", () => {
     expect(screen.getByText("Helper")).toBeInTheDocument();
     expect(screen.getByText("Disabled")).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: /Add endpoint/ }),
+      screen.getByRole("link", { name: /Add A2A endpoint/ }),
     ).toBeInTheDocument();
   });
 
@@ -78,14 +78,14 @@ describe("A2aEndpointsList", () => {
     );
   });
 
-  it("offers no Add endpoint to an Org Admin in another Owner's workspace", async () => {
+  it("offers no Add A2A endpoint to an Org Admin in another Owner's workspace", async () => {
     asOwner(false);
     mockScopedSWR({ "/a2a-endpoints": [ENDPOINT] }, { strict: true });
     await renderList(<A2aEndpointsList orgId="org1" workspaceId="ws1" />);
 
     expect(screen.getByText("Acme helpdesk")).toBeInTheDocument();
     expect(
-      screen.queryByRole("link", { name: /Add endpoint/ }),
+      screen.queryByRole("link", { name: /Add A2A endpoint/ }),
     ).not.toBeInTheDocument();
   });
 
@@ -104,28 +104,28 @@ describe("A2aEndpointsList", () => {
 
     expect(screen.getByText("No A2A endpoints configured")).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: /Add endpoint/ }),
+      screen.getByRole("link", { name: /Add A2A endpoint/ }),
     ).toBeInTheDocument();
   });
 
   // The same button renders once: solid inside the card while the list is
   // empty, outlined below the list once it has rows.
-  it("offers Add endpoint solid inside the empty card", async () => {
+  it("offers Add A2A endpoint solid inside the empty card", async () => {
     mockScopedSWR({ "/a2a-endpoints": [] }, { strict: true });
     await renderList(<A2aEndpointsList orgId="org1" workspaceId="ws1" />);
 
     expectEntryActionVariant(
-      screen.getByRole("link", { name: /Add endpoint/ }),
+      screen.getByRole("link", { name: /Add A2A endpoint/ }),
       "empty",
     );
   });
 
-  it("offers Add endpoint outlined under a populated list", async () => {
+  it("offers Add A2A endpoint outlined under a populated list", async () => {
     mockScopedSWR({ "/a2a-endpoints": [ENDPOINT] }, { strict: true });
     await renderList(<A2aEndpointsList orgId="org1" workspaceId="ws1" />);
 
     expectEntryActionVariant(
-      screen.getByRole("link", { name: /Add endpoint/ }),
+      screen.getByRole("link", { name: /Add A2A endpoint/ }),
       "populated",
     );
   });
@@ -139,7 +139,7 @@ describe("A2aEndpointsList", () => {
       screen.getByText(/Only the workspace owner can add one/),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("link", { name: /Add endpoint/ }),
+      screen.queryByRole("link", { name: /Add A2A endpoint/ }),
     ).not.toBeInTheDocument();
   });
 

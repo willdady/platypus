@@ -3,6 +3,7 @@ import { TriangleAlert } from "lucide-react";
 import { A2aEndpointsList } from "@/components/a2a-endpoints-list";
 import { A2aEndpointNotices } from "@/components/a2a-endpoint-notices";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { PageHeader } from "@/components/page-header";
 
 export const metadata: Metadata = { title: "A2A endpoints" };
 
@@ -15,12 +16,10 @@ async function A2aEndpointsPage({
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-4">A2A endpoints</h1>
-      <p className="text-muted-foreground mb-4">
-        Let agents and chat apps outside Platypus talk to an agent in this
-        workspace over A2A. Each endpoint has its own address, and each client
-        gets its own token.
-      </p>
+      <PageHeader
+        title="A2A endpoints"
+        description="Let agents and chat apps outside Platypus talk to an agent in this workspace over A2A. Each endpoint has its own address, and each client gets its own token."
+      />
       <Alert className="mb-6">
         <TriangleAlert />
         <AlertTitle>

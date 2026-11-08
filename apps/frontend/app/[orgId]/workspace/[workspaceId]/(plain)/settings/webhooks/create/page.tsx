@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { WebhookForm } from "@/components/webhook-form";
 import { ResourcePage } from "@/components/resource-page";
 
-export const metadata: Metadata = { title: "Create Webhook" };
+export const metadata: Metadata = { title: "Add Webhook" };
 
 async function WebhookCreatePage({
   params,
@@ -12,7 +12,7 @@ async function WebhookCreatePage({
   const { orgId, workspaceId } = await params;
 
   return (
-    <ResourcePage title="Create Webhook">
+    <ResourcePage title="Add Webhook">
       <WebhookForm orgId={orgId} workspaceId={workspaceId} />
     </ResourcePage>
   );

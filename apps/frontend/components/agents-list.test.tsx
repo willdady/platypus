@@ -145,7 +145,7 @@ describe("AgentsList delete", () => {
     );
     expect(toastError).not.toHaveBeenCalled();
     expect(mutate).not.toHaveBeenCalled();
-    expect(screen.queryByText("Delete Agent")).not.toBeInTheDocument();
+    expect(screen.queryByText("Delete agent")).not.toBeInTheDocument();
   });
 
   it("surfaces the backend's reason inline when delete fails for another reason", async () => {

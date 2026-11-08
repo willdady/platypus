@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { ExternalLink } from "lucide-react";
 import Link from "next/link";
+import { PageHeader } from "@/components/page-header";
 
 export const metadata: Metadata = { title: "About" };
 
@@ -9,7 +10,7 @@ function AboutPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-4">About</h1>
+      <PageHeader title="About" />
       <div className="mb-4">
         <p className="text-sm text-muted-foreground mb-2">Version</p>
         {version === "unknown" ? (

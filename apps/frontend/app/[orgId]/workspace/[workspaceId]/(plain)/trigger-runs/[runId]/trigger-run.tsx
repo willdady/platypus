@@ -3,6 +3,7 @@
 import { use, useCallback, useRef } from "react";
 import type { ReactNode } from "react";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useRevalidateOnRestore } from "@/hooks/use-revalidate-on-restore";
 import type { RunEvent, TriggerRunDetailResponse } from "@platypus/schemas";
 import { TriggerRunRow } from "@/components/trigger-run-row";
 import { RunTimeline } from "@/components/run-timeline";
@@ -19,6 +20,7 @@ import { fetcher } from "@/lib/utils";
 import { workspaceRoutes } from "@/lib/routes";
 import { mergeRunEvents, nextSinceSeq } from "@/lib/run-timeline";
 import type { Serialized } from "@/lib/api-write";
+import { PageHeader } from "@/components/page-header";
 
 /**
  * How often the page re-reads a run that is still running. Events reach the
@@ -89,6 +91,8 @@ function TriggerRunDetailPage({
     },
   );
 
+  useRevalidateOnRestore(() => void mutate());
+
   return (
     <div className="flex justify-center py-8">
       {/* The side gutter stays at every width: between the tablet and desktop
@@ -96,10 +100,10 @@ function TriggerRunDetailPage({
       touched the viewport edges. The widths are the workspace home page's, so
       the two read as one app. */}
       <div className="w-full px-4 md:px-8 xl:w-4/5 max-w-4xl">
-        <h1 className="text-2xl mb-1 font-bold">Trigger run</h1>
-        <p className="text-muted-foreground mb-4">
-          What this run concluded, and where its time went.
-        </p>
+        <PageHeader
+          title="Trigger run"
+          description="What this run concluded, and where its time went."
+        />
 
         {error && !data ? (
           <FetchErrorNotice

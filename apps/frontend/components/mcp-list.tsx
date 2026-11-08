@@ -10,8 +10,7 @@ const mcpConfig: ResourceListConfig = {
   delegationFlag: "mcpSelfManagement",
   labels: {
     add: "Add MCP server",
-    attach: "Attach shared MCP",
-    deleteTitle: "Delete MCP server",
+    attach: "Attach shared MCP server",
     noun: "MCP server",
     plural: "MCP servers",
   },

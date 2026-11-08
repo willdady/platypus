@@ -1,13 +1,12 @@
 import { type ReactNode } from "react";
-import Link from "next/link";
-import { Home, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { AppSidebar } from "@/components/app-sidebar";
 import { BackButton } from "@/components/back-button";
 import { CommandMenu } from "@/components/command-menu";
 import { Header } from "@/components/header";
+import { HeaderHomeButton } from "@/components/header-home-button";
 import { MAIN_CONTENT_ID } from "@/components/skip-link";
 import { WorkspaceScrollContainer } from "@/components/workspace-scroll-container";
-import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
 import {
   SidebarInset,
@@ -60,16 +59,7 @@ export function WorkspaceShell({
               ) : (
                 <BackButton variant="header" fallbackHref={home.href} />
               )}
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                aria-label={home.label}
-                asChild
-              >
-                <Link href={home.href}>
-                  <Home />
-                </Link>
-              </Button>
+              <HeaderHomeButton href={home.href} label={home.label} />
             </div>
           }
           rightContent={

@@ -72,7 +72,7 @@ describe("OrganizationLoading", () => {
     expect(container.querySelector('[data-slot="skeleton"]')).toBeNull();
   });
 
-  it("takes the wide wizard shape while Create Workspace loads", () => {
+  it("takes the wide wizard shape while Add Workspace loads", () => {
     nav.pathname = "/org2/create";
     const { container } = render(<OrganizationLoading />);
 

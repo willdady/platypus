@@ -179,9 +179,9 @@ function OrganizationForm({ classNames, orgId }: OrganizationFormProps) {
         <DeleteConfirmDialog
           open={isDeleteDialogOpen}
           onOpenChange={setIsDeleteDialogOpen}
-          title="Delete Organization"
-          description="Are you sure you want to delete this organization? This deletes every Workspace in it, along with their Chats, Agents, files and Sandboxes, and every Shared resource. Depending on its backend, deleting a Sandbox can also erase everything stored in it. This action cannot be undone."
-          confirmPhrase="Delete organization"
+          noun="organization"
+          consequence="This deletes every Workspace in it, along with their Chats, Agents, files and Sandboxes, and every Shared resource. Depending on its backend, deleting a Sandbox can also erase everything stored in it."
+          requireTypedConfirmation
           onConfirm={handleDelete}
           loading={isDeleting}
           error={deleteError}

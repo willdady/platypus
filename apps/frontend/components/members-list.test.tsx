@@ -95,7 +95,7 @@ describe("MembersList", () => {
     await openActionsFor("Nina");
     await user.click(screen.getByText("Edit org role"));
 
-    expect(await screen.findByText("Edit Member Role")).toBeInTheDocument();
+    expect(await screen.findByText("Edit member role")).toBeInTheDocument();
     await selectOption(
       screen.getByRole("combobox", { name: "Organization Role" }),
       "Admin",
