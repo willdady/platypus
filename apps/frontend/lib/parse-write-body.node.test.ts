@@ -49,4 +49,17 @@ describe("parseCloneBody", () => {
     expect(parsed.outcome.fieldErrors.name).toBeUndefined();
     expect(parsed.outcome.fieldErrors.notes).toBeDefined();
   });
+
+  it("keys nothing when an issue names no field, so the refusal shows", () => {
+    const parsed = parseCloneBody(
+      schema.strict(),
+      { name: "too long", notes: "ok", extra: true },
+      refusal,
+    );
+
+    expect(parsed.ok).toBe(false);
+    if (parsed.ok) return;
+    expect(parsed.outcome.message).toBe(refusal);
+    expect(parsed.outcome.fieldErrors).toEqual({});
+  });
 });

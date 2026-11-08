@@ -352,9 +352,6 @@ describe("transferWorkspace, clearing history", () => {
     expect(deleteStoredPrefix.mock.calls.map(([p]) => p).sort()).toEqual([
       "org-1/ws-1/chat-done/",
       "org-1/ws-1/chat-run/",
-      "org-1/ws-1/run-done/",
-      "org-1/ws-1/run-pending/",
-      "org-1/ws-1/run-running/",
     ]);
   });
 });

@@ -97,8 +97,8 @@ export const plugin: PlatypusPlugin = {
         category: "Productivity",
         description:
           "Read-only tools for listing the workspace's chats and reading a chat's transcript",
-        tools: ({ workspaceId, sessionId }) =>
-          createChatTools(workspaceId, sessionId),
+        tools: ({ orgId, workspaceId, sessionId }) =>
+          createChatTools(orgId, workspaceId, sessionId),
       },
       {
         id: "memory",
