@@ -72,6 +72,16 @@ const unread = {
   createdAt: new Date().toISOString(),
 };
 
+describe("NotificationsDropdown trigger", () => {
+  it("uses the header's icon-xs size on the bell", () => {
+    render(<NotificationsDropdown orgId="org1" workspaceId="ws1" />);
+
+    expect(screen.getByRole("button", { name: "Notifications" })).toHaveClass(
+      "size-7",
+    );
+  });
+});
+
 describe("NotificationsDropdown polling", () => {
   it("does not poll any feed while the dropdown is closed", () => {
     render(<NotificationsDropdown orgId="org1" workspaceId="ws1" />);

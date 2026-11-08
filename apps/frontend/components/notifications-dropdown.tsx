@@ -169,7 +169,7 @@ export function NotificationsDropdown({
       <DropdownMenuTrigger asChild>
         <Button
           variant="ghost"
-          size="icon"
+          size="icon-xs"
           className="relative"
           aria-label={
             totalCount > 0 ? `Notifications (${totalCount})` : "Notifications"
