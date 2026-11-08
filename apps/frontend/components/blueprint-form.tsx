@@ -553,6 +553,7 @@ function BlueprintForm({
 
       <FormFooterButtons
         submitText={blueprintId ? "Update" : "Save"}
+        pending={isSubmitting}
         onSubmit={() => void submit()}
         submitDisabled={isSubmitting || !canSubmit}
         deleteVisible={!!blueprintId}

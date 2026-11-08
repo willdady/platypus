@@ -557,6 +557,7 @@ function TriggerForm({
 
       <FormFooterButtons
         submitText={triggerId ? "Update" : "Save"}
+        pending={isSubmitting}
         onSubmit={() => void submit()}
         submitDisabled={
           isSubmitting || !canSubmit || !typeFieldsValid || inboundBlocked

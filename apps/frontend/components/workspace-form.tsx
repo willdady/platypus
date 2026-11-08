@@ -519,6 +519,7 @@ function WorkspaceForm({ orgId, workspaceId }: WorkspaceFormProps) {
         <div className="flex flex-wrap items-start gap-2">
           <FormFooterButtons
             submitText="Save"
+            pending={isSubmitting}
             onSubmit={() => void submit()}
             submitDisabled={isSubmitting || !canSubmit}
             deleteVisible

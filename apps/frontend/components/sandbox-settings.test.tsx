@@ -15,6 +15,7 @@ import {
   toastSuccess,
 } from "@/test/list-test-harness";
 import { savedBody } from "@/test/form-test-harness";
+import type { WriteOutcome } from "@/lib/api-write";
 
 // --- Module mocks ------------------------------------------------------------
 
@@ -196,6 +197,34 @@ describe("SandboxSettings read failure", () => {
 
     expect(screen.getByLabelText("Name")).toBeInTheDocument();
     expect(screen.queryByText("Couldn't load sandbox")).not.toBeInTheDocument();
+  });
+});
+
+describe("SandboxSettings draft", () => {
+  it("says Saving... while the wizard collects the sandbox", async () => {
+    let finishWrite: (outcome: WriteOutcome<undefined>) => void = () => {};
+    const write = vi.fn(
+      () =>
+        new Promise<WriteOutcome<undefined>>((resolve) => {
+          finishWrite = resolve;
+        }),
+    );
+    mockReads({ sandbox: { data: null } });
+    await renderList(
+      <SandboxSettings
+        orgId="org1"
+        draft={{ write, onBack: vi.fn(), submitText: "Save" }}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Dev box" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(screen.getByRole("button", { name: "Saving..." })).toBeDisabled();
+
+    finishWrite({ outcome: "success", data: undefined, revalidateKeys: [] });
   });
 });
 

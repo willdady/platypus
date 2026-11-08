@@ -1055,6 +1055,7 @@ function AgentForm({
 
       <FormFooterButtons
         submitText={agentId ? "Update" : "Save"}
+        pending={isSubmitting}
         onSubmit={() => void submit()}
         submitDisabled={isSubmitting || readOnly || !canSubmit}
         deleteVisible={!!agentId && !isOrgScoped}

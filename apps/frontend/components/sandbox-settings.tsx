@@ -50,7 +50,10 @@ import {
 import { EmptyCard } from "@/components/empty-card";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { FormFooterButtons } from "@/components/form-footer-buttons";
+import {
+  FormFooterButtons,
+  PENDING_SUBMIT_TEXT,
+} from "@/components/form-footer-buttons";
 import { ListError } from "@/components/list-state";
 import { LoadingRegion } from "@/components/list-skeletons";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -1019,13 +1022,16 @@ function SandboxSettings({
             Back
           </Button>
           <Button onClick={handleSave} disabled={isSubmitting}>
-            {draft.submitText}
+            {isSubmitting && draft.submitText === "Save"
+              ? PENDING_SUBMIT_TEXT.Save
+              : draft.submitText}
           </Button>
         </div>
       ) : (
         <div className="flex gap-2">
           <FormFooterButtons
             submitText="Save"
+            pending={isSubmitting}
             onSubmit={handleSave}
             submitDisabled={isSubmitting}
             deleteVisible={hasSandbox && canConfigure}

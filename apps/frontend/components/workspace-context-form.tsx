@@ -339,6 +339,7 @@ export function WorkspaceContextForm({ contextId }: { contextId?: string }) {
         <FormFooterButtons
           type="submit"
           submitText={contextId ? "Update" : "Save"}
+          pending={isSubmitting}
           submitDisabled={isSubmitting}
           deleteVisible={!!contextId}
           deleteDisabled={isSubmitting}

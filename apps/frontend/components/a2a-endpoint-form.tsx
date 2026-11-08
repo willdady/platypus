@@ -281,6 +281,7 @@ function A2aEndpointForm({
       {!readOnly && (
         <FormFooterButtons
           submitText={isEditMode ? "Update" : "Save"}
+          pending={isSubmitting}
           onSubmit={() => void submit()}
           submitDisabled={isSubmitting || !canSubmit || !formData.agentId}
           deleteVisible={isEditMode}

@@ -1228,6 +1228,7 @@ function ProviderForm({
         !isReadOnly && (
           <FormFooterButtons
             submitText={providerId ? "Update" : "Save"}
+            pending={isSubmitting}
             onSubmit={handleSubmit}
             submitDisabled={
               isSubmitting || !!headersError || !!extraBodyError

@@ -331,6 +331,7 @@ function SkillForm({
 
       <FormFooterButtons
         submitText={skillId ? "Update" : "Save"}
+        pending={isSubmitting}
         onSubmit={() => void submit()}
         submitDisabled={isSubmitting || !canSubmit}
         deleteVisible={!!skillId}
