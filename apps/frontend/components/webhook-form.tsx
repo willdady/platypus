@@ -39,6 +39,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useState } from "react";
 import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
+import { useMutation } from "@/hooks/use-mutation";
 import { useRouter } from "next/navigation";
 import { retractExactKeys } from "@/lib/form-errors";
 import { scopedUrl, writeAt } from "@/lib/api-write";
@@ -155,7 +156,6 @@ function WebhookForm({ orgId, workspaceId, webhookId }: WebhookFormProps) {
   const router = useRouter();
 
   const [isRegenerateDialogOpen, setIsRegenerateDialogOpen] = useState(false);
-  const [isRegenerating, setIsRegenerating] = useState(false);
   const [regenerateError, setRegenerateError] = useState<string | null>(null);
   const [showSecret, setShowSecret] = useState(false);
 
@@ -229,27 +229,27 @@ function WebhookForm({ orgId, workspaceId, webhookId }: WebhookFormProps) {
     });
   };
 
-  const handleRegenerateSecret = async () => {
-    setIsRegenerating(true);
-    setRegenerateError(null);
-    const outcome = await writeAt(
-      scopedUrl(backendUrl, `webhooks/${webhookId}/regenerate-secret`, {
-        orgId,
-        workspaceId,
-      }),
-      { method: "POST" },
-    );
+  const { run: handleRegenerateSecret, pending: isRegenerating } = useMutation(
+    async () => {
+      setRegenerateError(null);
+      const outcome = await writeAt(
+        scopedUrl(backendUrl, `webhooks/${webhookId}/regenerate-secret`, {
+          orgId,
+          workspaceId,
+        }),
+        { method: "POST" },
+      );
 
-    if (outcome.outcome === "success") {
-      toast.success("Signing secret regenerated");
-      await mutateRecord();
-      setIsRegenerateDialogOpen(false);
-    } else {
-      // A refused regenerate stays in the open dialog rather than closing it.
-      setRegenerateError(outcome.message);
-    }
-    setIsRegenerating(false);
-  };
+      if (outcome.outcome === "success") {
+        toast.success("Signing secret regenerated");
+        await mutateRecord();
+        setIsRegenerateDialogOpen(false);
+      } else {
+        // A refused regenerate stays in the open dialog rather than closing it.
+        setRegenerateError(outcome.message);
+      }
+    },
+  );
 
   const handleCopySecret = async () => {
     if (!webhook?.signingSecret) return;

@@ -13,6 +13,7 @@ import {
 } from "@platypus/schemas";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { useScopedList } from "@/hooks/use-scoped-list";
+import { useMutation } from "@/hooks/use-mutation";
 import { writeEntity, type WriteOutcome } from "@/lib/api-write";
 import {
   parseValidationErrors,
@@ -98,7 +99,6 @@ export function WorkspaceWizard({ orgId }: { orgId: string }) {
   const router = useRouter();
 
   const [step, setStep] = useState(0);
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [name, setName] = useState("");
   const [context, setContext] = useState("");
@@ -236,15 +236,10 @@ export function WorkspaceWizard({ orgId }: { orgId: string }) {
     return outcome;
   };
 
-  const createWithoutSandbox = async () => {
-    setIsSubmitting(true);
-    try {
-      const outcome = await create();
-      if (outcome.outcome !== "success") toast.error(outcome.message);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+  const { run: createWithoutSandbox, pending } = useMutation(async () => {
+    const outcome = await create();
+    if (outcome.outcome !== "success") toast.error(outcome.message);
+  });
 
   const back = () => setStep((s) => s - 1);
 
@@ -464,7 +459,7 @@ export function WorkspaceWizard({ orgId }: { orgId: string }) {
             id="withSandbox"
             checked={withSandbox}
             onCheckedChange={setWithSandbox}
-            disabled={!hasSandboxBackends || isSubmitting}
+            disabled={!hasSandboxBackends || pending}
           />
         </Field>
         {withSandbox ? (
@@ -481,11 +476,11 @@ export function WorkspaceWizard({ orgId }: { orgId: string }) {
               description="Agents in this workspace won't have shell or filesystem tools."
             />
             <div className="flex gap-2">
-              <Button variant="outline" onClick={back} disabled={isSubmitting}>
+              <Button variant="outline" onClick={back} disabled={pending}>
                 Back
               </Button>
-              <Button onClick={createWithoutSandbox} disabled={isSubmitting}>
-                {isSubmitting ? "Saving..." : "Save"}
+              <Button onClick={createWithoutSandbox} disabled={pending}>
+                {pending ? "Saving..." : "Save"}
               </Button>
             </div>
           </>

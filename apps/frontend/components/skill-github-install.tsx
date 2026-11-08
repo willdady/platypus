@@ -29,6 +29,7 @@ import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Markdown } from "@/components/markdown";
 import { useBackendUrl } from "@/components/auth-provider";
+import { useMutation } from "@/hooks/use-mutation";
 import { formatSize, githubTreeUrl } from "@/components/skill-bundle";
 import { useSkillImportAllowed } from "@/hooks/use-skill-import-allowed";
 import { scopedUrl, writeAt, type Scope } from "@/lib/api-write";
@@ -188,18 +189,15 @@ export function SkillGithubInstall({
   const [results, setResults] = useState<
     SkillGithubInstallResult["results"] | null
   >(null);
-  const [busy, setBusy] = useState(false);
 
   const url = (action: string) =>
     scopedUrl(backendUrl, `skills/github/${action}`, scope);
 
-  const runPreview = async () => {
-    setBusy(true);
+  const find = useMutation(async () => {
     const outcome = await writeAt<SkillGithubPreview>(url("preview"), {
       method: "POST",
       data: { source },
     });
-    setBusy(false);
     if (outcome.outcome !== "success") {
       toast.error(outcome.message);
       return;
@@ -207,11 +205,10 @@ export function SkillGithubInstall({
     setPreview(outcome.data);
     setSelected(new Set());
     setResults(null);
-  };
+  });
 
-  const install = async () => {
+  const install = useMutation(async () => {
     if (!preview) return;
-    setBusy(true);
     const outcome = await writeAt<SkillGithubInstallResult>(url("install"), {
       method: "POST",
       data: {
@@ -222,13 +219,12 @@ export function SkillGithubInstall({
         skillPaths: [...selected],
       },
     });
-    setBusy(false);
     if (outcome.outcome !== "success") {
       toast.error(outcome.message);
       return;
     }
     setResults(outcome.data.results);
-  };
+  });
 
   if (!importAllowed && scope.workspaceId) {
     return (
@@ -299,7 +295,7 @@ export function SkillGithubInstall({
         className="flex flex-col gap-3"
         onSubmit={(event) => {
           event.preventDefault();
-          void runPreview();
+          void find.run();
         }}
       >
         <Field>
@@ -317,8 +313,11 @@ export function SkillGithubInstall({
           </FieldDescription>
         </Field>
         <div>
-          <Button type="submit" disabled={busy || source.trim() === ""}>
-            {busy && !preview ? "Finding..." : "Find skills"}
+          <Button
+            type="submit"
+            disabled={find.pending || install.pending || source.trim() === ""}
+          >
+            {find.pending ? "Finding..." : "Find skills"}
           </Button>
         </div>
       </form>
@@ -397,10 +396,12 @@ export function SkillGithubInstall({
             <div>
               <Button
                 type="button"
-                disabled={busy || selected.size === 0}
-                onClick={() => void install()}
+                disabled={
+                  find.pending || install.pending || selected.size === 0
+                }
+                onClick={() => void install.run()}
               >
-                {busy
+                {install.pending
                   ? "Installing..."
                   : selected.size === 1
                     ? "Install 1 skill"

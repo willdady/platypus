@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { formatSize } from "@/components/skill-bundle";
 import { ThirdPartyScriptsAlert } from "@/components/skill-github-install";
+import { useMutation } from "@/hooks/use-mutation";
 import { writeAt, type Serialized } from "@/lib/api-write";
 import { lineDiff } from "@/lib/line-diff";
 import { cn } from "@/lib/utils";
@@ -117,41 +118,37 @@ export function SkillGithubUpdate({
   onUpdated: (skill: Serialized<Skill>) => void;
   children?: ReactNode;
 }) {
-  const [checking, setChecking] = useState(false);
   const [check, setCheck] = useState<SkillGithubUpdateCheck | null>(null);
   const [confirming, setConfirming] = useState(false);
-  const [updating, setUpdating] = useState(false);
   const [updateError, setUpdateError] = useState<string | null>(null);
 
-  const runCheck = async () => {
-    setChecking(true);
+  const { run: runCheck, pending: checking } = useMutation(async () => {
     const outcome = await writeAt<SkillGithubUpdateCheck>(
       `${skillUrl}/github/check`,
       { method: "POST", data: {} },
     );
-    setChecking(false);
     if (outcome.outcome === "success") setCheck(outcome.data);
     else toast.error(outcome.message);
-  };
+  });
 
-  const update = async (commitSha: string) => {
-    setUpdating(true);
-    const outcome = await writeAt<Serialized<Skill>>(
-      `${skillUrl}/github/update`,
-      { method: "POST", data: { commitSha } },
-    );
-    setUpdating(false);
-    if (outcome.outcome !== "success") {
-      // A refused update shows in the confirm dialog, which stays open.
-      if (confirming) setUpdateError(outcome.message);
-      else toast.error(outcome.message);
-      return;
-    }
-    setConfirming(false);
-    toast.success("Skill updated");
-    setCheck(null);
-    onUpdated(outcome.data);
-  };
+  const { run: update, pending: updating } = useMutation(
+    async (commitSha: string) => {
+      const outcome = await writeAt<Serialized<Skill>>(
+        `${skillUrl}/github/update`,
+        { method: "POST", data: { commitSha } },
+      );
+      if (outcome.outcome !== "success") {
+        // A refused update shows in the confirm dialog, which stays open.
+        if (confirming) setUpdateError(outcome.message);
+        else toast.error(outcome.message);
+        return;
+      }
+      setConfirming(false);
+      toast.success("Skill updated");
+      setCheck(null);
+      onUpdated(outcome.data);
+    },
+  );
 
   return (
     <div className="flex flex-col gap-3">

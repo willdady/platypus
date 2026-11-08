@@ -24,6 +24,7 @@ import { useScopedList } from "@/hooks/use-scoped-list";
 import { scopedUrl, writeAt } from "@/lib/api-write";
 import { sortByName } from "@/lib/utils";
 import { useBackendUrl } from "@/components/auth-provider";
+import { useMutation } from "@/hooks/use-mutation";
 
 // Apply a Blueprint to an existing Workspace (ADR-0008). The macro is additive
 // and idempotent, so re-applying only attaches what is missing — we report the
@@ -43,7 +44,6 @@ export function ApplyBlueprintDialog({
 }) {
   const backendUrl = useBackendUrl();
   const [workspaceId, setWorkspaceId] = useState<string>("");
-  const [applying, setApplying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{
     attached: number;
@@ -61,12 +61,10 @@ export function ApplyBlueprintDialog({
     setWorkspaceId("");
     setError(null);
     setResult(null);
-    setApplying(false);
   };
 
-  const handleApply = async () => {
+  const { run: handleApply, pending } = useMutation(async () => {
     if (!workspaceId || !backendUrl) return;
-    setApplying(true);
     setError(null);
     setResult(null);
     const outcome = await writeAt<{
@@ -82,14 +80,13 @@ export function ApplyBlueprintDialog({
     } else {
       setError(outcome.message);
     }
-    setApplying(false);
-  };
+  });
 
   return (
     <Dialog
       open={open}
       onOpenChange={(next) => {
-        if (!applying) {
+        if (!pending) {
           if (!next) reset();
           onOpenChange(next);
         }
@@ -116,7 +113,7 @@ export function ApplyBlueprintDialog({
           <Field>
             <FieldLabel htmlFor="apply-workspace">Workspace</FieldLabel>
             <Select value={workspaceId} onValueChange={setWorkspaceId}>
-              <SelectTrigger id="apply-workspace" disabled={applying}>
+              <SelectTrigger id="apply-workspace" disabled={pending}>
                 <SelectValue placeholder="Select a workspace" />
               </SelectTrigger>
               <SelectContent>
@@ -154,11 +151,11 @@ export function ApplyBlueprintDialog({
                   reset();
                   onOpenChange(false);
                 }}
-                disabled={applying}
+                disabled={pending}
               >
                 Cancel
               </Button>
-              <Button onClick={handleApply} disabled={applying || !workspaceId}>
+              <Button onClick={handleApply} disabled={pending || !workspaceId}>
                 Apply
               </Button>
             </>
