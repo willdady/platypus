@@ -16,6 +16,7 @@ import {
   trigger as triggerTable,
   triggerRun as triggerRunTable,
 } from "../db/schema.ts";
+import { getStorage } from "../storage/index.ts";
 
 /**
  * The cron claim and the NULL-schedule repair run for real against an
@@ -51,8 +52,17 @@ let pg: PGlite;
 let db: ReturnType<typeof drizzle>;
 beforeAll(async () => {
   pg = await migratedPglite();
-  // The Triggers' Workspace and Agent are beside the point; skip the FKs.
-  await pg.exec("SET session_replication_role = replica");
+  // The Triggers' Workspace and Agent are beside the point; skip the FKs. The
+  // Workspace row itself is read for the Organization a reaped run's Chat
+  // prefix sits under.
+  await pg.exec(`
+    SET session_replication_role = replica;
+    INSERT INTO "user" ("id", "name", "email", "email_verified", "created_at", "updated_at")
+      VALUES ('u1', 'Jane', 'jane@example.com', true, now(), now());
+    INSERT INTO "organization" ("id", "name") VALUES ('org-1', 'Acme');
+    INSERT INTO "workspace" ("id", "organization_id", "owner_id", "name")
+      VALUES ('ws-1', 'org-1', 'u1', 'Support');
+  `);
   db = drizzle(pg);
   holder.db = db;
 }, 60_000);
@@ -311,6 +321,18 @@ describe("reapFiredOneOffTriggers", () => {
 
     // The runs go by the FK cascade, which this fixture's replica mode skips.
     expect(await remaining()).toEqual(["recent"]);
+  });
+
+  it("deletes the stored files under each reaped run Chat's prefix", async () => {
+    await seedFired("ok", { status: "success", completedAt: daysAgo(8) });
+    const deletePrefix = vi
+      .spyOn(getStorage(), "deletePrefix")
+      .mockResolvedValue(undefined);
+
+    await reapFiredOneOffTriggers();
+
+    expect(deletePrefix).toHaveBeenCalledWith("org-1/ws-1/run-ok/");
+    deletePrefix.mockRestore();
   });
 
   it("never reaps a fired One-off whose run is still pending or running", async () => {

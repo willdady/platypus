@@ -48,7 +48,6 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -86,9 +85,7 @@ import {
   Network,
 } from "lucide-react";
 import { SearchInput } from "@/components/search-input";
-import { Field, FieldLabel, FieldError } from "@/components/ui/field";
 import { FormTextField } from "@/components/form-text-field";
-import { TagInput } from "@/components/tag-input";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
   activeChatIdFromPathname,
@@ -244,8 +241,8 @@ export function AppSidebar() {
     isSubmitting: isRenaming,
     setField: setRenameField,
     submit: submitRename,
-  } = useEntityForm<{ title: string; tags: string[] }>({
-    initialData: { title: "", tags: [] },
+  } = useEntityForm<{ title: string }>({
+    initialData: { title: "" },
     guardUnsavedChanges: false,
     entity: "chat",
     scope,
@@ -466,7 +463,7 @@ export function AppSidebar() {
                                 <p className="truncate">{chat.title}</p>
                               </Link>
                             </SidebarMenuButton>
-                            {(canChange || chat.tags.length > 0) && (
+                            {canChange && (
                               <DropdownMenu modal={false}>
                                 <DropdownMenuTrigger asChild>
                                   <SidebarMenuAction
@@ -481,61 +478,38 @@ export function AppSidebar() {
                                   side="right"
                                   align="start"
                                 >
-                                  {canChange && (
-                                    <>
-                                      <DropdownMenuItem
-                                        onSelect={() => {
-                                          setRenameChatId(chat.id);
-                                          setRenameData({
-                                            title: chat.title,
-                                            tags: chat.tags,
-                                          });
-                                          setRenameValidationErrors({});
-                                        }}
-                                      >
-                                        <Pencil className="size-4" /> Edit
-                                      </DropdownMenuItem>
-                                      <DropdownMenuItem
-                                        onSelect={() => handleTogglePin(chat)}
-                                        disabled={pins.isPending(chat.id)}
-                                      >
-                                        {chat.isPinned ? (
-                                          <>
-                                            <PinOff className="size-4" /> Unpin
-                                          </>
-                                        ) : (
-                                          <>
-                                            <Pin className="size-4" /> Pin
-                                          </>
-                                        )}
-                                      </DropdownMenuItem>
-                                      <DropdownMenuSeparator />
-                                      <DropdownMenuItem
-                                        variant="destructive"
-                                        onSelect={() =>
-                                          chatDelete.request(chat.id)
-                                        }
-                                      >
-                                        <Trash2 className="size-4" /> Delete
-                                      </DropdownMenuItem>
-                                    </>
-                                  )}
-                                  {chat.tags.length > 0 && (
-                                    <>
-                                      {canChange && <DropdownMenuSeparator />}
-                                      <DropdownMenuGroup className="flex flex-wrap p-1 gap-1">
-                                        {chat.tags.map((tag: string) => (
-                                          <Badge
-                                            key={tag}
-                                            className="cursor-default"
-                                            variant="secondary"
-                                          >
-                                            {tag}
-                                          </Badge>
-                                        ))}
-                                      </DropdownMenuGroup>
-                                    </>
-                                  )}
+                                  <DropdownMenuItem
+                                    onSelect={() => {
+                                      setRenameChatId(chat.id);
+                                      setRenameData({
+                                        title: chat.title,
+                                      });
+                                      setRenameValidationErrors({});
+                                    }}
+                                  >
+                                    <Pencil className="size-4" /> Edit
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onSelect={() => handleTogglePin(chat)}
+                                    disabled={pins.isPending(chat.id)}
+                                  >
+                                    {chat.isPinned ? (
+                                      <>
+                                        <PinOff className="size-4" /> Unpin
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Pin className="size-4" /> Pin
+                                      </>
+                                    )}
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    variant="destructive"
+                                    onSelect={() => chatDelete.request(chat.id)}
+                                  >
+                                    <Trash2 className="size-4" /> Delete
+                                  </DropdownMenuItem>
                                 </DropdownMenuContent>
                               </DropdownMenu>
                             )}
@@ -572,9 +546,7 @@ export function AppSidebar() {
         >
           <DialogHeader>
             <DialogTitle>Edit chat</DialogTitle>
-            <DialogDescription>
-              Update the chat title and tags.
-            </DialogDescription>
+            <DialogDescription>Update the chat title.</DialogDescription>
           </DialogHeader>
           <div className="py-4 flex flex-col gap-4">
             <FormTextField
@@ -586,19 +558,6 @@ export function AppSidebar() {
               disabled={isRenaming}
               error={renameValidationErrors.title}
             />
-
-            <Field data-invalid={!!renameValidationErrors.tags}>
-              <FieldLabel htmlFor="tags">Tags</FieldLabel>
-              <TagInput
-                id="tags"
-                value={renameData.tags}
-                onChange={(tags) => setRenameField("tags", tags)}
-                disabled={isRenaming}
-              />
-              {renameValidationErrors.tags && (
-                <FieldError>{renameValidationErrors.tags}</FieldError>
-              )}
-            </Field>
           </div>
           <DialogFooter>
             <Button

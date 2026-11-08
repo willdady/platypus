@@ -32,7 +32,6 @@ vi.mock("../services/chat-execution.ts", () => ({
 }));
 
 import { createUIMessageStreamResponse, generateText } from "ai";
-import { sql } from "drizzle-orm";
 import app from "../server.ts";
 import { runRegistry } from "../runs/run-registry.ts";
 import { recoverStuckChats } from "../jobs/scheduler.ts";
@@ -65,7 +64,7 @@ vi.mock("ai", async () => {
       .fn()
       .mockReturnValue(new Response("stream")),
     generateText: vi.fn().mockResolvedValue({
-      output: { title: "Generated Title", tags: ["tag1", "tag2"] },
+      output: { title: "Generated Title" },
     }),
     Output: {
       object: vi.fn().mockReturnValue({}),
@@ -196,9 +195,9 @@ describe("Chat Routes", () => {
       ]); // requireWorkspaceAccess
 
       const mockChats = [
-        { id: "chat-1", title: "Chat 1", tags: ["typescript"] },
-        { id: "chat-2", title: "Chat 2", tags: ["react"] },
-        { id: "chat-3", title: "Chat 3", tags: [] },
+        { id: "chat-1", title: "Chat 1" },
+        { id: "chat-2", title: "Chat 2" },
+        { id: "chat-3", title: "Chat 3" },
       ];
       mockDb.offset.mockResolvedValueOnce(mockChats);
       mockDb.where
@@ -228,16 +227,46 @@ describe("Chat Routes", () => {
     };
 
     it("escapes LIKE wildcards in the search term", async () => {
-      const res = await listChats(
-        `search=${encodeURIComponent("100%_done\\now")}`,
+      mockSession();
+      seedTenant({
+        chat: [
+          { id: "chat-1", workspaceId, title: "100%_done\\now" },
+          { id: "chat-2", workspaceId, title: "100xdone now" },
+        ],
+      });
+
+      const res = await app.request(
+        `${baseUrl}?search=${encodeURIComponent("100%_done\\now")}`,
       );
       expect(res.status).toBe(200);
-      const pattern = "%100\\%\\_done\\\\now%";
-      // Title and tag filters both get the escaped pattern.
-      const withPattern = vi
-        .mocked(sql)
-        .mock.calls.filter(([, ...values]) => values.includes(pattern));
-      expect(withPattern).toHaveLength(2);
+      const { results } = (await res.json()) as { results: Row[] };
+      expect(results.map((chat) => chat.id)).toEqual(["chat-1"]);
+    });
+
+    it("matches the title, not a term only a retired tag held", async () => {
+      mockSession();
+      seedTenant({
+        chat: [
+          {
+            id: "chat-1",
+            workspaceId,
+            title: "Centering a div",
+            // A row from before tags were dropped: search must ignore it.
+            tags: ["typescript"],
+          },
+          { id: "chat-2", workspaceId, title: "TypeScript tips" },
+        ],
+      });
+
+      const tagOnly = (await (
+        await app.request(`${baseUrl}?search=typescript`)
+      ).json()) as { results: Row[] };
+      expect(tagOnly.results.map((chat) => chat.id)).toEqual(["chat-2"]);
+
+      const byTitle = (await (
+        await app.request(`${baseUrl}?search=centering`)
+      ).json()) as { results: Row[] };
+      expect(byTitle.results.map((chat) => chat.id)).toEqual(["chat-1"]);
     });
 
     it("defaults to the first 100 chats", async () => {
@@ -287,6 +316,8 @@ describe("Chat Routes", () => {
       expect(byId("chat-ui")).not.toHaveProperty("a2aClientName");
       expect(one.a2aClientName).toBe("Telegram via Hermes");
       expect(one).not.toHaveProperty("a2aTokenId");
+      expect(byId("chat-a2a")).not.toHaveProperty("tags");
+      expect(one).not.toHaveProperty("tags");
     });
 
     it("keep the client's name once the token is deleted", async () => {
@@ -324,7 +355,6 @@ describe("Chat Routes", () => {
             id: "run-1",
             workspaceId,
             title: "Digest · 2026-11-07 09:00 UTC",
-            tags: ["digest"],
             triggerRunId: "run-1",
             activeLeafId: null,
           },
@@ -332,7 +362,6 @@ describe("Chat Routes", () => {
             id: "chat-ui",
             workspaceId,
             title: "My digest notes",
-            tags: [],
             triggerRunId: null,
           },
         ],
@@ -360,8 +389,9 @@ describe("Chat Routes", () => {
 
       expect(res.status).toBe(200);
       const one = (await res.json()) as Row;
-      expect(one).toMatchObject({ id: "run-1", tags: ["digest"] });
+      expect(one).toMatchObject({ id: "run-1" });
       expect(one).not.toHaveProperty("triggerRunId");
+      expect(one).not.toHaveProperty("tags");
     });
   });
 
@@ -404,6 +434,7 @@ describe("Chat Routes", () => {
       expect(res.status).toBe(200);
       const body = (await res.json()) as Record<string, unknown>;
       expect(body).toMatchObject({ id: "chat-1", title: "Chat 1" });
+      expect(body).not.toHaveProperty("tags");
       expect(body.messages).toEqual([
         {
           id: "u1",
@@ -1011,7 +1042,7 @@ describe("Chat Routes", () => {
       expect(await res.json()).toEqual(mockChat);
     });
 
-    it("pins without touching the title or tags", async () => {
+    it("pins without touching the title", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([
@@ -1031,7 +1062,31 @@ describe("Chat Routes", () => {
       >;
       expect(setArg.isPinned).toBe(true);
       expect(setArg.title).toBeUndefined();
-      expect(setArg.tags).toBeUndefined();
+    });
+
+    it("updates a chat with only a title", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
+      mockDb.returning.mockResolvedValueOnce([
+        { id: "chat-1", title: "A new title" },
+      ]);
+
+      const res = await app.request(`${baseUrl}/chat-1`, {
+        method: "PATCH",
+        body: JSON.stringify({ title: "A new title" }),
+        headers: { "Content-Type": "application/json" },
+      });
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ id: "chat-1", title: "A new title" });
+      const setArg = mockDb.set.mock.calls.at(-1)![0] as Record<
+        string,
+        unknown
+      >;
+      expect(setArg.title).toBe("A new title");
+      expect(setArg).not.toHaveProperty("tags");
     });
   });
 

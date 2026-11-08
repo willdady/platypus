@@ -5,6 +5,8 @@ import {
   mockNoSession,
   mockSession,
   resetMockDb,
+  seedDb,
+  type Row,
 } from "../test-utils.ts";
 
 const { mockValidateCronExpression } = vi.hoisted(() => ({
@@ -576,31 +578,55 @@ describe("Trigger Routes", () => {
   });
 
   describe("DELETE /:triggerId", () => {
+    /**
+     * The delete runs for real against a seeded Workspace: it reads the
+     * Trigger's rows before the cascade, so a chainable mock would have to
+     * stand in for the run lookup as well as the delete.
+     */
+    const deleteWorld = (triggers: Row[] = []) => {
+      mockSession();
+      return seedDb({
+        organization_member: [
+          {
+            id: "member-1",
+            organizationId: "org-1",
+            userId: "user-1",
+            role: "member",
+          },
+        ],
+        workspace: [
+          {
+            id: "ws-1",
+            organizationId: "org-1",
+            ownerId: "user-1",
+            name: "Support",
+          },
+        ],
+        trigger: triggers,
+      });
+    };
+
     it("deletes the trigger when found", async () => {
-      stubAuthLookups();
-      mockDb.returning.mockResolvedValueOnce([cronTrigger]);
+      const fake = deleteWorld([cronTrigger]);
 
       const res = await app.request(`${baseUrl}/trig-1`, { method: "DELETE" });
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ message: "Trigger deleted" });
+      expect(fake.tables.trigger).toHaveLength(0);
     });
 
     it("deletes an Inbound Trigger: the Owner's surface may", async () => {
-      stubAuthLookups();
       // Were the route to take the Agent's narrower surface, the type check
       // would read this row and refuse with 400.
-      mockDb.limit.mockResolvedValueOnce([{ ...cronTrigger, type: "inbound" }]);
-      mockDb.returning.mockResolvedValueOnce([
-        { ...cronTrigger, type: "inbound" },
-      ]);
+      const fake = deleteWorld([{ ...cronTrigger, type: "inbound" }]);
 
       const res = await app.request(`${baseUrl}/trig-1`, { method: "DELETE" });
       expect(res.status).toBe(200);
+      expect(fake.tables.trigger).toHaveLength(0);
     });
 
     it("returns 404 when the trigger doesn't exist", async () => {
-      stubAuthLookups();
-      mockDb.returning.mockResolvedValueOnce([]);
+      deleteWorld();
 
       const res = await app.request(`${baseUrl}/trig-missing`, {
         method: "DELETE",

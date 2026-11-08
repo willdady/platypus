@@ -478,7 +478,7 @@ function BlueprintForm({
             disableWhenEmpty
             error={validationErrors.taskModelProviderId}
             providers={attachedProviders}
-            description="Provider used for generating chat titles and tags. Attach a provider under Shared resources to enable this."
+            description="Provider used for generating chat titles. Attach a provider under Shared resources to enable this."
           />
 
           <ProviderPointerSelect

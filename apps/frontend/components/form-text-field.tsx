@@ -28,6 +28,7 @@ export type FormTextFieldProps = {
   max?: string | number;
   step?: string | number;
   maxLength?: number;
+  onKeyDown?: React.KeyboardEventHandler<HTMLInputElement>;
 };
 
 // Composes the ui/field + ui/input atoms so the six-line
@@ -54,6 +55,7 @@ export function FormTextField({
   max,
   step,
   maxLength,
+  onKeyDown,
 }: FormTextFieldProps) {
   const ids = formFieldIds(name, { description, error });
   return (
@@ -76,6 +78,7 @@ export function FormTextField({
         max={max}
         step={step}
         maxLength={maxLength}
+        onKeyDown={onKeyDown}
       />
       {description && (
         <FieldDescription id={ids.descriptionId}>

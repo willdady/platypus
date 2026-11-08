@@ -26,11 +26,7 @@ vi.mock("./provider.ts", () => ({
   }),
 }));
 
-import {
-  generateChatMetadata,
-  MAX_TITLE_FAILURES,
-  toKebabCase,
-} from "./chat-metadata.ts";
+import { generateChatMetadata, MAX_TITLE_FAILURES } from "./chat-metadata.ts";
 import { openProvider } from "./provider.ts";
 import type { PlatypusUIMessage } from "../types.ts";
 
@@ -49,7 +45,6 @@ const stubReads = (opts: {
     (Record<string, unknown> & { messages?: PlatypusUIMessage[] }) | undefined;
   workspace?: Record<string, unknown> | null | undefined;
   provider?: Record<string, unknown> | null | undefined;
-  existingTags?: string[];
 }) => {
   const { messages = [], ...chat } = opts.chat ?? {};
   mockDb.limit.mockResolvedValueOnce(
@@ -62,9 +57,6 @@ const stubReads = (opts: {
   if (opts.provider !== undefined) {
     mockDb.limit.mockResolvedValueOnce(opts.provider ? [opts.provider] : []); // provider
   }
-  mockDb.execute.mockResolvedValueOnce({
-    rows: (opts.existingTags ?? []).map((tag) => ({ tag })),
-  });
 };
 
 const provider = {
@@ -83,19 +75,6 @@ const sharedProvider = {
   organizationId: "org-1",
 };
 
-describe("toKebabCase", () => {
-  it.each([
-    ["Machine Learning", "machine-learning"],
-    ["machineLearning", "machine-learning"],
-    ["machine_learning", "machine-learning"],
-    ["C++/Rust!", "crust"],
-    ["already-kebab", "already-kebab"],
-    ["HTTP", "http"],
-  ])("normalizes %j to %j", (input, expected) => {
-    expect(toKebabCase(input)).toBe(expected);
-  });
-});
-
 describe("generateChatMetadata", () => {
   beforeEach(() => {
     resetMockDb();
@@ -110,14 +89,14 @@ describe("generateChatMetadata", () => {
     providerId: "p1",
   };
 
-  it("titles an Untitled chat and normalizes tags", async () => {
+  it("titles an Untitled chat", async () => {
     stubReads({
       chat: { id: "chat-1", title: "Untitled", messages: [userMessage] },
       workspace: { id: "ws-1", taskModelProviderId: null },
       provider,
     });
     mockGenerateText.mockResolvedValueOnce({
-      output: { title: "Centering a div", tags: ["CSS", "layout", "css"] },
+      output: { title: "Centering a div" },
     });
     const updated = { id: "chat-1", title: "Centering a div" };
     mockDb.returning.mockResolvedValueOnce([updated]);
@@ -138,8 +117,7 @@ describe("generateChatMetadata", () => {
     expect(mockLoadActivePath).toHaveBeenCalledWith("chat-1", "leaf-1");
     const setArg = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
     expect(setArg.title).toBe("Centering a div");
-    // kebab-cased + deduped
-    expect(setArg.tags).toEqual(["css", "layout"]);
+    expect(setArg).not.toHaveProperty("tags");
     // Read and written only within this Workspace; the write only while the
     // Chat is still Untitled.
     expect(mockDb.where).toHaveBeenCalledWith(
@@ -154,7 +132,7 @@ describe("generateChatMetadata", () => {
     );
   });
 
-  it("offers the workspace's existing tags and sends only the text of each message", async () => {
+  it("asks for a title alone and sends only the text of each message", async () => {
     stubReads({
       chat: {
         id: "chat-1",
@@ -172,21 +150,22 @@ describe("generateChatMetadata", () => {
       },
       workspace: { id: "ws-1", taskModelProviderId: null },
       provider,
-      existingTags: ["css", "web-browser"],
     });
     mockGenerateText.mockResolvedValueOnce({
-      output: { title: "Titled", tags: ["css"] },
+      output: { title: "Titled" },
     });
     mockDb.returning.mockResolvedValueOnce([{ id: "chat-1" }]);
 
     await generateChatMetadata(params);
 
     const { prompt } = mockGenerateText.mock.calls[0][0] as { prompt: string };
-    expect(prompt).toContain(
-      "Existing tags in this workspace: css, web-browser",
-    );
+    expect(prompt).toContain("Generate a short, descriptive title");
+    expect(prompt.toLowerCase()).not.toContain("tag");
+    expect(prompt).not.toContain("Existing tags");
     expect(prompt).toContain("Conversation:\nuser:\nWhat is this?");
     expect(prompt).not.toContain("data:,");
+    // No existing-tags lookup is made any more.
+    expect(mockDb.execute).not.toHaveBeenCalled();
   });
 
   it("returns null when the workspace does not exist", async () => {
@@ -208,7 +187,6 @@ describe("generateChatMetadata", () => {
     mockGenerateText.mockResolvedValueOnce({
       output: {
         title: "This is an absurdly long chat title that keeps going",
-        tags: ["misc"],
       },
     });
     mockDb.returning.mockResolvedValueOnce([{ id: "chat-1" }]);
@@ -229,7 +207,7 @@ describe("generateChatMetadata", () => {
         provider,
       });
       mockGenerateText.mockResolvedValueOnce({
-        output: { title, tags: ["misc"] },
+        output: { title },
       });
       mockDb.returning.mockResolvedValueOnce([{ titleFailures: 1 }]);
 
@@ -268,7 +246,7 @@ describe("generateChatMetadata", () => {
         provider,
       });
       mockGenerateText.mockResolvedValueOnce({
-        output: { title: "", tags: [] },
+        output: { title: "" },
       });
       mockDb.returning.mockResolvedValueOnce([{ titleFailures: failures }]);
       await generateChatMetadata(params);
@@ -309,7 +287,7 @@ describe("generateChatMetadata", () => {
       provider,
     });
     mockGenerateText.mockResolvedValueOnce({
-      output: { title: "Lots of a", tags: [] },
+      output: { title: "Lots of a" },
     });
     mockDb.returning.mockResolvedValueOnce([{ id: "chat-1" }]);
 
@@ -324,12 +302,6 @@ describe("generateChatMetadata", () => {
     expect(call.maxOutputTokens).toBeGreaterThan(0);
     expect(call.maxRetries).toBe(1);
     expect(call.abortSignal).toBeInstanceOf(AbortSignal);
-    // The tag query is bounded too.
-    const [tagQuery] = mockDb.execute.mock.calls[0] as [
-      { strings: string[]; values: unknown[] },
-    ];
-    expect(tagQuery.strings.join("?")).toMatch(/LIMIT \?\s*$/);
-    expect(tagQuery.values.at(-1)).toBe(100);
   });
 
   it("prefers the workspace task-model provider override", async () => {
@@ -339,7 +311,7 @@ describe("generateChatMetadata", () => {
       provider: { ...provider, id: "override-provider" },
     });
     mockGenerateText.mockResolvedValueOnce({
-      output: { title: "Titled", tags: ["a"] },
+      output: { title: "Titled" },
     });
     mockDb.returning.mockResolvedValueOnce([{ id: "chat-1" }]);
 
@@ -391,7 +363,7 @@ describe("generateChatMetadata", () => {
       provider,
     });
     mockGenerateText.mockResolvedValueOnce({
-      output: { title: "Titled", tags: ["a"] },
+      output: { title: "Titled" },
     });
     // A concurrent run already flipped the title away from "Untitled", so the
     // guarded UPDATE matches no rows.
@@ -425,7 +397,7 @@ describe("generateChatMetadata", () => {
     });
     mockDb.limit.mockResolvedValueOnce([{ id: "att-1" }]); // attached here
     mockGenerateText.mockResolvedValueOnce({
-      output: { title: "Titled", tags: ["a"] },
+      output: { title: "Titled" },
     });
     mockDb.returning.mockResolvedValueOnce([{ id: "chat-1" }]);
 

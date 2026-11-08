@@ -189,7 +189,9 @@ now**. Copy both, then click **I've copied it**, the only way to close it.
 
 **Clone** in the ⋮ menu on a Trigger's card makes a new, independent Trigger
 from it. Name the copy in the **Clone trigger** dialog — it starts as the
-original's name with ` (copy)` — and click **Clone**. The copy's edit page opens.
+original's name with ` (copy)` — and click **Clone**. The copy's name has to fit
+the same limit as any Trigger's name, so shorten it if the original was already
+near that limit; the dialog says when it is too long. The copy's edit page opens.
 
 The copy takes the original's type, Agent, description, instruction, schedule,
 events or inputs, and settings. It takes none of the original's runs, and:
@@ -267,7 +269,8 @@ The app doesn't show a run's Transcript yet. It is the record
 - **Its title is the Trigger's name and the run's start time** in UTC. Platypus
   never re-titles it.
 - **It is deleted with its run.** Pruning under **Max Runs to Keep** deletes the
-  pruned runs' Chats, and deleting the Trigger deletes them all.
+  pruned runs' Chats and the files stored in their messages, and deleting the
+  Trigger deletes them all.
 
 ### Run limits
 

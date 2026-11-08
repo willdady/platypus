@@ -10,8 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Field, FieldLabel } from "@/components/ui/field";
+import { FormTextField } from "@/components/form-text-field";
 import { useBackendUrl } from "@/components/auth-provider";
 import { useMutation } from "@/hooks/use-mutation";
 import type { WriteOutcome } from "@/lib/api-write";
@@ -29,6 +28,7 @@ export function CloneDialog({
   create,
   onCreated,
   note,
+  nameMaxLength,
   disabled = false,
 }: {
   /** The item's kind, lowercase, as in "Clone agent". */
@@ -49,6 +49,11 @@ export function CloneDialog({
   /** Shown above the name, such as what the copy leaves out. */
   note?: ReactNode;
   /**
+   * The create schema's Name limit. The `(copy)` suffix can push an
+   * already-near-limit name over it, so the field enforces it and can say so.
+   */
+  nameMaxLength: number;
+  /**
    * Whether Clone is unavailable. A caller that cannot assemble the copy's
    * references (a read still loading, or failed) passes this rather than
    * creating a clone with them silently dropped.
@@ -58,6 +63,7 @@ export function CloneDialog({
   const backendUrl = useBackendUrl();
   const [name, setName] = useState(`${original} (copy)`);
   const [error, setError] = useState<string | null>(null);
+  const [nameError, setNameError] = useState<string | null>(null);
   const inputId = `clone-${noun}-name`;
   const nounLabel = noun.charAt(0).toUpperCase() + noun.slice(1);
 
@@ -67,7 +73,18 @@ export function CloneDialog({
     if (!backendUrl) return;
     const outcome = await create(name, backendUrl);
     if (outcome.outcome !== "success") {
-      setError(outcome.message);
+      // The schema refused the copy's name itself: say so on the field, so the
+      // user can shorten it rather than reading that the entity can't be
+      // cloned. Every other failure keeps the entity's refusal, as does a body
+      // that fails on the name and something else at once.
+      const fieldErrors =
+        outcome.outcome === "invalid" ? outcome.fieldErrors : {};
+      const nameIssue = fieldErrors.name;
+      const otherIssue = Object.keys(fieldErrors).some(
+        (field) => field !== "name",
+      );
+      setNameError(nameIssue ?? null);
+      setError(nameIssue && !otherIssue ? null : outcome.message);
       return;
     }
     onClose();
@@ -101,23 +118,24 @@ export function CloneDialog({
           </DialogDescription>
         </DialogHeader>
         {note}
-        <Field>
-          <FieldLabel htmlFor={inputId}>Name</FieldLabel>
-          <Input
-            id={inputId}
-            value={name}
-            onChange={(e) => {
-              setName(e.target.value);
-              setError(null);
-            }}
-            placeholder={`${nounLabel} name`}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !disabled) {
-                void confirm();
-              }
-            }}
-          />
-        </Field>
+        <FormTextField
+          label="Name"
+          name={inputId}
+          value={name}
+          onChange={(value) => {
+            setName(value);
+            setNameError(null);
+            setError(null);
+          }}
+          placeholder={`${nounLabel} name`}
+          maxLength={nameMaxLength}
+          error={nameError}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !disabled) {
+              void confirm();
+            }
+          }}
+        />
         {error && (
           <p role="alert" className="text-destructive text-sm">
             {error}

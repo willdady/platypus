@@ -6,11 +6,18 @@ import type { EventTriggerEventPayload } from "@platypus/schemas";
 
 import { mockLogger, mockNanoid } from "../test-setup.ts";
 
-const { mockAnnounce } = vi.hoisted(() => ({ mockAnnounce: vi.fn() }));
+const { mockAnnounce, mockDeletePrefix } = vi.hoisted(() => ({
+  mockAnnounce: vi.fn(),
+  mockDeletePrefix: vi.fn<(prefix: string) => Promise<void>>(),
+}));
 
 vi.mock("./trigger-run-announce.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./trigger-run-announce.ts")>()),
   announceTriggerRunsEnded: mockAnnounce,
+}));
+
+vi.mock("../storage/index.ts", () => ({
+  getStorage: () => ({ deletePrefix: mockDeletePrefix }),
 }));
 
 mockNanoid.mockReturnValue("suppressed-1");
@@ -30,6 +37,7 @@ describe("trigger-breaker", () => {
   beforeEach(() => {
     resetMockDb();
     vi.clearAllMocks();
+    mockDeletePrefix.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -339,6 +347,63 @@ describe("trigger-breaker", () => {
       expect(vi.mocked(notInArray)).toHaveBeenCalledWith(triggerRunTable.id, [
         "suppressed-newest",
       ]);
+    });
+
+    it("deletes the stored files under each pruned run Chat's prefix", async () => {
+      // A run's Chat id is the run id, so each deleted run row names a storage
+      // prefix nothing else reaches once the row is gone.
+      stubRetention({
+        newest: [{ id: "newest" }],
+        suppressed: [],
+        deleted: [{ id: "run-1" }, { id: "run-2" }],
+      });
+      mockDb.limit.mockResolvedValueOnce([
+        { orgId: "org-1", workspaceId: "ws-1" },
+      ]);
+
+      await retainTriggerRuns("trigger-1", 1);
+
+      expect(
+        mockDeletePrefix.mock.calls.map(([prefix]) => prefix).sort(),
+      ).toEqual(["org-1/ws-1/run-1/", "org-1/ws-1/run-2/"]);
+    });
+
+    it("logs a storage failure without failing the prune", async () => {
+      stubRetention({
+        newest: [{ id: "newest" }],
+        suppressed: [],
+        deleted: [{ id: "run-1" }],
+      });
+      mockDb.limit.mockResolvedValueOnce([
+        { orgId: "org-1", workspaceId: "ws-1" },
+      ]);
+      mockDeletePrefix.mockRejectedValue(new Error("storage down"));
+
+      await expect(retainTriggerRuns("trigger-1", 1)).resolves.toBeUndefined();
+
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({ prefix: "org-1/ws-1/run-1/" }),
+        "Failed to delete files from storage",
+      );
+    });
+
+    it("logs a failed scope lookup without failing the prune", async () => {
+      // Retention has already committed its delete when the fallback lookup
+      // runs. Losing the scope must cost the files, not the prune.
+      stubRetention({
+        newest: [{ id: "newest" }],
+        suppressed: [],
+        deleted: [{ id: "run-1" }],
+      });
+      mockDb.limit.mockRejectedValueOnce(new Error("database down"));
+
+      await expect(retainTriggerRuns("trigger-1", 1)).resolves.toBeUndefined();
+
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({ triggerId: "trigger-1" }),
+        "Failed to resolve a Trigger's scope for run file deletion",
+      );
+      expect(mockDeletePrefix).not.toHaveBeenCalled();
     });
   });
 });
