@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { FileQuestion } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { EmptyCard } from "@/components/empty-card";
+import { RouteFallback } from "@/components/route-error";
 import { orgRoutes } from "@/lib/routes";
 
 /**
@@ -14,7 +14,7 @@ import { orgRoutes } from "@/lib/routes";
 export function OrgSettingsNotFound() {
   const { orgId } = useParams<{ orgId: string }>();
   return (
-    <EmptyCard
+    <RouteFallback
       icon={<FileQuestion />}
       title="Page not found"
       description="This settings page doesn't exist. It may have been deleted."
