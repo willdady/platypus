@@ -131,4 +131,21 @@ describe("FormTextField", () => {
       "email",
     );
   });
+
+  it("passes through autoComplete", () => {
+    render(
+      <FormTextField
+        label="Passphrase"
+        name="passphrase"
+        value=""
+        onChange={vi.fn()}
+        autoComplete="off"
+      />,
+    );
+
+    expect(screen.getByLabelText("Passphrase")).toHaveAttribute(
+      "autocomplete",
+      "off",
+    );
+  });
 });

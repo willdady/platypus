@@ -2,6 +2,8 @@ import { describe, it, expect, expectTypeOf, vi } from "vitest";
 import {
   writeEntity,
   writeAt,
+  attachResource,
+  detachResource,
   scopedUrl,
   attachmentsEntity,
   chatListEntity,
@@ -210,6 +212,48 @@ describe("the query-parameterized key builders", () => {
     expect(scopedUrl(BACKEND_URL, organizationEntity("org1"), {})).toBe(
       "http://localhost:4000/organizations/org1",
     );
+  });
+});
+
+describe("the attachment writes", () => {
+  const scope = { orgId: "org1", workspaceId: "ws1" };
+
+  it("attaches by POSTing the resource to the workspace's attachments", async () => {
+    const fetchMock = respond(201);
+
+    await attachResource(BACKEND_URL, scope, "agent", "a1");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:4000/organizations/org1/workspaces/ws1/attachments",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ resourceType: "agent", resourceId: "a1" }),
+      }),
+    );
+  });
+
+  it("detaches by DELETing the workspace's attachment address", async () => {
+    const fetchMock = respond(204);
+
+    await detachResource(BACKEND_URL, scope, "agent", "a1");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:4000/organizations/org1/workspaces/ws1/attachments/agent/a1",
+      expect.objectContaining({ method: "DELETE", body: undefined }),
+    );
+  });
+
+  it("maps a refusal through the shared outcome mapping", async () => {
+    respond(403, {
+      error: "This resource is managed at the organization level",
+    });
+
+    const result = await attachResource(BACKEND_URL, scope, "skill", "s1");
+
+    expect(result).toEqual({
+      outcome: "forbidden",
+      message: "This resource is managed at the organization level",
+    });
   });
 });
 

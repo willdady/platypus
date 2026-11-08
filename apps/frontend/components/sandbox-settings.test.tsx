@@ -11,10 +11,12 @@ import {
   stubAcceptedSave,
   stubRejectedSave,
   stubSaveSequence,
+  setupUser,
   toastError,
   toastSuccess,
 } from "@/test/list-test-harness";
 import { savedBody } from "@/test/form-test-harness";
+import type { WriteOutcome } from "@/lib/api-write";
 
 // --- Module mocks ------------------------------------------------------------
 
@@ -199,7 +201,48 @@ describe("SandboxSettings read failure", () => {
   });
 });
 
+describe("SandboxSettings draft", () => {
+  it("says Saving... while the wizard collects the sandbox", async () => {
+    let finishWrite: (outcome: WriteOutcome<undefined>) => void = () => {};
+    const write = vi.fn(
+      () =>
+        new Promise<WriteOutcome<undefined>>((resolve) => {
+          finishWrite = resolve;
+        }),
+    );
+    mockReads({ sandbox: { data: null } });
+    await renderList(
+      <SandboxSettings
+        orgId="org1"
+        draft={{ write, onBack: vi.fn(), submitText: "Save" }}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Dev box" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(screen.getByRole("button", { name: "Saving..." })).toBeDisabled();
+
+    finishWrite({ outcome: "success", data: undefined, revalidateKeys: [] });
+  });
+});
+
 describe("SandboxSettings save", () => {
+  it("saves on Enter in the Name field", async () => {
+    const fetchMock = stubAcceptedSave({});
+    mockReads({ sandbox: { data: DOCKER_SANDBOX } });
+    await renderSettings();
+
+    const name = screen.getByLabelText("Name");
+    fireEvent.change(name, { target: { value: "Edited box" } });
+    await setupUser().type(name, "{Enter}");
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(savedBody(fetchMock)).toMatchObject({ name: "Edited box" });
+  });
+
   it("creates the first sandbox on the first registered backend", async () => {
     const fetchMock = stubAcceptedSave({});
     mockReads({ sandbox: { data: null } });
@@ -575,5 +618,52 @@ describe("SandboxSettings revalidation", () => {
     rerender(<SandboxSettings orgId="org1" workspaceId="ws1" />);
 
     expect(screen.getByLabelText("Name")).toHaveValue("Edited box");
+  });
+});
+
+describe("SandboxSettings field wiring", () => {
+  const SSH_SANDBOX = {
+    ...DOCKER_SANDBOX,
+    backend: "ssh",
+    config: {},
+    hasCredentials: false,
+  };
+
+  // #1842: the fields carry their help text with the control, so a screen
+  // reader reads it with the field rather than only its label.
+  it("describes the fields that carry help text", async () => {
+    mockReads({
+      sandbox: { data: SSH_SANDBOX },
+      backends: [{ backend: "ssh", name: "SSH" }],
+    });
+    await renderSettings();
+
+    expect(screen.getByLabelText("Backend")).toHaveAccessibleDescription(
+      "The runtime that hosts the sandbox environment.",
+    );
+    expect(screen.getByLabelText("Host")).toHaveAccessibleDescription(
+      "Hostname or IP of the operator-owned host to attach to.",
+    );
+    expect(
+      screen.getByLabelText("Host key (optional)"),
+    ).toHaveAccessibleDescription(/Pin the host's public key/);
+    expect(screen.getByLabelText("Private key")).toHaveAccessibleDescription(
+      /PEM or OpenSSH private key/,
+    );
+    expect(
+      screen.getByLabelText("Key passphrase (optional)"),
+    ).toHaveAccessibleDescription(/Enter a private key first/);
+  });
+
+  it("marks a refused field invalid and describes it with the error", async () => {
+    stubRejectedSave([{ path: ["name"], message: "Name is taken" }], 400);
+    mockReads({ sandbox: { data: DOCKER_SANDBOX } });
+    await renderSettings();
+
+    const name = screen.getByLabelText("Name");
+    save();
+
+    await waitFor(() => expect(name).toHaveAttribute("aria-invalid", "true"));
+    expect(name).toHaveAccessibleDescription("Name is taken");
   });
 });

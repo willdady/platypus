@@ -34,6 +34,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useState, useEffect, useRef } from "react";
 import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
+import { useMutation } from "@/hooks/use-mutation";
 import { useRouter } from "next/navigation";
 import { type MCP, type McpResponse } from "@platypus/schemas";
 import { joinUrl } from "@/lib/utils";
@@ -132,7 +133,6 @@ function McpForm({
       ? workspaceRoutes(orgId, workspaceId).settings.mcpDetail(id)
       : orgRoutes(orgId).settings.mcpDetail(id);
 
-  const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<{
     success: boolean;
     toolNames?: string[];
@@ -148,7 +148,6 @@ function McpForm({
     popupPollRef.current = undefined;
   };
   useEffect(() => stopPopupPoll, []);
-  const [isRevoking, setIsRevoking] = useState(false);
   // The Client ID the form was seeded with or last saved; only an edit of it
   // is saved. A sign-in may since have registered a client this form never
   // saw, and saving the stale value over it would sign the MCP out.
@@ -298,11 +297,10 @@ function McpForm({
     }
   };
 
-  const handleTestConnection = async () => {
-    setIsTesting(true);
-    setTestResult(null);
+  const { run: handleTestConnection, pending: isTesting } = useMutation(
+    async () => {
+      setTestResult(null);
 
-    try {
       const payload: Record<string, unknown> = {
         url: formData.url,
         headers: rowsToRecord(formData.headerRows, undefined),
@@ -347,10 +345,8 @@ function McpForm({
           error: outcome.message,
         });
       }
-    } finally {
-      setIsTesting(false);
-    }
-  };
+    },
+  );
 
   // Listen for OAuth completion messages from the popup window
   useEffect(() => {
@@ -481,29 +477,36 @@ function McpForm({
     }
   };
 
-  const handleOAuthRevoke = async () => {
-    if (!mcpId) return;
-    setIsRevoking(true);
+  const { run: handleOAuthRevoke, pending: isRevoking } = useMutation(
+    async () => {
+      if (!mcpId) return;
 
-    const outcome = await writeAt(
-      joinUrl(backendUrl, `${collectionUrl}/${mcpId}/oauth/revoke`),
-      { method: "POST" },
-    );
+      const outcome = await writeAt(
+        joinUrl(backendUrl, `${collectionUrl}/${mcpId}/oauth/revoke`),
+        { method: "POST" },
+      );
 
-    if (outcome.outcome === "success") {
-      toast.success("OAuth authorization revoked");
-      void mutateMcp();
-      setTestResult(null);
-    } else {
-      toast.error(outcome.message);
-    }
-    setIsRevoking(false);
-  };
+      if (outcome.outcome === "success") {
+        toast.success("OAuth authorization revoked");
+        void mutateMcp();
+        setTestResult(null);
+      } else {
+        toast.error(outcome.message);
+      }
+    },
+  );
 
   const oauthAuthorized = mcp?.oauthAuthorized === true;
 
   const form = (
-    <div className={classNames}>
+    <form
+      noValidate
+      className={classNames}
+      onSubmit={(e) => {
+        e.preventDefault();
+        void handleSubmit();
+      }}
+    >
       <FieldSet className="mb-6">
         <FieldGroup>
           <FormTextField
@@ -784,8 +787,9 @@ function McpForm({
       </FieldSet>
 
       <FormFooterButtons
+        type="submit"
         submitText={mcpId ? "Update" : "Save"}
-        onSubmit={() => void handleSubmit()}
+        pending={isSubmitting}
         submitDisabled={isSubmitting || isTesting || !canSubmit}
         deleteVisible={!!mcpId}
         deleteDisabled={isSubmitting || isTesting}
@@ -801,7 +805,7 @@ function McpForm({
         loading={isDeleting}
         error={deleteError}
       />
-    </div>
+    </form>
   );
 
   return (

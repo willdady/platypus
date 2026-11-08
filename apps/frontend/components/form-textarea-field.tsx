@@ -20,6 +20,8 @@ export type FormTextareaFieldProps = {
   required?: boolean;
   rows?: number;
   maxLength?: number;
+  autoComplete?: string;
+  spellCheck?: boolean;
   className?: string;
   textareaClassName?: string;
 };
@@ -39,6 +41,8 @@ export function FormTextareaField({
   required,
   rows,
   maxLength,
+  autoComplete,
+  spellCheck,
   className,
   textareaClassName,
 }: FormTextareaFieldProps) {
@@ -55,6 +59,8 @@ export function FormTextareaField({
         required={required}
         rows={rows}
         maxLength={maxLength}
+        autoComplete={autoComplete}
+        spellCheck={spellCheck}
         aria-invalid={!!error}
         aria-describedby={ids.describedBy}
         className={textareaClassName}

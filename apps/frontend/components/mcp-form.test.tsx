@@ -6,6 +6,7 @@ import {
   setData,
   setError,
   resetFormHarness,
+  setupUser,
   stubAcceptedSave,
   stubRejectedSave,
   stubSaveSequence,
@@ -188,6 +189,22 @@ describe("McpForm detail read failures", () => {
     expect(
       screen.queryByRole("button", { name: "Update" }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("McpForm form submission", () => {
+  afterEach(() => {
+    resetFormHarness();
+  });
+
+  it("saves on Enter in the Name field", async () => {
+    const fetchMock = stubAcceptedSave({ id: "m1" });
+    render(<McpForm orgId="org1" workspaceId="ws1" />);
+
+    await setupUser().type(screen.getByLabelText("Name"), "Docs{Enter}");
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(savedBody(fetchMock)).toMatchObject({ name: "Docs" });
   });
 });
 

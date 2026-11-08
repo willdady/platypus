@@ -20,8 +20,8 @@ import type {
   PromoteBlocker,
   PromoteFlow,
   SharedDetach,
-  SharedResourceType,
 } from "@/hooks/use-shared-resource-actions";
+import type { AttachmentResourceType } from "@platypus/schemas";
 
 /**
  * The attach half of the Shared-resource actions (#880): the CTA, the picker
@@ -41,7 +41,7 @@ export function AttachSharedAction<
 }: {
   orgId: string;
   workspaceId: string;
-  resourceType: SharedResourceType;
+  resourceType: AttachmentResourceType;
   /** Attach CTA: "Attach shared skill" / "Attach shared MCP". */
   label: string;
   resources: readonly T[];
