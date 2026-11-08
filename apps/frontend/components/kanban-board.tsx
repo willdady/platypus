@@ -458,7 +458,7 @@ export function KanbanBoard({
                   className="flex items-center gap-2"
                 >
                   <Plus className="size-4" />
-                  <span>Create new board</span>
+                  <span>Create board</span>
                 </Link>
               </DropdownMenuItem>
               {boards.filter((b) => b.id !== boardId).length === 0 && (
