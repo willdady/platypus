@@ -31,6 +31,7 @@ import {
 } from "@/lib/api-write";
 import { moveCard, type ColumnWithCards } from "@/lib/board-moves";
 import { useBackendUrl } from "@/components/auth-provider";
+import { useRevalidateOnRestore } from "@/hooks/use-revalidate-on-restore";
 import { FetchErrorNotice } from "@/components/fetch-error-notice";
 import { KanbanColumnComponent } from "@/components/kanban-column";
 import { KanbanCardComponent } from "@/components/kanban-card";
@@ -107,6 +108,8 @@ export function KanbanBoard({
     scope,
     { refreshInterval: 10000, refreshWhenHidden: false },
   );
+
+  useRevalidateOnRestore(() => void mutate());
 
   const { results: boards } = useScopedList<{ id: string; name: string }>(
     "boards",

@@ -3,6 +3,7 @@
 import { use, useCallback } from "react";
 import { useListParams } from "@/hooks/use-list-params";
 import { useScopedList } from "@/hooks/use-scoped-list";
+import { useRevalidateOnRestore } from "@/hooks/use-revalidate-on-restore";
 import { scopedUrl, type Serialized } from "@/lib/api-write";
 import useSWRInfinite from "swr/infinite";
 import { History, TriangleAlert } from "lucide-react";
@@ -97,6 +98,8 @@ function TriggerRunsPage({
     // show it twice for one tick; that self-corrects on the next.
     { refreshInterval: 10000, refreshWhenHidden: false, revalidateAll: true },
   );
+
+  useRevalidateOnRestore(() => void mutate());
 
   const runs = data?.flatMap((page) => page.results) ?? [];
   const lastPage = data?.[data.length - 1];
