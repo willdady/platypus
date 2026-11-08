@@ -107,6 +107,22 @@ describe("UsersList table states", () => {
     expect(screen.getByText(/Failed to load users/)).toBeInTheDocument();
   });
 
+  it("keeps the rows already read when a revalidation fails", async () => {
+    mockScopedSWR(
+      {
+        "list-users": {
+          data: { users: [target] },
+          error: { status: 500, message: "Server error" },
+        },
+      },
+      { strict: true },
+    );
+    await renderList(<UsersList />);
+
+    expect(screen.getByText("Sam")).toBeInTheDocument();
+    expect(screen.queryByText(/Failed to load users/)).not.toBeInTheDocument();
+  });
+
   it("shows the loading state while the read is in flight", async () => {
     mockScopedSWR({ "list-users": { isLoading: true } }, { strict: true });
     await renderList(<UsersList />);

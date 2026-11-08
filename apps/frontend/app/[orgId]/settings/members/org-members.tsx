@@ -3,17 +3,16 @@
 import { useParams } from "next/navigation";
 import type { OrgMemberListItem } from "@platypus/schemas";
 import { MembersList } from "@/components/members-list";
-import { ListError } from "@/components/list-state";
 import { Users } from "lucide-react";
 import { EmptyCard } from "@/components/empty-card";
 import { useScopedList } from "@/hooks/use-scoped-list";
 import {
   BadgeSkeleton,
   IconButtonSkeleton,
-  LoadingRegion,
   TableSkeleton,
   UserCellSkeleton,
 } from "@/components/list-skeletons";
+import { TableList } from "@/components/table-list";
 import { OrganizationName } from "@/components/organization-name";
 
 function OrgMembersPage() {
@@ -36,8 +35,12 @@ function OrgMembersPage() {
         </p>
       </div>
 
-      {isLoading ? (
-        <LoadingRegion label="Loading members">
+      <TableList
+        isLoading={isLoading}
+        data={data}
+        error={error}
+        subject="members"
+        skeleton={
           <TableSkeleton
             tableClassName="min-w-[600px]"
             columns={[
@@ -54,22 +57,23 @@ function OrgMembersPage() {
               },
             ]}
           />
-        </LoadingRegion>
-      ) : error && !data ? (
-        <ListError error={error} subject="members" onRetry={() => mutate()} />
-      ) : data && members.length === 0 ? (
-        <EmptyCard
-          icon={<Users />}
-          title="No members yet"
-          description="People join this organization by accepting an invitation. Send one from Invitations."
-        />
-      ) : (
+        }
+        empty={
+          <EmptyCard
+            icon={<Users />}
+            title="No members yet"
+            description="People join this organization by accepting an invitation. Send one from Invitations."
+          />
+        }
+        isEmpty={members.length === 0}
+        onRetry={() => mutate()}
+      >
         <MembersList
           orgId={orgId}
           members={members}
           onUpdate={() => mutate()}
         />
-      )}
+      </TableList>
     </div>
   );
 }

@@ -1,6 +1,5 @@
 "use client";
 
-import { toast } from "sonner";
 import {
   Table,
   TableBody,
@@ -12,23 +11,20 @@ import {
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { DisabledBadge } from "@/components/disabled-badge";
-import { ListError } from "@/components/list-state";
 import { EmptyCard } from "@/components/empty-card";
 import { Webhook } from "lucide-react";
-import {
-  BadgeSkeleton,
-  ButtonSkeleton,
-  InlineSkeleton,
-  LoadingRegion,
-  TableSkeleton,
-} from "@/components/list-skeletons";
 import { useScopedList } from "@/hooks/use-scoped-list";
-import { useDeleteFlow } from "@/hooks/use-delete-flow";
-import { scopedUrl, writeAt } from "@/lib/api-write";
-import { joinUrl } from "@/lib/utils";
 import type { BearerTokenStatus } from "@platypus/schemas";
 import { formatDate } from "@/lib/format-date";
 import { TokenCells } from "@/components/bearer-token";
+import { TableList } from "@/components/table-list";
+import {
+  OVERSIGHT_TABLE_CLASS,
+  OversightTableSkeleton,
+  oversightColumns,
+  WorkspaceOwnerCell,
+} from "@/components/org-token-oversight";
+import { useOrgRevoke } from "@/hooks/use-org-revoke";
 
 /**
  * One row of `GET /organizations/:orgId/inbound-triggers` (ADR-0030): where
@@ -50,15 +46,6 @@ type OrgInboundTrigger = {
   lastRejectedAt: string | null;
 };
 
-const COLUMNS = [
-  "Trigger",
-  "Workspace",
-  "Created",
-  "Expires",
-  "Last used",
-  "Last rejected",
-] as const;
-
 /**
  * Every Inbound Trigger in the Organization, for its Org Admins. The one
  * action is revoking a token: it stops the token at once and notifies the
@@ -75,125 +62,74 @@ export function OrgInboundTriggersList({ orgId }: { orgId: string }) {
     mutate,
   } = useScopedList<OrgInboundTrigger>("inbound-triggers", scope);
 
-  const revoke = useDeleteFlow<OrgInboundTrigger>({
-    delete: async (trigger, backendUrl) => {
-      // Names the token this row showed, so a token the Owner regenerated
-      // since the list loaded is refused rather than revoked unseen.
-      const seen = new URLSearchParams({
-        tokenCreatedAt: trigger.tokenCreatedAt ?? "",
-      });
-      const outcome = await writeAt(
-        joinUrl(
-          scopedUrl(backendUrl, "inbound-triggers", scope),
-          `/${trigger.id}/token?${seen}`,
-        ),
-        { method: "DELETE" },
-      );
-      // After a failure too: a token replaced since the list loaded is
-      // refused, and the list should show the one that is current now.
-      if (outcome.outcome !== "success") await mutate();
-      return outcome;
-    },
+  const revoke = useOrgRevoke<OrgInboundTrigger>({
+    entity: "inbound-triggers",
+    orgId,
     mutate,
-    onSuccess: () => toast.success("Token revoked"),
+    target: (trigger) => ({
+      path: `/${trigger.id}/token`,
+      tokenCreatedAt: trigger.tokenCreatedAt,
+      message: "Token revoked",
+    }),
   });
-
-  if (isLoading) {
-    return (
-      <LoadingRegion label="Loading inbound triggers">
-        <TableSkeleton
-          tableClassName="min-w-[720px]"
-          columns={[
-            ...COLUMNS.map((header) => ({
-              header,
-              cell:
-                header === "Expires" ? (
-                  <BadgeSkeleton className="w-16" />
-                ) : (
-                  <InlineSkeleton className="w-20" />
-                ),
-            })),
-            {
-              header: "Actions",
-              className: "text-right",
-              cell: (
-                <div className="flex justify-end">
-                  <ButtonSkeleton className="w-20" />
-                </div>
-              ),
-            },
-          ]}
-        />
-      </LoadingRegion>
-    );
-  }
-
-  if (error && !data) {
-    return (
-      <ListError
-        error={error}
-        subject="inbound triggers"
-        onRetry={() => void mutate()}
-      />
-    );
-  }
-
-  if (!triggers.length) {
-    return (
-      <EmptyCard
-        icon={<Webhook />}
-        title="No Inbound Triggers configured"
-        description="No workspace in this organization has an Inbound Trigger."
-      />
-    );
-  }
 
   return (
     <>
-      <Table bordered className="min-w-[720px]">
-        <TableHeader>
-          <TableRow>
-            {COLUMNS.map((header) => (
-              <TableHead key={header}>{header}</TableHead>
-            ))}
-            <TableHead className="text-right">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {triggers.map((trigger) => (
-            <TableRow key={trigger.id}>
-              <TableCell>
-                <div className="flex items-center gap-2">
-                  <span className="font-medium">{trigger.name}</span>
-                  {!trigger.enabled && <DisabledBadge />}
-                </div>
-              </TableCell>
-              <TableCell>
-                {/* The Owner, not the Admin: the run acts as them and a
-                        revoke notifies them. */}
-                <div className="flex flex-col">
-                  <span>{trigger.workspaceName}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {trigger.ownerName}
-                  </span>
-                </div>
-              </TableCell>
-              <TableCell>{formatDate(trigger.createdAt)}</TableCell>
-              <TokenCells token={trigger} />
-              <TableCell className="text-right">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={trigger.tokenStatus === "none"}
-                  onClick={() => revoke.request(trigger)}
-                >
-                  Revoke token
-                </Button>
-              </TableCell>
+      <TableList
+        isLoading={isLoading}
+        data={data}
+        error={error}
+        subject="inbound triggers"
+        skeleton={<OversightTableSkeleton firstHeader="Trigger" />}
+        empty={
+          <EmptyCard
+            icon={<Webhook />}
+            title="No Inbound Triggers configured"
+            description="No workspace in this organization has an Inbound Trigger."
+          />
+        }
+        isEmpty={triggers.length === 0}
+        onRetry={() => void mutate()}
+      >
+        <Table bordered className={OVERSIGHT_TABLE_CLASS}>
+          <TableHeader>
+            <TableRow>
+              {oversightColumns("Trigger").map((header) => (
+                <TableHead key={header}>{header}</TableHead>
+              ))}
+              <TableHead className="text-right">Actions</TableHead>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {triggers.map((trigger) => (
+              <TableRow key={trigger.id}>
+                <TableCell>
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">{trigger.name}</span>
+                    {!trigger.enabled && <DisabledBadge />}
+                  </div>
+                </TableCell>
+                <WorkspaceOwnerCell
+                  workspaceName={trigger.workspaceName}
+                  ownerName={trigger.ownerName}
+                />
+                <TableCell>{formatDate(trigger.createdAt)}</TableCell>
+                <TokenCells token={trigger} />
+                <TableCell className="text-right">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={trigger.tokenStatus === "none"}
+                    onClick={() => revoke.request(trigger)}
+                  >
+                    Revoke token
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableList>
 
       <ConfirmDialog
         open={revoke.open}

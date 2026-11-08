@@ -11,7 +11,7 @@ import {
 import { formatDate } from "@/lib/format-date";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Shield, User as UserIcon, KeyRound, Trash2 } from "lucide-react";
+import { Shield, KeyRound, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useAuth, type User } from "@/components/auth-provider";
 import { joinUrl } from "@/lib/utils";
@@ -21,15 +21,16 @@ import { useDeleteFlow } from "@/hooks/use-delete-flow";
 import { toast } from "sonner";
 import { ChangePasswordDialog } from "@/components/change-password-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { ListError, ListState } from "@/components/list-state";
+import { ListState } from "@/components/list-state";
 import {
   BadgeSkeleton,
-  LoadingRegion,
   SkeletonLine,
   TableSkeleton,
   UserCellSkeleton,
 } from "@/components/list-skeletons";
 import { Skeleton } from "@/components/ui/skeleton";
+import { TableList } from "@/components/table-list";
+import { UserCell } from "@/components/user-cell";
 
 /** A row of `list-users`, read as plain JSON rather than through the auth client. */
 export type ListedUser = Serialized<User>;
@@ -62,133 +63,118 @@ export function UsersList() {
     },
   });
 
-  if (isLoading) {
-    return (
-      <LoadingRegion label="Loading users">
-        <TableSkeleton
-          tableClassName="min-w-[800px]"
-          columns={[
-            { header: "User", cell: <UserCellSkeleton /> },
-            { header: "Role", cell: <BadgeSkeleton className="w-14" /> },
-            { header: "Status", cell: <BadgeSkeleton /> },
-            { header: "Created", cell: <SkeletonLine className="w-20" /> },
-            {
-              header: "Actions",
-              className: "text-right",
-              // Change password + Delete, both `size="sm"`.
-              cell: (
-                <div className="flex items-center justify-end gap-2">
-                  <Skeleton className="h-8 w-40" />
-                  <Skeleton className="h-8 w-20" />
-                </div>
-              ),
-            },
-          ]}
-        />
-      </LoadingRegion>
-    );
-  }
-
-  if (error) {
-    return (
-      <ListError error={error} subject="users" onRetry={() => void mutate()} />
-    );
-  }
-
   const users = data?.users || [];
-
-  if (users.length === 0) {
-    return <ListState variant="empty">No users found.</ListState>;
-  }
 
   return (
     <>
-      <Table bordered className="min-w-[800px]">
-        <TableHeader>
-          <TableRow>
-            <TableHead>User</TableHead>
-            <TableHead>Role</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Created</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {users.map((user) => (
-            <TableRow key={user.id}>
-              <TableCell>
-                <div className="flex items-center gap-3">
-                  <div className="size-8 rounded-full bg-muted flex items-center justify-center overflow-hidden">
-                    <UserIcon className="size-4 text-muted-foreground" />
+      <TableList
+        isLoading={isLoading}
+        data={data}
+        error={error}
+        subject="users"
+        skeleton={
+          <TableSkeleton
+            tableClassName="min-w-[800px]"
+            columns={[
+              { header: "User", cell: <UserCellSkeleton /> },
+              { header: "Role", cell: <BadgeSkeleton className="w-14" /> },
+              { header: "Status", cell: <BadgeSkeleton /> },
+              { header: "Created", cell: <SkeletonLine className="w-20" /> },
+              {
+                header: "Actions",
+                className: "text-right",
+                // Change password + Delete, both `size="sm"`.
+                cell: (
+                  <div className="flex items-center justify-end gap-2">
+                    <Skeleton className="h-8 w-40" />
+                    <Skeleton className="h-8 w-20" />
                   </div>
-                  <div className="flex flex-col">
-                    <span className="font-medium">{user.name}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {user.email}
-                    </span>
-                  </div>
-                </div>
-              </TableCell>
-              <TableCell>
-                <Badge
-                  variant={user.role === "admin" ? "default" : "secondary"}
-                  className="capitalize"
-                >
-                  {user.role === "admin" && <Shield className="size-3" />}
-                  {user.role === "admin" ? "Super Admin" : "User"}
-                </Badge>
-              </TableCell>
-              <TableCell>
-                <div className="flex items-center gap-2">
-                  {user.banned ? (
-                    <Badge variant="destructive">Banned</Badge>
-                  ) : user.emailVerified ? (
-                    <Badge variant="outline" className="text-success">
-                      Verified
-                    </Badge>
-                  ) : (
-                    <Badge
-                      variant="outline"
-                      className="text-warning-foreground"
-                    >
-                      Unverified
-                    </Badge>
-                  )}
-                </div>
-              </TableCell>
-              <TableCell>
-                <span className="text-sm text-muted-foreground">
-                  {formatDate(user.createdAt)}
-                </span>
-              </TableCell>
-              <TableCell className="text-right">
-                <div className="flex items-center justify-end gap-2">
-                  {user.id !== currentUser?.id && user.role !== "admin" && (
-                    <>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setChangingPasswordUser(user)}
-                      >
-                        <KeyRound />
-                        Change password
-                      </Button>
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => deleteFlow.request(user)}
-                      >
-                        <Trash2 />
-                        Delete
-                      </Button>
-                    </>
-                  )}
-                </div>
-              </TableCell>
+                ),
+              },
+            ]}
+          />
+        }
+        empty={<ListState variant="empty">No users found.</ListState>}
+        isEmpty={users.length === 0}
+        onRetry={() => void mutate()}
+      >
+        <Table bordered className="min-w-[800px]">
+          <TableHeader>
+            <TableRow>
+              <TableHead>User</TableHead>
+              <TableHead>Role</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Created</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {users.map((user) => (
+              <TableRow key={user.id}>
+                <TableCell>
+                  <UserCell name={user.name} email={user.email} />
+                </TableCell>
+                <TableCell>
+                  <Badge
+                    variant={user.role === "admin" ? "default" : "secondary"}
+                    className="capitalize"
+                  >
+                    {user.role === "admin" && <Shield className="size-3" />}
+                    {user.role === "admin" ? "Super Admin" : "User"}
+                  </Badge>
+                </TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-2">
+                    {user.banned ? (
+                      <Badge variant="destructive">Banned</Badge>
+                    ) : user.emailVerified ? (
+                      <Badge variant="outline" className="text-success">
+                        Verified
+                      </Badge>
+                    ) : (
+                      <Badge
+                        variant="outline"
+                        className="text-warning-foreground"
+                      >
+                        Unverified
+                      </Badge>
+                    )}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <span className="text-sm text-muted-foreground">
+                    {formatDate(user.createdAt)}
+                  </span>
+                </TableCell>
+                <TableCell className="text-right">
+                  <div className="flex items-center justify-end gap-2">
+                    {user.id !== currentUser?.id && user.role !== "admin" && (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setChangingPasswordUser(user)}
+                        >
+                          <KeyRound />
+                          Change password
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => deleteFlow.request(user)}
+                        >
+                          <Trash2 />
+                          Delete
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableList>
 
       {changingPasswordUser && (
         <ChangePasswordDialog
