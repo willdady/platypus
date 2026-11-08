@@ -382,7 +382,8 @@ describe("AppSidebar chat actions", () => {
   it("orders Edit, Pin, then a destructive Delete", () => {
     seedHeader();
     setRead("ws1", CHAT_LIST, {
-      results: [chat("c1", "First chat")],
+      // A stale tag in a response is no longer rendered in the menu.
+      results: [{ ...chat("c1", "First chat"), tags: ["ops"] }],
     });
     renderSidebar();
 
@@ -395,6 +396,7 @@ describe("AppSidebar chat actions", () => {
     expect(
       within(menu).getByRole("menuitem", { name: "Delete" }),
     ).toHaveAttribute("data-variant", "destructive");
+    expect(within(menu).queryByText("ops")).not.toBeInTheDocument();
   });
 
   it("opens Edit chat with only the title field", () => {
