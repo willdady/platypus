@@ -64,9 +64,9 @@ export function OrgInboundTriggersList({ orgId }: { orgId: string }) {
 
   const revoke = useOrgRevoke<OrgInboundTrigger>({
     entity: "inbound-triggers",
-    orgId,
+    scope,
     mutate,
-    target: (trigger) => ({
+    revokeFor: (trigger) => ({
       path: `/${trigger.id}/token`,
       tokenCreatedAt: trigger.tokenCreatedAt,
       message: "Token revoked",

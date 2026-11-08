@@ -25,7 +25,7 @@ export function TableList({
   children,
 }: {
   isLoading: boolean;
-  /** The read's data. Absent with an error means the read failed cold. */
+  /** The read's data. Absent means nothing has landed yet (and, with an error, a cold failure). */
   data: unknown;
   error: unknown;
   /** The plural noun loading or failing to load: "members", "users". */
@@ -51,7 +51,7 @@ export function TableList({
     return <ListError error={error} subject={subject} onRetry={onRetry} />;
   }
 
-  if (isEmpty) {
+  if (data && isEmpty) {
     return <>{empty}</>;
   }
 

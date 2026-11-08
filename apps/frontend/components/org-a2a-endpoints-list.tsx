@@ -52,9 +52,9 @@ export function OrgA2aEndpointsList({ orgId }: { orgId: string }) {
 
   const revoke = useOrgRevoke<RevokeTarget>({
     entity: "a2a/endpoints",
-    orgId,
+    scope,
     mutate,
-    target: ({ endpoint, token }) => ({
+    revokeFor: ({ endpoint, token }) => ({
       path: token ? `/${endpoint.id}/tokens/${token.id}` : `/${endpoint.id}`,
       tokenCreatedAt: token?.tokenCreatedAt,
       message: token ? "Token revoked" : "Endpoint revoked",

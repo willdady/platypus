@@ -63,6 +63,13 @@ describe("TableList", () => {
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
   });
 
+  it("waits for a read before showing the empty state", () => {
+    renderList({ data: undefined, isEmpty: true });
+
+    expect(screen.getByRole("table")).toBeInTheDocument();
+    expect(screen.queryByText("No users.")).not.toBeInTheDocument();
+  });
+
   it("offers Retry on a cold failure", () => {
     const onRetry = vi.fn();
     renderList({

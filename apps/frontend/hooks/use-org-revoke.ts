@@ -2,7 +2,7 @@
 
 import { toast } from "sonner";
 import { useDeleteFlow, type DeleteFlow } from "@/hooks/use-delete-flow";
-import { scopedUrl, writeAt } from "@/lib/api-write";
+import { scopedUrl, writeAt, type Scope } from "@/lib/api-write";
 import { joinUrl } from "@/lib/utils";
 
 /** What revoking a row deletes, and what to say once it has. */
@@ -25,27 +25,28 @@ export type OrgRevokeTarget = {
  */
 export function useOrgRevoke<T>({
   entity,
-  orgId,
+  scope,
   mutate,
-  target,
+  revokeFor,
 }: {
   /** The scoped route the rows come from: "a2a/endpoints", "inbound-triggers". */
   entity: string;
-  orgId: string;
+  /** The same scope the list's read resolved, reused for the write. */
+  scope: Scope;
   mutate: () => void | Promise<unknown>;
   /** Reads the path, guard and success message out of the requested row. */
-  target: (row: T) => OrgRevokeTarget;
+  revokeFor: (row: T) => OrgRevokeTarget;
 }): DeleteFlow<T> {
   return useDeleteFlow<T>({
     delete: async (row, backendUrl) => {
-      const { path, tokenCreatedAt } = target(row);
+      const { path, tokenCreatedAt } = revokeFor(row);
       const seen = tokenCreatedAt
         ? `?${new URLSearchParams({
             tokenCreatedAt: new Date(tokenCreatedAt).toISOString(),
           })}`
         : "";
       const outcome = await writeAt(
-        joinUrl(scopedUrl(backendUrl, entity, { orgId }), `${path}${seen}`),
+        joinUrl(scopedUrl(backendUrl, entity, scope), `${path}${seen}`),
         { method: "DELETE" },
       );
       // After a failure too: a token replaced since the list loaded is
@@ -54,6 +55,6 @@ export function useOrgRevoke<T>({
       return outcome;
     },
     mutate,
-    onSuccess: (row) => toast.success(target(row).message),
+    onSuccess: (row) => toast.success(revokeFor(row).message),
   });
 }
