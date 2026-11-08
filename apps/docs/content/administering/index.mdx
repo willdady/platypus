@@ -50,7 +50,7 @@ Org Admins and Operators see either link.
 
 | Screen               | For                                                                                                                                       |
 | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| **General**          | The Organization's name and its identity / context text, folded into every Chat in the Org                                                |
+| **General**          | The Organization's name, its **Organization ID**, and its identity / context text, folded into every Chat in the Org                      |
 | **Members**          | Who is in the Organization, and their **Org Role**                                                                                        |
 | **Invitations**      | Inviting people in — see [Users & access](/self-hosting/users-and-access)                                                                 |
 | **Providers**        | The credential-bearing model connections                                                                                                  |
@@ -100,7 +100,9 @@ deletes every Workspace in the Organization, along with everything scoped to
 them, and every Shared resource. Each Workspace's Sandbox is torn down too.
 With the Docker or Daytona backend that deletes the Sandbox and its storage, so
 any files an Agent left in the Sandbox are gone. With SSH the host is left
-alone. You can't recover any of this from inside the product, only from a database backup.
+alone. You can't recover any of this from inside the product. Restoring it
+takes a backup of both the database and file storage, and a Docker or Daytona
+Sandbox's files are gone either way.
 
 ## Inbound Triggers
 
@@ -144,9 +146,9 @@ switch.
 
 **Organization settings → Inbound Triggers** lists every Inbound Trigger in the
 Organization: its Workspace and that Workspace's Owner, whom the run acts as,
-when it was created, when its token expires, and when it was **Last used** and
-**Last rejected**. A token that needs a look is flagged **Expiring soon**
-(within 7 days), **Expired** or **No token**; an active one shows only its
+when it was created, when its token expires, when it was **Last used** and
+**Last rejected**, and a **Disabled** badge if its Owner turned it off. A token
+that needs a look is flagged **Expiring soon** (within 7 days), **Expired** or **No token**; an active one shows only its
 expiry. It never shows a token.
 
 **Last rejected** is the column to watch. A Trigger rejecting calls it used to
@@ -156,7 +158,7 @@ Owner having left the Organization or been banned. A Trigger
 rejecting calls it never accepted may be someone guessing. It also moves when a
 caller sends inputs that don't match the Trigger's, but not when the server
 turns calls away because it is already running as many inbound runs as it
-allows. The
+allows, or because a call's body is over the size limit. The
 [inbound call log](/reference/backend-configuration#the-inbound-call-log) names
 the reason for each one. Both times update at most once a minute.
 
@@ -206,8 +208,8 @@ not at once.
 Organization: its Agent, its Workspace and that Workspace's Owner, whom the runs
 act as, when it was created, and a **Disabled** badge if its Owner turned it
 off. Each endpoint's tokens are listed beneath it by name, with when each
-expires and when it was **Last used** and **Last rejected**. A token that needs
-a look is flagged **Expiring soon** (within 7 days) or **Expired**; an active
+was created and expires, and when it was **Last used** and **Last rejected**. A
+token that needs a look is flagged **Expiring soon** (within 7 days) or **Expired**; an active
 one shows only its expiry. It never shows a token. Both times update at most
 once a minute.
 

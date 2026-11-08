@@ -38,11 +38,11 @@ scope in the first place: **Organization settings → MCP Servers → Add MCP se
 
 <Callout type="info">
   **Promote to organization** is refused if the resource points at something
-  that is still Workspace-scoped: an Agent's Provider, Skills, Sub-Agents, or
-  MCP servers. Promote the Skills and Sub-Agents first. A Provider or MCP can't
-  be promoted, so recreate it at Organization scope, attach it, and point the
-  Agent at that. Platypus won't pull any of them up for you, which is what stops
-  a resource becoming Organization-readable that you never named.
+  that is still Workspace-scoped: an Agent's Provider (its fallback model's
+  Provider included), Skills, Sub-Agents, or MCP servers. Promote the Skills and
+  Sub-Agents first. A Provider or MCP can't be promoted, so recreate it at
+  Organization scope, attach it, and point the Agent at that. Platypus won't
+  pull any of them up for you.
 </Callout>
 
 ## Making it appear in a Workspace
@@ -65,6 +65,12 @@ the list — **Attach shared agent**, **Attach shared skill**, **Attach shared
 MCP server** or **Attach shared provider**. Each opens an **Attach a shared**
 dialog listing the Organization's available resources of that type.
 
+<Callout type="warning">
+  Attaching a Shared Agent attaches the Agent alone. Attach the Provider and
+  Skills it uses to the same Workspace too: without its Provider its Chats fail,
+  and a Skill that isn't attached there is left out.
+</Callout>
+
 To undo one, use **Detach** inside the Workspace, or untick the Workspace in
 **Manage attachments**. Detaching a Shared Agent also deletes the Workspace's
 [A2A endpoints](/building-with-platypus/a2a-endpoints#deleting) for it and
@@ -81,7 +87,8 @@ attached.
   at is the trap. Nothing reports an error — chats simply stay **Untitled**,
   because the Workspace can no longer see the Provider doing the titling. Attach
   the Provider again, or pick another **Task Model Provider**, and titling and
-  summarising resume.
+  summarising resume. **Memory Extraction Provider** fails the same quiet way:
+  memories simply stop being extracted.
 </Callout>
 
 ## What a Workspace Owner sees
@@ -93,8 +100,6 @@ edit: **Edit in org settings** and **Detach** are yours alone. On a Shared
 Agent their three-dot menu offers **Pin** and **Clone**. **Clone** makes a
 Workspace Agent of their own, leaving out any Skill, Sub-Agent or Tool set not
 attached to their Workspace.
-
-That is the point: one definition, changed once by you, live everywhere at once.
 
 <Callout type="warning">
   A Shared resource **cannot be deleted while it is attached** anywhere, or

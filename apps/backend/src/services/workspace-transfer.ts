@@ -222,9 +222,12 @@ export const applyWorkspaceTransfer = async (
         .where(eq(chatTable.workspaceId, workspaceId))
         .returning({ id: chatTable.id })
     ).map(({ id }) => id);
-    await tx
+    // A Trigger run's Chat is stored under the run's own id.
+    const clearedRuns = await tx
       .delete(triggerRunTable)
-      .where(inArray(triggerRunTable.triggerId, triggerIds));
+      .where(inArray(triggerRunTable.triggerId, triggerIds))
+      .returning({ id: triggerRunTable.id });
+    clearedChatIds.push(...clearedRuns.map(({ id }) => id));
     await tx
       .delete(memoryTable)
       .where(eq(memoryTable.workspaceId, workspaceId));
