@@ -1,7 +1,7 @@
 "use client";
 
 import { use, useCallback } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useListParams } from "@/hooks/use-list-params";
 import { useScopedList } from "@/hooks/use-scoped-list";
 import { scopedUrl, type Serialized } from "@/lib/api-write";
 import useSWRInfinite from "swr/infinite";
@@ -16,6 +16,8 @@ import { TriggerRunRow } from "@/components/trigger-run-row";
 import { Button } from "@/components/ui/button";
 import { EmptyCard } from "@/components/empty-card";
 import { ListState } from "@/components/list-state";
+import { ListToolbar } from "@/components/list-toolbar";
+import { ALL } from "@/lib/search-params";
 import {
   Select,
   SelectContent,
@@ -36,9 +38,6 @@ import { fetcher } from "@/lib/utils";
  */
 const PAGE_SIZE = 50;
 
-/** The value a Select carries for "no filter" — Radix rejects an empty one. */
-const ALL = "all";
-
 type RunPage = Serialized<TriggerRunWithTriggerList>;
 
 function TriggerRunsPage({
@@ -50,14 +49,13 @@ function TriggerRunsPage({
 
   const { user } = useAuth();
   const backendUrl = useBackendUrl();
-  const searchParams = useSearchParams();
-  const router = useRouter();
-  const pathname = usePathname();
+  // No page param: the list pages by "Load more", not the URL.
+  const { get, set } = useListParams();
 
   // Both filters live in the URL, so a filtered view survives a refresh and can
   // be handed to someone else as a link.
-  const triggerFilter = searchParams.get("triggerId") ?? "";
-  const statusFilter = searchParams.get("status") ?? "";
+  const triggerFilter = get("triggerId") ?? "";
+  const statusFilter = get("status") ?? "";
   const isFiltered = Boolean(triggerFilter || statusFilter);
 
   // Fired One-offs too: their runs are listed here, filterable by name.
@@ -115,33 +113,13 @@ function TriggerRunsPage({
         }
       : null;
 
-  const replaceQuery = useCallback(
-    (next: URLSearchParams) => {
-      const qs = next.toString();
-      router.replace(`${pathname}${qs ? `?${qs}` : ""}`, { scroll: false });
-    },
-    [router, pathname],
-  );
+  const setFilter = (key: "triggerId" | "status", value: string) =>
+    set(key, value === ALL ? null : value);
 
-  const setFilter = useCallback(
-    (key: "triggerId" | "status", value: string) => {
-      const next = new URLSearchParams(searchParams.toString());
-      if (value === ALL) {
-        next.delete(key);
-      } else {
-        next.set(key, value);
-      }
-      replaceQuery(next);
-    },
-    [searchParams, replaceQuery],
-  );
-
-  const clearFilters = useCallback(() => {
-    const next = new URLSearchParams(searchParams.toString());
-    next.delete("triggerId");
-    next.delete("status");
-    replaceQuery(next);
-  }, [searchParams, replaceQuery]);
+  const clearFilters = () => {
+    set("triggerId", null);
+    set("status", null);
+  };
 
   return (
     <div className="flex justify-center py-8">
@@ -155,51 +133,54 @@ function TriggerRunsPage({
           Recent runs from every trigger in this workspace, newest first.
         </p>
 
-        <div className="flex flex-wrap gap-2 mb-4">
-          <Select
-            value={triggerFilter || ALL}
-            onValueChange={(value) => setFilter("triggerId", value)}
-          >
-            <SelectTrigger className="w-56" aria-label="Filter by trigger">
-              <SelectValue placeholder="All triggers" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL}>All triggers</SelectItem>
-              {/* The filtered Trigger, while the dropdown's own list is still
+        {/* The parent supplies the space below the toolbar. */}
+        <div className="mb-4">
+          <ListToolbar>
+            <Select
+              value={triggerFilter || ALL}
+              onValueChange={(value) => setFilter("triggerId", value)}
+            >
+              <SelectTrigger className="w-56" aria-label="Filter by trigger">
+                <SelectValue placeholder="All triggers" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL}>All triggers</SelectItem>
+                {/* The filtered Trigger, while the dropdown's own list is still
                 in flight or after that Trigger was deleted. Without an item
                 carrying the value, the control falls back to "All triggers"
                 and misreports a list that is filtered. The runs themselves
                 name their Trigger, so the label is right on arrival. */}
-              {unlistedTrigger && (
-                <SelectItem value={unlistedTrigger.id}>
-                  {unlistedTrigger.name}
-                </SelectItem>
-              )}
-              {triggers.map((trigger) => (
-                <SelectItem key={trigger.id} value={trigger.id}>
-                  {trigger.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+                {unlistedTrigger && (
+                  <SelectItem value={unlistedTrigger.id}>
+                    {unlistedTrigger.name}
+                  </SelectItem>
+                )}
+                {triggers.map((trigger) => (
+                  <SelectItem key={trigger.id} value={trigger.id}>
+                    {trigger.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-          <Select
-            value={statusFilter || ALL}
-            onValueChange={(value) => setFilter("status", value)}
-          >
-            <SelectTrigger className="w-40" aria-label="Filter by status">
-              <SelectValue placeholder="All statuses" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL}>All statuses</SelectItem>
-              {/* The domain's own status vocabulary, not a hand-written copy. */}
-              {triggerRunStatusSchema.options.map((status) => (
-                <SelectItem key={status} value={status}>
-                  {TRIGGER_RUN_STATUS_LABELS[status]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            <Select
+              value={statusFilter || ALL}
+              onValueChange={(value) => setFilter("status", value)}
+            >
+              <SelectTrigger className="w-40" aria-label="Filter by status">
+                <SelectValue placeholder="All statuses" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL}>All statuses</SelectItem>
+                {/* The domain's own status vocabulary, not a hand-written copy. */}
+                {triggerRunStatusSchema.options.map((status) => (
+                  <SelectItem key={status} value={status}>
+                    {TRIGGER_RUN_STATUS_LABELS[status]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </ListToolbar>
         </div>
 
         {/* No data and no error is loading — including the frames before the

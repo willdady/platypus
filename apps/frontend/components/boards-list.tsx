@@ -1,7 +1,5 @@
 "use client";
 
-import { useState } from "react";
-import { useSearchParams } from "next/navigation";
 import { defaultFilter } from "cmdk";
 import { Plus } from "lucide-react";
 import Link from "next/link";
@@ -9,19 +7,16 @@ import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EntityCardList } from "@/components/entity-card-list";
 import { ListState } from "@/components/list-state";
 import { CardGridSkeleton } from "@/components/list-skeletons";
-import {
-  ListFooter,
-  ListPagination,
-  pageOf,
-} from "@/components/list-pagination";
+import { ListFooter, ListPagination } from "@/components/list-pagination";
+import { ListToolbar } from "@/components/list-toolbar";
 import { RowActionsMenu } from "@/components/row-actions-menu";
 import { SearchInput } from "@/components/search-input";
 import { Button } from "@/components/ui/button";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
+import { useListParams, useSearchParamInput } from "@/hooks/use-list-params";
 import { useScopedList } from "@/hooks/use-scoped-list";
 import { writeEntity } from "@/lib/api-write";
 import { workspaceRoutes } from "@/lib/routes";
-import { replaceSearchParam } from "@/lib/search-params";
 import { sortByName } from "@/lib/utils";
 
 /** Boards per page on the Workspace home. */
@@ -56,18 +51,10 @@ export function BoardsList({
     mutate,
   } = useScopedList<BoardCard>("boards", { orgId, workspaceId });
 
-  const searchParams = useSearchParams();
-  // The input reads local state, seeded from the URL: the URL write below
-  // lands a render later, and an input bound straight to it drops keystrokes.
-  const [nameFilter, setNameFilterState] = useState(
-    () => searchParams.get(QUERY_PARAM) ?? "",
-  );
+  const { page: pageItems } = useListParams(PAGE_PARAM);
   // An empty search leaves its param out. A new search starts on page 1.
-  const setNameFilter = (value: string) => {
-    setNameFilterState(value);
-    replaceSearchParam(QUERY_PARAM, value.trim() || null);
-    replaceSearchParam(PAGE_PARAM, null);
-  };
+  const { value: nameFilter, onValueChange: setNameFilter } =
+    useSearchParamInput(QUERY_PARAM, PAGE_PARAM);
 
   const routes = workspaceRoutes(orgId, workspaceId).boards;
 
@@ -76,7 +63,7 @@ export function BoardsList({
   const cards = sortByName(rows).filter(
     (card) => !query || defaultFilter(card.name, query) > 0,
   );
-  const page = pageOf(searchParams.get(PAGE_PARAM), cards, BOARDS_PAGE_SIZE);
+  const page = pageItems(cards, BOARDS_PAGE_SIZE);
 
   const deleteFlow = useDeleteFlow<BoardCard>({
     mutate,
@@ -95,7 +82,7 @@ export function BoardsList({
     <>
       {/* Nothing to filter, no controls. */}
       {rows.length > 0 && (
-        <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+        <ListToolbar>
           <SearchInput
             placeholder={"Search boards…"}
             aria-label={"Search boards"}
@@ -103,7 +90,7 @@ export function BoardsList({
             onValueChange={setNameFilter}
             className="w-full sm:w-64"
           />
-        </div>
+        </ListToolbar>
       )}
       <EntityCardList
         items={page.items}

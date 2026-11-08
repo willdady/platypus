@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { CloneDialog } from "@/components/clone-dialog";
-import { replaceSearchParam } from "@/lib/search-params";
+import { ALL } from "@/lib/search-params";
 import { TOKEN_STATUS_LABELS, TOKEN_STATUS_VARIANTS } from "@/lib/bearer-token";
 import { pickKeys, sortByName } from "@/lib/utils";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -11,11 +11,8 @@ import { ListState } from "@/components/list-state";
 import { CardGridSkeleton, SkeletonLine } from "@/components/list-skeletons";
 import { EntityCardList } from "@/components/entity-card-list";
 import { RowActionsMenu } from "@/components/row-actions-menu";
-import {
-  ListFooter,
-  ListPagination,
-  pageOf,
-} from "@/components/list-pagination";
+import { ListFooter, ListPagination } from "@/components/list-pagination";
+import { ListToolbar } from "@/components/list-toolbar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DisabledBadge } from "@/components/disabled-badge";
@@ -61,6 +58,7 @@ import {
   type WriteOutcome,
 } from "@/lib/api-write";
 import { useScopedList } from "@/hooks/use-scoped-list";
+import { useListParams } from "@/hooks/use-list-params";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
 import { workspaceRoutes } from "@/lib/routes";
 
@@ -76,9 +74,6 @@ function describeSchedule(cronExpression: string, timezone: string): string {
     return cronExpression;
   }
 }
-
-/** The value a Select carries for "no filter" — Radix rejects an empty one. */
-const ALL = "all";
 
 /** Triggers per page on the Workspace home. */
 const TRIGGERS_PAGE_SIZE = 6;
@@ -231,17 +226,15 @@ export function TriggerList({
   workspaceId: string;
 }) {
   const routes = workspaceRoutes(orgId, workspaceId);
-  const searchParams = useSearchParams();
+  const { get, set, page: pageItems } = useListParams("triggersPage");
   const router = useRouter();
   const [triggerToClone, setTriggerToClone] =
     useState<Serialized<Trigger> | null>(null);
 
   // Both filters live in the URL, so they survive a refresh and Back. An
   // unknown type reads as no filter.
-  const showFired = searchParams.get("triggerShowFired") === "true";
-  const parsedType = triggerTypeSchema.safeParse(
-    searchParams.get("triggerType"),
-  );
+  const showFired = get("triggerShowFired") === "true";
+  const parsedType = triggerTypeSchema.safeParse(get("triggerType"));
   const typeFilter: TriggerType | typeof ALL = parsedType.success
     ? parsedType.data
     : ALL;
@@ -335,20 +328,14 @@ export function TriggerList({
     </>
   );
 
-  // A new filter starts on page 1.
-  const setFilter = (key: string, value: string | null) => {
-    replaceSearchParam(key, value);
-    replaceSearchParam("triggersPage", null);
-  };
-
   // Shown even with nothing listed: fired One-offs may be all there is.
   const controls =
     !error && allTriggers.length ? (
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+      <ListToolbar>
         <Select
           value={typeFilter}
           onValueChange={(value) =>
-            setFilter("triggerType", value === ALL ? null : value)
+            set("triggerType", value === ALL ? null : value)
           }
         >
           <SelectTrigger className="w-36" aria-label="Filter by type">
@@ -368,7 +355,7 @@ export function TriggerList({
             id="show-fired-triggers"
             checked={showFired}
             onCheckedChange={(checked) =>
-              setFilter("triggerShowFired", checked ? "true" : null)
+              set("triggerShowFired", checked ? "true" : null)
             }
             // Only a One-off fires, and a One-off is always Cron.
             disabled={typeFilter === "event" || typeFilter === "inbound"}
@@ -377,7 +364,7 @@ export function TriggerList({
             Show fired
           </Label>
         </div>
-      </div>
+      </ListToolbar>
     ) : null;
 
   const shown =
@@ -385,11 +372,7 @@ export function TriggerList({
       ? triggers
       : triggers.filter((trigger) => trigger.type === typeFilter);
 
-  const page = pageOf(
-    searchParams.get("triggersPage"),
-    shown,
-    TRIGGERS_PAGE_SIZE,
-  );
+  const page = pageItems(shown, TRIGGERS_PAGE_SIZE);
 
   // Nothing to list yet; fired One-offs hidden but reachable; or a type with
   // no Trigger of its own.

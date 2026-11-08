@@ -68,15 +68,20 @@ vi.mock("@/components/back-button", () => ({
   BackButton: () => null,
 }));
 
-const { replaceSpy, searchParams } = vi.hoisted(() => ({
+const { replaceSpy } = vi.hoisted(() => ({
   replaceSpy: vi.fn(),
-  searchParams: { current: new URLSearchParams() },
 }));
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ replace: replaceSpy, push: vi.fn() }),
-  usePathname: () => "/org-1/workspace/ws-1/trigger-runs",
-  useSearchParams: () => searchParams.current,
-}));
+// `navigationMock.useSearchParams` reads jsdom's location and re-renders on the
+// `history.replaceState` that `replaceSearchParam` makes, so a filter change
+// reaches the request as it does in the app.
+vi.mock("next/navigation", async (importOriginal) => {
+  const { navigationMock } = await import("@/test/test-utils");
+  return {
+    ...(await importOriginal<typeof import("next/navigation")>()),
+    ...navigationMock,
+    useRouter: () => ({ replace: replaceSpy, push: vi.fn() }),
+  };
+});
 
 const { toastSuccessSpy, toastErrorSpy } = vi.hoisted(() => ({
   toastSuccessSpy: vi.fn(),
@@ -146,7 +151,7 @@ async function renderRuns(rows: TriggerRunWithTrigger[]) {
 }
 
 beforeEach(() => {
-  searchParams.current = new URLSearchParams();
+  window.history.replaceState(null, "", "/");
   state.pages = [];
   state.size = 1;
   state.isLoading = false;
@@ -191,7 +196,7 @@ describe("Trigger runs list", () => {
   });
 
   it("keeps the heading static whatever the filters say", async () => {
-    searchParams.current = new URLSearchParams({ triggerId: "trigger-1" });
+    window.history.replaceState(null, "", "?triggerId=trigger-1");
     await renderRuns([run()]);
 
     expect(
@@ -216,10 +221,7 @@ describe("Trigger runs list", () => {
 // pasted to someone else.
 describe("Trigger runs filters", () => {
   it("carries the URL's trigger and status into the request", async () => {
-    searchParams.current = new URLSearchParams({
-      triggerId: "trigger-2",
-      status: "failed",
-    });
+    window.history.replaceState(null, "", "?triggerId=trigger-2&status=failed");
     await renderRuns([run()]);
 
     expect(state.keys[0]).toContain("triggerId=trigger-2");
@@ -227,7 +229,7 @@ describe("Trigger runs filters", () => {
   });
 
   it("shows the URL's trigger as the selected filter", async () => {
-    searchParams.current = new URLSearchParams({ triggerId: "trigger-2" });
+    window.history.replaceState(null, "", "?triggerId=trigger-2");
     await renderRuns([run()]);
 
     expect(
@@ -239,7 +241,7 @@ describe("Trigger runs filters", () => {
   // dropdown's own list of triggers is a separate fetch and may not be back.
   it("names the filtered trigger before the dropdown's triggers arrive", async () => {
     state.triggers = [];
-    searchParams.current = new URLSearchParams({ triggerId: "trigger-1" });
+    window.history.replaceState(null, "", "?triggerId=trigger-1");
     await renderRuns([run()]);
 
     expect(
@@ -247,44 +249,40 @@ describe("Trigger runs filters", () => {
     ).toContain("Nightly digest");
   });
 
-  it("writes the chosen trigger to the URL", async () => {
+  it("writes the chosen trigger to the URL without a server round-trip", async () => {
     await renderRuns([run()]);
 
     await act(async () => {
       await selectOption("All triggers", "Card watcher");
     });
 
-    expect(replaceSpy).toHaveBeenCalledWith(
-      "/org-1/workspace/ws-1/trigger-runs?triggerId=trigger-2",
-      { scroll: false },
-    );
+    expect(window.location.search).toBe("?triggerId=trigger-2");
+    expect(state.keys[0]).toContain("triggerId=trigger-2");
+    expect(replaceSpy).not.toHaveBeenCalled();
   });
 
-  it("writes the chosen status to the URL", async () => {
+  it("writes the chosen status to the URL without a server round-trip", async () => {
     await renderRuns([run()]);
 
     await act(async () => {
       await selectOption("All statuses", "Failed");
     });
 
-    expect(replaceSpy).toHaveBeenCalledWith(
-      "/org-1/workspace/ws-1/trigger-runs?status=failed",
-      { scroll: false },
-    );
+    expect(window.location.search).toBe("?status=failed");
+    expect(state.keys[0]).toContain("status=failed");
+    expect(replaceSpy).not.toHaveBeenCalled();
   });
 
   it("drops the parameter again when the filter goes back to all", async () => {
-    searchParams.current = new URLSearchParams({ status: "failed" });
+    window.history.replaceState(null, "", "?status=failed");
     await renderRuns([run()]);
 
     await act(async () => {
       await selectOption("Failed", "All statuses");
     });
 
-    expect(replaceSpy).toHaveBeenCalledWith(
-      "/org-1/workspace/ws-1/trigger-runs",
-      { scroll: false },
-    );
+    expect(window.location.search).toBe("");
+    expect(replaceSpy).not.toHaveBeenCalled();
   });
 });
 
@@ -313,7 +311,7 @@ describe("Trigger runs empty states", () => {
   });
 
   it("says nothing matches, and offers a way out, when a filter is active", async () => {
-    searchParams.current = new URLSearchParams({ status: "failed" });
+    window.history.replaceState(null, "", "?status=failed");
     await renderRuns([]);
 
     expect(screen.getByText(/No runs match/)).toBeInTheDocument();
@@ -327,7 +325,7 @@ describe("Trigger runs empty states", () => {
   // read as "nothing matched", which is a claim about the data the page never
   // received.
   it("reports a failed read rather than showing an empty list", async () => {
-    searchParams.current = new URLSearchParams({ status: "bogus" });
+    window.history.replaceState(null, "", "?status=bogus");
     state.error = new Error("Bad Request");
     await renderRuns([]);
 
@@ -340,7 +338,7 @@ describe("Trigger runs empty states", () => {
   });
 
   it("offers a retry beside the filters when the read fails", async () => {
-    searchParams.current = new URLSearchParams({ status: "bogus" });
+    window.history.replaceState(null, "", "?status=bogus");
     state.error = new Error("Bad Request");
     await renderRuns([]);
 
@@ -370,20 +368,15 @@ describe("Trigger runs empty states", () => {
   });
 
   it("clears every filter from the URL", async () => {
-    searchParams.current = new URLSearchParams({
-      status: "failed",
-      triggerId: "trigger-1",
-    });
+    window.history.replaceState(null, "", "?status=failed&triggerId=trigger-1");
     await renderRuns([]);
 
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
     });
 
-    expect(replaceSpy).toHaveBeenCalledWith(
-      "/org-1/workspace/ws-1/trigger-runs",
-      { scroll: false },
-    );
+    expect(window.location.search).toBe("");
+    expect(replaceSpy).not.toHaveBeenCalled();
   });
 });
 
@@ -485,10 +478,9 @@ describe("Trigger runs suppression", () => {
       await selectOption("All statuses", "Suppressed");
     });
 
-    expect(replaceSpy).toHaveBeenCalledWith(
-      "/org-1/workspace/ws-1/trigger-runs?status=suppressed",
-      { scroll: false },
-    );
+    expect(window.location.search).toBe("?status=suppressed");
+    expect(state.keys[0]).toContain("status=suppressed");
+    expect(replaceSpy).not.toHaveBeenCalled();
   });
 });
 

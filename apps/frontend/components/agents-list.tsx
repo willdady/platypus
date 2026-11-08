@@ -37,7 +37,7 @@ import {
 } from "@platypus/schemas";
 import { useScopedList } from "@/hooks/use-scoped-list";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import {
   canCreateAgent,
@@ -60,16 +60,13 @@ import {
 } from "@/lib/api-write";
 import { splitPinned } from "@/lib/pinned-agents";
 import { pickKeys, sortByName } from "@/lib/utils";
-import {
-  ListFooter,
-  ListPagination,
-  pageOf,
-} from "@/components/list-pagination";
+import { ListFooter, ListPagination } from "@/components/list-pagination";
 import {
   usePromoteShared,
   useSharedDetach,
 } from "@/hooks/use-shared-resource-actions";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
+import { useListParams } from "@/hooks/use-list-params";
 import { useOptimisticRows } from "@/hooks/use-optimistic-rows";
 import { orgRoutes, workspaceRoutes } from "@/lib/routes";
 
@@ -128,7 +125,7 @@ export function AgentsList({
   const [agentToClone, setAgentToClone] = useState<SerializedAgent | null>(
     null,
   );
-  const searchParams = useSearchParams();
+  const { page: pageItems } = useListParams("agentsPage");
 
   // Resolved once per render and reused for the list's reads and every write
   // below, rather than re-deriving the Organization-vs-Workspace branch at
@@ -198,11 +195,7 @@ export function AgentsList({
   // A Pinned Agent shows only in the Pinned group, above the rest.
   const { pinned: pinnedAgents, unpinned: unpinnedAgents } =
     splitPinned(agents);
-  const page = pageOf(
-    searchParams.get("agentsPage"),
-    unpinnedAgents,
-    AGENTS_PAGE_SIZE,
-  );
+  const page = pageItems(unpinnedAgents, AGENTS_PAGE_SIZE);
 
   // Attach, detach, and Promote a Shared resource are the same rule
   // (ADR-0007), asked of the auth module instead of re-derived here.
