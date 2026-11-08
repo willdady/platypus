@@ -13,6 +13,7 @@ import { RowActionsMenu } from "@/components/row-actions-menu";
 import { writeEntity } from "@/lib/api-write";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
 import { useEnabledToggle } from "@/hooks/use-enabled-toggle";
+import { ListFooter } from "@/components/list-pagination";
 
 import { workspaceRoutes } from "@/lib/routes";
 import {
@@ -75,19 +76,21 @@ function WebhooksList({
 
   const webhooks: Webhook[] = toggle.apply(results);
 
+  const actions = (
+    <Button variant={webhooks.length ? "outline" : "default"} asChild>
+      <Link href={routes.settings.createWebhook}>
+        <Plus /> Add webhook
+      </Link>
+    </Button>
+  );
+
   if (!webhooks.length) {
     return (
       <EmptyCard
         icon={<Radio />}
         title="No webhooks configured"
         description="Add a webhook to deliver this workspace's events to a URL you control."
-        action={
-          <Button asChild>
-            <Link href={routes.settings.createWebhook}>
-              <Plus /> Add webhook
-            </Link>
-          </Button>
-        }
+        action={actions}
       />
     );
   }
@@ -130,11 +133,7 @@ function WebhooksList({
           </li>
         ))}
       </ul>
-      <Button asChild>
-        <Link href={routes.settings.createWebhook}>
-          <Plus /> Add webhook
-        </Link>
-      </Button>
+      <ListFooter className="mt-4">{actions}</ListFooter>
       <DeleteConfirmDialog
         open={deleteFlow.open}
         onOpenChange={(open) => !open && deleteFlow.close()}

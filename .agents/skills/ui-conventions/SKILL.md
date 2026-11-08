@@ -57,7 +57,10 @@ dialogs and chat.
 
 One short line in the same dashed frame: `No triggers yet.`,
 `No Cron triggers to show.` The section's buttons sit below it, so the line
-states the fact and leaves the instruction to the buttons.
+states the fact and leaves the instruction to the buttons. They sit there in
+every state, loading and failed included — the footer of a section never
+blinks out. An `EmptyCard` screen is the other way round: it holds the
+buttons itself while empty, and the footer appears only once there are rows.
 
 ## Button verbs
 

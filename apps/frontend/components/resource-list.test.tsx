@@ -13,6 +13,7 @@ import {
   stubAcceptedSave,
   stubRejectedSave,
   stubSaveSequence,
+  expectEntryActionVariant,
   mutate,
   menuItemLabels,
   confirmDialog,
@@ -144,6 +145,25 @@ describe.each(RESOURCES)(
       expect(screen.getByRole("link", { name: /^Add/ })).toHaveAttribute(
         "href",
         `/org1/workspace/ws1/${settingsPath}/create`,
+      );
+    });
+
+    it("offers the create CTA solid inside the empty card", async () => {
+      authState.actor = "org-admin";
+      await renderRows([]);
+
+      expectEntryActionVariant(
+        screen.getByRole("link", { name: /^Add/ }),
+        "empty",
+      );
+    });
+
+    it("offers the create CTA outlined under a populated list", async () => {
+      await renderRows([item]);
+
+      expectEntryActionVariant(
+        screen.getByRole("link", { name: /^Add/ }),
+        "populated",
       );
     });
 

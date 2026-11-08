@@ -10,6 +10,7 @@ import {
   confirmDialog,
   stubAcceptedSave,
   stubRejectedSave,
+  expectEntryActionVariant,
   mutate,
   toastError,
   toastInfo,
@@ -496,6 +497,65 @@ describe("SkillsList empty states", () => {
     expect(
       screen.queryByRole("combobox", { name: "Filter by agent" }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("SkillsList footer", () => {
+  const createSkill = () =>
+    screen.queryByRole("link", { name: /Create skill/ });
+  // The footer's own box, which no accessible query reaches; the slot
+  // attribute is the handle ListFooter offers.
+  const footer = () =>
+    // eslint-disable-next-line testing-library/no-node-access
+    createSkill()?.closest('[data-slot="list-footer"]');
+
+  // The Workspace home is a ListState section, not an EmptyCard screen: its
+  // footer sits under every state, loading and failed included, outlined.
+  it("shows Create skill outlined under the Workspace section while it loads", async () => {
+    mockScopedSWR({ "/skills": { isLoading: true }, "/agents": [] });
+    await renderList(<SkillsList orgId="org1" workspaceId="ws1" />);
+
+    expectEntryActionVariant(
+      screen.getByRole("link", { name: /Create skill/ }),
+      "populated",
+    );
+  });
+
+  it("shows Create skill under the Workspace section after a failed read", async () => {
+    mockScopedSWR({ "/skills": { error: new Error("500") }, "/agents": [] });
+    await renderList(<SkillsList orgId="org1" workspaceId="ws1" />);
+
+    expect(screen.getByText("Failed to load skills. 500")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /Create skill/ }),
+    ).toBeInTheDocument();
+  });
+
+  // The section's parent already spaces its children, so the footer adds no
+  // top gap of its own.
+  it("offers Create skill outlined under a populated Workspace section", async () => {
+    await renderSkills([workspaceSkill]);
+
+    expectEntryActionVariant(
+      screen.getByRole("link", { name: /Create skill/ }),
+      "populated",
+    );
+    expect(footer()).not.toHaveClass("mt-4");
+  });
+
+  // The Organization surface is an EmptyCard screen: its footer shows once
+  // there are rows, and keeps the plain settings page's top gap.
+  it("hides the Organization surface's footer while it loads", async () => {
+    mockScopedSWR({ "/skills": { isLoading: true } });
+    await renderList(<SkillsList orgId="org1" />);
+
+    expect(createSkill()).not.toBeInTheDocument();
+  });
+
+  it("draws the Organization surface's footer with a top gap", async () => {
+    await renderOrgSkills([orgSkill]);
+
+    expect(footer()).toHaveClass("mt-4");
   });
 });
 
