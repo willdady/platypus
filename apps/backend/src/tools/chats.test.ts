@@ -31,7 +31,6 @@ const chatRow = (id: string, over: Row = {}): Row => ({
   title: id,
   status: "succeeded",
   isPinned: false,
-  tags: [],
   activeLeafId: null,
   agentId: null,
   providerId: null,
@@ -88,7 +87,6 @@ describe("createChatTools", () => {
           chatRow("chat-agent", {
             title: "Agent chat",
             agentId: "agent-1",
-            tags: ["research"],
             lastTurnAt: at(4),
           }),
           chatRow("chat-adhoc", {
@@ -105,7 +103,6 @@ describe("createChatTools", () => {
           chatRow("chat-trigger", {
             title: "Nightly digest",
             triggerRunId: "run-1",
-            tags: ["nightly"],
             lastTurnAt: at(1),
           }),
           chatRow("chat-other-workspace", {
@@ -156,7 +153,6 @@ describe("createChatTools", () => {
 
       expect(chats.find((chat) => chat.id === "chat-agent")).toMatchObject({
         agentName: "Researcher",
-        tags: ["research"],
       });
       expect(chats.find((chat) => chat.id === "chat-adhoc")).toMatchObject({
         providerName: "OpenAI",
@@ -184,7 +180,7 @@ describe("createChatTools", () => {
       );
     });
 
-    it("filters by Agent, tag, Trigger and since", async () => {
+    it("filters by Agent, Trigger and since", async () => {
       seedChats();
       const tools = createTools();
 
@@ -193,12 +189,6 @@ describe("createChatTools", () => {
           (chat) => chat.id,
         ),
       ).toEqual(["chat-agent"]);
-
-      expect(
-        (await callOkTool(tools.listChats, { tag: "nightly" })).chats.map(
-          (chat) => chat.id,
-        ),
-      ).toEqual(["chat-trigger"]);
 
       expect(
         (
@@ -317,6 +307,23 @@ describe("createChatTools", () => {
       expect(result).toEqual({
         error: "A Chat cannot read its own Transcript.",
       });
+    });
+
+    it("refuses its own Chat from a Sub-Agent, which inherits the parent's session", async () => {
+      seedChat({}, [messageRow("chat-1", "u1", null, "user", 1)]);
+
+      // A Sub-Agent's Tool session reopens with the parent's scope, so its
+      // `sessionId` is the Chat it was delegated from.
+      const subAgentTools = createTools("chat-1");
+
+      expect(
+        await callTool(subAgentTools.readTranscript, { chatId: "chat-1" }),
+      ).toEqual({ error: "A Chat cannot read its own Transcript." });
+      expect(
+        (await callOkTool(subAgentTools.listChats, {})).chats.map(
+          (chat) => chat.id,
+        ),
+      ).not.toContain("chat-1");
     });
 
     it("names the Chat and its Agent in the header", async () => {

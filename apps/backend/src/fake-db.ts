@@ -431,7 +431,7 @@ export const orderOperators = () => ({
  * under test uses — `<column> [asc|desc] [nulls first|last]` — so an explicit
  * null placement is honoured rather than silently dropped.
  */
-const orderMarkerOf = (marker: unknown): OrderMarker => {
+const orderMarkerOf = (marker: OrderMarker | Marker): OrderMarker => {
   if (!isMarker(marker) || marker.op !== "sql") {
     return marker as OrderMarker;
   }
@@ -835,7 +835,7 @@ export const createFakeDb = (
           condition = c;
           return builder;
         },
-        orderBy(...markers: unknown[]) {
+        orderBy(...markers: (OrderMarker | Marker)[]) {
           order = markers.filter(Boolean).map(orderMarkerOf);
           return builder;
         },

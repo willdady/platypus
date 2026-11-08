@@ -55,7 +55,6 @@ const chatSummarySchema = z
   .object({
     id: z.string(),
     title: z.string(),
-    tags: z.array(z.string()),
     createdAt: z.date(),
     lastTurnAt: z.date().nullable(),
     triggerId: z.string().optional(),
@@ -110,7 +109,6 @@ const listChatsInputSchema = z.object({
     .string()
     .optional()
     .describe("Only Chats last run with this Agent"),
-  tag: z.string().optional().describe("Only Chats carrying this tag"),
   triggerId: z
     .string()
     .optional()
@@ -257,9 +255,9 @@ const attributionOf = (row: {
 export const createChatTools = (workspaceId: string, sessionId: string) => {
   const listChats = tool({
     description:
-      "List the Chats in this workspace, newest activity first, with an optional Agent, tag, Trigger or time filter. Use readTranscript to read one.",
+      "List the Chats in this workspace, newest activity first, with an optional Agent, Trigger or time filter. Use readTranscript to read one.",
     inputSchema: listChatsInputSchema,
-    execute: async ({ agentId, tag, triggerId, since, limit, offset }) => {
+    execute: async ({ agentId, triggerId, since, limit, offset }) => {
       // Defaulted here as well as described in the schema: a caller may invoke
       // `execute` directly, where the schema's parsing never runs.
       const pageSize = limit ?? 20;
@@ -276,9 +274,6 @@ export const createChatTools = (workspaceId: string, sessionId: string) => {
           ne(chatTable.triggerRunId, sessionId),
         ),
         ...(agentId ? [eq(chatTable.agentId, agentId)] : []),
-        ...(tag
-          ? [sql`${chatTable.tags} @> ${JSON.stringify([tag])}::jsonb`]
-          : []),
         ...(triggerId ? [eq(triggerTable.id, triggerId)] : []),
         ...(since ? [gte(chatTable.lastTurnAt, new Date(since))] : []),
       );
@@ -287,7 +282,6 @@ export const createChatTools = (workspaceId: string, sessionId: string) => {
         .select({
           id: chatTable.id,
           title: chatTable.title,
-          tags: chatTable.tags,
           createdAt: chatTable.createdAt,
           lastTurnAt: chatTable.lastTurnAt,
           agentName: agentTable.name,
@@ -321,7 +315,6 @@ export const createChatTools = (workspaceId: string, sessionId: string) => {
         chats: rows.map((row) => ({
           id: row.id,
           title: row.title,
-          tags: row.tags,
           createdAt: row.createdAt,
           lastTurnAt: row.lastTurnAt,
           ...attributionOf(row),
