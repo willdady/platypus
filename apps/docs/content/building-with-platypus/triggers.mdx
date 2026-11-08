@@ -258,11 +258,14 @@ result the Agent produced, written as the run goes. A run that fails or is
 cancelled keeps what it wrote up to that point. A _Suppressed_ run never started,
 so it has none.
 
+The app doesn't show a run's Transcript yet. It is the record
+[Extract Memories](#memories-in-a-run) reads, and the run page still shows the
+**Response** and **Timeline**.
+
 - **It isn't in your Chat list.** The sidebar and its search leave run Chats out,
-  so a Trigger firing every few minutes doesn't bury your own. Anyone who can
-  read Chats in the Workspace can read one.
-- **Its title is the Trigger's name and the run's start time** in UTC, with the
-  Trigger's name as a tag. Platypus never re-titles it.
+  so a Trigger firing every few minutes doesn't bury your own.
+- **Its title is the Trigger's name and the run's start time** in UTC. Platypus
+  never re-titles it.
 - **It is deleted with its run.** Pruning under **Max Runs to Keep** deletes the
   pruned runs' Chats, and deleting the Trigger deletes them all.
 
