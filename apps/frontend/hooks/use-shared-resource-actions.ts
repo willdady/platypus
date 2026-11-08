@@ -1,11 +1,12 @@
 import { useState } from "react";
+import type { AttachmentResourceType } from "@platypus/schemas";
 import { useBackendUrl } from "@/components/auth-provider";
 import {
   attachmentsEntity,
+  detachResource,
   errorMessage,
   scopedPath,
   scopedUrl,
-  writeEntity,
   type Scope,
 } from "@/lib/api-write";
 import { fetcher, joinUrl } from "@/lib/utils";
@@ -17,9 +18,6 @@ export type NamedResource = {
   readonly id: string;
   readonly name: string;
 };
-
-/** The Shared resources a Workspace can attach, detach, or promote (ADR-0007). */
-export type SharedResourceType = "mcp" | "provider" | "skill" | "agent";
 
 export type SharedDetach<T> = {
   /** The org-scoped row the detach dialog is open for, or null when closed. */
@@ -43,7 +41,7 @@ export function useSharedDetach<T extends NamedResource>({
   scope,
   mutate,
 }: {
-  readonly resourceType: SharedResourceType;
+  readonly resourceType: AttachmentResourceType;
   readonly scope: Scope;
   readonly mutate: () => void | Promise<unknown>;
 }): SharedDetach<T> {
@@ -53,15 +51,16 @@ export function useSharedDetach<T extends NamedResource>({
 
   const detach = async () => {
     const target = dialog.selected;
-    if (!target || !backendUrl || !scope.workspaceId) return;
+    const { orgId, workspaceId } = scope;
+    if (!target || !backendUrl || !orgId || !workspaceId) return;
     setDetaching(true);
     dialog.setError(null);
     try {
-      const outcome = await writeEntity(
+      const outcome = await detachResource(
         backendUrl,
-        `attachments/${resourceType}`,
-        scope,
-        { id: target.id },
+        { orgId, workspaceId },
+        resourceType,
+        target.id,
       );
       if (outcome.outcome === "success") {
         dialog.close();
@@ -202,7 +201,7 @@ export function useSharedDeleteGuard<T extends NamedResource>({
   scope,
   onAllowed,
 }: {
-  readonly resourceType: SharedResourceType;
+  readonly resourceType: AttachmentResourceType;
   readonly scope: Scope;
   /** Runs when nothing is attached — typically the delete flow's `request`. */
   readonly onAllowed: (item: T) => void;

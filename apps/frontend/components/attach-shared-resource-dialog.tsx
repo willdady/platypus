@@ -1,8 +1,10 @@
 "use client";
 
 import { useScopedList } from "@/hooks/use-scoped-list";
-import { scopedUrl, writeAt } from "../lib/api-write";
+import { attachResource } from "../lib/api-write";
+import { ATTACHMENT_RESOURCE_LABELS } from "@/lib/attachment-resource";
 import { useBackendUrl } from "@/components/auth-provider";
+import type { AttachmentResourceType } from "@platypus/schemas";
 import { Button } from "./ui/button";
 import {
   Dialog,
@@ -18,20 +20,11 @@ import { ListState } from "./list-state";
 import { Skeleton } from "./ui/skeleton";
 import { useState } from "react";
 
-type ResourceType = "mcp" | "provider" | "skill" | "agent";
-
-const COLLECTION: Record<ResourceType, string> = {
+const COLLECTION: Record<AttachmentResourceType, string> = {
   mcp: "mcps",
   provider: "providers",
   skill: "skills",
   agent: "agents",
-};
-
-const LABEL: Record<ResourceType, string> = {
-  mcp: "MCP server",
-  provider: "provider",
-  skill: "skill",
-  agent: "agent",
 };
 
 /**
@@ -52,13 +45,13 @@ function AttachSharedResourceDialog({
   onOpenChange: (open: boolean) => void;
   orgId: string;
   workspaceId: string;
-  resourceType: ResourceType;
+  resourceType: AttachmentResourceType;
   attachedIds: string[];
   onAttached: () => void;
 }) {
   const backendUrl = useBackendUrl();
   const collection = COLLECTION[resourceType];
-  const label = LABEL[resourceType];
+  const label = ATTACHMENT_RESOURCE_LABELS[resourceType];
 
   const { results, isLoading } = useScopedList<{ id: string; name: string }>(
     collection,
@@ -75,9 +68,11 @@ function AttachSharedResourceDialog({
     setBusyId(resourceId);
     setError(null);
     try {
-      const outcome = await writeAt(
-        scopedUrl(backendUrl, "attachments", { orgId, workspaceId }),
-        { method: "POST", data: { resourceType, resourceId } },
+      const outcome = await attachResource(
+        backendUrl,
+        { orgId, workspaceId },
+        resourceType,
+        resourceId,
       );
       if (outcome.outcome !== "success") {
         setError(outcome.message);

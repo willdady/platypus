@@ -1,4 +1,7 @@
-import type { PlatypusUIMessage } from "@platypus/schemas";
+import type {
+  AttachmentResourceType,
+  PlatypusUIMessage,
+} from "@platypus/schemas";
 import { joinUrl } from "./utils";
 import { parseValidationErrors } from "./form-errors";
 
@@ -160,6 +163,40 @@ export function attachmentsEntity(
 ): string {
   const query = new URLSearchParams({ resourceType, resourceId });
   return `attachments?${query.toString()}`;
+}
+
+/** The branch of {@link Scope} an Attachment exists in: one Workspace. */
+export type WorkspaceScope = Extract<Scope, { readonly workspaceId: string }>;
+
+/**
+ * The write-side counterpart to {@link attachmentsEntity}: attaching a Shared
+ * resource POSTs it to the Workspace's attachments collection. The three
+ * surfaces that attach or detach share these two helpers so the address and
+ * body are spelled once.
+ */
+export async function attachResource(
+  backendUrl: string,
+  scope: WorkspaceScope,
+  resourceType: AttachmentResourceType,
+  resourceId: string,
+): Promise<WriteOutcome<unknown>> {
+  return writeAt(scopedUrl(backendUrl, "attachments", scope), {
+    method: "POST",
+    data: { resourceType, resourceId },
+  });
+}
+
+/** The counterpart to {@link attachResource}: removing one Attachment. */
+export async function detachResource(
+  backendUrl: string,
+  scope: WorkspaceScope,
+  resourceType: AttachmentResourceType,
+  resourceId: string,
+): Promise<WriteOutcome<unknown>> {
+  return writeAt(
+    scopedUrl(backendUrl, `attachments/${resourceType}/${resourceId}`, scope),
+    { method: "DELETE" },
+  );
 }
 
 /**

@@ -26,20 +26,17 @@ import {
 } from "@/components/ui/tooltip";
 import { useState, type ReactNode } from "react";
 import { cn, sortByName } from "@/lib/utils";
-import { attachmentsEntity, scopedUrl, writeAt } from "@/lib/api-write";
+import {
+  attachResource,
+  attachmentsEntity,
+  detachResource,
+} from "@/lib/api-write";
+import { ATTACHMENT_RESOURCE_LABELS } from "@/lib/attachment-resource";
 import { useScopedList } from "@/hooks/use-scoped-list";
 import { useBackendUrl } from "@/components/auth-provider";
 import { LoadingRegion } from "@/components/list-skeletons";
 import { Skeleton } from "@/components/ui/skeleton";
-
-type ResourceType = "mcp" | "provider" | "skill" | "agent";
-
-const LABEL: Record<ResourceType, string> = {
-  mcp: "MCP server",
-  provider: "provider",
-  skill: "skill",
-  agent: "agent",
-};
+import type { AttachmentResourceType } from "@platypus/schemas";
 
 type AttachedWorkspace = { workspaceId: string; workspaceName: string };
 
@@ -47,7 +44,7 @@ type AttachedWorkspace = { workspaceId: string; workspaceName: string };
 // attachments dialog share a single read and revalidate together.
 function useAttachments(
   orgId: string | null,
-  resourceType: ResourceType,
+  resourceType: AttachmentResourceType,
   resourceId: string,
 ) {
   return useScopedList<AttachedWorkspace>(
@@ -63,7 +60,7 @@ function useAttachments(
  */
 function useAttachmentCount(
   orgId: string | null,
-  resourceType: ResourceType,
+  resourceType: AttachmentResourceType,
   resourceId: string,
 ): number | undefined {
   return useAttachments(orgId, resourceType, resourceId).data?.results.length;
@@ -80,7 +77,7 @@ export function AttachmentCount({
   children,
 }: {
   orgId: string | null;
-  resourceType: ResourceType;
+  resourceType: AttachmentResourceType;
   resourceId: string;
   children: (count: number | undefined) => ReactNode;
 }) {
@@ -135,7 +132,7 @@ export function SharedWithBadge({
   resourceId,
 }: {
   orgId: string;
-  resourceType: ResourceType;
+  resourceType: AttachmentResourceType;
   resourceId: string;
 }) {
   const { results: attached, isLoading } = useAttachments(
@@ -190,13 +187,14 @@ export function ManageAttachmentsDialog({
   onOpenChange,
 }: {
   orgId: string;
-  resourceType: ResourceType;
+  resourceType: AttachmentResourceType;
   resourceId: string;
   resourceName: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
   const backendUrl = useBackendUrl();
+  const label = ATTACHMENT_RESOURCE_LABELS[resourceType];
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -222,19 +220,17 @@ export function ManageAttachmentsDialog({
       // One attachment address: the Workspace names the path, so the body
       // carries only which Shared resource.
       const outcome = isAttached
-        ? await writeAt(
-            scopedUrl(backendUrl, `attachments/${resourceType}/${resourceId}`, {
-              orgId,
-              workspaceId,
-            }),
-            { method: "DELETE" },
+        ? await detachResource(
+            backendUrl,
+            { orgId, workspaceId },
+            resourceType,
+            resourceId,
           )
-        : await writeAt(
-            scopedUrl(backendUrl, "attachments", { orgId, workspaceId }),
-            {
-              method: "POST",
-              data: { resourceType, resourceId },
-            },
+        : await attachResource(
+            backendUrl,
+            { orgId, workspaceId },
+            resourceType,
+            resourceId,
           );
       if (outcome.outcome !== "success") {
         setError(outcome.message);
@@ -256,8 +252,8 @@ export function ManageAttachmentsDialog({
           <DialogDescription>
             {/* Keep the apostrophe literal, not `&apos;` — see
                 jsx-entity-whitespace.node.test.ts. */}
-            Choose which workspaces this {LABEL[resourceType]} appears in. It
-            runs against each workspace’s own resources.
+            Choose which workspaces this {label} appears in. It runs against
+            each workspace’s own resources.
           </DialogDescription>
         </DialogHeader>
 
