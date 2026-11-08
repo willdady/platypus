@@ -471,7 +471,7 @@ export function AppSidebar() {
                                 <DropdownMenuTrigger asChild>
                                   <SidebarMenuAction
                                     className="text-muted-foreground"
-                                    aria-label="Chat options"
+                                    aria-label={`Actions for ${chat.title}`}
                                   >
                                     <EllipsisVertical className="size-4" />
                                   </SidebarMenuAction>
@@ -483,6 +483,18 @@ export function AppSidebar() {
                                 >
                                   {canChange && (
                                     <>
+                                      <DropdownMenuItem
+                                        onSelect={() => {
+                                          setRenameChatId(chat.id);
+                                          setRenameData({
+                                            title: chat.title,
+                                            tags: chat.tags,
+                                          });
+                                          setRenameValidationErrors({});
+                                        }}
+                                      >
+                                        <Pencil className="size-4" /> Edit
+                                      </DropdownMenuItem>
                                       <DropdownMenuItem
                                         onSelect={() => handleTogglePin(chat)}
                                         disabled={pins.isPending(chat.id)}
@@ -497,19 +509,9 @@ export function AppSidebar() {
                                           </>
                                         )}
                                       </DropdownMenuItem>
+                                      <DropdownMenuSeparator />
                                       <DropdownMenuItem
-                                        onSelect={() => {
-                                          setRenameChatId(chat.id);
-                                          setRenameData({
-                                            title: chat.title,
-                                            tags: chat.tags,
-                                          });
-                                          setRenameValidationErrors({});
-                                        }}
-                                      >
-                                        <Pencil className="size-4" /> Edit
-                                      </DropdownMenuItem>
-                                      <DropdownMenuItem
+                                        variant="destructive"
                                         onSelect={() =>
                                           chatDelete.request(chat.id)
                                         }

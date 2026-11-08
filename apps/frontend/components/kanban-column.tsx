@@ -10,23 +10,10 @@ import { useDndContext, useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import type { KanbanCard, KanbanColumn, KanbanLabel } from "@platypus/schemas";
 import { KanbanCardComponent } from "@/components/kanban-card";
-import {
-  Plus,
-  MoreVertical,
-  Pencil,
-  Trash2,
-  ArrowLeft,
-  ArrowRight,
-} from "lucide-react";
+import { Plus, ArrowLeft, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
+import { RowActionsMenu } from "@/components/row-actions-menu";
 import { cn } from "@/lib/utils";
 import type { Serialized } from "@/lib/api-write";
 
@@ -96,45 +83,26 @@ function ColumnContent({
           <span className="font-semibold">{column.name}</span>
           <Badge variant="outline">{column.cards.length}</Badge>
         </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              aria-label={`Actions for ${column.name}`}
-              className="p-1 hover:bg-muted rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <MoreVertical className="size-4" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent>
-            <DropdownMenuItem
-              disabled={isFirst}
-              onSelect={() => onMoveColumn?.(column.id, "left")}
-            >
-              <ArrowLeft className="size-4" />
-              Move column left
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              disabled={isLast}
-              onSelect={() => onMoveColumn?.(column.id, "right")}
-            >
-              <ArrowRight className="size-4" />
-              Move column right
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={() => onEditColumn(column.id)}>
-              <Pencil className="size-4" />
-              Edit
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={() => onDeleteColumn(column.id, hasCards)}
-            >
-              <Trash2 className="size-4" />
-              Delete
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <RowActionsMenu
+          name={column.name}
+          stopTriggerClick
+          edit={{ onSelect: () => onEditColumn(column.id) }}
+          actions={[
+            {
+              label: "Move column left",
+              icon: <ArrowLeft />,
+              disabled: isFirst,
+              onSelect: () => onMoveColumn?.(column.id, "left"),
+            },
+            {
+              label: "Move column right",
+              icon: <ArrowRight />,
+              disabled: isLast,
+              onSelect: () => onMoveColumn?.(column.id, "right"),
+            },
+          ]}
+          remove={{ onSelect: () => onDeleteColumn(column.id, hasCards) }}
+        />
       </div>
       <div
         ref={cardDropRef}

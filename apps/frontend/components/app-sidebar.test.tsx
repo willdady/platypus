@@ -371,13 +371,32 @@ describe("AppSidebar chat actions", () => {
   const openChatMenu = (title: string) => {
     const trigger = within(screen.getByText(title).closest("li")!).getByRole(
       "button",
-      { name: "Chat options" },
+      { name: `Actions for ${title}` },
     );
     fireEvent.pointerDown(trigger, { button: 0, pointerId: 1 });
     fireEvent.pointerUp(trigger, { button: 0, pointerId: 1 });
     fireEvent.click(trigger, { button: 0 });
     return screen.getByRole("menu");
   };
+
+  it("orders Edit, Pin, then a destructive Delete", () => {
+    seedHeader();
+    setRead("ws1", CHAT_LIST, {
+      results: [{ ...chat("c1", "First chat"), tags: ["ops"] }],
+    });
+    renderSidebar();
+
+    const menu = openChatMenu("First chat");
+    expect(
+      within(menu)
+        .getAllByRole("menuitem")
+        .map((item) => item.textContent?.trim()),
+    ).toEqual(["Edit", "Pin", "Delete"]);
+    expect(
+      within(menu).getByRole("menuitem", { name: "Delete" }),
+    ).toHaveAttribute("data-variant", "destructive");
+    expect(within(menu).getByText("ops")).toBeInTheDocument();
+  });
 
   // A field left out of the update is left unchanged, so pinning sends only
   // the pin: resending the title would 400 on one shorter than the minimum.
@@ -467,7 +486,7 @@ describe("AppSidebar chat actions", () => {
     expect(
       within(screen.getByText("Untagged chat").closest("li")!).queryByRole(
         "button",
-        { name: "Chat options" },
+        { name: "Actions for Untagged chat" },
       ),
     ).not.toBeInTheDocument();
     const menu = openChatMenu("Tagged chat");

@@ -8,21 +8,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
-import { MoreHorizontal, Shield, Trash2, Edit } from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Pencil, Shield } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { type OrgMemberListItem } from "@platypus/schemas";
 import { useState } from "react";
 import { MemberEditDialog } from "@/components/member-edit-dialog";
 import { RemoveMemberDialog } from "@/components/remove-member-dialog";
+import { RowActionsMenu } from "@/components/row-actions-menu";
 import type { Serialized } from "@/lib/api-write";
 import { UserCell } from "@/components/user-cell";
 
@@ -49,72 +41,59 @@ export function MembersList({ orgId, members, onUpdate }: MembersListProps) {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {members.map((member) => (
-            <TableRow key={member.id}>
-              <TableCell>
-                <UserCell
-                  name={member.user.name}
-                  email={member.user.email}
-                  image={member.user.image}
-                />
-              </TableCell>
-              <TableCell>
-                <Badge
-                  variant={
-                    member.isSuperAdmin
-                      ? "default"
-                      : member.role === "admin"
+          {members.map((member) => {
+            const manageable = !member.isSuperAdmin;
+            return (
+              <TableRow key={member.id}>
+                <TableCell>
+                  <UserCell
+                    name={member.user.name}
+                    email={member.user.email}
+                    image={member.user.image}
+                  />
+                </TableCell>
+                <TableCell>
+                  <Badge
+                    variant={
+                      member.isSuperAdmin
                         ? "default"
-                        : "secondary"
-                  }
-                  className="capitalize"
-                >
-                  {member.isSuperAdmin && <Shield />}
-                  {member.isSuperAdmin ? "Super Admin" : member.role}
-                </Badge>
-              </TableCell>
-              <TableCell className="text-right">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      aria-label={`Actions for ${member.user.name}`}
-                    >
-                      <MoreHorizontal />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                    {!member.isSuperAdmin && (
-                      <>
-                        <DropdownMenuItem
-                          onClick={() => setEditingMember(member)}
-                        >
-                          <Edit className="size-4" /> Edit org role
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          onClick={() => setRemovingMember(member)}
-                          className="text-destructive focus:text-destructive"
-                        >
-                          <Trash2 className="size-4" /> Remove from Org
-                        </DropdownMenuItem>
-                      </>
-                    )}
-                    {member.isSuperAdmin && (
-                      <DropdownMenuItem
-                        disabled
-                        className="text-muted-foreground"
-                      >
-                        <Shield /> Super Admin - No actions available
-                      </DropdownMenuItem>
-                    )}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </TableCell>
-            </TableRow>
-          ))}
+                        : member.role === "admin"
+                          ? "default"
+                          : "secondary"
+                    }
+                    className="capitalize"
+                  >
+                    {member.isSuperAdmin && <Shield />}
+                    {member.isSuperAdmin ? "Super Admin" : member.role}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-right">
+                  <RowActionsMenu
+                    name={member.user.name}
+                    actions={
+                      manageable
+                        ? [
+                            {
+                              label: "Edit org role",
+                              icon: <Pencil />,
+                              onSelect: () => setEditingMember(member),
+                            },
+                          ]
+                        : []
+                    }
+                    remove={
+                      manageable
+                        ? {
+                            onSelect: () => setRemovingMember(member),
+                            label: "Remove from Org",
+                          }
+                        : undefined
+                    }
+                  />
+                </TableCell>
+              </TableRow>
+            );
+          })}
         </TableBody>
       </Table>
 

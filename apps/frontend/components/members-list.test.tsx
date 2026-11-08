@@ -68,12 +68,13 @@ describe("MembersList", () => {
     expect(screen.queryByText("admin")).not.toBeInTheDocument();
   });
 
-  // A Super Admin's membership isn't the org's to change.
+  // A Super Admin's membership isn't the org's to change, so it has no menu.
   it("offers no actions for a Super Admin", async () => {
     await renderMembers([sam]);
-    await openActionsFor("Sam");
 
-    expect(menuItemLabels()).toEqual(["Super Admin - No actions available"]);
+    expect(
+      screen.queryByRole("button", { name: "Actions for Sam" }),
+    ).not.toBeInTheDocument();
   });
 
   it("offers edit and remove for a regular member", async () => {
@@ -81,6 +82,10 @@ describe("MembersList", () => {
     await openActionsFor("Nina");
 
     expect(menuItemLabels()).toEqual(["Edit org role", "Remove from Org"]);
+    expect(
+      screen.getByRole("menuitem", { name: "Remove from Org" }),
+    ).toHaveAttribute("data-variant", "destructive");
+    expect(screen.getByRole("separator")).toBeInTheDocument();
   });
 
   // The list rereads once a role change lands, and the dialog goes away.

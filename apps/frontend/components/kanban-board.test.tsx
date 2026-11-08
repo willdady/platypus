@@ -466,6 +466,61 @@ describe("KanbanBoard transport", () => {
       return screen.getAllByText(/^(To Do|Done)$/).map((el) => el.textContent);
     }
 
+    it("orders Edit, the moves, then a destructive Delete", async () => {
+      renderBoard();
+
+      const trigger = screen.getByRole("button", {
+        name: "Actions for To Do",
+      });
+      fireEvent.pointerDown(trigger, { pointerId: 1, button: 0 });
+      fireEvent.pointerUp(trigger, { pointerId: 1, button: 0 });
+      fireEvent.click(trigger);
+
+      await screen.findByText("Move column right");
+      expect(
+        screen.getAllByRole("menuitem").map((item) => item.textContent?.trim()),
+      ).toEqual(["Edit", "Move column left", "Move column right", "Delete"]);
+      expect(screen.getByRole("menuitem", { name: "Delete" })).toHaveAttribute(
+        "data-variant",
+        "destructive",
+      );
+    });
+
+    it("disables each move at its end of the row", async () => {
+      renderBoard();
+
+      const openMenu = (columnName: string) => {
+        const trigger = screen.getByRole("button", {
+          name: `Actions for ${columnName}`,
+        });
+        fireEvent.pointerDown(trigger, { pointerId: 1, button: 0 });
+        fireEvent.pointerUp(trigger, { pointerId: 1, button: 0 });
+        fireEvent.click(trigger);
+        return screen.findByRole("menu");
+      };
+
+      await openMenu("To Do");
+      expect(
+        screen.getByRole("menuitem", { name: "Move column left" }),
+      ).toHaveAttribute("data-disabled");
+      expect(
+        screen.getByRole("menuitem", { name: "Move column right" }),
+      ).not.toHaveAttribute("data-disabled");
+
+      fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+      await waitFor(() =>
+        expect(screen.queryByRole("menu")).not.toBeInTheDocument(),
+      );
+
+      await openMenu("Done");
+      expect(
+        screen.getByRole("menuitem", { name: "Move column left" }),
+      ).not.toHaveAttribute("data-disabled");
+      expect(
+        screen.getByRole("menuitem", { name: "Move column right" }),
+      ).toHaveAttribute("data-disabled");
+    });
+
     async function moveFirstColumnRight() {
       const columnContainer = screen.getByText("To Do").closest(".w-80")!;
       const trigger = columnContainer.querySelector(
