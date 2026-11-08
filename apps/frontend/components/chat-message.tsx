@@ -97,7 +97,7 @@ export const CUT_SHORT_NOTICE =
  * on its last step to answer from what it had (issue #1730), so this means it
  * called a tool again instead. **Max steps** is the remedy on every turn that
  * shows it: an Agent has the field, and a direct Chat has the same setting in
- * Chat Settings.
+ * Chat settings.
  */
 export const STEP_LIMIT_NOTICE =
   "Response cut short at the step limit. Raise Max steps to let it finish.";

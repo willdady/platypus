@@ -52,15 +52,10 @@ function BoardSettingsPage({
       <DeleteConfirmDialog
         open={isDeleteDialogOpen}
         onOpenChange={setIsDeleteDialogOpen}
-        title="Delete Board"
-        description={
-          <>
-            This action cannot be undone. This will permanently delete the board{" "}
-            <span className="font-semibold">{board?.name}</span> and all of its
-            data.
-          </>
-        }
-        confirmPhrase="delete board"
+        noun="board"
+        name={board?.name}
+        consequence="This also deletes all of its data."
+        requireTypedConfirmation
         onConfirm={handleDelete}
         loading={isDeleting}
         error={deleteError}

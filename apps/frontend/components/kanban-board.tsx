@@ -458,7 +458,7 @@ export function KanbanBoard({
                   className="flex items-center gap-2"
                 >
                   <Plus className="size-4" />
-                  <span>Create new board</span>
+                  <span>Create board</span>
                 </Link>
               </DropdownMenuItem>
               {boards.filter((b) => b.id !== boardId).length === 0 && (
@@ -572,14 +572,13 @@ export function KanbanBoard({
         <DeleteConfirmDialog
           open
           onOpenChange={(open) => !open && closeDialog()}
-          title="Delete Column"
-          description={
+          noun="column"
+          blockedReason={
             dialog.hasCards
               ? "Cannot delete this column because it contains cards. Move or delete all cards first."
-              : "Are you sure you want to delete this column? This action cannot be undone."
+              : undefined
           }
           cancelLabel={dialog.hasCards ? "Close" : "Cancel"}
-          confirmDisabled={dialog.hasCards}
           onConfirm={() => void deleteColumn.run(dialog.columnId)}
           loading={deleteColumn.pending}
           error={deleteColumnError}

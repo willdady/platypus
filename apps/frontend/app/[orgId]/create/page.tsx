@@ -5,7 +5,7 @@ import { ResourcePage } from "@/components/resource-page";
 import { ProtectedRoute } from "@/components/protected-route";
 import { orgRoutes } from "@/lib/routes";
 
-export const metadata: Metadata = { title: "Create Workspace" };
+export const metadata: Metadata = { title: "Add Workspace" };
 
 async function WorkspaceCreatePage({
   params,
@@ -20,7 +20,7 @@ async function WorkspaceCreatePage({
       <main id={MAIN_CONTENT_ID} className="h-dvh overflow-y-auto pb-4">
         <ResourcePage
           backFallbackHref={orgRoutes(orgId).root}
-          title="Create Workspace"
+          title="Add Workspace"
           variant="wide"
         >
           <WorkspaceWizard orgId={orgId} />

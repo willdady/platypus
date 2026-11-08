@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { SandboxSettings } from "@/components/sandbox-settings";
+import { PageHeader } from "@/components/page-header";
 
 export const metadata: Metadata = { title: "Sandbox" };
 
@@ -12,7 +13,7 @@ async function SandboxPage({
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-4">Sandbox</h1>
+      <PageHeader title="Sandbox" />
       <SandboxSettings orgId={orgId} workspaceId={workspaceId} />
     </div>
   );

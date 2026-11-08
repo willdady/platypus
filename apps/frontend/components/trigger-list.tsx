@@ -504,7 +504,7 @@ export function TriggerList({
 
       {triggerToClone && (
         <CloneDialog
-          noun="Trigger"
+          noun="trigger"
           original={triggerToClone.name}
           onClose={() => setTriggerToClone(null)}
           create={(name, url) => createClone(triggerToClone, name, url)}
@@ -518,8 +518,9 @@ export function TriggerList({
       <DeleteConfirmDialog
         open={deleteFlow.open}
         onOpenChange={(open) => !open && deleteFlow.close()}
-        title="Delete Trigger"
-        description={`Are you sure you want to delete "${deleteFlow.target?.name}"? This will also delete all run history for this trigger. This action cannot be undone.`}
+        noun="trigger"
+        name={deleteFlow.target?.name}
+        consequence="This will also delete all run history for this trigger."
         onConfirm={deleteFlow.confirm}
         loading={deleteFlow.deleting}
         error={deleteFlow.error}

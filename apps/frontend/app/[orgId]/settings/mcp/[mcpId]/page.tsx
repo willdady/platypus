@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { McpForm } from "@/components/mcp-form";
 import { ResourcePage } from "@/components/resource-page";
 
-export const metadata: Metadata = { title: "Edit Organization MCP" };
+export const metadata: Metadata = { title: "Edit Organization MCP Server" };
 
 async function EditOrgMcpPage({
   params,
@@ -12,7 +12,7 @@ async function EditOrgMcpPage({
   const { orgId, mcpId } = await params;
 
   return (
-    <ResourcePage title="Edit Organization MCP">
+    <ResourcePage title="Edit Organization MCP Server">
       <McpForm orgId={orgId} mcpId={mcpId} />
     </ResourcePage>
   );

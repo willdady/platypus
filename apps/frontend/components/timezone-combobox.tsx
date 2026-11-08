@@ -51,7 +51,7 @@ export function TimezoneCombobox({
       </PopoverTrigger>
       <PopoverContent className="w-(--radix-popover-trigger-width) p-0">
         <Command>
-          <CommandInput placeholder="Search timezones…" />
+          <CommandInput placeholder="Search timezones..." />
           <CommandList>
             <CommandEmpty>No timezones found.</CommandEmpty>
             <CommandGroup>

@@ -56,7 +56,7 @@ export function AddColumnDialog({
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Add Column</DialogTitle>
+          <DialogTitle>Add column</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit}>
           <div className="py-4">
@@ -100,7 +100,7 @@ export function AddCardDialog({
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Add Card</DialogTitle>
+          <DialogTitle>Add card</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit}>
           <div className="py-4 flex flex-col gap-4">
@@ -178,7 +178,7 @@ export function EditColumnDialog({
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Edit Column</DialogTitle>
+          <DialogTitle>Edit column</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit}>
           <div className="py-4">

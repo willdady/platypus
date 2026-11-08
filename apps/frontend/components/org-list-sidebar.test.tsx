@@ -52,8 +52,18 @@ describe("OrgListSidebar", () => {
       screen.getByRole("status", { name: "Loading organizations" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("status", { name: "Loading add organization" }),
+      screen.getByRole("status", { name: "Loading create organization" }),
     ).toBeInTheDocument();
+  });
+
+  it("offers Create organization below the list", () => {
+    read.data = { results: [] };
+
+    renderSidebar();
+
+    expect(
+      screen.getByRole("link", { name: "Create organization" }),
+    ).toHaveAttribute("href", "/create");
   });
 
   it("lists organizations by name without reordering the cached results", () => {

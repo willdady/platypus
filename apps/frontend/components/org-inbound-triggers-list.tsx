@@ -84,7 +84,7 @@ export function OrgInboundTriggersList({ orgId }: { orgId: string }) {
         empty={
           <EmptyCard
             icon={<Webhook />}
-            title="No Inbound Triggers configured"
+            title="No inbound triggers yet"
             description="No workspace in this organization has an Inbound Trigger."
           />
         }

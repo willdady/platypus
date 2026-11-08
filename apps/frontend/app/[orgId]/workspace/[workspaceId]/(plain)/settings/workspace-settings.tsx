@@ -2,6 +2,7 @@
 
 import { CopyRow } from "@/components/copy-row";
 import { WorkspaceForm } from "@/components/workspace-form";
+import { PageHeader } from "@/components/page-header";
 
 function WorkspaceSettingsPage({
   orgId,
@@ -12,7 +13,7 @@ function WorkspaceSettingsPage({
 }) {
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-4">Workspace Settings</h1>
+      <PageHeader title="Workspace Settings" />
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-4">
         <CopyRow
           id="organization-id"

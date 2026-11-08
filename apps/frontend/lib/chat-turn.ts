@@ -23,15 +23,15 @@ import type { ModelSelection } from "@/hooks/use-model-selection";
 export const CHAT_MAX_STEPS_ERROR = `Max steps must be a whole number between ${CHAT_MAX_STEPS_MIN} and ${CHAT_MAX_STEPS_MAX}.`;
 /** Like {@link CHAT_MAX_STEPS_ERROR}, one string per sampling field (#1177). */
 export const CHAT_SAMPLING_ERRORS: Record<ChatSamplingField, string> = {
-  temperature: `Temperature in Chat Settings must be at least ${TEMPERATURE_MIN}.`,
-  topP: `Top-p in Chat Settings must be between ${TOP_P_MIN} and ${TOP_P_MAX}.`,
-  topK: `Top-k in Chat Settings must be a whole number of at least ${TOP_K_MIN}.`,
-  seed: "Seed in Chat Settings must be a whole number.",
-  presencePenalty: `Presence Penalty in Chat Settings must be between ${PENALTY_MIN} and ${PENALTY_MAX}.`,
-  frequencyPenalty: `Frequency Penalty in Chat Settings must be between ${PENALTY_MIN} and ${PENALTY_MAX}.`,
+  temperature: `Temperature in Chat settings must be at least ${TEMPERATURE_MIN}.`,
+  topP: `Top-p in Chat settings must be between ${TOP_P_MIN} and ${TOP_P_MAX}.`,
+  topK: `Top-k in Chat settings must be a whole number of at least ${TOP_K_MIN}.`,
+  seed: "Seed in Chat settings must be a whole number.",
+  presencePenalty: `Presence Penalty in Chat settings must be between ${PENALTY_MIN} and ${PENALTY_MAX}.`,
+  frequencyPenalty: `Frequency Penalty in Chat settings must be between ${PENALTY_MIN} and ${PENALTY_MAX}.`,
 };
 export const CHAT_THINKING_BUDGET_ERROR =
-  "Thinking budget in Chat Settings must be a whole number of at least 1.";
+  "Thinking budget in Chat settings must be a whole number of at least 1.";
 
 export const CHAT_SELECTION_ERROR =
   "Please select a model or agent to start the chat";

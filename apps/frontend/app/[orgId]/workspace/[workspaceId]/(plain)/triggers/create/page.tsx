@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { TriggerForm } from "@/components/trigger-form";
 import { ResourcePage } from "@/components/resource-page";
 
-export const metadata: Metadata = { title: "New Trigger" };
+export const metadata: Metadata = { title: "Create Trigger" };
 
 async function CreateTriggerPage({
   params,
@@ -12,7 +12,7 @@ async function CreateTriggerPage({
   const { orgId, workspaceId } = await params;
 
   return (
-    <ResourcePage title="New Trigger" variant="narrow">
+    <ResourcePage title="Create Trigger" variant="narrow">
       <TriggerForm orgId={orgId} workspaceId={workspaceId} />
     </ResourcePage>
   );

@@ -55,7 +55,7 @@ export function AgentInfoDialog({
       showCloseButton={false}
     >
       <DialogHeader>
-        <DialogTitle>Agent Information</DialogTitle>
+        <DialogTitle>Agent information</DialogTitle>
         <DialogDescription>
           View the configuration for this agent.
         </DialogDescription>

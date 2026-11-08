@@ -1258,8 +1258,7 @@ function ProviderForm({
       <DeleteConfirmDialog
         open={isDeleteDialogOpen}
         onOpenChange={setIsDeleteDialogOpen}
-        title="Delete Provider"
-        description="Are you sure you want to delete this provider? This action cannot be undone."
+        noun="provider"
         onConfirm={handleDelete}
         loading={isDeleting}
         error={deleteError}
@@ -1268,7 +1267,7 @@ function ProviderForm({
       <ConfirmDialog
         open={isEmbeddingChangeDialogOpen}
         onOpenChange={setIsEmbeddingChangeDialogOpen}
-        title="Embedding Configuration Changed"
+        title="Embedding configuration changed"
         description="Changing the embedding model or dimensions will invalidate existing memory embeddings for any workspaces using this provider. Semantic memory search will be unavailable until summaries are re-embedded."
         confirmLabel="Continue"
         onConfirm={() => {

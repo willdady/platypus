@@ -2,11 +2,12 @@
 
 import { CopyRow } from "@/components/copy-row";
 import { OrganizationForm } from "@/components/organization-form";
+import { PageHeader } from "@/components/page-header";
 
 function OrgSettingsPage({ orgId }: { orgId: string }) {
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-4">Organization Settings</h1>
+      <PageHeader title="Organization Settings" />
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-4">
         <CopyRow
           id="organization-id"

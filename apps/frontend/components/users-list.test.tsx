@@ -47,8 +47,8 @@ function renderUsers(users: ListedUser[]) {
 async function confirmDelete() {
   fireEvent.click(screen.getByRole("button", { name: /Delete/ }));
   fireEvent.change(
-    screen.getByPlaceholderText("Type 'delete user' to confirm"),
-    { target: { value: "delete user" } },
+    screen.getByPlaceholderText("Type 'Delete user' to confirm"),
+    { target: { value: "Delete user" } },
   );
   await confirmDialog("Delete user");
 }
