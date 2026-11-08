@@ -3,7 +3,7 @@ import { useState } from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { Dialog } from "./ui/dialog";
 import { ChatSettingsDialog } from "./chat-settings-dialog";
-import { CHAT_SAMPLING_ERRORS } from "@/lib/chat-turn";
+import { CHAT_MAX_STEPS_ERROR, CHAT_SAMPLING_ERRORS } from "@/lib/chat-turn";
 import type { ChatSettings } from "@/hooks/use-chat-settings";
 import type { ReasoningMap } from "@platypus/schemas";
 import { selectOption } from "@/test/test-utils";
@@ -180,6 +180,38 @@ describe("ChatSettingsDialog", () => {
     for (const message of Object.values(CHAT_SAMPLING_ERRORS)) {
       expect(screen.queryByText(message)).not.toBeInTheDocument();
     }
+  });
+
+  // #1842: the fields carry their help text and error with the control, so a
+  // screen reader reads them with the field rather than only its red state.
+  it("describes the Instructions field with its helper text", () => {
+    renderDialog();
+
+    expect(screen.getByLabelText("Instructions")).toHaveAccessibleDescription(
+      /builds the\s+full system prompt/,
+    );
+  });
+
+  it.each([
+    ["Max steps", { maxSteps: 99 }, CHAT_MAX_STEPS_ERROR],
+    ["Temperature", { temperature: -1 }, CHAT_SAMPLING_ERRORS.temperature],
+  ] as const)(
+    "marks an invalid %s invalid and describes it with the error",
+    (label, settings, message) => {
+      renderDialog(settings);
+
+      const input = screen.getByLabelText(label);
+      expect(input).toHaveAttribute("aria-invalid", "true");
+      expect(input).toHaveAccessibleDescription(message);
+    },
+  );
+
+  it("carries no description on a number field with no error", () => {
+    renderDialog({ maxSteps: 10 });
+
+    expect(screen.getByLabelText("Max steps")).not.toHaveAttribute(
+      "aria-describedby",
+    );
   });
 });
 

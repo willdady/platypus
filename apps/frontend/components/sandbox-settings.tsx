@@ -20,7 +20,6 @@ import {
 } from "@/lib/api-write";
 import { optionalFetcher } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   KeyValueRowsEditor,
   newRow,
@@ -34,23 +33,17 @@ import {
   FieldDescription,
   FieldError,
   FieldGroup,
-  FieldLabel,
   FieldSet,
   FieldTitle,
 } from "@/components/ui/field";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SelectGroup, SelectItem, SelectLabel } from "@/components/ui/select";
 import { EmptyCard } from "@/components/empty-card";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
+import { FormSelectField } from "@/components/form-select-field";
+import { FormTextField } from "@/components/form-text-field";
+import { FormTextareaField } from "@/components/form-textarea-field";
 import { ListError } from "@/components/list-state";
 import { LoadingRegion } from "@/components/list-skeletons";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -572,60 +565,47 @@ function SandboxSettings({
     <div>
       <FieldSet className="mb-6">
         <FieldGroup>
-          <Field data-invalid={!!validationErrors.name}>
-            <FieldLabel htmlFor="sandbox-name">Name</FieldLabel>
-            <Input
-              id="sandbox-name"
-              placeholder="My sandbox"
-              value={formData.name}
-              onChange={(e) => {
-                clearErrors("name");
-                setFormData((prev) => ({ ...prev, name: e.target.value }));
-              }}
-              disabled={isSubmitting}
-              aria-invalid={!!validationErrors.name}
-              autoFocus
-            />
-            {validationErrors.name && (
-              <FieldError>{validationErrors.name}</FieldError>
-            )}
-          </Field>
+          <FormTextField
+            label="Name"
+            name="sandbox-name"
+            placeholder="My sandbox"
+            value={formData.name}
+            onChange={(value) => {
+              clearErrors("name");
+              setFormData((prev) => ({ ...prev, name: value }));
+            }}
+            disabled={isSubmitting}
+            error={validationErrors.name}
+            autoFocus
+          />
 
-          <Field data-invalid={!!validationErrors.backend}>
-            <FieldLabel htmlFor="backend">Backend</FieldLabel>
-            <Select
-              value={formData.backend}
-              onValueChange={(value) => {
-                clearErrors("backend");
-                setFormData((prev) => ({ ...prev, backend: value }));
-              }}
-              disabled={isSubmitting || !canConfigure}
-            >
-              <SelectTrigger
-                id="backend"
-                disabled={isSubmitting || !canConfigure}
-              >
-                <SelectValue placeholder="Select a backend" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  <SelectLabel>Backend</SelectLabel>
-                  {backends.map((option) => (
-                    <SelectItem key={option.backend} value={option.backend}>
-                      {option.name}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-            <FieldDescription>
-              The runtime that hosts the sandbox environment.
-              {!canConfigure && " Managed by an organization admin."}
-            </FieldDescription>
-            {validationErrors.backend && (
-              <FieldError>{validationErrors.backend}</FieldError>
-            )}
-          </Field>
+          <FormSelectField
+            label="Backend"
+            name="backend"
+            value={formData.backend}
+            onValueChange={(value) => {
+              clearErrors("backend");
+              setFormData((prev) => ({ ...prev, backend: value }));
+            }}
+            disabled={isSubmitting || !canConfigure}
+            placeholder="Select a backend"
+            description={
+              <>
+                The runtime that hosts the sandbox environment.
+                {!canConfigure && " Managed by an organization admin."}
+              </>
+            }
+            error={validationErrors.backend}
+          >
+            <SelectGroup>
+              <SelectLabel>Backend</SelectLabel>
+              {backends.map((option) => (
+                <SelectItem key={option.backend} value={option.backend}>
+                  {option.name}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </FormSelectField>
 
           {/* Host reachability (ADR-0005) — admin-only, docker backend only. */}
           {canConfigure && isDocker && (
@@ -728,130 +708,97 @@ function SandboxSettings({
           {/* SSH connection (ADR-0012) — admin-only, ssh backend only. */}
           {canConfigure && isSsh && (
             <>
-              <Field data-invalid={!!validationErrors.config}>
-                <FieldLabel htmlFor="ssh-host">Host</FieldLabel>
-                <Input
-                  id="ssh-host"
-                  placeholder="ssh.example.com"
-                  value={formData.sshHost}
-                  onChange={(e) => {
-                    clearErrors("config");
-                    setFormData((prev) => ({
-                      ...prev,
-                      sshHost: e.target.value,
-                    }));
-                  }}
-                  disabled={isSubmitting}
-                  className="font-mono"
-                />
-                <FieldDescription>
-                  Hostname or IP of the operator-owned host to attach to.
-                </FieldDescription>
-              </Field>
+              <FormTextField
+                label="Host"
+                name="ssh-host"
+                placeholder="ssh.example.com"
+                value={formData.sshHost}
+                onChange={(value) => {
+                  clearErrors("config");
+                  setFormData((prev) => ({ ...prev, sshHost: value }));
+                }}
+                disabled={isSubmitting}
+                inputClassName="font-mono"
+                description="Hostname or IP of the operator-owned host to attach to."
+              />
 
-              <Field>
-                <FieldLabel htmlFor="ssh-port">Port</FieldLabel>
-                <Input
-                  id="ssh-port"
-                  type="number"
-                  placeholder={DEFAULT_SSH_PORT}
-                  value={formData.sshPort}
-                  onChange={(e) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      sshPort: e.target.value,
-                    }))
-                  }
-                  disabled={isSubmitting}
-                  className="font-mono"
-                />
-              </Field>
+              <FormTextField
+                label="Port"
+                name="ssh-port"
+                type="number"
+                placeholder={DEFAULT_SSH_PORT}
+                value={formData.sshPort}
+                onChange={(value) =>
+                  setFormData((prev) => ({ ...prev, sshPort: value }))
+                }
+                disabled={isSubmitting}
+                inputClassName="font-mono"
+              />
 
-              <Field>
-                <FieldLabel htmlFor="ssh-user">User</FieldLabel>
-                <Input
-                  id="ssh-user"
-                  placeholder="platypus"
-                  value={formData.sshUser}
-                  onChange={(e) => {
-                    clearErrors("config");
-                    setFormData((prev) => ({
-                      ...prev,
-                      sshUser: e.target.value,
-                    }));
-                  }}
-                  disabled={isSubmitting}
-                  className="font-mono"
-                />
-                <FieldDescription>
-                  SSH login user. Public-key auth only.
-                </FieldDescription>
-              </Field>
+              <FormTextField
+                label="User"
+                name="ssh-user"
+                placeholder="platypus"
+                value={formData.sshUser}
+                onChange={(value) => {
+                  clearErrors("config");
+                  setFormData((prev) => ({ ...prev, sshUser: value }));
+                }}
+                disabled={isSubmitting}
+                inputClassName="font-mono"
+                description="SSH login user. Public-key auth only."
+              />
 
-              <Field>
-                <FieldLabel htmlFor="ssh-root-dir">
-                  Workspace root (optional)
-                </FieldLabel>
-                <Input
-                  id="ssh-root-dir"
-                  placeholder="$HOME/platypus-workspace"
-                  value={formData.sshRootDir}
-                  onChange={(e) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      sshRootDir: e.target.value,
-                    }))
-                  }
-                  disabled={isSubmitting}
-                  className="font-mono"
-                />
-                <FieldDescription>
-                  Absolute or $HOME-relative directory the sandbox works in.
-                  Defaults to{" "}
-                  <span className="font-mono">$HOME/platypus-workspace</span>,
-                  created on first connect.
-                </FieldDescription>
-              </Field>
+              <FormTextField
+                label="Workspace root (optional)"
+                name="ssh-root-dir"
+                placeholder="$HOME/platypus-workspace"
+                value={formData.sshRootDir}
+                onChange={(value) =>
+                  setFormData((prev) => ({ ...prev, sshRootDir: value }))
+                }
+                disabled={isSubmitting}
+                inputClassName="font-mono"
+                description={
+                  <>
+                    Absolute or $HOME-relative directory the sandbox works in.
+                    Defaults to{" "}
+                    <span className="font-mono">$HOME/platypus-workspace</span>,
+                    created on first connect.
+                  </>
+                }
+              />
 
-              <Field>
-                <FieldLabel htmlFor="ssh-host-key">
-                  Host key (optional)
-                </FieldLabel>
-                <textarea
-                  id="ssh-host-key"
-                  placeholder="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5..."
-                  value={formData.sshHostKey}
-                  onChange={(e) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      sshHostKey: e.target.value,
-                    }))
-                  }
-                  disabled={isSubmitting}
-                  rows={3}
-                  autoComplete="off"
-                  spellCheck={false}
-                  className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm font-mono shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                />
-                <FieldDescription>
-                  Pin the host&apos;s public key to reject a man-in-the-middle.
-                  Obtain it with{" "}
-                  <span className="font-mono">
-                    ssh-keyscan -t ed25519 {formData.sshHost || "<host>"}
-                  </span>
-                  . Leave blank to connect unverified (a warning is logged).
-                </FieldDescription>
-              </Field>
+              <FormTextareaField
+                label="Host key (optional)"
+                name="ssh-host-key"
+                placeholder="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5..."
+                value={formData.sshHostKey}
+                onChange={(value) =>
+                  setFormData((prev) => ({ ...prev, sshHostKey: value }))
+                }
+                disabled={isSubmitting}
+                rows={3}
+                autoComplete="off"
+                spellCheck={false}
+                textareaClassName="font-mono"
+                description={
+                  <>
+                    Pin the host&apos;s public key to reject a
+                    man-in-the-middle. Obtain it with{" "}
+                    <span className="font-mono">
+                      ssh-keyscan -t ed25519 {formData.sshHost || "<host>"}
+                    </span>
+                    . Leave blank to connect unverified (a warning is logged).
+                  </>
+                }
+              />
 
-              <Field>
-                {/* Once stored there is no control to label, only the status
-                    row, so the caption drops to plain text. */}
-                {keyStored ? (
+              {/* Once stored there is no control to label, only the status row,
+                  so the caption drops to plain text. */}
+              {keyStored ? (
+                <Field>
                   <FieldTitle>Private key</FieldTitle>
-                ) : (
-                  <FieldLabel htmlFor="ssh-private-key">Private key</FieldLabel>
-                )}
-                {keyStored ? (
                   <div className="flex items-center justify-between gap-2 rounded-md border border-input px-3 py-2 text-sm">
                     <span className="flex items-center gap-2">
                       <KeyRound className="size-4 text-muted-foreground" />
@@ -867,60 +814,56 @@ function SandboxSettings({
                       Replace key
                     </Button>
                   </div>
-                ) : (
-                  <textarea
-                    id="ssh-private-key"
-                    placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"
-                    value={formData.sshPrivateKey}
-                    onChange={(e) =>
-                      setFormData((prev) => ({
-                        ...prev,
-                        sshPrivateKey: e.target.value,
-                        // The passphrase only travels with a key, so clearing
-                        // the key clears it rather than dropping it on save.
-                        sshPassphrase: e.target.value.trim()
-                          ? prev.sshPassphrase
-                          : "",
-                      }))
-                    }
-                    disabled={isSubmitting}
-                    rows={5}
-                    autoComplete="off"
-                    spellCheck={false}
-                    className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm font-mono shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                  />
-                )}
-                <FieldDescription>
-                  PEM or OpenSSH private key. Kept server-side, never sent to
-                  the model.
-                  {isReplacingKey && " Leave blank to keep the stored key."}
-                </FieldDescription>
-              </Field>
-
-              <Field>
-                <FieldLabel htmlFor="ssh-passphrase">
-                  Key passphrase (optional)
-                </FieldLabel>
-                <Input
-                  id="ssh-passphrase"
-                  type="password"
-                  placeholder="Passphrase for the private key"
-                  value={formData.sshPassphrase}
-                  onChange={(e) =>
+                  <FieldDescription>
+                    PEM or OpenSSH private key. Kept server-side, never sent to
+                    the model.
+                    {isReplacingKey && " Leave blank to keep the stored key."}
+                  </FieldDescription>
+                </Field>
+              ) : (
+                <FormTextareaField
+                  label="Private key"
+                  name="ssh-private-key"
+                  placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"
+                  value={formData.sshPrivateKey}
+                  onChange={(value) =>
                     setFormData((prev) => ({
                       ...prev,
-                      sshPassphrase: e.target.value,
+                      sshPrivateKey: value,
+                      // The passphrase only travels with a key, so clearing
+                      // the key clears it rather than dropping it on save.
+                      sshPassphrase: value.trim() ? prev.sshPassphrase : "",
                     }))
                   }
-                  disabled={isSubmitting || !formData.sshPrivateKey.trim()}
+                  disabled={isSubmitting}
+                  rows={5}
                   autoComplete="off"
-                  className="font-mono"
+                  spellCheck={false}
+                  textareaClassName="font-mono"
+                  description={
+                    <>
+                      PEM or OpenSSH private key. Kept server-side, never sent
+                      to the model.
+                      {isReplacingKey && " Leave blank to keep the stored key."}
+                    </>
+                  }
                 />
-                <FieldDescription>
-                  Enter a private key first. A new key replaces the stored
-                  passphrase too, so re-enter it here if the key is encrypted.
-                </FieldDescription>
-              </Field>
+              )}
+
+              <FormTextField
+                label="Key passphrase (optional)"
+                name="ssh-passphrase"
+                type="password"
+                placeholder="Passphrase for the private key"
+                value={formData.sshPassphrase}
+                onChange={(value) =>
+                  setFormData((prev) => ({ ...prev, sshPassphrase: value }))
+                }
+                disabled={isSubmitting || !formData.sshPrivateKey.trim()}
+                autoComplete="off"
+                inputClassName="font-mono"
+                description="Enter a private key first. A new key replaces the stored passphrase too, so re-enter it here if the key is encrypted."
+              />
             </>
           )}
 

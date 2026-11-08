@@ -85,9 +85,9 @@ import {
   Loader2,
   Network,
 } from "lucide-react";
-import { Input } from "@/components/ui/input";
 import { SearchInput } from "@/components/search-input";
 import { Field, FieldLabel, FieldError } from "@/components/ui/field";
+import { FormTextField } from "@/components/form-text-field";
 import { TagInput } from "@/components/tag-input";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
@@ -575,20 +575,15 @@ export function AppSidebar() {
             </DialogDescription>
           </DialogHeader>
           <div className="py-4 flex flex-col gap-4">
-            <Field data-invalid={!!renameValidationErrors.title}>
-              <FieldLabel htmlFor="title">Title</FieldLabel>
-              <Input
-                id="title"
-                value={renameData.title}
-                onChange={(e) => setRenameField("title", e.target.value)}
-                placeholder="Chat title"
-                disabled={isRenaming}
-                aria-invalid={!!renameValidationErrors.title}
-              />
-              {renameValidationErrors.title && (
-                <FieldError>{renameValidationErrors.title}</FieldError>
-              )}
-            </Field>
+            <FormTextField
+              label="Title"
+              name="title"
+              value={renameData.title}
+              onChange={(value) => setRenameField("title", value)}
+              placeholder="Chat title"
+              disabled={isRenaming}
+              error={renameValidationErrors.title}
+            />
 
             <Field data-invalid={!!renameValidationErrors.tags}>
               <FieldLabel htmlFor="tags">Tags</FieldLabel>

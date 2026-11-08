@@ -13,9 +13,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { FormTextField } from "@/components/form-text-field";
 
 /**
  * Each board dialog is mounted only while it is the board's open dialog, so
@@ -61,13 +60,12 @@ export function AddColumnDialog({
         </DialogHeader>
         <form onSubmit={handleSubmit}>
           <div className="py-4">
-            <Label htmlFor="columnName">Column Name</Label>
-            <Input
-              id="columnName"
+            <FormTextField
+              label="Column Name"
+              name="columnName"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={setName}
               placeholder="Enter column name"
-              className="mt-2"
               autoFocus
             />
           </div>
@@ -106,17 +104,14 @@ export function AddCardDialog({
         </DialogHeader>
         <form onSubmit={handleSubmit}>
           <div className="py-4 flex flex-col gap-4">
-            <div>
-              <Label htmlFor="cardTitle">Card Title</Label>
-              <Input
-                id="cardTitle"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="Enter card title"
-                className="mt-2"
-                autoFocus
-              />
-            </div>
+            <FormTextField
+              label="Card Title"
+              name="cardTitle"
+              value={title}
+              onChange={setTitle}
+              placeholder="Enter card title"
+              autoFocus
+            />
             {labels.length > 0 && (
               <div role="group" aria-labelledby="new-card-labels-label">
                 <p
@@ -187,13 +182,12 @@ export function EditColumnDialog({
         </DialogHeader>
         <form onSubmit={handleSubmit}>
           <div className="py-4">
-            <Label htmlFor="editColumnName">Column Name</Label>
-            <Input
-              id="editColumnName"
+            <FormTextField
+              label="Column Name"
+              name="editColumnName"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={setName}
               placeholder="Enter column name"
-              className="mt-2"
             />
           </div>
           <DialogFooter>

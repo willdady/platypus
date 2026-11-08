@@ -19,6 +19,7 @@ export type FormTextFieldProps = {
   disabled?: boolean;
   required?: boolean;
   autoFocus?: boolean;
+  autoComplete?: string;
   type?: string;
   trailing?: ReactNode;
   className?: string;
@@ -44,6 +45,7 @@ export function FormTextField({
   disabled,
   required,
   autoFocus,
+  autoComplete,
   type = "text",
   trailing,
   className,
@@ -66,6 +68,7 @@ export function FormTextField({
         disabled={disabled}
         required={required}
         autoFocus={autoFocus}
+        autoComplete={autoComplete}
         aria-invalid={!!error}
         aria-describedby={ids.describedBy}
         className={inputClassName}

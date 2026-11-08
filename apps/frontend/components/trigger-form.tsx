@@ -32,13 +32,7 @@ import { deepEqual } from "@/lib/deep-equal";
 import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
 import { useRouter } from "next/navigation";
 import { ShieldOff } from "lucide-react";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SelectItem } from "@/components/ui/select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { TriggerCronFields } from "@/components/trigger-cron-fields";
 import { TriggerEventFields } from "@/components/trigger-event-fields";
@@ -333,31 +327,22 @@ function TriggerForm({
       <FieldSet className="mb-6">
         <FieldGroup>
           {/* Trigger Type Selector */}
-          <Field>
-            <FieldLabel htmlFor="trigger-type">Trigger Type</FieldLabel>
-            <Select
-              value={triggerType}
-              onValueChange={(value) => {
-                const parsed = triggerTypeSchema.safeParse(value);
-                if (parsed.success) setTriggerType(parsed.data);
-              }}
-              disabled={isSubmitting || !!triggerId}
-            >
-              <SelectTrigger
-                id="trigger-type"
-                disabled={isSubmitting || !!triggerId}
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.entries(TRIGGER_TYPE_LABELS).map(([value, label]) => (
-                  <SelectItem key={value} value={value}>
-                    {label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
+          <FormSelectField
+            label="Trigger Type"
+            name="trigger-type"
+            value={triggerType}
+            onValueChange={(value) => {
+              const parsed = triggerTypeSchema.safeParse(value);
+              if (parsed.success) setTriggerType(parsed.data);
+            }}
+            disabled={isSubmitting || !!triggerId}
+          >
+            {Object.entries(TRIGGER_TYPE_LABELS).map(([value, label]) => (
+              <SelectItem key={value} value={value}>
+                {label}
+              </SelectItem>
+            ))}
+          </FormSelectField>
 
           {inboundBlocked && (
             <Alert>
