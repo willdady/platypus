@@ -21,17 +21,46 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 /**
- * An item-specific ⋮ entry, such as Manage attachments: a link (`href`, so
- * middle-click and open-in-new-tab work) or a handler (`onSelect`).
+ * An entry that is either a link (`href`, so middle-click and open-in-new-tab
+ * work) or a handler (`onSelect`).
+ */
+type LinkOrHandler =
+  | { readonly href: string; readonly onSelect?: never }
+  | { readonly onSelect: () => void; readonly href?: never };
+
+/**
+ * An item-specific ⋮ entry, such as Manage attachments.
  */
 export type RowAction = {
   readonly label: string;
   readonly icon: ReactNode;
   readonly disabled?: boolean;
-} & (
-  | { readonly href: string; readonly onSelect?: never }
-  | { readonly onSelect: () => void; readonly href?: never }
-);
+} & LinkOrHandler;
+
+/** One menu item, rendered as a link or a handler. */
+function RowMenuItem({
+  target,
+  disabled,
+  children,
+}: {
+  target: LinkOrHandler;
+  disabled?: boolean;
+  children: ReactNode;
+}) {
+  if (target.href) {
+    return (
+      <DropdownMenuItem disabled={disabled} asChild>
+        <Link href={target.href}>{children}</Link>
+      </DropdownMenuItem>
+    );
+  }
+
+  return (
+    <DropdownMenuItem disabled={disabled} onSelect={target.onSelect}>
+      {children}
+    </DropdownMenuItem>
+  );
+}
 
 /**
  * A list card's ⋮ menu, in the `card-conventions` order: Edit, item-specific
@@ -47,17 +76,25 @@ export function RowActionsMenu({
   clone,
   toggle,
   remove,
+  stopTriggerClick = false,
 }: {
   /** The row's name, for the ⋮ button's accessible name. */
   name: string;
   /** A Shared resource attached to the Workspace. */
   shared?: boolean;
-  edit?: { href: string };
+  /** A link, or a handler for an edit dialog. */
+  edit?: LinkOrHandler;
   /** Item-specific entries, shown in order between Edit and Clone. */
   actions?: readonly RowAction[];
   clone?: { onSelect: () => void };
   toggle?: { enabled: boolean; onSelect: () => void; disabled?: boolean };
-  remove?: { onSelect: () => void };
+  /**
+   * Delete, or Detach on a Shared row. `label` renames Delete; Detach keeps
+   * its own label on a Shared row.
+   */
+  remove?: { onSelect: () => void; label?: string };
+  /** Keep the trigger's click from reaching a clickable ancestor. */
+  stopTriggerClick?: boolean;
 }) {
   if (!edit && !actions.length && !clone && !toggle && !remove) return null;
 
@@ -69,7 +106,10 @@ export function RowActionsMenu({
           variant="ghost"
           size="icon"
           aria-label={`Actions for ${name}`}
-          onClick={(e) => e.preventDefault()}
+          onClick={(e) => {
+            e.preventDefault();
+            if (stopTriggerClick) e.stopPropagation();
+          }}
         >
           <EllipsisVertical />
         </Button>
@@ -78,33 +118,19 @@ export function RowActionsMenu({
           to it: stop them there, without cancelling a Cmd-click's new tab. */}
       <DropdownMenuContent onClick={(e) => e.stopPropagation()}>
         {edit && (
-          <DropdownMenuItem asChild>
-            <Link href={edit.href}>
-              <Pencil /> {shared ? "Edit in org settings" : "Edit"}
-            </Link>
-          </DropdownMenuItem>
+          <RowMenuItem target={edit}>
+            <Pencil /> {shared && edit.href ? "Edit in org settings" : "Edit"}
+          </RowMenuItem>
         )}
-        {actions.map((action) =>
-          action.href ? (
-            <DropdownMenuItem
-              key={action.label}
-              disabled={action.disabled}
-              asChild
-            >
-              <Link href={action.href}>
-                {action.icon} {action.label}
-              </Link>
-            </DropdownMenuItem>
-          ) : (
-            <DropdownMenuItem
-              key={action.label}
-              disabled={action.disabled}
-              onSelect={action.onSelect}
-            >
-              {action.icon} {action.label}
-            </DropdownMenuItem>
-          ),
-        )}
+        {actions.map((action) => (
+          <RowMenuItem
+            key={action.label}
+            target={action}
+            disabled={action.disabled}
+          >
+            {action.icon} {action.label}
+          </RowMenuItem>
+        ))}
         {clone && (
           <DropdownMenuItem onSelect={clone.onSelect}>
             <Copy /> Clone
@@ -132,9 +158,7 @@ export function RowActionsMenu({
               <DropdownMenuSeparator />
             )}
             <DropdownMenuItem
-              className={
-                shared ? undefined : "text-destructive focus:text-destructive"
-              }
+              variant={shared ? "default" : "destructive"}
               onSelect={remove.onSelect}
             >
               {shared ? (
@@ -143,7 +167,7 @@ export function RowActionsMenu({
                 </>
               ) : (
                 <>
-                  <Trash2 /> Delete
+                  <Trash2 /> {remove.label ?? "Delete"}
                 </>
               )}
             </DropdownMenuItem>

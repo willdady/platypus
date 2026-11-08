@@ -59,8 +59,9 @@ describe("RowActionsMenu", () => {
     expect(
       screen.getByRole("menuitem", { name: "Edit in org settings" }),
     ).toHaveAttribute("href", "/org/edit");
-    expect(screen.getByRole("menuitem", { name: "Detach" })).not.toHaveClass(
-      "text-destructive",
+    expect(screen.getByRole("menuitem", { name: "Detach" })).toHaveAttribute(
+      "data-variant",
+      "default",
     );
   });
 
@@ -88,6 +89,40 @@ describe("RowActionsMenu", () => {
     );
   });
 
+  it("opens Edit through onSelect for a dialog", async () => {
+    const onSelect = vi.fn();
+    render(<RowActionsMenu name="Bot" edit={{ onSelect }} />);
+    await openDropdownMenu();
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "Edit" }));
+    expect(onSelect).toHaveBeenCalledOnce();
+  });
+
+  it("labels an edit dialog Edit, even on a Shared row", async () => {
+    render(<RowActionsMenu name="Bot" shared edit={{ onSelect: noop }} />);
+    await openDropdownMenu();
+
+    expect(menuItemLabels()).toEqual(["Edit"]);
+  });
+
+  it("labels the remove item and keeps it destructive", async () => {
+    const onSelect = vi.fn();
+    render(
+      <RowActionsMenu
+        name="Nina"
+        actions={[pin]}
+        remove={{ onSelect, label: "Remove from Org" }}
+      />,
+    );
+    await openDropdownMenu();
+
+    expect(menuItemLabels()).toEqual(["Pin", "Remove from Org"]);
+    expect(
+      screen.getByRole("menuitem", { name: "Remove from Org" }),
+    ).toHaveAttribute("data-variant", "destructive");
+    expect(screen.getByRole("separator")).toBeInTheDocument();
+  });
+
   it("renders an href action as a link", async () => {
     const onSelect = vi.fn();
     render(
@@ -103,8 +138,9 @@ describe("RowActionsMenu", () => {
       "href",
       "/runs",
     );
-    expect(screen.getByRole("menuitem", { name: "Delete" })).toHaveClass(
-      "text-destructive",
+    expect(screen.getByRole("menuitem", { name: "Delete" })).toHaveAttribute(
+      "data-variant",
+      "destructive",
     );
   });
 
@@ -133,5 +169,22 @@ describe("RowActionsMenu", () => {
 
     fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
     expect(onRowClick).not.toHaveBeenCalled();
+  });
+
+  it("keeps the trigger's click from reaching a clickable ancestor when asked", () => {
+    const onAncestorClick = vi.fn();
+    render(
+      // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
+      <div onClick={onAncestorClick}>
+        <RowActionsMenu
+          name="Bot"
+          stopTriggerClick
+          remove={{ onSelect: noop }}
+        />
+      </div>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Actions for Bot" }));
+    expect(onAncestorClick).not.toHaveBeenCalled();
   });
 });
