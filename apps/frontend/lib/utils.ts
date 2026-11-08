@@ -13,6 +13,23 @@ export function sortByName<T extends { name: string }>(
 }
 
 /**
+ * The fields `shape` declares, copied from `record`. A clone builds its create
+ * body from the create schema's own keys, so a field added to the schema is
+ * copied with no edit at the call site, and a key the strict create refuses
+ * (an identity, run state, a scope) cannot ride along.
+ */
+export function pickKeys<T extends object>(
+  record: T,
+  shape: Record<string, unknown>,
+): Partial<T> {
+  return Object.fromEntries(
+    Object.keys(shape)
+      .filter((key) => Object.hasOwn(record, key))
+      .map((key) => [key, record[key as keyof T]]),
+  ) as Partial<T>;
+}
+
+/**
  * Joins a base URL and a path, ensuring no double slashes or missing slashes.
  * @param base - The base URL
  * @param path - The path to append

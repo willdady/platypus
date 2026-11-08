@@ -170,7 +170,7 @@ export function workspaceRoutes(orgId: string, workspaceId: string) {
 /**
  * Whether a Workspace pathname draws the app sidebar: the Workspace home and
  * Chat do, every other Workspace screen doesn't. Mirrors the `(sidebar)` route
- * group, for the one boundary (`loading`) that renders above it.
+ * group, for the boundaries that render above it.
  */
 export function isWorkspaceSidebarRoute(pathname: string) {
   return /^\/[^/]+\/workspace\/[^/]+(\/chat(\/[^/]+)?)?\/?$/.test(pathname);

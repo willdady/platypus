@@ -13,6 +13,7 @@ import {
   mutate,
   toastInfo,
   menuItemLabels,
+  expectEntryActionVariant,
 } from "@/test/list-test-harness";
 import { openDropdownMenu } from "@/test/test-utils";
 
@@ -96,5 +97,25 @@ describe("BlueprintsList empty state", () => {
     await renderBlueprints([]);
 
     expect(screen.getByText(/No blueprints yet/i)).toBeInTheDocument();
+  });
+});
+
+describe("BlueprintsList actions", () => {
+  it("offers Create blueprint solid inside the empty card", async () => {
+    await renderBlueprints([]);
+
+    expectEntryActionVariant(
+      screen.getByRole("link", { name: /Create blueprint/ }),
+      "empty",
+    );
+  });
+
+  it("offers Create blueprint outlined under a populated list", async () => {
+    await renderBlueprints([blueprint]);
+
+    expectEntryActionVariant(
+      screen.getByRole("link", { name: /Create blueprint/ }),
+      "populated",
+    );
   });
 });

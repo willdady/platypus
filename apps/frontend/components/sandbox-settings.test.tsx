@@ -79,7 +79,9 @@ describe("SandboxSettings loading", () => {
     mockReads({ sandbox: { isLoading: true } });
     await renderSettings();
 
-    expect(screen.getByLabelText("Loading sandbox")).toBeInTheDocument();
+    expect(
+      screen.getByRole("status", { name: "Loading sandbox" }),
+    ).toBeInTheDocument();
     expect(screen.queryByText("No sandbox configured")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Name")).not.toBeInTheDocument();
   });
@@ -88,7 +90,9 @@ describe("SandboxSettings loading", () => {
     mockReads({ sandbox: { data: null }, backends: { isLoading: true } });
     await renderSettings();
 
-    expect(screen.getByLabelText("Loading sandbox")).toBeInTheDocument();
+    expect(
+      screen.getByRole("status", { name: "Loading sandbox" }),
+    ).toBeInTheDocument();
   });
 
   it("shows a networks placeholder, not a false 'none declared', while the allowlist loads", async () => {
@@ -98,7 +102,9 @@ describe("SandboxSettings loading", () => {
     });
     await renderSettings();
 
-    expect(screen.getByLabelText("Loading networks")).toBeInTheDocument();
+    expect(
+      screen.getByRole("status", { name: "Loading networks" }),
+    ).toBeInTheDocument();
     expect(
       screen.queryByText("No networks declared by the operator."),
     ).not.toBeInTheDocument();
@@ -162,6 +168,34 @@ describe("SandboxSettings secondary reads", () => {
     expect(
       screen.queryByText("No networks declared by the operator."),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("SandboxSettings read failure", () => {
+  it("shows a cold read failure with a retry, not the form", async () => {
+    mockReads({ sandbox: { error: { status: 500, message: "Server error" } } });
+    await renderSettings();
+
+    expect(screen.getByText("Couldn't load sandbox")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Name")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(mutate).toHaveBeenCalled();
+  });
+
+  // `null` is "no sandbox configured", and a failed revalidation over loaded
+  // data must keep the form being edited rather than swap it for an error.
+  it("keeps the form when a revalidation fails over loaded data", async () => {
+    mockReads({
+      sandbox: {
+        data: DOCKER_SANDBOX,
+        error: { status: 500, message: "Server error" },
+      },
+    });
+    await renderSettings();
+
+    expect(screen.getByLabelText("Name")).toBeInTheDocument();
+    expect(screen.queryByText("Couldn't load sandbox")).not.toBeInTheDocument();
   });
 });
 
@@ -414,6 +448,40 @@ describe("SandboxSettings save", () => {
       `${SANDBOX_URL}?force=true`,
     ]);
   });
+
+  it("keeps a refused forced switch open with the backend's message, then retries", async () => {
+    stubSaveSequence(
+      {
+        status: 502,
+        body: { error: "Teardown failed, retry with force=true" },
+      },
+      { status: 409, body: { error: "Sandbox backend is busy" } },
+      { status: 200, body: {} },
+    );
+    mockReads({ sandbox: { data: DOCKER_SANDBOX } });
+    await renderSettings();
+
+    save();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Switch anyway" }),
+    );
+
+    const dialog = await screen.findByRole("dialog");
+    expect(
+      await within(dialog).findByText("Sandbox backend is busy"),
+    ).toBeVisible();
+    expect(toastError).not.toHaveBeenCalled();
+    expect(toastSuccess).not.toHaveBeenCalled();
+
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Switch anyway" }),
+    );
+
+    await waitFor(() =>
+      expect(toastSuccess).toHaveBeenCalledWith("Sandbox configured"),
+    );
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
 });
 
 describe("SandboxSettings delete", () => {
@@ -463,6 +531,34 @@ describe("SandboxSettings delete", () => {
       [`${SANDBOX_URL}?force=true`, "DELETE"],
     ]);
     expect(mutate).toHaveBeenCalledWith(null, { revalidate: false });
+  });
+
+  it("keeps a refused forced delete open with the backend's message", async () => {
+    stubSaveSequence(
+      {
+        status: 502,
+        body: { error: "Destroy failed, retry with force=true" },
+      },
+      { status: 409, body: { error: "Sandbox is still running" } },
+    );
+    mockReads({ sandbox: { data: DOCKER_SANDBOX } });
+    await renderSettings();
+
+    const deleteDialog = await openDelete();
+    fireEvent.click(
+      within(deleteDialog).getByRole("button", { name: "Delete" }),
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Delete anyway" }),
+    );
+
+    const dialog = await screen.findByRole("dialog");
+    expect(
+      await within(dialog).findByText("Sandbox is still running"),
+    ).toBeVisible();
+    expect(toastError).not.toHaveBeenCalled();
+    expect(toastSuccess).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 });
 

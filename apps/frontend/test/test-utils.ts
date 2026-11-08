@@ -1,5 +1,5 @@
 import { useMemo, useSyncExternalStore } from "react";
-import { vi, type Mock } from "vitest";
+import { expect, vi, type Mock } from "vitest";
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
@@ -142,6 +142,22 @@ export function jsonResponse(status: number, body: unknown): Response {
     statusText: "",
     json: () => Promise.resolve(body),
   } as unknown as Response;
+}
+
+/**
+ * Asserts an entry button's variant against the list's emptiness: solid
+ * (`default`) inside the EmptyCard, outlined in the footer once rows exist.
+ */
+export function expectEntryActionVariant(
+  link: HTMLElement,
+  state: "empty" | "populated",
+) {
+  if (state === "empty") {
+    expect(link).toHaveClass("bg-primary");
+    return;
+  }
+  expect(link).toHaveClass("border");
+  expect(link).not.toHaveClass("bg-primary");
 }
 
 /** Stubs global `fetch` to resolve with an accepted (2xx) save. */

@@ -1,10 +1,10 @@
 "use client";
 
 import { useMemo } from "react";
-import { ListTree, TriangleAlert } from "lucide-react";
+import { TriangleAlert } from "lucide-react";
 import type { RunEvent, TriggerRunStatus } from "@platypus/schemas";
 import { ActivityRow, activityColor } from "@/components/activity-row";
-import { EmptyCard } from "@/components/empty-card";
+import { ListState } from "@/components/list-state";
 import {
   Tooltip,
   TooltipContent,
@@ -112,13 +112,9 @@ export function RunTimeline({
   );
 
   if (layout.rows.length === 0) {
-    return (
-      <EmptyCard
-        icon={<ListTree />}
-        title="No timeline"
-        description={RUN_TIMELINE_EMPTY_NOTICE}
-      />
-    );
+    // A section state, not a screen card. The full notice stays: it explains
+    // why a run can have no timeline, which a one-line state can't (#1852).
+    return <ListState variant="empty">{RUN_TIMELINE_EMPTY_NOTICE}</ListState>;
   }
 
   return (

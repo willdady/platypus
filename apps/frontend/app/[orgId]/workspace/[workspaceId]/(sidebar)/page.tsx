@@ -22,6 +22,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   ButtonRowSkeleton,
   CardGridSkeleton,
+  LoadingRegion,
   SkeletonLine,
 } from "@/components/list-skeletons";
 import { NoProvidersEmptyState } from "@/components/no-providers-empty-state";
@@ -100,9 +101,9 @@ function CollapsibleSectionSkeleton({
  */
 function WorkspaceSkeleton() {
   return (
-    <div
+    <LoadingRegion
+      label="Loading workspace"
       className="flex flex-col gap-8 px-4 md:px-8 py-8 pb-32 max-w-6xl mx-auto"
-      aria-label="Loading workspace"
     >
       {/* Header: org name, then icon + workspace name, settings link */}
       <div className="flex flex-col">
@@ -172,7 +173,7 @@ function WorkspaceSkeleton() {
         <TriggerCardsSkeleton cards={2} />
         <ButtonRowSkeleton className="flex-wrap" widths={["w-36", "w-32"]} />
       </CollapsibleSectionSkeleton>
-    </div>
+    </LoadingRegion>
   );
 }
 

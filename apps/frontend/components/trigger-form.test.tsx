@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import {
   authMock,
   swrMock,
@@ -8,8 +14,10 @@ import {
   resetFormHarness,
   authState,
   stubAcceptedSave,
+  stubRejectedSave,
   savedBody,
   push,
+  toastError,
 } from "@/test/form-test-harness";
 import { selectOption } from "@/test/test-utils";
 import { getBrowserTimezone } from "@/lib/timezones";
@@ -657,5 +665,38 @@ describe("TriggerForm — Inbound Triggers", () => {
       ),
     );
     expect(await screen.findByDisplayValue("pit_regenerated")).toBeVisible();
+  });
+
+  it("keeps a refused token regenerate in the dialog with the backend's message", async () => {
+    setDataFor("/triggers/trigger-1", {
+      id: "trigger-1",
+      workspaceId: "ws1",
+      agentId: "agent-1",
+      name: "Ready for AI",
+      instruction: "Work the issue",
+      type: "inbound",
+      config: { inputs: [], tokenExpiryDays: 90 },
+      enabled: true,
+      maxRunsToKeep: 10,
+      tokenStatus: "active",
+      tokenExpiresAt: "2099-01-01T00:00:00.000Z",
+    });
+    stubRejectedSave("Token was revoked by an Org Admin", 409);
+    render(
+      <TriggerForm orgId="org1" workspaceId="ws1" triggerId="trigger-1" />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Regenerate" }));
+    const confirm = await screen.findAllByRole("button", {
+      name: "Regenerate",
+    });
+    fireEvent.click(confirm[confirm.length - 1]);
+
+    const dialog = await screen.findByRole("dialog");
+    expect(
+      await within(dialog).findByText("Token was revoked by an Org Admin"),
+    ).toBeVisible();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(toastError).not.toHaveBeenCalled();
   });
 });

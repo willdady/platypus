@@ -28,6 +28,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import {
+  agentCreateSchema,
   type Agent,
   type AgentResponse,
   type Provider,
@@ -58,7 +59,7 @@ import {
   type Serialized,
 } from "@/lib/api-write";
 import { splitPinned } from "@/lib/pinned-agents";
-import { sortByName } from "@/lib/utils";
+import { pickKeys, sortByName } from "@/lib/utils";
 import {
   ListFooter,
   ListPagination,
@@ -271,21 +272,12 @@ export function AgentsList({
     cloneName: string,
     url: string,
   ) => {
-    const {
-      id,
-      createdAt,
-      updatedAt,
-      avatarUrl,
-      scope: agentScope,
-      organizationId,
-      ...cloneData
-    } = agent;
-
+    // Exactly the create's own fields, so an identity, the list's per-Workspace
+    // pin state, or a scope the strict create refuses cannot ride along.
     const sanitizedData = Object.fromEntries(
       Object.entries({
-        ...cloneData,
+        ...pickKeys(agent, agentCreateSchema.shape),
         ...references,
-        workspaceId,
         name: cloneName,
       }).map(([key, value]) => [key, value === null ? undefined : value]),
     );

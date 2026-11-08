@@ -406,11 +406,17 @@ export function SkillsList({
 
   // The Organization's own Skills screen shows the empty card, holding the
   // buttons; the workspace home's Skills section keeps the one-line state.
-  const showCard = !workspaceId && skills.length === 0;
+  const showEmptyCard = !workspaceId && skills.length === 0;
+
+  // An EmptyCard screen shows its footer once there are rows; a ListState
+  // section (the workspace home) shows it under every state, loading and
+  // failed included.
+  const showFooter =
+    Boolean(workspaceId) || (!isLoading && !error && !showEmptyCard);
 
   const actions = (
     <>
-      <Button variant={showCard ? "default" : "outline"} asChild>
+      <Button variant={showEmptyCard ? "default" : "outline"} asChild>
         <Link href={`${editBasePath}/create`}>
           <Plus /> Create skill
         </Link>
@@ -468,14 +474,15 @@ export function SkillsList({
               agentLine={Boolean(workspaceId)}
               sharingLines={!workspaceId && canManageOrg}
             />
-            <ButtonRowSkeleton
-              className="mt-4"
-              widths={["w-32", ...(canAttach && workspaceId ? ["w-44"] : [])]}
-            />
+            {/* The Workspace home's footer shows in every state, so only the
+                Organization screen reserves it as a skeleton. */}
+            {!workspaceId && (
+              <ButtonRowSkeleton className="mt-4" widths={["w-32"]} />
+            )}
           </>
         }
         empty={
-          showCard ? (
+          showEmptyCard ? (
             <EmptyCard
               icon={<Sparkles />}
               title="No skills yet"
@@ -544,9 +551,9 @@ export function SkillsList({
         }
       />
 
-      {!isLoading && !error && !showCard && (
+      {showFooter && (
         <ListFooter
-          className="mt-4"
+          className={workspaceId ? undefined : "mt-4"}
           pagination={
             <ListPagination
               page={page}

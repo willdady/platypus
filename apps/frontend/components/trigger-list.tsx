@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { CloneDialog } from "@/components/clone-dialog";
 import { replaceSearchParam } from "@/lib/search-params";
 import { TOKEN_STATUS_LABELS, TOKEN_STATUS_VARIANTS } from "@/lib/bearer-token";
-import { sortByName } from "@/lib/utils";
+import { pickKeys, sortByName } from "@/lib/utils";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ListState } from "@/components/list-state";
 import { CardGridSkeleton, SkeletonLine } from "@/components/list-skeletons";
@@ -43,6 +43,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import {
+  triggerCreateSchema,
   type Trigger,
   type Agent,
   type TriggerType,
@@ -53,7 +54,12 @@ import { formatDateTime } from "@/lib/format-date";
 import { formatRelativeTime } from "@/lib/relative-time";
 import cronstrue from "cronstrue";
 import { AgentAvatar } from "@/components/agent-avatar";
-import { writeEntity, type Scope, type Serialized } from "@/lib/api-write";
+import {
+  writeEntity,
+  type Scope,
+  type Serialized,
+  type WriteOutcome,
+} from "@/lib/api-write";
 import { useScopedList } from "@/hooks/use-scoped-list";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
 import { workspaceRoutes } from "@/lib/routes";
@@ -277,29 +283,37 @@ export function TriggerList({
   });
 
   // Only the fields a create takes: no run or token state rides along. The
-  // clone starts disabled, and an Inbound clone asks for no token.
+  // create variant is picked from the Trigger's own type, so a field added to
+  // that variant is cloned with no edit here. The clone starts disabled, and
+  // an Inbound clone asks for no token.
   const createClone = (
     original: Serialized<Trigger>,
     name: string,
     url: string,
-  ) =>
-    writeEntity<Trigger>(url, "triggers", scope, {
+  ): Promise<WriteOutcome<Trigger>> => {
+    const createSchema = triggerCreateSchema.options.find(
+      (option) => option.shape.type.value === original.type,
+    );
+    // Unreachable while the create union covers every Trigger type; answer as a
+    // refused create so the dialog can still show a reason inline.
+    if (!createSchema) {
+      return Promise.resolve({
+        outcome: "error",
+        message: `This ${original.type} Trigger cannot be cloned.`,
+      });
+    }
+
+    return writeEntity<Trigger>(url, "triggers", scope, {
       data: {
+        ...pickKeys(original, createSchema.shape),
+        // The route's Workspace, not whatever the read carried.
         workspaceId,
-        agentId: original.agentId,
-        type: original.type,
         name,
-        description: original.description ?? undefined,
-        instruction: original.instruction,
-        maxRunsToKeep: original.maxRunsToKeep,
-        search: original.search,
-        includeMemories: original.includeMemories,
-        extractMemories: original.extractMemories,
-        config: original.config,
         enabled: false,
         ...(original.type === "inbound" && { issueToken: false }),
       },
     });
+  };
 
   // The footer sits under every state, loading and failed included, as the
   // Create links did when the page drew them.

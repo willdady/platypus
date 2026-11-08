@@ -234,6 +234,15 @@ describe("RunTimeline", () => {
     expect(screen.getByText(RUN_TIMELINE_EMPTY_NOTICE)).toBeInTheDocument();
   });
 
+  // The timeline is a section of the run page, not a screen of its own: its
+  // empty state is a one-line `ListState`, whose line is a paragraph, not an
+  // `EmptyCard` title block.
+  it("draws the empty state as a section line, not a screen card", () => {
+    render(<RunTimeline events={[]} runStatus="success" />);
+
+    expect(screen.getByText(RUN_TIMELINE_EMPTY_NOTICE).tagName).toBe("P");
+  });
+
   it("marks a timeline cut at the event ceiling, on the run and on the node", () => {
     render(
       <RunTimeline

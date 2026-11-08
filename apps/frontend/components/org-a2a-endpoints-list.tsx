@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { Fragment } from "react";
 import { toast } from "sonner";
 import {
   Table,
@@ -10,9 +10,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { DisabledBadge } from "@/components/disabled-badge";
 import { ListError } from "@/components/list-state";
 import { EmptyCard } from "@/components/empty-card";
 import { Network } from "lucide-react";
@@ -22,8 +22,8 @@ import {
   LoadingRegion,
   TableSkeleton,
 } from "@/components/list-skeletons";
-import { useBackendUrl } from "@/components/auth-provider";
 import { useScopedList } from "@/hooks/use-scoped-list";
+import { useDeleteFlow } from "@/hooks/use-delete-flow";
 import { scopedUrl, writeAt, type Serialized } from "@/lib/api-write";
 import { joinUrl } from "@/lib/utils";
 import type { OrgA2aEndpoint } from "@platypus/schemas";
@@ -52,7 +52,6 @@ const COLUMNS = [
  * lasting off switch.
  */
 export function OrgA2aEndpointsList({ orgId }: { orgId: string }) {
-  const backendUrl = useBackendUrl();
   const scope = { orgId };
   const {
     data,
@@ -61,35 +60,29 @@ export function OrgA2aEndpointsList({ orgId }: { orgId: string }) {
     isLoading,
     mutate,
   } = useScopedList<OrgA2aEndpoint>("a2a/endpoints", scope);
-  const [toRevoke, setToRevoke] = useState<RevokeTarget | null>(null);
-  const [isRevoking, setIsRevoking] = useState(false);
 
-  const handleRevoke = async () => {
-    if (!backendUrl || !toRevoke) return;
-    setIsRevoking(true);
-    const { endpoint, token } = toRevoke;
-    const outcome = await writeAt(
-      joinUrl(
-        scopedUrl(backendUrl, "a2a/endpoints", scope),
-        // Names the value this row showed, so a token the Owner regenerated
-        // since the list loaded is refused rather than revoked unseen.
-        token
-          ? `/${endpoint.id}/tokens/${token.id}?${new URLSearchParams({ tokenCreatedAt: new Date(token.tokenCreatedAt).toISOString() })}`
-          : `/${endpoint.id}`,
-      ),
-      { method: "DELETE" },
-    );
-    if (outcome.outcome === "success") {
-      toast.success(token ? "Token revoked" : "Endpoint revoked");
-    } else {
-      toast.error(outcome.message);
-    }
-    // After a failure too: a token regenerated since the list loaded is
-    // refused, and the list should show the one that is current now.
-    await mutate();
-    setIsRevoking(false);
-    setToRevoke(null);
-  };
+  const revoke = useDeleteFlow<RevokeTarget>({
+    delete: async ({ endpoint, token }, backendUrl) => {
+      const outcome = await writeAt(
+        joinUrl(
+          scopedUrl(backendUrl, "a2a/endpoints", scope),
+          // Names the value this row showed, so a token the Owner regenerated
+          // since the list loaded is refused rather than revoked unseen.
+          token
+            ? `/${endpoint.id}/tokens/${token.id}?${new URLSearchParams({ tokenCreatedAt: new Date(token.tokenCreatedAt).toISOString() })}`
+            : `/${endpoint.id}`,
+        ),
+        { method: "DELETE" },
+      );
+      // After a failure too: a token regenerated since the list loaded is
+      // refused, and the list should show the one that is current now.
+      if (outcome.outcome !== "success") await mutate();
+      return outcome;
+    },
+    mutate,
+    onSuccess: ({ token }) =>
+      toast.success(token ? "Token revoked" : "Endpoint revoked"),
+  });
 
   if (isLoading) {
     return (
@@ -136,7 +129,7 @@ export function OrgA2aEndpointsList({ orgId }: { orgId: string }) {
     );
   }
 
-  const owner = toRevoke?.endpoint.ownerName ?? "the workspace owner";
+  const owner = revoke.target?.endpoint.ownerName ?? "the workspace owner";
 
   return (
     <>
@@ -157,11 +150,7 @@ export function OrgA2aEndpointsList({ orgId }: { orgId: string }) {
                   <div className="flex flex-col">
                     <div className="flex items-center gap-2">
                       <span className="font-medium">{endpoint.name}</span>
-                      {!endpoint.enabled && (
-                        <Badge variant="secondary" className="text-xs">
-                          Disabled
-                        </Badge>
-                      )}
+                      {!endpoint.enabled && <DisabledBadge />}
                     </div>
                     <span className="text-xs text-muted-foreground">
                       Agent: {endpoint.agentName}
@@ -184,7 +173,7 @@ export function OrgA2aEndpointsList({ orgId }: { orgId: string }) {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setToRevoke({ endpoint })}
+                    onClick={() => revoke.request({ endpoint })}
                   >
                     Revoke endpoint
                   </Button>
@@ -206,7 +195,7 @@ export function OrgA2aEndpointsList({ orgId }: { orgId: string }) {
                       variant="outline"
                       size="sm"
                       aria-label={`Revoke token ${token.name}`}
-                      onClick={() => setToRevoke({ endpoint, token })}
+                      onClick={() => revoke.request({ endpoint, token })}
                     >
                       Revoke token
                     </Button>
@@ -219,18 +208,19 @@ export function OrgA2aEndpointsList({ orgId }: { orgId: string }) {
       </Table>
 
       <ConfirmDialog
-        open={toRevoke !== null}
-        onOpenChange={(open) => !open && setToRevoke(null)}
-        title={toRevoke?.token ? "Revoke token" : "Revoke endpoint"}
+        open={revoke.open}
+        onOpenChange={(open) => !open && revoke.close()}
+        title={revoke.target?.token ? "Revoke token" : "Revoke endpoint"}
         description={
-          toRevoke?.token
-            ? `Calls with the token "${toRevoke.token.name}" are refused from now on, and ${owner} gets a notification. The endpoint's other tokens keep working, and the owner can issue a new token.`
-            : `The endpoint "${toRevoke?.endpoint.name}" is deleted with all of its tokens, so its URL stops working. Its chats are kept, and ${owner} gets a notification. To stop the workspace having endpoints for good, change the organization's A2A setting.`
+          revoke.target?.token
+            ? `Calls with the token "${revoke.target.token.name}" are refused from now on, and ${owner} gets a notification. The endpoint's other tokens keep working, and the owner can issue a new token.`
+            : `The endpoint "${revoke.target?.endpoint.name}" is deleted with all of its tokens, so its URL stops working. Its chats are kept, and ${owner} gets a notification. To stop the workspace having endpoints for good, change the organization's A2A setting.`
         }
-        confirmLabel={toRevoke?.token ? "Revoke token" : "Revoke endpoint"}
+        confirmLabel={revoke.target?.token ? "Revoke token" : "Revoke endpoint"}
         confirmVariant="destructive"
-        onConfirm={() => void handleRevoke()}
-        loading={isRevoking}
+        onConfirm={() => void revoke.confirm()}
+        loading={revoke.deleting}
+        error={revoke.error}
       />
     </>
   );

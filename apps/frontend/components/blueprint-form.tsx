@@ -17,7 +17,7 @@ import { SelectItem } from "@/components/ui/select";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { DetailFormState } from "@/components/detail-form-state";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
-import { ListError } from "@/components/list-state";
+import { ListError, ListState } from "@/components/list-state";
 import { useState } from "react";
 import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
 import { useRouter } from "next/navigation";
@@ -144,9 +144,9 @@ function ResourceGroup({
             onRetry={() => void mutate()}
           />
         ) : resources.length === 0 ? (
-          <FieldDescription>
+          <ListState variant="empty">
             No shared {label.toLowerCase()} in this organization yet.
-          </FieldDescription>
+          </ListState>
         ) : (
           <FieldGroup className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {resources.map((resource) => {

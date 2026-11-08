@@ -7,7 +7,9 @@ import {
   resetListHarness,
   renderList,
   stubAcceptedSave,
+  stubRejectedSave,
   mutate,
+  toastError,
 } from "@/test/list-test-harness";
 
 vi.mock("@/components/auth-provider", () => authMock);
@@ -67,7 +69,10 @@ describe("OrgA2aEndpointsList", () => {
     expect(within(endpointRow).getByText("Agent: Helper")).toBeInTheDocument();
     expect(within(endpointRow).getByText("Support")).toBeInTheDocument();
     expect(within(endpointRow).getByText("Dana Owner")).toBeInTheDocument();
-    expect(within(endpointRow).getByText("Disabled")).toBeInTheDocument();
+    const badge = within(endpointRow).getByText("Disabled");
+    // The badge's Pause icon is decorative, so no accessible query sees it.
+    // eslint-disable-next-line testing-library/no-node-access
+    expect(badge.querySelector("svg")).not.toBeNull();
     expect(within(tokenRow).getByText("Telegram")).toBeInTheDocument();
     expect(within(tokenRow).getByText("Expiring soon")).toBeInTheDocument();
     expect(within(tokenRow).getByText("Never")).toBeInTheDocument();
@@ -138,6 +143,23 @@ describe("OrgA2aEndpointsList", () => {
       "http://test/organizations/org1/a2a/endpoints/ep-1/tokens/tok-1?tokenCreatedAt=2026-07-01T10%3A00%3A00.000Z",
       expect.objectContaining({ method: "DELETE" }),
     );
+  });
+
+  it("keeps a refused revoke in the dialog and still revalidates", async () => {
+    stubRejectedSave("Token was regenerated since it was shown", 409);
+    mockScopedSWR({ "/a2a/endpoints": [endpoint()] }, { strict: true });
+    await renderList(<OrgA2aEndpointsList orgId="org1" />);
+
+    await revoke("Revoke token Telegram", "Revoke token");
+
+    const dialog = await screen.findByRole("dialog");
+    expect(
+      await within(dialog).findByText(
+        "Token was regenerated since it was shown",
+      ),
+    ).toBeVisible();
+    expect(toastError).not.toHaveBeenCalled();
+    await waitFor(() => expect(mutate).toHaveBeenCalled());
   });
 
   it("says so when no Workspace has one", async () => {

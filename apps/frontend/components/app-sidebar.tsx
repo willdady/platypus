@@ -39,6 +39,8 @@ import {
   SidebarSeparator,
 } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
+import { LoadingRegion } from "@/components/list-skeletons";
+import { ListState } from "@/components/list-state";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -422,8 +424,10 @@ export function AppSidebar() {
               {/* Names the search the shown list answered, not the one in
                 flight, so a pending search never reads as "no matches". */}
               {chatGroups.length === 0 && shownChatList?.search && (
-                <div className="px-4 py-6 text-center text-sm text-muted-foreground">
-                  No chats match &ldquo;{shownChatList.search}&rdquo;
+                <div className="p-2">
+                  <ListState variant="empty">
+                    No chats match &ldquo;{shownChatList.search}&rdquo;
+                  </ListState>
                 </div>
               )}
               {chatGroups.map((group) => (
@@ -633,20 +637,22 @@ export function AppSidebar() {
 /** Stands in for the first chat-history group until the list first loads. */
 function ChatHistorySkeleton() {
   return (
-    <SidebarGroup role="status" aria-label="Loading chats">
-      <SidebarGroupLabel>
-        <Skeleton className="mr-2 size-4" />
-        <Skeleton className="h-3 w-20" />
-      </SidebarGroupLabel>
-      <SidebarGroupContent>
-        <SidebarMenu>
-          {Array.from({ length: 5 }, (_, i) => (
-            <SidebarMenuItem key={i}>
-              <SidebarMenuSkeleton />
-            </SidebarMenuItem>
-          ))}
-        </SidebarMenu>
-      </SidebarGroupContent>
-    </SidebarGroup>
+    <LoadingRegion label="Loading chats">
+      <SidebarGroup>
+        <SidebarGroupLabel>
+          <Skeleton className="mr-2 size-4" />
+          <Skeleton className="h-3 w-20" />
+        </SidebarGroupLabel>
+        <SidebarGroupContent>
+          <SidebarMenu>
+            {Array.from({ length: 5 }, (_, i) => (
+              <SidebarMenuItem key={i}>
+                <SidebarMenuSkeleton />
+              </SidebarMenuItem>
+            ))}
+          </SidebarMenu>
+        </SidebarGroupContent>
+      </SidebarGroup>
+    </LoadingRegion>
   );
 }

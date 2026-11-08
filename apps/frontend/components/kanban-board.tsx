@@ -31,6 +31,7 @@ import {
 } from "@/lib/api-write";
 import { moveCard, type ColumnWithCards } from "@/lib/board-moves";
 import { useBackendUrl } from "@/components/auth-provider";
+import { FetchErrorNotice } from "@/components/fetch-error-notice";
 import { KanbanColumnComponent } from "@/components/kanban-column";
 import { KanbanCardComponent } from "@/components/kanban-card";
 import { KanbanCardDialog } from "@/components/kanban-card-dialog";
@@ -49,6 +50,7 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
+import { LoadingRegion } from "@/components/list-skeletons";
 import { workspaceRoutes } from "@/lib/routes";
 import { replaceSearchParam } from "@/lib/search-params";
 
@@ -315,12 +317,20 @@ export function KanbanBoard({
     ],
   );
 
+  // The card dialog's delete confirm shows the outcome inline, so a refusal
+  // is returned rather than toasted. A successful delete leaves the card it
+  // destroyed: clear the `cardId` param and revalidate the board.
   const handleCardDelete = useCallback(
     async (cardId: string) => {
       const column = columns.find((col) =>
         col.cards.some((c) => c.id === cardId),
       );
-      if (!column) return;
+      if (!column) {
+        return {
+          outcome: "notFound" as const,
+          message: "Card not found",
+        };
+      }
       const outcome = await writeEntity(
         backendUrl,
         `${boardPath}/cards`,
@@ -330,9 +340,8 @@ export function KanbanBoard({
       if (outcome.outcome === "success") {
         updateCardIdParam(null);
         await mutate();
-      } else {
-        toast.error(outcome.message);
       }
+      return outcome;
     },
     [columns, backendUrl, boardPath, scope, mutate, updateCardIdParam],
   );
@@ -341,16 +350,22 @@ export function KanbanBoard({
   // last good state on screen rather than swapping a loaded board for an error.
   if (error && !data) {
     return (
-      <div role="alert" className="p-4 text-destructive">
-        Failed to load board.
+      <div className="p-4">
+        <FetchErrorNotice
+          error={error}
+          subject="board"
+          backHref={routes.root}
+          backLabel="Back to workspace"
+          onRetry={() => void mutate()}
+        />
       </div>
     );
   }
   if (!data) {
     return (
-      <div
+      <LoadingRegion
+        label="Loading board"
         className="flex flex-col h-full min-w-0 overflow-hidden"
-        aria-label="Loading board"
       >
         <div className="flex items-center justify-between px-4 py-2 border-b shrink-0">
           <Skeleton className="h-7 w-40" />
@@ -397,7 +412,7 @@ export function KanbanBoard({
             <div className="w-40 min-w-40 shrink-0 bg-muted/30 rounded-lg border border-dashed border-muted-foreground/30" />
           </div>
         </div>
-      </div>
+      </LoadingRegion>
     );
   }
 

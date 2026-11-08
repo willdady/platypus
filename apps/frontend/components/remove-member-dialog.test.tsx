@@ -4,10 +4,12 @@ import type { OrgMemberListItem } from "@platypus/schemas";
 import {
   authMock,
   mockScopedSWR,
+  mutate,
   renderList,
   resetListHarness,
   stubAcceptedSave,
   stubRejectedSave,
+  stubSaveSequence,
   swrMock,
   toastError,
 } from "@/test/list-test-harness";
@@ -82,20 +84,57 @@ beforeEach(() => {
 });
 
 describe("RemoveMemberDialog", () => {
-  it("toasts a last-admin refusal and stays open", async () => {
+  it("keeps a last-admin refusal inline and stays open", async () => {
     mockScopedSWR({ "/workspaces": [] }, { strict: true });
     stubRejectedSave("Cannot remove the last organization admin", 409);
     await renderDialog([olive, nina]);
 
     fireEvent.click(removeButton());
 
-    await waitFor(() =>
-      expect(toastError).toHaveBeenCalledWith(
-        "Cannot remove the last organization admin",
-      ),
-    );
+    expect(
+      await screen.findByText("Cannot remove the last organization admin"),
+    ).toBeVisible();
+    expect(toastError).not.toHaveBeenCalled();
     expect(onSuccess).not.toHaveBeenCalled();
     expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("clears a refusal when the removal is retried", async () => {
+    mockScopedSWR({ "/workspaces": [] }, { strict: true });
+    stubSaveSequence(
+      { status: 409, body: { error: "Cannot remove the last admin" } },
+      { status: 200, body: { message: "ok" } },
+    );
+    await renderDialog([olive, nina]);
+
+    fireEvent.click(removeButton());
+    expect(
+      await screen.findByText("Cannot remove the last admin"),
+    ).toBeVisible();
+
+    fireEvent.click(removeButton());
+    await waitFor(() => expect(onSuccess).toHaveBeenCalled());
+    expect(
+      screen.queryByText("Cannot remove the last admin"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows a retryable error when the Workspaces read fails", async () => {
+    mockScopedSWR(
+      { "/workspaces": { error: new Error("Workspaces are unavailable") } },
+      { strict: true },
+    );
+    await renderDialog([olive, nina]);
+
+    expect(
+      screen.getByText(
+        /Failed to load workspaces\. Workspaces are unavailable/,
+      ),
+    ).toBeVisible();
+    expect(removeButton()).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(mutate).toHaveBeenCalled();
   });
 
   it("is a plain confirmation for a member who owns no Workspaces, and never claims to delete any", async () => {

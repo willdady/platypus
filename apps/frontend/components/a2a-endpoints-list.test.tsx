@@ -10,6 +10,7 @@ import {
   renderList,
   menuItemLabels,
   confirmDialog,
+  expectEntryActionVariant,
   stubAcceptedSave,
 } from "@/test/list-test-harness";
 import { openDropdownMenu } from "@/test/test-utils";
@@ -101,6 +102,28 @@ describe("A2aEndpointsList", () => {
     expect(
       screen.getByRole("link", { name: /Add endpoint/ }),
     ).toBeInTheDocument();
+  });
+
+  // The same button renders once: solid inside the card while the list is
+  // empty, outlined below the list once it has rows.
+  it("offers Add endpoint solid inside the empty card", async () => {
+    mockScopedSWR({ "/a2a-endpoints": [] }, { strict: true });
+    await renderList(<A2aEndpointsList orgId="org1" workspaceId="ws1" />);
+
+    expectEntryActionVariant(
+      screen.getByRole("link", { name: /Add endpoint/ }),
+      "empty",
+    );
+  });
+
+  it("offers Add endpoint outlined under a populated list", async () => {
+    mockScopedSWR({ "/a2a-endpoints": [ENDPOINT] }, { strict: true });
+    await renderList(<A2aEndpointsList orgId="org1" workspaceId="ws1" />);
+
+    expectEntryActionVariant(
+      screen.getByRole("link", { name: /Add endpoint/ }),
+      "populated",
+    );
   });
 
   it("tells an Org Admin in another Owner's workspace only the workspace owner can add one", async () => {

@@ -9,6 +9,7 @@ import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useEntityForm } from "@/hooks/use-entity-form";
 import { ContextsList } from "@/components/contexts-list";
 import { ListError } from "@/components/list-state";
+import { LoadingRegion } from "@/components/list-skeletons";
 import { Skeleton } from "@/components/ui/skeleton";
 
 type ContextWithWorkspaceName = {
@@ -94,12 +95,12 @@ function ContextsPage() {
                   />
                 ) : isLoading || !error ? (
                   // The textarea and its character counter.
-                  <div aria-label="Loading global context">
+                  <LoadingRegion label="Loading global context">
                     <Skeleton className="h-16 w-full" />
                     <div className="flex justify-end mt-1">
                       <Skeleton className="h-4 w-14" />
                     </div>
-                  </div>
+                  </LoadingRegion>
                 ) : (
                   <ListError
                     error={error}

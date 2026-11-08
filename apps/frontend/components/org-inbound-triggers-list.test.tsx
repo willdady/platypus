@@ -7,7 +7,9 @@ import {
   resetListHarness,
   renderList,
   stubAcceptedSave,
+  stubRejectedSave,
   mutate,
+  toastError,
 } from "@/test/list-test-harness";
 
 vi.mock("@/components/auth-provider", () => authMock);
@@ -49,6 +51,20 @@ describe("OrgInboundTriggersList", () => {
     expect(within(dataRow).getByText("Never")).toBeInTheDocument();
   });
 
+  it("badges a disabled Trigger with the shared Disabled badge", async () => {
+    mockScopedSWR(
+      { "/inbound-triggers": [row({ enabled: false })] },
+      { strict: true },
+    );
+    await renderList(<OrgInboundTriggersList orgId="org1" />);
+
+    const [, dataRow] = screen.getAllByRole("row");
+    const badge = within(dataRow).getByText("Disabled");
+    // The badge's Pause icon is decorative, so no accessible query sees it.
+    // eslint-disable-next-line testing-library/no-node-access
+    expect(badge.querySelector("svg")).not.toBeNull();
+  });
+
   it("revokes the token the row showed through the Org route and revalidates", async () => {
     const fetchMock = stubAcceptedSave({ message: "Token revoked" });
     mockScopedSWR({ "/inbound-triggers": [row()] }, { strict: true });
@@ -65,6 +81,27 @@ describe("OrgInboundTriggersList", () => {
       "http://test/organizations/org1/inbound-triggers/trig-1/token?tokenCreatedAt=2026-07-01T10%3A00%3A00.000Z",
       expect.objectContaining({ method: "DELETE" }),
     );
+  });
+
+  it("keeps a refused revoke in the dialog and still revalidates", async () => {
+    stubRejectedSave("A newer token was issued since this list loaded", 409);
+    mockScopedSWR({ "/inbound-triggers": [row()] }, { strict: true });
+    await renderList(<OrgInboundTriggersList orgId="org1" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Revoke token" }));
+    const buttons = await screen.findAllByRole("button", {
+      name: "Revoke token",
+    });
+    fireEvent.click(buttons[buttons.length - 1]);
+
+    const dialog = await screen.findByRole("dialog");
+    expect(
+      await within(dialog).findByText(
+        "A newer token was issued since this list loaded",
+      ),
+    ).toBeVisible();
+    expect(toastError).not.toHaveBeenCalled();
+    await waitFor(() => expect(mutate).toHaveBeenCalled());
   });
 
   it("badges only a token that needs attention, not an active one", async () => {

@@ -18,6 +18,7 @@ import { RowActionsMenu } from "@/components/row-actions-menu";
 import { writeEntity, type Serialized } from "@/lib/api-write";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
 import { useEnabledToggle } from "@/hooks/use-enabled-toggle";
+import { ListFooter } from "@/components/list-pagination";
 import { workspaceRoutes } from "@/lib/routes";
 import {
   ButtonSkeleton,
@@ -75,8 +76,8 @@ function A2aEndpointsList({
 
   const endpoints = toggle.apply(results);
 
-  const addButton = ownsWorkspace && (
-    <Button asChild>
+  const actions = ownsWorkspace && (
+    <Button variant={endpoints.length ? "outline" : "default"} asChild>
       <Link href={routes.settings.createA2aEndpoint}>
         <Plus /> Add endpoint
       </Link>
@@ -93,7 +94,7 @@ function A2aEndpointsList({
             ? "Add an endpoint to expose an agent in this workspace over A2A."
             : "There are no A2A endpoints in this workspace. Only the workspace owner can add one."
         }
-        action={addButton}
+        action={actions}
       />
     );
   }
@@ -148,7 +149,7 @@ function A2aEndpointsList({
           </li>
         ))}
       </ul>
-      {addButton}
+      <ListFooter className="mt-4">{actions}</ListFooter>
       <DeleteConfirmDialog
         open={deleteFlow.open}
         onOpenChange={(open) => !open && deleteFlow.close()}
