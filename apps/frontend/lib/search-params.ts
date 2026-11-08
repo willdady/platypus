@@ -1,4 +1,10 @@
 /**
+ * The value a Select carries for "no filter" — Radix rejects an empty one.
+ * Every list that offers an "all" option shares this one value.
+ */
+export const ALL = "all";
+
+/**
  * Sets one query-string param, or removes it for `null`/empty, without a new
  * history entry.
  *

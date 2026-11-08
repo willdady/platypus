@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useSearchParams } from "next/navigation";
-import { replaceSearchParam } from "@/lib/search-params";
+import { ALL } from "@/lib/search-params";
 import { sortByName } from "@/lib/utils";
 import { defaultFilter } from "cmdk";
 import { Badge } from "@/components/ui/badge";
@@ -28,8 +27,8 @@ import {
   ListFooter,
   ListPagination,
   NO_GHOSTS,
-  pageOf,
 } from "@/components/list-pagination";
+import { ListToolbar } from "@/components/list-toolbar";
 import { RowActionsMenu } from "@/components/row-actions-menu";
 import {
   Tooltip,
@@ -47,6 +46,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { type SkillResponse, type Agent } from "@platypus/schemas";
+import { useListParams, useSearchParamInput } from "@/hooks/use-list-params";
 import { useScopedList } from "@/hooks/use-scoped-list";
 import { useSkillImportAllowed } from "@/hooks/use-skill-import-allowed";
 import Link from "next/link";
@@ -87,8 +87,6 @@ import {
 // always carries `scope`.
 type SerializedSkill = Serialized<SkillResponse>;
 
-/** The value a Select carries for "no filter" — Radix rejects an empty one. */
-const ALL = "all";
 /** The agent-filter value for Skills attached to no agent. */
 const UNATTACHED = "unattached";
 /** Skills per page on the Workspace home. */
@@ -196,27 +194,15 @@ export function SkillsList({
   const [skillToManage, setSkillToManage] = useState<SerializedSkill | null>(
     null,
   );
-  const searchParams = useSearchParams();
-
   // Both filters live in the URL, so they survive a refresh and Back. Only the
   // Workspace home shows the controls; elsewhere the params are ignored.
-  const agentFilter = (workspaceId && searchParams.get("skillAgent")) || ALL;
-  // The input reads local state, seeded from the URL: the URL write below
-  // lands a render later, and an input bound straight to it drops keystrokes.
-  const [nameFilter, setNameFilterState] = useState(
-    () => (workspaceId && searchParams.get("skillQuery")) || "",
-  );
-
+  const { get, set, page: pageItems } = useListParams("skillsPage");
+  const agentFilter = (workspaceId && get("skillAgent")) || ALL;
   // A default value leaves its param out. A new filter starts on page 1.
-  const setNameFilter = (value: string) => {
-    setNameFilterState(value);
-    replaceSearchParam("skillQuery", value.trim() || null);
-    replaceSearchParam("skillsPage", null);
-  };
-  const setAgentFilter = (value: string) => {
-    replaceSearchParam("skillAgent", value === ALL ? null : value);
-    replaceSearchParam("skillsPage", null);
-  };
+  const { value: nameFilter, onValueChange: setNameFilter } =
+    useSearchParamInput("skillQuery", "skillsPage");
+  const setAgentFilter = (value: string) =>
+    set("skillAgent", value === ALL ? null : value);
 
   // Resolved once per render and reused for the list's read and every write
   // below, rather than re-deriving the Organization-vs-Workspace branch at
@@ -356,7 +342,9 @@ export function SkillsList({
       ? agentFilter
       : ALL;
 
-  const query = nameFilter.trim();
+  // The Organization surface has no filters, so a stale search param there is
+  // ignored rather than hiding rows.
+  const query = workspaceId ? nameFilter.trim() : "";
   const matchesAgent = (skill: SerializedSkill) => {
     if (activeAgentFilter === ALL) return true;
     const skillAgents = getAgentsForSkill(skill.id);
@@ -375,7 +363,7 @@ export function SkillsList({
   // the agent filter would have nothing to offer there. Nothing to filter, no
   // controls.
   const controls = !isLoading && !error && workspaceId && skills.length > 0 && (
-    <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+    <ListToolbar>
       <SearchInput
         placeholder="Search skills…"
         aria-label="Search skills"
@@ -401,7 +389,7 @@ export function SkillsList({
           <SelectItem value={UNATTACHED}>Unattached</SelectItem>
         </SelectContent>
       </Select>
-    </div>
+    </ListToolbar>
   );
 
   // The Organization's own Skills screen shows the empty card, holding the
@@ -446,7 +434,7 @@ export function SkillsList({
 
   // Paged on the Workspace home only; the Organization surface lists them all.
   const page = workspaceId
-    ? pageOf(searchParams.get("skillsPage"), shown, SKILLS_PAGE_SIZE)
+    ? pageItems(shown, SKILLS_PAGE_SIZE)
     : { items: shown, page: 1, pageCount: 1, ...NO_GHOSTS };
 
   return (
