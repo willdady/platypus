@@ -74,6 +74,12 @@ describe("WebhookForm event picker", () => {
 describe("WebhookForm form submission", () => {
   beforeEach(() => resetFormHarness());
 
+  it("stops the Name at 100 characters, the most a save accepts", () => {
+    renderForm();
+
+    expect(screen.getByLabelText("Name")).toHaveAttribute("maxLength", "100");
+  });
+
   it("saves on Enter in the Name field", async () => {
     const fetchMock = stubAcceptedSave({ id: "w1" });
     renderForm();

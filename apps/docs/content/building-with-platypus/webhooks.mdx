@@ -58,7 +58,7 @@ Go to **Workspace settings → Webhooks** and click **Add webhook**.
 
 ### Configure the endpoint
 
-- **Name** — a label for the Webhook.
+- **Name** — a label for the Webhook (1–100 characters).
 - **URL** — where the `POST` is sent. **Must be HTTPS**, and must pass the
   deployment's [egress guard](/self-hosting/configuration#the-egress-guard):
   loopback and cloud-metadata addresses are refused, and so are private
@@ -502,8 +502,8 @@ Every delivery includes:
 | `X-Webhook-Timestamp` | ISO 8601 timestamp, identical to the body's `timestamp`. |
 
 Any **Custom Headers** you configured on the Webhook are sent alongside these.
-A custom header with the same name replaces Platypus's own, so don't reuse
-`X-Webhook-Signature` or `X-Webhook-Timestamp` — verification then fails.
+Don't name one `X-Webhook-Signature` or `X-Webhook-Timestamp`: it can break
+signature verification.
 
 ## Verifying the signature
 

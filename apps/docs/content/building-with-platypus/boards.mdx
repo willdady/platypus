@@ -1,6 +1,6 @@
 ---
 title: Boards
-description: Kanban boards in a Workspace — create a board with columns, labels, and cards, and let Agents read and update it through the Kanban Tool sets.
+description: Kanban boards in a Workspace — create a Board with columns, labels, and cards, and let Agents read and update it through the Kanban Tool sets.
 ---
 
 import { Callout, Steps } from "nextra/components";
@@ -9,57 +9,63 @@ import { Callout, Steps } from "nextra/components";
 
 A **Board** is a Kanban board scoped to your Workspace: columns you arrange
 left-to-right, and cards you drag between them. Boards are a shared working
-surface — both you and your Agents can read and update the same board, which
+surface — both you and your Agents can read and update the same Board, which
 makes them a natural place for an Agent to track tasks, triage items, or hand
 work back to you.
 
-## Create a board
+## Create a Board
 
 <Steps>
 
-### Open the board form
+### Open the Board form
 
 On the Workspace home, expand the **Boards** section and click **Create board**.
 The section only appears once the Workspace has a Provider.
 
 ### Name it and add labels
 
-- **Name** — what to call the board (1–100 characters, unique within the
+- **Name** — what to call the Board (1–100 characters, unique within the
   Workspace).
 - **Description** _(optional)_ — up to 500 characters.
 - **Labels** _(optional)_ — add colour-coded labels (each has a name and a colour
   from a fixed palette) that you can later apply to cards. Use **Add label** for
   each, and the delete button to remove one.
 
-Save to create the board. It starts with three columns — **To Do**,
+Save to create the Board. It starts with three columns — **To Do**,
 **In Progress** and **Done** — which you rename, move or delete like any other.
 You can edit the name, description, and labels anytime
-from the gear beside the board's name (**Board settings**), or **Edit** in the
-board card's three-dot menu on the Workspace home.
+from the gear beside the Board's name, or **Edit** in the
+Board card's three-dot menu on the Workspace home.
 
 </Steps>
 
 <Callout type="warning">
-  Deleting a label from a board also removes it from every card that was using
+  Deleting a label from a Board also removes it from every card that was using
   it. The cards keep everything else — title, description, assignee — and there
   is no undo for the label itself.
 </Callout>
 
-## Find a board
+## Find a Board
 
-The **Boards** section of your Workspace lists every board alphabetically. To
+The **Boards** section of your Workspace lists every Board alphabetically. To
 narrow it, type part of a name into **Search boards...** above the list; the
 letters only need to appear in order, so `spl` finds `Sprint planning`.
 
 A long list is split into pages; use the arrows under the list to move
 between them. Changing the search goes back to the first page.
 
-## Work the board
+## Delete a Board
 
-The board view scrolls horizontally across its **columns**. From here you:
+Choose **Delete** from the Board card's three-dot menu on the Workspace home, or
+in the Board's settings, and type `Delete board` to confirm. It takes every
+column, card and comment on the Board with it, and there is no undo.
+
+## Work the Board
+
+The Board view scrolls horizontally across its **columns**. From here you:
 
 - **Add columns** with the dashed **Add column** button at the end of the row.
-  Column names must be unique on the board.
+  Column names must be unique on the Board.
   A column's three-dot menu holds four items: **Edit** (which is where you
   rename it), **Move column left**, **Move column right**, and **Delete**.
   **Delete** refuses a column that still holds cards — move or
@@ -71,7 +77,7 @@ The board view scrolls horizontally across its **columns**. From here you:
 - **From the keyboard**, Tab to a card and press Enter to open it. To move a
   card or column, press Space to pick it up, the arrow keys to move it, and
   Space again to drop it. Escape puts it back.
-- **Switch boards** from the board-name dropdown above the columns.
+- **Switch Boards** from the Board-name dropdown above the columns.
 
 Click a card, or press Enter on it, to open its detail dialog, where you can edit:
 
@@ -79,6 +85,10 @@ Click a card, or press Enter on it, to open its detail dialog, where you can edi
 - **Column**, **Labels**, and **Priority** (None, Low, Medium, High, Urgent).
 - **Due Date** and a single **Assignee** — yourself or an Agent.
 - **Comments** — a discussion on the card (also Markdown).
+
+Changes to the card's fields apply only when you click **Save**; comments post
+on their own. **Delete**, beside **Save**, removes the card after a confirm,
+along with its comments and history.
 
 You can edit or delete only your own comments, unless you are an Org Admin.
 That includes comments an Agent wrote: the **Delete** button is there, but the
@@ -90,17 +100,17 @@ starts collapsed; click it to open. On a phone, **Details**, **Comments** and
 
 <Callout type="info">
   Cards record who created and last edited them — and that can be an **Agent**,
-  not just a person. When an Agent works a board, its activity shows up in the
+  not just a person. When an Agent works a Board, its activity shows up in the
   card metadata and comments just like a teammate's.
 </Callout>
 
-## Agents and boards
+## Agents and Boards
 
 Grant an Agent the **Kanban Cards** tool set (in the [Agent form](/building-with-platypus/agents)'s
-**Tools** card, under _Kanban_) and it can operate boards directly. The tool
+**Tools** card, under _Kanban_) and it can operate Boards directly. The tool
 set lets an Agent:
 
-- **list boards** and **read a board's state** (columns and card summaries),
+- **list Boards** and **read a Board's state** (columns and card summaries),
 - **list Agents** it can assign cards to,
 - **read, create, and update cards** — title, description, labels, priority, due
   date, and assignee,
@@ -112,34 +122,34 @@ set lets an Agent:
   An Agent is held to the same rules as a person editing the card. It can only
   assign someone who can work in this Workspace: a member of the Organization,
   or an Agent available here. Labels are stricter than they look. A new card
-  with a label the board doesn't have is refused, but an edit or bulk edit drops
+  with a label the Board doesn't have is refused, but an edit or bulk edit drops
   the unknown label and reports success, so the Agent believes it applied it.
-  Tell it to read the board's labels first and use their ids, rather than
+  Tell it to read the Board's labels first and use their ids, rather than
   inventing one. Comments are the exception the other way: you can edit or
   delete only your own comments, but an Agent can edit or delete any comment on
   a card, yours included.
 </Callout>
 
-The board's own structure is a separate grant. **Kanban Boards**, in the same
-_Kanban_ category, lets an Agent **create, rename, relabel and delete boards**,
+The Board's own structure is a separate grant. **Kanban Boards**, in the same
+_Kanban_ category, lets an Agent **create, rename, relabel and delete Boards**,
 and **add, rename, reorder and delete columns**. Grant it only to an Agent whose
-job is to set boards up: deleting a board or a column deletes every card in it.
-The Agent has to name the board exactly to delete it, which stops a misread id,
-not a model that decided the board should go.
+job is to set Boards up: deleting a Board or a column deletes every card in it.
+The Agent has to name the Board exactly to delete it, which stops a misread id,
+not a model that decided the Board should go.
 
-This is what makes boards a two-way surface: you arrange the work, and an Agent
+This is what makes Boards a two-way surface: you arrange the work, and an Agent
 — in a Chat or on a schedule via a [Trigger](/building-with-platypus/triggers) —
 can keep it moving. Board activity (cards created, moved, updated, or deleted)
-can in turn fire **Event** Triggers, so a change on a board can kick off another
-Agent run. Deleting a whole board is not card activity: its cards fire
+can in turn fire **Event** Triggers, so a change on a Board can kick off another
+Agent run. Deleting a whole Board is not card activity: its cards fire
 nothing.
 
 ### When two people move the same card
 
-An Agent run can take minutes, and a board can be open in someone's browser the
+An Agent run can take minutes, and a Board can be open in someone's browser the
 whole time — so a card can move while another move is already on its way.
 Platypus refuses the later move rather than letting it silently overwrite the
-first. The same holds between two Agents working one board at once, when the
+first. The same holds between two Agents working one Board at once, when the
 moving Agent names the column it last saw the card in: a move made from a stale
 reading is refused, and the Agent is told to look again.
 
@@ -168,8 +178,8 @@ Two things it deliberately does not record:
 - **The description's text.** An entry says the description was edited and who
   edited it, never what it said before. Use a Comment if the previous wording
   matters.
-- **Anything that happened to the board rather than the card.** Delete a Label
-  at board level and it disappears from every card carrying it, and no card's
+- **Anything that happened to the Board rather than the card.** Delete a Label
+  at Board level and it disappears from every card carrying it, and no card's
   history mentions it. Entries written earlier still show that Label by the
   name it had at the time.
 
@@ -177,7 +187,7 @@ Two things it deliberately does not record:
   A card keeps its **50 most recent** entries. Past that, the oldest are dropped
   — permanently, and with no copy kept anywhere. Treating History as an audit
   trail is the trap: it is there to tell whoever picks the card up next how it
-  got here, and a busy card outruns it. If you need a durable record of board
+  got here, and a busy card outruns it. If you need a durable record of Board
   activity, send `card.*` events to a
   [Webhook](/building-with-platypus/webhooks) and keep them your side. Deleting
   a card deletes its history with it.
@@ -190,4 +200,4 @@ acting on it.
 ## Where to next
 
 - **[Triggers](/building-with-platypus/triggers)** — fire an Agent when a card
-  changes, or update a board on a schedule.
+  changes, or update a Board on a schedule.
