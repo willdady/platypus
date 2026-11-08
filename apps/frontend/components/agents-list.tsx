@@ -511,15 +511,11 @@ export function AgentsList({
 
       <DetachSharedDialog
         detach={orgAgentDetach}
-        title="Detach shared agent"
-        description={(selected) => (
-          <>
-            Detach <strong>{selected.name}</strong> from this workspace? The
-            shared agent itself is not deleted; it just stops appearing here.
-          </>
-        )}
+        noun="agent"
         canDetach={canManageShared}
-        orgSettingsHref={() => `/${orgId}/settings/agents`}
+        orgSettingsHref={(selected) =>
+          orgRoutes(orgId).settings.agentDetail(selected.id)
+        }
       />
 
       <PromoteSharedDialog promote={promote} noun="agent" />

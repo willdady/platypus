@@ -38,10 +38,8 @@ function renderDialog({
     <ManageAttachmentsDialog
       orgId="org1"
       resourceType="agent"
-      resourceId="a1"
-      resourceName="Support Bot"
-      open={true}
-      onOpenChange={() => {}}
+      resource={{ id: "a1", name: "Support Bot" }}
+      onClose={() => {}}
     />,
   );
 }
@@ -107,10 +105,8 @@ describe("loading states", () => {
       <ManageAttachmentsDialog
         orgId="org1"
         resourceType="agent"
-        resourceId="a1"
-        resourceName="Support Bot"
-        open={true}
-        onOpenChange={() => {}}
+        resource={{ id: "a1", name: "Support Bot" }}
+        onClose={() => {}}
       />,
     );
 

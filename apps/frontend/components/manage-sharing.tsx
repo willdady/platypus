@@ -29,6 +29,7 @@ import { cn, sortByName } from "@/lib/utils";
 import { attachmentsEntity, scopedUrl, writeAt } from "@/lib/api-write";
 import { useScopedList } from "@/hooks/use-scoped-list";
 import { useBackendUrl } from "@/components/auth-provider";
+import type { NamedResource } from "@/hooks/use-shared-resource-actions";
 import { LoadingRegion } from "@/components/list-skeletons";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -48,11 +49,11 @@ type AttachedWorkspace = { workspaceId: string; workspaceName: string };
 function useAttachments(
   orgId: string | null,
   resourceType: ResourceType,
-  resourceId: string,
+  resourceId: string | null,
 ) {
   return useScopedList<AttachedWorkspace>(
-    attachmentsEntity(resourceType, resourceId),
-    orgId ? { orgId } : null,
+    resourceId ? attachmentsEntity(resourceType, resourceId) : "attachments",
+    orgId && resourceId ? { orgId } : null,
   );
 }
 
@@ -179,26 +180,25 @@ export function SharedWithBadge({
  * Org Admin dialog to manage where a Shared resource is attached (ADR-0007).
  * A searchable multi-select that scales to many workspaces: attached
  * workspaces show as removable chips and the list filters as you type.
- * Controlled by the caller (opened from the card's "Manage attachments" menu).
+ * Opened from the card's "Manage attachments" menu, which passes the row;
+ * `null` means closed.
  */
 export function ManageAttachmentsDialog({
   orgId,
   resourceType,
-  resourceId,
-  resourceName,
-  open,
-  onOpenChange,
+  resource,
+  onClose,
 }: {
   orgId: string;
   resourceType: ResourceType;
-  resourceId: string;
-  resourceName: string;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+  /** The Shared resource to manage, or `null` while the dialog is closed. */
+  resource: NamedResource | null;
+  onClose: () => void;
 }) {
   const backendUrl = useBackendUrl();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const resourceId = resource?.id ?? null;
 
   const {
     results: attached,
@@ -211,11 +211,11 @@ export function ManageAttachmentsDialog({
   const { results: allWorkspaces, isLoading: wsLoading } = useScopedList<{
     id: string;
     name: string;
-  }>("workspaces", open ? { orgId } : null);
+  }>("workspaces", resourceId ? { orgId } : null);
   const workspaces = sortByName(allWorkspaces);
 
   const toggle = async (workspaceId: string, isAttached: boolean) => {
-    if (!backendUrl) return;
+    if (!backendUrl || !resourceId) return;
     setBusyId(workspaceId);
     setError(null);
     try {
@@ -249,10 +249,10 @@ export function ManageAttachmentsDialog({
   const count = attached.length;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={!!resource} onOpenChange={(open) => !open && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Share “{resourceName}”</DialogTitle>
+          <DialogTitle>Share “{resource?.name}”</DialogTitle>
           <DialogDescription>
             {/* Keep the apostrophe literal, not `&apos;` — see
                 jsx-entity-whitespace.node.test.ts. */}
@@ -344,7 +344,7 @@ export function ManageAttachmentsDialog({
         </Command>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={onClose}>
             Done
           </Button>
         </DialogFooter>

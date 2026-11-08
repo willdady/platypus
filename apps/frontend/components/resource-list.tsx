@@ -65,8 +65,6 @@ export type ResourceListLabels = {
   readonly add: string;
   /** Attach CTA: "Attach shared provider" / "Attach shared MCP". */
   readonly attach: string;
-  /** Detach dialog title: "Detach shared provider" / "Detach shared MCP server". */
-  readonly detachTitle: string;
   /** Delete dialog title: "Delete Provider" / "Delete MCP server". */
   readonly deleteTitle: string;
   /** The resource named mid-sentence: "provider" / "MCP server". */
@@ -327,26 +325,15 @@ export function ResourceList({
       {!isLoading && !error && resources.length > 0 && (
         <ListFooter className="mt-4">{actions}</ListFooter>
       )}
-      {resourceToManage && (
-        <ManageAttachmentsDialog
-          orgId={orgId}
-          resourceType={config.resourceType}
-          resourceId={resourceToManage.id}
-          resourceName={resourceToManage.name}
-          open
-          onOpenChange={(open) => !open && setResourceToManage(null)}
-        />
-      )}
+      <ManageAttachmentsDialog
+        orgId={orgId}
+        resourceType={config.resourceType}
+        resource={resourceToManage}
+        onClose={() => setResourceToManage(null)}
+      />
       <DetachSharedDialog
         detach={detach}
-        title={config.labels.detachTitle}
-        description={(selected) => (
-          <>
-            Detach <strong>{selected.name}</strong> from this workspace? The
-            shared {config.labels.noun} itself is not deleted; it just stops
-            appearing here.
-          </>
-        )}
+        noun={config.labels.noun}
         canDetach={canAttach}
         orgSettingsHref={(selected) => `${orgSettingsRoot}/${selected.id}`}
       />
