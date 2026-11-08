@@ -7,6 +7,7 @@ import { HeaderHomeButton } from "@/components/header-home-button";
 import { OrgHome } from "@/components/org-home";
 import { OrgListSidebar } from "@/components/org-list-sidebar";
 import { resourcePageLayout } from "@/components/resource-page";
+import { LoadingRegion } from "@/components/list-skeletons";
 import { Skeleton } from "@/components/ui/skeleton";
 import { orgRoutes } from "@/lib/routes";
 import WorkspaceLoading from "./workspace/loading";
@@ -23,16 +24,11 @@ function MenuSkeleton() {
 
 function ContentSkeleton() {
   return (
-    <div
-      role="status"
-      aria-busy="true"
-      aria-label="Loading organization"
-      className="flex flex-col gap-4"
-    >
+    <LoadingRegion label="Loading organization" className="flex flex-col gap-4">
       <Skeleton className="h-8 w-48" />
       <Skeleton className="h-24 w-full" />
       <Skeleton className="h-24 w-full" />
-    </div>
+    </LoadingRegion>
   );
 }
 
@@ -41,10 +37,8 @@ function ContentSkeleton() {
 function AddWorkspaceSkeleton() {
   return (
     <div className="h-dvh overflow-y-auto pb-4">
-      <div
-        role="status"
-        aria-busy="true"
-        aria-label="Loading workspace setup"
+      <LoadingRegion
+        label="Loading workspace setup"
         className={resourcePageLayout.wide.outer}
       >
         <div className={resourcePageLayout.wide.inner}>
@@ -86,7 +80,7 @@ function AddWorkspaceSkeleton() {
           </div>
           <Skeleton className="h-9 w-16" />
         </div>
-      </div>
+      </LoadingRegion>
     </div>
   );
 }

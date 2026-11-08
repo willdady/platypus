@@ -1,6 +1,7 @@
 "use client";
 
 import { WorkspaceShell } from "@/components/workspace-shell";
+import { LoadingRegion } from "@/components/list-skeletons";
 import { useWorkspaceShellProps } from "@/hooks/use-workspace-shell-props";
 
 // The Workspace layout awaits the workspace on the server, and a segment's
@@ -16,12 +17,10 @@ export default function WorkspaceLoading() {
 
   return (
     <WorkspaceShell {...shell}>
-      <div
-        role="status"
-        aria-busy="true"
-        aria-label="Loading workspace"
-        className="flex-1"
-      />
+      {/* The content area waits blank until the page lands. */}
+      <LoadingRegion label="Loading workspace" className="flex-1">
+        {null}
+      </LoadingRegion>
     </WorkspaceShell>
   );
 }
