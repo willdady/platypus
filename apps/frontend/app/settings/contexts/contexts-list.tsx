@@ -11,6 +11,8 @@ import { ContextsList } from "@/components/contexts-list";
 import { ListError } from "@/components/list-state";
 import { LoadingRegion } from "@/components/list-skeletons";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PageHeader } from "@/components/page-header";
+import { SettingsSectionHeading } from "@/components/settings-section-heading";
 
 type ContextWithWorkspaceName = {
   workspaceName?: string | null;
@@ -63,16 +65,16 @@ function ContextsPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-6">Contexts</h1>
+      <PageHeader title="Contexts" />
 
       <div className="flex flex-col gap-8">
         {/* Global Context Section */}
         <div>
           <div className="mb-4">
-            <h2 className="text-lg font-semibold mb-2 flex items-center gap-2">
+            <SettingsSectionHeading className="flex items-center gap-2">
               <Globe className="size-5" />
               Global Context
-            </h2>
+            </SettingsSectionHeading>
             <p className="text-sm text-muted-foreground">
               Your global context applies across all workspaces and chats. Use
               it to provide personal information, preferences, or instructions
@@ -124,10 +126,10 @@ function ContextsPage() {
         {/* Workspace Contexts Section */}
         <div>
           <div className="mb-4">
-            <h2 className="text-lg font-semibold mb-2 flex items-center gap-2">
+            <SettingsSectionHeading className="flex items-center gap-2">
               <FolderClosed className="size-5" />
               Workspace Contexts
-            </h2>
+            </SettingsSectionHeading>
             <p className="text-sm text-muted-foreground">
               Similar to global context, workspace context is specific to a
               single workspace. Use them to provide information about yourself

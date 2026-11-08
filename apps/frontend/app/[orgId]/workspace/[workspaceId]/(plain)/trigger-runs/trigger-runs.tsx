@@ -29,6 +29,7 @@ import { TriggerRunRowSkeleton } from "@/components/trigger-run-row-skeleton";
 import { LoadingRegion } from "@/components/list-skeletons";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { fetcher } from "@/lib/utils";
+import { PageHeader } from "@/components/page-header";
 
 /**
  * How many runs a page of the list holds. The endpoint caps a request at 100;
@@ -128,10 +129,10 @@ function TriggerRunsPage({
       touched the viewport edges. The widths are the workspace home page's, so
       the two read as one app. */}
       <div className="w-full px-4 md:px-8 xl:w-4/5 max-w-4xl">
-        <h1 className="text-2xl mb-1 font-bold">Trigger runs</h1>
-        <p className="text-muted-foreground mb-4">
-          Recent runs from every trigger in this workspace, newest first.
-        </p>
+        <PageHeader
+          title="Trigger runs"
+          description="Recent runs from every trigger in this workspace, newest first."
+        />
 
         {/* The parent supplies the space below the toolbar. */}
         <div className="mb-4">
