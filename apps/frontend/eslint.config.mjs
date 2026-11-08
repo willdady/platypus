@@ -48,6 +48,64 @@ const TOP_LEVEL_FUNCTION_DECLARATIONS = {
     "Declare top-level functions and components with `function`, not a const arrow.",
 };
 
+// A disabled item's badge is drawn by hand instead of through the shared
+// primitive (`card-conventions`), so its icon, weight and casing drift.
+const DISABLED_BADGE = {
+  selector:
+    ":matches(JSXElement[openingElement.name.name='Badge']:has(JSXText[value=/^\\s*Disabled\\s*$/]), JSXElement[openingElement.name.name='Badge']:has(JSXExpressionContainer > Literal[value='Disabled']))",
+  message:
+    "Render a disabled item's badge with DisabledBadge from components/disabled-badge, not a hand-built Badge.",
+};
+
+// An element that announces itself as "Loading …" is a copy of
+// LoadingRegion's `status` frame (`ui-conventions`). A lone Skeleton that holds
+// a control's slot is not a region; each such call site is exempted below.
+const HAND_BUILT_LOADING_REGION = {
+  selector:
+    ":matches(JSXOpeningElement:has(JSXAttribute[name.name='aria-label'][value.value=/^Loading /]), JSXOpeningElement:has(JSXAttribute[name.name='aria-label'][value.expression.quasis.0.value.raw=/^Loading /]))",
+  message:
+    'Wrap a skeleton in LoadingRegion from components/list-skeletons (label="Loading …"), not an aria-label of your own.',
+};
+
+// Every DropdownMenu is either a row's ⋮ menu, which RowActionsMenu builds
+// (`card-conventions`), or one of the different uses exempted below. A
+// hand-built row menu otherwise drifts in item order and separator.
+const HAND_BUILT_ROW_ACTIONS_MENU = {
+  selector: "JSXOpeningElement[name.name='DropdownMenu']",
+  message:
+    "Build a list row's ⋮ menu with RowActionsMenu from components/row-actions-menu, not DropdownMenu primitives.",
+};
+
+// An inline by-name comparator is a copy of sortByName (#1863), which also
+// keeps the input array unmutated.
+const INLINE_NAME_SORT = {
+  selector:
+    "CallExpression[callee.property.name=/^(sort|toSorted)$/]:has(CallExpression[callee.property.name='localeCompare'][callee.object.property.name='name'])",
+  message:
+    "Sort by name with sortByName() from lib/utils, not an inline comparator.",
+};
+
+// Every `no-restricted-syntax` rule, by the name a block excludes.
+const SYNTAX_RULES = {
+  topLevelFunctions: TOP_LEVEL_FUNCTION_DECLARATIONS,
+  rawWriteFetch: RAW_WRITE_FETCH,
+  handBuiltOrgPath: HAND_BUILT_ORG_PATH,
+  disabledBadge: DISABLED_BADGE,
+  loadingRegion: HAND_BUILT_LOADING_REGION,
+  rowActionsMenu: HAND_BUILT_ROW_ACTIONS_MENU,
+  sortByName: INLINE_NAME_SORT,
+};
+
+/** The `no-restricted-syntax` entry for a block, minus the rules it exempts. */
+function syntaxRules(...exempt) {
+  return [
+    "error",
+    ...Object.entries(SYNTAX_RULES)
+      .filter(([name]) => !exempt.includes(name))
+      .map(([, rule]) => rule),
+  ];
+}
+
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
@@ -133,12 +191,7 @@ const eslintConfig = defineConfig([
     files: ["**/*.ts", "**/*.tsx"],
     ignores: RAW_FETCH_EXEMPT,
     rules: {
-      "no-restricted-syntax": [
-        "error",
-        TOP_LEVEL_FUNCTION_DECLARATIONS,
-        RAW_WRITE_FETCH,
-        HAND_BUILT_ORG_PATH,
-      ],
+      "no-restricted-syntax": syntaxRules(),
     },
   },
   // The files exempt from the raw-fetch rule above still get the others, bar
@@ -147,18 +200,105 @@ const eslintConfig = defineConfig([
     files: RAW_FETCH_EXEMPT,
     ignores: ["lib/api-write.ts"],
     rules: {
-      "no-restricted-syntax": [
-        "error",
-        TOP_LEVEL_FUNCTION_DECLARATIONS,
-        HAND_BUILT_ORG_PATH,
-      ],
+      "no-restricted-syntax": syntaxRules("rawWriteFetch"),
     },
   },
   {
     files: ["lib/api-write.ts"],
     rules: {
-      "no-restricted-syntax": ["error", TOP_LEVEL_FUNCTION_DECLARATIONS],
+      "no-restricted-syntax": syntaxRules("rawWriteFetch", "handBuiltOrgPath"),
     },
+  },
+  // Each convention primitive's own module draws the pattern by definition,
+  // and each inspection's one-line reason covers a legitimately different use.
+  {
+    // Home of DisabledBadge.
+    files: ["components/disabled-badge.tsx"],
+    rules: { "no-restricted-syntax": syntaxRules("disabledBadge") },
+  },
+  {
+    // Home of LoadingRegion.
+    files: ["components/list-skeletons.tsx"],
+    rules: { "no-restricted-syntax": syntaxRules("loadingRegion") },
+  },
+  {
+    // Home of RowActionsMenu.
+    files: ["components/row-actions-menu.tsx"],
+    rules: { "no-restricted-syntax": syntaxRules("rowActionsMenu") },
+  },
+  {
+    // The chat sidebar's ⋮ menu is a navigation row with tags and pinning, not
+    // a card's action menu, so it keeps its own content and order.
+    files: ["components/app-sidebar.tsx"],
+    rules: { "no-restricted-syntax": syntaxRules("rowActionsMenu") },
+  },
+  {
+    // The notification bell's list, not a row's actions.
+    files: ["components/notifications-dropdown.tsx"],
+    rules: { "no-restricted-syntax": syntaxRules("rowActionsMenu") },
+  },
+  {
+    // The theme picker, not a row's actions.
+    files: ["components/mode-toggle.tsx"],
+    rules: { "no-restricted-syntax": syntaxRules("rowActionsMenu") },
+  },
+  {
+    // The workspace settings links in the header, not a row's actions.
+    files: ["components/header.tsx"],
+    rules: { "no-restricted-syntax": syntaxRules("rowActionsMenu") },
+  },
+  {
+    // The board switcher in the board's own header, not a row's actions.
+    files: ["components/kanban-board.tsx"],
+    rules: { "no-restricted-syntax": syntaxRules("rowActionsMenu") },
+  },
+  {
+    // The assignee picker inside a card dialog, not a row's actions.
+    files: ["components/kanban-card-dialog.tsx"],
+    rules: { "no-restricted-syntax": syntaxRules("rowActionsMenu") },
+  },
+  {
+    // Vendored AI Elements pickers (models, tools), not a row's actions.
+    files: ["components/ai-elements/**"],
+    rules: { "no-restricted-syntax": syntaxRules("rowActionsMenu") },
+  },
+  {
+    // A test that renders the DropdownMenu primitive itself, not a row's menu.
+    files: TEST_FILES,
+    rules: { "no-restricted-syntax": syntaxRules("rowActionsMenu") },
+  },
+  {
+    // Home of sortByName.
+    files: ["lib/utils.ts"],
+    rules: { "no-restricted-syntax": syntaxRules("sortByName") },
+  },
+  {
+    // Slash commands sort by tier first; the name is only the tie-breaker.
+    files: ["lib/slash-commands.ts"],
+    rules: { "no-restricted-syntax": syntaxRules("sortByName") },
+  },
+  {
+    // The account menu in the header, not a row in a list; its trigger's
+    // placeholder is one Skeleton, not a container.
+    files: ["components/user-menu.tsx"],
+    rules: {
+      "no-restricted-syntax": syntaxRules("rowActionsMenu", "loadingRegion"),
+    },
+  },
+  {
+    // Stands in for the model trigger's label; one Skeleton, not a container.
+    files: ["components/model-selector-dialog.tsx"],
+    rules: { "no-restricted-syntax": syntaxRules("loadingRegion") },
+  },
+  {
+    // A count badge's placeholder; one Skeleton, not a container.
+    files: ["components/manage-sharing.tsx"],
+    rules: { "no-restricted-syntax": syntaxRules("loadingRegion") },
+  },
+  {
+    // A summary stat's value placeholder; one Skeleton, not a container.
+    files: ["app/\\[orgId\\]/workspace/\\[workspaceId\\]/(sidebar)/page.tsx"],
+    rules: { "no-restricted-syntax": syntaxRules("loadingRegion") },
   },
   // Tailwind: `size-N` over a matching `h-N w-N` pair (and the other
   // shorthands), and `flex flex-col gap-*` over `space-y-*`.
