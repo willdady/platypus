@@ -311,8 +311,8 @@ type ToolPartCardProps = {
   messageMetadata: PlatypusUIMessage["metadata"];
   /**
    * The row's title, shown verbatim. An MCP tool's name is its identity —
-   * namespace and all — so it is passed rather than humanised (issue #691 is
-   * why it has to truncate).
+   * namespace and all — so it is passed rather than humanised; `ToolHeader`
+   * truncates it because a name can be long (issue #691).
    */
   title?: string;
   /** A human-readable label shown after the name. */

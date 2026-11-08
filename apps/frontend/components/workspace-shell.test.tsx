@@ -2,7 +2,6 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 
 vi.mock("next/navigation", () => ({
-  useParams: () => ({ orgId: "org1", workspaceId: "ws1" }),
   useRouter: () => ({
     push: vi.fn(),
     back: vi.fn(),
@@ -14,9 +13,6 @@ vi.mock("@/components/user-menu", () => ({ UserMenu: () => null }));
 vi.mock("@/components/mode-toggle", () => ({ ModeToggle: () => null }));
 vi.mock("@/components/notifications-dropdown", () => ({
   NotificationsDropdown: () => null,
-}));
-vi.mock("@/components/command-menu", () => ({
-  CommandMenu: () => null,
 }));
 
 import { WorkspaceShell } from "./workspace-shell";
