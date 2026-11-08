@@ -9,15 +9,9 @@ import {
   FieldDescription,
 } from "@/components/ui/field";
 import { FormTextField } from "@/components/form-text-field";
+import { ProviderPointerSelect } from "@/components/provider-pointer-select";
 import { Switch } from "@/components/ui/switch";
 import { ExpandableTextarea } from "@/components/expandable-textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
 import { DetailFormState } from "@/components/detail-form-state";
@@ -32,7 +26,6 @@ import {
   WORKSPACE_MAX_DAILY_SUMMARIES_MIN,
 } from "@platypus/schemas";
 import { retractFieldError } from "@/lib/form-errors";
-import { providerModelLabel } from "@/lib/provider-model-label";
 import {
   canManageWorkspaceDelegation,
   canTransferWorkspace,
@@ -147,6 +140,7 @@ function WorkspaceForm({ orgId, workspaceId }: WorkspaceFormProps) {
     canSubmit,
     handleChange,
     toFieldChange,
+    setField,
     submit,
   } = useEntityForm<WorkspaceFormData, Workspace, Workspace>({
     initialData: {
@@ -268,131 +262,43 @@ function WorkspaceForm({ orgId, workspaceId }: WorkspaceFormProps) {
               )}
             </Field>
 
-            <Field data-invalid={!!validationErrors.taskModelProviderId}>
-              <FieldLabel htmlFor="taskModelProviderId">
-                Task Model Provider
-              </FieldLabel>
-              <Select
-                value={formData.taskModelProviderId || "none"}
-                onValueChange={(value) => {
-                  setValidationErrors((prev) =>
-                    retractFieldError(prev, "taskModelProviderId"),
-                  );
-                  setFormData((prevData) => ({
-                    ...prevData,
-                    taskModelProviderId: value === "none" ? null : value,
-                  }));
-                }}
-                disabled={isSubmitting}
-              >
-                <SelectTrigger id="taskModelProviderId">
-                  <SelectValue placeholder="Select a provider" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None (use chat provider)</SelectItem>
-                  {providers.map((provider) => (
-                    <SelectItem key={provider.id} value={provider.id}>
-                      {providerModelLabel(provider, "task")}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <FieldDescription>
-                Provider to use for generating chat titles and tags. If not set,
-                each chat will use its own provider for metadata generation.
-              </FieldDescription>
-              {validationErrors.taskModelProviderId && (
-                <FieldError>{validationErrors.taskModelProviderId}</FieldError>
-              )}
-            </Field>
+            <ProviderPointerSelect
+              kind="task"
+              label="Task Model Provider"
+              noneLabel="None (use chat provider)"
+              description="Provider to use for generating chat titles and tags. If not set, each chat will use its own provider for metadata generation."
+              value={formData.taskModelProviderId}
+              onChange={(value) => setField("taskModelProviderId", value)}
+              error={validationErrors.taskModelProviderId}
+              disabled={isSubmitting}
+              providers={providers}
+            />
 
-            <Field data-invalid={!!validationErrors.memoryExtractionProviderId}>
-              <FieldLabel htmlFor="memoryExtractionProviderId">
-                Memory Extraction Provider
-              </FieldLabel>
-              <Select
-                value={formData.memoryExtractionProviderId || "none"}
-                onValueChange={(value) => {
-                  setValidationErrors((prev) =>
-                    retractFieldError(prev, "memoryExtractionProviderId"),
-                  );
-                  setFormData((prevData) => ({
-                    ...prevData,
-                    memoryExtractionProviderId: value === "none" ? null : value,
-                  }));
-                }}
-                disabled={isSubmitting}
-              >
-                <SelectTrigger id="memoryExtractionProviderId">
-                  <SelectValue placeholder="Select a provider" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Disabled</SelectItem>
-                  {providers
-                    .filter((p) => p.memoryExtractionModelId)
-                    .map((provider) => (
-                      <SelectItem key={provider.id} value={provider.id}>
-                        {providerModelLabel(provider, "memoryExtraction")}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-              <FieldDescription>
-                Provider to use for extracting memories from conversations.
-                Enable memory extraction on a provider to see it here.
-              </FieldDescription>
-              {validationErrors.memoryExtractionProviderId && (
-                <FieldError>
-                  {validationErrors.memoryExtractionProviderId}
-                </FieldError>
-              )}
-            </Field>
+            <ProviderPointerSelect
+              kind="memoryExtraction"
+              label="Memory Extraction Provider"
+              noneLabel="Disabled"
+              description="Provider to use for extracting memories from conversations. Enable memory extraction on a provider to see it here."
+              value={formData.memoryExtractionProviderId}
+              onChange={(value) =>
+                setField("memoryExtractionProviderId", value)
+              }
+              error={validationErrors.memoryExtractionProviderId}
+              disabled={isSubmitting}
+              providers={providers}
+            />
 
-            <Field data-invalid={!!validationErrors.memoryEmbeddingProviderId}>
-              <FieldLabel htmlFor="memoryEmbeddingProviderId">
-                Memory Embedding Provider
-              </FieldLabel>
-              <Select
-                value={formData.memoryEmbeddingProviderId || "none"}
-                onValueChange={(value) => {
-                  setValidationErrors((prev) =>
-                    retractFieldError(prev, "memoryEmbeddingProviderId"),
-                  );
-                  setFormData((prevData) => ({
-                    ...prevData,
-                    memoryEmbeddingProviderId: value === "none" ? null : value,
-                  }));
-                }}
-                disabled={isSubmitting}
-              >
-                <SelectTrigger id="memoryEmbeddingProviderId">
-                  <SelectValue placeholder="Select a provider" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Disabled</SelectItem>
-                  {providers
-                    .filter(
-                      (p) =>
-                        (p as { embeddingModelId?: string }).embeddingModelId,
-                    )
-                    .map((provider) => (
-                      <SelectItem key={provider.id} value={provider.id}>
-                        {providerModelLabel(provider, "embedding")}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-              <FieldDescription>
-                Provider to use for generating memory embeddings. Required for
-                semantic memory search. Set an embedding model ID on a provider
-                to see it here.
-              </FieldDescription>
-              {validationErrors.memoryEmbeddingProviderId && (
-                <FieldError>
-                  {validationErrors.memoryEmbeddingProviderId}
-                </FieldError>
-              )}
-            </Field>
+            <ProviderPointerSelect
+              kind="embedding"
+              label="Memory Embedding Provider"
+              noneLabel="Disabled"
+              description="Provider to use for generating memory embeddings. Required for semantic memory search. Set an embedding model ID on a provider to see it here."
+              value={formData.memoryEmbeddingProviderId}
+              onChange={(value) => setField("memoryEmbeddingProviderId", value)}
+              error={validationErrors.memoryEmbeddingProviderId}
+              disabled={isSubmitting}
+              providers={providers}
+            />
 
             <FormTextField
               label="Memory Summary Retention"
