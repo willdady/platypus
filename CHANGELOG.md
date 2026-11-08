@@ -1,5 +1,45 @@
 # Changelog
 
+## [4.3.0](https://github.com/willdady/platypus/compare/v4.2.2...v4.3.0) (2026-11-08)
+
+
+### Features
+
+* **frontend:** read the Organization and Workspace rows through useOrganization / useWorkspace ([#1875](https://github.com/willdady/platypus/issues/1875)) ([c8f1fde](https://github.com/willdady/platypus/commit/c8f1fde061bc21e055ed6047fcca007f041aaed8))
+* **frontend:** share one page header across settings and list pages ([#1902](https://github.com/willdady/platypus/issues/1902)) ([d6a6863](https://github.com/willdady/platypus/commit/d6a686300066028af29a822acadf0ae6964f9a08))
+* keep a Trigger run's Transcript as a Chat ([#1829](https://github.com/willdady/platypus/issues/1829)) ([2db044d](https://github.com/willdady/platypus/commit/2db044dea5cbe86814cc52545e33a0f5b9113895))
+
+
+### Bug Fixes
+
+* **docs:** say a Trigger run's Transcript isn't shown in the app yet ([#1911](https://github.com/willdady/platypus/issues/1911)) ([3f6443f](https://github.com/willdady/platypus/commit/3f6443fed7be5132e6a19484a8dedc62300a5e6b))
+* **frontend:** align empty and error states with list conventions ([#1881](https://github.com/willdady/platypus/issues/1881)) ([5f3fd1a](https://github.com/willdady/platypus/commit/5f3fd1a3cec51e98e9251b92530970026f5aeb5a))
+* **frontend:** align not-found and search copy with conventions ([#1899](https://github.com/willdady/platypus/issues/1899)) ([6ae0031](https://github.com/willdady/platypus/commit/6ae0031d4d295f9f87b1d3f25aee0743e535d64d))
+* **frontend:** align row action menus across Members, Boards and Chat ([#1894](https://github.com/willdady/platypus/issues/1894)) ([5e1ec77](https://github.com/willdady/platypus/commit/5e1ec775e8f9c1551e2febd3167e3a04155e7bb6))
+* **frontend:** build Agent and Trigger clones from their create schemas ([#1879](https://github.com/willdady/platypus/issues/1879)) ([8f12639](https://github.com/willdady/platypus/commit/8f12639b8f3a56b0bcb5662a5d7b5502978cd5f0))
+* **frontend:** guard the workspace wizard and Org access gates against unsaved changes ([#1883](https://github.com/willdady/platypus/issues/1883)) ([a843af6](https://github.com/willdady/platypus/commit/a843af6666e6ab7c7d32ffd2d88c7cb927ecd269))
+* **frontend:** keep the route's shell in Workspace and User settings errors ([#1884](https://github.com/willdady/platypus/issues/1884)) ([e8a1ede](https://github.com/willdady/platypus/commit/e8a1ede172e3243678846ea1aab06161c42f6175))
+* **frontend:** make every entity form submit on Enter ([#1893](https://github.com/willdady/platypus/issues/1893)) ([3d6073f](https://github.com/willdady/platypus/commit/3d6073ffaeb664a6b19456d09b507d7425b0ebc3))
+* **frontend:** move four card lists onto EntityCardList ([#1892](https://github.com/willdady/platypus/issues/1892)) ([682959d](https://github.com/willdady/platypus/commit/682959db416e819d0c5d9c12e09cc96f301f7593))
+* **frontend:** move hand-wired form fields onto the Form*Field components ([#1897](https://github.com/willdady/platypus/issues/1897)) ([454776f](https://github.com/willdady/platypus/commit/454776f08c2610fcf759a145c55746fa6326085c))
+* **frontend:** outline below-list buttons and render footers through ListFooter ([#1882](https://github.com/willdady/platypus/issues/1882)) ([be12f77](https://github.com/willdady/platypus/commit/be12f776da8ba11394143ca31b21617f099a58c7))
+* **frontend:** refresh stale reads on bfcache restore ([#1905](https://github.com/willdady/platypus/issues/1905)) ([19d47fe](https://github.com/willdady/platypus/commit/19d47fed4823df2ef8ce9faddf05b28ceddf6d1f))
+* **frontend:** sentence-case dialog titles and compose delete copy from a noun ([#1901](https://github.com/willdady/platypus/issues/1901)) ([a309250](https://github.com/willdady/platypus/commit/a3092506aee224e9bc5c1e1cae4aa3a51bf73dd6))
+* **frontend:** share the admin table shell and merge the oversight tables ([#1890](https://github.com/willdady/platypus/issues/1890)) ([33c20db](https://github.com/willdady/platypus/commit/33c20db46e09a09efe009563c1d7ba50717a375b))
+* **frontend:** show failed invitation reads as errors with retry ([#1877](https://github.com/willdady/platypus/issues/1877)) ([3498038](https://github.com/willdady/platypus/commit/3498038c4fc518f83bab282d6ab8905d39a22904))
+* **frontend:** show Kanban card and comment delete refusals inline ([#1886](https://github.com/willdady/platypus/issues/1886)) ([f490004](https://github.com/willdady/platypus/commit/f490004d13e8b997af68cc781defb2ca02b8025c))
+* **frontend:** show Organization and Workspace IDs with CopyRow ([#1904](https://github.com/willdady/platypus/issues/1904)) ([ee2a28f](https://github.com/willdady/platypus/commit/ee2a28fbc9411d63a29b854dd9a87731c4b4cb52))
+* **frontend:** show pending label on entity form submit buttons ([#1888](https://github.com/willdady/platypus/issues/1888)) ([ea604f4](https://github.com/willdady/platypus/commit/ea604f4b673ca726534a2aaf5068138f2ac5ce63))
+* **frontend:** show refused destructive dialog errors inline ([#1885](https://github.com/willdady/platypus/issues/1885)) ([65e113f](https://github.com/willdady/platypus/commit/65e113ffe26faecb15bd84eed5dab93729c6d358))
+* **frontend:** single-source shared resource dialog wiring ([#1891](https://github.com/willdady/platypus/issues/1891)) ([97c8779](https://github.com/willdady/platypus/commit/97c8779a0f78aa20411282fec211adc1d1e727f4))
+* **frontend:** size header bell and theme toggle with icon-xs ([#1903](https://github.com/willdady/platypus/issues/1903)) ([d2d26c0](https://github.com/willdady/platypus/commit/d2d26c07a93a0839f604a838e70c1c1e9463de8a))
+* **frontend:** stop duplicate creates from double-clicking Clone ([#1871](https://github.com/willdady/platypus/issues/1871)) ([3763ed5](https://github.com/willdady/platypus/commit/3763ed5ce600484fa01f2d46887f77995f7dc0c2))
+* **frontend:** surface failed secondary list reads ([#1887](https://github.com/willdady/platypus/issues/1887)) ([ade7ccd](https://github.com/willdady/platypus/commit/ade7ccd0b20061fbc9b030e6f40fb88cbf8734a8))
+* **frontend:** use Add/Create verbs on create entry points and titles ([#1900](https://github.com/willdady/platypus/issues/1900)) ([034c342](https://github.com/willdady/platypus/commit/034c34242c09e5b32de862cb9a1c50d7fbac70ec))
+* **frontend:** use LoadingRegion for the remaining skeletons ([#1880](https://github.com/willdady/platypus/issues/1880)) ([11a4ad2](https://github.com/willdady/platypus/commit/11a4ad200cc827a0dec02e675d8a0af75b27fa31))
+* **frontend:** use the shared date and duration formatters in Card history, Users and Trigger run rows ([#1874](https://github.com/willdady/platypus/issues/1874)) ([b6ed8d1](https://github.com/willdady/platypus/commit/b6ed8d198314349989cafb978dd6bf07196a0b31))
+* **frontend:** use the shared Disabled badge in the organization tables ([#1878](https://github.com/willdady/platypus/issues/1878)) ([2aa9727](https://github.com/willdady/platypus/commit/2aa9727f7cb5e2b7012ed7a74bc97f9ac32abd51))
+
 ## [4.2.2](https://github.com/willdady/platypus/compare/v4.2.1...v4.2.2) (2026-11-07)
 
 
