@@ -8,9 +8,11 @@ import { Callout } from "nextra/components";
 # Workspace settings
 
 Most of what makes a Workspace behave the way it does is one form:
-**Workspace settings**, opened from **Workspace** in the gear menu at the top
-right of any page in the Workspace: a name, some text, three Provider
-dropdowns and a number, plus three switches only an Org Admin sees.
+**Workspace Settings**, opened from **Workspace** in the gear menu at the top
+right of any page in the Workspace: a **Name**, the **Context**, three Provider
+dropdowns and **Memory Summary Retention**, plus three switches only an Org
+Admin sees. Above it, **Organization ID** and **Workspace ID** each have a copy
+button.
 
 ## Creating a Workspace
 
@@ -41,8 +43,8 @@ keeps what you entered; nothing is created until **Save** on the last one.
 
 ## The Context field
 
-**Context** is text about the **Workspace**, included in every Chat anyone runs
-there — up to 1,000 characters.
+**Context** is text about the **Workspace**, included in every Chat in the
+Workspace — up to 1,000 characters.
 
 Use it for standing facts about the work: what this Workspace is for, what the
 service is called, which team owns it, house terminology.
@@ -181,7 +183,9 @@ including each member's own **Workspace Context** for it. Shared resources are
 only detached, not deleted. Its Sandbox is torn down too. With the Docker or
 Daytona backend that deletes the Sandbox and its storage, so any files an Agent
 left in the Sandbox are gone. With SSH the host is left alone.
-It is not recoverable from inside the product — only from a database backup.
+It is not recoverable from inside the product. Restoring it takes a backup of
+both the database and file storage, and a Docker or Daytona Sandbox's files are
+gone either way.
 
 ## Where to next
 

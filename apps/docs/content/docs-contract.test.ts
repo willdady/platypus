@@ -58,6 +58,9 @@ import {
   TOOL_CLEARING_BATCH,
   TOOL_RESULT_CLEARING_KEEP_RECENT,
   TOOL_RESULT_CLEARING_THRESHOLD,
+  WORKSPACE_MAX_DAILY_SUMMARIES_MAX,
+  WORKSPACE_MAX_DAILY_SUMMARIES_MIN,
+  DEFAULT_WORKSPACE_MAX_DAILY_SUMMARIES,
   triggerBaseSchema,
   eventTriggerEventSchema,
   webhookEventDataSchemas,
@@ -2237,7 +2240,10 @@ const BACKEND_CONSTANTS = [
     source: "apps/backend/src/services/bearer-token.ts",
     name: "EXPIRING_SOON_DAYS",
     phrase: (days: number) => `(within ${days} days)`,
-    files: ["building-with-platypus/a2a-endpoints.mdx"],
+    files: [
+      "building-with-platypus/a2a-endpoints.mdx",
+      "administering/index.mdx",
+    ],
     cost: "A Workspace Owner reads **Expiring soon** as more, or less, time than the token has left.",
   },
   {
@@ -2362,6 +2368,27 @@ const SCHEMA_CONSTANTS = [
     phrase: (bytes: number) => `capped at ${bytes / 1024} KiB`,
     files: ["building-with-platypus/triggers.mdx"],
     cost: "A reader debugging a failed run takes a cut error for the whole of it.",
+  },
+  {
+    name: "WORKSPACE_MAX_DAILY_SUMMARIES_MIN",
+    value: WORKSPACE_MAX_DAILY_SUMMARIES_MIN,
+    phrase: (count: number) => `from **${count}** to`,
+    files: ["administering/workspaces.mdx"],
+    cost: "An Org Admin sets a retention the form refuses.",
+  },
+  {
+    name: "WORKSPACE_MAX_DAILY_SUMMARIES_MAX",
+    value: WORKSPACE_MAX_DAILY_SUMMARIES_MAX,
+    phrase: (count: number) => `to **${count}**,`,
+    files: ["administering/workspaces.mdx"],
+    cost: "An Org Admin sets a retention the form refuses.",
+  },
+  {
+    name: "DEFAULT_WORKSPACE_MAX_DAILY_SUMMARIES",
+    value: DEFAULT_WORKSPACE_MAX_DAILY_SUMMARIES,
+    phrase: (count: number) => `defaulting to **${count}**`,
+    files: ["administering/workspaces.mdx"],
+    cost: "An Org Admin leaves the default expecting more, or fewer, summaries kept than Memory keeps.",
   },
 ] as const;
 
@@ -2490,12 +2517,6 @@ const pinnedPhrases = (): PagePhrase[] => {
  * one. A wrong number is fixed or pinned instead.
  */
 const UNPINNED_NUMBERS: (PagePhrase & { reason: string })[] = [
-  {
-    file: "administering/index.mdx",
-    phrase: "7 days",
-    reason:
-      "Expiring soon threshold; EXPIRING_SOON_DAYS, pinned on the A2A page",
-  },
   {
     file: "building-with-platypus/a2a-endpoints.mdx",
     phrase: "1 MiB",
