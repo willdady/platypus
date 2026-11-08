@@ -37,7 +37,15 @@ export function parseCloneBody<T extends z.ZodType>(
       outcome: {
         outcome: "invalid",
         message: refusalMessage,
-        fieldErrors: parseValidationErrors({ error: result.error.issues }),
+        // An issue with no path (an unknown key on a strict schema) names no
+        // field, so it would vanish from the keyed errors and leave a name
+        // issue looking like the only one. Key nothing then: the dialog falls
+        // back to the entity's refusal.
+        fieldErrors: result.error.issues.some(
+          (issue) => issue.path.length === 0,
+        )
+          ? {}
+          : parseValidationErrors({ error: result.error.issues }),
       },
     };
   }

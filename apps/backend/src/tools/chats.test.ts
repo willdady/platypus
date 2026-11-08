@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { Readable } from "node:stream";
 import {
   callOkTool,
   callTool,
@@ -11,16 +12,19 @@ import {
   CHAT_TRANSCRIPT_PAGE_MAX_MESSAGES,
 } from "@platypus/schemas";
 
-const { mockStorageGet } = vi.hoisted(() => ({ mockStorageGet: vi.fn() }));
+const { mockStorageGetStream } = vi.hoisted(() => ({
+  mockStorageGetStream: vi.fn(),
+}));
 
 vi.mock("../storage/index.ts", () => ({
   getStorage: vi.fn(() => ({
-    get: mockStorageGet,
+    getStream: mockStorageGetStream,
   })),
 }));
 
 import { createChatTools } from "./chats.ts";
 
+const orgId = "org-1";
 const workspaceId = "ws-1";
 
 const at = (minutes: number) => new Date(Date.UTC(2026, 0, 1, 0, minutes));
@@ -66,12 +70,12 @@ const messageRow = (
 const text = (value: string) => ({ type: "text", text: value });
 
 const createTools = (sessionId = "chat-invoking") =>
-  createChatTools(workspaceId, sessionId);
+  createChatTools(orgId, workspaceId, sessionId);
 
 describe("createChatTools", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockStorageGet.mockReset();
+    mockStorageGetStream.mockReset();
     resetMockDb();
   });
 
@@ -524,10 +528,12 @@ describe("createChatTools", () => {
       ]);
     });
 
-    it("sizes a stored file without reading its bytes into the result", async () => {
-      mockStorageGet.mockResolvedValueOnce({
-        data: Buffer.alloc(7),
+    it("sizes a stored file from its length and closes the stream unread", async () => {
+      const stream = Readable.from([Buffer.alloc(7)]);
+      mockStorageGetStream.mockResolvedValueOnce({
+        stream,
         contentType: "image/png",
+        contentLength: 7,
       });
       seedChat({}, [
         messageRow("chat-1", "u1", null, "user", 1, [
@@ -552,13 +558,35 @@ describe("createChatTools", () => {
           size: 7,
         },
       ]);
-      expect(mockStorageGet).toHaveBeenCalledWith(
+      expect(mockStorageGetStream).toHaveBeenCalledWith(
         "org-1/ws-1/chat-1/u1/0-aaaaaaaa.png",
       );
+      expect(stream.destroyed).toBe(true);
+    });
+
+    it.each([
+      ["another Chat", "storage://org-1/ws-1/chat-2/u1/0-aaaaaaaa.png"],
+      ["another Organization", "storage://org-2/ws-9/chat-1/u1/0-aaaaaaaa.png"],
+      ["an invalid key", "storage://org-1/ws-1/chat-1/../../../etc/passwd"],
+    ])("never looks up a stored file under %s", async (_label, url) => {
+      seedChat({}, [
+        messageRow("chat-1", "u1", null, "user", 1, [
+          { type: "file", mediaType: "image/png", filename: "x.png", url },
+        ]),
+      ]);
+
+      const result = await callOkTool(createTools().readTranscript, {
+        chatId: "chat-1",
+      });
+
+      expect(result.messages[0].parts).toEqual([
+        { type: "file", name: "x.png", mediaType: "image/png", size: null },
+      ]);
+      expect(mockStorageGetStream).not.toHaveBeenCalled();
     });
 
     it("leaves a stored file's size unknown when storage misses", async () => {
-      mockStorageGet.mockResolvedValueOnce(null);
+      mockStorageGetStream.mockResolvedValueOnce(null);
       seedChat({}, [
         messageRow("chat-1", "u1", null, "user", 1, [
           {

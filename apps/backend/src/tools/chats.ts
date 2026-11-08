@@ -16,6 +16,7 @@ import {
 } from "../db/schema.ts";
 import { loadActivePath } from "../services/chat-messages.ts";
 import { getStorage } from "../storage/index.ts";
+import { chatStorageKeyPrefix, isValidStorageKey } from "../storage/keys.ts";
 import {
   canonicalStorageKeyFromUrl,
   decodeDataUrl,
@@ -169,17 +170,31 @@ const asRecord = (value: unknown): Record<string, unknown> =>
     ? (value as Record<string, unknown>)
     : {};
 
-/** The bytes a File part's URL names, where the backend can tell without a fetch. */
-const fileSize = async (url: unknown): Promise<number | null> => {
+/**
+ * The bytes a File part's URL names, where the backend can tell without a fetch.
+ *
+ * A stored URL is message content, so its key is untrusted: only a valid key
+ * under this Chat's own prefix is looked up, as `inlineFileUrls` does. Anything
+ * else reads as an unknown size rather than confirming another Chat's file.
+ */
+const fileSize = async (
+  url: unknown,
+  chatPrefix: string,
+): Promise<number | null> => {
   if (typeof url !== "string") return null;
   const inline = decodeDataUrl(url);
   if (inline) return inline.bytes.length;
 
   const key = canonicalStorageKeyFromUrl(url);
-  if (!key) return null;
+  if (!key || !isValidStorageKey(key) || !key.startsWith(chatPrefix)) {
+    return null;
+  }
   try {
-    const stored = await getStorage().get(key);
-    return stored?.data.length ?? null;
+    // The stream's length, not its bytes: the stream is closed unread.
+    const stored = await getStorage().getStream(key);
+    if (!stored) return null;
+    stored.stream.destroy();
+    return stored.contentLength;
   } catch {
     // A storage miss is not a reason to fail the page: the placeholder still
     // names the file, and its size is simply unknown.
@@ -198,6 +213,7 @@ const toolNameOf = (type: string, part: Record<string, unknown>): string =>
 /** One stored part as the Transcript reader shows it, or null to omit it. */
 const transcriptPart = async (
   value: unknown,
+  chatPrefix: string,
 ): Promise<z.infer<typeof transcriptPartSchema> | null> => {
   const part = asRecord(value);
   const type = typeof part.type === "string" ? part.type : "";
@@ -219,7 +235,7 @@ const transcriptPart = async (
         typeof part.mediaType === "string"
           ? part.mediaType
           : "application/octet-stream",
-      size: await fileSize(part.url),
+      size: await fileSize(part.url, chatPrefix),
     };
   }
 
@@ -252,7 +268,11 @@ const attributionOf = (row: {
         ...(row.modelId ? { modelId: row.modelId } : {}),
       };
 
-export const createChatTools = (workspaceId: string, sessionId: string) => {
+export const createChatTools = (
+  orgId: string,
+  workspaceId: string,
+  sessionId: string,
+) => {
   const listChats = tool({
     description:
       "List the Chats in this workspace, newest activity first, with an optional Agent, Trigger or time filter. Use readTranscript to read one.",
@@ -365,6 +385,11 @@ export const createChatTools = (workspaceId: string, sessionId: string) => {
       }
 
       const { messages } = await loadActivePath(row.id, row.activeLeafId);
+      const chatPrefix = chatStorageKeyPrefix({
+        orgId,
+        workspaceId,
+        chatId: row.id,
+      });
 
       let start = 0;
       if (decoded) {
@@ -390,7 +415,9 @@ export const createChatTools = (workspaceId: string, sessionId: string) => {
         const message = messages[end];
         if (!message) break;
         const parts = (
-          await Promise.all(message.parts.map(transcriptPart))
+          await Promise.all(
+            message.parts.map((part) => transcriptPart(part, chatPrefix)),
+          )
         ).filter(
           (part): part is z.infer<typeof transcriptPartSchema> => part !== null,
         );
