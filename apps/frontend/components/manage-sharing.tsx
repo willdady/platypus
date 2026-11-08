@@ -49,11 +49,11 @@ type AttachedWorkspace = { workspaceId: string; workspaceName: string };
 function useAttachments(
   orgId: string | null,
   resourceType: ResourceType,
-  resourceId: string | null,
+  resourceId: string,
 ) {
   return useScopedList<AttachedWorkspace>(
-    resourceId ? attachmentsEntity(resourceType, resourceId) : "attachments",
-    orgId && resourceId ? { orgId } : null,
+    attachmentsEntity(resourceType, resourceId),
+    orgId ? { orgId } : null,
   );
 }
 
@@ -195,27 +195,57 @@ export function ManageAttachmentsDialog({
   resource: NamedResource | null;
   onClose: () => void;
 }) {
+  return (
+    <Dialog open={!!resource} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent>
+        {resource && (
+          <ManageAttachmentsContent
+            orgId={orgId}
+            resourceType={resourceType}
+            resource={resource}
+            onClose={onClose}
+          />
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * The open dialog's body. Mounted only while a resource is selected, so each
+ * row opens with the last row's failure and in-flight state cleared.
+ */
+function ManageAttachmentsContent({
+  orgId,
+  resourceType,
+  resource,
+  onClose,
+}: {
+  orgId: string;
+  resourceType: ResourceType;
+  resource: NamedResource;
+  onClose: () => void;
+}) {
   const backendUrl = useBackendUrl();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const resourceId = resource?.id ?? null;
 
   const {
     results: attached,
     isLoading: attLoading,
     mutate: mutateAtt,
-  } = useAttachments(orgId, resourceType, resourceId);
+  } = useAttachments(orgId, resourceType, resource.id);
   const attachedIds = new Set(attached.map((a) => a.workspaceId));
 
   // The full workspace list is only needed while the dialog is open.
   const { results: allWorkspaces, isLoading: wsLoading } = useScopedList<{
     id: string;
     name: string;
-  }>("workspaces", resourceId ? { orgId } : null);
+  }>("workspaces", { orgId });
   const workspaces = sortByName(allWorkspaces);
 
   const toggle = async (workspaceId: string, isAttached: boolean) => {
-    if (!backendUrl || !resourceId) return;
+    if (!backendUrl) return;
     setBusyId(workspaceId);
     setError(null);
     try {
@@ -223,17 +253,18 @@ export function ManageAttachmentsDialog({
       // carries only which Shared resource.
       const outcome = isAttached
         ? await writeAt(
-            scopedUrl(backendUrl, `attachments/${resourceType}/${resourceId}`, {
-              orgId,
-              workspaceId,
-            }),
+            scopedUrl(
+              backendUrl,
+              `attachments/${resourceType}/${resource.id}`,
+              { orgId, workspaceId },
+            ),
             { method: "DELETE" },
           )
         : await writeAt(
             scopedUrl(backendUrl, "attachments", { orgId, workspaceId }),
             {
               method: "POST",
-              data: { resourceType, resourceId },
+              data: { resourceType, resourceId: resource.id },
             },
           );
       if (outcome.outcome !== "success") {
@@ -249,106 +280,104 @@ export function ManageAttachmentsDialog({
   const count = attached.length;
 
   return (
-    <Dialog open={!!resource} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Share “{resource?.name}”</DialogTitle>
-          <DialogDescription>
-            {/* Keep the apostrophe literal, not `&apos;` — see
-                jsx-entity-whitespace.node.test.ts. */}
-            Choose which workspaces this {LABEL[resourceType]} appears in. It
-            runs against each workspace’s own resources.
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <DialogHeader>
+        <DialogTitle>Share “{resource.name}”</DialogTitle>
+        <DialogDescription>
+          {/* Keep the apostrophe literal, not `&apos;` — see
+              jsx-entity-whitespace.node.test.ts. */}
+          Choose which workspaces this {LABEL[resourceType]} appears in. It runs
+          against each workspace’s own resources.
+        </DialogDescription>
+      </DialogHeader>
 
-        {error && (
-          <p role="alert" className="text-sm text-destructive">
-            {error}
-          </p>
-        )}
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
 
-        {/* Currently-attached workspaces as removable chips. */}
-        {attLoading ? (
-          <LoadingRegion
-            label="Loading attachments"
-            className="flex flex-wrap gap-1"
-          >
-            <Skeleton className="h-badge w-24 rounded-full" />
-            <Skeleton className="h-badge w-20 rounded-full" />
-          </LoadingRegion>
-        ) : count > 0 ? (
-          <div className="flex flex-wrap gap-1">
-            {attached.map((a) => (
-              <Badge key={a.workspaceId} variant="secondary" className="gap-1">
-                {a.workspaceName}
-                <button
-                  type="button"
-                  aria-label={`Detach ${a.workspaceName}`}
-                  disabled={busyId === a.workspaceId}
-                  onClick={() => toggle(a.workspaceId, true)}
-                  className="rounded-sm hover:text-destructive disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      {/* Currently-attached workspaces as removable chips. */}
+      {attLoading ? (
+        <LoadingRegion
+          label="Loading attachments"
+          className="flex flex-wrap gap-1"
+        >
+          <Skeleton className="h-badge w-24 rounded-full" />
+          <Skeleton className="h-badge w-20 rounded-full" />
+        </LoadingRegion>
+      ) : count > 0 ? (
+        <div className="flex flex-wrap gap-1">
+          {attached.map((a) => (
+            <Badge key={a.workspaceId} variant="secondary" className="gap-1">
+              {a.workspaceName}
+              <button
+                type="button"
+                aria-label={`Detach ${a.workspaceName}`}
+                disabled={busyId === a.workspaceId}
+                onClick={() => toggle(a.workspaceId, true)}
+                className="rounded-sm hover:text-destructive disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <X className="size-3" />
+              </button>
+            </Badge>
+          ))}
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          Not shared with any workspace yet.
+        </p>
+      )}
+
+      {/* Searchable multi-select — scales to many workspaces. */}
+      <Command>
+        <CommandInput placeholder="Search workspaces…" />
+        <CommandList>
+          {/* Rows in place of the false "No workspaces found." while the
+              list is still loading. */}
+          {wsLoading ? (
+            <LoadingRegion label="Loading workspaces" className="p-1">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="flex items-center gap-2 px-2 py-1.5">
+                  <Skeleton className="mr-2 size-4" />
+                  <Skeleton className="h-4 w-32" />
+                </div>
+              ))}
+            </LoadingRegion>
+          ) : (
+            <CommandEmpty>No workspaces found.</CommandEmpty>
+          )}
+          <CommandGroup>
+            {workspaces.map((ws) => {
+              const isAtt = attachedIds.has(ws.id);
+              return (
+                <CommandItem
+                  key={ws.id}
+                  // Include the id so the search value stays unique even if
+                  // two workspaces share a name; search still matches name.
+                  value={`${ws.name} ${ws.id}`}
+                  disabled={busyId === ws.id}
+                  onSelect={() => toggle(ws.id, isAtt)}
                 >
-                  <X className="size-3" />
-                </button>
-              </Badge>
-            ))}
-          </div>
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            Not shared with any workspace yet.
-          </p>
-        )}
+                  <Check
+                    className={cn(
+                      "mr-2 size-4",
+                      isAtt ? "opacity-100" : "opacity-0",
+                    )}
+                  />
+                  {ws.name}
+                </CommandItem>
+              );
+            })}
+          </CommandGroup>
+        </CommandList>
+      </Command>
 
-        {/* Searchable multi-select — scales to many workspaces. */}
-        <Command>
-          <CommandInput placeholder="Search workspaces…" />
-          <CommandList>
-            {/* Rows in place of the false "No workspaces found." while the
-                list is still loading. */}
-            {wsLoading ? (
-              <LoadingRegion label="Loading workspaces" className="p-1">
-                {[0, 1, 2].map((i) => (
-                  <div key={i} className="flex items-center gap-2 px-2 py-1.5">
-                    <Skeleton className="mr-2 size-4" />
-                    <Skeleton className="h-4 w-32" />
-                  </div>
-                ))}
-              </LoadingRegion>
-            ) : (
-              <CommandEmpty>No workspaces found.</CommandEmpty>
-            )}
-            <CommandGroup>
-              {workspaces.map((ws) => {
-                const isAtt = attachedIds.has(ws.id);
-                return (
-                  <CommandItem
-                    key={ws.id}
-                    // Include the id so the search value stays unique even if
-                    // two workspaces share a name; search still matches name.
-                    value={`${ws.name} ${ws.id}`}
-                    disabled={busyId === ws.id}
-                    onSelect={() => toggle(ws.id, isAtt)}
-                  >
-                    <Check
-                      className={cn(
-                        "mr-2 size-4",
-                        isAtt ? "opacity-100" : "opacity-0",
-                      )}
-                    />
-                    {ws.name}
-                  </CommandItem>
-                );
-              })}
-            </CommandGroup>
-          </CommandList>
-        </Command>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            Done
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      <DialogFooter>
+        <Button variant="outline" onClick={onClose}>
+          Done
+        </Button>
+      </DialogFooter>
+    </>
   );
 }
