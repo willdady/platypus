@@ -1,6 +1,5 @@
 ---
 status: accepted
-implemented-by: "#1826"
 ---
 
 # A Trigger run keeps its Transcript as a Chat
