@@ -193,38 +193,40 @@ export function SkillGithubInstall({
   const url = (action: string) =>
     scopedUrl(backendUrl, `skills/github/${action}`, scope);
 
-  const find = useMutation(async () => {
-    const outcome = await writeAt<SkillGithubPreview>(url("preview"), {
-      method: "POST",
-      data: { source },
-    });
-    if (outcome.outcome !== "success") {
-      toast.error(outcome.message);
-      return;
-    }
-    setPreview(outcome.data);
-    setSelected(new Set());
-    setResults(null);
-  });
-
-  const install = useMutation(async () => {
-    if (!preview) return;
-    const outcome = await writeAt<SkillGithubInstallResult>(url("install"), {
-      method: "POST",
-      data: {
-        owner: preview.owner,
-        repo: preview.repo,
-        ref: preview.ref,
-        commitSha: preview.commitSha,
-        skillPaths: [...selected],
-      },
-    });
-    if (outcome.outcome !== "success") {
-      toast.error(outcome.message);
-      return;
-    }
-    setResults(outcome.data.results);
-  });
+  const { run, pending } = useMutation(
+    async (action: "preview" | "install") => {
+      if (action === "preview") {
+        const outcome = await writeAt<SkillGithubPreview>(url("preview"), {
+          method: "POST",
+          data: { source },
+        });
+        if (outcome.outcome !== "success") {
+          toast.error(outcome.message);
+          return;
+        }
+        setPreview(outcome.data);
+        setSelected(new Set());
+        setResults(null);
+        return;
+      }
+      if (!preview) return;
+      const outcome = await writeAt<SkillGithubInstallResult>(url("install"), {
+        method: "POST",
+        data: {
+          owner: preview.owner,
+          repo: preview.repo,
+          ref: preview.ref,
+          commitSha: preview.commitSha,
+          skillPaths: [...selected],
+        },
+      });
+      if (outcome.outcome !== "success") {
+        toast.error(outcome.message);
+        return;
+      }
+      setResults(outcome.data.results);
+    },
+  );
 
   if (!importAllowed && scope.workspaceId) {
     return (
@@ -295,7 +297,7 @@ export function SkillGithubInstall({
         className="flex flex-col gap-3"
         onSubmit={(event) => {
           event.preventDefault();
-          void find.run();
+          void run("preview");
         }}
       >
         <Field>
@@ -313,11 +315,8 @@ export function SkillGithubInstall({
           </FieldDescription>
         </Field>
         <div>
-          <Button
-            type="submit"
-            disabled={find.pending || install.pending || source.trim() === ""}
-          >
-            {find.pending ? "Finding..." : "Find skills"}
+          <Button type="submit" disabled={pending || source.trim() === ""}>
+            {pending && !preview ? "Finding..." : "Find skills"}
           </Button>
         </div>
       </form>
@@ -396,12 +395,10 @@ export function SkillGithubInstall({
             <div>
               <Button
                 type="button"
-                disabled={
-                  find.pending || install.pending || selected.size === 0
-                }
-                onClick={() => void install.run()}
+                disabled={pending || selected.size === 0}
+                onClick={() => void run("install")}
               >
-                {install.pending
+                {pending
                   ? "Installing..."
                   : selected.size === 1
                     ? "Install 1 skill"
