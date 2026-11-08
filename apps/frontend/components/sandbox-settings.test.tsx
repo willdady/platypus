@@ -11,6 +11,7 @@ import {
   stubAcceptedSave,
   stubRejectedSave,
   stubSaveSequence,
+  setupUser,
   toastError,
   toastSuccess,
 } from "@/test/list-test-harness";
@@ -229,6 +230,19 @@ describe("SandboxSettings draft", () => {
 });
 
 describe("SandboxSettings save", () => {
+  it("saves on Enter in the Name field", async () => {
+    const fetchMock = stubAcceptedSave({});
+    mockReads({ sandbox: { data: DOCKER_SANDBOX } });
+    await renderSettings();
+
+    const name = screen.getByLabelText("Name");
+    fireEvent.change(name, { target: { value: "Edited box" } });
+    await setupUser().type(name, "{Enter}");
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(savedBody(fetchMock)).toMatchObject({ name: "Edited box" });
+  });
+
   it("creates the first sandbox on the first registered backend", async () => {
     const fetchMock = stubAcceptedSave({});
     mockReads({ sandbox: { data: null } });

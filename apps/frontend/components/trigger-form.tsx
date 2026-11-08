@@ -329,7 +329,13 @@ function TriggerForm({
   const inboundBlocked = triggerType === "inbound" && gateClosed;
 
   const form = (
-    <div>
+    <form
+      noValidate
+      onSubmit={(e) => {
+        e.preventDefault();
+        void submit();
+      }}
+    >
       <FieldSet className="mb-6">
         <FieldGroup>
           {/* Trigger Type Selector */}
@@ -556,9 +562,9 @@ function TriggerForm({
       </FieldSet>
 
       <FormFooterButtons
+        type="submit"
         submitText={triggerId ? "Update" : "Save"}
         pending={isSubmitting}
-        onSubmit={() => void submit()}
         submitDisabled={
           isSubmitting || !canSubmit || !typeFieldsValid || inboundBlocked
         }
@@ -576,7 +582,7 @@ function TriggerForm({
         loading={isDeleting}
         error={deleteError}
       />
-    </div>
+    </form>
   );
 
   return (

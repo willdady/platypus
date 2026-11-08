@@ -118,7 +118,14 @@ function OrganizationForm({ classNames, orgId }: OrganizationFormProps) {
       backHref={orgId ? orgRoutes(orgId).root : "/"}
       backLabel="Back to organization"
     >
-      <div className={classNames}>
+      <form
+        noValidate
+        className={classNames}
+        onSubmit={(e) => {
+          e.preventDefault();
+          void submit();
+        }}
+      >
         <FieldSet className="mb-6">
           <FieldGroup>
             <FormTextField
@@ -160,9 +167,9 @@ function OrganizationForm({ classNames, orgId }: OrganizationFormProps) {
         </FieldSet>
 
         <FormFooterButtons
+          type="submit"
           submitText="Save"
           pending={isSubmitting}
-          onSubmit={() => void submit()}
           submitDisabled={isSubmitting || !canSubmit}
           deleteVisible={!!orgId}
           deleteDisabled={isSubmitting}
@@ -179,7 +186,7 @@ function OrganizationForm({ classNames, orgId }: OrganizationFormProps) {
           loading={isDeleting}
           error={deleteError}
         />
-      </div>
+      </form>
     </DetailFormState>
   );
 }

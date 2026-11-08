@@ -387,7 +387,14 @@ function BlueprintForm({
   );
 
   const form = (
-    <div className={classNames}>
+    <form
+      noValidate
+      className={classNames}
+      onSubmit={(e) => {
+        e.preventDefault();
+        void submit();
+      }}
+    >
       <FieldSet className="mb-6">
         <FieldGroup className="gap-4">
           <FormTextField
@@ -552,9 +559,9 @@ function BlueprintForm({
       {formError && <FieldError className="mb-4">{formError}</FieldError>}
 
       <FormFooterButtons
+        type="submit"
         submitText={blueprintId ? "Update" : "Save"}
         pending={isSubmitting}
-        onSubmit={() => void submit()}
         submitDisabled={isSubmitting || !canSubmit}
         deleteVisible={!!blueprintId}
         deleteDisabled={isSubmitting}
@@ -570,7 +577,7 @@ function BlueprintForm({
         loading={isDeleting}
         error={deleteError}
       />
-    </div>
+    </form>
   );
 
   return (

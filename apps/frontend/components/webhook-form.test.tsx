@@ -13,6 +13,7 @@ import {
   resetFormHarness,
   setData,
   setDataFor,
+  setupUser,
   toastError,
   jsonResponse,
   stubAcceptedSave,
@@ -61,6 +62,20 @@ describe("WebhookForm event picker", () => {
         name: "Card moved",
       }),
     ).toBeInTheDocument();
+  });
+});
+
+describe("WebhookForm form submission", () => {
+  beforeEach(() => resetFormHarness());
+
+  it("saves on Enter in the Name field", async () => {
+    const fetchMock = stubAcceptedSave({ id: "w1" });
+    renderForm();
+
+    await setupUser().type(screen.getByLabelText("Name"), "Deploy hook{Enter}");
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(savedBody(fetchMock)).toMatchObject({ name: "Deploy hook" });
   });
 });
 

@@ -155,7 +155,13 @@ function A2aEndpointForm({
   };
 
   const form = (
-    <div>
+    <form
+      noValidate
+      onSubmit={(e) => {
+        e.preventDefault();
+        void submit();
+      }}
+    >
       <A2aEndpointNotices orgId={orgId} workspaceId={workspaceId} />
 
       <FieldSet className="mb-6">
@@ -280,9 +286,9 @@ function A2aEndpointForm({
 
       {!readOnly && (
         <FormFooterButtons
+          type="submit"
           submitText={isEditMode ? "Update" : "Save"}
           pending={isSubmitting}
-          onSubmit={() => void submit()}
           submitDisabled={isSubmitting || !canSubmit || !formData.agentId}
           deleteVisible={isEditMode}
           deleteDisabled={isSubmitting}
@@ -299,7 +305,7 @@ function A2aEndpointForm({
         loading={isDeleting}
         error={deleteError}
       />
-    </div>
+    </form>
   );
 
   return (

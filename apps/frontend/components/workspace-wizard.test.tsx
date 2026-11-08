@@ -140,6 +140,7 @@ describe("WorkspaceWizard", () => {
       ownerId: "u2",
       sharedProviderIds: ["shared-1"],
     });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("creates the sandbox with the workspace when one is configured", async () => {
@@ -168,6 +169,7 @@ describe("WorkspaceWizard", () => {
       name: "Dev box",
       backend: "docker",
     });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("keeps what was entered when going back", () => {
