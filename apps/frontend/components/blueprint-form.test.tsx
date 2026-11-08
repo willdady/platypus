@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { blueprintCreateSchema } from "@platypus/schemas";
+import { expectSentBodyToMatchSchema } from "@/test/test-utils";
 import {
   authMock,
   swrMock,
@@ -11,7 +13,6 @@ import {
   setupUser,
   stubAcceptedSave,
   stubRejectedSave,
-  savedBody,
 } from "@/test/form-test-harness";
 import { selectOption } from "@/test/test-utils";
 import { scopedPath } from "@/lib/api-write";
@@ -66,7 +67,9 @@ describe("BlueprintForm form submission", () => {
     await setupUser().type(name, "{Enter}");
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    expect(savedBody(fetchMock)).toMatchObject({ name: "Starter" });
+    expect(
+      expectSentBodyToMatchSchema(fetchMock, blueprintCreateSchema),
+    ).toMatchObject({ name: "Starter" });
   });
 });
 
@@ -140,7 +143,9 @@ describe("BlueprintForm Tier 2 provider slots", () => {
     await waitFor(() =>
       expect(push).toHaveBeenCalledWith("/org1/settings/blueprints"),
     );
-    expect(savedBody(fetchMock)).toEqual({
+    expect(
+      expectSentBodyToMatchSchema(fetchMock, blueprintCreateSchema),
+    ).toEqual({
       name: "Starter",
       items: [
         { resourceType: "provider", resourceId: "p1" },
@@ -162,7 +167,9 @@ describe("BlueprintForm Tier 2 provider slots", () => {
     save();
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    expect(savedBody(fetchMock)).toMatchObject({
+    expect(
+      expectSentBodyToMatchSchema(fetchMock, blueprintCreateSchema),
+    ).toMatchObject({
       items: [],
       taskModelProviderId: null,
     });

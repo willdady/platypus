@@ -57,6 +57,7 @@ import {
   type Serialized,
   type WriteOutcome,
 } from "@/lib/api-write";
+import { parseCloneBody } from "@/lib/parse-write-body";
 import { useScopedList } from "@/hooks/use-scoped-list";
 import { useListParams } from "@/hooks/use-list-params";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
@@ -296,8 +297,11 @@ export function TriggerList({
       });
     }
 
-    return writeEntity<Trigger>(url, "triggers", scope, {
-      data: {
+    // Unreachable while the read carries a stored Trigger the create accepts;
+    // answer as a refused create rather than send a body the backend refuses.
+    const parsed = parseCloneBody(
+      createSchema,
+      {
         ...pickKeys(original, createSchema.shape),
         // The route's Workspace, not whatever the read carried.
         workspaceId,
@@ -305,6 +309,12 @@ export function TriggerList({
         enabled: false,
         ...(original.type === "inbound" && { issueToken: false }),
       },
+      `This ${original.type} Trigger cannot be cloned.`,
+    );
+    if (!parsed.ok) return Promise.resolve(parsed.outcome);
+
+    return writeEntity<"triggers", Trigger>(url, "triggers", scope, {
+      data: parsed.data,
     });
   };
 

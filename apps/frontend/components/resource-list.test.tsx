@@ -1,7 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { screen, fireEvent, waitFor } from "@testing-library/react";
 import type { ComponentType } from "react";
-import type { MCP, Provider } from "@platypus/schemas";
+import {
+  attachmentCreateSchema,
+  type MCP,
+  type Provider,
+} from "@platypus/schemas";
 import type { WorkspaceDelegationFlags } from "@/lib/authorization";
 import {
   authMock,
@@ -18,7 +22,10 @@ import {
   menuItemLabels,
   confirmDialog,
 } from "@/test/list-test-harness";
-import { openDropdownMenu } from "@/test/test-utils";
+import {
+  expectSentBodyToMatchSchema,
+  openDropdownMenu,
+} from "@/test/test-utils";
 
 // --- Module mocks ------------------------------------------------------------
 
@@ -394,6 +401,9 @@ describe.each(RESOURCES)(
             }),
           ),
         );
+        expect(
+          expectSentBodyToMatchSchema(fetchMock, attachmentCreateSchema),
+        ).toEqual({ resourceType, resourceId: item.id });
       });
 
       it("shows an Org Admin how many Workspaces each row is shared with", async () => {

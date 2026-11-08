@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { screen, fireEvent, waitFor } from "@testing-library/react";
+import { attachmentCreateSchema } from "@platypus/schemas";
+import { expectSentBodyToMatchSchema } from "@/test/test-utils";
 import {
   authMock,
   swrMock,
@@ -66,6 +68,9 @@ describe("ManageAttachmentsDialog attach", () => {
         }),
       }),
     );
+    expect(
+      expectSentBodyToMatchSchema(fetchMock, attachmentCreateSchema),
+    ).toEqual({ resourceType: "agent", resourceId: "a1" });
   });
 
   it("surfaces the backend's reason inline and does not revalidate when attach is refused", async () => {

@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { fireEvent, screen, waitFor } from "@testing-library/react";
-import type { OrgMemberListItem } from "@platypus/schemas";
+import {
+  organizationMemberRemoveSchema,
+  type OrgMemberListItem,
+} from "@platypus/schemas";
 import {
   authMock,
   mockScopedSWR,
@@ -13,7 +16,7 @@ import {
   swrMock,
   toastError,
 } from "@/test/list-test-harness";
-import { selectOption } from "@/test/test-utils";
+import { expectSentBodyToMatchSchema, selectOption } from "@/test/test-utils";
 
 vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("swr", () => swrMock);
@@ -75,7 +78,14 @@ function actionFor(name: string) {
 }
 function sentBody(fetchMock: ReturnType<typeof stubAcceptedSave>) {
   const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-  return { url, method: init.method, body: JSON.parse(String(init.body)) };
+  return {
+    url,
+    method: init.method,
+    body: expectSentBodyToMatchSchema(
+      fetchMock,
+      organizationMemberRemoveSchema,
+    ),
+  };
 }
 
 beforeEach(() => {

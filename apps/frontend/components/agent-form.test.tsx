@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import type { Provider, ToolSet } from "@platypus/schemas";
+import {
+  agentCreateSchema,
+  agentUpdateSchema,
+  type Provider,
+  type ToolSet,
+} from "@platypus/schemas";
 import {
   authMock,
   swrMock,
@@ -13,9 +18,8 @@ import {
   setupUser,
   stubRejectedSave,
   stubSaveSequence,
-  savedBody,
 } from "@/test/form-test-harness";
-import { selectOption } from "@/test/test-utils";
+import { expectSentBodyToMatchSchema, selectOption } from "@/test/test-utils";
 
 // --- Module mocks ------------------------------------------------------------
 
@@ -137,32 +141,91 @@ describe("AgentForm form submission", () => {
     registerSwrData();
   });
 
+  const stored = {
+    id: "a1",
+    name: "Old name",
+    description: "A helpful bot",
+    providerId: "p1",
+    modelId: "gpt-4o",
+    maxSteps: 5,
+    toolSetIds: [],
+    skillIds: [],
+    subAgentIds: [],
+  };
+
+  const renderEditForm = () => {
+    setDataFor("/agents/a1", stored);
+    return render(
+      <AgentForm
+        orgId="org1"
+        workspaceId="ws1"
+        toolSets={[]}
+        agents={[]}
+        agentId="a1"
+      />,
+    );
+  };
+
   it("saves on Enter in the Name field", async () => {
     const fetchMock = stubSaveSequence({ status: 200, body: { id: "a1" } });
-    renderCreateForm();
+    renderEditForm();
 
-    const name = screen.getByLabelText("Name");
+    const name = await screen.findByDisplayValue("Old name");
     fireEvent.change(name, { target: { value: "Bot" } });
     await setupUser().type(name, "{Enter}");
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    expect(savedBody(fetchMock)).toMatchObject({ name: "Bot" });
+    expect(
+      expectSentBodyToMatchSchema(fetchMock, agentUpdateSchema),
+    ).toMatchObject({ name: "Bot" });
+  });
+
+  it("sends a create body the strict Agent schema accepts", async () => {
+    const fetchMock = stubSaveSequence({ status: 200, body: { id: "a1" } });
+    renderCreateForm();
+
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Bot" },
+    });
+    fireEvent.change(screen.getByLabelText("Description"), {
+      target: { value: "A test Agent" },
+    });
+    await selectOption(
+      screen.getByRole("combobox", { name: "Model" }),
+      "gpt-4o",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(
+      expectSentBodyToMatchSchema(fetchMock, agentCreateSchema),
+    ).toMatchObject({
+      name: "Bot",
+      description: "A test Agent",
+      providerId: "p1",
+      modelId: "gpt-4o",
+    });
   });
 
   // The schema owns validation, so the browser's own step/type checks must not
   // block a save now that these fields live in a real form.
   it("does not let browser constraint validation block a schema-valid save", async () => {
     const fetchMock = stubSaveSequence({ status: 200, body: { id: "a1" } });
-    renderCreateForm();
+    renderEditForm();
 
     fireEvent.click(screen.getByText("Advanced settings"));
     fireEvent.change(screen.getByLabelText("Top-p"), {
       target: { value: "0.95" },
     });
-    await setupUser().type(screen.getByLabelText("Name"), "Bot{Enter}");
+    await setupUser().type(
+      await screen.findByDisplayValue("Old name"),
+      "Bot{Enter}",
+    );
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    expect(savedBody(fetchMock)).toMatchObject({ topP: 0.95 });
+    expect(
+      expectSentBodyToMatchSchema(fetchMock, agentUpdateSchema),
+    ).toMatchObject({ topP: 0.95 });
   });
 });
 
@@ -395,7 +458,7 @@ describe("AgentForm tool set load failure", () => {
     fireEvent.click(screen.getByRole("button", { name: "Update" }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    const body = expectSentBodyToMatchSchema(fetchMock, agentUpdateSchema);
     expect(body.toolSetIds).toEqual(["ts1", "ts2"]);
   });
 });
@@ -540,7 +603,7 @@ describe("AgentForm Skills search", () => {
     fireEvent.click(screen.getByRole("button", { name: "Update" }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    const body = expectSentBodyToMatchSchema(fetchMock, agentUpdateSchema);
     expect(body.skillIds).toEqual(["s2"]);
   });
 
@@ -656,7 +719,9 @@ describe("AgentForm Reasoning section", () => {
     expect(await screen.findByDisplayValue("2048")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Update" }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    expect(savedBody(fetchMock)).toMatchObject({
+    expect(
+      expectSentBodyToMatchSchema(fetchMock, agentUpdateSchema),
+    ).toMatchObject({
       reasoningThinking: true,
       reasoningEffort: "high",
       thinkingBudget: 2048,
@@ -667,7 +732,9 @@ describe("AgentForm Reasoning section", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Update" }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
-    expect(savedBody(fetchMock)).toMatchObject({
+    expect(
+      expectSentBodyToMatchSchema(fetchMock, agentUpdateSchema),
+    ).toMatchObject({
       thinkingBudget: null,
     });
   });
@@ -725,7 +792,9 @@ describe("AgentForm Fallback model", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Update" }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    expect(savedBody(fetchMock)).toMatchObject({
+    expect(
+      expectSentBodyToMatchSchema(fetchMock, agentUpdateSchema),
+    ).toMatchObject({
       fallbackProviderId: "p2",
       fallbackModelId: "claude-sonnet-4-5",
     });
@@ -743,7 +812,9 @@ describe("AgentForm Fallback model", () => {
     expect(await screen.findByText("Fallback model")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Update" }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    expect(savedBody(fetchMock)).toMatchObject({
+    expect(
+      expectSentBodyToMatchSchema(fetchMock, agentUpdateSchema),
+    ).toMatchObject({
       fallbackProviderId: null,
       fallbackModelId: null,
     });
@@ -761,7 +832,9 @@ describe("AgentForm Fallback model", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Update" }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    expect(savedBody(fetchMock)).toMatchObject({
+    expect(
+      expectSentBodyToMatchSchema(fetchMock, agentUpdateSchema),
+    ).toMatchObject({
       fallbackProviderId: null,
       fallbackModelId: null,
     });

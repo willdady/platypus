@@ -18,8 +18,9 @@ import {
   jsonResponse,
   stubAcceptedSave,
   stubRejectedSave,
-  savedBody,
 } from "@/test/form-test-harness";
+import { webhookCreateSchema } from "@platypus/schemas";
+import { expectSentBodyToMatchSchema } from "@/test/test-utils";
 
 // --- Module mocks ------------------------------------------------------------
 
@@ -34,6 +35,11 @@ import { WebhookForm } from "./webhook-form";
 
 function renderForm() {
   return render(<WebhookForm orgId="org1" workspaceId="ws1" />);
+}
+
+/** The create body the form put on the wire, checked against the strict schema. */
+function savedCreateBody(fetchMock: ReturnType<typeof vi.fn>) {
+  return expectSentBodyToMatchSchema(fetchMock, webhookCreateSchema);
 }
 
 // --- Tests -------------------------------------------------------------------
@@ -72,10 +78,13 @@ describe("WebhookForm form submission", () => {
     const fetchMock = stubAcceptedSave({ id: "w1" });
     renderForm();
 
+    fireEvent.change(screen.getByLabelText("URL"), {
+      target: { value: "https://example.com/hook" },
+    });
     await setupUser().type(screen.getByLabelText("Name"), "Deploy hook{Enter}");
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    expect(savedBody(fetchMock)).toMatchObject({ name: "Deploy hook" });
+    expect(savedCreateBody(fetchMock)).toMatchObject({ name: "Deploy hook" });
   });
 });
 
@@ -91,6 +100,12 @@ describe("WebhookForm validation error surfacing", () => {
 
     renderForm();
 
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Deploy hook" },
+    });
+    fireEvent.change(screen.getByLabelText("URL"), {
+      target: { value: "https://example.com/hook" },
+    });
     const saveButton = screen.getByRole("button", { name: "Save" });
     fireEvent.click(saveButton);
 
@@ -123,7 +138,7 @@ describe("WebhookForm validation error surfacing", () => {
       ),
     );
     // Every event starts subscribed, so the toggle above dropped one.
-    const body = savedBody(fetchMock);
+    const body = savedCreateBody(fetchMock);
     expect(body.events).not.toContain("notification.created");
     expect(body.events).toContain("notification.updated");
     expect(body.headers).toBeNull();

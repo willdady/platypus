@@ -6,7 +6,12 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import type { Provider } from "@platypus/schemas";
+import {
+  providerCreateSchema,
+  providerTestSchema,
+  providerUpdateSchema,
+  type Provider,
+} from "@platypus/schemas";
 import {
   authMock,
   authState,
@@ -19,9 +24,8 @@ import {
   stubAcceptedSave,
   stubPendingSave,
   stubRejectedSave,
-  savedBody,
 } from "@/test/form-test-harness";
-import { selectOption } from "@/test/test-utils";
+import { expectSentBodyToMatchSchema, selectOption } from "@/test/test-utils";
 
 // --- Module mocks ------------------------------------------------------------
 
@@ -89,9 +93,15 @@ function type(dialog: HTMLElement, label: string, value: string) {
   });
 }
 
+/** The body the form put on the wire for the last save, checked against the
+ * strict update schema the backend validates it with. */
+function savedProviderBody(fetchMock: ReturnType<typeof vi.fn>) {
+  return expectSentBodyToMatchSchema(fetchMock, providerUpdateSchema);
+}
+
 /** The `modelIds` the form put on the wire for the last save. */
 function savedModelIds(fetchMock: ReturnType<typeof vi.fn>) {
-  return savedBody(fetchMock).modelIds as ({ id: string } & Record<
+  return savedProviderBody(fetchMock).modelIds as ({ id: string } & Record<
     string,
     unknown
   >)[];
@@ -116,14 +126,47 @@ describe("ProviderForm form submission", () => {
 
   it("saves on Enter in the Name field", async () => {
     const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
-    render(<ProviderForm orgId="org1" />);
+    renderEditForm([{ id: "gpt-4o", passthroughFileTypes: [] }]);
 
-    const name = screen.getByLabelText("Name");
+    const name = await screen.findByLabelText("Name");
     fireEvent.change(name, { target: { value: "Local" } });
     await setupUser().type(name, "{Enter}");
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    expect(savedBody(fetchMock)).toMatchObject({ name: "Local" });
+    expect(savedProviderBody(fetchMock)).toMatchObject({ name: "Local" });
+  });
+
+  it("creates a Provider with a model and its background model pointers", async () => {
+    const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
+    render(<ProviderForm orgId="org1" />);
+
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Local" },
+    });
+    fireEvent.change(screen.getByLabelText("API Key"), {
+      target: { value: "sk-test" },
+    });
+    const dialog = openAddDialog();
+    type(dialog, "Model ID", "gpt-4o");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Add" }));
+    fireEvent.change(screen.getByLabelText("Task Model ID"), {
+      target: { value: "gpt-4o" },
+    });
+    fireEvent.change(screen.getByLabelText("Memory Extraction Model ID"), {
+      target: { value: "gpt-4o" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(
+      expectSentBodyToMatchSchema(fetchMock, providerCreateSchema),
+    ).toMatchObject({
+      name: "Local",
+      apiKey: "sk-test",
+      modelIds: [{ id: "gpt-4o" }],
+      taskModelId: "gpt-4o",
+      memoryExtractionModelId: "gpt-4o",
+    });
   });
 });
 
@@ -939,7 +982,7 @@ describe("ProviderForm Web search selector", () => {
     save();
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    expect(savedBody(fetchMock).searchSource).toBe("native");
+    expect(savedProviderBody(fetchMock).searchSource).toBe("native");
   });
 
   // The other half of keeping it: picking None explicitly is a real edit, and
@@ -953,7 +996,7 @@ describe("ProviderForm Web search selector", () => {
     save();
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    expect(savedBody(fetchMock).searchSource).toBe("none");
+    expect(savedProviderBody(fetchMock).searchSource).toBe("none");
   });
 
   // Switching Provider Type away from native search after "The provider's
@@ -1026,7 +1069,7 @@ describe("ProviderForm Web search selector", () => {
       save();
 
       await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-      expect(savedBody(fetchMock).searchSource).toBe(searchSource);
+      expect(savedProviderBody(fetchMock).searchSource).toBe(searchSource);
     },
   );
 });
@@ -1068,9 +1111,9 @@ describe("ProviderForm Test action", () => {
     fireEvent.click(testButton("gpt-4o"));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    const [url, init] = fetchMock.mock.calls.at(-1) as [string, RequestInit];
+    const [url] = fetchMock.mock.calls.at(-1) as [string, RequestInit];
     expect(url).toBe("http://test/organizations/org1/providers/test");
-    const body = JSON.parse(init.body as string) as Record<string, unknown>;
+    const body = expectSentBodyToMatchSchema(fetchMock, providerTestSchema);
     expect(body).toEqual(
       expect.objectContaining({
         apiKey: "sk-test",
