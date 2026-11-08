@@ -1,8 +1,14 @@
 import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
+/** The label a submit button shows while its form is saving. */
+export const PENDING_SUBMIT_TEXT = {
+  Save: "Saving...",
+  Update: "Updating...",
+} as const;
+
 export type FormFooterButtonsProps = {
-  submitText: "Save" | "Update";
+  submitText: keyof typeof PENDING_SUBMIT_TEXT;
   pending?: boolean;
   onSubmit?: () => void;
   submitDisabled?: boolean;
@@ -34,11 +40,7 @@ export function FormFooterButtons({
         onClick={type === "button" ? onSubmit : undefined}
         disabled={submitDisabled || pending}
       >
-        {pending
-          ? submitText === "Save"
-            ? "Saving..."
-            : "Updating..."
-          : submitText}
+        {pending ? PENDING_SUBMIT_TEXT[submitText] : submitText}
       </Button>
 
       {deleteVisible && (

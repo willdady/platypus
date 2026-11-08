@@ -50,7 +50,10 @@ import {
 import { EmptyCard } from "@/components/empty-card";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { FormFooterButtons } from "@/components/form-footer-buttons";
+import {
+  FormFooterButtons,
+  PENDING_SUBMIT_TEXT,
+} from "@/components/form-footer-buttons";
 import { ListError } from "@/components/list-state";
 import { LoadingRegion } from "@/components/list-skeletons";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -1020,7 +1023,7 @@ function SandboxSettings({
           </Button>
           <Button onClick={handleSave} disabled={isSubmitting}>
             {isSubmitting && draft.submitText === "Save"
-              ? "Saving..."
+              ? PENDING_SUBMIT_TEXT.Save
               : draft.submitText}
           </Button>
         </div>
