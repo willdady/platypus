@@ -24,7 +24,7 @@ function renderDialog() {
   );
   render(
     <CloneDialog
-      noun="Agent"
+      noun="agent"
       original="Scout"
       onClose={onClose}
       create={create}
@@ -41,6 +41,13 @@ async function settle(outcome: WriteOutcome<{ id: string }>) {
 }
 
 describe("CloneDialog", () => {
+  it("titles itself from the lowercase noun", () => {
+    renderDialog();
+
+    expect(screen.getByRole("dialog", { name: "Clone agent" })).toBeVisible();
+    expect(screen.getByPlaceholderText("Agent name")).toBeInTheDocument();
+  });
+
   it("sends the create once for two rapid clicks", async () => {
     const create = renderDialog();
     const user = setupUser();

@@ -291,7 +291,7 @@ describe("KanbanBoard transport", () => {
   }[] = [
     {
       name: "column create",
-      heading: "Add Column",
+      heading: "Add column",
       perform: (value) => {
         fireEvent.click(screen.getByRole("button", { name: /add column/i }));
         fireEvent.change(screen.getByPlaceholderText("Enter column name"), {
@@ -316,7 +316,7 @@ describe("KanbanBoard transport", () => {
     },
     {
       name: "card create",
-      heading: "Add Card",
+      heading: "Add card",
       perform: (value) => {
         fireEvent.click(screen.getByRole("button", { name: /add card/i }));
         fireEvent.change(screen.getByPlaceholderText("Enter card title"), {
@@ -336,7 +336,7 @@ describe("KanbanBoard transport", () => {
     },
     {
       name: "column edit",
-      heading: "Edit Column",
+      heading: "Edit column",
       perform: async (value) => {
         await openColumnMenuItem("To Do", "Edit");
         fireEvent.change(
@@ -356,7 +356,7 @@ describe("KanbanBoard transport", () => {
     },
     {
       name: "column delete",
-      heading: "Delete Column",
+      heading: "Delete column",
       perform: async () => {
         await openColumnMenuItem("To Do", "Delete");
         fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
@@ -762,7 +762,7 @@ describe("KanbanBoard transport", () => {
     async function openCardDeleteConfirm() {
       fireEvent.click(screen.getByText("A card"));
       fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
-      return screen.findByRole("dialog", { name: "Delete Card" });
+      return screen.findByRole("dialog", { name: "Delete card" });
     }
 
     /** Opens the card's Delete confirm dialog and confirms it. */
@@ -824,7 +824,7 @@ describe("KanbanBoard transport", () => {
       await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
       await waitFor(() =>
         expect(
-          screen.queryByRole("dialog", { name: "Delete Card" }),
+          screen.queryByRole("dialog", { name: "Delete card" }),
         ).not.toBeInTheDocument(),
       );
       expect(
@@ -861,7 +861,7 @@ describe("KanbanBoard transport", () => {
       // Both the confirm and the card dialog stay open for a retry. The card
       // dialog sits behind the modal, so it is hidden from the a11y tree.
       expect(
-        screen.getByRole("dialog", { name: "Delete Card" }),
+        screen.getByRole("dialog", { name: "Delete card" }),
       ).toBeInTheDocument();
       expect(
         screen.getByRole("button", { name: "Save", hidden: true }),
@@ -992,7 +992,7 @@ describe("KanbanBoard card comment delete", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: /^Delete comment by Bob/ }),
     );
-    return screen.findByRole("dialog", { name: "Delete Comment" });
+    return screen.findByRole("dialog", { name: "Delete comment" });
   }
 
   it("sends the delete and closes the confirm dialog on success", async () => {
@@ -1010,7 +1010,7 @@ describe("KanbanBoard card comment delete", () => {
     );
     await waitFor(() => expect(mutateCardComments).toHaveBeenCalledOnce());
     expect(
-      screen.queryByRole("dialog", { name: "Delete Comment" }),
+      screen.queryByRole("dialog", { name: "Delete comment" }),
     ).not.toBeInTheDocument();
     expect(toastError).not.toHaveBeenCalled();
   });
@@ -1195,7 +1195,7 @@ describe("KanbanBoard double submit", () => {
         fireEvent.click(screen.getByText("A card"));
         fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
         const confirm = await screen.findByRole("dialog", {
-          name: "Delete Card",
+          name: "Delete card",
         });
         return within(confirm).getByRole("button", { name: "Delete" });
       },

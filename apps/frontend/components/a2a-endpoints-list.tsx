@@ -138,13 +138,9 @@ function A2aEndpointsList({
       <DeleteConfirmDialog
         open={deleteFlow.open}
         onOpenChange={(open) => !open && deleteFlow.close()}
-        title="Delete A2A endpoint"
-        description={
-          <>
-            Delete <strong>{deleteFlow.target?.name}</strong>? Its URL and every
-            one of its tokens stop working straight away.
-          </>
-        }
+        noun="A2A endpoint"
+        name={deleteFlow.target?.name}
+        consequence="Its URL and every one of its tokens stop working straight away."
         onConfirm={deleteFlow.confirm}
         loading={deleteFlow.deleting}
         error={deleteFlow.error}

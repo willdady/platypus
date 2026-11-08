@@ -40,7 +40,7 @@ export function ChatErrorDialog({
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent showCloseButton={false}>
         <DialogHeader>
-          <DialogTitle>Chat Error</DialogTitle>
+          <DialogTitle>Chat error</DialogTitle>
           <DialogDescription>
             An error occurred while processing your request.
           </DialogDescription>
@@ -61,7 +61,7 @@ export function ChatErrorDialog({
           >
             {copied ? <Check /> : <Copy />}
           </Button>
-          <Button onClick={() => onOpenChange(false)}>Ok</Button>
+          <Button onClick={() => onOpenChange(false)}>OK</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -461,8 +461,7 @@ function WebhookForm({ orgId, workspaceId, webhookId }: WebhookFormProps) {
       <DeleteConfirmDialog
         open={isDeleteDialogOpen}
         onOpenChange={setIsDeleteDialogOpen}
-        title="Delete webhook"
-        description="Are you sure you want to delete this webhook? This action cannot be undone."
+        noun="webhook"
         onConfirm={handleDelete}
         loading={isDeleting}
         error={deleteError}

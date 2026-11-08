@@ -517,7 +517,7 @@ export function AgentsList({
 
       {cloneRefs && agentToClone && (
         <CloneDialog
-          noun="Agent"
+          noun="agent"
           original={agentToClone.name}
           onClose={() => setAgentToClone(null)}
           create={(name, url) =>
@@ -565,8 +565,8 @@ export function AgentsList({
       <DeleteConfirmDialog
         open={deleteFlow.open}
         onOpenChange={(open) => !open && deleteFlow.close()}
-        title="Delete Agent"
-        description={`Are you sure you want to delete "${deleteFlow.target?.name}"? This action cannot be undone.`}
+        noun="agent"
+        name={deleteFlow.target?.name}
         onConfirm={deleteFlow.confirm}
         loading={deleteFlow.deleting}
         error={deleteFlow.error}

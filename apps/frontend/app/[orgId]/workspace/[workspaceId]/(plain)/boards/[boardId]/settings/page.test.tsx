@@ -91,8 +91,8 @@ describe("BoardSettingsPage", () => {
       fireEvent.click(screen.getByRole("button", { name: /Delete/ }));
       const dialog = screen.getByRole("dialog");
       fireEvent.change(
-        within(dialog).getByPlaceholderText("Type 'delete board' to confirm"),
-        { target: { value: "delete board" } },
+        within(dialog).getByPlaceholderText("Type 'Delete board' to confirm"),
+        { target: { value: "Delete board" } },
       );
       fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
     };

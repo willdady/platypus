@@ -27,6 +27,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { A2aTokenDialog } from "@/components/a2a-token-dialog";
 import { CopyRow } from "@/components/copy-row";
 import { TokenTime } from "@/components/bearer-token";
@@ -268,13 +269,12 @@ export function A2aTokens({
         )}
       </Field>
 
-      <ConfirmDialog
+      <DeleteConfirmDialog
         open={tokenDelete.open}
         onOpenChange={(open) => !open && tokenDelete.close()}
-        title="Delete token"
-        description={`The client using "${tokenDelete.target?.name}" stops getting in straight away.`}
-        confirmLabel="Delete"
-        confirmVariant="destructive"
+        noun="token"
+        name={tokenDelete.target?.name}
+        consequence="The client using it stops getting in straight away."
         onConfirm={tokenDelete.confirm}
         loading={tokenDelete.deleting}
         error={tokenDelete.error}

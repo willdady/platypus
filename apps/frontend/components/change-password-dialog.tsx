@@ -87,7 +87,7 @@ export function ChangePasswordDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Change Password</DialogTitle>
+          <DialogTitle>Change password</DialogTitle>
           <DialogDescription>
             Set a new password for {user.name} ({user.email}).
           </DialogDescription>
