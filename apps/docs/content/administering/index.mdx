@@ -179,8 +179,11 @@ refreshes, so you can judge the new token before revoking it too.
 
 An [A2A endpoint](/building-with-platypus/a2a-endpoints) makes an Agent
 reachable from outside Platypus over the A2A protocol, by any client holding a
-token its Workspace Owner issues. Its runs act as that Owner with all of the
-Agent's Tools, so whether a Workspace may have endpoints is your decision.
+token its Workspace Owner issues. Its runs act as that Owner with the Agent's
+Tools. No one is there to approve a Tool call that needs approval, so those
+calls are refused, and Memory Tools are withheld unless the endpoint's
+**Include Memories** is on. Whether a Workspace may have endpoints is your
+decision.
 
 **Organization settings → A2A endpoints → Allow A2A endpoints in** decides it,
 separately from Inbound Triggers:
