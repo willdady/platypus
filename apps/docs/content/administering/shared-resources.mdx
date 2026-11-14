@@ -66,9 +66,11 @@ MCP server** or **Attach shared provider**. Each opens an **Attach a shared**
 dialog listing the Organization's available resources of that type.
 
 <Callout type="warning">
-  Attaching a Shared Agent attaches the Agent alone. Attach the Provider and
-  Skills it uses to the same Workspace too: without its Provider its Chats fail,
-  and a Skill that isn't attached there is left out.
+  Attaching a Shared Agent attaches the Agent alone. Attach the Provider,
+  Skills, Sub-Agents and MCP servers it uses to the same Workspace too: without
+  its Provider its Chats fail. A Skill or MCP server that isn't attached there
+  is left out, and a Sub-Agent that isn't attached can't be delegated to; the
+  Agent carries on without them.
 </Callout>
 
 To undo one, use **Detach** inside the Workspace, or untick the Workspace in

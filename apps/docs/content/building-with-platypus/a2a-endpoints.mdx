@@ -32,8 +32,9 @@ still create endpoints and tokens in the meantime.
 
 <Callout type="warning">
   Anyone holding a token can talk to the Agent, and every run acts as you, with
-  every Tool the Agent has. A token is only as safe as the Agent's Tools are
-  narrow. To expose less, make a narrower Agent and give the endpoint that one.
+  the Agent's Tools, except that a Tool call needing approval is refused. A
+  token is only as safe as the Agent's Tools are narrow. To expose less, make a
+  narrower Agent and give the endpoint that one.
 </Callout>
 
 The Agent is told the conversation arrives from the client the token is named
