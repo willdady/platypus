@@ -12,6 +12,7 @@ import {
   stubRejectedSave,
 } from "@/test/form-test-harness";
 import { expectSentBodyToMatchSchema, selectOption } from "@/test/test-utils";
+import { FIX_FORM_ERRORS_MESSAGE } from "@/lib/apply-write-outcome";
 
 // --- Module mocks ------------------------------------------------------------
 
@@ -171,7 +172,7 @@ describe("WorkspaceContextForm writes", () => {
     expect(push).not.toHaveBeenCalled();
   });
 
-  it("renders a rejected field inline rather than collapsing it to a toast", async () => {
+  it("renders a rejected field inline and says why the save stopped", async () => {
     stubRejectedSave([{ path: ["content"], message: "Too long" }], 400);
 
     render(<WorkspaceContextForm />);
@@ -179,7 +180,7 @@ describe("WorkspaceContextForm writes", () => {
     submit();
 
     expect(await screen.findByText("Too long")).toBeInTheDocument();
-    expect(toastError).not.toHaveBeenCalled();
+    expect(toastError).toHaveBeenCalledWith(FIX_FORM_ERRORS_MESSAGE);
   });
 
   it("updates through writeAt and revalidates both the list and the record", async () => {

@@ -6,7 +6,6 @@ import {
   FieldGroup,
   FieldSet,
   FieldDescription,
-  FieldError,
 } from "@/components/ui/field";
 import { FormTextField } from "@/components/form-text-field";
 import { ProviderPointerSelect } from "@/components/provider-pointer-select";
@@ -262,7 +261,6 @@ function BlueprintForm({
 
   // Selected items as a Set of `${type}:${id}` keys for cheap toggling.
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [formError, setFormError] = useState<string | null>(null);
 
   const router = useRouter();
 
@@ -319,8 +317,9 @@ function BlueprintForm({
         memoryEmbeddingProviderId: data.memoryEmbeddingProviderId,
       };
     },
+    successMessage: () =>
+      blueprintId ? "Blueprint updated" : "Blueprint created",
     onSuccess: () => router.push(returnPath),
-    onError: (message) => setFormError(message),
   });
 
   const {
@@ -334,6 +333,7 @@ function BlueprintForm({
     entity: "blueprints",
     scope: { orgId },
     id: blueprintId,
+    successMessage: "Blueprint deleted",
     onSuccess: () => router.push(returnPath),
   });
 
@@ -508,8 +508,6 @@ function BlueprintForm({
           />
         </FieldGroup>
       </FieldSet>
-
-      {formError && <FieldError className="mb-4">{formError}</FieldError>}
 
       <FormFooterButtons
         type="submit"

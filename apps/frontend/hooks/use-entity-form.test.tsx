@@ -21,6 +21,7 @@ vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("swr", () => swrMock);
 
 import { useEntityDelete, useEntityForm } from "./use-entity-form";
+import { FIX_FORM_ERRORS_MESSAGE } from "@/lib/apply-write-outcome";
 
 type Data = { name: string; description: string };
 
@@ -296,6 +297,49 @@ describe("useEntityForm submit lifecycle", () => {
 
     expect(result.current.validationErrors.name).toBe("Name is taken");
     expect(onSuccess).not.toHaveBeenCalled();
+  });
+
+  it("toasts the fix-the-errors copy when a rejection maps to a field", async () => {
+    stubRejectedSave([{ path: ["name"], message: "Name is taken" }], 400);
+
+    const { result } = renderHook(() =>
+      useEntityForm<Data, unknown>(baseOptions),
+    );
+
+    await act(async () => {
+      await result.current.submit();
+    });
+
+    expect(toastError).toHaveBeenCalledWith(FIX_FORM_ERRORS_MESSAGE);
+  });
+
+  it("stays inline-only when invalidMessage is null", async () => {
+    stubRejectedSave([{ path: ["name"], message: "Name is taken" }], 400);
+
+    const { result } = renderHook(() =>
+      useEntityForm<Data, unknown>({ ...baseOptions, invalidMessage: null }),
+    );
+
+    await act(async () => {
+      await result.current.submit();
+    });
+
+    expect(result.current.validationErrors.name).toBe("Name is taken");
+    expect(toastError).not.toHaveBeenCalled();
+  });
+
+  it("toasts the save's failure when a rejection maps to no field", async () => {
+    stubRejectedSave("Name is not allowed", 400);
+
+    const { result } = renderHook(() =>
+      useEntityForm<Data, unknown>(baseOptions),
+    );
+
+    await act(async () => {
+      await result.current.submit();
+    });
+
+    expect(toastError).toHaveBeenCalledWith("Name is not allowed");
   });
 
   it("toasts a default failure when the save throws", async () => {

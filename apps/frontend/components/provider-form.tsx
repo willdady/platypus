@@ -533,6 +533,10 @@ function ProviderForm({
     },
     buildPayload,
     write: draft && ((data) => draft.write(buildPayload(data))),
+    // The wizard advancing is the feedback for a staged draft.
+    successMessage: draft
+      ? undefined
+      : () => (providerId ? "Provider updated" : "Provider created"),
     onConflict: (message) => setError(message),
     onError: toastGuidanceOrError,
     failureMessage: "Failed to save provider",
@@ -600,6 +604,7 @@ function ProviderForm({
     entity: "providers",
     scope,
     id: providerId,
+    successMessage: "Provider deleted",
     onSuccess: () => router.push(listHref),
     guidanceOnForbidden: true,
   });

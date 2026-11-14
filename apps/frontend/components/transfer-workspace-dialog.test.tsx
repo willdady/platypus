@@ -11,7 +11,9 @@ import {
   renderList,
   resetListHarness,
   stubAcceptedSave,
+  stubRejectedSave,
   swrMock,
+  toastError,
   toastSuccess,
 } from "@/test/list-test-harness";
 import { expectSentBodyToMatchSchema, selectOption } from "@/test/test-utils";
@@ -117,5 +119,29 @@ describe("TransferWorkspaceAction", () => {
       newOwnerId: "u-new",
       keepHistory: true,
     });
+  });
+
+  it("shows a field-mapped refusal on the recipient field, without a toast", async () => {
+    mockScopedSWR(
+      {
+        "/workspaces/ws-1": { data: workspace },
+        "/members": [memberOf("u-old", "Olive"), memberOf("u-new", "Nina")],
+      },
+      { strict: true },
+    );
+    stubRejectedSave([{ path: ["newOwnerId"], message: "Not eligible" }], 400);
+    await renderAction();
+
+    fireEvent.click(screen.getByRole("button", { name: "Transfer" }));
+    await selectOption(
+      screen.getByRole("combobox", { name: "New owner" }),
+      "Nina (u-new@example.com)",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(screen.getByRole("button", { name: "Transfer" }));
+
+    expect(await screen.findByText("Not eligible")).toBeInTheDocument();
+    expect(toastError).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 });

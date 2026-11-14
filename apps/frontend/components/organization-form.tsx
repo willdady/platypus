@@ -24,7 +24,6 @@ import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
 import { useRouter } from "next/navigation";
 import { type Organization } from "@platypus/schemas";
 import { ORGANIZATION_IDENTITY_CONTEXT_MAX_LENGTH } from "@platypus/schemas";
-import { toast } from "sonner";
 import { appRoutes, orgRoutes, withBasePath } from "@/lib/routes";
 
 type OrganizationFormProps = {
@@ -66,12 +65,12 @@ function OrganizationForm({ classNames, orgId }: OrganizationFormProps) {
       orgId
         ? { name: data.name, identityContext: data.identityContext || null }
         : { name: data.name },
+    successMessage: () =>
+      orgId ? "Organization updated" : "Organization created",
     onSuccess: (data) => {
       if (orgId) {
-        toast.success("Organization updated");
         router.refresh();
       } else {
-        toast.success("Organization created");
         router.push(orgRoutes(data.id).root);
       }
     },

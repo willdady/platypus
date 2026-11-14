@@ -32,7 +32,6 @@ import {
 } from "@/lib/authorization";
 import { TransferWorkspaceAction } from "@/components/transfer-workspace-dialog";
 import { useAuth } from "@/components/auth-provider";
-import { toast } from "sonner";
 import { useScopedList } from "@/hooks/use-scoped-list";
 import Link from "next/link";
 import {
@@ -183,8 +182,8 @@ function WorkspaceForm({ orgId, workspaceId }: WorkspaceFormProps) {
       // setting is "Selected workspaces" (ADR-0030).
       inboundTriggersAllowed: data.inboundTriggersAllowed,
     }),
+    successMessage: "Workspace updated",
     onSuccess: () => {
-      toast.success("Workspace updated");
       router.refresh();
     },
   });

@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import {
   agentCreateSchema,
   agentUpdateSchema,
@@ -11,11 +17,13 @@ import {
   swrMock,
   push,
   toastError,
+  toastSuccess,
   setData,
   setDataFor,
   resetFormHarness,
   setLoading,
   setupUser,
+  stubAcceptedSave,
   stubRejectedSave,
   stubSaveSequence,
 } from "@/test/form-test-harness";
@@ -81,7 +89,7 @@ describe("AgentForm validation error surfacing", () => {
     expect(toastError).toHaveBeenCalledWith(FIX_FORM_ERRORS_MESSAGE);
   });
 
-  it("shows a generic error toast when the failure maps to no inline field", async () => {
+  it("shows the server's message when the failure maps to no inline field", async () => {
     stubRejectedSave("something went wrong on the server");
 
     renderCreateForm();
@@ -89,7 +97,9 @@ describe("AgentForm validation error surfacing", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() =>
-      expect(toastError).toHaveBeenCalledWith("Failed to save agent"),
+      expect(toastError).toHaveBeenCalledWith(
+        "something went wrong on the server",
+      ),
     );
   });
 
@@ -226,6 +236,96 @@ describe("AgentForm form submission", () => {
     expect(
       expectSentBodyToMatchSchema(fetchMock, agentUpdateSchema),
     ).toMatchObject({ topP: 0.95 });
+  });
+});
+
+// #1845: every save and delete toasts success, including those that navigate
+// away; arriving on the list is not feedback enough.
+describe("AgentForm success feedback", () => {
+  beforeEach(() => {
+    resetFormHarness();
+    registerSwrData();
+  });
+
+  it("toasts that the Agent was created", async () => {
+    stubAcceptedSave({ id: "a1" });
+
+    renderCreateForm();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Bot" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(toastSuccess).toHaveBeenCalledWith("Agent created"),
+    );
+    expect(push).toHaveBeenCalledWith("/org1/workspace/ws1");
+  });
+
+  it("toasts that the Agent was updated", async () => {
+    setDataFor("/agents/a1", {
+      id: "a1",
+      name: "Bot",
+      description: "",
+      providerId: "p1",
+      modelId: "gpt-4o",
+      maxSteps: 5,
+      toolSetIds: [],
+      skillIds: [],
+      subAgentIds: [],
+    });
+    stubAcceptedSave({ id: "a1" });
+
+    render(
+      <AgentForm
+        orgId="org1"
+        workspaceId="ws1"
+        toolSets={[]}
+        agents={[]}
+        agentId="a1"
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Update" }));
+
+    await waitFor(() =>
+      expect(toastSuccess).toHaveBeenCalledWith("Agent updated"),
+    );
+    expect(push).toHaveBeenCalledWith("/org1/workspace/ws1");
+  });
+
+  it("toasts that the Agent was deleted", async () => {
+    setDataFor("/agents/a1", {
+      id: "a1",
+      name: "Bot",
+      description: "",
+      providerId: "p1",
+      modelId: "gpt-4o",
+      maxSteps: 5,
+      toolSetIds: [],
+      skillIds: [],
+      subAgentIds: [],
+    });
+    stubAcceptedSave({});
+
+    render(
+      <AgentForm
+        orgId="org1"
+        workspaceId="ws1"
+        toolSets={[]}
+        agents={[]}
+        agentId="a1"
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /Delete/ }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
+
+    await waitFor(() =>
+      expect(toastSuccess).toHaveBeenCalledWith("Agent deleted"),
+    );
+    expect(push).toHaveBeenCalledWith("/org1/workspace/ws1");
   });
 });
 

@@ -1,6 +1,5 @@
 "use client";
 
-import { toast } from "sonner";
 import { useState } from "react";
 import { TriangleAlert } from "lucide-react";
 import {
@@ -106,7 +105,11 @@ export function OrgGateAccess({
     (gate === "selected" && !sameSet(allowed, savedAllowed));
   useUnsavedChangesGuard(dirty);
 
-  const { isSubmitting: isSaving, submit } = useEntityForm<object, Access>({
+  const {
+    isSubmitting: isSaving,
+    validationErrors,
+    submit,
+  } = useEntityForm<object, Access>({
     initialData: {},
     entity: copy.entity,
     scope,
@@ -125,8 +128,8 @@ export function OrgGateAccess({
           allowedWorkspaceIds: gate === "selected" ? [...allowed] : null,
         },
       }),
-    // No field here renders a server error, so a rejection is toasted.
-    onInvalid: (_fieldErrors, message) => toast.error(message),
+    // The gate field shows a mapped rejection, so this surface adds no toast.
+    invalidMessage: null,
     successMessage: copy.savedMessage,
     onSuccess: async (saved) => {
       await mutate(saved, { revalidate: false });
@@ -179,6 +182,7 @@ export function OrgGateAccess({
         }}
         disabled={isSaving}
         description={copy.selectDescription}
+        error={validationErrors.gate ?? validationErrors.allowedWorkspaceIds}
       >
         {GATE_OPTIONS.map((option) => (
           <SelectItem key={option.value} value={option.value}>

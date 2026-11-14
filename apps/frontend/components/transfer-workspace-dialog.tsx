@@ -1,6 +1,5 @@
 "use client";
 
-import { toast } from "sonner";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRightLeft } from "lucide-react";
@@ -14,7 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { FieldGroup } from "@/components/ui/field";
+import { FieldError, FieldGroup } from "@/components/ui/field";
 import { useBackendUrl } from "@/components/auth-provider";
 import { useScopedList } from "@/hooks/use-scoped-list";
 import { useEntityForm } from "@/hooks/use-entity-form";
@@ -62,6 +61,7 @@ export function TransferWorkspaceAction({
     formData: { newOwnerId, keepHistory },
     setFormData,
     setField,
+    validationErrors,
     isSubmitting,
     submit,
   } = useEntityForm({
@@ -79,8 +79,9 @@ export function TransferWorkspaceAction({
         revalidateKeys: [url, scopedUrl(backendUrl, "workspaces", { orgId })],
       });
     },
-    // No field here renders a server error, so a rejection is toasted.
-    onInvalid: (_fieldErrors, message) => toast.error(message),
+    // The recipient field shows a mapped rejection, so this dialog adds no
+    // toast.
+    invalidMessage: null,
     successMessage: "Workspace transferred",
     onSuccess: () => {
       setOpen(false);
@@ -136,6 +137,7 @@ export function TransferWorkspaceAction({
                 recipients={recipients}
                 newOwnerId={newOwnerId}
                 keepHistory={keepHistory}
+                error={validationErrors.newOwnerId}
                 onChange={(change) => {
                   if (change.newOwnerId !== undefined) {
                     setField("newOwnerId", change.newOwnerId);
@@ -148,6 +150,9 @@ export function TransferWorkspaceAction({
             </FieldGroup>
           ) : (
             <div className="flex flex-col gap-3 text-sm">
+              {validationErrors.newOwnerId && (
+                <FieldError>{validationErrors.newOwnerId}</FieldError>
+              )}
               <ul className="list-disc flex flex-col gap-1 pl-5">
                 <li>
                   {nameOf(newOwnerId)} becomes the owner.{" "}

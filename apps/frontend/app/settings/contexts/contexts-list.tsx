@@ -52,6 +52,8 @@ function ContextsPage() {
       globalCtx?.id ? data : { ...data, workspaceId: null },
     // No field to key it to: the backend's refusal is the message to show.
     conflictField: null,
+    // The editor's field errors are already in view.
+    invalidMessage: null,
     successMessage: "Global context saved",
   });
 

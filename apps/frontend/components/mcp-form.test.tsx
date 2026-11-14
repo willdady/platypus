@@ -10,6 +10,7 @@ import {
   stubAcceptedSave,
   stubRejectedSave,
   stubSaveSequence,
+  toastSuccess,
 } from "@/test/form-test-harness";
 import {
   mcpCreateSchema,
@@ -81,6 +82,62 @@ describe("McpForm secret reveal", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Hide client secret" }));
     expect(input).toHaveAttribute("type", "password");
+  });
+});
+
+describe("McpForm save feedback", () => {
+  afterEach(() => {
+    resetFormHarness();
+  });
+
+  it("toasts that the MCP server was created", async () => {
+    stubAcceptedSave({ id: "m1" });
+    render(<McpForm orgId="org1" workspaceId="ws1" />);
+
+    fireEvent.change(screen.getByLabelText("URL"), {
+      target: { value: "http://mcp.test" },
+    });
+    await setupUser().type(screen.getByLabelText("Name"), "Docs{Enter}");
+
+    await waitFor(() =>
+      expect(toastSuccess).toHaveBeenCalledWith("MCP server created"),
+    );
+  });
+
+  it("toasts that the MCP server was updated", async () => {
+    setData({
+      id: "m1",
+      name: "Docs",
+      url: "http://mcp.test",
+      authType: "None",
+    });
+    stubAcceptedSave({ id: "m1" });
+    render(<McpForm orgId="org1" mcpId="m1" />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Update" }));
+
+    await waitFor(() =>
+      expect(toastSuccess).toHaveBeenCalledWith("MCP server updated"),
+    );
+  });
+
+  it("toasts that the MCP server was deleted", async () => {
+    setData({
+      id: "m1",
+      name: "Docs",
+      url: "http://mcp.test",
+      authType: "None",
+    });
+    stubAcceptedSave({});
+    render(<McpForm orgId="org1" mcpId="m1" />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Delete/ }));
+    const deleteButtons = screen.getAllByRole("button", { name: "Delete" });
+    fireEvent.click(deleteButtons[deleteButtons.length - 1]);
+
+    await waitFor(() =>
+      expect(toastSuccess).toHaveBeenCalledWith("MCP server deleted"),
+    );
   });
 });
 

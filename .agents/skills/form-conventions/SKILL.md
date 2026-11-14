@@ -1,6 +1,6 @@
 ---
 name: form-conventions
-description: Post-save conventions for Platypus frontend forms — where a save lands the user, what the submit button is called, how a failed delete is shown, and the unsaved-changes guard. Use when adding or changing a form in apps/frontend, its submit button, what happens after it saves, a delete confirm dialog, or a dialog's Cancel button.
+description: Post-save conventions for Platypus frontend forms — where a save lands the user, what toasts on success, how a failed save is shown, what the submit button is called, how a failed delete is shown, and the unsaved-changes guard. Use when adding or changing a form in apps/frontend, its submit button, what happens after it saves, the feedback a save or delete gives, or a dialog's Cancel button.
 ---
 
 # Frontend Form Conventions
@@ -23,8 +23,18 @@ the agent edit form — an agent has no detail page, so leaving the form means
 returning to `settings/agents`. A board does have a page, and its form lives
 at `boards/[boardId]/settings`, so saving keeps you there.
 
-Staying means `mutate()` (or `router.refresh()`) plus a toast. Never
-`router.push` to the page you are already on.
+Staying means `mutate()` (or `router.refresh()`) plus a `successMessage`
+toast. Never `router.push` to the page you are already on.
+
+**Every save and delete toasts success, even when it navigates away.**
+Arriving on the list is not feedback enough. Pass `successMessage` to
+`useEntityForm` and `useEntityDelete`, naming the outcome: `"<Entity>
+created"` / `"<Entity> updated"` on a save, `"<Entity> deleted"` on a
+delete. Use a function when create and edit differ, as the Webhook form
+does. `onSuccess` keeps only the navigation, refresh and side effects; do
+not hand-call `toast.success` there. The one exception is a Provider draft
+staged inside the setup wizard: the wizard advancing is the feedback, so
+its `successMessage` is unset while it runs as a draft.
 
 **Creating always navigates** — to the new entity where it has a page of its
 own, otherwise to the list it now belongs to.
@@ -35,6 +45,33 @@ shape: to the list for a collection member, to the parent otherwise.
 A list is wherever the list actually renders, not a route that looks like one.
 Triggers navigate to the Workspace home because that is where the trigger list
 lives; there is no `triggers/` page.
+
+## When a save fails
+
+A rejected save that maps to fields sets those field errors inline **and**
+toasts "please fix the errors" (`FIX_FORM_ERRORS_MESSAGE`). That is
+`useEntityForm`'s default, so a page-level form needs nothing; a field can
+be scrolled out of view, and the toast is what tells the reader why nothing
+happened.
+
+Every dialog or inline action built on `useEntityForm` passes
+`invalidMessage: null` instead: its field errors are already in view, so a
+toast would only repeat them. That covers member edit, transfer workspace,
+the change-password dialog, issuing an A2A token, the Global Context
+editor, chat rename and `OrgGateAccess`. A dialog that shows a refusal in
+the dialog itself (the A2A regenerate confirm) uses `onInvalid` instead;
+the message is then already in view. A short settings page
+(change password, profile, sandbox) is still page-level and keeps the
+default.
+
+Any other failure — a fieldless 400, `forbidden`, `notFound`, or `error` —
+toasts the backend's message. `useEntityForm` does that by default; leave
+`onError` alone unless the form has its own guidance rule.
+
+The one inline exception is a `conflict` whose message names the records
+blocking the save: render it in a destructive `Alert` at the top of the
+form. Today that is only the Provider form, through `onConflict`. Every
+other failure of that form still toasts.
 
 ## When a delete fails
 

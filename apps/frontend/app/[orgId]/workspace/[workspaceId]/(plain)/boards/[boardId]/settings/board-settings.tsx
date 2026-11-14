@@ -36,6 +36,7 @@ function BoardSettingsPage({
     entity: "boards",
     scope: { orgId, workspaceId },
     id: boardId,
+    successMessage: "Board deleted",
     onSuccess: () => router.push(routes.root),
   });
 

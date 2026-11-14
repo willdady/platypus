@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { blueprintCreateSchema } from "@platypus/schemas";
 import { expectSentBodyToMatchSchema } from "@/test/test-utils";
 import {
@@ -13,6 +19,8 @@ import {
   setupUser,
   stubAcceptedSave,
   stubRejectedSave,
+  toastError,
+  toastSuccess,
 } from "@/test/form-test-harness";
 import { selectOption } from "@/test/test-utils";
 import { scopedPath } from "@/lib/api-write";
@@ -70,6 +78,90 @@ describe("BlueprintForm form submission", () => {
     expect(
       expectSentBodyToMatchSchema(fetchMock, blueprintCreateSchema),
     ).toMatchObject({ name: "Starter" });
+  });
+});
+
+describe("BlueprintForm save feedback", () => {
+  beforeEach(() => {
+    resetFormHarness();
+    setDataFor("/organizations/org1/providers", { results: [] });
+  });
+
+  it("toasts that the Blueprint was created", async () => {
+    stubAcceptedSave({ id: "b1" });
+    render(<BlueprintForm orgId="org1" />);
+
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Starter" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(toastSuccess).toHaveBeenCalledWith("Blueprint created"),
+    );
+    expect(push).toHaveBeenCalledWith("/org1/settings/blueprints");
+  });
+
+  it("toasts that the Blueprint was updated", async () => {
+    setDataFor("/organizations/org1/blueprints/b1", {
+      id: "b1",
+      name: "Starter",
+      description: null,
+      context: null,
+      items: [],
+      taskModelProviderId: null,
+      memoryExtractionProviderId: null,
+      memoryEmbeddingProviderId: null,
+    });
+    stubAcceptedSave({ id: "b1" });
+    render(<BlueprintForm orgId="org1" blueprintId="b1" />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Update" }));
+
+    await waitFor(() =>
+      expect(toastSuccess).toHaveBeenCalledWith("Blueprint updated"),
+    );
+  });
+
+  it("toasts that the Blueprint was deleted", async () => {
+    setDataFor("/organizations/org1/blueprints/b1", {
+      id: "b1",
+      name: "Starter",
+      description: null,
+      context: null,
+      items: [],
+      taskModelProviderId: null,
+      memoryExtractionProviderId: null,
+      memoryEmbeddingProviderId: null,
+    });
+    stubAcceptedSave({});
+    render(<BlueprintForm orgId="org1" blueprintId="b1" />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Delete/ }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
+
+    await waitFor(() =>
+      expect(toastSuccess).toHaveBeenCalledWith("Blueprint deleted"),
+    );
+  });
+
+  it("toasts a non-field save failure instead of showing an inline error", async () => {
+    stubRejectedSave("Provider is unavailable", 500);
+
+    render(<BlueprintForm orgId="org1" />);
+
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Starter" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(toastError).toHaveBeenCalledWith("Provider is unavailable"),
+    );
+    expect(
+      screen.queryByText("Provider is unavailable"),
+    ).not.toBeInTheDocument();
   });
 });
 

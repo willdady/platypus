@@ -25,7 +25,6 @@ import {
   type KanbanBoard,
   type KanbanLabel,
 } from "@platypus/schemas";
-import { toast } from "sonner";
 import { workspaceRoutes } from "@/lib/routes";
 
 const DEFAULT_COLOR = KANBAN_LABEL_COLORS[5].value; // Blue
@@ -90,9 +89,12 @@ export function KanbanBoardForm({
       description: data.description || null,
       labels: data.labels,
     }),
+    // An edit stays on the settings page; a create leaves for the new board's
+    // page. Either way the save toasts, because landing somewhere is not
+    // feedback enough.
+    successMessage: () => (isEditing ? "Board updated" : "Board created"),
     onSuccess: async (data) => {
       if (isEditing) {
-        toast.success("Board updated");
         // So the board view picks up renamed labels.
         await mutate(stateUrl(data.id));
         return;

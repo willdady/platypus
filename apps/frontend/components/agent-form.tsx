@@ -59,10 +59,7 @@ import {
   scopedUrl,
   type Serialized,
 } from "@/lib/api-write";
-import {
-  toastGuidanceOrError,
-  FIX_FORM_ERRORS_MESSAGE,
-} from "@/lib/apply-write-outcome";
+import { toastGuidanceOrError } from "@/lib/apply-write-outcome";
 import type { FormErrors } from "@/lib/form-errors";
 import { findModelOption, getModelOptions } from "@/lib/model-config";
 import { resolveModel } from "@/lib/resolve-model";
@@ -288,7 +285,6 @@ function AgentForm({
     setFormData,
     seedFormData,
     validationErrors,
-    setValidationErrors,
     isSubmitting,
     canSubmit,
     handleChange,
@@ -400,17 +396,7 @@ function AgentForm({
         subAgentIds: data.subAgentIds,
       };
     },
-    onInvalid: (fieldErrors) => {
-      setValidationErrors(fieldErrors);
-      // Surface a user-visible signal even when the failure maps to a
-      // field without an inline error, so a rejected save is never
-      // silent (#331).
-      toast.error(
-        Object.keys(fieldErrors).length > 0
-          ? FIX_FORM_ERRORS_MESSAGE
-          : "Failed to save agent",
-      );
-    },
+    successMessage: () => (agentId ? "Agent updated" : "Agent created"),
     onError: toastGuidanceOrError,
     failureMessage: "Failed to save agent",
     onSuccess: async (data) => {
@@ -469,6 +455,7 @@ function AgentForm({
     entity: "agents",
     scope,
     id: agentId,
+    successMessage: "Agent deleted",
     onSuccess: () => router.push(doneHref),
     guidanceOnForbidden: true,
   });
