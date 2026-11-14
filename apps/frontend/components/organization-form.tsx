@@ -70,14 +70,7 @@ function OrganizationForm({ classNames, orgId }: OrganizationFormProps) {
     },
   });
 
-  const {
-    isDeleteDialogOpen,
-    setIsDeleteDialogOpen,
-    isDeleting,
-    deleteError,
-    openDeleteDialog,
-    handleDelete,
-  } = useEntityDelete({
+  const { dialogProps, openDeleteDialog } = useEntityDelete({
     entity: "organizations",
     scope: {},
     id: orgId,
@@ -167,14 +160,10 @@ function OrganizationForm({ classNames, orgId }: OrganizationFormProps) {
         />
 
         <DeleteConfirmDialog
-          open={isDeleteDialogOpen}
-          onOpenChange={setIsDeleteDialogOpen}
           noun="organization"
           consequence="This deletes every Workspace in it, along with their Chats, Agents, files and Sandboxes, and every Shared resource. Depending on its backend, deleting a Sandbox can also erase everything stored in it."
           requireTypedConfirmation
-          onConfirm={handleDelete}
-          loading={isDeleting}
-          error={deleteError}
+          {...dialogProps}
         />
       </form>
     </DetailFormState>

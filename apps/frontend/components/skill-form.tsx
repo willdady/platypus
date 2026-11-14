@@ -161,14 +161,7 @@ function SkillForm({
     onError: toastGuidanceOrError,
   });
 
-  const {
-    isDeleteDialogOpen,
-    setIsDeleteDialogOpen,
-    isDeleting,
-    deleteError,
-    openDeleteDialog,
-    handleDelete,
-  } = useEntityDelete({
+  const { dialogProps, openDeleteDialog } = useEntityDelete({
     entity: "skills",
     scope,
     id: skillId,
@@ -322,14 +315,7 @@ function SkillForm({
         </p>
       )}
 
-      <DeleteConfirmDialog
-        open={isDeleteDialogOpen}
-        onOpenChange={setIsDeleteDialogOpen}
-        noun="skill"
-        onConfirm={handleDelete}
-        loading={isDeleting}
-        error={deleteError}
-      />
+      <DeleteConfirmDialog noun="skill" {...dialogProps} />
     </form>
   );
 

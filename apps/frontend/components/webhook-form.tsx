@@ -203,14 +203,7 @@ function WebhookForm({ orgId, workspaceId, webhookId }: WebhookFormProps) {
       router.push(workspaceRoutes(orgId, workspaceId).settings.webhooks),
   });
 
-  const {
-    isDeleteDialogOpen,
-    setIsDeleteDialogOpen,
-    isDeleting,
-    deleteError,
-    openDeleteDialog,
-    handleDelete,
-  } = useEntityDelete({
+  const { dialogProps, openDeleteDialog } = useEntityDelete({
     entity: "webhooks",
     scope: { orgId, workspaceId },
     id: webhookId,
@@ -451,14 +444,7 @@ function WebhookForm({ orgId, workspaceId, webhookId }: WebhookFormProps) {
         onDelete={openDeleteDialog}
       />
 
-      <DeleteConfirmDialog
-        open={isDeleteDialogOpen}
-        onOpenChange={setIsDeleteDialogOpen}
-        noun="webhook"
-        onConfirm={handleDelete}
-        loading={isDeleting}
-        error={deleteError}
-      />
+      <DeleteConfirmDialog noun="webhook" {...dialogProps} />
 
       <ConfirmDialog
         open={isRegenerateDialogOpen}

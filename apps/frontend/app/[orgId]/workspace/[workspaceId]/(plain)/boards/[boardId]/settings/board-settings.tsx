@@ -25,14 +25,7 @@ function BoardSettingsPage({
     workspaceId,
   });
 
-  const {
-    isDeleteDialogOpen,
-    setIsDeleteDialogOpen,
-    isDeleting,
-    deleteError,
-    openDeleteDialog,
-    handleDelete,
-  } = useEntityDelete({
+  const { isDeleting, dialogProps, openDeleteDialog } = useEntityDelete({
     entity: "boards",
     scope: { orgId, workspaceId },
     id: boardId,
@@ -51,15 +44,11 @@ function BoardSettingsPage({
       />
 
       <DeleteConfirmDialog
-        open={isDeleteDialogOpen}
-        onOpenChange={setIsDeleteDialogOpen}
         noun="board"
         name={board?.name}
         consequence="This also deletes all of its data."
         requireTypedConfirmation
-        onConfirm={handleDelete}
-        loading={isDeleting}
-        error={deleteError}
+        {...dialogProps}
       />
     </ResourcePage>
   );

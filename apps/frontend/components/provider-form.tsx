@@ -592,14 +592,7 @@ function ProviderForm({
     };
   }
 
-  const {
-    isDeleteDialogOpen,
-    setIsDeleteDialogOpen,
-    isDeleting,
-    deleteError,
-    openDeleteDialog,
-    handleDelete,
-  } = useEntityDelete({
+  const { dialogProps, openDeleteDialog } = useEntityDelete({
     entity: "providers",
     scope,
     id: providerId,
@@ -1253,14 +1246,7 @@ function ProviderForm({
         )
       )}
 
-      <DeleteConfirmDialog
-        open={isDeleteDialogOpen}
-        onOpenChange={setIsDeleteDialogOpen}
-        noun="provider"
-        onConfirm={handleDelete}
-        loading={isDeleting}
-        error={deleteError}
-      />
+      <DeleteConfirmDialog noun="provider" {...dialogProps} />
 
       <ConfirmDialog
         open={isEmbeddingChangeDialogOpen}

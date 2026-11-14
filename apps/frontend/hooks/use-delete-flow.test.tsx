@@ -142,3 +142,62 @@ describe("useDeleteFlow", () => {
     expect(perform).not.toHaveBeenCalled();
   });
 });
+
+describe("useDeleteFlow dialogProps", () => {
+  it("wires the confirm dialog's open state, loading and error", async () => {
+    const { result, perform } = setup({
+      outcome: "success",
+      data: null,
+      revalidateKeys: [],
+    });
+
+    expect(result.current.dialogProps).toMatchObject({
+      open: false,
+      loading: false,
+      error: null,
+    });
+
+    act(() => result.current.request(target));
+    expect(result.current.dialogProps.open).toBe(true);
+
+    let pending: Promise<void> = Promise.resolve();
+    act(() => {
+      pending = Promise.resolve(result.current.dialogProps.onConfirm());
+    });
+    expect(result.current.dialogProps.loading).toBe(true);
+    await act(async () => {
+      await pending;
+    });
+    expect(perform).toHaveBeenCalledWith(target, "http://test");
+    expect(result.current.dialogProps.loading).toBe(false);
+    expect(result.current.dialogProps.open).toBe(false);
+  });
+
+  it("closes on a dismissed dialog and holds an open one", () => {
+    const { result } = setup({
+      outcome: "success",
+      data: null,
+      revalidateKeys: [],
+    });
+
+    act(() => result.current.request(target));
+    act(() => result.current.dialogProps.onOpenChange(true));
+    expect(result.current.open).toBe(true);
+
+    act(() => result.current.dialogProps.onOpenChange(false));
+    expect(result.current.open).toBe(false);
+  });
+
+  it("shows the refusal inline and clears it when the dialog closes", async () => {
+    const { result } = setup({ outcome: "conflict", message: "In use" });
+
+    act(() => result.current.request(target));
+    await act(async () => result.current.dialogProps.onConfirm());
+
+    expect(result.current.dialogProps.error).toBe("In use");
+    expect(result.current.dialogProps.open).toBe(true);
+
+    act(() => result.current.dialogProps.onOpenChange(false));
+    expect(result.current.dialogProps.error).toBeNull();
+  });
+});

@@ -215,12 +215,8 @@ function OrgInvitationsPage() {
       </div>
 
       <DeleteConfirmDialog
-        open={invitationDelete.open}
-        onOpenChange={(open) => !open && invitationDelete.close()}
         noun="invitation"
-        onConfirm={invitationDelete.confirm}
-        loading={invitationDelete.deleting}
-        error={invitationDelete.error}
+        {...invitationDelete.dialogProps}
       />
     </div>
   );

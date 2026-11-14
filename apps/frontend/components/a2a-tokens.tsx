@@ -272,14 +272,10 @@ export function A2aTokens({
       </Field>
 
       <DeleteConfirmDialog
-        open={tokenDelete.open}
-        onOpenChange={(open) => !open && tokenDelete.close()}
         noun="token"
         name={tokenDelete.target?.name}
         consequence="The client using it stops getting in straight away."
-        onConfirm={tokenDelete.confirm}
-        loading={tokenDelete.deleting}
-        error={tokenDelete.error}
+        {...tokenDelete.dialogProps}
       />
 
       <ConfirmDialog
