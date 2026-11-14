@@ -45,7 +45,11 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
+import {
+  useEntityDelete,
+  useEntityForm,
+  type UseEntityFormOptions,
+} from "@/hooks/use-entity-form";
 import {
   providerHasNativeSearch,
   PROVIDER_SECURITY_GUARDRAILS_MAX_LENGTH,
@@ -452,6 +456,101 @@ function ProviderForm({
     clearCard: clearTestResult,
   } = useModelTestResults(joinUrl(backendUrl, `${collectionUrl}/test`));
 
+  // A draft collects the Provider for a later write; every other form saves
+  // it through its entity. One hook call, two option sets.
+  type SavedProvider = { id: string; aliasRepoints?: unknown } | undefined;
+  const sharedOptions = {
+    initialData: {
+      providerType: "OpenAI" as const,
+      name: "",
+      apiKey: "",
+      region: "",
+      baseUrl: "",
+      headers: {},
+      extraBody: {},
+      organization: "",
+      project: "",
+      apiMode: "responses" as const,
+      searchSource: SEARCH_SOURCE_NATIVE,
+      securityGuardrails: "",
+      modelIds: [],
+      taskModelId: "",
+      memoryExtractionModelId: "",
+      embeddingModelId: "",
+      embeddingDimensions: "",
+    },
+    // The raw text, so JSON still being typed (and not yet valid) counts.
+    sideState: { headersString, extraBodyString },
+    // The wizard advancing is the feedback for a staged draft.
+    successMessage: draft
+      ? undefined
+      : () => (providerId ? "Provider updated" : "Provider created"),
+    onConflict: (message: string) => setError(message),
+    onError: toastGuidanceOrError,
+    failureMessage: "Failed to save provider",
+    onSuccess: (data: SavedProvider) => {
+      // A draft stays put: the wizard moves on once `write` accepts it.
+      if (draft) return;
+      reportAliasRepoints(data?.aliasRepoints);
+      router.push(listHref);
+    },
+  };
+  const formOptions: UseEntityFormOptions<
+    ProviderFormData,
+    // Undefined only for a draft, whose `write` saves nothing.
+    SavedProvider,
+    SerializedProvider
+  > = draft
+    ? {
+        ...sharedOptions,
+        write: (data) => draft.write(buildPayload(data)),
+      }
+    : {
+        ...sharedOptions,
+        entity: "providers",
+        scope,
+        id: providerId,
+        fromRecord: (provider) => ({
+          providerType: provider.providerType,
+          name: provider.name,
+          // The API is free to withhold the stored key: it is returned only to a
+          // caller who may manage this Provider (ADR-0006). Anyone else lands here
+          // read-only, so an empty field is the honest rendering — and keeps the
+          // input controlled either way.
+          apiKey: provider.apiKey ?? "",
+          region: provider.region || "",
+          baseUrl: provider.baseUrl || "",
+          headers: provider.headers || {},
+          extraBody: provider.extraBody || {},
+          organization: provider.organization || "",
+          project: provider.project || "",
+          apiMode: provider.apiMode ?? "responses",
+          // Held exactly as stored, including a row backfilled to "native"
+          // (ADR-0014) on a Provider with no native tool at all — Bedrock, or
+          // vLLM on the chat API. Rendering that as the built-in search option
+          // would be wrong, but so is rewriting it: `doSubmit` sends this field
+          // on every save, so coercing here would let a save that touched only
+          // the name silently retire a selection the Operator never edited, and
+          // one that starts working again the moment the Provider regains a
+          // native tool. See `nativeSelectedButUnavailable` for what renders.
+          searchSource: provider.searchSource ?? SEARCH_SOURCE_NATIVE,
+          securityGuardrails: provider.securityGuardrails ?? "",
+          modelIds: provider.modelIds ? getModelConfigs(provider) : [],
+          taskModelId: provider.taskModelId,
+          memoryExtractionModelId: provider.memoryExtractionModelId,
+          embeddingModelId: provider.embeddingModelId || "",
+          embeddingDimensions: provider.embeddingDimensions?.toString() || "",
+        }),
+        onSeed: (provider) => {
+          setHeadersString(JSON.stringify(provider.headers || {}, null, 2));
+          setExtraBodyString(JSON.stringify(provider.extraBody || {}, null, 2));
+          setSavedEmbeddingModelId(provider.embeddingModelId || null);
+          setSavedEmbeddingDimensions(
+            provider.embeddingDimensions?.toString() || null,
+          );
+        },
+        buildPayload,
+      };
   const {
     record: provider,
     loadState,
@@ -461,91 +560,7 @@ function ProviderForm({
     isSubmitting,
     clearErrors,
     submit,
-  } = useEntityForm<
-    ProviderFormData,
-    // Undefined only for a draft, whose `write` saves nothing.
-    { id: string; aliasRepoints?: unknown } | undefined,
-    SerializedProvider
-  >({
-    initialData: {
-      providerType: "OpenAI",
-      name: "",
-      apiKey: "",
-      region: "",
-      baseUrl: "",
-      headers: {},
-      extraBody: {},
-      organization: "",
-      project: "",
-      apiMode: "responses",
-      searchSource: SEARCH_SOURCE_NATIVE,
-      securityGuardrails: "",
-      modelIds: [],
-      taskModelId: "",
-      memoryExtractionModelId: "",
-      embeddingModelId: "",
-      embeddingDimensions: "",
-    },
-    entity: "providers",
-    scope,
-    id: providerId,
-    fromRecord: (provider) => ({
-      providerType: provider.providerType,
-      name: provider.name,
-      // The API is free to withhold the stored key: it is returned only to a
-      // caller who may manage this Provider (ADR-0006). Anyone else lands here
-      // read-only, so an empty field is the honest rendering — and keeps the
-      // input controlled either way.
-      apiKey: provider.apiKey ?? "",
-      region: provider.region || "",
-      baseUrl: provider.baseUrl || "",
-      headers: provider.headers || {},
-      extraBody: provider.extraBody || {},
-      organization: provider.organization || "",
-      project: provider.project || "",
-      apiMode: provider.apiMode ?? "responses",
-      // Held exactly as stored, including a row backfilled to "native"
-      // (ADR-0014) on a Provider with no native tool at all — Bedrock, or
-      // vLLM on the chat API. Rendering that as the built-in search option
-      // would be wrong, but so is rewriting it: `doSubmit` sends this field
-      // on every save, so coercing here would let a save that touched only
-      // the name silently retire a selection the Operator never edited, and
-      // one that starts working again the moment the Provider regains a
-      // native tool. See `nativeSelectedButUnavailable` for what renders.
-      searchSource: provider.searchSource ?? SEARCH_SOURCE_NATIVE,
-      securityGuardrails: provider.securityGuardrails ?? "",
-      modelIds: provider.modelIds ? getModelConfigs(provider) : [],
-      taskModelId: provider.taskModelId,
-      memoryExtractionModelId: provider.memoryExtractionModelId,
-      embeddingModelId: provider.embeddingModelId || "",
-      embeddingDimensions: provider.embeddingDimensions?.toString() || "",
-    }),
-    // The raw text, so JSON still being typed (and not yet valid) counts.
-    sideState: { headersString, extraBodyString },
-    onSeed: (provider) => {
-      setHeadersString(JSON.stringify(provider.headers || {}, null, 2));
-      setExtraBodyString(JSON.stringify(provider.extraBody || {}, null, 2));
-      setSavedEmbeddingModelId(provider.embeddingModelId || null);
-      setSavedEmbeddingDimensions(
-        provider.embeddingDimensions?.toString() || null,
-      );
-    },
-    buildPayload,
-    write: draft && ((data) => draft.write(buildPayload(data))),
-    // The wizard advancing is the feedback for a staged draft.
-    successMessage: draft
-      ? undefined
-      : () => (providerId ? "Provider updated" : "Provider created"),
-    onConflict: (message) => setError(message),
-    onError: toastGuidanceOrError,
-    failureMessage: "Failed to save provider",
-    onSuccess: (data) => {
-      // A draft stays put: the wizard moves on once `write` accepts it.
-      if (draft) return;
-      reportAliasRepoints(data?.aliasRepoints);
-      router.push(listHref);
-    },
-  });
+  } = useEntityForm(formOptions);
 
   function buildPayload(data: ProviderFormData) {
     return {

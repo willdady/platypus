@@ -35,8 +35,6 @@ function UserSettingsPage() {
 
   const nameForm = useEntityForm<{ name: string }>({
     initialData: { name: user?.name || "" },
-    entity: "users/me",
-    scope: {},
     write: async ({ name }) =>
       toOutcome(
         (await authClient.updateUser({ name: name.trim() })).error,
@@ -50,8 +48,6 @@ function UserSettingsPage() {
 
   const timezoneForm = useEntityForm<{ timezone: string | null }>({
     initialData: { timezone: savedTimezone },
-    entity: "users/me",
-    scope: {},
     write: async ({ timezone }) =>
       toOutcome(
         (await authClient.updateUser({ timezone })).error,

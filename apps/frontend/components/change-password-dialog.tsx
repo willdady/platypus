@@ -43,8 +43,6 @@ export function ChangePasswordDialog({
   } = useEntityForm<typeof INITIAL_DATA>({
     initialData: INITIAL_DATA,
     guardUnsavedChanges: false,
-    entity: "admin/set-user-password",
-    scope: {},
     retractableFields: RETRACTABLE_FIELDS,
     // An admin auth-client call, not a REST write — mapped onto the shared
     // outcome shape. The server owns the length rule; its 400 lands on the

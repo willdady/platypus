@@ -108,7 +108,13 @@ type EntityRequestSchemas = {
   };
 };
 
-type EntityWithRequestSchemas = keyof EntityRequestSchemas;
+/**
+ * Every collection name whose writes have a shared request schema. A form
+ * that names one of these as its `entity` has its payload checked against the
+ * matching schema; an entity outside this set can only be written through a
+ * form's own `write`, because there is no body type to check.
+ */
+export type EntityWithRequestSchemas = keyof EntityRequestSchemas;
 
 /** A schema's accepted input, or `never` when the entity has no such schema. */
 type EntityBody<
@@ -129,6 +135,15 @@ type EntityUpdateData<TEntity extends string> =
   TEntity extends EntityWithRequestSchemas
     ? EntityBody<TEntity, "update">
     : unknown;
+
+/**
+ * The body a form for this entity may build: whichever of its create or update
+ * bodies the write turns out to be. A form that names its entity has
+ * `buildPayload` checked against this, so a body the backend's strict request
+ * validation would refuse is a compile error rather than a 400.
+ */
+export type EntityPayload<TEntity extends string> =
+  EntityCreateData<TEntity> | EntityUpdateData<TEntity>;
 
 /**
  * A write's target scope (ADR-0007): an Organization-level (Shared) resource,
