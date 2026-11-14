@@ -2,7 +2,6 @@
 
 import {
   Field,
-  FieldLabel,
   FieldGroup,
   FieldSet,
   FieldDescription,
@@ -10,8 +9,8 @@ import {
 import { ExpandableTextarea } from "@/components/expandable-textarea";
 import { FormTextField } from "@/components/form-text-field";
 import { FormSelectField } from "@/components/form-select-field";
+import { FormSwitchField } from "@/components/form-switch-field";
 import { AgentAvatar } from "@/components/agent-avatar";
-import { Switch } from "@/components/ui/switch";
 import { FormAdvancedSection } from "@/components/form-advanced-section";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { DetailFormState } from "@/components/detail-form-state";
@@ -451,97 +450,61 @@ function TriggerForm({
                 description="Minimum number of recent run records to keep; older ones are pruned"
               />
 
-              <Field orientation="horizontal">
-                <Switch
-                  id="search"
-                  checked={formData.search}
+              <FormSwitchField
+                name="search"
+                label="Web Search"
+                description="Web search on the resolved provider — its built-in tool, or a Web-search backend selected on it"
+                checked={formData.search}
+                onCheckedChange={(checked) =>
+                  setFormData((prev) => ({ ...prev, search: checked }))
+                }
+                disabled={isSubmitting}
+              />
+
+              <FormSwitchField
+                name="enabled"
+                label="Enabled"
+                description={
+                  triggerType === "inbound"
+                    ? "Trigger accepts calls. A disabled one refuses them."
+                    : "Trigger will run automatically"
+                }
+                checked={formData.enabled}
+                onCheckedChange={(checked) =>
+                  setFormData((prev) => ({ ...prev, enabled: checked }))
+                }
+                disabled={scheduleLocked}
+              />
+
+              <FormAdvancedSection>
+                <FormSwitchField
+                  className="pt-2"
+                  name="includeMemories"
+                  label="Include Memories"
+                  description="Add your recent memory summaries to this trigger's system prompt. Off by default, so a run isn't influenced by chat activity unrelated to it."
+                  checked={formData.includeMemories}
                   onCheckedChange={(checked) =>
-                    setFormData((prev) => ({ ...prev, search: checked }))
+                    setFormData((prev) => ({
+                      ...prev,
+                      includeMemories: checked,
+                    }))
                   }
                   disabled={isSubmitting}
                 />
-                <FieldLabel
-                  htmlFor="search"
-                  className="flex-col items-stretch gap-0"
-                >
-                  <p>Web Search</p>
-                  <p className="text-xs text-muted-foreground">
-                    Web search on the resolved provider — its built-in tool, or
-                    a Web-search backend selected on it
-                  </p>
-                </FieldLabel>
-              </Field>
-
-              <Field orientation="horizontal">
-                <Switch
-                  id="enabled"
-                  checked={formData.enabled}
+                <FormSwitchField
+                  className="pt-2"
+                  name="extractMemories"
+                  label="Extract Memories"
+                  description="Let this trigger's runs feed your memories. Off by default, since a run carries no preferences of yours."
+                  checked={formData.extractMemories}
                   onCheckedChange={(checked) =>
-                    setFormData((prev) => ({ ...prev, enabled: checked }))
+                    setFormData((prev) => ({
+                      ...prev,
+                      extractMemories: checked,
+                    }))
                   }
-                  disabled={scheduleLocked}
+                  disabled={isSubmitting}
                 />
-                <FieldLabel
-                  htmlFor="enabled"
-                  className="flex-col items-stretch gap-0"
-                >
-                  <p>Enabled</p>
-                  <p className="text-xs text-muted-foreground">
-                    {triggerType === "inbound"
-                      ? "Trigger accepts calls. A disabled one refuses them."
-                      : "Trigger will run automatically"}
-                  </p>
-                </FieldLabel>
-              </Field>
-
-              <FormAdvancedSection>
-                <Field orientation="horizontal" className="pt-2">
-                  <Switch
-                    id="includeMemories"
-                    checked={formData.includeMemories}
-                    onCheckedChange={(checked) =>
-                      setFormData((prev) => ({
-                        ...prev,
-                        includeMemories: checked,
-                      }))
-                    }
-                    disabled={isSubmitting}
-                  />
-                  <FieldLabel
-                    htmlFor="includeMemories"
-                    className="flex-col items-stretch gap-0"
-                  >
-                    <p>Include Memories</p>
-                    <p className="text-xs text-muted-foreground">
-                      Add your recent memory summaries to this trigger&apos;s
-                      system prompt. Off by default, so a run isn&apos;t
-                      influenced by chat activity unrelated to it.
-                    </p>
-                  </FieldLabel>
-                </Field>
-                <Field orientation="horizontal" className="pt-2">
-                  <Switch
-                    id="extractMemories"
-                    checked={formData.extractMemories}
-                    onCheckedChange={(checked) =>
-                      setFormData((prev) => ({
-                        ...prev,
-                        extractMemories: checked,
-                      }))
-                    }
-                    disabled={isSubmitting}
-                  />
-                  <FieldLabel
-                    htmlFor="extractMemories"
-                    className="flex-col items-stretch gap-0"
-                  >
-                    <p>Extract Memories</p>
-                    <p className="text-xs text-muted-foreground">
-                      Let this trigger&apos;s runs feed your memories. Off by
-                      default, since a run carries no preferences of yours.
-                    </p>
-                  </FieldLabel>
-                </Field>
               </FormAdvancedSection>
             </>
           )}

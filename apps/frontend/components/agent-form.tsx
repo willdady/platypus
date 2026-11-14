@@ -2,7 +2,6 @@
 
 import {
   Field,
-  FieldLabel,
   FieldGroup,
   FieldSet,
   FieldLegend,
@@ -11,7 +10,7 @@ import {
 import { ExpandableTextarea } from "@/components/expandable-textarea";
 import { FormTextField } from "@/components/form-text-field";
 import { FormSelectField } from "@/components/form-select-field";
-import { Switch } from "@/components/ui/switch";
+import { FormSwitchField } from "@/components/form-switch-field";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { FormAdvancedSection } from "@/components/form-advanced-section";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -81,6 +80,7 @@ import { ToolSetsUnavailableNotice } from "@/components/tool-sets-unavailable-no
 import type { ToolSetsFailureReason } from "@/lib/tool-sets-request";
 import { orgRoutes, workspaceRoutes } from "@/lib/routes";
 import { sortByName } from "@/lib/utils";
+import { toggleInList } from "@/lib/toggle-in-list";
 
 // toolSetIds, skillIds, and subAgentIds are deliberately excluded: this form
 // has no field that retracts an error keyed to them, so including them here
@@ -807,35 +807,24 @@ function AgentForm({
                     <FieldLegend variant="label">{category}</FieldLegend>
                     <FieldGroup className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       {toolSetsByCategory[category].map((toolSet) => (
-                        <Field key={toolSet.id} orientation="horizontal">
-                          <Switch
-                            id={toolSet.id}
-                            checked={formData.toolSetIds.includes(toolSet.id)}
-                            onCheckedChange={(checked) => {
-                              setFormData((prevData) => {
-                                const newToolSetIds = checked
-                                  ? [...prevData.toolSetIds, toolSet.id]
-                                  : prevData.toolSetIds.filter(
-                                      (id: string) => id !== toolSet.id,
-                                    );
-                                return {
-                                  ...prevData,
-                                  toolSetIds: newToolSetIds,
-                                };
-                              });
-                            }}
-                            disabled={isSubmitting || readOnly}
-                          />
-                          <FieldLabel
-                            htmlFor={toolSet.id}
-                            className="flex-col items-stretch gap-0"
-                          >
-                            <p>{toolSet.name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {toolSet.description}
-                            </p>
-                          </FieldLabel>
-                        </Field>
+                        <FormSwitchField
+                          key={toolSet.id}
+                          name={toolSet.id}
+                          label={toolSet.name}
+                          description={toolSet.description}
+                          checked={formData.toolSetIds.includes(toolSet.id)}
+                          onCheckedChange={(checked) =>
+                            setFormData((prevData) => ({
+                              ...prevData,
+                              toolSetIds: toggleInList(
+                                prevData.toolSetIds,
+                                toolSet.id,
+                                checked,
+                              ),
+                            }))
+                          }
+                          disabled={isSubmitting || readOnly}
+                        />
                       ))}
                     </FieldGroup>
                   </FieldSet>
@@ -866,35 +855,25 @@ function AgentForm({
               ) : (
                 <FieldGroup className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {shownSkills.map((skill) => (
-                    <Field key={skill.id} orientation="horizontal">
-                      <Switch
-                        id={`skill-${skill.id}`}
-                        checked={formData.skillIds.includes(skill.id)}
-                        onCheckedChange={(checked) => {
-                          setFormData((prevData) => {
-                            const newSkillIds = checked
-                              ? [...prevData.skillIds, skill.id]
-                              : prevData.skillIds.filter(
-                                  (id: string) => id !== skill.id,
-                                );
-                            return {
-                              ...prevData,
-                              skillIds: newSkillIds,
-                            };
-                          });
-                        }}
-                        disabled={isSubmitting || readOnly}
-                      />
-                      <FieldLabel
-                        htmlFor={`skill-${skill.id}`}
-                        className="flex-col items-stretch gap-0"
-                      >
-                        <p>{skill.name}</p>
-                        <p className="text-xs text-muted-foreground line-clamp-6">
-                          {skill.description}
-                        </p>
-                      </FieldLabel>
-                    </Field>
+                    <FormSwitchField
+                      key={skill.id}
+                      name={`skill-${skill.id}`}
+                      label={skill.name}
+                      description={skill.description}
+                      descriptionClassName="line-clamp-6"
+                      checked={formData.skillIds.includes(skill.id)}
+                      onCheckedChange={(checked) =>
+                        setFormData((prevData) => ({
+                          ...prevData,
+                          skillIds: toggleInList(
+                            prevData.skillIds,
+                            skill.id,
+                            checked,
+                          ),
+                        }))
+                      }
+                      disabled={isSubmitting || readOnly}
+                    />
                   ))}
                 </FieldGroup>
               )}
@@ -917,34 +896,25 @@ function AgentForm({
                 {agents
                   .filter((a) => a.id !== agentId) // Only exclude self-assignment
                   .map((agent) => (
-                    <Field key={agent.id} orientation="horizontal">
-                      <Switch
-                        id={`subagent-${agent.id}`}
-                        checked={formData.subAgentIds.includes(agent.id)}
-                        onCheckedChange={(checked) => {
-                          setFormData((prevData) => ({
-                            ...prevData,
-                            subAgentIds: checked
-                              ? [...prevData.subAgentIds, agent.id]
-                              : prevData.subAgentIds.filter(
-                                  (id) => id !== agent.id,
-                                ),
-                          }));
-                        }}
-                        disabled={isSubmitting || readOnly}
-                      />
-                      <FieldLabel htmlFor={`subagent-${agent.id}`}>
-                        <div className="flex items-center gap-2">
-                          <AgentAvatar agent={agent} className="size-6" />
-                          <div className="flex flex-col">
-                            <p>{agent.name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {agent.description || "No description"}
-                            </p>
-                          </div>
-                        </div>
-                      </FieldLabel>
-                    </Field>
+                    <FormSwitchField
+                      key={agent.id}
+                      name={`subagent-${agent.id}`}
+                      label={agent.name}
+                      description={agent.description || "No description"}
+                      leading={<AgentAvatar agent={agent} className="size-6" />}
+                      checked={formData.subAgentIds.includes(agent.id)}
+                      onCheckedChange={(checked) =>
+                        setFormData((prevData) => ({
+                          ...prevData,
+                          subAgentIds: toggleInList(
+                            prevData.subAgentIds,
+                            agent.id,
+                            checked,
+                          ),
+                        }))
+                      }
+                      disabled={isSubmitting || readOnly}
+                    />
                   ))}
               </FieldGroup>
             </CardContent>

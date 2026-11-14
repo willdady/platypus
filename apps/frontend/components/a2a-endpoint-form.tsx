@@ -8,18 +8,12 @@ import {
   type A2aToken,
   type Agent,
 } from "@platypus/schemas";
-import {
-  Field,
-  FieldDescription,
-  FieldGroup,
-  FieldLabel,
-  FieldSet,
-} from "@/components/ui/field";
-import { Switch } from "@/components/ui/switch";
+import { FieldGroup, FieldSet } from "@/components/ui/field";
 import { SelectItem } from "@/components/ui/select";
 import { FormTextField } from "@/components/form-text-field";
 import { FormTextareaField } from "@/components/form-textarea-field";
 import { FormSelectField } from "@/components/form-select-field";
+import { FormSwitchField } from "@/components/form-switch-field";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
 import { DetailFormState } from "@/components/detail-form-state";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -212,67 +206,33 @@ function A2aEndpointForm({
             description="Shown to outside callers on the agent card, in place of the agent's own description."
           />
 
-          <Field>
-            <div className="flex items-center gap-3">
-              <Switch
-                id="enabled"
-                checked={formData.enabled}
-                onCheckedChange={(checked) => setField("enabled", checked)}
-                disabled={isSubmitting || readOnly}
-              />
-              <FieldLabel htmlFor="enabled" className="mb-0">
-                Enabled
-              </FieldLabel>
-            </div>
-            <FieldDescription>
-              When disabled, the endpoint answers every call with Not Found.
-            </FieldDescription>
-          </Field>
+          <FormSwitchField
+            name="enabled"
+            label="Enabled"
+            description="When disabled, the endpoint answers every call with Not Found."
+            checked={formData.enabled}
+            onCheckedChange={(checked) => setField("enabled", checked)}
+            disabled={isSubmitting || readOnly}
+          />
 
           {/* Both off by default: whoever holds a token may not be you. */}
-          <Field orientation="horizontal">
-            <Switch
-              id="includeMemories"
-              checked={formData.includeMemories}
-              onCheckedChange={(checked) =>
-                setField("includeMemories", checked)
-              }
-              disabled={isSubmitting || readOnly}
-            />
-            <FieldLabel
-              htmlFor="includeMemories"
-              className="flex-col items-stretch gap-0"
-            >
-              <p>Include Memories</p>
-              <p className="text-xs text-muted-foreground">
-                Add your recent memory summaries to the agent&apos;s system
-                prompt on this endpoint&apos;s runs. Leave off if anyone other
-                than you holds a token.
-              </p>
-            </FieldLabel>
-          </Field>
+          <FormSwitchField
+            name="includeMemories"
+            label="Include Memories"
+            description="Add your recent memory summaries to the agent's system prompt on this endpoint's runs. Leave off if anyone other than you holds a token."
+            checked={formData.includeMemories}
+            onCheckedChange={(checked) => setField("includeMemories", checked)}
+            disabled={isSubmitting || readOnly}
+          />
 
-          <Field orientation="horizontal">
-            <Switch
-              id="extractMemories"
-              checked={formData.extractMemories}
-              onCheckedChange={(checked) =>
-                setField("extractMemories", checked)
-              }
-              disabled={isSubmitting || readOnly}
-            />
-            <FieldLabel
-              htmlFor="extractMemories"
-              className="flex-col items-stretch gap-0"
-            >
-              <p>Extract Memories</p>
-              <p className="text-xs text-muted-foreground">
-                Let this endpoint&apos;s chats feed your memories, including
-                turns you add to them yourself. Leave off if anyone other than
-                you holds a token.
-              </p>
-            </FieldLabel>
-          </Field>
+          <FormSwitchField
+            name="extractMemories"
+            label="Extract Memories"
+            description="Let this endpoint's chats feed your memories, including turns you add to them yourself. Leave off if anyone other than you holds a token."
+            checked={formData.extractMemories}
+            onCheckedChange={(checked) => setField("extractMemories", checked)}
+            disabled={isSubmitting || readOnly}
+          />
 
           {endpoint && (
             <A2aTokens

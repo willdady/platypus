@@ -9,9 +9,9 @@ import {
   FieldDescription,
 } from "@/components/ui/field";
 import { FormTextField } from "@/components/form-text-field";
+import { FormSwitchField } from "@/components/form-switch-field";
 import { Button } from "@/components/ui/button";
 import { ListError, ListState } from "@/components/list-state";
-import { Switch } from "@/components/ui/switch";
 import { SwitchGridSkeleton } from "@/components/form-skeleton";
 import Link from "next/link";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
@@ -19,6 +19,7 @@ import { useEntityForm } from "@/hooks/use-entity-form";
 import type { Blueprint } from "@platypus/schemas";
 import { ArrowDown, ArrowUp, X } from "lucide-react";
 import { orgRoutes } from "@/lib/routes";
+import { toggleInList } from "@/lib/toggle-in-list";
 
 type InvitationFormProps = {
   orgId: string;
@@ -84,9 +85,7 @@ export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
     clearErrors("blueprintIds");
     setFormData((prev) => ({
       ...prev,
-      blueprintIds: on
-        ? [...prev.blueprintIds, id]
-        : prev.blueprintIds.filter((bid) => bid !== id),
+      blueprintIds: toggleInList(prev.blueprintIds, id, on),
     }));
   };
 
@@ -179,24 +178,16 @@ export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
                   {blueprints.map((bp) => {
                     const checked = blueprintIds.includes(bp.id);
                     return (
-                      <Field key={bp.id} orientation="horizontal">
-                        <Switch
-                          id={`bp-${bp.id}`}
-                          checked={checked}
-                          onCheckedChange={(on) => toggleBlueprint(bp.id, on)}
-                          disabled={isSubmitting}
-                        />
-                        <FieldLabel htmlFor={`bp-${bp.id}`}>
-                          <div className="flex flex-col">
-                            <p>{bp.name}</p>
-                            {bp.description && (
-                              <p className="text-xs text-muted-foreground line-clamp-1">
-                                {bp.description}
-                              </p>
-                            )}
-                          </div>
-                        </FieldLabel>
-                      </Field>
+                      <FormSwitchField
+                        key={bp.id}
+                        name={`bp-${bp.id}`}
+                        label={bp.name}
+                        description={bp.description}
+                        descriptionClassName="line-clamp-1"
+                        checked={checked}
+                        onCheckedChange={(on) => toggleBlueprint(bp.id, on)}
+                        disabled={isSubmitting}
+                      />
                     );
                   })}
                 </FieldGroup>
