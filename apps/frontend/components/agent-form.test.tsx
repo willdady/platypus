@@ -127,6 +127,36 @@ describe("AgentForm validation error surfacing", () => {
     expect(saveButton).toBeEnabled();
   });
 
+  it("clears a sampling field's error and re-enables Save once that field is edited", async () => {
+    stubRejectedSave([
+      { path: ["temperature"], message: "Temperature is required" },
+    ]);
+
+    renderCreateForm();
+
+    fireEvent.click(screen.getByText("Advanced settings"));
+    const saveButton = screen.getByRole("button", { name: "Save" });
+    fireEvent.click(saveButton);
+
+    expect(
+      await screen.findByText("Temperature is required"),
+    ).toBeInTheDocument();
+    expect(saveButton).toBeDisabled();
+
+    // The shared SamplingControls reports a patch, so the form itself must
+    // retract the error keyed to the field that changed (#1941).
+    fireEvent.change(screen.getByLabelText("Temperature"), {
+      target: { value: "0.5" },
+    });
+
+    await waitFor(() =>
+      expect(
+        screen.queryByText("Temperature is required"),
+      ).not.toBeInTheDocument(),
+    );
+    expect(saveButton).toBeEnabled();
+  });
+
   // #571: toolSetIds has no field that retracts its error, so gating Save on
   // it would disable Save forever with no way out but reloading.
   it("never disables Save on a rejection keyed to a field with no retracting input", async () => {
