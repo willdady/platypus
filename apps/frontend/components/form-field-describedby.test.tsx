@@ -4,6 +4,7 @@ import { SelectItem } from "@/components/ui/select";
 import { FormTextField } from "./form-text-field";
 import { FormTextareaField } from "./form-textarea-field";
 import { FormSelectField } from "./form-select-field";
+import { FormSwitchField } from "./form-switch-field";
 
 const FIELDS = [
   {
@@ -46,6 +47,19 @@ const FIELDS = [
       </FormSelectField>
     ),
     control: () => screen.getByRole("combobox", { name: "Name" }),
+  },
+  {
+    kind: "switch",
+    render: (props: { error?: string; description?: string }) => (
+      <FormSwitchField
+        label="Name"
+        name="name"
+        checked={false}
+        onCheckedChange={vi.fn()}
+        {...props}
+      />
+    ),
+    control: () => screen.getByRole("switch", { name: "Name" }),
   },
 ];
 

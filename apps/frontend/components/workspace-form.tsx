@@ -2,15 +2,14 @@
 
 import {
   Field,
-  FieldLabel,
   FieldGroup,
   FieldSet,
   FieldError,
   FieldDescription,
 } from "@/components/ui/field";
 import { FormTextField } from "@/components/form-text-field";
+import { FormSwitchField } from "@/components/form-switch-field";
 import { ProviderPointerSelect } from "@/components/provider-pointer-select";
-import { Switch } from "@/components/ui/switch";
 import { ExpandableTextarea } from "@/components/expandable-textarea";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
@@ -39,9 +38,9 @@ import {
   FooterSkeleton,
   FormSkeletonGroup,
   FormSkeletonSet,
+  SwitchRowSkeleton,
   TextareaSkeleton,
 } from "@/components/form-skeleton";
-import { Skeleton } from "@/components/ui/skeleton";
 import { orgRoutes, withBasePath, workspaceRoutes } from "@/lib/routes";
 import { useOrganization } from "@/hooks/use-organization";
 
@@ -74,19 +73,6 @@ type WorkspaceFormData = {
   inboundTriggersAllowed: boolean;
 };
 
-/** A delegation flag: label and description, its Switch on the right. */
-function DelegationRowSkeleton() {
-  return (
-    <div className="flex w-full items-center justify-between gap-3">
-      <div className="flex flex-1 flex-col gap-1.5">
-        <Skeleton className="h-3.5 w-44" />
-        <Skeleton className="h-3.5 w-3/4" />
-      </div>
-      <Skeleton className="h-[1.15rem] w-8 shrink-0 rounded-full" />
-    </div>
-  );
-}
-
 function WorkspaceFormSkeleton({ delegation }: { delegation: boolean }) {
   return (
     <div>
@@ -100,9 +86,9 @@ function WorkspaceFormSkeleton({ delegation }: { delegation: boolean }) {
           <FieldSkeleton description={1} />
           {delegation && (
             <>
-              <DelegationRowSkeleton />
-              <DelegationRowSkeleton />
-              <DelegationRowSkeleton />
+              <SwitchRowSkeleton align="end" />
+              <SwitchRowSkeleton align="end" />
+              <SwitchRowSkeleton align="end" />
             </>
           )}
         </FormSkeletonGroup>
@@ -326,102 +312,71 @@ function WorkspaceForm({ orgId, workspaceId }: WorkspaceFormProps) {
               workspace owner may self-manage it. */}
             {canManageDelegation && (
               <>
-                <Field
-                  orientation="horizontal"
-                  className="items-center justify-between"
-                >
-                  <div>
-                    <FieldLabel htmlFor="providerSelfManagement">
-                      Owner-managed providers
-                    </FieldLabel>
-                    <FieldDescription>
-                      Let the workspace owner create and edit workspace-scoped
-                      providers. Off by default (org admins only).
-                    </FieldDescription>
-                  </div>
-                  <Switch
-                    id="providerSelfManagement"
-                    checked={formData.providerSelfManagement}
-                    disabled={isSubmitting}
-                    onCheckedChange={(checked) =>
-                      setFormData((prev) => ({
-                        ...prev,
-                        providerSelfManagement: checked,
-                      }))
-                    }
-                  />
-                </Field>
+                <FormSwitchField
+                  align="end"
+                  name="providerSelfManagement"
+                  label="Owner-managed providers"
+                  description="Let the workspace owner create and edit workspace-scoped providers. Off by default (org admins only)."
+                  checked={formData.providerSelfManagement}
+                  disabled={isSubmitting}
+                  onCheckedChange={(checked) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      providerSelfManagement: checked,
+                    }))
+                  }
+                />
 
-                <Field
-                  orientation="horizontal"
-                  className="items-center justify-between"
-                >
-                  <div>
-                    <FieldLabel htmlFor="mcpSelfManagement">
-                      Owner-managed MCP servers
-                    </FieldLabel>
-                    <FieldDescription>
-                      Let the workspace owner register and authorize their own
-                      MCP servers (e.g. personal-credential integrations). Off
-                      by default (org admins only).
-                    </FieldDescription>
-                  </div>
-                  <Switch
-                    id="mcpSelfManagement"
-                    checked={formData.mcpSelfManagement}
-                    disabled={isSubmitting}
-                    onCheckedChange={(checked) =>
-                      setFormData((prev) => ({
-                        ...prev,
-                        mcpSelfManagement: checked,
-                      }))
-                    }
-                  />
-                </Field>
+                <FormSwitchField
+                  align="end"
+                  name="mcpSelfManagement"
+                  label="Owner-managed MCP servers"
+                  description="Let the workspace owner register and authorize their own MCP servers (e.g. personal-credential integrations). Off by default (org admins only)."
+                  checked={formData.mcpSelfManagement}
+                  disabled={isSubmitting}
+                  onCheckedChange={(checked) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      mcpSelfManagement: checked,
+                    }))
+                  }
+                />
 
-                <Field
-                  orientation="horizontal"
-                  className="items-center justify-between"
-                >
-                  <div>
-                    <FieldLabel htmlFor="inboundTriggersAllowed">
-                      Allow Inbound Triggers
-                    </FieldLabel>
-                    <FieldDescription>
-                      {inboundGate === "off" || inboundGate === "all" ? (
-                        <>
-                          {inboundGate === "all"
-                            ? "Your organization allows Inbound Triggers in every workspace."
-                            : "Your organization doesn't allow Inbound Triggers."}{" "}
-                          Change this in the organization&apos;s{" "}
-                          <Link
-                            href={orgRoutes(orgId).settings.inboundTriggers}
-                            className="underline"
-                          >
-                            Inbound Triggers
-                          </Link>{" "}
-                          settings.
-                        </>
-                      ) : (
-                        <>
-                          Let this workspace&apos;s Inbound Triggers accept
-                          calls from outside Platypus. Off by default.
-                        </>
-                      )}
-                    </FieldDescription>
-                  </div>
-                  <Switch
-                    id="inboundTriggersAllowed"
-                    checked={formData.inboundTriggersAllowed}
-                    disabled={isSubmitting || inboundGate !== "selected"}
-                    onCheckedChange={(checked) =>
-                      setFormData((prev) => ({
-                        ...prev,
-                        inboundTriggersAllowed: checked,
-                      }))
-                    }
-                  />
-                </Field>
+                <FormSwitchField
+                  align="end"
+                  name="inboundTriggersAllowed"
+                  label="Allow Inbound Triggers"
+                  description={
+                    inboundGate === "off" || inboundGate === "all" ? (
+                      <>
+                        {inboundGate === "all"
+                          ? "Your organization allows Inbound Triggers in every workspace."
+                          : "Your organization doesn't allow Inbound Triggers."}{" "}
+                        Change this in the organization&apos;s{" "}
+                        <Link
+                          href={orgRoutes(orgId).settings.inboundTriggers}
+                          className="underline"
+                        >
+                          Inbound Triggers
+                        </Link>{" "}
+                        settings.
+                      </>
+                    ) : (
+                      <>
+                        Let this workspace&apos;s Inbound Triggers accept calls
+                        from outside Platypus. Off by default.
+                      </>
+                    )
+                  }
+                  checked={formData.inboundTriggersAllowed}
+                  disabled={isSubmitting || inboundGate !== "selected"}
+                  onCheckedChange={(checked) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      inboundTriggersAllowed: checked,
+                    }))
+                  }
+                />
               </>
             )}
           </FieldGroup>

@@ -24,6 +24,7 @@ import {
   type KanbanBoardState,
 } from "@platypus/schemas";
 import type { TriggerFieldsProps } from "@/components/trigger-form";
+import { toggleInList } from "@/lib/toggle-in-list";
 
 // The events an Event Trigger can subscribe to. Webhook-only events
 // (`trigger_run.*`) are not among them.
@@ -124,7 +125,7 @@ function TriggerEventFields({
 
   const handleChangedFieldToggle = (field: string) => {
     setFilterChangedFields((prev) =>
-      prev.includes(field) ? prev.filter((f) => f !== field) : [...prev, field],
+      toggleInList(prev, field, !prev.includes(field)),
     );
   };
 

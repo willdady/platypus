@@ -3,9 +3,9 @@
 import { Field, FieldLabel, FieldTitle } from "@/components/ui/field";
 import { FormTextField } from "@/components/form-text-field";
 import { FormSelectField } from "@/components/form-select-field";
+import { FormSwitchField } from "@/components/form-switch-field";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
-import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -408,20 +408,14 @@ function TriggerCronFields({
         </Field>
       )}
 
-      <Field orientation="horizontal">
-        <Switch
-          id="isOneOff"
-          checked={isOneOff}
-          onCheckedChange={setIsOneOff}
-          disabled={scheduleLocked}
-        />
-        <FieldLabel htmlFor="isOneOff" className="flex-col items-stretch gap-0">
-          <p>One-off Trigger</p>
-          <p className="text-xs text-muted-foreground">
-            Run once and then disable
-          </p>
-        </FieldLabel>
-      </Field>
+      <FormSwitchField
+        name="isOneOff"
+        label="One-off Trigger"
+        description="Run once and then disable"
+        checked={isOneOff}
+        onCheckedChange={setIsOneOff}
+        disabled={scheduleLocked}
+      />
     </>
   );
 }

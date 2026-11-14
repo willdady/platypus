@@ -2,15 +2,14 @@
 
 import {
   Field,
-  FieldLabel,
   FieldGroup,
   FieldSet,
   FieldDescription,
 } from "@/components/ui/field";
 import { FormTextField } from "@/components/form-text-field";
+import { FormSwitchField } from "@/components/form-switch-field";
 import { ProviderPointerSelect } from "@/components/provider-pointer-select";
 import { ExpandableTextarea } from "@/components/expandable-textarea";
-import { Switch } from "@/components/ui/switch";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { DetailFormState } from "@/components/detail-form-state";
@@ -148,26 +147,18 @@ function ResourceGroup({
             {resources.map((resource) => {
               const key = itemKey(type, resource.id);
               return (
-                <Field key={resource.id} orientation="horizontal">
-                  <Switch
-                    id={key}
-                    checked={selected.has(key)}
-                    onCheckedChange={(checked) =>
-                      onToggle(type, resource.id, checked)
-                    }
-                    disabled={disabled}
-                  />
-                  <FieldLabel htmlFor={key}>
-                    <div className="flex flex-col">
-                      <p>{resource.name}</p>
-                      {resource.description && (
-                        <p className="text-xs text-muted-foreground line-clamp-1">
-                          {resource.description}
-                        </p>
-                      )}
-                    </div>
-                  </FieldLabel>
-                </Field>
+                <FormSwitchField
+                  key={resource.id}
+                  name={key}
+                  label={resource.name}
+                  description={resource.description}
+                  descriptionClassName="line-clamp-1"
+                  checked={selected.has(key)}
+                  onCheckedChange={(checked) =>
+                    onToggle(type, resource.id, checked)
+                  }
+                  disabled={disabled}
+                />
               );
             })}
           </FieldGroup>
