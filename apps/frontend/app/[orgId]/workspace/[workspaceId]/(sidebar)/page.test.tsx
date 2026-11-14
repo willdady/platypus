@@ -25,7 +25,10 @@ const WORKSPACE = { id: "ws1", organizationId: "org1", name: "Research" };
 // contains the Workspace's, and the harness matches in insertion order.
 const workspaceRead = { "/workspaces/ws1": { data: WORKSPACE } };
 
-beforeEach(() => resetListHarness());
+beforeEach(() => {
+  resetListHarness();
+  localStorage.clear();
+});
 
 describe("Workspace home", () => {
   it("offers to add a provider when the workspace has none", async () => {
@@ -104,6 +107,43 @@ describe("Workspace home", () => {
     expect(
       screen.queryByRole("heading", { name: "Pinned" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("leaves fired One-offs out of the count, whether or not the list shows them", async () => {
+    const activeTrigger = {
+      id: "t1",
+      name: "Nightly job",
+      type: "cron",
+      enabled: true,
+      agentId: "a1",
+      config: { cronExpression: "0 0 * * *", timezone: "UTC" },
+    };
+    const firedOneOff = {
+      ...activeTrigger,
+      id: "t2",
+      name: "Launch reminder",
+      enabled: false,
+      config: { ...activeTrigger.config, isOneOff: true },
+      firedAt: "2026-02-01T08:00:00.000Z",
+    };
+    mockScopedSWR({
+      "/providers": [{ id: "p1", name: "OpenAI" }],
+      "/triggers": [activeTrigger, firedOneOff],
+      ...workspaceRead,
+    });
+    await renderList(<Workspace />);
+
+    const triggersCard = screen
+      .getByText("Automated agent runs")
+      .closest("[data-slot='card']") as HTMLElement;
+    expect(within(triggersCard).getByText("1")).toBeInTheDocument();
+
+    // Showing the fired One-off in the list leaves the count alone.
+    fireEvent.click(screen.getByRole("button", { name: /Triggers/ }));
+    expect(screen.queryByText("Launch reminder")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("switch", { name: "Show fired" }));
+    expect(screen.getByText("Launch reminder")).toBeInTheDocument();
+    expect(within(triggersCard).getByText("1")).toBeInTheDocument();
   });
 
   it("shows a failed count as an error, not as 0", async () => {
