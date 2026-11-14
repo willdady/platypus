@@ -1,4 +1,4 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "../../index.ts";
 import {
   triggerRun as triggerRunTable,
@@ -6,16 +6,16 @@ import {
   workspace as workspaceTable,
 } from "../../db/schema.ts";
 import type {
-  TriggerRunStats,
-  TriggerRunStatus,
   EventTriggerEvent,
   EventTriggerEventPayload,
 } from "@platypus/schemas";
 import { FlushScheduler } from "../flush-scheduler.ts";
 import {
-  announceTriggerRunsEnded,
-  endedTriggerRunColumns,
-} from "../../services/trigger-run-announce.ts";
+  adoptPendingTriggerRun,
+  endTriggerRun,
+  openTriggerRun,
+  triggerRunStats,
+} from "../../services/trigger-run-lifecycle.ts";
 import { eventStatusForRun, type RunEventRecorder } from "../run-events.ts";
 import type {
   ResolvedRunPlan,
@@ -50,63 +50,14 @@ export type TriggerSinkParams = {
 };
 
 /**
- * `steps == null` means no step was ever observed, and writing "0 steps, 0
- * tokens" for a run that never started reads as a real measurement — hence the
- * null.
- */
-const toTriggerRunStats = (stats: RunStats): TriggerRunStats | null => {
-  if (stats.steps == null) return null;
-  return {
-    steps: stats.steps ?? 0,
-    toolCalls: stats.toolCalls ?? [],
-    inputTokens: stats.inputTokens ?? 0,
-    outputTokens: stats.outputTokens ?? 0,
-    // Spread rather than defaulted to 0: unlike the sums above, an absent
-    // occupancy means the Provider reported no usage, and writing 0 there would
-    // record an empty context as a measurement (ADR-0018). The cached-token
-    // breakdowns follow the same idiom — absent means the Provider reported no
-    // cache detail, never a zero (issue #734).
-    ...(stats.contextOccupancy === undefined
-      ? {}
-      : { contextOccupancy: stats.contextOccupancy }),
-    ...(stats.cacheReadTokens === undefined
-      ? {}
-      : { cacheReadTokens: stats.cacheReadTokens }),
-    ...(stats.cacheWriteTokens === undefined
-      ? {}
-      : { cacheWriteTokens: stats.cacheWriteTokens }),
-    // Spread so an untruncated run stores no key at all, matching the schema's
-    // `z.literal(true).optional()`.
-    ...(stats.truncatedByTokenLimit
-      ? { truncatedByTokenLimit: true as const }
-      : {}),
-    // Same idiom, same reason: a run whose loop was never stopped short stores
-    // no key, so the flag's presence is the whole of its meaning.
-    ...(stats.stoppedAtStepLimit ? { stoppedAtStepLimit: true as const } : {}),
-    ...(stats.usageByModel ? { usageByModel: stats.usageByModel } : {}),
-    ...(stats.fallback ? { fallback: stats.fallback } : {}),
-  };
-};
-
-/** The run's status vocabulary, from the registered run's. */
-const toTriggerRunStatus = (status: RunStatus): TriggerRunStatus => {
-  switch (status) {
-    case "succeeded":
-      return "success";
-    case "cancelled":
-      return "cancelled";
-    default:
-      return "failed";
-  }
-};
-
-/**
  * Persists `triggerRun` rows — and the run's **Run timeline** (#647) — around a
- * headless run.
+ * headless run. Every write of the run's `status` belongs to the Trigger run
+ * lifecycle (`services/trigger-run-lifecycle.ts`); this sink says what happened
+ * to the run and writes only what does not touch status.
  *
- * - `onStart`: INSERT row with status `running` and event metadata — or, for
- *   an inbound run, move its `pending` row to `running`; takes the run's Run
- *   event recorder and starts flushing it.
+ * - `onStart`: opens the run as `running` with its event metadata — or, for an
+ *   inbound run, has its `pending` row adopted; takes the run's Run event
+ *   recorder and starts flushing it.
  * - `onProgress`: drives a FlushScheduler that writes incremental `stats`
  *   (tool-call counts, step counts) so a long-running Trigger is observable on
  *   the runs page mid-flight. The recorder bumps the same scheduler, so events
@@ -114,22 +65,21 @@ const toTriggerRunStatus = (status: RunStatus): TriggerRunStatus => {
  *   the last flush, plus a patch per event that has since closed. The write
  *   *rate* is bounded exactly as the stats flushing bounds it.
  * - `onFinish`: closes every still-open event with the run's terminal status
- *   and writes them, then UPDATEs the row — only while it is still `pending`
- *   or `running` — with terminal status, final stats, error message and final
- *   text, and announces the run as a `trigger_run.*` Webhook event when that
- *   write landed. Events first, so no reader ever sees a terminal run with a
- *   running event.
+ *   and writes them, then hands the run's outcome to the lifecycle, which ends
+ *   the row and announces it. Events first, so no reader ever sees a terminal
+ *   run with a running event.
  *
- * `suppressed` rows are written by the run-rate breaker instead of a run, and
- * never pass through this sink.
+ * `suppressed` rows are recorded by the lifecycle, in place of the run the
+ * breaker dropped, and never pass through this sink.
  *
- * Note: trigger-table maintenance (`lastRunAt`, `nextRunAt`, retention) is not
- * this sink's: `services/trigger-firing.ts` owns it, and applies it on every
- * exit of a firing — including a run that threw before or after this sink saw
- * it. The run is bounded by `TRIGGER_PER_RUN_TIMEOUT_MS`
- * (`runs/trigger-timeouts.ts`), not the run registry's generic default; the
- * stuck-run sweep in `jobs/scheduler.ts` reads the same value, which is why a
- * row this sink leaves `running` is safe from it until that ceiling passes.
+ * Note: trigger-table maintenance (`lastRunAt`, `nextRunAt`) and run retention
+ * are not this sink's: `services/trigger-firing.ts` owns the former and applies
+ * it on every exit of a firing — including a run that threw before or after
+ * this sink saw it — and the lifecycle applies retention as a run ends. The run
+ * is bounded by `TRIGGER_PER_RUN_TIMEOUT_MS` (`runs/trigger-timeouts.ts`), not
+ * the run registry's generic default; the stuck-run sweep in
+ * `jobs/scheduler.ts` reads the same value, which is why a row this sink leaves
+ * `running` is safe from it until that ceiling passes.
  */
 export class TriggerSink implements RunSink {
   private latestStats: RunStats = {};
@@ -169,36 +119,16 @@ export class TriggerSink implements RunSink {
         );
       }
       if (this.params.adoptPendingRow) {
-        // `startedAt` moves to the real start, so the run's duration does not
-        // include the moment between acceptance and the Drive picking it up.
-        // Only a row still `pending` is adopted: one the recovery sweep already
-        // failed, or retention pruned, must not come back as a live run nobody's
-        // dedup or poll can see. Throwing fails the run before the Agent starts.
-        const adopted = await tx
-          .update(triggerRunTable)
-          .set({ status: "running", startedAt: new Date() })
-          .where(
-            and(
-              eq(triggerRunTable.id, ctx.runId),
-              eq(triggerRunTable.status, "pending"),
-            ),
-          )
-          .returning({ id: triggerRunTable.id });
-        if (adopted.length === 0) {
-          throw new Error(
-            `Inbound trigger run '${ctx.runId}' is no longer pending; not started`,
-          );
-        }
+        // Throws when the row is no longer `pending`: failing the run before
+        // the Agent starts is the point.
+        await adoptPendingTriggerRun(tx, ctx.runId);
       } else {
-        await tx.insert(triggerRunTable).values({
-          id: ctx.runId,
+        await openTriggerRun(tx, {
+          runId: ctx.runId,
           triggerId: this.params.triggerId,
-          status: "running",
-          entityId: this.params.entityId ?? null,
-          eventType: this.params.eventType ?? null,
-          eventData: this.params.eventData ?? null,
-          startedAt: new Date(),
-          createdAt: new Date(),
+          entityId: this.params.entityId,
+          eventType: this.params.eventType,
+          eventData: this.params.eventData,
         });
       }
     });
@@ -255,30 +185,18 @@ export class TriggerSink implements RunSink {
     this.events?.closeOpen(eventStatusForRun(ctx.status));
     await this.flushEvents();
 
-    const triggerStats = toTriggerRunStats(ctx.stats);
-
-    // Only a row still live is finished: one the recovery sweep already failed
-    // keeps that outcome, and announces nothing a second time. The instance
-    // whose write lands is the one that announces the run.
-    const ended = await db
-      .update(triggerRunTable)
-      .set({
-        status: toTriggerRunStatus(ctx.status),
-        errorMessage: ctx.error?.message ?? null,
-        stats: triggerStats,
-        completedAt: new Date(),
-        finalText: ctx.finalText ?? null,
-        eventsTruncated: this.events?.eventsTruncated ?? false,
-        failedToolCalls: this.events?.failedToolCalls ?? 0,
-      })
-      .where(
-        and(
-          eq(triggerRunTable.id, ctx.runId),
-          inArray(triggerRunTable.status, ["pending", "running"]),
-        ),
-      )
-      .returning(endedTriggerRunColumns);
-    if (ended.length > 0) void announceTriggerRunsEnded(ended);
+    // The lifecycle ends the row only while it is still live: one the recovery
+    // sweep already failed keeps that outcome, and announces nothing a second
+    // time. The instance whose write lands is the one that announces the run.
+    await endTriggerRun({
+      runId: ctx.runId,
+      status: ctx.status,
+      stats: ctx.stats,
+      error: ctx.error,
+      finalText: ctx.finalText,
+      eventsTruncated: this.events?.eventsTruncated ?? false,
+      failedToolCalls: this.events?.failedToolCalls ?? 0,
+    });
   }
 
   /**
@@ -287,7 +205,7 @@ export class TriggerSink implements RunSink {
    * marked, not only the node — then the events since the last flush.
    */
   private async flush(): Promise<void> {
-    const triggerStats = toTriggerRunStats(this.latestStats);
+    const triggerStats = triggerRunStats(this.latestStats);
     const truncated = this.events?.eventsTruncated ?? false;
     const failedToolCalls = this.events?.failedToolCalls ?? 0;
     if (triggerStats != null || truncated || failedToolCalls > 0) {

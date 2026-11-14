@@ -17,13 +17,19 @@ import { ValidationError } from "../errors.ts";
  * built from the shipped migrations: what it clears, what it keeps, and that
  * a refused one changes nothing.
  */
-const { holder, cancelRun, stopRevokedA2aWork, deleteStoredPrefix } =
-  vi.hoisted(() => ({
-    holder: { db: undefined as ReturnType<typeof drizzle> | undefined },
-    cancelRun: vi.fn(async (_runId: string) => {}),
-    stopRevokedA2aWork: vi.fn(async (_endpointIds: string[]) => {}),
-    deleteStoredPrefix: vi.fn(async (_prefix: string) => {}),
-  }));
+const {
+  holder,
+  cancelRun,
+  stopRevokedA2aWork,
+  deleteStoredPrefix,
+  dispatchWebhookEvent,
+} = vi.hoisted(() => ({
+  holder: { db: undefined as ReturnType<typeof drizzle> | undefined },
+  cancelRun: vi.fn(async (_runId: string) => {}),
+  stopRevokedA2aWork: vi.fn(async (_endpointIds: string[]) => {}),
+  deleteStoredPrefix: vi.fn(async (_prefix: string) => {}),
+  dispatchWebhookEvent: vi.fn(),
+}));
 vi.mock("../index.ts", () => ({
   get db() {
     return holder.db!;
@@ -32,6 +38,10 @@ vi.mock("../index.ts", () => ({
 vi.mock("../runs/run-cancel.ts", () => ({ cancelRun }));
 vi.mock("./a2a-cancel.ts", () => ({ stopRevokedA2aWork }));
 vi.mock("../storage/utils.ts", () => ({ deleteStoredPrefix }));
+// The delivery is the one part of a `trigger_run.*` Webhook event mocked: which
+// events a transfer produces, and that they follow the commit, are what this
+// file is about.
+vi.mock("./event-dispatch.ts", () => ({ dispatchWebhookEvent }));
 
 const { transferWorkspace } = await import("./workspace-transfer.ts");
 
@@ -286,11 +296,38 @@ describe("transferWorkspace, whatever the history choice", () => {
     ).toEqual([{ id: "run-pending", status: "cancelled" }]);
   });
 
+  it("announces the pending run it cancelled, once, after the transfer commits", async () => {
+    await transfer("u-new");
+
+    // The pending run ends `cancelled` with its Webhook event — the behaviour
+    // change #1934 makes, so the pending case matches the running one and what
+    // the Webhooks docs already promise.
+    // Exactly one event, and it is the cancelled one. The announcement is
+    // started after the commit, not awaited by it, so let it land.
+    await vi.waitFor(() =>
+      expect(dispatchWebhookEvent).toHaveBeenCalledTimes(1),
+    );
+    expect(dispatchWebhookEvent).toHaveBeenCalledWith(
+      "org-1",
+      "ws-1",
+      expect.objectContaining({
+        event: "trigger_run.cancelled",
+        data: expect.objectContaining({
+          runId: "run-pending",
+          triggerId: "t-1",
+          status: "cancelled",
+        }) as unknown,
+      }),
+    );
+  });
+
   it("cancels nothing when the transfer is refused", async () => {
     await expect(transfer("u-out")).rejects.toThrow(ValidationError);
 
     expect(cancelRun).not.toHaveBeenCalled();
     expect(stopRevokedA2aWork).not.toHaveBeenCalled();
+    // Nothing was committed, so nothing is announced.
+    expect(dispatchWebhookEvent).not.toHaveBeenCalled();
   });
 
   it("tells the new Owner, in the Workspace, without an Agent", async () => {

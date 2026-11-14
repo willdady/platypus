@@ -140,9 +140,11 @@ const postFailedRunNotification = async (
  *
  * Exactly one event — and one Notification — per run rests on the caller: pass
  * only the rows a terminal write actually changed — a write conditional on the
- * row still being `pending`/`running`, or the insert of a `suppressed` row — so
- * whichever instance won the write is the only one that announces. Delivery is
- * in-process, never over the cross-instance channel.
+ * row still being live, or the insert of a `suppressed` row — so whichever
+ * instance won the write is the only one that announces. Delivery is
+ * in-process, never over the cross-instance channel. Its one caller is the
+ * Trigger run lifecycle (`trigger-run-lifecycle.ts`), which is what keeps that
+ * guarantee true across every path that ends a run.
  *
  * What is announced is the run's final status, not the first Provider error it
  * saw: a run that recovers (through the Fallback model or otherwise) and ends

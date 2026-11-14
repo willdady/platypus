@@ -2,6 +2,16 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { resetMockDb, seedDb, type Row } from "../test-utils.ts";
 import { mockLogger, mockNanoid } from "../test-setup.ts";
 
+const { mockDeletePrefix } = vi.hoisted(() => ({
+  mockDeletePrefix: vi.fn<(prefix: string) => Promise<void>>(),
+}));
+
+// Retention deletes the stored files of every run it prunes; the delete is the
+// only part of that mocked.
+vi.mock("../storage/index.ts", () => ({
+  getStorage: () => ({ deletePrefix: mockDeletePrefix }),
+}));
+
 vi.mock("./trigger-firing.ts", () => ({
   fireTrigger: vi.fn(() => Promise.resolve("ran")),
 }));
@@ -126,6 +136,7 @@ describe("inbound triggers", () => {
     vi.clearAllMocks();
     resetInboundRunSlots();
     resetTokenTouches();
+    mockDeletePrefix.mockResolvedValue(undefined);
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(NOW);
   });
@@ -501,6 +512,54 @@ describe("inbound triggers", () => {
         expect(other.outcome).toBe("accepted");
         expect(fireTrigger).toHaveBeenCalledTimes(1);
         expect(announceTriggerRunsEnded).toHaveBeenCalledTimes(1);
+      } finally {
+        delete process.env.TRIGGER_BREAKER_MAX_RUNS;
+      }
+    });
+
+    it("prunes the Trigger's history when it records a suppression, as an Event Trigger does", async () => {
+      process.env.TRIGGER_BREAKER_MAX_RUNS = "1";
+      try {
+        // One run inside the breaker window (which retention always keeps), one
+        // outside it, and a budget of one row: the suppression prunes the out-of-
+        // window row, and the file delete carries the run's Chat prefix.
+        const longAgo = new Date(NOW.getTime() - 2 * 60 * 60 * 1000);
+        const fake = seed({
+          trigger: [inboundTrigger({ maxRunsToKeep: 1 })],
+          runs: [
+            {
+              id: "run-old",
+              triggerId: "trig-1",
+              entityId: "PLAT-42",
+              status: "success",
+              startedAt: longAgo,
+              completedAt: longAgo,
+            },
+            {
+              id: "run-recent",
+              triggerId: "trig-1",
+              entityId: "PLAT-42",
+              status: "success",
+              startedAt: new Date(NOW.getTime() - 60_000),
+            },
+          ],
+        });
+        mockNanoid.mockReturnValueOnce("run-suppressed");
+
+        await acceptInboundCall(
+          target(),
+          config,
+          { issueKey: "PLAT-42" },
+          settings,
+        );
+
+        expect(fake.tables.trigger_run.map((run) => run.id).sort()).toEqual([
+          "run-recent",
+          "run-suppressed",
+        ]);
+        expect(mockDeletePrefix.mock.calls.map(([prefix]) => prefix)).toEqual([
+          "org-1/ws-1/run-old/",
+        ]);
       } finally {
         delete process.env.TRIGGER_BREAKER_MAX_RUNS;
       }
