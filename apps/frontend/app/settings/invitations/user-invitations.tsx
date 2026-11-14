@@ -55,7 +55,9 @@ function UserInvitationsPage() {
         method: "POST",
       }),
     mutate,
-    onSuccess: () => toast.success("Invitation declined"),
+    onSuccess: () => {
+      toast.success("Invitation declined");
+    },
   });
 
   const cards = invitations.map((invite) => ({
