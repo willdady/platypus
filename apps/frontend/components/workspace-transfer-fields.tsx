@@ -2,12 +2,7 @@
 
 import Link from "next/link";
 import { type OrgMemberListItem } from "@platypus/schemas";
-import {
-  Field,
-  FieldDescription,
-  FieldError,
-  FieldLabel,
-} from "@/components/ui/field";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import {
   Select,
   SelectContent,
@@ -15,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
+import { FormSwitchField } from "@/components/form-switch-field";
 import { orgRoutes } from "@/lib/routes";
 import type { Serialized } from "@/lib/api-write";
 
@@ -94,22 +89,15 @@ export function TransferFields({
         </Select>
         {error && <FieldError>{error}</FieldError>}
       </Field>
-      <Field orientation="horizontal" className="items-center justify-between">
-        <div>
-          <FieldLabel htmlFor={`${idPrefix}-keepHistory`}>
-            Keep history
-          </FieldLabel>
-          <FieldDescription>
-            {historyOutcome(keepHistory, "the new owner")}
-          </FieldDescription>
-        </div>
-        <Switch
-          id={`${idPrefix}-keepHistory`}
-          checked={keepHistory}
-          onCheckedChange={(checked) => onChange({ keepHistory: checked })}
-          disabled={disabled}
-        />
-      </Field>
+      <FormSwitchField
+        align="end"
+        name={`${idPrefix}-keepHistory`}
+        label="Keep history"
+        description={historyOutcome(keepHistory, "the new owner")}
+        checked={keepHistory}
+        onCheckedChange={(checked) => onChange({ keepHistory: checked })}
+        disabled={disabled}
+      />
     </>
   );
 }

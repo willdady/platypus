@@ -2,14 +2,13 @@
 
 import {
   Field,
-  FieldLabel,
   FieldGroup,
   FieldSet,
   FieldDescription,
 } from "@/components/ui/field";
 import { FormTextField } from "@/components/form-text-field";
 import { ExpandableTextarea } from "@/components/expandable-textarea";
-import { Switch } from "@/components/ui/switch";
+import { FormSwitchField } from "@/components/form-switch-field";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { DetailFormState } from "@/components/detail-form-state";
@@ -41,6 +40,7 @@ import { toastGuidanceOrError } from "@/lib/apply-write-outcome";
 import { orgRoutes, workspaceRoutes } from "@/lib/routes";
 import { SkillBundleCard } from "@/components/skill-bundle";
 import type { Serialized } from "@/lib/api-write";
+import { toggleInList } from "@/lib/toggle-in-list";
 
 const RETRACTABLE_FIELDS = [
   "name",
@@ -258,28 +258,19 @@ function SkillForm({
               </p>
             }
           />
-          <Field orientation="horizontal" className="items-start">
-            <Switch
-              id="disableModelInvocation"
-              checked={formData.disableModelInvocation}
-              onCheckedChange={(checked) =>
-                setFormData((previous) => ({
-                  ...previous,
-                  disableModelInvocation: checked,
-                }))
-              }
-              disabled={isSubmitting}
-            />
-            <div className="flex flex-col gap-1">
-              <FieldLabel htmlFor="disableModelInvocation">
-                User-invocable only
-              </FieldLabel>
-              <FieldDescription>
-                Keep this Skill out of the model catalogue. People can still
-                invoke it directly.
-              </FieldDescription>
-            </div>
-          </Field>
+          <FormSwitchField
+            name="disableModelInvocation"
+            label="User-invocable only"
+            description="Keep this Skill out of the model catalogue. People can still invoke it directly."
+            checked={formData.disableModelInvocation}
+            onCheckedChange={(checked) =>
+              setFormData((previous) => ({
+                ...previous,
+                disableModelInvocation: checked,
+              }))
+            }
+            disabled={isSubmitting}
+          />
         </FieldGroup>
       </FieldSet>
 
@@ -294,31 +285,20 @@ function SkillForm({
             </FieldDescription>
             <FieldGroup className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {agents.map((agent) => (
-                <Field key={agent.id} orientation="horizontal">
-                  <Switch
-                    id={`agent-${agent.id}`}
-                    checked={selectedAgentIds.includes(agent.id)}
-                    onCheckedChange={(checked) => {
-                      setSelectedAgentIds((prev) =>
-                        checked
-                          ? [...prev, agent.id]
-                          : prev.filter((id) => id !== agent.id),
-                      );
-                    }}
-                    disabled={isSubmitting}
-                  />
-                  <FieldLabel htmlFor={`agent-${agent.id}`}>
-                    <div className="flex items-center gap-2">
-                      <AgentAvatar agent={agent} className="size-6" />
-                      <div className="flex flex-col">
-                        <p>{agent.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {agent.description || "No description"}
-                        </p>
-                      </div>
-                    </div>
-                  </FieldLabel>
-                </Field>
+                <FormSwitchField
+                  key={agent.id}
+                  name={`agent-${agent.id}`}
+                  label={agent.name}
+                  description={agent.description || "No description"}
+                  leading={<AgentAvatar agent={agent} className="size-6" />}
+                  checked={selectedAgentIds.includes(agent.id)}
+                  onCheckedChange={(checked) =>
+                    setSelectedAgentIds((prev) =>
+                      toggleInList(prev, agent.id, checked),
+                    )
+                  }
+                  disabled={isSubmitting}
+                />
               ))}
             </FieldGroup>
           </CardContent>
