@@ -1,5 +1,22 @@
 # Changelog
 
+## [4.5.0](https://github.com/willdady/platypus/compare/v4.4.0...v4.5.0) (2026-11-14)
+
+
+### Features
+
+* **backend:** make a Trigger run's Chat read-only ([#1964](https://github.com/willdady/platypus/issues/1964)) ([a5c442d](https://github.com/willdady/platypus/commit/a5c442d8d80c7627e8d47296ef16e93b081dae5f))
+* **frontend:** put admin table row actions in ⋮ menus ([#1963](https://github.com/willdady/platypus/issues/1963)) ([3612161](https://github.com/willdady/platypus/commit/3612161df89ae7896d206a0d8aac0db525c4d41c))
+* **frontend:** unify save and delete feedback across forms ([#1965](https://github.com/willdady/platypus/issues/1965)) ([8c0df2c](https://github.com/willdady/platypus/commit/8c0df2c565024587d5fa3c0fe251dc569df6ef5d))
+
+
+### Bug Fixes
+
+* correct docs claims traced against source ([#1932](https://github.com/willdady/platypus/issues/1932)) ([035c5e3](https://github.com/willdady/platypus/commit/035c5e3eceb0a2b30ee88d29c8a4f981223f959a))
+* **frontend:** exclude fired One-off Triggers from home count ([#1953](https://github.com/willdady/platypus/issues/1953)) ([3a895ac](https://github.com/willdady/platypus/commit/3a895aca5ca6fa382aae8e64aaeb19ee1ebab83f))
+* **frontend:** keep Kanban comment drafts when the open card changes ([#1952](https://github.com/willdady/platypus/issues/1952)) ([f2aa8ec](https://github.com/willdady/platypus/commit/f2aa8ec93b1843cf71cb6043be0e52a67f65eece))
+* **frontend:** refresh the command menu's Trigger list after delete, clone or toggle ([#1954](https://github.com/willdady/platypus/issues/1954)) ([efa2bc8](https://github.com/willdady/platypus/commit/efa2bc8a0560dfa167676380ca94451aa94ab643))
+
 ## [4.4.0](https://github.com/willdady/platypus/compare/v4.3.0...v4.4.0) (2026-11-08)
 
 
