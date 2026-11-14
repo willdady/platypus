@@ -126,21 +126,41 @@ export function TextareaSkeleton({
   );
 }
 
-/** A horizontal Switch + label row, optionally with a description line. */
+/** A Switch's box: the rounded track every switch skeleton stands in for. */
+export function SwitchToggleSkeleton() {
+  return <Skeleton className="h-[1.15rem] w-8 shrink-0 rounded-full" />;
+}
+
+/**
+ * A horizontal Switch + label row, with its description line — the shape
+ * `FormSwitchField` lays out, so a loading form does not shift when the
+ * switches land. `align` mirrors that prop: the switch sits before the text,
+ * or after it on a settings row.
+ */
 export function SwitchRowSkeleton({
   className,
   description = true,
+  align = "start",
 }: {
   className?: string;
   description?: boolean;
+  align?: "start" | "end";
 }) {
+  const toggle = <SwitchToggleSkeleton />;
   return (
     <div className={cn("flex w-full items-center gap-3", className)}>
-      <Skeleton className="h-[1.15rem] w-8 shrink-0 rounded-full" />
+      {align === "start" && toggle}
       <div className="flex flex-1 flex-col gap-1">
-        <Skeleton className="h-3.5 w-28" />
-        {description && <Skeleton className="h-3 w-3/4" />}
+        <div className="flex h-5 items-center">
+          <Skeleton className="h-3.5 w-28" />
+        </div>
+        {description && (
+          <div className="flex h-5 items-center">
+            <Skeleton className="h-3.5 w-3/4" />
+          </div>
+        )}
       </div>
+      {align === "end" && toggle}
     </div>
   );
 }

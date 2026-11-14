@@ -20,6 +20,7 @@ import {
   type Serialized,
 } from "@/lib/api-write";
 import { optionalFetcher } from "@/lib/utils";
+import { toggleInList } from "@/lib/toggle-in-list";
 import { Button } from "@/components/ui/button";
 import {
   KeyValueRowsEditor,
@@ -664,9 +665,7 @@ function SandboxSettings({
                             onCheckedChange={(on) =>
                               setFormData((prev) => ({
                                 ...prev,
-                                networks: on
-                                  ? [...prev.networks, net]
-                                  : prev.networks.filter((n) => n !== net),
+                                networks: toggleInList(prev.networks, net, on),
                               }))
                             }
                             aria-label={`Attach network ${net}`}

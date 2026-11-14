@@ -23,11 +23,13 @@ import {
 } from "@/lib/form-errors";
 import { workspaceRoutes } from "@/lib/routes";
 import { cn } from "@/lib/utils";
+import { toggleInList } from "@/lib/toggle-in-list";
 import { ProviderForm } from "@/components/provider-form";
 import { SandboxSettings } from "@/components/sandbox-settings";
 import { useUnsavedChangesGuard } from "@/components/unsaved-changes-guard";
 import { FormTextField } from "@/components/form-text-field";
 import { FormSelectField } from "@/components/form-select-field";
+import { FormSwitchField } from "@/components/form-switch-field";
 import { ExpandableTextarea } from "@/components/expandable-textarea";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -41,16 +43,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmptyCard } from "@/components/empty-card";
 import { ListError } from "@/components/list-state";
 import {
+  InlineSkeleton,
   ItemRowsSkeleton,
   LoadingRegion,
-  SkeletonLine,
 } from "@/components/list-skeletons";
 import {
   Field,
   FieldDescription,
   FieldError,
   FieldGroup,
-  FieldLabel,
   FieldSet,
 } from "@/components/ui/field";
 import { SelectItem } from "@/components/ui/select";
@@ -399,9 +400,7 @@ export function WorkspaceWizard({ orgId }: { orgId: string }) {
                             checked={sharedProviderIds.includes(p.id)}
                             onCheckedChange={(on) =>
                               setSharedProviderIds((prev) =>
-                                on
-                                  ? [...prev, p.id]
-                                  : prev.filter((id) => id !== p.id),
+                                toggleInList(prev, p.id, on),
                               )
                             }
                           />
@@ -428,35 +427,32 @@ export function WorkspaceWizard({ orgId }: { orgId: string }) {
       </div>
 
       <div hidden={step !== 2}>
-        <Field
-          orientation="horizontal"
-          className="mb-6 items-center justify-between"
-        >
-          <div>
-            <FieldLabel htmlFor="withSandbox">Configure a sandbox</FieldLabel>
-            {isLoadingBackends ? (
-              <SkeletonLine className="w-80 max-w-full" />
-            ) : backendsFailed ? (
-              <ListError
-                error={backendsError}
-                subject="sandbox backends"
-                onRetry={() => void mutateBackends()}
-              />
-            ) : (
-              <FieldDescription>
-                {hasSandboxBackends
-                  ? "Optional. Gives agents shell and filesystem tools in an isolated environment. You can add one later in the workspace settings."
-                  : "No sandbox backends are installed on this server."}
-              </FieldDescription>
-            )}
-          </div>
-          <Switch
-            id="withSandbox"
+        <div className="mb-6">
+          <FormSwitchField
+            align="end"
+            name="withSandbox"
+            label="Configure a sandbox"
+            description={
+              isLoadingBackends ? (
+                <InlineSkeleton className="w-80 max-w-full" />
+              ) : backendsFailed ? undefined : hasSandboxBackends ? (
+                "Optional. Gives agents shell and filesystem tools in an isolated environment. You can add one later in the workspace settings."
+              ) : (
+                "No sandbox backends are installed on this server."
+              )
+            }
             checked={withSandbox}
             onCheckedChange={setWithSandbox}
             disabled={!hasSandboxBackends || pending}
           />
-        </Field>
+          {backendsFailed && (
+            <ListError
+              error={backendsError}
+              subject="sandbox backends"
+              onRetry={() => void mutateBackends()}
+            />
+          )}
+        </div>
         {withSandbox ? (
           <SandboxSettings
             orgId={orgId}

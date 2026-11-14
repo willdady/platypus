@@ -25,6 +25,7 @@ import {
   type Webhook,
 } from "@platypus/schemas";
 import { FormTextField } from "@/components/form-text-field";
+import { FormSwitchField } from "@/components/form-switch-field";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -36,6 +37,8 @@ import {
   FooterSkeleton,
   FormSkeletonGroup,
   FormSkeletonSet,
+  SwitchRowSkeleton,
+  SwitchToggleSkeleton,
 } from "@/components/form-skeleton";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useState } from "react";
@@ -49,6 +52,7 @@ import { copyWithToast } from "@/lib/clipboard";
 import { useBackendUrl } from "@/components/auth-provider";
 import { Eye, EyeOff, Copy, RefreshCw } from "lucide-react";
 import { workspaceRoutes } from "@/lib/routes";
+import { toggleInList } from "@/lib/toggle-in-list";
 
 type WebhookFormProps = {
   orgId: string;
@@ -109,11 +113,11 @@ const INITIAL_DATA = {
   headers: [] as KeyValueRow[],
 };
 
-/** A switch beside a single-line label, as the Enabled and event rows are. */
+/** A switch beside a single-line label, as the event rows are. */
 function InlineSwitchSkeleton() {
   return (
     <div className="flex items-center gap-3">
-      <Skeleton className="h-[1.15rem] w-8 shrink-0 rounded-full" />
+      <SwitchToggleSkeleton />
       <Skeleton className="h-3.5 w-32" />
     </div>
   );
@@ -126,10 +130,8 @@ function WebhookFormSkeleton({ editing }: { editing: boolean }) {
         <FormSkeletonGroup>
           <FieldSkeleton />
           <FieldSkeleton description={1} />
-          <div className="flex flex-col gap-3">
-            <InlineSwitchSkeleton />
-            <Skeleton className="h-3.5 w-1/2" />
-          </div>
+          {/* The Enabled row: a switch beside its label and description. */}
+          <SwitchRowSkeleton />
           <div className="flex flex-col gap-3">
             <Skeleton className="h-3.5 w-16" />
             <Skeleton className="mb-3 h-3.5 w-1/2" />
@@ -222,11 +224,10 @@ function WebhookForm({ orgId, workspaceId, webhookId }: WebhookFormProps) {
   const toggleEvent = (event: string) => {
     clearErrors("events");
     setFormData((prev) => {
-      if (prev.events.includes(event)) {
-        if (prev.events.length === 1) return prev;
-        return { ...prev, events: prev.events.filter((e) => e !== event) };
-      }
-      return { ...prev, events: [...prev.events, event] };
+      const on = !prev.events.includes(event);
+      // The last event stays: a webhook that delivers nothing is not a webhook.
+      if (!on && prev.events.length === 1) return prev;
+      return { ...prev, events: toggleInList(prev.events, event, on) };
     });
   };
 
@@ -317,28 +318,18 @@ function WebhookForm({ orgId, workspaceId, webhookId }: WebhookFormProps) {
             description="The URL that will receive webhook POST requests."
           />
 
-          <Field data-invalid={!!validationErrors.enabled}>
-            <div className="flex items-center gap-3">
-              <Switch
-                id="enabled"
-                checked={formData.enabled}
-                onCheckedChange={(checked) => {
-                  clearErrors("enabled");
-                  setFormData((prev) => ({ ...prev, enabled: checked }));
-                }}
-                disabled={isSubmitting}
-              />
-              <FieldLabel htmlFor="enabled" className="mb-0">
-                Enabled
-              </FieldLabel>
-            </div>
-            <FieldDescription>
-              When disabled, no webhook requests will be sent.
-            </FieldDescription>
-            {validationErrors.enabled && (
-              <FieldError>{validationErrors.enabled}</FieldError>
-            )}
-          </Field>
+          <FormSwitchField
+            name="enabled"
+            label="Enabled"
+            description="When disabled, no webhook requests will be sent."
+            checked={formData.enabled}
+            onCheckedChange={(checked) => {
+              clearErrors("enabled");
+              setFormData((prev) => ({ ...prev, enabled: checked }));
+            }}
+            disabled={isSubmitting}
+            error={validationErrors.enabled}
+          />
 
           <Field
             aria-labelledby="webhook-events-label"
