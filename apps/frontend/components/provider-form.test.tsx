@@ -256,6 +256,30 @@ describe("ProviderForm save feedback", () => {
   });
 });
 
+describe("ProviderForm API key", () => {
+  it("masks the key and reveals it on demand", () => {
+    renderEditForm([{ id: "gpt-4o", passthroughFileTypes: [] }]);
+
+    const input = screen.getByLabelText("API Key");
+    expect(input).toHaveAttribute("type", "password");
+
+    fireEvent.click(screen.getByRole("button", { name: "Show API key" }));
+    expect(input).toHaveAttribute("type", "text");
+  });
+
+  it("shows a validation error inline, linked to the input", async () => {
+    stubRejectedSave([{ path: ["apiKey"], message: "API key is required" }]);
+    renderEditForm([{ id: "gpt-4o", passthroughFileTypes: [] }]);
+
+    save();
+
+    expect(await screen.findByText("API key is required")).toBeVisible();
+    const input = screen.getByLabelText("API Key");
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(input).toHaveAccessibleDescription("API key is required");
+  });
+});
+
 describe("ProviderForm model cards", () => {
   it("shows each model as a card, with no inputs outside a dialog", () => {
     renderEditForm([

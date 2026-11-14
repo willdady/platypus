@@ -9,14 +9,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { RevealableInput } from "@/components/ui/revealable-input";
-import {
-  Field,
-  FieldError,
-  FieldLabel,
-  FieldGroup,
-  FieldSet,
-} from "@/components/ui/field";
+import { FieldGroup, FieldSet } from "@/components/ui/field";
+import { FormTextField } from "@/components/form-text-field";
 import { useAuthClient, type User } from "@/components/auth-provider";
 import { useEntityForm } from "@/hooks/use-entity-form";
 
@@ -44,7 +38,7 @@ export function ChangePasswordDialog({
     validationErrors,
     setValidationErrors,
     isSubmitting,
-    handleChange,
+    toFieldChange,
     submit,
   } = useEntityForm<typeof INITIAL_DATA>({
     initialData: INITIAL_DATA,
@@ -97,20 +91,18 @@ export function ChangePasswordDialog({
 
         <FieldSet>
           <FieldGroup>
-            <Field data-invalid={!!validationError}>
-              <FieldLabel htmlFor="newPassword">New Password</FieldLabel>
-              <RevealableInput
-                id="newPassword"
-                value={newPassword}
-                onChange={handleChange}
-                disabled={isSubmitting}
-                aria-invalid={!!validationError}
-                placeholder="Enter new password"
-                autoComplete="new-password"
-                revealLabel="new password"
-              />
-              {validationError && <FieldError>{validationError}</FieldError>}
-            </Field>
+            <FormTextField
+              label="New Password"
+              name="newPassword"
+              value={newPassword}
+              onChange={toFieldChange("newPassword")}
+              disabled={isSubmitting}
+              error={validationError}
+              placeholder="Enter new password"
+              autoComplete="new-password"
+              revealable
+              revealLabel="new password"
+            />
           </FieldGroup>
         </FieldSet>
 

@@ -2,14 +2,8 @@
 
 import { useAuthClient } from "@/components/auth-provider";
 import { Button } from "@/components/ui/button";
-import { RevealableInput } from "@/components/ui/revealable-input";
-import {
-  Field,
-  FieldLabel,
-  FieldGroup,
-  FieldSet,
-  FieldError,
-} from "@/components/ui/field";
+import { FieldGroup, FieldSet } from "@/components/ui/field";
+import { FormTextField } from "@/components/form-text-field";
 import { useEntityForm } from "@/hooks/use-entity-form";
 
 const RETRACTABLE_FIELDS = [
@@ -33,7 +27,7 @@ export function ChangePasswordForm() {
     validationErrors,
     setValidationErrors,
     isSubmitting,
-    handleChange,
+    toFieldChange,
     submit,
   } = useEntityForm<typeof INITIAL_DATA, unknown>({
     initialData: INITIAL_DATA,
@@ -76,45 +70,39 @@ export function ChangePasswordForm() {
     <form onSubmit={handleSubmit}>
       <FieldSet className="mb-8">
         <FieldGroup>
-          <Field>
-            <FieldLabel htmlFor="currentPassword">Current Password</FieldLabel>
-            <RevealableInput
-              id="currentPassword"
-              value={formData.currentPassword}
-              onChange={handleChange}
-              required
-              disabled={isSubmitting}
-              revealLabel="current password"
-            />
-          </Field>
-          <Field>
-            <FieldLabel htmlFor="newPassword">New Password</FieldLabel>
-            <RevealableInput
-              id="newPassword"
-              value={formData.newPassword}
-              onChange={handleChange}
-              required
-              disabled={isSubmitting}
-              revealLabel="new password"
-            />
-          </Field>
-          <Field data-invalid={!!validationErrors.confirmPassword}>
-            <FieldLabel htmlFor="confirmPassword">
-              Confirm New Password
-            </FieldLabel>
-            <RevealableInput
-              id="confirmPassword"
-              value={formData.confirmPassword}
-              onChange={handleChange}
-              required
-              disabled={isSubmitting}
-              aria-invalid={!!validationErrors.confirmPassword}
-              revealLabel="confirm new password"
-            />
-            {validationErrors.confirmPassword && (
-              <FieldError>{validationErrors.confirmPassword}</FieldError>
-            )}
-          </Field>
+          <FormTextField
+            label="Current Password"
+            name="currentPassword"
+            value={formData.currentPassword}
+            onChange={toFieldChange("currentPassword")}
+            required
+            disabled={isSubmitting}
+            error={validationErrors.currentPassword}
+            revealable
+            revealLabel="current password"
+          />
+          <FormTextField
+            label="New Password"
+            name="newPassword"
+            value={formData.newPassword}
+            onChange={toFieldChange("newPassword")}
+            required
+            disabled={isSubmitting}
+            error={validationErrors.newPassword}
+            revealable
+            revealLabel="new password"
+          />
+          <FormTextField
+            label="Confirm New Password"
+            name="confirmPassword"
+            value={formData.confirmPassword}
+            onChange={toFieldChange("confirmPassword")}
+            required
+            disabled={isSubmitting}
+            error={validationErrors.confirmPassword}
+            revealable
+            revealLabel="confirm new password"
+          />
         </FieldGroup>
       </FieldSet>
       <Button type="submit" disabled={isSubmitting}>

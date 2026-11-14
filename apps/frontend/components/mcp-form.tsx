@@ -1,12 +1,9 @@
 "use client";
 
 import {
-  Field,
-  FieldLabel,
   FieldGroup,
   FieldSet,
   FieldDescription,
-  FieldError,
   FieldTitle,
 } from "@/components/ui/field";
 import {
@@ -18,7 +15,6 @@ import {
 } from "@/components/key-value-rows-editor";
 import { FormTextField } from "@/components/form-text-field";
 import { FormSelectField } from "@/components/form-select-field";
-import { RevealableInput } from "@/components/ui/revealable-input";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { SelectGroup, SelectItem, SelectLabel } from "@/components/ui/select";
@@ -166,7 +162,6 @@ function McpForm({
     clearErrors,
     isSubmitting,
     canSubmit,
-    handleChange: onFieldChange,
     toFieldChange: toFieldChangeBase,
     submit,
   } = useEntityForm<
@@ -244,14 +239,8 @@ function McpForm({
     guidanceOnForbidden: true,
   });
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    onFieldChange(e);
-    // Clear test result when form changes
-    setTestResult(null);
-  };
-
-  // Adapts FormTextField's `onChange(value)` to handleChange's `onChange(e)`
-  // so the centralized clear-error-and-set-formData logic stays in one place.
+  // A field edit sets the value and retracts that field's error; the test
+  // result describes values that have just changed, so it clears too.
   const toFieldChange = (id: string) => (value: string) => {
     toFieldChangeBase(id)(value);
     // Clear test result when form changes
@@ -558,24 +547,18 @@ function McpForm({
             </FormSelectField>
 
             {formData.authType === "Bearer" && (
-              <Field
+              <FormTextField
                 className="col-span-2"
-                data-invalid={!!validationErrors.bearerToken}
-              >
-                <FieldLabel htmlFor="bearerToken">Bearer Token</FieldLabel>
-                <RevealableInput
-                  id="bearerToken"
-                  placeholder="Bearer token"
-                  value={formData.bearerToken}
-                  onChange={handleChange}
-                  disabled={isSubmitting}
-                  aria-invalid={!!validationErrors.bearerToken}
-                  revealLabel="bearer token"
-                />
-                {validationErrors.bearerToken && (
-                  <FieldError>{validationErrors.bearerToken}</FieldError>
-                )}
-              </Field>
+                label="Bearer Token"
+                name="bearerToken"
+                placeholder="Bearer token"
+                value={formData.bearerToken ?? ""}
+                onChange={toFieldChange("bearerToken")}
+                disabled={isSubmitting}
+                error={validationErrors.bearerToken}
+                revealable
+                revealLabel="bearer token"
+              />
             )}
           </FieldGroup>
 
@@ -592,30 +575,22 @@ function McpForm({
                 error={validationErrors.oauthClientId}
               />
 
-              <Field data-invalid={!!validationErrors.oauthClientSecret}>
-                <FieldLabel htmlFor="oauthClientSecret">
-                  Client Secret
-                </FieldLabel>
-                <RevealableInput
-                  id="oauthClientSecret"
-                  placeholder={
-                    mcpId && mcp?.oauthClientId
-                      ? "Leave blank to keep current"
-                      : "OAuth Client Secret"
-                  }
-                  value={formData.oauthClientSecret}
-                  onChange={handleChange}
-                  disabled={isSubmitting}
-                  aria-invalid={!!validationErrors.oauthClientSecret}
-                  revealLabel="client secret"
-                />
-                {validationErrors.oauthClientSecret && (
-                  <FieldError>{validationErrors.oauthClientSecret}</FieldError>
-                )}
-              </Field>
-              <FieldDescription className="col-span-2">
-                Leave blank if the server supports dynamic client registration.
-              </FieldDescription>
+              <FormTextField
+                label="Client Secret"
+                name="oauthClientSecret"
+                placeholder={
+                  mcpId && mcp?.oauthClientId
+                    ? "Leave blank to keep current"
+                    : "OAuth Client Secret"
+                }
+                value={formData.oauthClientSecret ?? ""}
+                onChange={toFieldChange("oauthClientSecret")}
+                disabled={isSubmitting}
+                error={validationErrors.oauthClientSecret}
+                description="Leave blank if the server supports dynamic client registration."
+                revealable
+                revealLabel="client secret"
+              />
 
               <FormTextField
                 className="col-span-2"

@@ -70,6 +70,7 @@ describe("ChangePasswordDialog", () => {
       "Password too short",
     );
     expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(input).toHaveAccessibleDescription("Password too short");
     expect(onSuccess).not.toHaveBeenCalled();
   });
 

@@ -12,7 +12,6 @@ import { ExpandableTextarea } from "@/components/expandable-textarea";
 import { FormTextareaField } from "@/components/form-textarea-field";
 import { FormTextField } from "@/components/form-text-field";
 import { FormSelectField } from "@/components/form-select-field";
-import { RevealableInput } from "@/components/ui/revealable-input";
 import { Button } from "@/components/ui/button";
 import { FormAdvancedSection } from "@/components/form-advanced-section";
 import { Badge } from "@/components/ui/badge";
@@ -891,21 +890,17 @@ function ProviderForm({
             autoFocus
           />
 
-          <Field data-invalid={!!validationErrors.apiKey}>
-            <FieldLabel htmlFor="apiKey">API Key</FieldLabel>
-            <RevealableInput
-              id="apiKey"
-              placeholder="sk-..."
-              value={formData.apiKey}
-              onChange={handleChange}
-              disabled={isSubmitting || isReadOnly}
-              aria-invalid={!!validationErrors.apiKey}
-              revealLabel="API key"
-            />
-            {validationErrors.apiKey && (
-              <FieldError>{validationErrors.apiKey}</FieldError>
-            )}
-          </Field>
+          <FormTextField
+            label="API Key"
+            name="apiKey"
+            placeholder="sk-..."
+            value={formData.apiKey}
+            onChange={toFieldChange("apiKey")}
+            disabled={isSubmitting || isReadOnly}
+            error={validationErrors.apiKey}
+            revealable
+            revealLabel="API key"
+          />
 
           {formData.providerType === "Bedrock" && (
             <FormTextField

@@ -72,6 +72,9 @@ describe("ChangePasswordForm submit", () => {
 
     expect(screen.getByText("Passwords do not match")).toBeInTheDocument();
     expect(fields().confirm).toHaveAttribute("aria-invalid", "true");
+    expect(fields().confirm).toHaveAccessibleDescription(
+      "Passwords do not match",
+    );
     expect(mockChangePassword).not.toHaveBeenCalled();
   });
 
