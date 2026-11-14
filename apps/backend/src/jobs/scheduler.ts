@@ -4,10 +4,8 @@ import {
   count,
   eq,
   isNotNull,
-  lt,
   lte,
   not,
-  or,
   inArray,
   sql,
 } from "drizzle-orm";
@@ -18,7 +16,6 @@ import {
   chat as chatTable,
   trigger as triggerTable,
   triggerRun as triggerRunTable,
-  triggerRunEvent as triggerRunEventTable,
   workspace as workspaceTable,
 } from "../db/schema.ts";
 import { fireTrigger } from "../services/trigger-firing.ts";
@@ -26,12 +23,12 @@ import {
   deleteTriggerRunFiles,
   type TriggerRunScope,
 } from "../services/trigger-run-files.ts";
+import {
+  failAbandonedTriggerRuns,
+  liveTriggerRun,
+} from "../services/trigger-run-lifecycle.ts";
 import { sendInboundTokenReminders } from "../services/inbound-trigger.ts";
 import { sendA2aTokenReminders } from "../services/a2a-token.ts";
-import {
-  announceTriggerRunsEnded,
-  endedTriggerRunColumns,
-} from "../services/trigger-run-announce.ts";
 import { DAY_MS } from "../services/bearer-token.ts";
 import {
   FIRED_ONE_OFF_TTL_DAYS,
@@ -311,61 +308,13 @@ export function stuckPendingTriggerCutoff(): Date {
  * does not prevent racing live runs.
  */
 export async function recoverStuckTriggers(): Promise<void> {
-  const cutoff = stuckTriggerCutoff();
-
-  // Mark abandoned runs as failed. The age cutoff guarantees no live peer is
-  // still working on them. `pending` is included for Inbound Trigger runs
-  // (ADR-0030): the row is written before the run starts, so a crash between
-  // the two leaves it pending — and a pending row holds its record's dedup
-  // slot, so it gets the shorter cutoff of a run that never started.
-  const orphaned = await db
-    .update(triggerRunTable)
-    .set({
-      status: "failed",
-      errorMessage: "Server restarted during execution",
-      completedAt: new Date(),
-    })
-    .where(
-      or(
-        and(
-          eq(triggerRunTable.status, "running"),
-          lt(triggerRunTable.startedAt, cutoff),
-        ),
-        and(
-          eq(triggerRunTable.status, "pending"),
-          lt(triggerRunTable.startedAt, stuckPendingTriggerCutoff()),
-        ),
-      ),
-    )
-    .returning(endedTriggerRunColumns);
-
-  if (orphaned.length > 0) {
-    // No terminal run leaves an open event. The sweep is one of the two paths
-    // that end a run without ending its events (cancellation is the other, and
-    // the sink covers that one).
-    await db
-      .update(triggerRunEventTable)
-      .set({ status: "error" })
-      .where(
-        and(
-          inArray(
-            triggerRunEventTable.runId,
-            orphaned.map((r) => r.runId),
-          ),
-          eq(triggerRunEventTable.status, "running"),
-        ),
-      );
-
-    logger.warn(
-      { count: orphaned.length, cutoff: cutoff.toISOString() },
-      "Marked orphaned trigger runs as failed (older than per-run timeout)",
-    );
-
-    // One `trigger_run.failed` per row this update changed. The advisory lock
-    // keeps two sweeps from racing; a late finish on a swept row writes and
-    // announces nothing, because the sink's write matches only a live row.
-    void announceTriggerRunsEnded(orphaned);
-  }
+  // The age cutoffs are the scheduler's, since they derive from the per-run
+  // timeout it knows the run was bounded by; the write itself, and the events
+  // it closes, belong to the Trigger run lifecycle.
+  await failAbandonedTriggerRuns({
+    runningCutoff: stuckTriggerCutoff(),
+    pendingCutoff: stuckPendingTriggerCutoff(),
+  });
 }
 
 /**
@@ -378,7 +327,7 @@ export async function reapFiredOneOffTriggers(): Promise<void> {
   const cutoff = new Date(Date.now() - FIRED_ONE_OFF_TTL_DAYS * DAY_MS);
   const expired = and(
     isNotNull(triggerTable.firedAt),
-    sql`not exists (select 1 from ${triggerRunTable} where ${triggerRunTable.triggerId} = ${triggerTable.id} and ${triggerRunTable.status} in ('pending', 'running'))`,
+    sql`not exists (select 1 from ${triggerRunTable} where ${triggerRunTable.triggerId} = ${triggerTable.id} and ${liveTriggerRun()})`,
     sql`coalesce((select max(${triggerRunTable.completedAt}) from ${triggerRunTable} where ${triggerRunTable.triggerId} = ${triggerTable.id}), ${triggerTable.firedAt}) < ${cutoff}`,
   );
 

@@ -1,10 +1,9 @@
 import { nanoid } from "nanoid";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db } from "../index.ts";
 import {
   organizationMember,
   trigger as triggerTable,
-  triggerRun as triggerRunTable,
   user as userTable,
   workspace as workspaceTable,
 } from "../db/schema.ts";
@@ -30,14 +29,10 @@ import {
   withRunSource,
 } from "../event-causation.ts";
 import {
-  retainTriggerRuns,
-  shouldSuppressTriggerRun,
+  failUnstartedTriggerRun,
   suppressTriggerRun,
-} from "./trigger-breaker.ts";
-import {
-  announceTriggerRunsEnded,
-  endedTriggerRunColumns,
-} from "./trigger-run-announce.ts";
+} from "./trigger-run-lifecycle.ts";
+import { shouldSuppressTriggerRun } from "./trigger-breaker.ts";
 import type { TriggerRow } from "./trigger.ts";
 import type { RunInput } from "../runs/types.ts";
 import type { PlatypusUIMessage } from "../types.ts";
@@ -138,7 +133,6 @@ export const fireTrigger = async (
       if (await shouldSuppressTriggerRun(trigger.id, eventContext.entityId)) {
         await suppressTriggerRun({
           triggerId: trigger.id,
-          maxRunsToKeep: trigger.maxRunsToKeep,
           entityId: eventContext.entityId,
           eventType: eventContext.payload.event,
           eventData: eventContext.payload.data,
@@ -170,43 +164,12 @@ export const fireTrigger = async (
       "Trigger run failed",
     );
     if (inboundContext) {
-      await failPendingRun(inboundContext.runId, error);
+      await failUnstartedTriggerRun(inboundContext.runId, error);
     }
   }
 
   await recordFiring(trigger.id);
   return outcome;
-};
-
-/**
- * Ends an inbound run whose firing threw before its Drive adopted the row, so
- * the run id its caller holds reaches a terminal status instead of reading
- * `pending` until the recovery sweep. A row the Drive already adopted is left
- * alone: its sink wrote the real outcome, and announced it.
- */
-const failPendingRun = async (runId: string, error: unknown) => {
-  try {
-    const ended = await db
-      .update(triggerRunTable)
-      .set({
-        status: "failed",
-        errorMessage: errorMessage(error),
-        completedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(triggerRunTable.id, runId),
-          eq(triggerRunTable.status, "pending"),
-        ),
-      )
-      .returning(endedTriggerRunColumns);
-    if (ended.length > 0) void announceTriggerRunsEnded(ended);
-  } catch (updateError) {
-    logger.error(
-      { runId, error: errorMessage(updateError) },
-      "Failed to mark a pending inbound trigger run as failed",
-    );
-  }
 };
 
 /**
@@ -398,9 +361,10 @@ const runTrigger = async (
 
 /**
  * What every firing that got as far as a run owes its Trigger, whatever the
- * run's outcome: `lastRunAt` at completion, and retention. The schedule is not
- * written here: the scheduler's claim already wrote a cron Trigger's next run
- * (or disabled a one-off) before the run started.
+ * run's outcome: `lastRunAt` at completion. The schedule is not written here:
+ * the scheduler's claim already wrote a cron Trigger's next run (or disabled a
+ * one-off) before the run started. Retention is not here either: the Trigger
+ * run lifecycle prunes a Trigger's history when a run or a suppression ends.
  *
  * Reads the row as it is now rather than the snapshot the run was fired from:
  * a Workspace Owner who disables or edits a Trigger mid-run keeps what they
@@ -410,18 +374,8 @@ const runTrigger = async (
 const recordFiring = async (triggerId: string): Promise<void> => {
   try {
     const [current] = await db
-      .select({
-        id: triggerTable.id,
-        workspaceId: triggerTable.workspaceId,
-        type: triggerTable.type,
-        maxRunsToKeep: triggerTable.maxRunsToKeep,
-        orgId: workspaceTable.organizationId,
-      })
+      .select({ id: triggerTable.id, type: triggerTable.type })
       .from(triggerTable)
-      // Left, not inner: a missing Workspace must not stop the bookkeeping that
-      // still owes this Trigger its `lastRunAt`. A present one names the scope
-      // the run Chats' files sit under, sparing retention a second lookup.
-      .leftJoin(workspaceTable, eq(workspaceTable.id, triggerTable.workspaceId))
       .where(eq(triggerTable.id, triggerId))
       .limit(1);
     if (!current) {
@@ -434,16 +388,6 @@ const recordFiring = async (triggerId: string): Promise<void> => {
       .update(triggerTable)
       .set({ lastRunAt: now, updatedAt: now })
       .where(eq(triggerTable.id, triggerId));
-
-    // The newest maxRunsToKeep rows, plus everything inside the run-rate
-    // breaker's window so its count is never pruned out from under it.
-    await retainTriggerRuns(
-      triggerId,
-      current.maxRunsToKeep,
-      current.orgId
-        ? { orgId: current.orgId, workspaceId: current.workspaceId }
-        : undefined,
-    );
 
     logger.info({ triggerId, type: current.type }, "Updated trigger after run");
   } catch (error) {

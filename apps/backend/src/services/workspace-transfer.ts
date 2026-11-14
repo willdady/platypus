@@ -26,6 +26,11 @@ import { revokedTokenFields } from "./bearer-token.ts";
 import { OAUTH_TOKEN_CLEAR_FIELDS } from "./mcp-oauth-provider.ts";
 import { createPlatypusNotification } from "./notification.ts";
 import { isBanned } from "./owner-membership.ts";
+import {
+  cancelPendingTriggerRuns,
+  triggerRunsEnded,
+  type EndedTriggerRun,
+} from "./trigger-run-lifecycle.ts";
 
 export type WorkspaceTransferInput = {
   orgId: string;
@@ -38,12 +43,15 @@ export type WorkspaceTransferInput = {
 
 /**
  * What a transfer leaves to do once it commits, since a rollback cannot undo
- * it: stop what was running, and delete the files of the Chats it cleared.
+ * it: stop what was running, announce the runs it ended, and delete the files
+ * of the Chats it cleared.
  */
 export type TransferAftermath = {
   orgId: string;
   workspaceId: string;
   runIds: string[];
+  /** The pending runs it ended, which are announced only once it commits. */
+  endedTriggerRuns: EndedTriggerRun[];
   endpointIds: string[];
   clearedChatIds: string[];
 };
@@ -168,16 +176,9 @@ export const applyWorkspaceTransfer = async (
     .set({ enabled: false, ...revokedTokenFields(), updatedAt: now })
     .where(eq(triggerTable.workspaceId, workspaceId));
   // An accepted Inbound call waits as a pending run; started after this, it
-  // would run as the new Owner.
-  await tx
-    .update(triggerRunTable)
-    .set({ status: "cancelled", completedAt: now })
-    .where(
-      and(
-        inArray(triggerRunTable.triggerId, triggerIds),
-        eq(triggerRunTable.status, "pending"),
-      ),
-    );
+  // would run as the new Owner. Ended here — announced only once this commits,
+  // so a transfer that rolls back announces nothing (see `finishTransfer`).
+  const endedTriggerRuns = await cancelPendingTriggerRuns(tx, triggerIds);
   if (endpoints.length > 0) {
     await tx.delete(a2aTokenTable).where(
       inArray(
@@ -244,6 +245,7 @@ export const applyWorkspaceTransfer = async (
     orgId,
     workspaceId,
     runIds: [...runningChats, ...runningRuns].map(({ id }) => id),
+    endedTriggerRuns,
     endpointIds: endpoints.map(({ id }) => id),
     clearedChatIds,
   };
@@ -252,13 +254,15 @@ export const applyWorkspaceTransfer = async (
 /**
  * Stops what a transfer found running: each Chat turn and Trigger run, by the
  * Chat cancel action's path, and each A2A Task, whose tokens are now gone.
- * Then deletes the cleared Chats' files. Never throws: the transfer has
+ * Announces the pending Trigger runs it cancelled, now that they are committed,
+ * then deletes the cleared Chats' files. Never throws: the transfer has
  * committed.
  */
 export const finishTransfer = async ({
   orgId,
   workspaceId,
   runIds,
+  endedTriggerRuns,
   endpointIds,
   clearedChatIds,
 }: TransferAftermath): Promise<void> => {
@@ -272,6 +276,7 @@ export const finishTransfer = async ({
       ),
     ),
   );
+  await triggerRunsEnded(endedTriggerRuns);
   await stopRevokedA2aWork(endpointIds);
   await Promise.all(
     clearedChatIds.map((chatId) =>

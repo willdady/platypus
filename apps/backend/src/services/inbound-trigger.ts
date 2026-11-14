@@ -1,4 +1,4 @@
-import { and, count, eq, gt, inArray, isNotNull, lte, sql } from "drizzle-orm";
+import { and, count, eq, gt, isNotNull, lte, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import {
   gateAdmits,
@@ -25,16 +25,17 @@ import { errorMessage } from "../utils/error-message.ts";
 import { getGateAccess, setGateAccess } from "./org-gate.ts";
 import {
   readPositiveInt,
-  retainTriggerRuns,
   shouldSuppressTriggerRun,
 } from "./trigger-breaker.ts";
 import { ownerMayAct, ownerMembershipJoin } from "./owner-membership.ts";
 import { fireTrigger } from "./trigger-firing.ts";
 import {
-  announceTriggerRunsEnded,
-  endedTriggerRunColumns,
+  acceptInboundTriggerRun,
+  liveTriggerRun,
+  recordSuppressedTriggerRun,
+  triggerRunsEnded,
   type EndedTriggerRun,
-} from "./trigger-run-announce.ts";
+} from "./trigger-run-lifecycle.ts";
 import { narrowTriggerConfig, type TriggerRow } from "./trigger.ts";
 import {
   bearerToken,
@@ -414,6 +415,17 @@ export type InboundAcceptance =
   | { outcome: "rate_limited" };
 
 /**
+ * The decision the call's transaction makes. A suppressed call also carries the
+ * row it recorded, which is settled once the transaction commits — never from
+ * inside it, which could still roll back.
+ */
+type AcceptanceDecision =
+  | { outcome: "accepted"; runId: string }
+  | { outcome: "deduplicated"; runId: string }
+  | { outcome: "suppressed"; runId: string; suppressed: EndedTriggerRun }
+  | { outcome: "rate_limited" };
+
+/**
  * Turns an authenticated, validated call into a run id: the active run for
  * this record when there is one, a `suppressed` row when the breaker trips,
  * or a new `pending` row whose run then starts in the background.
@@ -436,10 +448,7 @@ export const acceptInboundCall = async (
   // Whether this call holds a run slot, so every path that does not end in a
   // started run gives it back exactly once.
   let holdsSlot = false;
-  // The `suppressed` row this call wrote, announced once its transaction has
-  // committed.
-  let suppressedRun: EndedTriggerRun | undefined;
-  let decision: InboundAcceptance;
+  let decision: AcceptanceDecision;
   try {
     decision = await inLocalTurn(lockKey, () =>
       db.transaction(async (tx) => {
@@ -455,7 +464,7 @@ export const acceptInboundCall = async (
               and(
                 eq(triggerRunTable.triggerId, trigger.id),
                 eq(triggerRunTable.entityId, entityId),
-                inArray(triggerRunTable.status, ["pending", "running"]),
+                liveTriggerRun(),
               ),
             )
             .limit(1);
@@ -478,24 +487,22 @@ export const acceptInboundCall = async (
           holdsSlot = true;
         }
         const runId = nanoid();
-        const now = new Date();
-        const [row] = await tx
-          .insert(triggerRunTable)
-          .values({
-            id: runId,
+        if (suppress) {
+          const suppressed = await recordSuppressedTriggerRun(tx, {
+            runId,
             triggerId: trigger.id,
-            status: suppress ? "suppressed" : "pending",
             entityId,
-            eventType: null,
             eventData: { inputs },
-            startedAt: now,
-            createdAt: now,
-          })
-          .returning(endedTriggerRunColumns);
-        if (suppress) suppressedRun = row;
-        return suppress
-          ? { outcome: "suppressed" as const, runId }
-          : { outcome: "accepted" as const, runId };
+          });
+          return { outcome: "suppressed" as const, runId, suppressed };
+        }
+        await acceptInboundTriggerRun(tx, {
+          runId,
+          triggerId: trigger.id,
+          entityId,
+          inputs,
+        });
+        return { outcome: "accepted" as const, runId };
       }),
     );
   } catch (error) {
@@ -504,27 +511,15 @@ export const acceptInboundCall = async (
     throw error;
   }
 
+  if (decision.outcome === "rate_limited") return decision;
   if (decision.outcome === "suppressed") {
-    if (suppressedRun) void announceTriggerRunsEnded([suppressedRun]);
-    // A suppressed row is bounded by its own budget; applied here as
-    // `suppressTriggerRun` applies it for an Event Trigger.
-    await retainTriggerRuns(trigger.id, trigger.maxRunsToKeep, {
-      orgId: target.organizationId,
-      workspaceId: target.workspaceId,
-    }).catch((error: unknown) =>
-      logger.error(
-        {
-          triggerId: trigger.id,
-          error: errorMessage(error),
-        },
-        "Failed to apply retention after a suppressed inbound call",
-      ),
-    );
+    await triggerRunsEnded([decision.suppressed]);
   }
   if (decision.outcome === "accepted") {
     startAcceptedRun(trigger, config, inputs, entityId, decision.runId);
   }
-  return decision;
+  // The suppressed row is the lifecycle's business, not the caller's.
+  return { outcome: decision.outcome, runId: decision.runId };
 };
 
 /**

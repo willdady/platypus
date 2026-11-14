@@ -1,21 +1,7 @@
-import { and, count, desc, eq, gt, lte, notInArray, ne } from "drizzle-orm";
-import { nanoid } from "nanoid";
+import { and, count, eq, gt, ne } from "drizzle-orm";
 import { db } from "../index.ts";
 import { triggerRun as triggerRunTable } from "../db/schema.ts";
 import { logger } from "../logger.ts";
-import {
-  announceTriggerRunsEnded,
-  endedTriggerRunColumns,
-} from "./trigger-run-announce.ts";
-import {
-  deleteTriggerRunFiles,
-  deleteTriggerRunFilesForTrigger,
-  type TriggerRunScope,
-} from "./trigger-run-files.ts";
-import type {
-  EventTriggerEvent,
-  EventTriggerEventPayload,
-} from "@platypus/schemas";
 
 /**
  * The run-rate breaker for Event and Inbound Triggers.
@@ -31,7 +17,9 @@ import type {
  * N runs per Trigger per entity per rolling window, after which the excess
  * firings are dropped before an Agent is invoked. A dropped firing is recorded
  * as a `trigger_run` row with status `suppressed`, which is what makes the
- * trip visible on the runs page.
+ * trip visible on the runs page; recording it belongs to the Trigger run
+ * lifecycle (`trigger-run-lifecycle.ts`), because it is a status write. This
+ * module decides only whether a firing is admitted.
  *
  * The count and the ceiling live in the Operator's environment, not on the
  * Trigger: a Workspace Owner tunable is not a ceiling, and `maxRunsToKeep`
@@ -103,11 +91,11 @@ export const triggerBreakerConfig = (
  * accepts traffic: a malformed value must fail the deployment rather than be
  * silently replaced by a default nobody chose.
  *
- * Retention is not a separate setting to reconcile — `retainTriggerRuns` reads
- * the same window — so what is left to surface is the cost: the retention rule
- * keeps every run inside the window, so a window larger than the default grows
- * `trigger_run` for the whole of it. Said out loud, because it is otherwise
- * silent.
+ * Retention is not a separate setting to reconcile — the Trigger run
+ * lifecycle's retention reads the same window — so what is left to surface is
+ * the cost: the retention rule keeps every run inside the window, so a window
+ * larger than the default grows `trigger_run` for the whole of it. Said out
+ * loud, because it is otherwise silent.
  */
 export const validateTriggerBreakerConfig = (): TriggerBreakerConfig => {
   const config = triggerBreakerConfig();
@@ -158,165 +146,4 @@ export const shouldSuppressTriggerRun = async (
     );
 
   return (row?.runs ?? 0) >= maxRuns;
-};
-
-/**
- * Drops one firing: writes the `suppressed` row the Operator sees, then trims
- * the Trigger's run history. Both belong together — the row is what makes the
- * trip visible, and retention is what stops a runaway from filling the table
- * with the evidence — so a caller cannot record a suppression and forget to
- * bound it. Called in place of the run it would have started; it carries the
- * same event fields a run row would, and no stats or completion time, because
- * no Agent was invoked. The row is announced as `trigger_run.suppressed`.
- */
-export const suppressTriggerRun = async (input: {
-  triggerId: string;
-  maxRunsToKeep: number;
-  entityId: string;
-  eventType: EventTriggerEvent;
-  eventData: EventTriggerEventPayload["data"];
-}): Promise<void> => {
-  const now = new Date();
-  const suppressed = await db
-    .insert(triggerRunTable)
-    .values({
-      id: nanoid(),
-      triggerId: input.triggerId,
-      status: "suppressed",
-      entityId: input.entityId,
-      eventType: input.eventType,
-      eventData: input.eventData,
-      startedAt: now,
-      createdAt: now,
-    })
-    .returning(endedTriggerRunColumns);
-  void announceTriggerRunsEnded(suppressed);
-
-  await retainTriggerRuns(input.triggerId, input.maxRunsToKeep);
-};
-
-/**
- * Retention for one Trigger's runs, applied after every run and every
- * suppression.
- *
- * Replaces the old "newest maxRunsToKeep rows" rule with a union, because the
- * breaker counts rows `maxRunsToKeep` may have deleted: a Trigger busier than
- * its retention budget would otherwise have its own history pruned out from
- * under the count, and at `maxRunsToKeep: 1` the ceiling could never trip.
- *
- * `keep = (newest maxRunsToKeep) ∪ (started_at within the breaker window)`
- *
- * Suppressed rows are budgeted separately: a runaway produces them fast, and
- * sharing `maxRunsToKeep` would evict the runs that explain the incident in
- * favour of the evidence of their own suppression.
- */
-export const retainTriggerRuns = async (
-  triggerId: string,
-  maxRunsToKeep: number,
-  scope?: TriggerRunScope,
-): Promise<void> => {
-  const { windowSeconds, suppressedRunsToKeep } = triggerBreakerConfig();
-  let deletedCount = 0;
-  // Only a normal run has a Chat, and so stored files: a suppressed row records
-  // a firing that never started one (ADR-0044). Keep its deletion counted for
-  // the log, but out of the prefix cleanup.
-  const deletedRunIds: string[] = [];
-
-  // Nothing to prune when the Trigger holds fewer than the budget: the newest
-  // query returning a short page means it returned every normal row there is.
-  if (maxRunsToKeep > 0) {
-    const newest = await db
-      .select({ id: triggerRunTable.id })
-      .from(triggerRunTable)
-      .where(
-        and(
-          eq(triggerRunTable.triggerId, triggerId),
-          ne(triggerRunTable.status, "suppressed"),
-        ),
-      )
-      .orderBy(desc(triggerRunTable.startedAt))
-      .limit(maxRunsToKeep);
-
-    if (newest.length >= maxRunsToKeep) {
-      // The window half of the union is expressed as a predicate rather than
-      // an id list: selecting every row inside the window would grow the
-      // `notInArray` argument with the Trigger's throughput, on a query that
-      // runs after every run. `startedAt` is NOT NULL, so `<= since` is the
-      // exact complement of the `> since` the count uses.
-      const since = new Date(Date.now() - windowSeconds * 1000);
-      const removed = await db
-        .delete(triggerRunTable)
-        .where(
-          and(
-            eq(triggerRunTable.triggerId, triggerId),
-            ne(triggerRunTable.status, "suppressed"),
-            // A run still in flight is never pruned, however old: its row is
-            // what its sink finishes and what an Inbound Trigger's dedup and
-            // poll read (ADR-0030). A per-run timeout longer than the window
-            // would otherwise delete a live run's row mid-run. The recovery
-            // sweep fails an abandoned one, which then prunes normally.
-            ne(triggerRunTable.status, "pending"),
-            ne(triggerRunTable.status, "running"),
-            lte(triggerRunTable.startedAt, since),
-            notInArray(
-              triggerRunTable.id,
-              newest.map((row) => row.id),
-            ),
-          ),
-        )
-        .returning({ id: triggerRunTable.id });
-      deletedCount += removed.length;
-      deletedRunIds.push(...removed.map(({ id }) => id));
-    }
-  }
-
-  const suppressed = await db
-    .select({ id: triggerRunTable.id })
-    .from(triggerRunTable)
-    .where(
-      and(
-        eq(triggerRunTable.triggerId, triggerId),
-        eq(triggerRunTable.status, "suppressed"),
-      ),
-    )
-    .orderBy(desc(triggerRunTable.startedAt))
-    .limit(suppressedRunsToKeep);
-
-  if (suppressed.length >= suppressedRunsToKeep) {
-    const removedSuppressed = await db
-      .delete(triggerRunTable)
-      .where(
-        and(
-          eq(triggerRunTable.triggerId, triggerId),
-          eq(triggerRunTable.status, "suppressed"),
-          notInArray(
-            triggerRunTable.id,
-            suppressed.map((row) => row.id),
-          ),
-        ),
-      )
-      .returning({ id: triggerRunTable.id });
-    deletedCount += removedSuppressed.length;
-  }
-
-  if (deletedCount > 0) {
-    // The rows are gone; their run Chats cascade with them. Their stored files
-    // sit under prefixes nothing else reaches, so clear those too.
-    if (scope) {
-      await deleteTriggerRunFiles(scope, deletedRunIds);
-    } else {
-      await deleteTriggerRunFilesForTrigger(triggerId, deletedRunIds);
-    }
-
-    logger.info(
-      {
-        triggerId,
-        deletedCount,
-        maxRunsToKeep,
-        windowSeconds,
-        suppressedRunsToKeep,
-      },
-      "Cleaned up old trigger runs",
-    );
-  }
 };
