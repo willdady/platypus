@@ -822,8 +822,13 @@ export function KanbanCardDialog({
     setIsEditing(true);
   };
 
-  // Re-initialise the dialog whenever a different card is shown, the card is
-  // updated server-side, or the target column changes.
+  const cancelEditingComment = () => {
+    setEditingCommentId(null);
+    setEditingCommentBody("");
+  };
+
+  // Re-initialise the card's fields whenever a different card is shown, the
+  // card is updated server-side, or the target column changes.
   useResetOnChange(
     `${card?.id ?? ""}:${String(card?.updatedAt ?? "")}:${initialColumnId ?? ""}`,
     () => {
@@ -836,11 +841,17 @@ export function KanbanCardDialog({
         setSelectedPriority(card.priority ?? "none");
         setSelectedColumnId(initialColumnId);
         setIsEditing(false);
-        setNewCommentBody("");
-        setEditingCommentId(null);
       }
     },
   );
+
+  // A comment draft is not derived from the card's data, so a server-side
+  // update to the open card must not clear it. Reset the draft and any
+  // in-progress edit only when the dialog shows a different card or closes.
+  useResetOnChange(open ? (card?.id ?? "") : "", () => {
+    setNewCommentBody("");
+    cancelEditingComment();
+  });
 
   // Dirty while the fields differ from the card, a new comment is drafted, or
   // a comment is being edited. A save closes the dialog itself, not through
@@ -961,11 +972,6 @@ export function KanbanCardDialog({
   const startEditingComment = (comment: Serialized<KanbanCardComment>) => {
     setEditingCommentId(comment.id);
     setEditingCommentBody(comment.body);
-  };
-
-  const cancelEditingComment = () => {
-    setEditingCommentId(null);
-    setEditingCommentBody("");
   };
 
   const requestCommentDelete = (

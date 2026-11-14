@@ -86,18 +86,27 @@ function acceptedDelete(): Promise<WriteOutcome<unknown>> {
   });
 }
 
-function renderDialog(
-  onOpenChange: (open: boolean) => void = () => {},
-  onDelete: (cardId: string) => Promise<WriteOutcome<unknown>> = acceptedDelete,
-) {
-  return render(
+function dialogElement({
+  card: shownCard = card,
+  columnId = null,
+  open = true,
+  onOpenChange = () => {},
+  onDelete = acceptedDelete,
+}: {
+  card?: Serialized<KanbanCard> | null;
+  columnId?: string | null;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  onDelete?: (cardId: string) => Promise<WriteOutcome<unknown>>;
+} = {}) {
+  return (
     <UnsavedChangesProvider>
       <KanbanCardDialog
-        card={card}
+        card={shownCard}
         labels={[]}
         columns={[]}
-        columnId={null}
-        open={true}
+        columnId={columnId}
+        open={open}
         onOpenChange={onOpenChange}
         onSave={() => {}}
         onDelete={onDelete}
@@ -105,8 +114,15 @@ function renderDialog(
         workspaceId="ws1"
         boardId="b1"
       />
-    </UnsavedChangesProvider>,
+    </UnsavedChangesProvider>
   );
+}
+
+function renderDialog(
+  onOpenChange: (open: boolean) => void = () => {},
+  onDelete: (cardId: string) => Promise<WriteOutcome<unknown>> = acceptedDelete,
+) {
+  return render(dialogElement({ onOpenChange, onDelete }));
 }
 
 /** Opens the card's Delete confirm dialog and returns it. */
@@ -269,6 +285,96 @@ describe("KanbanCardDialog editing", () => {
     });
     expect(description).toHaveValue("Details");
     expect(description.labels?.[0]).toHaveTextContent("Description");
+  });
+});
+
+describe("KanbanCardDialog comment drafts across card updates", () => {
+  const updatedCard = {
+    ...card,
+    updatedAt: new Date("2026-01-02").toISOString(),
+  };
+
+  it("keeps a comment draft when the open card is updated server-side", () => {
+    const { rerender } = render(dialogElement());
+    fireEvent.change(screen.getByRole("textbox", { name: "Add a comment" }), {
+      target: { value: "Work in progress" },
+    });
+
+    rerender(dialogElement({ card: updatedCard }));
+
+    expect(
+      screen.getByRole<HTMLTextAreaElement>("textbox", {
+        name: "Add a comment",
+      }),
+    ).toHaveValue("Work in progress");
+  });
+
+  it("keeps a comment edit open with its text when the open card is updated", () => {
+    comments = [existingComment];
+    const { rerender } = render(dialogElement());
+    fireEvent.click(
+      screen.getByRole("button", { name: /^Edit comment by Bob/ }),
+    );
+    fireEvent.change(screen.getByDisplayValue("First comment"), {
+      target: { value: "Still editing" },
+    });
+
+    rerender(dialogElement({ card: updatedCard }));
+
+    expect(screen.getByDisplayValue("Still editing")).toBeInTheDocument();
+  });
+
+  it("keeps a comment draft when the open card moves to another column", () => {
+    const { rerender } = render(dialogElement({ columnId: "col1" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Add a comment" }), {
+      target: { value: "Draft while moving" },
+    });
+
+    rerender(dialogElement({ card: updatedCard, columnId: "col2" }));
+
+    expect(
+      screen.getByRole<HTMLTextAreaElement>("textbox", {
+        name: "Add a comment",
+      }),
+    ).toHaveValue("Draft while moving");
+  });
+
+  it("starts a different card with an empty draft and no comment being edited", () => {
+    comments = [existingComment];
+    const { rerender } = render(dialogElement());
+    fireEvent.change(screen.getByRole("textbox", { name: "Add a comment" }), {
+      target: { value: "Draft for c1" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: /^Edit comment by Bob/ }),
+    );
+
+    rerender(
+      dialogElement({ card: { ...card, id: "c2", title: "Another card" } }),
+    );
+
+    expect(
+      screen.getByRole<HTMLTextAreaElement>("textbox", {
+        name: "Add a comment",
+      }),
+    ).toHaveValue("");
+    expect(screen.queryByDisplayValue("First comment")).not.toBeInTheDocument();
+  });
+
+  it("starts a reopened card with an empty draft", () => {
+    const { rerender } = render(dialogElement());
+    fireEvent.change(screen.getByRole("textbox", { name: "Add a comment" }), {
+      target: { value: "Draft" },
+    });
+
+    rerender(dialogElement({ card: null, open: false }));
+    rerender(dialogElement());
+
+    expect(
+      screen.getByRole<HTMLTextAreaElement>("textbox", {
+        name: "Add a comment",
+      }),
+    ).toHaveValue("");
   });
 });
 
