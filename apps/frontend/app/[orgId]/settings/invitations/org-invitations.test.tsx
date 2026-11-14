@@ -13,6 +13,9 @@ import {
   stubRejectedSave,
   toastError,
   toastSuccess,
+  menuItemLabels,
+  openRowMenu,
+  chooseRowMenuAction,
 } from "@/test/list-test-harness";
 
 vi.mock("@/components/auth-provider", () => authMock);
@@ -40,11 +43,7 @@ beforeEach(() => {
 
 async function confirmDelete() {
   await renderList(<OrgInvitationsPage />);
-  fireEvent.click(
-    screen.getByRole("button", {
-      name: "Delete invitation for sam@example.com",
-    }),
-  );
+  await chooseRowMenuAction("sam@example.com", "Delete");
   const dialog = screen.getByRole("dialog");
   fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
   return dialog;
@@ -106,6 +105,29 @@ describe("OrgInvitationsPage empty list", () => {
     await renderList(<OrgInvitationsPage />);
 
     expect(screen.getByText("No invitations sent yet")).toBeInTheDocument();
+  });
+});
+
+describe("OrgInvitationsPage row actions", () => {
+  it("puts Copy invitation link and Delete in a pending invitation's ⋮ menu", async () => {
+    await renderList(<OrgInvitationsPage />);
+    await openRowMenu("sam@example.com");
+
+    expect(menuItemLabels()).toEqual(["Copy invitation link", "Delete"]);
+    expect(screen.getByRole("menuitem", { name: "Delete" })).toHaveAttribute(
+      "data-variant",
+      "destructive",
+    );
+  });
+
+  it("offers only Delete once the invitation is no longer pending", async () => {
+    mockScopedSWR({
+      "/invitations": [{ ...invitation, status: "accepted" }],
+    });
+    await renderList(<OrgInvitationsPage />);
+    await openRowMenu("sam@example.com");
+
+    expect(menuItemLabels()).toEqual(["Delete"]);
   });
 });
 

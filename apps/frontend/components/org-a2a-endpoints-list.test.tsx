@@ -10,6 +10,9 @@ import {
   stubRejectedSave,
   mutate,
   toastError,
+  menuItemLabels,
+  openRowMenu,
+  chooseRowMenuAction,
 } from "@/test/list-test-harness";
 
 vi.mock("@/components/auth-provider", () => authMock);
@@ -47,11 +50,11 @@ function endpoint(over: Record<string, unknown> = {}) {
   };
 }
 
-/** Opens the row's revoke dialog, then confirms it. */
-async function revoke(name: string, label: string) {
-  fireEvent.click(screen.getByRole("button", { name }));
-  const buttons = await screen.findAllByRole("button", { name: label });
-  fireEvent.click(buttons[buttons.length - 1]);
+/** Opens the row's ⋮ menu, picks its revoke item, then confirms the dialog. */
+async function revoke(actionsFor: string, label: string) {
+  await chooseRowMenuAction(actionsFor, label);
+  const dialog = await screen.findByRole("dialog");
+  fireEvent.click(within(dialog).getByRole("button", { name: label }));
 }
 
 beforeEach(resetListHarness);
@@ -107,14 +110,26 @@ describe("OrgA2aEndpointsList", () => {
     expect(screen.queryByText("Active")).not.toBeInTheDocument();
   });
 
-  it("offers revoke and nothing that edits", async () => {
+  it("puts the endpoint's revoke in its ⋮ menu, with nothing that edits", async () => {
     mockScopedSWR({ "/a2a/endpoints": [endpoint()] }, { strict: true });
     await renderList(<OrgA2aEndpointsList orgId="org1" />);
+    await openRowMenu("Support desk");
 
-    expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual([
-      "Revoke endpoint",
-      "Revoke token",
-    ]);
+    expect(menuItemLabels()).toEqual(["Revoke endpoint"]);
+    expect(
+      screen.getByRole("menuitem", { name: "Revoke endpoint" }),
+    ).toHaveAttribute("data-variant", "destructive");
+  });
+
+  it("puts the token's revoke in its own row's ⋮ menu", async () => {
+    mockScopedSWR({ "/a2a/endpoints": [endpoint()] }, { strict: true });
+    await renderList(<OrgA2aEndpointsList orgId="org1" />);
+    await openRowMenu("Telegram");
+
+    expect(menuItemLabels()).toEqual(["Revoke token"]);
+    expect(
+      screen.getByRole("menuitem", { name: "Revoke token" }),
+    ).toHaveAttribute("data-variant", "destructive");
   });
 
   it("revokes an endpoint through the Org route and revalidates", async () => {
@@ -122,7 +137,7 @@ describe("OrgA2aEndpointsList", () => {
     mockScopedSWR({ "/a2a/endpoints": [endpoint()] }, { strict: true });
     await renderList(<OrgA2aEndpointsList orgId="org1" />);
 
-    await revoke("Revoke endpoint", "Revoke endpoint");
+    await revoke("Support desk", "Revoke endpoint");
 
     await waitFor(() => expect(mutate).toHaveBeenCalled());
     expect(fetchMock).toHaveBeenCalledWith(
@@ -136,7 +151,7 @@ describe("OrgA2aEndpointsList", () => {
     mockScopedSWR({ "/a2a/endpoints": [endpoint()] }, { strict: true });
     await renderList(<OrgA2aEndpointsList orgId="org1" />);
 
-    await revoke("Revoke token Telegram", "Revoke token");
+    await revoke("Telegram", "Revoke token");
 
     await waitFor(() => expect(mutate).toHaveBeenCalled());
     expect(fetchMock).toHaveBeenCalledWith(
@@ -150,7 +165,7 @@ describe("OrgA2aEndpointsList", () => {
     mockScopedSWR({ "/a2a/endpoints": [endpoint()] }, { strict: true });
     await renderList(<OrgA2aEndpointsList orgId="org1" />);
 
-    await revoke("Revoke token Telegram", "Revoke token");
+    await revoke("Telegram", "Revoke token");
 
     const dialog = await screen.findByRole("dialog");
     expect(

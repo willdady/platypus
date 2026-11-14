@@ -123,6 +123,20 @@ describe("RowActionsMenu", () => {
     expect(screen.getByRole("separator")).toBeInTheDocument();
   });
 
+  it("greys out a disabled remove item without dropping it", async () => {
+    render(
+      <RowActionsMenu
+        name="Bot"
+        remove={{ onSelect: noop, label: "Revoke token", disabled: true }}
+      />,
+    );
+    await openDropdownMenu();
+
+    expect(
+      screen.getByRole("menuitem", { name: "Revoke token" }),
+    ).toHaveAttribute("data-disabled");
+  });
+
   it("renders an href action as a link", async () => {
     const onSelect = vi.fn();
     render(

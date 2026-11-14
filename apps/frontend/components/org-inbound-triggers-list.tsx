@@ -8,7 +8,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { DisabledBadge } from "@/components/disabled-badge";
 import { EmptyCard } from "@/components/empty-card";
@@ -18,6 +17,7 @@ import type { BearerTokenStatus } from "@platypus/schemas";
 import { formatDate } from "@/lib/format-date";
 import { TokenCells } from "@/components/bearer-token";
 import { TableList } from "@/components/table-list";
+import { RowActionsMenu } from "@/components/row-actions-menu";
 import {
   OVERSIGHT_TABLE_CLASS,
   OversightTableSkeleton,
@@ -116,14 +116,14 @@ export function OrgInboundTriggersList({ orgId }: { orgId: string }) {
                 <TableCell>{formatDate(trigger.createdAt)}</TableCell>
                 <TokenCells token={trigger} />
                 <TableCell className="text-right">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={trigger.tokenStatus === "none"}
-                    onClick={() => revoke.request(trigger)}
-                  >
-                    Revoke token
-                  </Button>
+                  <RowActionsMenu
+                    name={trigger.name}
+                    remove={{
+                      onSelect: () => revoke.request(trigger),
+                      label: "Revoke token",
+                      disabled: trigger.tokenStatus === "none",
+                    }}
+                  />
                 </TableCell>
               </TableRow>
             ))}

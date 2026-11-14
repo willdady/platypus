@@ -48,9 +48,9 @@ Delete
 Skip the items that do not apply and keep the rest in this order. Delete
 takes the destructive style.
 
-Build every list card's (and run row's) ⋮ menu with `RowActionsMenu`
-(`components/row-actions-menu.tsx`), never a hand-built `DropdownMenu`; it
-enforces the order and the separator.
+Build every list card's, run row's and admin table row's ⋮ menu with
+`RowActionsMenu` (`components/row-actions-menu.tsx`), never a hand-built
+`DropdownMenu`; it enforces the order and the separator.
 
 ```tsx
 <RowActionsMenu
@@ -69,6 +69,13 @@ enforces the order and the separator.
 
 Leave out a prop the User lacks the permission for; the component drops the ⋮
 when nothing is left, so a list needs no "has menu" check of its own.
+
+## Tables
+
+An admin table row puts its actions in `RowActionsMenu`, right-aligned in the
+table's Actions column — even when the row has only one action. Rename `remove`
+for what the row does when that is not Delete (**Revoke endpoint**, **Revoke
+token**).
 
 ## Shared items
 

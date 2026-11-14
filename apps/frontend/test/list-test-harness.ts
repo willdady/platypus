@@ -177,6 +177,22 @@ export function menuItemLabels() {
 }
 
 /**
+ * Opens a table row's ⋮ menu. `name` is the row's own name, which the trigger
+ * reads as `Actions for <name>`.
+ */
+export async function openRowMenu(name: string) {
+  await setupUser().click(
+    screen.getByRole("button", { name: `Actions for ${name}` }),
+  );
+}
+
+/** Opens a row's ⋮ menu and picks `item`, as a keyboard or pointer user would. */
+export async function chooseRowMenuAction(name: string, item: string) {
+  await openRowMenu(name);
+  await setupUser().click(await screen.findByRole("menuitem", { name: item }));
+}
+
+/**
  * Confirms the open dialog by clicking its button. `await`s the button, so it
  * also covers the surfaces that check something over the wire (an attachment
  * count) before the dialog appears.

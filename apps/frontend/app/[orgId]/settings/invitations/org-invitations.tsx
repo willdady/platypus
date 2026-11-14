@@ -6,8 +6,7 @@ import { InvitationForm } from "@/components/invitation-form";
 import { EmptyCard } from "@/components/empty-card";
 import { writeEntity } from "@/lib/api-write";
 import { type InvitationListItem, type Blueprint } from "@platypus/schemas";
-import { Button } from "@/components/ui/button";
-import { Trash2, Mail, Copy } from "lucide-react";
+import { Mail, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { copyWithToast } from "@/lib/clipboard";
 import { useScopedList } from "@/hooks/use-scoped-list";
@@ -29,6 +28,7 @@ import {
   TableSkeleton,
 } from "@/components/list-skeletons";
 import { TableList } from "@/components/table-list";
+import { RowActionsMenu } from "@/components/row-actions-menu";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
 import { OrganizationName } from "@/components/organization-name";
 import { PageHeader } from "@/components/page-header";
@@ -134,10 +134,9 @@ function OrgInvitationsPage() {
                 {
                   header: "Actions",
                   className: "text-right",
-                  // Copy link + Delete, both ghost icon buttons.
+                  // The row's ⋮ menu.
                   cell: (
                     <div className="flex justify-end">
-                      <IconButtonSkeleton />
                       <IconButtonSkeleton />
                     </div>
                   ),
@@ -189,26 +188,24 @@ function OrgInvitationsPage() {
                     {formatDate(invite.expiresAt)}
                   </TableCell>
                   <TableCell className="text-right">
-                    {invite.status === "pending" && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label="Copy invitation link"
-                        title="Copy invitation link"
-                        onClick={() => handleCopyLink(invite.token)}
-                      >
-                        <Copy />
-                      </Button>
-                    )}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      aria-label={`Delete invitation for ${invite.email}`}
-                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                      onClick={() => invitationDelete.request(invite.id)}
-                    >
-                      <Trash2 />
-                    </Button>
+                    <RowActionsMenu
+                      name={invite.email}
+                      actions={
+                        invite.status === "pending"
+                          ? [
+                              {
+                                label: "Copy invitation link",
+                                icon: <Copy />,
+                                onSelect: () =>
+                                  void handleCopyLink(invite.token),
+                              },
+                            ]
+                          : []
+                      }
+                      remove={{
+                        onSelect: () => invitationDelete.request(invite.id),
+                      }}
+                    />
                   </TableCell>
                 </TableRow>
               ))}

@@ -9,9 +9,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatDate } from "@/lib/format-date";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Shield, KeyRound, Trash2 } from "lucide-react";
+import { Shield, KeyRound } from "lucide-react";
 import { useState } from "react";
 import { useAuth, type User } from "@/components/auth-provider";
 import { joinUrl } from "@/lib/utils";
@@ -24,12 +23,13 @@ import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ListState } from "@/components/list-state";
 import {
   BadgeSkeleton,
+  IconButtonSkeleton,
   SkeletonLine,
   TableSkeleton,
   UserCellSkeleton,
 } from "@/components/list-skeletons";
-import { Skeleton } from "@/components/ui/skeleton";
 import { TableList } from "@/components/table-list";
+import { RowActionsMenu } from "@/components/row-actions-menu";
 import { UserCell } from "@/components/user-cell";
 
 /** A row of `list-users`, read as plain JSON rather than through the auth client. */
@@ -83,11 +83,10 @@ export function UsersList() {
               {
                 header: "Actions",
                 className: "text-right",
-                // Change password + Delete, both `size="sm"`.
+                // The row's ⋮ menu.
                 cell: (
-                  <div className="flex items-center justify-end gap-2">
-                    <Skeleton className="h-8 w-40" />
-                    <Skeleton className="h-8 w-20" />
+                  <div className="flex justify-end">
+                    <IconButtonSkeleton />
                   </div>
                 ),
               },
@@ -109,69 +108,70 @@ export function UsersList() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {users.map((user) => (
-              <TableRow key={user.id}>
-                <TableCell>
-                  <UserCell name={user.name} email={user.email} />
-                </TableCell>
-                <TableCell>
-                  <Badge
-                    variant={user.role === "admin" ? "default" : "secondary"}
-                    className="capitalize"
-                  >
-                    {user.role === "admin" && <Shield className="size-3" />}
-                    {user.role === "admin" ? "Super Admin" : "User"}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  <div className="flex items-center gap-2">
-                    {user.banned ? (
-                      <Badge variant="destructive">Banned</Badge>
-                    ) : user.emailVerified ? (
-                      <Badge variant="outline" className="text-success">
-                        Verified
-                      </Badge>
-                    ) : (
-                      <Badge
-                        variant="outline"
-                        className="text-warning-foreground"
-                      >
-                        Unverified
-                      </Badge>
-                    )}
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <span className="text-sm text-muted-foreground">
-                    {formatDate(user.createdAt)}
-                  </span>
-                </TableCell>
-                <TableCell className="text-right">
-                  <div className="flex items-center justify-end gap-2">
-                    {user.id !== currentUser?.id && user.role !== "admin" && (
-                      <>
-                        <Button
+            {users.map((user) => {
+              const manageable =
+                user.id !== currentUser?.id && user.role !== "admin";
+              return (
+                <TableRow key={user.id}>
+                  <TableCell>
+                    <UserCell name={user.name} email={user.email} />
+                  </TableCell>
+                  <TableCell>
+                    <Badge
+                      variant={user.role === "admin" ? "default" : "secondary"}
+                      className="capitalize"
+                    >
+                      {user.role === "admin" && <Shield className="size-3" />}
+                      {user.role === "admin" ? "Super Admin" : "User"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      {user.banned ? (
+                        <Badge variant="destructive">Banned</Badge>
+                      ) : user.emailVerified ? (
+                        <Badge variant="outline" className="text-success">
+                          Verified
+                        </Badge>
+                      ) : (
+                        <Badge
                           variant="outline"
-                          size="sm"
-                          onClick={() => setChangingPasswordUser(user)}
+                          className="text-warning-foreground"
                         >
-                          <KeyRound />
-                          Change password
-                        </Button>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => deleteFlow.request(user)}
-                        >
-                          <Trash2 />
-                          Delete
-                        </Button>
-                      </>
-                    )}
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
+                          Unverified
+                        </Badge>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <span className="text-sm text-muted-foreground">
+                      {formatDate(user.createdAt)}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <RowActionsMenu
+                      name={user.name}
+                      actions={
+                        manageable
+                          ? [
+                              {
+                                label: "Change password",
+                                icon: <KeyRound />,
+                                onSelect: () => setChangingPasswordUser(user),
+                              },
+                            ]
+                          : []
+                      }
+                      remove={
+                        manageable
+                          ? { onSelect: () => deleteFlow.request(user) }
+                          : undefined
+                      }
+                    />
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </TableList>
