@@ -24,6 +24,7 @@ import { currentTurnId, isA2aChat } from "./a2a-task-state.ts";
 import { endTurnIn, turnEnded } from "./a2a-task-lifecycle.ts";
 import { chatRunIsLive } from "../runs/chat-run-heartbeat.ts";
 import { withRunSource } from "../event-causation.ts";
+import { refuseTriggerRunChat } from "./chat-write-guard.ts";
 
 /**
  * Starts one Chat turn and returns its streaming response — the one path every
@@ -80,10 +81,16 @@ export const startChatTurn = async (params: {
       updatedAt: chatTable.updatedAt,
       a2aEndpointId: chatTable.a2aEndpointId,
       activeLeafId: chatTable.activeLeafId,
+      triggerRunId: chatTable.triggerRunId,
     })
     .from(chatTable)
     .where(ownedWhere("chat", { id: chatId, workspaceId: scope.workspaceId }))
     .limit(1);
+
+  // A Trigger run's Chat is the run's record: no turn, regenerate or approval
+  // answer may add to or change it (ADR-0046). A Chat not written yet has no
+  // run to belong to, so a first turn still creates it.
+  refuseTriggerRunChat(existingChat[0]);
 
   // What the turn continues, from the server's own rows (ADR-0026). Refuses a
   // turn that cannot run — an unknown parent, a duplicate id, a reply that
