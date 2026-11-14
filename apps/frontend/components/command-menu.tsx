@@ -34,7 +34,7 @@ import type { Agent, KanbanBoard, Trigger } from "@platypus/schemas";
 import { useScopedList } from "@/hooks/use-scoped-list";
 import { useHasNoProviders } from "@/hooks/use-has-no-providers";
 import { appRoutes, userRoutes, workspaceRoutes } from "@/lib/routes";
-import type { Serialized } from "@/lib/api-write";
+import { triggerListEntity, type Serialized } from "@/lib/api-write";
 
 /**
  * What a group shows when its read failed: a Retry item in place of the rows,
@@ -94,7 +94,7 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
     results: triggers,
     error: triggersError,
     mutate: mutateTriggers,
-  } = useScopedList<Trigger>("triggers", scope);
+  } = useScopedList<Trigger>(triggerListEntity(), scope);
   const hasNoProviders = useHasNoProviders(scope);
 
   useEffect(() => {

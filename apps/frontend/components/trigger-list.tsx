@@ -53,12 +53,16 @@ import { formatRelativeTime } from "@/lib/relative-time";
 import cronstrue from "cronstrue";
 import { AgentAvatar } from "@/components/agent-avatar";
 import {
+  matchesCollection,
+  triggerListEntity,
   writeEntity,
   type Scope,
   type Serialized,
   type WriteOutcome,
 } from "@/lib/api-write";
 import { parseCloneBody } from "@/lib/parse-write-body";
+import { useBackendUrl } from "@/components/auth-provider";
+import { useSWRConfig } from "swr";
 import { useScopedList } from "@/hooks/use-scoped-list";
 import { useListParams } from "@/hooks/use-list-params";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
@@ -246,13 +250,24 @@ export function TriggerList({
   // each call site.
   const scope: Scope = { orgId, workspaceId };
 
+  const backendUrl = useBackendUrl();
+  const { mutate: mutateCache } = useSWRConfig();
+
+  // The list is read under more than one key — this one with fired One-offs,
+  // the command menu's without — so a write here revalidates every variant,
+  // as the sidebar does for Chats.
+  const revalidateTriggerList = () =>
+    mutateCache((key: unknown) =>
+      matchesCollection(key, backendUrl, triggerListEntity(), scope),
+    );
+
   const {
     data: triggersData,
     error,
     isLoading,
     mutate,
     results: triggerRows,
-  } = useScopedList<Trigger>("triggers?includeFired=true", scope);
+  } = useScopedList<Trigger>(triggerListEntity({ includeFired: true }), scope);
 
   const { results: agents } = useScopedList<Agent>("agents", scope);
 
@@ -261,7 +276,7 @@ export function TriggerList({
   const toggle = useEnabledToggle<Serialized<Trigger>>({
     entity: "triggers",
     scope,
-    mutate,
+    mutate: revalidateTriggerList,
   });
 
   // Fired One-offs are read too and hidden here, so the list knows whether
@@ -272,7 +287,7 @@ export function TriggerList({
   );
 
   const deleteFlow = useDeleteFlow<Serialized<Trigger>>({
-    mutate,
+    mutate: revalidateTriggerList,
     delete: (trigger, url) =>
       writeEntity(url, "triggers", scope, { id: trigger.id }),
   });
@@ -521,7 +536,7 @@ export function TriggerList({
           onClose={() => setTriggerToClone(null)}
           create={(name, url) => createClone(triggerToClone, name, url)}
           onCreated={(id) => {
-            void mutate();
+            void revalidateTriggerList();
             router.push(routes.triggers.detail(id));
           }}
         />

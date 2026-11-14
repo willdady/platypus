@@ -5,7 +5,7 @@ import { useParams, usePathname, useRouter } from "next/navigation";
 import { useSWRConfig } from "swr";
 import {
   chatListEntity,
-  scopedUrl,
+  matchesCollection,
   writeEntity,
   type Serialized,
 } from "@/lib/api-write";
@@ -133,12 +133,10 @@ export function AppSidebar() {
   }, [searchInput]);
 
   // Helper to revalidate the chat list (handles query params in SWR key)
-  const revalidateChatList = () => {
-    const chatListUrl = scopedUrl(backendUrl, chatListEntity(), scope);
-    return mutate(
-      (key: unknown) => typeof key === "string" && key.startsWith(chatListUrl),
+  const revalidateChatList = () =>
+    mutate((key: unknown) =>
+      matchesCollection(key, backendUrl, chatListEntity(), scope),
     );
-  };
 
   const { results: allWorkspaces, isLoading: isWorkspacesLoading } =
     useScopedList<Workspace>("workspaces", { orgId });

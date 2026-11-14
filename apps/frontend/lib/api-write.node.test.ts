@@ -7,6 +7,8 @@ import {
   scopedUrl,
   attachmentsEntity,
   chatListEntity,
+  triggerListEntity,
+  matchesCollection,
   organizationEntity,
   type Serialized,
 } from "./api-write";
@@ -263,6 +265,50 @@ describe("the query-parameterized key builders", () => {
     expect(searched.startsWith(prefix)).toBe(true);
     expect(searched).toContain("limit=100");
     expect(searched).toContain("search=hello+there");
+  });
+
+  it("makes the parameterless trigger list key a prefix of its includeFired variant", () => {
+    const scope = { orgId: "org1", workspaceId: "ws1" };
+    const prefix = scopedUrl(BACKEND_URL, triggerListEntity(), scope);
+    const withFired = scopedUrl(
+      BACKEND_URL,
+      triggerListEntity({ includeFired: true }),
+      scope,
+    );
+    expect(triggerListEntity({ includeFired: true })).toBe(
+      "triggers?includeFired=true",
+    );
+    expect(withFired.startsWith(prefix)).toBe(true);
+  });
+
+  it("matches a collection's key and its variants, and no sibling collection", () => {
+    const scope = { orgId: "org1", workspaceId: "ws1" };
+    const triggers = scopedUrl(BACKEND_URL, triggerListEntity(), scope);
+
+    expect(matchesCollection(triggers, BACKEND_URL, "triggers", scope)).toBe(
+      true,
+    );
+    expect(
+      matchesCollection(
+        scopedUrl(
+          BACKEND_URL,
+          triggerListEntity({ includeFired: true }),
+          scope,
+        ),
+        BACKEND_URL,
+        "triggers",
+        scope,
+      ),
+    ).toBe(true);
+    expect(
+      matchesCollection(
+        scopedUrl(BACKEND_URL, "agents", scope),
+        BACKEND_URL,
+        "triggers",
+        scope,
+      ),
+    ).toBe(false);
+    expect(matchesCollection(null, BACKEND_URL, "triggers", scope)).toBe(false);
   });
 
   it("spells the attachments key the same for every surface that asks", () => {

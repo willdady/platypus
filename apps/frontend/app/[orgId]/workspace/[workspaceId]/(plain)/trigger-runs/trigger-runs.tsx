@@ -4,7 +4,7 @@ import { use, useCallback } from "react";
 import { useListParams } from "@/hooks/use-list-params";
 import { useScopedList } from "@/hooks/use-scoped-list";
 import { useRevalidateOnRestore } from "@/hooks/use-revalidate-on-restore";
-import { scopedUrl, type Serialized } from "@/lib/api-write";
+import { scopedUrl, triggerListEntity, type Serialized } from "@/lib/api-write";
 import useSWRInfinite from "swr/infinite";
 import { History, TriangleAlert } from "lucide-react";
 import {
@@ -62,7 +62,7 @@ function TriggerRunsPage({
 
   // Fired One-offs too: their runs are listed here, filterable by name.
   const { results: triggers } = useScopedList<Trigger>(
-    "triggers?includeFired=true",
+    triggerListEntity({ includeFired: true }),
     { orgId, workspaceId },
   );
 

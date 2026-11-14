@@ -32,7 +32,7 @@ import { WorkspaceNotFound } from "@/components/workspace-not-found";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { useScopedList } from "@/hooks/use-scoped-list";
-import { chatListEntity } from "@/lib/api-write";
+import { chatListEntity, triggerListEntity } from "@/lib/api-write";
 import { useParams } from "next/navigation";
 import { orgRoutes } from "@/lib/routes";
 import { cn } from "@/lib/utils";
@@ -253,7 +253,10 @@ function Workspace() {
   const agents = useScopedList<unknown>("agents", scope);
   const skills = useScopedList<unknown>("skills", scope);
   const boards = useScopedList<unknown>("boards", scope);
-  const triggers = useScopedList<unknown>("triggers?includeFired=true", scope);
+  const triggers = useScopedList<unknown>(
+    triggerListEntity({ includeFired: true }),
+    scope,
+  );
 
   if (
     !backendUrl ||
