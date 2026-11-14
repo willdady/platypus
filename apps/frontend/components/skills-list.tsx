@@ -293,7 +293,7 @@ export function SkillsList({
           name={skill.name}
           shared
           edit={{ href: orgRoutes(orgId).settings.skillDetail(skill.id) }}
-          remove={{ onSelect: () => orgSkillDetach.open(skill) }}
+          remove={{ onSelect: () => orgSkillDetach.request(skill) }}
         />
       ) : null;
     }
