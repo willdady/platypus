@@ -19,7 +19,7 @@ import {
   inboundEndpointUrl,
 } from "@/components/inbound-token-dialog";
 import { useBackendUrl } from "@/components/auth-provider";
-import { useMutation } from "@/hooks/use-mutation";
+import { useConfirmFlow } from "@/hooks/use-delete-flow";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, RefreshCw, X } from "lucide-react";
@@ -30,10 +30,11 @@ import {
   INBOUND_TRIGGER_INPUT_NAME_MAX_LENGTH,
   INBOUND_TRIGGER_MAX_INPUTS,
   inboundTriggerInputNameRegex,
+  type Trigger,
 } from "@platypus/schemas";
 import { formatDateTime } from "@/lib/format-date";
 import { workspaceRoutes } from "@/lib/routes";
-import { scopedUrl, writeAt } from "@/lib/api-write";
+import { scopedUrl, writeAt, type Serialized } from "@/lib/api-write";
 import { joinUrl } from "@/lib/utils";
 import { TOKEN_STATUS_LABELS, TOKEN_STATUS_VARIANTS } from "@/lib/bearer-token";
 import type {
@@ -74,6 +75,12 @@ type ShownToken = {
   leaveOnClose: boolean;
 };
 
+/** What regenerating answers: the new token, shown once, and when it expires. */
+type IssuedInboundToken = {
+  token: string;
+  tokenExpiresAt: string;
+};
+
 /**
  * An Inbound Trigger's declared inputs, record key and token lifetime, and,
  * once saved, its token: status, regenerate, and the one-time token dialog.
@@ -105,8 +112,6 @@ function TriggerInboundFields({
     saved?.tokenExpiryDays ?? DEFAULT_BEARER_TOKEN_EXPIRY_DAYS,
   );
   const [shownToken, setShownToken] = useState<ShownToken | null>(null);
-  const [isRegenerateDialogOpen, setIsRegenerateDialogOpen] = useState(false);
-  const [regenerateError, setRegenerateError] = useState<string | null>(null);
 
   const requiredInputNames = inboundInputs
     .filter((input) => input.required && input.name.trim())
@@ -179,32 +184,29 @@ function TriggerInboundFields({
       prev.map((input, i) => (i === index ? { ...input, ...patch } : input)),
     );
 
-  const { run: handleRegenerateToken, pending: isRegenerating } = useMutation(
-    async () => {
-      if (!backendUrl || !trigger) return;
-      setRegenerateError(null);
-      const outcome = await writeAt<{ token: string; tokenExpiresAt: string }>(
+  // The response carries the new token, which is shown once and never read
+  // back, so the confirmation hands it straight to the token dialog.
+  const regenerateToken = useConfirmFlow<
+    Serialized<Trigger>,
+    IssuedInboundToken
+  >({
+    delete: (target, backendUrl) =>
+      writeAt<IssuedInboundToken>(
         joinUrl(
           scopedUrl(backendUrl, "triggers", scope),
-          `/${trigger.id}/token`,
+          `/${target.id}/token`,
         ),
         { method: "POST" },
-      );
-      if (outcome.outcome === "success") {
-        setShownToken({
-          token: outcome.data.token,
-          triggerId: trigger.id,
-          expiresAt: outcome.data.tokenExpiresAt,
-          leaveOnClose: false,
-        });
-        await mutateRecord();
-        setIsRegenerateDialogOpen(false);
-      } else {
-        // A refused regenerate stays in the open dialog rather than closing it.
-        setRegenerateError(outcome.message);
-      }
-    },
-  );
+      ),
+    mutate: mutateRecord,
+    onSuccess: (target, data) =>
+      setShownToken({
+        token: data.token,
+        triggerId: target.id,
+        expiresAt: data.tokenExpiresAt,
+        leaveOnClose: false,
+      }),
+  });
 
   const closeTokenDialog = () => {
     const leave = shownToken?.leaveOnClose;
@@ -370,7 +372,7 @@ function TriggerInboundFields({
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => setIsRegenerateDialogOpen(true)}
+                    onClick={() => regenerateToken.request(trigger)}
                     disabled={disabled}
                   >
                     <RefreshCw /> {hasToken ? "Regenerate" : "Issue token"}
@@ -420,11 +422,6 @@ function TriggerInboundFields({
       )}
 
       <ConfirmDialog
-        open={isRegenerateDialogOpen}
-        onOpenChange={(open) => {
-          setIsRegenerateDialogOpen(open);
-          if (!open) setRegenerateError(null);
-        }}
         title={hasToken ? "Regenerate token" : "Issue token"}
         description={
           hasToken
@@ -432,9 +429,7 @@ function TriggerInboundFields({
             : "A new token is issued and shown once."
         }
         confirmLabel={hasToken ? "Regenerate" : "Issue token"}
-        onConfirm={() => void handleRegenerateToken()}
-        loading={isRegenerating}
-        error={regenerateError}
+        {...regenerateToken.dialogProps}
       />
 
       {shownToken && (

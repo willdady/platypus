@@ -43,13 +43,12 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useState } from "react";
 import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
-import { useMutation } from "@/hooks/use-mutation";
+import { useConfirmFlow } from "@/hooks/use-delete-flow";
 import { useRouter } from "next/navigation";
 import { retractExactKeys } from "@/lib/form-errors";
-import { scopedUrl, writeAt } from "@/lib/api-write";
+import { scopedUrl, writeAt, type Serialized } from "@/lib/api-write";
 import { toast } from "sonner";
 import { copyWithToast } from "@/lib/clipboard";
-import { useBackendUrl } from "@/components/auth-provider";
 import { Eye, EyeOff, Copy, RefreshCw } from "lucide-react";
 import { workspaceRoutes } from "@/lib/routes";
 import { toggleInList } from "@/lib/toggle-in-list";
@@ -155,11 +154,8 @@ function WebhookFormSkeleton({ editing }: { editing: boolean }) {
 }
 
 function WebhookForm({ orgId, workspaceId, webhookId }: WebhookFormProps) {
-  const backendUrl = useBackendUrl();
   const router = useRouter();
 
-  const [isRegenerateDialogOpen, setIsRegenerateDialogOpen] = useState(false);
-  const [regenerateError, setRegenerateError] = useState<string | null>(null);
   const [showSecret, setShowSecret] = useState(false);
 
   const isEditMode = !!webhookId;
@@ -224,27 +220,20 @@ function WebhookForm({ orgId, workspaceId, webhookId }: WebhookFormProps) {
     });
   };
 
-  const { run: handleRegenerateSecret, pending: isRegenerating } = useMutation(
-    async () => {
-      setRegenerateError(null);
-      const outcome = await writeAt(
-        scopedUrl(backendUrl, `webhooks/${webhookId}/regenerate-secret`, {
+  const regenerateSecret = useConfirmFlow<Serialized<Webhook>>({
+    delete: (webhook, backendUrl) =>
+      writeAt(
+        scopedUrl(backendUrl, `webhooks/${webhook.id}/regenerate-secret`, {
           orgId,
           workspaceId,
         }),
         { method: "POST" },
-      );
-
-      if (outcome.outcome === "success") {
-        toast.success("Signing secret regenerated");
-        await mutateRecord();
-        setIsRegenerateDialogOpen(false);
-      } else {
-        // A refused regenerate stays in the open dialog rather than closing it.
-        setRegenerateError(outcome.message);
-      }
+      ),
+    mutate: mutateRecord,
+    onSuccess: () => {
+      toast.success("Signing secret regenerated");
     },
-  );
+  });
 
   const handleCopySecret = async () => {
     if (!webhook?.signingSecret) return;
@@ -397,7 +386,7 @@ function WebhookForm({ orgId, workspaceId, webhookId }: WebhookFormProps) {
                   type="button"
                   variant="outline"
                   className="shrink-0"
-                  onClick={() => setIsRegenerateDialogOpen(true)}
+                  onClick={() => regenerateSecret.request(webhook)}
                   disabled={isSubmitting}
                 >
                   <RefreshCw /> Regenerate
@@ -447,18 +436,11 @@ function WebhookForm({ orgId, workspaceId, webhookId }: WebhookFormProps) {
       <DeleteConfirmDialog noun="webhook" {...dialogProps} />
 
       <ConfirmDialog
-        open={isRegenerateDialogOpen}
-        onOpenChange={(open) => {
-          setIsRegenerateDialogOpen(open);
-          if (!open) setRegenerateError(null);
-        }}
         title="Regenerate signing secret"
         description="Are you sure you want to regenerate the signing secret? The current secret will be invalidated immediately."
         confirmLabel="Regenerate"
         confirmVariant="destructive"
-        onConfirm={handleRegenerateSecret}
-        loading={isRegenerating}
-        error={regenerateError}
+        {...regenerateSecret.dialogProps}
       />
     </form>
   );

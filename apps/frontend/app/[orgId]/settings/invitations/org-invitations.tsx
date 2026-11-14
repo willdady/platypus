@@ -53,7 +53,9 @@ function OrgInvitationsPage() {
     delete: (id, backendUrl) =>
       writeEntity(backendUrl, "invitations", { orgId }, { id }),
     mutate,
-    onSuccess: () => toast.success("Invitation deleted"),
+    onSuccess: () => {
+      toast.success("Invitation deleted");
+    },
   });
 
   // Available for the whole time an Invitation is pending (#549, ADR-0019) --

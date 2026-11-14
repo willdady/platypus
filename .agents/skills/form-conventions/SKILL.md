@@ -58,9 +58,10 @@ Every dialog or inline action built on `useEntityForm` passes
 `invalidMessage: null` instead: its field errors are already in view, so a
 toast would only repeat them. That covers member edit, transfer workspace,
 the change-password dialog, issuing an A2A token, the Global Context
-editor, chat rename and `OrgGateAccess`. A dialog that shows a refusal in
-the dialog itself (the A2A regenerate confirm) uses `onInvalid` instead;
-the message is then already in view. A short settings page
+editor, chat rename and `OrgGateAccess`. A confirmation whose write isn't a
+form at all — regenerating a token or a signing secret — runs on
+`useDeleteFlow` (`useConfirmFlow`), whose `dialogProps` already keeps every
+refusal inline and closes the dialog on success. A short settings page
 (change password, profile, sandbox) is still page-level and keeps the
 default.
 

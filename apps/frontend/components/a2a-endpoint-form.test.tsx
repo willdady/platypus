@@ -16,6 +16,7 @@ import {
   setDataFor,
   setupUser,
   stubAcceptedSave,
+  stubPendingSave,
   stubRejectedSave,
   toastError,
   toastSuccess,
@@ -490,5 +491,39 @@ describe("A2aTokens regenerate", () => {
     expect(
       within(dialog).queryByText("Token is locked"),
     ).not.toBeInTheDocument();
+  });
+
+  it("disables the confirm button while the regenerate is in flight", async () => {
+    const { fetchMock, resolve } = stubPendingSave({
+      ...endpoint.tokens[0],
+      token: "pa2a_fresh",
+    });
+    render(
+      <A2aTokens
+        orgId="org1"
+        endpoint={
+          endpoint as unknown as ComponentProps<typeof A2aTokens>["endpoint"]
+        }
+        mutate={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Regenerate token Hermes" }),
+    );
+    const dialog = screen.getByRole("dialog");
+    const confirm = within(dialog).getByRole("button", { name: "Regenerate" });
+
+    fireEvent.click(confirm);
+    await waitFor(() => expect(confirm).toBeDisabled());
+
+    // A second click on a pending confirm sends nothing.
+    fireEvent.click(confirm);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    resolve();
+    await waitFor(() =>
+      expect(screen.getByLabelText("Token")).toHaveValue("pa2a_fresh"),
+    );
   });
 });
