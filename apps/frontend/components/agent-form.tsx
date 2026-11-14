@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  Field,
   FieldGroup,
   FieldSet,
   FieldLegend,
@@ -653,20 +652,17 @@ function AgentForm({
             error={validationErrors.name}
             autoFocus
           />
-          <Field data-invalid={!!validationErrors.description}>
-            <ExpandableTextarea
-              id="description"
-              label="Description"
-              expandable={false}
-              placeholder="Description of the agent..."
-              value={formData.description}
-              onChange={handleChange}
-              disabled={isSubmitting || readOnly}
-              maxLength={AGENT_DESCRIPTION_MAX_LENGTH}
-              aria-invalid={!!validationErrors.description}
-              error={validationErrors.description}
-            />
-          </Field>
+          <ExpandableTextarea
+            id="description"
+            label="Description"
+            expandable={false}
+            placeholder="Description of the agent..."
+            value={formData.description}
+            onChange={handleChange}
+            disabled={isSubmitting || readOnly}
+            maxLength={AGENT_DESCRIPTION_MAX_LENGTH}
+            error={validationErrors.description}
+          />
           <FormTextField
             label="Input Placeholder"
             name="inputPlaceholder"
@@ -678,24 +674,24 @@ function AgentForm({
             error={validationErrors.inputPlaceholder}
             description="Custom placeholder text shown in the chat input when this agent is selected"
           />
-          <Field data-invalid={!!validationErrors.instructions}>
-            <ExpandableTextarea
-              id="instructions"
-              label="Instructions"
-              placeholder="You are a helpful agent..."
-              value={formData.instructions}
-              onChange={handleChange}
-              disabled={isSubmitting || readOnly}
-              className="!font-mono"
-              aria-invalid={!!validationErrors.instructions}
-              error={validationErrors.instructions}
-            />
-            <FieldDescription>
-              How this Agent should behave. Platypus builds the full system
-              prompt around it, adding workspace and user context, memories,
-              Skills, Sub-Agents, and your Provider&apos;s security guardrails.
-            </FieldDescription>
-          </Field>
+          <ExpandableTextarea
+            id="instructions"
+            label="Instructions"
+            placeholder="You are a helpful agent..."
+            value={formData.instructions}
+            onChange={handleChange}
+            disabled={isSubmitting || readOnly}
+            className="!font-mono"
+            error={validationErrors.instructions}
+            description={
+              <>
+                How this Agent should behave. Platypus builds the full system
+                prompt around it, adding workspace and user context, memories,
+                Skills, Sub-Agents, and your Provider&apos;s security
+                guardrails.
+              </>
+            }
+          />
           {/* Provider and model are chosen from one control, so surface either
               field's server error on the single Model field. */}
           <div className="flex flex-col gap-3">

@@ -321,18 +321,16 @@ export function WorkspaceContextForm({ contextId }: { contextId?: string }) {
               </Field>
             )}
 
-            <Field data-invalid={!!validationErrors.content}>
-              <ExpandableTextarea
-                id="content"
-                label="Content"
-                placeholder="Enter project-specific context, team conventions, or workspace instructions..."
-                value={formData.content}
-                onChange={handleChange}
-                className="!font-mono"
-                maxLength={CONTEXT_MAX_LENGTH}
-                error={validationErrors.content}
-              />
-            </Field>
+            <ExpandableTextarea
+              id="content"
+              label="Content"
+              placeholder="Enter project-specific context, team conventions, or workspace instructions..."
+              value={formData.content}
+              onChange={handleChange}
+              className="!font-mono"
+              maxLength={CONTEXT_MAX_LENGTH}
+              error={validationErrors.content}
+            />
           </FieldGroup>
         </FieldSet>
 

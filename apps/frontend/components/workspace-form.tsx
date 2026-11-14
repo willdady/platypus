@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  Field,
-  FieldGroup,
-  FieldSet,
-  FieldError,
-  FieldDescription,
-} from "@/components/ui/field";
+import { FieldGroup, FieldSet } from "@/components/ui/field";
 import { FormTextField } from "@/components/form-text-field";
 import { FormSwitchField } from "@/components/form-switch-field";
 import { ProviderPointerSelect } from "@/components/provider-pointer-select";
@@ -226,26 +220,18 @@ function WorkspaceForm({ orgId, workspaceId }: WorkspaceFormProps) {
               autoFocus
             />
 
-            <Field data-invalid={!!validationErrors.context}>
-              <ExpandableTextarea
-                id="context"
-                label="Context"
-                placeholder="Optional context for this workspace"
-                value={formData.context}
-                onChange={handleChange}
-                disabled={isSubmitting}
-                aria-invalid={!!validationErrors.context}
-                className="!font-mono"
-                maxLength={CONTEXT_MAX_LENGTH}
-              />
-              <FieldDescription>
-                Additional context about this workspace included in all chats in
-                this workspace
-              </FieldDescription>
-              {validationErrors.context && (
-                <FieldError>{validationErrors.context}</FieldError>
-              )}
-            </Field>
+            <ExpandableTextarea
+              id="context"
+              label="Context"
+              placeholder="Optional context for this workspace"
+              value={formData.context}
+              onChange={handleChange}
+              disabled={isSubmitting}
+              className="!font-mono"
+              maxLength={CONTEXT_MAX_LENGTH}
+              error={validationErrors.context}
+              description="Additional context about this workspace included in all chats in this workspace"
+            />
 
             <ProviderPointerSelect
               kind="task"

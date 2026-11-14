@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  Field,
-  FieldGroup,
-  FieldSet,
-  FieldDescription,
-} from "@/components/ui/field";
+import { FieldGroup, FieldSet, FieldDescription } from "@/components/ui/field";
 import { FormTextField } from "@/components/form-text-field";
 import { ExpandableTextarea } from "@/components/expandable-textarea";
 import { FormSwitchField } from "@/components/form-switch-field";
@@ -215,33 +210,27 @@ function SkillForm({
               </p>
             }
           />
-          <Field data-invalid={!!validationErrors.description}>
-            <ExpandableTextarea
-              id="description"
-              label="Description"
-              placeholder="A brief description of what this skill does..."
-              value={formData.description}
-              onChange={handleChange}
-              disabled={isSubmitting}
-              maxLength={SKILL_DESCRIPTION_MAX_LENGTH}
-              aria-invalid={!!validationErrors.description}
-              error={validationErrors.description}
-            />
-          </Field>
-          <Field data-invalid={!!validationErrors.body}>
-            <ExpandableTextarea
-              id="body"
-              label="Body"
-              placeholder="Instructions for this skill..."
-              value={formData.body}
-              onChange={handleChange}
-              disabled={isSubmitting}
-              className="min-h-[200px] !font-mono"
-              aria-invalid={!!validationErrors.body}
-              maxLength={SKILL_BODY_MAX_LENGTH}
-              error={validationErrors.body}
-            />
-          </Field>
+          <ExpandableTextarea
+            id="description"
+            label="Description"
+            placeholder="A brief description of what this skill does..."
+            value={formData.description}
+            onChange={handleChange}
+            disabled={isSubmitting}
+            maxLength={SKILL_DESCRIPTION_MAX_LENGTH}
+            error={validationErrors.description}
+          />
+          <ExpandableTextarea
+            id="body"
+            label="Body"
+            placeholder="Instructions for this skill..."
+            value={formData.body}
+            onChange={handleChange}
+            disabled={isSubmitting}
+            className="min-h-[200px] !font-mono"
+            maxLength={SKILL_BODY_MAX_LENGTH}
+            error={validationErrors.body}
+          />
           <FormTextField
             label="Argument hint"
             name="argumentHint"
