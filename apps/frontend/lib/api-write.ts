@@ -364,6 +364,36 @@ export function chatListEntity(params?: {
   return suffix ? `chat?${suffix}` : "chat";
 }
 
+/**
+ * The trigger list's key, with the one query parameter its readers vary it
+ * by. Parameterless it is exactly the prefix every variant shares: the command
+ * menu reads the list without fired One-offs, while the Triggers list, the
+ * Workspace home and the Trigger runs screen read it with them.
+ */
+export function triggerListEntity(params?: {
+  readonly includeFired?: boolean;
+}): string {
+  return params?.includeFired ? "triggers?includeFired=true" : "triggers";
+}
+
+/**
+ * SWR's `mutate` filter for a collection's key: true for the parameterless key
+ * and every query-string variant of it. One write can then refresh every
+ * reader of a collection, however each spells its own variant. `entity` is the
+ * parameterless key builder's output — `chatListEntity()`, `triggerListEntity()`.
+ */
+export function matchesCollection(
+  key: unknown,
+  backendUrl: string,
+  entity: string,
+  scope: Scope,
+): boolean {
+  return (
+    typeof key === "string" &&
+    key.startsWith(scopedUrl(backendUrl, entity, scope))
+  );
+}
+
 export function errorMessage(body: unknown): string | undefined {
   if (body && typeof body === "object" && "error" in body) {
     const { error } = body;

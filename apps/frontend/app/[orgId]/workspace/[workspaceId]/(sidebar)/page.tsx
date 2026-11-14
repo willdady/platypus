@@ -36,7 +36,7 @@ import { WorkspaceNotFound } from "@/components/workspace-not-found";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { useScopedList } from "@/hooks/use-scoped-list";
-import { chatListEntity } from "@/lib/api-write";
+import { chatListEntity, triggerListEntity } from "@/lib/api-write";
 import { useParams } from "next/navigation";
 import { orgRoutes } from "@/lib/routes";
 import { cn } from "@/lib/utils";
@@ -265,7 +265,10 @@ function Workspace() {
   const boards = useScopedList<unknown>("boards", scope);
   // Fired One-offs ride along for the list's "Show fired" toggle, but not for
   // the count.
-  const triggers = useScopedList<Trigger>("triggers?includeFired=true", scope);
+  const triggers = useScopedList<Trigger>(
+    triggerListEntity({ includeFired: true }),
+    scope,
+  );
 
   if (
     !backendUrl ||
