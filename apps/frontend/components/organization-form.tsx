@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  Field,
-  FieldGroup,
-  FieldSet,
-  FieldError,
-  FieldDescription,
-} from "@/components/ui/field";
+import { FieldGroup, FieldSet } from "@/components/ui/field";
 import { FormTextField } from "@/components/form-text-field";
 import { ExpandableTextarea } from "@/components/expandable-textarea";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -139,28 +133,25 @@ function OrganizationForm({ classNames, orgId }: OrganizationFormProps) {
             />
 
             {orgId && (
-              <Field data-invalid={!!validationErrors.identityContext}>
-                <ExpandableTextarea
-                  id="identityContext"
-                  label="Organization identity / context"
-                  placeholder="Optional identity or context for this organization, shared across all workspaces"
-                  value={formData.identityContext}
-                  onChange={handleChange}
-                  disabled={isSubmitting}
-                  aria-invalid={!!validationErrors.identityContext}
-                  className="!font-mono"
-                  maxLength={ORGANIZATION_IDENTITY_CONTEXT_MAX_LENGTH}
-                />
-                <FieldDescription>
-                  Framing added early in the system prompt for every chat across
-                  the organization — who you are, what you do. This is context,
-                  not a security control (set provider security guardrails for
-                  that).
-                </FieldDescription>
-                {validationErrors.identityContext && (
-                  <FieldError>{validationErrors.identityContext}</FieldError>
-                )}
-              </Field>
+              <ExpandableTextarea
+                id="identityContext"
+                label="Organization identity / context"
+                placeholder="Optional identity or context for this organization, shared across all workspaces"
+                value={formData.identityContext}
+                onChange={handleChange}
+                disabled={isSubmitting}
+                className="!font-mono"
+                maxLength={ORGANIZATION_IDENTITY_CONTEXT_MAX_LENGTH}
+                error={validationErrors.identityContext}
+                description={
+                  <>
+                    Framing added early in the system prompt for every chat
+                    across the organization — who you are, what you do. This is
+                    context, not a security control (set provider security
+                    guardrails for that).
+                  </>
+                }
+              />
             )}
           </FieldGroup>
         </FieldSet>

@@ -11,20 +11,21 @@ Reach for the shared primitive before building the need by hand. The last
 column points at the rules that govern it; empty states have their own picker
 under [§ Empty states](#empty-states).
 
-| Need                                              | Primitive                                                                     | Governed by                                                               |
-| ------------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| A list of entity cards                            | `EntityCardList`                                                              | [`card-conventions`](../card-conventions/SKILL.md)                        |
-| A row's ⋮ menu                                    | `RowActionsMenu`                                                              | [`card-conventions`](../card-conventions/SKILL.md) § The ⋮ menu order     |
-| A disabled item's title-row badge                 | `DisabledBadge`                                                               | [`card-conventions`](../card-conventions/SKILL.md) § Icons and badges     |
-| A count that lists its names on hover             | `CountTooltip`                                                                | [`card-conventions`](../card-conventions/SKILL.md) § Card height          |
-| A list's create controls and pagination           | `ListFooter`                                                                  | [§ Empty states](#empty-states)                                           |
-| A loading skeleton that announces what loads      | `LoadingRegion`                                                               | —                                                                         |
-| A labelled text field, textarea, select or switch | `FormTextField` / `FormTextareaField` / `FormSelectField` / `FormSwitchField` | —                                                                         |
-| A collapsed "Advanced settings" block             | `FormAdvancedSection`                                                         | [`form-conventions`](../form-conventions/SKILL.md) § How the form submits |
-| A write-backed entity form                        | `useEntityForm`                                                               | [`form-conventions`](../form-conventions/SKILL.md)                        |
-| A one-shot write with a pending state             | `useMutation`                                                                 | —                                                                         |
-| A read-only value with a copy button              | `CopyRow`                                                                     | —                                                                         |
-| A delete behind a confirm dialog                  | `DeleteConfirmDialog` + `useDeleteFlow` (lists) or `useEntityDelete` (forms)  | [`form-conventions`](../form-conventions/SKILL.md) § When a delete fails  |
+| Need                                                    | Primitive                                                                     | Governed by                                                               |
+| ------------------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| A list of entity cards                                  | `EntityCardList`                                                              | [`card-conventions`](../card-conventions/SKILL.md)                        |
+| A row's ⋮ menu                                          | `RowActionsMenu`                                                              | [`card-conventions`](../card-conventions/SKILL.md) § The ⋮ menu order     |
+| A disabled item's title-row badge                       | `DisabledBadge`                                                               | [`card-conventions`](../card-conventions/SKILL.md) § Icons and badges     |
+| A count that lists its names on hover                   | `CountTooltip`                                                                | [`card-conventions`](../card-conventions/SKILL.md) § Card height          |
+| A list's create controls and pagination                 | `ListFooter`                                                                  | [§ Empty states](#empty-states)                                           |
+| A loading skeleton that announces what loads            | `LoadingRegion`                                                               | —                                                                         |
+| A labelled text field, textarea, select or switch       | `FormTextField` / `FormTextareaField` / `FormSelectField` / `FormSwitchField` | —                                                                         |
+| A long-text field, optionally with a full-screen editor | `ExpandableTextarea`                                                          | —                                                                         |
+| A collapsed "Advanced settings" block                   | `FormAdvancedSection`                                                         | [`form-conventions`](../form-conventions/SKILL.md) § How the form submits |
+| A write-backed entity form                              | `useEntityForm`                                                               | [`form-conventions`](../form-conventions/SKILL.md)                        |
+| A one-shot write with a pending state                   | `useMutation`                                                                 | —                                                                         |
+| A read-only value with a copy button                    | `CopyRow`                                                                     | —                                                                         |
+| A delete behind a confirm dialog                        | `DeleteConfirmDialog` + `useDeleteFlow` (lists) or `useEntityDelete` (forms)  | [`form-conventions`](../form-conventions/SKILL.md) § When a delete fails  |
 
 ## Empty states
 

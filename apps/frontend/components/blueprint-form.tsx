@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  Field,
-  FieldGroup,
-  FieldSet,
-  FieldDescription,
-} from "@/components/ui/field";
+import { FieldGroup, FieldSet } from "@/components/ui/field";
 import { FormTextField } from "@/components/form-text-field";
 import { FormSwitchField } from "@/components/form-switch-field";
 import { ProviderPointerSelect } from "@/components/provider-pointer-select";
@@ -395,19 +390,16 @@ function BlueprintForm({
               </p>
             }
           />
-          <Field data-invalid={!!validationErrors.description}>
-            <ExpandableTextarea
-              id="description"
-              label="Description"
-              placeholder="What this blueprint provisions..."
-              value={formData.description}
-              onChange={handleChange}
-              disabled={isSubmitting}
-              maxLength={BLUEPRINT_DESCRIPTION_MAX_LENGTH}
-              aria-invalid={!!validationErrors.description}
-              error={validationErrors.description}
-            />
-          </Field>
+          <ExpandableTextarea
+            id="description"
+            label="Description"
+            placeholder="What this blueprint provisions..."
+            value={formData.description}
+            onChange={handleChange}
+            disabled={isSubmitting}
+            maxLength={BLUEPRINT_DESCRIPTION_MAX_LENGTH}
+            error={validationErrors.description}
+          />
         </FieldGroup>
       </FieldSet>
 
@@ -441,23 +433,18 @@ function BlueprintForm({
 
       <FieldSet className="mb-6">
         <FieldGroup className="gap-4">
-          <Field data-invalid={!!validationErrors.context}>
-            <ExpandableTextarea
-              id="context"
-              label="Default context"
-              placeholder="Optional context for the workspace"
-              value={formData.context}
-              onChange={handleChange}
-              disabled={isSubmitting}
-              className="!font-mono"
-              maxLength={CONTEXT_MAX_LENGTH}
-              aria-invalid={!!validationErrors.context}
-              error={validationErrors.context}
-            />
-            <FieldDescription>
-              Additional context included in all chats in the workspace.
-            </FieldDescription>
-          </Field>
+          <ExpandableTextarea
+            id="context"
+            label="Default context"
+            placeholder="Optional context for the workspace"
+            value={formData.context}
+            onChange={handleChange}
+            disabled={isSubmitting}
+            className="!font-mono"
+            maxLength={CONTEXT_MAX_LENGTH}
+            error={validationErrors.context}
+            description="Additional context included in all chats in the workspace."
+          />
 
           <ProviderPointerSelect
             kind="task"

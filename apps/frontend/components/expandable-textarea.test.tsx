@@ -1,6 +1,12 @@
 import { describe, it, expect, vi } from "vitest";
 import { useState } from "react";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { ExpandableTextarea } from "./expandable-textarea";
 
 function Harness({ onChange }: { onChange?: (value: string) => void }) {
@@ -21,6 +27,62 @@ function Harness({ onChange }: { onChange?: (value: string) => void }) {
 function expand() {
   return fireEvent.click(screen.getByRole("button", { name: "Expand" }));
 }
+
+function FieldHarness({
+  description,
+  error,
+}: {
+  description?: string;
+  error?: string;
+}) {
+  return (
+    <ExpandableTextarea
+      id="notes"
+      label="Notes"
+      value=""
+      onChange={vi.fn()}
+      expandable={false}
+      description={description}
+      error={error}
+    />
+  );
+}
+
+describe("ExpandableTextarea field", () => {
+  it("marks the textarea invalid when it has an error", () => {
+    render(<FieldHarness error="Notes are required" />);
+
+    expect(screen.getByLabelText("Notes")).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
+  });
+
+  it("leaves the textarea valid when it has no error", () => {
+    render(<FieldHarness />);
+
+    expect(screen.getByLabelText("Notes")).toHaveAttribute(
+      "aria-invalid",
+      "false",
+    );
+  });
+
+  it("renders the error after the description", () => {
+    render(
+      <FieldHarness
+        description="What these notes are for."
+        error="Notes are required"
+      />,
+    );
+
+    const description = screen.getByText("What these notes are for.");
+    const error = screen.getByRole("alert");
+    expect(
+      description.compareDocumentPosition(error) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+});
 
 describe("ExpandableTextarea expanded editor", () => {
   it("opens as a modal dialog named after the field", async () => {
@@ -47,6 +109,24 @@ describe("ExpandableTextarea expanded editor", () => {
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
     );
     expect(screen.getByRole("button", { name: "Expand" })).toHaveFocus();
+  });
+
+  it("marks the expanded editor invalid, and describes it with the error", async () => {
+    render(
+      <ExpandableTextarea
+        id="notes"
+        label="Notes"
+        value=""
+        onChange={vi.fn()}
+        error="Notes are required"
+      />,
+    );
+    expand();
+
+    const dialog = await screen.findByRole("dialog");
+    const editor = within(dialog).getByRole("textbox");
+    expect(editor).toHaveAttribute("aria-invalid", "true");
+    expect(editor).toHaveAccessibleDescription("Notes are required");
   });
 
   it("commits the draft when closed", async () => {

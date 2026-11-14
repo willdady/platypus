@@ -47,13 +47,7 @@ import {
   ItemRowsSkeleton,
   LoadingRegion,
 } from "@/components/list-skeletons";
-import {
-  Field,
-  FieldDescription,
-  FieldError,
-  FieldGroup,
-  FieldSet,
-} from "@/components/ui/field";
+import { FieldGroup, FieldSet } from "@/components/ui/field";
 import { SelectItem } from "@/components/ui/select";
 
 const STEPS = ["Workspace", "Provider", "Sandbox"] as const;
@@ -305,30 +299,22 @@ export function WorkspaceWizard({ orgId }: { orgId: string }) {
               ))}
             </FormSelectField>
 
-            <Field data-invalid={!!workspaceErrors.context}>
-              <ExpandableTextarea
-                id="workspace-context"
-                label="Context"
-                placeholder="Optional context for this workspace"
-                value={context}
-                onChange={(e) => {
-                  setWorkspaceErrors((prev) =>
-                    retractFieldError(prev, "context"),
-                  );
-                  setContext(e.target.value);
-                }}
-                aria-invalid={!!workspaceErrors.context}
-                className="!font-mono"
-                maxLength={CONTEXT_MAX_LENGTH}
-              />
-              <FieldDescription>
-                Additional context about this workspace included in all chats in
-                this workspace
-              </FieldDescription>
-              {workspaceErrors.context && (
-                <FieldError>{workspaceErrors.context}</FieldError>
-              )}
-            </Field>
+            <ExpandableTextarea
+              id="workspace-context"
+              label="Context"
+              placeholder="Optional context for this workspace"
+              value={context}
+              onChange={(e) => {
+                setWorkspaceErrors((prev) =>
+                  retractFieldError(prev, "context"),
+                );
+                setContext(e.target.value);
+              }}
+              error={workspaceErrors.context}
+              description="Additional context about this workspace included in all chats in this workspace"
+              className="!font-mono"
+              maxLength={CONTEXT_MAX_LENGTH}
+            />
           </FieldGroup>
         </FieldSet>
         <Button onClick={nextFromWorkspace}>Next</Button>

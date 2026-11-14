@@ -90,6 +90,7 @@ function ContextsPage() {
                   <ExpandableTextarea
                     id="global-context-edit"
                     label=""
+                    aria-label="Global context"
                     placeholder="Enter context about yourself, your preferences, or general instructions..."
                     value={formData.content}
                     onChange={(e) => setField("content", e.target.value)}
