@@ -24,8 +24,7 @@ import {
   FieldSet,
 } from "@/components/ui/field";
 import { type OrgMemberListItem } from "@platypus/schemas";
-import { useBackendUrl } from "@/components/auth-provider";
-import { scopedUrl, writeAt, type Serialized } from "@/lib/api-write";
+import { type Serialized } from "@/lib/api-write";
 import { useEntityForm } from "@/hooks/use-entity-form";
 
 type MemberEditDialogProps = {
@@ -43,18 +42,16 @@ export function MemberEditDialog({
   onOpenChange,
   onSuccess,
 }: MemberEditDialogProps) {
-  const backendUrl = useBackendUrl();
   const { formData, setField, validationErrors, isSubmitting, submit } =
     useEntityForm({
       initialData: { role: member.role },
       guardUnsavedChanges: false,
       entity: "members",
       scope: { orgId },
-      write: (data) =>
-        writeAt(scopedUrl(backendUrl, `members/${member.id}`, { orgId }), {
-          method: "PATCH",
-          data,
-        }),
+      id: member.id,
+      method: "PATCH",
+      // Only the role is editable; the payload is the form's own shape.
+      buildPayload: (data) => data,
       // The role field shows a mapped rejection, so this dialog adds no toast.
       invalidMessage: null,
       conflictField: null,

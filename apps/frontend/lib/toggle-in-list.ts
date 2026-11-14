@@ -3,11 +3,11 @@
  * labelled switch rows in a form all repeat. Returns `list` itself when it is
  * already in the state asked for, so a React setter can skip the re-render.
  */
-export function toggleInList(
-  list: string[],
-  id: string,
+export function toggleInList<T extends string>(
+  list: T[],
+  id: T,
   on: boolean,
-): string[] {
+): T[] {
   if (list.includes(id) === on) return list;
   return on ? [...list, id] : list.filter((item) => item !== id);
 }

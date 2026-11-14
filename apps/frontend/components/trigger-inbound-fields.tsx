@@ -75,6 +75,9 @@ type ShownToken = {
   leaveOnClose: boolean;
 };
 
+/** The token lifetimes the picker offers. */
+type TokenExpiryDays = (typeof BEARER_TOKEN_EXPIRY_DAYS)[number];
+
 /** What regenerating answers: the new token, shown once, and when it expires. */
 type IssuedInboundToken = {
   token: string;
@@ -108,7 +111,7 @@ function TriggerInboundFields({
       })) ?? [],
   );
   const [recordKey, setRecordKey] = useState<string>(saved?.recordKey ?? "");
-  const [tokenExpiryDays, setTokenExpiryDays] = useState<number>(
+  const [tokenExpiryDays, setTokenExpiryDays] = useState<TokenExpiryDays>(
     saved?.tokenExpiryDays ?? DEFAULT_BEARER_TOKEN_EXPIRY_DAYS,
   );
   const [shownToken, setShownToken] = useState<ShownToken | null>(null);
@@ -346,7 +349,12 @@ function TriggerInboundFields({
             label="Token lifetime"
             name="tokenExpiryDays"
             value={String(tokenExpiryDays)}
-            onValueChange={(value) => setTokenExpiryDays(Number(value))}
+            onValueChange={(value) => {
+              const days = BEARER_TOKEN_EXPIRY_DAYS.find(
+                (option) => String(option) === value,
+              );
+              if (days) setTokenExpiryDays(days);
+            }}
             disabled={disabled}
             description={
               trigger
