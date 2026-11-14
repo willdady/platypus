@@ -1,6 +1,5 @@
 "use client";
 
-import { toast } from "sonner";
 import { useState } from "react";
 import { TriangleAlert } from "lucide-react";
 import {
@@ -125,8 +124,9 @@ export function OrgGateAccess({
           allowedWorkspaceIds: gate === "selected" ? [...allowed] : null,
         },
       }),
-    // No field here renders a server error, so a rejection is toasted.
-    onInvalid: (_fieldErrors, message) => toast.error(message),
+    // No field here renders a server error, so a fieldless rejection still
+    // toasts; mapped field errors are already in view, so no extra toast.
+    invalidMessage: null,
     successMessage: copy.savedMessage,
     onSuccess: async (saved) => {
       await mutate(saved, { revalidate: false });

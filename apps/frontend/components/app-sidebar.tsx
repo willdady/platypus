@@ -252,6 +252,8 @@ export function AppSidebar() {
     }),
     // A chat has no field a conflict could key to.
     conflictField: null,
+    // The rename input's error is already in view.
+    invalidMessage: null,
     onSuccess: async () => {
       setRenameChatId(null);
       // The list is read under query params the write's own keys don't cover.

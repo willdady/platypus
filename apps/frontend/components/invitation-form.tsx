@@ -16,7 +16,6 @@ import { SwitchGridSkeleton } from "@/components/form-skeleton";
 import Link from "next/link";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { useEntityForm } from "@/hooks/use-entity-form";
-import { FIX_FORM_ERRORS_MESSAGE } from "@/lib/apply-write-outcome";
 import type { Blueprint } from "@platypus/schemas";
 import { ArrowDown, ArrowUp, X } from "lucide-react";
 import { orgRoutes } from "@/lib/routes";
@@ -64,7 +63,6 @@ export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
       ...(data.blueprintIds.length ? { blueprintIds: data.blueprintIds } : {}),
     }),
     conflictField: "email",
-    invalidMessage: FIX_FORM_ERRORS_MESSAGE,
     successMessage: "Invitation created",
     onSuccess: () => {
       seedFormData(INITIAL_DATA);

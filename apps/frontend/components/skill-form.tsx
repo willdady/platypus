@@ -161,6 +161,7 @@ function SkillForm({
       // from the route.
       ...(workspaceId ? { agentIds: selectedAgentIds } : {}),
     }),
+    successMessage: () => (skillId ? "Skill updated" : "Skill created"),
     onSuccess: () => router.push(returnPath),
     onError: toastGuidanceOrError,
   });
@@ -176,6 +177,7 @@ function SkillForm({
     entity: "skills",
     scope,
     id: skillId,
+    successMessage: "Skill deleted",
     onSuccess: () => router.push(returnPath),
     guidanceOnForbidden: true,
   });

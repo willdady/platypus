@@ -67,6 +67,8 @@ export function ChangePasswordDialog({
         : { outcome: "error", message };
     },
     successMessage: () => `Password updated successfully for ${user.name}`,
+    // The dialog's field errors are already in view.
+    invalidMessage: null,
     onSuccess: () => {
       setFormData(INITIAL_DATA);
       onSuccess();

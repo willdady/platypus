@@ -95,6 +95,8 @@ export function A2aTokens({
   } = useEntityForm<{ name: string; expiryDays: number }, IssuedToken>({
     initialData: { name: "", expiryDays: DEFAULT_BEARER_TOKEN_EXPIRY_DAYS },
     guardUnsavedChanges: false,
+    // The token form's errors are already in view.
+    invalidMessage: null,
     entity: "tokens",
     scope: {},
     write: (data) =>
@@ -123,6 +125,9 @@ export function A2aTokens({
       entity: "tokens",
       scope: {},
       conflictField: null,
+      // Every refusal, including a validation failure, shows in the confirm
+      // dialog instead of the default toast.
+      invalidMessage: null,
       write: () =>
         writeAt<IssuedToken>(
           `${tokensUrl}/${tokenToRegenerate?.id}/regenerate`,

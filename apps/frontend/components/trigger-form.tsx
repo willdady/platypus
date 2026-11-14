@@ -280,6 +280,7 @@ function TriggerForm({
       type: triggerType,
       config: selectedFields?.config,
     }),
+    successMessage: () => (triggerId ? "Trigger updated" : "Trigger created"),
     onSuccess: (saved) => {
       if (selectedFields?.onSaved?.(saved)) return;
       router.push(workspaceRoutes(orgId, workspaceId).root);
@@ -300,6 +301,7 @@ function TriggerForm({
     entity: "triggers",
     scope: { orgId, workspaceId },
     id: triggerId,
+    successMessage: "Trigger deleted",
     onSuccess: () => router.push(workspaceRoutes(orgId, workspaceId).root),
   });
 

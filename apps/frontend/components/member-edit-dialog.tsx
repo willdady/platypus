@@ -1,6 +1,5 @@
 "use client";
 
-import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
@@ -49,9 +48,9 @@ export function MemberEditDialog({
         method: "PATCH",
         data,
       }),
-    // No field here renders a server error, so a rejection is toasted; a
-    // last-admin refusal is a conflict with no field to key it to.
-    onInvalid: (_fieldErrors, message) => toast.error(message),
+    // No field here renders a server error, so a fieldless rejection toasts
+    // the backend's message; there is no inline error for a toast to repeat.
+    invalidMessage: null,
     conflictField: null,
     successMessage: "Member role updated",
     onSuccess,

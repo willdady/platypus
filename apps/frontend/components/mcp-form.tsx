@@ -223,6 +223,7 @@ function McpForm({
           ? data.oauthRequestedScope.trim()
           : undefined,
     }),
+    successMessage: () => (mcpId ? "MCP server updated" : "MCP server created"),
     onError: toastGuidanceOrError,
     failureMessage: "Failed to save MCP server",
   });
@@ -238,6 +239,7 @@ function McpForm({
     entity: "mcps",
     scope,
     id: mcpId,
+    successMessage: "MCP server deleted",
     onSuccess: () => router.push(listPath),
     guidanceOnForbidden: true,
   });
@@ -277,8 +279,10 @@ function McpForm({
    * Saves the MCP (create or update). Returns the saved record's ID on
    * success, or null on failure.
    */
-  const saveMcp = async (): Promise<string | null> => {
-    const saved = await submit({ silent: true });
+  const saveMcp = async ({
+    silent = false,
+  }: { silent?: boolean } = {}): Promise<string | null> => {
+    const saved = await submit({ silent });
     // The form stays open after Authorize's save, so it takes the Client ID
     // the backend stored, not the one it sent: a new URL clears the client
     // while the field still shows it.
@@ -374,15 +378,16 @@ function McpForm({
       // If the MCP hasn't been saved yet, save it first
       let resolvedMcpId = mcpId;
       if (!resolvedMcpId) {
-        resolvedMcpId = (await saveMcp()) ?? undefined;
+        resolvedMcpId = (await saveMcp({ silent: true })) ?? undefined;
         if (!resolvedMcpId) {
           // Validation errors were set by saveMcp
           setIsAuthorizing(false);
           return;
         }
       } else {
-        // Save any pending changes (e.g. newly entered client credentials)
-        const savedId = await saveMcp();
+        // Save any pending changes (e.g. newly entered client credentials).
+        // Quiet: the authorization that follows is the feedback.
+        const savedId = await saveMcp({ silent: true });
         if (!savedId) {
           setIsAuthorizing(false);
           return;

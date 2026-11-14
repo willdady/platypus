@@ -18,6 +18,7 @@ import {
   stubRejectedSave,
   push,
   toastError,
+  toastSuccess,
 } from "@/test/form-test-harness";
 import { triggerCreateSchema, triggerUpdateSchema } from "@platypus/schemas";
 import { expectSentBodyToMatchSchema, selectOption } from "@/test/test-utils";
@@ -102,6 +103,88 @@ describe("TriggerForm — form submission", () => {
 
     expect(screen.getByLabelText(/Include Memories/)).toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+// #1845: every save and delete toasts success, including those that navigate
+// away.
+describe("TriggerForm — success feedback", () => {
+  it("toasts that the Trigger was created", async () => {
+    stubAcceptedSave({ id: "t1" });
+    render(<TriggerForm orgId="org1" workspaceId="ws1" />);
+    expect(await screen.findByText("Agent")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Nightly" },
+    });
+    fireEvent.change(screen.getByLabelText("Instruction"), {
+      target: { value: "Do it" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(toastSuccess).toHaveBeenCalledWith("Trigger created"),
+    );
+    expect(push).toHaveBeenCalledWith("/org1/workspace/ws1");
+  });
+
+  it("toasts that the Trigger was updated", async () => {
+    setDataFor("/triggers/trigger-1", {
+      id: "trigger-1",
+      workspaceId: "ws1",
+      agentId: "agent-1",
+      name: "Nightly",
+      instruction: "Do it",
+      type: "cron",
+      config: {
+        cronExpression: "30 9 * * *",
+        timezone: "UTC",
+        isOneOff: false,
+      },
+      enabled: true,
+      maxRunsToKeep: 10,
+    });
+    stubAcceptedSave({ id: "trigger-1" });
+    render(
+      <TriggerForm orgId="org1" workspaceId="ws1" triggerId="trigger-1" />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Update" }));
+
+    await waitFor(() =>
+      expect(toastSuccess).toHaveBeenCalledWith("Trigger updated"),
+    );
+  });
+
+  it("toasts that the Trigger was deleted", async () => {
+    setDataFor("/triggers/trigger-1", {
+      id: "trigger-1",
+      workspaceId: "ws1",
+      agentId: "agent-1",
+      name: "Nightly",
+      instruction: "Do it",
+      type: "cron",
+      config: {
+        cronExpression: "30 9 * * *",
+        timezone: "UTC",
+        isOneOff: false,
+      },
+      enabled: true,
+      maxRunsToKeep: 10,
+    });
+    stubAcceptedSave({});
+    render(
+      <TriggerForm orgId="org1" workspaceId="ws1" triggerId="trigger-1" />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /Delete/ }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
+
+    await waitFor(() =>
+      expect(toastSuccess).toHaveBeenCalledWith("Trigger deleted"),
+    );
+    expect(push).toHaveBeenCalledWith("/org1/workspace/ws1");
   });
 });
 

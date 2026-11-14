@@ -24,6 +24,8 @@ import {
   stubAcceptedSave,
   stubPendingSave,
   stubRejectedSave,
+  toastError,
+  toastSuccess,
 } from "@/test/form-test-harness";
 import { expectSentBodyToMatchSchema, selectOption } from "@/test/test-utils";
 
@@ -167,6 +169,90 @@ describe("ProviderForm form submission", () => {
       taskModelId: "gpt-4o",
       memoryExtractionModelId: "gpt-4o",
     });
+  });
+});
+
+describe("ProviderForm save feedback", () => {
+  it("toasts that the Provider was created", async () => {
+    stubAcceptedSave(ACCEPTED_SAVE);
+    render(<ProviderForm orgId="org1" />);
+
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Local" },
+    });
+    fireEvent.change(screen.getByLabelText("API Key"), {
+      target: { value: "sk-test" },
+    });
+    const dialog = openAddDialog();
+    type(dialog, "Model ID", "gpt-4o");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Add" }));
+    fireEvent.change(screen.getByLabelText("Task Model ID"), {
+      target: { value: "gpt-4o" },
+    });
+    fireEvent.change(screen.getByLabelText("Memory Extraction Model ID"), {
+      target: { value: "gpt-4o" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(toastSuccess).toHaveBeenCalledWith("Provider created"),
+    );
+  });
+
+  it("toasts that the Provider was updated", async () => {
+    stubAcceptedSave(ACCEPTED_SAVE);
+    renderEditForm([{ id: "gpt-4o", passthroughFileTypes: [] }]);
+
+    save();
+
+    await waitFor(() =>
+      expect(toastSuccess).toHaveBeenCalledWith("Provider updated"),
+    );
+  });
+
+  it("stays quiet when a draft is staged on the setup wizard", async () => {
+    const write = vi.fn().mockResolvedValue({
+      outcome: "success",
+      data: undefined,
+      revalidateKeys: [],
+    });
+    render(
+      <ProviderForm
+        orgId="org1"
+        draft={{ write, onBack: vi.fn(), submitText: "Next" }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+
+    await waitFor(() => expect(write).toHaveBeenCalled());
+    expect(toastSuccess).not.toHaveBeenCalled();
+  });
+
+  it("toasts that the Provider was deleted", async () => {
+    stubAcceptedSave({});
+    renderEditForm([{ id: "gpt-4o", passthroughFileTypes: [] }]);
+
+    fireEvent.click(screen.getByRole("button", { name: /Delete/ }));
+    const dialog = await screen.findByRole("dialog", { name: /Delete/ });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
+
+    await waitFor(() =>
+      expect(toastSuccess).toHaveBeenCalledWith("Provider deleted"),
+    );
+  });
+
+  // A conflict that names the records blocking the save is the one failure
+  // shown inline rather than toasted.
+  it("shows a save conflict in the destructive Alert instead of a toast", async () => {
+    stubRejectedSave("Used by the Support Agent", 409);
+    renderEditForm([{ id: "gpt-4o", passthroughFileTypes: [] }]);
+
+    save();
+
+    expect(await screen.findByText("Used by the Support Agent")).toBeVisible();
+    expect(screen.getByText("Couldn't save the provider")).toBeVisible();
+    expect(toastError).not.toHaveBeenCalled();
   });
 });
 

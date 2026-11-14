@@ -12,6 +12,7 @@ import {
 import {
   applyDeleteOutcome,
   applyWriteOutcome,
+  FIX_FORM_ERRORS_MESSAGE,
   toastGuidanceOrError,
   type ApplyWriteOutcomeOptions,
 } from "@/lib/apply-write-outcome";
@@ -106,10 +107,12 @@ export type UseEntityFormOptions<
   onInvalid?: ApplyWriteOutcomeOptions<TResult>["onInvalid"];
   /**
    * Toast shown when a rejected write maps to a field (default handling only;
-   * ignored when `onInvalid` is given). Single-sources the "please fix the
-   * errors" copy through `applyWriteOutcome`.
+   * ignored when `onInvalid` is given). Defaults to `FIX_FORM_ERRORS_MESSAGE`,
+   * because a page-level form can have its invalid field scrolled off screen.
+   * A dialog or inline action passes `null`: its field errors are already in
+   * view, so a toast would only repeat them.
    */
-  invalidMessage?: string;
+  invalidMessage?: string | null;
   /** Overrides the default `conflict` handling. */
   onConflict?: ApplyWriteOutcomeOptions<TResult>["onConflict"];
   /** Overrides the default toast for every other failure. */
@@ -331,7 +334,10 @@ export function useEntityForm<
           setValidationErrors,
           conflictField,
           onInvalid,
-          invalidMessage,
+          invalidMessage:
+            invalidMessage === null
+              ? undefined
+              : (invalidMessage ?? FIX_FORM_ERRORS_MESSAGE),
           onConflict,
           onError,
           onSuccess: async (savedData) => {

@@ -1,6 +1,5 @@
 "use client";
 
-import { toast } from "sonner";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRightLeft } from "lucide-react";
@@ -79,8 +78,9 @@ export function TransferWorkspaceAction({
         revalidateKeys: [url, scopedUrl(backendUrl, "workspaces", { orgId })],
       });
     },
-    // No field here renders a server error, so a rejection is toasted.
-    onInvalid: (_fieldErrors, message) => toast.error(message),
+    // No field here renders a server error, so a fieldless rejection still
+    // toasts; mapped field errors are already in view, so no extra toast.
+    invalidMessage: null,
     successMessage: "Workspace transferred",
     onSuccess: () => {
       setOpen(false);
