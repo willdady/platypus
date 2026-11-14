@@ -21,6 +21,20 @@ const FIELDS = [
     control: () => screen.getByRole("textbox", { name: "Name" }),
   },
   {
+    kind: "revealable",
+    render: (props: { error?: string; description?: string }) => (
+      <FormTextField
+        label="Name"
+        name="name"
+        value=""
+        onChange={vi.fn()}
+        revealable
+        {...props}
+      />
+    ),
+    control: () => screen.getByLabelText("Name"),
+  },
+  {
     kind: "textarea",
     render: (props: { error?: string; description?: string }) => (
       <FormTextareaField

@@ -76,12 +76,36 @@ describe("McpForm secret reveal", () => {
 
     const input = screen.getByLabelText("Client Secret");
     expect(input).toHaveAttribute("type", "password");
+    expect(input).toHaveAccessibleDescription(
+      "Leave blank if the server supports dynamic client registration.",
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Show client secret" }));
     expect(input).toHaveAttribute("type", "text");
 
     fireEvent.click(screen.getByRole("button", { name: "Hide client secret" }));
     expect(input).toHaveAttribute("type", "password");
+  });
+
+  it("shows a validation error inline, linked to the secret input", async () => {
+    stubRejectedSave([
+      { path: ["bearerToken"], message: "Bearer token is required" },
+    ]);
+    setData({
+      id: "m1",
+      name: "Docs",
+      url: "http://mcp.test",
+      authType: "Bearer",
+      bearerToken: "secret-token",
+    });
+    render(<McpForm orgId="org1" mcpId="m1" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+
+    expect(await screen.findByText("Bearer token is required")).toBeVisible();
+    const input = screen.getByLabelText("Bearer Token");
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(input).toHaveAccessibleDescription("Bearer token is required");
   });
 });
 
