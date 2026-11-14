@@ -84,6 +84,13 @@ function describeSchedule(cronExpression: string, timezone: string): string {
 /** Triggers per page on the Workspace home. */
 const TRIGGERS_PAGE_SIZE = 6;
 
+/** A Trigger that has already fired: spent, so hidden from the live lists. */
+export function hasFired(
+  trigger: Pick<Serialized<Trigger>, "firedAt">,
+): boolean {
+  return Boolean(trigger.firedAt);
+}
+
 export const TRIGGER_TYPE_LABELS: Record<TriggerType, string> = {
   cron: "Cron",
   event: "Event",
@@ -283,7 +290,7 @@ export function TriggerList({
   // the Workspace has any triggers at all.
   const allTriggers = toggle.apply(triggerRows);
   const triggers = sortByName(
-    allTriggers.filter((trigger) => showFired || !trigger.firedAt),
+    allTriggers.filter((trigger) => showFired || !hasFired(trigger)),
   );
 
   const deleteFlow = useDeleteFlow<Serialized<Trigger>>({
@@ -423,7 +430,7 @@ export function TriggerList({
           One-off
         </Badge>
       )}
-      {trigger.firedAt ? (
+      {hasFired(trigger) ? (
         <Badge variant="secondary" className="text-xs">
           <CircleCheck />
           Fired
@@ -495,7 +502,7 @@ export function TriggerList({
       clone={{ onSelect: () => setTriggerToClone(trigger) }}
       toggle={
         // A fired One-off is spent: it cannot be re-armed.
-        trigger.firedAt
+        hasFired(trigger)
           ? undefined
           : {
               enabled: trigger.enabled,

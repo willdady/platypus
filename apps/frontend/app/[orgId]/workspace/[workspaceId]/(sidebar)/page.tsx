@@ -2,7 +2,11 @@
 
 import { AgentCardsSkeleton, AgentsList } from "@/components/agents-list";
 import { SkillCardsSkeleton, SkillsList } from "@/components/skills-list";
-import { TriggerCardsSkeleton, TriggerList } from "@/components/trigger-list";
+import {
+  TriggerCardsSkeleton,
+  TriggerList,
+  hasFired,
+} from "@/components/trigger-list";
 import { BoardsList } from "@/components/boards-list";
 import { CollapsibleSection } from "@/components/collapsible-section";
 import { useSectionOpen } from "@/hooks/use-section-open";
@@ -38,6 +42,7 @@ import { orgRoutes } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 import { useOrganization } from "@/hooks/use-organization";
 import { useWorkspace } from "@/hooks/use-workspace";
+import type { Trigger } from "@platypus/schemas";
 
 /** Where each collapsible section persists its open state. */
 const SECTION_KEYS = {
@@ -186,9 +191,14 @@ type Stat = {
   count: number | undefined;
 };
 
-/** A list read's row count, once it has landed. */
-function listCount(list: { data?: unknown; results: unknown[] }) {
-  return list.data ? list.results.length : undefined;
+/** A list read's row count, once it has landed — of the rows `counted` keeps, when given. */
+function listCount<T>(
+  list: { data?: unknown; results: T[] },
+  counted?: (row: T) => boolean,
+) {
+  return list.data
+    ? (counted ? list.results.filter(counted) : list.results).length
+    : undefined;
 }
 
 /**
@@ -253,7 +263,9 @@ function Workspace() {
   const agents = useScopedList<unknown>("agents", scope);
   const skills = useScopedList<unknown>("skills", scope);
   const boards = useScopedList<unknown>("boards", scope);
-  const triggers = useScopedList<unknown>(
+  // Fired One-offs ride along for the list's "Show fired" toggle, but not for
+  // the count.
+  const triggers = useScopedList<Trigger>(
     triggerListEntity({ includeFired: true }),
     scope,
   );
@@ -323,7 +335,7 @@ function Workspace() {
       description: "Automated agent runs",
       icon: Zap,
       read: triggers,
-      count: listCount(triggers),
+      count: listCount(triggers, (trigger) => !hasFired(trigger)),
     },
   ];
 
