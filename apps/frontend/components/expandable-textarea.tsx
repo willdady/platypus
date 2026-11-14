@@ -4,15 +4,19 @@ import * as React from "react";
 import { Maximize2, Minimize2 } from "lucide-react";
 import { Markdown } from "@/components/markdown";
 import { Textarea } from "./ui/textarea";
-import { FieldError, FieldLabel } from "./ui/field";
+import { Field, FieldDescription, FieldError, FieldLabel } from "./ui/field";
+import { formFieldIds } from "@/components/form-field-ids";
 import { Button } from "./ui/button";
 import { Dialog, DialogClose, DialogContent, DialogTitle } from "./ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { cn } from "@/lib/utils";
 
 type ExpandableTextareaProps = {
+  /** The textarea's id; its label, description and error are wired to it. */
+  id: string;
   label?: string;
   error?: string;
+  description?: React.ReactNode;
   expandable?: boolean;
 } & React.ComponentProps<typeof Textarea>;
 
@@ -21,6 +25,7 @@ function ExpandableTextarea({
   maxLength,
   value,
   error,
+  description,
   label,
   expandable = true,
   onChange,
@@ -33,6 +38,7 @@ function ExpandableTextarea({
   );
   const [draftValue, setDraftValue] = React.useState("");
   const expandButtonRef = React.useRef<HTMLButtonElement>(null);
+  const ids = formFieldIds(id, { description, error });
 
   const commitDraft = () => {
     if (onChange && draftValue !== value) {
@@ -57,14 +63,11 @@ function ExpandableTextarea({
   };
 
   const renderCounter = (text: unknown) =>
-    (maxLength !== undefined || error) && (
-      <div className="flex justify-between mt-1">
-        {error ? <FieldError>{error}</FieldError> : <div />}
-        {maxLength !== undefined && (
-          <p className="text-xs text-muted-foreground">
-            {typeof text === "string" ? text.length : 0}/{maxLength}
-          </p>
-        )}
+    maxLength !== undefined && (
+      <div className="flex justify-end mt-1">
+        <p className="text-xs text-muted-foreground">
+          {typeof text === "string" ? text.length : 0}/{maxLength}
+        </p>
       </div>
     );
 
@@ -86,30 +89,40 @@ function ExpandableTextarea({
 
   return (
     <>
-      <div className="relative w-full group flex flex-col">
-        {label && (
-          <div className="flex justify-between items-center mb-2">
-            <FieldLabel htmlFor={id}>{label}</FieldLabel>
-            {expandButton}
-          </div>
-        )}
-        <div className="w-full relative">
-          <Textarea
-            className={cn("resize-none min-h-16 max-h-[15em]", className)}
-            maxLength={maxLength}
-            value={value}
-            onChange={onChange}
-            id={id}
-            {...props}
-          />
-          {!label && expandButton && (
-            <div className="absolute top-2 right-2 flex gap-1">
+      <Field data-invalid={!!error}>
+        <div className="relative w-full group flex flex-col">
+          {label && (
+            <div className="flex justify-between items-center mb-2">
+              <FieldLabel htmlFor={id}>{label}</FieldLabel>
               {expandButton}
             </div>
           )}
-          {renderCounter(value)}
+          <div className="w-full relative">
+            <Textarea
+              className={cn("resize-none min-h-16 max-h-[15em]", className)}
+              maxLength={maxLength}
+              value={value}
+              onChange={onChange}
+              id={id}
+              {...props}
+              aria-invalid={!!error}
+              aria-describedby={ids.describedBy}
+            />
+            {!label && expandButton && (
+              <div className="absolute top-2 right-2 flex gap-1">
+                {expandButton}
+              </div>
+            )}
+            {renderCounter(value)}
+          </div>
         </div>
-      </div>
+        {description && (
+          <FieldDescription id={ids.descriptionId}>
+            {description}
+          </FieldDescription>
+        )}
+        {error && <FieldError id={ids.errorId}>{error}</FieldError>}
+      </Field>
 
       {expandable && (
         <Dialog open={isExpanded} onOpenChange={handleOpenChange}>
@@ -162,6 +175,8 @@ function ExpandableTextarea({
                   id={id ? `${id}-expanded` : undefined}
                   aria-label={title}
                   {...props}
+                  aria-invalid={!!error}
+                  aria-describedby={ids.describedBy}
                 />
               </TabsContent>
               <TabsContent

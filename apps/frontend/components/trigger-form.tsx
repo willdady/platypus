@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  Field,
-  FieldGroup,
-  FieldSet,
-  FieldDescription,
-} from "@/components/ui/field";
+import { FieldGroup, FieldSet } from "@/components/ui/field";
 import { ExpandableTextarea } from "@/components/expandable-textarea";
 import { FormTextField } from "@/components/form-text-field";
 import { FormSelectField } from "@/components/form-select-field";
@@ -402,22 +397,17 @@ function TriggerForm({
                 ))}
               </FormSelectField>
 
-              <Field data-invalid={!!validationErrors.instruction}>
-                <ExpandableTextarea
-                  id="instruction"
-                  label="Instruction"
-                  placeholder={INSTRUCTION_PLACEHOLDERS[triggerType]}
-                  value={formData.instruction}
-                  onChange={handleChange}
-                  disabled={isSubmitting}
-                  maxLength={TRIGGER_INSTRUCTION_MAX_LENGTH}
-                  aria-invalid={!!validationErrors.instruction}
-                  error={validationErrors.instruction}
-                />
-                <FieldDescription>
-                  {INSTRUCTION_DESCRIPTIONS[triggerType]}
-                </FieldDescription>
-              </Field>
+              <ExpandableTextarea
+                id="instruction"
+                label="Instruction"
+                placeholder={INSTRUCTION_PLACEHOLDERS[triggerType]}
+                value={formData.instruction}
+                onChange={handleChange}
+                disabled={isSubmitting}
+                maxLength={TRIGGER_INSTRUCTION_MAX_LENGTH}
+                error={validationErrors.instruction}
+                description={INSTRUCTION_DESCRIPTIONS[triggerType]}
+              />
             </>
           )}
 
