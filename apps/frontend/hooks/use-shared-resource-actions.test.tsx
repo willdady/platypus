@@ -14,12 +14,14 @@ vi.mock("@/components/auth-provider", () => ({
 import {
   usePromoteShared,
   useSharedDeleteGuard,
+  useSharedDetach,
 } from "./use-shared-resource-actions";
 
 /**
- * The lists exercise the refusals (blockers, attachment counts) through their
- * own UI. These cover the hook paths no list test reaches: a Promote that
- * lands, and a delete guard whose own check fails.
+ * The lists exercise the detach dialog itself, and the refusals (blockers,
+ * attachment counts) through their own UI. These cover the detach flow's own
+ * state — its binding, refusal and close — plus the two hook paths no list
+ * test reaches: a Promote that lands, and a delete guard whose own check fails.
  */
 
 const skill = { id: "s1", name: "Deploy" };
@@ -27,6 +29,76 @@ const scope = { orgId: "org1", workspaceId: "ws1" };
 
 afterEach(() => {
   toastError.mockClear();
+});
+
+describe("useSharedDetach", () => {
+  const renderDetach = () => {
+    const mutate = vi.fn();
+    const view = renderHook(() =>
+      useSharedDetach<typeof skill>({ resourceType: "skill", scope, mutate }),
+    );
+    return { ...view, mutate };
+  };
+
+  it("starts closed, with nothing to detach and no error", () => {
+    const { result } = renderDetach();
+
+    expect(result.current.target).toBeNull();
+    expect(result.current.open).toBe(false);
+    expect(result.current.deleting).toBe(false);
+    expect(result.current.error).toBeNull();
+  });
+
+  it("detaches the open row through the attachment endpoint", async () => {
+    const fetchMock = stubAcceptedSave();
+    const { result } = renderDetach();
+
+    act(() => result.current.request(skill));
+    await act(async () => result.current.confirm());
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://test/organizations/org1/workspaces/ws1/attachments/skill/s1",
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
+
+  it("revalidates, then closes its dialog", async () => {
+    stubAcceptedSave();
+    const { result, mutate } = renderDetach();
+
+    act(() => result.current.request(skill));
+    await act(async () => result.current.confirm());
+
+    expect(mutate).toHaveBeenCalledTimes(1);
+    expect(result.current.open).toBe(false);
+    expect(result.current.target).toBeNull();
+  });
+
+  it("keeps a refusal inline and does not revalidate", async () => {
+    stubRejectedSave("This skill is in use by an agent", 409);
+    const { result, mutate } = renderDetach();
+
+    act(() => result.current.request(skill));
+    await act(async () => result.current.confirm());
+
+    expect(result.current.error).toBe("This skill is in use by an agent");
+    expect(result.current.open).toBe(true);
+    expect(mutate).not.toHaveBeenCalled();
+  });
+
+  it("clears a refusal's reason on close", async () => {
+    stubRejectedSave("This skill is in use by an agent", 409);
+    const { result } = renderDetach();
+
+    act(() => result.current.request(skill));
+    await act(async () => result.current.confirm());
+    expect(result.current.error).not.toBeNull();
+
+    act(() => result.current.close());
+
+    expect(result.current.error).toBeNull();
+    expect(result.current.target).toBeNull();
+  });
 });
 
 describe("usePromoteShared", () => {
