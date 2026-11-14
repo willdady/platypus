@@ -10,6 +10,9 @@ import {
   stubRejectedSave,
   mutate,
   toastError,
+  menuItemLabels,
+  openRowMenu,
+  chooseRowMenuAction,
 } from "@/test/list-test-harness";
 
 vi.mock("@/components/auth-provider", () => authMock);
@@ -38,6 +41,13 @@ function row(over: Record<string, unknown> = {}) {
 
 beforeEach(resetListHarness);
 
+/** Opens the row's ⋮ menu, picks Revoke token, then confirms the dialog. */
+async function revoke() {
+  await chooseRowMenuAction("Ready for AI", "Revoke token");
+  const dialog = await screen.findByRole("dialog");
+  fireEvent.click(within(dialog).getByRole("button", { name: "Revoke token" }));
+}
+
 describe("OrgInboundTriggersList", () => {
   it("lists each Inbound Trigger with its Workspace, Owner and token standing", async () => {
     mockScopedSWR({ "/inbound-triggers": [row()] }, { strict: true });
@@ -65,16 +75,23 @@ describe("OrgInboundTriggersList", () => {
     expect(badge.querySelector("svg")).not.toBeNull();
   });
 
+  it("puts Revoke token in the row's ⋮ menu, destructive", async () => {
+    mockScopedSWR({ "/inbound-triggers": [row()] }, { strict: true });
+    await renderList(<OrgInboundTriggersList orgId="org1" />);
+    await openRowMenu("Ready for AI");
+
+    expect(menuItemLabels()).toEqual(["Revoke token"]);
+    expect(
+      screen.getByRole("menuitem", { name: "Revoke token" }),
+    ).toHaveAttribute("data-variant", "destructive");
+  });
+
   it("revokes the token the row showed through the Org route and revalidates", async () => {
     const fetchMock = stubAcceptedSave({ message: "Token revoked" });
     mockScopedSWR({ "/inbound-triggers": [row()] }, { strict: true });
     await renderList(<OrgInboundTriggersList orgId="org1" />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Revoke token" }));
-    const buttons = await screen.findAllByRole("button", {
-      name: "Revoke token",
-    });
-    fireEvent.click(buttons[buttons.length - 1]);
+    await revoke();
 
     await waitFor(() => expect(mutate).toHaveBeenCalled());
     expect(fetchMock).toHaveBeenCalledWith(
@@ -95,11 +112,7 @@ describe("OrgInboundTriggersList", () => {
     );
     await renderList(<OrgInboundTriggersList orgId="org1" />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Revoke token" }));
-    const buttons = await screen.findAllByRole("button", {
-      name: "Revoke token",
-    });
-    fireEvent.click(buttons[buttons.length - 1]);
+    await revoke();
 
     await waitFor(() => expect(mutate).toHaveBeenCalled());
     expect(fetchMock).toHaveBeenCalledWith(
@@ -113,11 +126,7 @@ describe("OrgInboundTriggersList", () => {
     mockScopedSWR({ "/inbound-triggers": [row()] }, { strict: true });
     await renderList(<OrgInboundTriggersList orgId="org1" />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Revoke token" }));
-    const buttons = await screen.findAllByRole("button", {
-      name: "Revoke token",
-    });
-    fireEvent.click(buttons[buttons.length - 1]);
+    await revoke();
 
     const dialog = await screen.findByRole("dialog");
     expect(
@@ -144,7 +153,7 @@ describe("OrgInboundTriggersList", () => {
     expect(screen.queryByText(/Expires \d/)).not.toBeInTheDocument();
   });
 
-  it("offers no revoke for a Trigger that has no token", async () => {
+  it("offers a disabled Revoke token for a Trigger that has no token", async () => {
     mockScopedSWR(
       {
         "/inbound-triggers": [
@@ -154,8 +163,11 @@ describe("OrgInboundTriggersList", () => {
       { strict: true },
     );
     await renderList(<OrgInboundTriggersList orgId="org1" />);
+    await openRowMenu("Ready for AI");
 
-    expect(screen.getByRole("button", { name: "Revoke token" })).toBeDisabled();
+    expect(
+      screen.getByRole("menuitem", { name: "Revoke token" }),
+    ).toHaveAttribute("data-disabled");
     expect(screen.getByText("No token")).toBeInTheDocument();
   });
 

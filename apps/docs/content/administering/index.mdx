@@ -162,8 +162,9 @@ allows, or because a call's body is over the size limit. The
 [inbound call log](/reference/backend-configuration#the-inbound-call-log) names
 the reason for each one. Both times update at most once a minute.
 
-**Revoke token** stops a token at once and sends its Owner a notification. A
-run the token already started keeps going. It is
+Every Trigger row's **⋮** menu holds **Revoke token**, disabled until the Trigger
+has a token. Choosing it stops the token at once and sends its Owner a
+notification. A run the token already started keeps going. It is
 the only thing you can do to another person's Trigger here. You cannot edit or
 disable one. It revokes only the token the list showed you: if the Owner issued
 a new one since you opened the page, the revoke is refused and the list
@@ -222,9 +223,10 @@ traced to a token, and a call refused because the Workspace isn't allowed, the
 endpoint is **Disabled** or its Owner has left never reaches the token check,
 so none of those move it.
 
-**Revoke endpoint** deletes the endpoint with all of its tokens, so its URL
-stops answering at once. Its Chats are kept. **Revoke token** deletes one token
-and leaves the endpoint's other tokens working. Either also stops the work
+**Revoke endpoint** in an endpoint's **⋮** menu deletes it with all of its tokens,
+so its URL stops answering at once. Its Chats are kept. **Revoke token** in a
+token's own **⋮** menu deletes one token and leaves the endpoint's other tokens
+working. Either also stops the work
 already running: the revoked clients' running Tasks are canceled, their open
 streams end, and no push notification is sent for those Tasks. Either sends the Owner a
 notification. Revoking is the only thing you can do to another person's

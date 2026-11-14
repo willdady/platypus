@@ -1,7 +1,7 @@
 import { TableCell } from "@/components/ui/table";
 import {
   BadgeSkeleton,
-  ButtonSkeleton,
+  IconButtonSkeleton,
   InlineSkeleton,
   TableSkeleton,
 } from "@/components/list-skeletons";
@@ -52,7 +52,7 @@ export function OversightTableSkeleton({
           className: "text-right",
           cell: (
             <div className="flex justify-end">
-              <ButtonSkeleton className="w-24" />
+              <IconButtonSkeleton />
             </div>
           ),
         },

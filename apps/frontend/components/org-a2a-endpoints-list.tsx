@@ -9,7 +9,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { DisabledBadge } from "@/components/disabled-badge";
 import { EmptyCard } from "@/components/empty-card";
@@ -20,6 +19,7 @@ import type { OrgA2aEndpoint } from "@platypus/schemas";
 import { formatDate } from "@/lib/format-date";
 import { TokenCells, TokenTime } from "@/components/bearer-token";
 import { TableList } from "@/components/table-list";
+import { RowActionsMenu } from "@/components/row-actions-menu";
 import {
   OVERSIGHT_TABLE_CLASS,
   OversightTableSkeleton,
@@ -112,13 +112,13 @@ export function OrgA2aEndpointsList({ orgId }: { orgId: string }) {
                   <TableCell>{formatDate(endpoint.createdAt)}</TableCell>
                   <TableCell colSpan={3} />
                   <TableCell className="text-right">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => revoke.request({ endpoint })}
-                    >
-                      Revoke endpoint
-                    </Button>
+                    <RowActionsMenu
+                      name={endpoint.name}
+                      remove={{
+                        onSelect: () => revoke.request({ endpoint }),
+                        label: "Revoke endpoint",
+                      }}
+                    />
                   </TableCell>
                 </TableRow>
                 {endpoint.tokens.map((token) => (
@@ -133,14 +133,13 @@ export function OrgA2aEndpointsList({ orgId }: { orgId: string }) {
                     </TableCell>
                     <TokenCells token={token} />
                     <TableCell className="text-right">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        aria-label={`Revoke token ${token.name}`}
-                        onClick={() => revoke.request({ endpoint, token })}
-                      >
-                        Revoke token
-                      </Button>
+                      <RowActionsMenu
+                        name={token.name}
+                        remove={{
+                          onSelect: () => revoke.request({ endpoint, token }),
+                          label: "Revoke token",
+                        }}
+                      />
                     </TableCell>
                   </TableRow>
                 ))}

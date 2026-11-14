@@ -90,9 +90,9 @@ export function RowActionsMenu({
   toggle?: { enabled: boolean; onSelect: () => void; disabled?: boolean };
   /**
    * Delete, or Detach on a Shared row. `label` renames Delete; Detach keeps
-   * its own label on a Shared row.
+   * its own label on a Shared row. `disabled` greys it out without dropping it.
    */
-  remove?: { onSelect: () => void; label?: string };
+  remove?: { onSelect: () => void; label?: string; disabled?: boolean };
   /** Keep the trigger's click from reaching a clickable ancestor. */
   stopTriggerClick?: boolean;
 }) {
@@ -159,6 +159,7 @@ export function RowActionsMenu({
             )}
             <DropdownMenuItem
               variant={shared ? "default" : "destructive"}
+              disabled={remove.disabled}
               onSelect={remove.onSelect}
             >
               {shared ? (

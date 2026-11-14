@@ -12,6 +12,9 @@ import {
   stubRejectedSave,
   mutate,
   toastSuccess,
+  menuItemLabels,
+  openRowMenu,
+  chooseRowMenuAction,
 } from "@/test/list-test-harness";
 
 // --- Module mocks ------------------------------------------------------------
@@ -45,7 +48,7 @@ function renderUsers(users: ListedUser[]) {
 }
 
 async function confirmDelete() {
-  fireEvent.click(screen.getByRole("button", { name: /Delete/ }));
+  await chooseRowMenuAction("Sam", "Delete");
   fireEvent.change(
     screen.getByPlaceholderText("Type 'Delete user' to confirm"),
     { target: { value: "Delete user" } },
@@ -56,6 +59,30 @@ async function confirmDelete() {
 beforeEach(resetListHarness);
 
 // --- Tests -------------------------------------------------------------------
+
+describe("UsersList row actions", () => {
+  it("puts Change password and Delete in the row's ⋮ menu", async () => {
+    await renderUsers([target]);
+    await openRowMenu("Sam");
+
+    expect(menuItemLabels()).toEqual(["Change password", "Delete"]);
+    expect(screen.getByRole("menuitem", { name: "Delete" })).toHaveAttribute(
+      "data-variant",
+      "destructive",
+    );
+  });
+
+  it("offers no actions on your own row or another Super Admin's", async () => {
+    await renderUsers([
+      { ...target, id: "u1" },
+      { ...target, id: "u3", name: "Ada", role: "admin" },
+    ]);
+
+    expect(
+      screen.queryByRole("button", { name: /Actions for/ }),
+    ).not.toBeInTheDocument();
+  });
+});
 
 describe("UsersList delete", () => {
   it("deletes through the request module, revalidates, and confirms on success", async () => {

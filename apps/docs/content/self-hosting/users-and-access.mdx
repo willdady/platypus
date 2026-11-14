@@ -47,9 +47,9 @@ password passes through an administrator's hands. Only the entrance changed.
   **The link is the credential.** Whoever holds an invitation link can redeem it
   and become the account it names, so send it over a channel you would trust
   with a password. If a link reaches the wrong person there is no revoke button:
-  delete the invitation — the trash icon at the end of its row in **Organization
-  settings → Invitations**, then **Delete** — and send a fresh one. Expiry
-  bounds the window either way.
+  delete the invitation — **Delete** in the **⋮** menu at the end of its row in
+  **Organization settings → Invitations** — and send a fresh one. Expiry bounds
+  the window either way.
 </Callout>
 
 Rate limiting for sign-in and invitation links belongs at the reverse proxy —
@@ -102,11 +102,10 @@ Click **Send invitation**.
 
 ### Copy the link
 
-Every pending invitation in the table has a copy button at the end of its row,
-shown as a copy icon with the tooltip **Copy invitation link**. Click it to
-copy a `/invite/...` link that stays good for as long as the invitation is
-pending and unexpired — the same link works whether the recipient has an account
-yet or not.
+Every pending invitation's row ends in a **⋮** menu holding **Copy invitation
+link**. Choose it to copy a `/invite/...` link that stays good for as long as
+the invitation is pending and unexpired — the same link works whether the
+recipient has an account yet or not.
 
 ### Tell them yourself
 
@@ -201,7 +200,7 @@ Expect almost everyone to read **Unverified**. Only the admin seeded on first bo
 is marked verified; because email verification is off there is no flow that ever
 verifies anybody else. It is not a problem to fix — nothing is gated on it.
 
-Two actions per row: **Change password** and **Delete**.
+A row's **⋮** menu offers **Change password** and **Delete**.
 
 This is the screen to use when somebody has locked themselves out, or when a
 self-registered account should not exist. It is also the recovery path referred to
