@@ -89,9 +89,10 @@ export function KanbanBoardForm({
       description: data.description || null,
       labels: data.labels,
     }),
-    // An edit stays on the settings page, so its toast is the only feedback;
-    // a create lands on the new board's page, which already says it exists.
-    successMessage: isEditing ? "Board updated" : undefined,
+    // An edit stays on the settings page; a create leaves for the new board's
+    // page. Either way the save toasts, because landing somewhere is not
+    // feedback enough.
+    successMessage: () => (isEditing ? "Board updated" : "Board created"),
     onSuccess: async (data) => {
       if (isEditing) {
         // So the board view picks up renamed labels.

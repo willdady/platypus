@@ -125,9 +125,6 @@ export function A2aTokens({
       entity: "tokens",
       scope: {},
       conflictField: null,
-      // Every refusal, including a validation failure, shows in the confirm
-      // dialog instead of the default toast.
-      invalidMessage: null,
       write: () =>
         writeAt<IssuedToken>(
           `${tokensUrl}/${tokenToRegenerate?.id}/regenerate`,

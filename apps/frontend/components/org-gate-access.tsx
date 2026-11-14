@@ -105,7 +105,11 @@ export function OrgGateAccess({
     (gate === "selected" && !sameSet(allowed, savedAllowed));
   useUnsavedChangesGuard(dirty);
 
-  const { isSubmitting: isSaving, submit } = useEntityForm<object, Access>({
+  const {
+    isSubmitting: isSaving,
+    validationErrors,
+    submit,
+  } = useEntityForm<object, Access>({
     initialData: {},
     entity: copy.entity,
     scope,
@@ -124,8 +128,7 @@ export function OrgGateAccess({
           allowedWorkspaceIds: gate === "selected" ? [...allowed] : null,
         },
       }),
-    // No field here renders a server error, so a fieldless rejection still
-    // toasts; mapped field errors are already in view, so no extra toast.
+    // The gate field shows a mapped rejection, so this surface adds no toast.
     invalidMessage: null,
     successMessage: copy.savedMessage,
     onSuccess: async (saved) => {
@@ -179,6 +182,7 @@ export function OrgGateAccess({
         }}
         disabled={isSaving}
         description={copy.selectDescription}
+        error={validationErrors.gate ?? validationErrors.allowedWorkspaceIds}
       >
         {GATE_OPTIONS.map((option) => (
           <SelectItem key={option.value} value={option.value}>

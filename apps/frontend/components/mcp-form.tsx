@@ -277,7 +277,9 @@ function McpForm({
 
   /**
    * Saves the MCP (create or update). Returns the saved record's ID on
-   * success, or null on failure.
+   * success, or null on failure. A normal submit toasts success; the OAuth
+   * authorize path passes `silent` because the authorization that follows is
+   * the feedback.
    */
   const saveMcp = async ({
     silent = false,

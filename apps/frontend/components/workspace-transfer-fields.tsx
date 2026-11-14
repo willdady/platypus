@@ -2,7 +2,12 @@
 
 import Link from "next/link";
 import { type OrgMemberListItem } from "@platypus/schemas";
-import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldLabel,
+} from "@/components/ui/field";
 import {
   Select,
   SelectContent,
@@ -53,6 +58,8 @@ type TransferFieldsProps = {
   keepHistory: boolean;
   onChange: (change: { newOwnerId?: string; keepHistory?: boolean }) => void;
   disabled?: boolean;
+  /** A server rejection mapped to the owner field, shown under the picker. */
+  error?: string;
 };
 
 /** The two choices a transfer takes: the new Owner, and the history. */
@@ -63,10 +70,11 @@ export function TransferFields({
   keepHistory,
   onChange,
   disabled,
+  error,
 }: TransferFieldsProps) {
   return (
     <>
-      <Field>
+      <Field data-invalid={!!error}>
         <FieldLabel htmlFor={`${idPrefix}-newOwnerId`}>New owner</FieldLabel>
         <Select
           value={newOwnerId}
@@ -84,6 +92,7 @@ export function TransferFields({
             ))}
           </SelectContent>
         </Select>
+        {error && <FieldError>{error}</FieldError>}
       </Field>
       <Field orientation="horizontal" className="items-center justify-between">
         <div>

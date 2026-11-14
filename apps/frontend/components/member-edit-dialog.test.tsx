@@ -91,6 +91,17 @@ describe("MemberEditDialog", () => {
     expect(onSuccess).not.toHaveBeenCalled();
     expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
+  // A mapped 400 lands on the role field, in view, with no extra toast.
+  it("shows a field-mapped refusal inline without a toast", async () => {
+    stubRejectedSave([{ path: ["role"], message: "Role is not allowed" }], 400);
+    await changeRoleToAdmin();
+
+    expect(await screen.findByText("Role is not allowed")).toBeInTheDocument();
+    expect(toastError).not.toHaveBeenCalled();
+    expect(onSuccess).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
   // A last-admin refusal is a 409 conflict, not a field error.
   it("toasts a last-admin refusal and stays open", async () => {
     stubRejectedSave("Cannot demote the last organization admin", 409);

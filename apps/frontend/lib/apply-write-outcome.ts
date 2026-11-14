@@ -31,7 +31,9 @@ export type ApplyWriteOutcomeOptions<TResult> = {
   /**
    * Toast shown by the default `invalid` handling when the rejection mapped to
    * at least one field (so the copy is single-sourced). Ignored if `onInvalid`
-   * is given; when omitted, a mapped rejection stays inline-only.
+   * is given; when omitted, a mapped rejection stays inline-only at this seam.
+   * `useEntityForm` supplies `FIX_FORM_ERRORS_MESSAGE` by default, and accepts
+   * `null` to opt out for a dialog or inline action.
    */
   readonly invalidMessage?: string;
   /**

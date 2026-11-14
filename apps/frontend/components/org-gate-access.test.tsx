@@ -8,6 +8,8 @@ import {
   resetListHarness,
   renderList,
   stubAcceptedSave,
+  stubRejectedSave,
+  toastError,
   mutate,
 } from "@/test/list-test-harness";
 import { orgGateAccessUpdateSchema } from "@platypus/schemas";
@@ -115,6 +117,18 @@ describe("OrgInboundTriggerAccess", () => {
       gate: "selected",
       allowedWorkspaceIds: ["ws-1"],
     });
+  });
+
+  it("shows a field-mapped refusal on the gate field, without a toast", async () => {
+    stubRejectedSave([{ path: ["gate"], message: "Gate is not allowed" }], 400);
+    mockScopedSWR({ "/inbound-triggers/access": access() }, { strict: true });
+    await renderList(<OrgInboundTriggerAccess orgId="org1" />);
+
+    await selectOption("All workspaces", "Selected workspaces");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByText("Gate is not allowed")).toBeInTheDocument();
+    expect(toastError).not.toHaveBeenCalled();
   });
 
   it("leaves the switches alone when saving another setting", async () => {
