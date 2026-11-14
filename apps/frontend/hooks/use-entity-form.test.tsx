@@ -555,6 +555,58 @@ describe("useEntityDelete lifecycle", () => {
   });
 });
 
+describe("useEntityDelete dialogProps", () => {
+  beforeEach(() => resetFormHarness());
+
+  it("opens and closes the confirm dialog through the props", () => {
+    const { result } = renderDelete();
+
+    expect(result.current.dialogProps.open).toBe(false);
+
+    act(() => result.current.openDeleteDialog());
+    expect(result.current.dialogProps.open).toBe(true);
+
+    act(() => result.current.dialogProps.onOpenChange(false));
+    expect(result.current.dialogProps.open).toBe(false);
+  });
+
+  it("deletes through the props, reporting the pending state and any refusal", async () => {
+    stubRejectedSave("Still referenced", 409);
+
+    const { result } = renderDelete();
+    act(() => result.current.openDeleteDialog());
+
+    let pending: Promise<void> = Promise.resolve();
+    act(() => {
+      pending = Promise.resolve(result.current.dialogProps.onConfirm());
+    });
+    expect(result.current.dialogProps.loading).toBe(true);
+    await act(async () => {
+      await pending;
+    });
+
+    expect(result.current.dialogProps.loading).toBe(false);
+    expect(result.current.dialogProps.error).toBe("Still referenced");
+    expect(result.current.dialogProps.open).toBe(true);
+  });
+
+  it("closes through the props, clearing the refusal", async () => {
+    stubRejectedSave("Still referenced", 409);
+
+    const { result } = renderDelete();
+    act(() => result.current.openDeleteDialog());
+    await act(async () => {
+      await result.current.handleDelete();
+    });
+    expect(result.current.dialogProps.error).toBe("Still referenced");
+
+    act(() => result.current.dialogProps.onOpenChange(false));
+
+    expect(result.current.dialogProps.open).toBe(false);
+    expect(result.current.dialogProps.error).toBeNull();
+  });
+});
+
 function renderDelete(options: { guidanceOnForbidden?: boolean } = {}) {
   return renderHook(() =>
     useEntityDelete({

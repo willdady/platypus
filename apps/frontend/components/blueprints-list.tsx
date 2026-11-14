@@ -119,14 +119,10 @@ export function BlueprintsList({ orgId }: { orgId: string }) {
       )}
 
       <DeleteConfirmDialog
-        open={deleteFlow.open}
-        onOpenChange={(open) => !open && deleteFlow.close()}
         noun="blueprint"
         name={deleteFlow.target?.name}
         consequence="Workspaces already provisioned from it are unaffected."
-        onConfirm={deleteFlow.confirm}
-        loading={deleteFlow.deleting}
-        error={deleteFlow.error}
+        {...deleteFlow.dialogProps}
       />
     </>
   );

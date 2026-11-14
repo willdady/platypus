@@ -578,13 +578,9 @@ export function AgentsList({
       )}
 
       <DeleteConfirmDialog
-        open={deleteFlow.open}
-        onOpenChange={(open) => !open && deleteFlow.close()}
         noun="agent"
         name={deleteFlow.target?.name}
-        onConfirm={deleteFlow.confirm}
-        loading={deleteFlow.deleting}
-        error={deleteFlow.error}
+        {...deleteFlow.dialogProps}
       />
     </>
   );

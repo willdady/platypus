@@ -284,14 +284,7 @@ function TriggerForm({
 
   const filterListsLoading = useEventFilterListsLoading(trigger, scope);
 
-  const {
-    isDeleteDialogOpen,
-    setIsDeleteDialogOpen,
-    isDeleting,
-    deleteError,
-    openDeleteDialog,
-    handleDelete,
-  } = useEntityDelete({
+  const { dialogProps, openDeleteDialog } = useEntityDelete({
     entity: "triggers",
     scope: { orgId, workspaceId },
     id: triggerId,
@@ -514,13 +507,9 @@ function TriggerForm({
       />
 
       <DeleteConfirmDialog
-        open={isDeleteDialogOpen}
-        onOpenChange={setIsDeleteDialogOpen}
         noun="trigger"
         consequence="This will also delete all run history for this trigger."
-        onConfirm={handleDelete}
-        loading={isDeleting}
-        error={deleteError}
+        {...dialogProps}
       />
     </form>
   );
