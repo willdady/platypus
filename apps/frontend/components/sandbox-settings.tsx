@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
 import { useMutation } from "@/hooks/use-mutation";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { useScopedList } from "@/hooks/use-scoped-list";
 import { toast } from "sonner";
-import { Box, KeyRound, Plus } from "lucide-react";
+import { Box, Plus } from "lucide-react";
 import { type Sandbox } from "@platypus/schemas";
 
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
@@ -20,7 +20,7 @@ import {
   type Serialized,
 } from "@/lib/api-write";
 import { optionalFetcher } from "@/lib/utils";
-import { toggleInList } from "@/lib/toggle-in-list";
+import { retractFieldError, type FormErrors } from "@/lib/form-errors";
 import { Button } from "@/components/ui/button";
 import {
   KeyValueRowsEditor,
@@ -29,7 +29,6 @@ import {
   rowsToRecord,
   type KeyValueRow,
 } from "@/components/key-value-rows-editor";
-import { Switch } from "@/components/ui/switch";
 import {
   Field,
   FieldDescription,
@@ -48,10 +47,20 @@ import {
 } from "@/components/form-footer-buttons";
 import { FormSelectField } from "@/components/form-select-field";
 import { FormTextField } from "@/components/form-text-field";
-import { FormTextareaField } from "@/components/form-textarea-field";
 import { ListError } from "@/components/list-state";
 import { LoadingRegion } from "@/components/list-skeletons";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  FieldSkeleton,
+  FormSkeletonGroup,
+  FormSkeletonSet,
+} from "@/components/form-skeleton";
+import { SandboxDockerFields } from "@/components/sandbox-docker-fields";
+import {
+  DEFAULT_SSH_PORT,
+  SandboxSshFields,
+  type SandboxKeyState,
+} from "@/components/sandbox-ssh-fields";
 
 type SandboxBackend = { backend: string; name: string };
 
@@ -63,9 +72,12 @@ const DOCKER_BACKEND = "docker";
 // config (host/port/user/rootDir) and credentials (privateKey/passphrase) are
 // all admin-only, inherited from the existing requireSandboxAdmin gating.
 const SSH_BACKEND = "ssh";
-const DEFAULT_SSH_PORT = "22";
 
-type SandboxFormData = {
+/**
+ * The form's values. Exported for the per-backend field components, which read
+ * and write the backend-config fields through `setConfigField`.
+ */
+export type SandboxFormData = {
   name: string;
   backend: string;
   // Two-tier env (ADR-0006): admin-managed vs owner-managed.
@@ -102,6 +114,32 @@ const DEFAULT_FORM: SandboxFormData = {
   sshHostKey: "",
   sshPrivateKey: "",
   sshPassphrase: "",
+};
+
+/** The fields that travel in the backend's `config`, which share one error key. */
+type SandboxConfigField =
+  | "networks"
+  | "extraHosts"
+  | "sshHost"
+  | "sshPort"
+  | "sshUser"
+  | "sshRootDir"
+  | "sshHostKey"
+  | "sshPrivateKey"
+  | "sshPassphrase";
+
+/** Sets one backend-config field, retracting its errors as it lands. */
+type SetConfigField = <K extends SandboxConfigField>(
+  field: K,
+  value: SandboxFormData[K],
+) => void;
+
+/** What a per-backend config field component takes. */
+export type SandboxConfigFieldsProps = {
+  formData: SandboxFormData;
+  setConfigField: SetConfigField;
+  errors: FormErrors;
+  disabled: boolean;
 };
 
 // extraHosts travel as `["hostname:target", ...]`. Split on the first colon so
@@ -144,38 +182,39 @@ function isForceRetry(outcome: WriteOutcome<unknown>): boolean {
   );
 }
 
-// One label / control / description field, at the form's sizes.
-function FieldSkeleton({
-  control,
-  description = true,
-}: {
-  control: string;
-  description?: boolean;
-}) {
-  return (
-    <div className="flex flex-col gap-3">
-      <Skeleton className="h-4 w-28" />
-      <Skeleton className={control} />
-      {description && <Skeleton className="h-4 w-3/4" />}
-    </div>
-  );
-}
-
 // Mirrors the configured-sandbox form — the shape most workspaces land on —
 // rather than the Empty card: name, backend, the env editors, then Save.
 function SandboxSettingsSkeleton({ canConfigure }: { canConfigure: boolean }) {
   return (
     <LoadingRegion label="Loading sandbox">
-      <div className="mb-6 flex flex-col gap-7">
-        <FieldSkeleton control="h-9 w-full" description={false} />
-        <FieldSkeleton control="h-9 w-full" />
-        {canConfigure && <FieldSkeleton control="h-8 w-32" />}
-        <FieldSkeleton control="h-8 w-32" />
-      </div>
+      <FormSkeletonSet>
+        <FormSkeletonGroup>
+          <FieldSkeleton />
+          <FieldSkeleton description={1} />
+          {canConfigure && <FieldSkeleton description={1} />}
+          <FieldSkeleton description={1} />
+        </FormSkeletonGroup>
+      </FormSkeletonSet>
       <Skeleton className="h-9 w-16" />
     </LoadingRegion>
   );
 }
+
+/**
+ * A teardown the backend could not finish, offered as a forced retry in its own
+ * dialog: the write it retries, and what a successful retry does.
+ */
+type ForceRetry = {
+  title: string;
+  message: string;
+  confirmLabel: string;
+  /** Toast shown once the forced write succeeds. */
+  successMessage: string;
+  /** The forced write the dialog confirms. */
+  retry: () => Promise<WriteOutcome<unknown>>;
+  /** Runs once the forced write succeeds, before its toast. */
+  onSuccess: () => Promise<void>;
+};
 
 function SandboxSettings({
   orgId,
@@ -213,29 +252,18 @@ function SandboxSettings({
     mutate: mutateBackends,
   } = useScopedList<SandboxBackend>("sandbox-backends", { orgId });
 
-  // Operator network allowlist — admin-only endpoint (ADR-0005).
-  const {
-    data: networksData,
-    results: allowedNetworks,
-    error: networksError,
-    isLoading: networksLoading,
-    mutate: mutateNetworks,
-  } = useScopedList<string>(
-    "sandbox-backends/networks",
-    canConfigure ? { orgId } : null,
-  );
-
   const [isConfiguring, setIsConfiguring] = useState(false);
   // Whether the admin chose to replace a stored SSH key, revealing the textarea
   // in place of the "Key stored" state.
   const [isReplacingKey, setIsReplacingKey] = useState(false);
 
-  const [forceDialog, setForceDialog] = useState<{
-    open: boolean;
-    kind: "save" | "delete" | null;
-    message: string;
-    error: string | null;
-  }>({ open: false, kind: null, message: "", error: null });
+  const [forceDialog, setForceDialog] = useState<
+    (ForceRetry & { error: string | null }) | null
+  >(null);
+
+  function openForceRetry(retry: ForceRetry) {
+    setForceDialog({ ...retry, error: null });
+  }
 
   // A sandbox is the Workspace's singleton, read from the collection path
   // itself with no id, so the hook only writes and the read above seeds.
@@ -246,7 +274,8 @@ function SandboxSettings({
     validationErrors,
     setValidationErrors,
     isSubmitting,
-    clearErrors,
+    setField,
+    toFieldChange,
     submit,
   } = useEntityForm<SandboxFormData>({
     initialData: DEFAULT_FORM,
@@ -254,17 +283,19 @@ function SandboxSettings({
     // A rejected save toasts, as there is no one field to key a conflict to.
     conflictField: null,
     onError: (message, outcome) => {
-      if (isForceRetry(outcome)) {
-        setForceDialog({
-          open: true,
-          kind: "save",
-          message:
-            "Failed to tear down previous sandbox — switch anyway? External resources may leak.",
-          error: null,
-        });
-      } else {
+      if (!isForceRetry(outcome)) {
         toast.error(message);
+        return;
       }
+      openForceRetry({
+        title: "Force switch backend",
+        message:
+          "Failed to tear down previous sandbox — switch anyway? External resources may leak.",
+        confirmLabel: "Switch anyway",
+        successMessage: SAVED_MESSAGE,
+        retry: () => writeSandbox({ force: true }),
+        onSuccess: reseedFromServer,
+      });
     },
     failureMessage: "Failed to save sandbox",
     // A draft stays put: the wizard moves on once `write` accepts it.
@@ -284,11 +315,13 @@ function SandboxSettings({
       onError: (_message, outcome) => {
         if (!isForceRetry(outcome)) return false;
         setIsDeleteDialogOpen(false);
-        setForceDialog({
-          open: true,
-          kind: "delete",
+        openForceRetry({
+          title: "Force delete sandbox",
           message: "Failed to destroy sandbox — delete anyway?",
-          error: null,
+          confirmLabel: "Delete anyway",
+          successMessage: DELETED_MESSAGE,
+          retry: () => deleteSandbox({ force: true }),
+          onSuccess: clearDeleted,
         });
         return true;
       },
@@ -297,6 +330,19 @@ function SandboxSettings({
         await clearDeleted();
       },
     });
+
+  // Backend config fields key their server error to `config`, so they share one
+  // setter that retracts it — and the field's own key, which `networks` uses.
+  // A top-level field's own name is the key, so it goes through `setField`.
+  const setConfigField: SetConfigField = useCallback(
+    <K extends SandboxConfigField>(field: K, value: SandboxFormData[K]) => {
+      setValidationErrors((prev) =>
+        retractFieldError(retractFieldError(prev, "config"), field),
+      );
+      setFormData((prev) => ({ ...prev, [field]: value }));
+    },
+    [setValidationErrors, setFormData],
+  );
 
   function seedFrom(record: Serialized<Sandbox>) {
     setIsReplacingKey(false);
@@ -455,34 +501,23 @@ function SandboxSettings({
     void submit();
   };
 
-  const closeForceDialog = () =>
-    setForceDialog({ open: false, kind: null, message: "", error: null });
+  const closeForceDialog = () => setForceDialog(null);
 
   const { run: handleForceConfirm, pending: isForcing } = useMutation(
     async () => {
-      setForceDialog((prev) => ({ ...prev, error: null }));
+      if (!forceDialog) return;
+      setForceDialog((prev) => prev && { ...prev, error: null });
       try {
-        if (forceDialog.kind === "save") {
-          const outcome = await writeSandbox({ force: true });
-          if (outcome.outcome !== "success") {
-            // A refused force stays in the open dialog with the backend's
-            // message, so it can be read and retried.
-            setForceDialog((prev) => ({ ...prev, error: outcome.message }));
-            return;
-          }
-          closeForceDialog();
-          await reseedFromServer();
-          toast.success(SAVED_MESSAGE);
-        } else if (forceDialog.kind === "delete") {
-          const outcome = await deleteSandbox({ force: true });
-          if (outcome.outcome !== "success") {
-            setForceDialog((prev) => ({ ...prev, error: outcome.message }));
-            return;
-          }
-          closeForceDialog();
-          await clearDeleted();
-          toast.success(DELETED_MESSAGE);
+        const outcome = await forceDialog.retry();
+        if (outcome.outcome !== "success") {
+          // A refused force stays in the open dialog with the backend's
+          // message, so it can be read and retried.
+          setForceDialog((prev) => prev && { ...prev, error: outcome.message });
+          return;
         }
+        closeForceDialog();
+        await forceDialog.onSuccess();
+        toast.success(forceDialog.successMessage);
       } catch (err) {
         // A thrown failure is not a refusal with a backend message, so it keeps
         // the plain toast rather than posing as one inline.
@@ -510,12 +545,17 @@ function SandboxSettings({
   }
 
   const hasSandbox = !!data;
-  const keyStored =
-    data?.backend === SSH_BACKEND && data.hasCredentials && !isReplacingKey;
+  // A stored key stays "stored" until the admin opts to replace it; with none
+  // stored the field starts empty and offers no stored state.
+  const keyState: SandboxKeyState =
+    data?.backend === SSH_BACKEND && data.hasCredentials
+      ? isReplacingKey
+        ? "replacing"
+        : "stored"
+      : "none";
   const showForm = hasSandbox || isConfiguring || !!draft;
   const noBackends = backends.length === 0;
   const backendsFailed = Boolean(backendsError && !backendsData);
-  const networksFailed = Boolean(networksError && !networksData);
 
   if (!showForm) {
     // Without the backends list there is no telling a server with none
@@ -571,10 +611,7 @@ function SandboxSettings({
             name="sandbox-name"
             placeholder="My sandbox"
             value={formData.name}
-            onChange={(value) => {
-              clearErrors("name");
-              setFormData((prev) => ({ ...prev, name: value }));
-            }}
+            onChange={toFieldChange("name")}
             disabled={isSubmitting}
             error={validationErrors.name}
             autoFocus
@@ -584,10 +621,7 @@ function SandboxSettings({
             label="Backend"
             name="backend"
             value={formData.backend}
-            onValueChange={(value) => {
-              clearErrors("backend");
-              setFormData((prev) => ({ ...prev, backend: value }));
-            }}
+            onValueChange={(value) => setField("backend", value)}
             disabled={isSubmitting || !canConfigure}
             placeholder="Select a backend"
             description={
@@ -610,260 +644,24 @@ function SandboxSettings({
 
           {/* Host reachability (ADR-0005) — admin-only, docker backend only. */}
           {canConfigure && isDocker && (
-            <>
-              <Field
-                aria-labelledby="sandbox-networks-label"
-                data-invalid={!!validationErrors.networks}
-              >
-                <FieldTitle id="sandbox-networks-label">Networks</FieldTitle>
-                <FieldDescription>
-                  Docker networks this sandbox may attach to. The list is
-                  declared by the operator in the deployment&apos;s plugin
-                  configuration. Off by default.
-                </FieldDescription>
-                {networksLoading ? (
-                  // A network row, in place of the false "none declared"
-                  // while the allowlist is still loading.
-                  <LoadingRegion
-                    label="Loading networks"
-                    className="flex items-center justify-between gap-2"
-                  >
-                    <Skeleton className="h-4 w-32" />
-                    <Skeleton className="h-[1.15rem] w-8 rounded-full" />
-                  </LoadingRegion>
-                ) : networksFailed ? (
-                  <ListError
-                    error={networksError}
-                    subject="networks"
-                    onRetry={() => void mutateNetworks()}
-                  />
-                ) : allowedNetworks.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    No networks declared by the operator.
-                  </p>
-                ) : (
-                  <div className="flex flex-col gap-2">
-                    {allowedNetworks.map((net) => {
-                      const checked = formData.networks.includes(net);
-                      return (
-                        <div
-                          key={net}
-                          className="flex items-center justify-between gap-2"
-                        >
-                          <span className="font-mono text-sm">{net}</span>
-                          <Switch
-                            checked={checked}
-                            disabled={isSubmitting}
-                            onCheckedChange={(on) =>
-                              setFormData((prev) => ({
-                                ...prev,
-                                networks: toggleInList(prev.networks, net, on),
-                              }))
-                            }
-                            aria-label={`Attach network ${net}`}
-                          />
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-                {validationErrors.networks && (
-                  <FieldError>{validationErrors.networks}</FieldError>
-                )}
-              </Field>
-
-              <Field
-                aria-labelledby="sandbox-extra-hosts-label"
-                data-invalid={!!validationErrors.config}
-              >
-                <FieldTitle id="sandbox-extra-hosts-label">
-                  Extra hosts
-                </FieldTitle>
-                <FieldDescription>
-                  Extra <span className="font-mono">hostname → target</span>{" "}
-                  entries added to the container (target is an IP or{" "}
-                  <span className="font-mono">host-gateway</span>). Lets agent
-                  code reach host services. Off by default.
-                </FieldDescription>
-                <KeyValueRowsEditor
-                  rows={formData.extraHosts}
-                  onChange={(rows) => {
-                    clearErrors("config");
-                    setFormData((prev) => ({ ...prev, extraHosts: rows }));
-                  }}
-                  disabled={isSubmitting}
-                  keyPlaceholder="hostname"
-                  valuePlaceholder="host-gateway"
-                  addLabel="Add host"
-                  mono
-                />
-                {validationErrors.config && (
-                  <FieldError>{validationErrors.config}</FieldError>
-                )}
-              </Field>
-            </>
+            <SandboxDockerFields
+              orgId={orgId}
+              formData={formData}
+              setConfigField={setConfigField}
+              errors={validationErrors}
+              disabled={isSubmitting}
+            />
           )}
 
           {/* SSH connection (ADR-0012) — admin-only, ssh backend only. */}
           {canConfigure && isSsh && (
-            <>
-              <FormTextField
-                label="Host"
-                name="ssh-host"
-                placeholder="ssh.example.com"
-                value={formData.sshHost}
-                onChange={(value) => {
-                  clearErrors("config");
-                  setFormData((prev) => ({ ...prev, sshHost: value }));
-                }}
-                disabled={isSubmitting}
-                inputClassName="font-mono"
-                description="Hostname or IP of the operator-owned host to attach to."
-              />
-
-              <FormTextField
-                label="Port"
-                name="ssh-port"
-                type="number"
-                placeholder={DEFAULT_SSH_PORT}
-                value={formData.sshPort}
-                onChange={(value) =>
-                  setFormData((prev) => ({ ...prev, sshPort: value }))
-                }
-                disabled={isSubmitting}
-                inputClassName="font-mono"
-              />
-
-              <FormTextField
-                label="User"
-                name="ssh-user"
-                placeholder="platypus"
-                value={formData.sshUser}
-                onChange={(value) => {
-                  clearErrors("config");
-                  setFormData((prev) => ({ ...prev, sshUser: value }));
-                }}
-                disabled={isSubmitting}
-                inputClassName="font-mono"
-                description="SSH login user. Public-key auth only."
-              />
-
-              <FormTextField
-                label="Workspace root (optional)"
-                name="ssh-root-dir"
-                placeholder="$HOME/platypus-workspace"
-                value={formData.sshRootDir}
-                onChange={(value) =>
-                  setFormData((prev) => ({ ...prev, sshRootDir: value }))
-                }
-                disabled={isSubmitting}
-                inputClassName="font-mono"
-                description={
-                  <>
-                    Absolute or $HOME-relative directory the sandbox works in.
-                    Defaults to{" "}
-                    <span className="font-mono">$HOME/platypus-workspace</span>,
-                    created on first connect.
-                  </>
-                }
-              />
-
-              <FormTextareaField
-                label="Host key (optional)"
-                name="ssh-host-key"
-                placeholder="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5..."
-                value={formData.sshHostKey}
-                onChange={(value) =>
-                  setFormData((prev) => ({ ...prev, sshHostKey: value }))
-                }
-                disabled={isSubmitting}
-                rows={3}
-                autoComplete="off"
-                spellCheck={false}
-                textareaClassName="font-mono"
-                description={
-                  <>
-                    Pin the host&apos;s public key to reject a
-                    man-in-the-middle. Obtain it with{" "}
-                    <span className="font-mono">
-                      ssh-keyscan -t ed25519 {formData.sshHost || "<host>"}
-                    </span>
-                    . Leave blank to connect unverified (a warning is logged).
-                  </>
-                }
-              />
-
-              {/* Once stored there is no control to label, only the status row,
-                  so the caption drops to plain text. */}
-              {keyStored ? (
-                <Field>
-                  <FieldTitle>Private key</FieldTitle>
-                  <div className="flex items-center justify-between gap-2 rounded-md border border-input px-3 py-2 text-sm">
-                    <span className="flex items-center gap-2">
-                      <KeyRound className="size-4 text-muted-foreground" />
-                      Key stored
-                    </span>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setIsReplacingKey(true)}
-                      disabled={isSubmitting}
-                    >
-                      Replace key
-                    </Button>
-                  </div>
-                  <FieldDescription>
-                    PEM or OpenSSH private key. Kept server-side, never sent to
-                    the model.
-                    {isReplacingKey && " Leave blank to keep the stored key."}
-                  </FieldDescription>
-                </Field>
-              ) : (
-                <FormTextareaField
-                  label="Private key"
-                  name="ssh-private-key"
-                  placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"
-                  value={formData.sshPrivateKey}
-                  onChange={(value) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      sshPrivateKey: value,
-                      // The passphrase only travels with a key, so clearing
-                      // the key clears it rather than dropping it on save.
-                      sshPassphrase: value.trim() ? prev.sshPassphrase : "",
-                    }))
-                  }
-                  disabled={isSubmitting}
-                  rows={5}
-                  autoComplete="off"
-                  spellCheck={false}
-                  textareaClassName="font-mono"
-                  description={
-                    <>
-                      PEM or OpenSSH private key. Kept server-side, never sent
-                      to the model.
-                      {isReplacingKey && " Leave blank to keep the stored key."}
-                    </>
-                  }
-                />
-              )}
-
-              <FormTextField
-                label="Key passphrase (optional)"
-                name="ssh-passphrase"
-                type="password"
-                placeholder="Passphrase for the private key"
-                value={formData.sshPassphrase}
-                onChange={(value) =>
-                  setFormData((prev) => ({ ...prev, sshPassphrase: value }))
-                }
-                disabled={isSubmitting || !formData.sshPrivateKey.trim()}
-                autoComplete="off"
-                inputClassName="font-mono"
-                description="Enter a private key first. A new key replaces the stored passphrase too, so re-enter it here if the key is encrypted."
-              />
-            </>
+            <SandboxSshFields
+              formData={formData}
+              setConfigField={setConfigField}
+              disabled={isSubmitting}
+              keyState={keyState}
+              onReplaceKey={() => setIsReplacingKey(true)}
+            />
           )}
 
           {/* Admin-managed env (ADR-0006). */}
@@ -882,10 +680,7 @@ function SandboxSettings({
               </FieldDescription>
               <KeyValueRowsEditor
                 rows={formData.adminEnv}
-                onChange={(rows) => {
-                  clearErrors("adminEnv");
-                  setFormData((prev) => ({ ...prev, adminEnv: rows }));
-                }}
+                onChange={(rows) => setField("adminEnv", rows)}
                 disabled={isSubmitting}
                 keyPlaceholder="KEY"
                 valuePlaceholder="value"
@@ -933,10 +728,7 @@ function SandboxSettings({
             )}
             <KeyValueRowsEditor
               rows={formData.userEnv}
-              onChange={(rows) => {
-                clearErrors("userEnv");
-                setFormData((prev) => ({ ...prev, userEnv: rows }));
-              }}
+              onChange={(rows) => setField("userEnv", rows)}
               disabled={isSubmitting}
               keyPlaceholder="KEY"
               valuePlaceholder="value"
@@ -999,23 +791,17 @@ function SandboxSettings({
       <DeleteConfirmDialog noun="sandbox" {...dialogProps} />
 
       <ConfirmDialog
-        open={forceDialog.open}
+        open={!!forceDialog}
         onOpenChange={(open) => {
           if (!open && !isForcing) closeForceDialog();
         }}
-        title={
-          forceDialog.kind === "delete"
-            ? "Force delete sandbox"
-            : "Force switch backend"
-        }
-        description={forceDialog.message}
-        confirmLabel={
-          forceDialog.kind === "delete" ? "Delete anyway" : "Switch anyway"
-        }
+        title={forceDialog?.title ?? ""}
+        description={forceDialog?.message ?? ""}
+        confirmLabel={forceDialog?.confirmLabel}
         confirmVariant="destructive"
         onConfirm={handleForceConfirm}
         loading={isForcing}
-        error={forceDialog.error}
+        error={forceDialog?.error ?? null}
       />
     </form>
   );
