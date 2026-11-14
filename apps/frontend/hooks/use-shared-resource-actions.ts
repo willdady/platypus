@@ -11,7 +11,7 @@ import {
 } from "@/lib/api-write";
 import { fetcher, joinUrl } from "@/lib/utils";
 import { toast } from "sonner";
-import { useDetachDialog } from "@/hooks/use-detach-dialog";
+import { useDeleteFlow, type DeleteFlow } from "@/hooks/use-delete-flow";
 
 /** The minimum a row needs to appear in one of the Shared-resource dialogs. */
 export type NamedResource = {
@@ -19,21 +19,11 @@ export type NamedResource = {
   readonly name: string;
 };
 
-export type SharedDetach<T> = {
-  /** The org-scoped row the detach dialog is open for, or null when closed. */
-  readonly selected: T | null;
-  readonly error: string | null;
-  readonly detaching: boolean;
-  readonly open: (item: T) => void;
-  readonly close: () => void;
-  /** Detach the open row; revalidates and closes on success. */
-  readonly detach: () => Promise<void>;
-};
-
 /**
- * The detach half of the Shared-resource actions (#880): `useDetachDialog`'s
- * state plus the shared Attachment delete — the in-flight flag, revalidate and
- * close on success, and the backend's reason inline on refusal.
+ * The detach half of the Shared-resource actions (#880): the delete flow's
+ * confirm dialog, pending flag and inline refusal, with the shared Attachment
+ * write bound in. Built on `useDeleteFlow` so a detach refusal is shown by the
+ * same code as every other list's delete (#1943).
  */
 export function useSharedDetach<T extends NamedResource>({
   resourceType,
@@ -43,43 +33,27 @@ export function useSharedDetach<T extends NamedResource>({
   readonly resourceType: AttachmentResourceType;
   readonly scope: Scope;
   readonly mutate: () => void | Promise<unknown>;
-}): SharedDetach<T> {
-  const backendUrl = useBackendUrl();
-  const dialog = useDetachDialog<T>();
-  const [detaching, setDetaching] = useState(false);
-
-  const detach = async () => {
-    const target = dialog.selected;
-    const { orgId, workspaceId } = scope;
-    if (!target || !backendUrl || !orgId || !workspaceId) return;
-    setDetaching(true);
-    dialog.setError(null);
-    try {
-      const outcome = await detachResource(
+}): DeleteFlow<T> {
+  return useDeleteFlow<T>({
+    delete: (target, backendUrl) => {
+      const { orgId, workspaceId } = scope;
+      // An Attachment lives on the Workspace route (ADR-0007), and the
+      // Detach row only exists inside a Workspace — but these lists serve
+      // both surfaces, so the workspace scope can't be required in the type.
+      // Without one there is no attachment address to write to, which the
+      // backend would answer as a 404; say the same without the round trip.
+      if (!orgId || !workspaceId) {
+        return Promise.resolve({ outcome: "notFound", message: "Not found" });
+      }
+      return detachResource(
         backendUrl,
         { orgId, workspaceId },
         resourceType,
         target.id,
       );
-      if (outcome.outcome === "success") {
-        dialog.close();
-        await mutate();
-      } else {
-        dialog.setError(outcome.message);
-      }
-    } finally {
-      setDetaching(false);
-    }
-  };
-
-  return {
-    selected: dialog.selected,
-    error: dialog.error,
-    detaching,
-    open: dialog.open,
-    close: dialog.close,
-    detach,
-  };
+    },
+    mutate,
+  });
 }
 
 /** One workspace-private reference that a refused Promote asks the user to fix. */

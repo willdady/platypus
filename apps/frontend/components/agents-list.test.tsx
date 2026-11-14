@@ -108,6 +108,22 @@ describe("AgentsList detach", () => {
     );
   });
 
+  it("keeps Detach disabled while the detach is in flight", async () => {
+    const { fetchMock, resolve } = stubPendingSave();
+
+    await renderAgents([orgAgent], "Detach");
+    fireEvent.click(screen.getByRole("button", { name: /Detach/ }));
+
+    const detachButton = screen.getByRole("button", { name: /Detach/ });
+    await waitFor(() => expect(detachButton).toBeDisabled());
+    fireEvent.click(detachButton);
+    expect(fetchMock).toHaveBeenCalledOnce();
+
+    resolve();
+    await waitFor(() => expect(mutate).toHaveBeenCalled());
+    expect(screen.queryByText("Detach shared agent")).not.toBeInTheDocument();
+  });
+
   it("revalidates and closes the dialog when detach succeeds", async () => {
     stubAcceptedSave();
 

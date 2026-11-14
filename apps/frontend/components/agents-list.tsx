@@ -361,7 +361,7 @@ export function AgentsList({
           }
           remove={
             canManageShared
-              ? { onSelect: () => orgAgentDetach.open(agent) }
+              ? { onSelect: () => orgAgentDetach.request(agent) }
               : undefined
           }
         />

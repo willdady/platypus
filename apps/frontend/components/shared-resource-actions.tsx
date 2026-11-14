@@ -19,8 +19,8 @@ import type {
   NamedResource,
   PromoteBlocker,
   PromoteFlow,
-  SharedDetach,
 } from "@/hooks/use-shared-resource-actions";
+import type { DeleteFlow } from "@/hooks/use-delete-flow";
 import type { AttachmentResourceType } from "@platypus/schemas";
 
 /**
@@ -84,16 +84,16 @@ export function DetachSharedDialog<T extends NamedResource>({
   canDetach,
   orgSettingsHref,
 }: {
-  detach: SharedDetach<T>;
+  detach: DeleteFlow<T>;
   /** The resource named in the title and mid-sentence: "agent" / "skill". */
   noun: string;
   canDetach: boolean;
   /** Where the Shared resource is actually edited. */
-  orgSettingsHref: (selected: T) => string;
+  orgSettingsHref: (target: T) => string;
 }) {
   return (
     <Dialog
-      open={!!detach.selected}
+      open={detach.open}
       onOpenChange={(open) => {
         if (!open) detach.close();
       }}
@@ -102,9 +102,9 @@ export function DetachSharedDialog<T extends NamedResource>({
         <DialogHeader>
           <DialogTitle>Detach shared {noun}</DialogTitle>
           <DialogDescription>
-            {detach.selected && (
+            {detach.target && (
               <>
-                Detach <strong>{detach.selected.name}</strong> from this
+                Detach <strong>{detach.target.name}</strong> from this
                 workspace? The shared {noun} itself is not deleted; it just
                 stops appearing here.
               </>
@@ -120,21 +120,21 @@ export function DetachSharedDialog<T extends NamedResource>({
           <Button variant="outline" onClick={detach.close}>
             Close
           </Button>
-          {canDetach && detach.selected && (
+          {canDetach && detach.target && (
             <Button
               variant="destructive"
-              disabled={detach.detaching}
-              onClick={detach.detach}
+              disabled={detach.deleting}
+              onClick={detach.confirm}
             >
               <Unlink />
               Detach
             </Button>
           )}
-          {canDetach && detach.selected && (
+          {canDetach && detach.target && (
             <Button asChild>
               {/* The Org settings copy, even from a workspace: that is where the
                 Shared resource is edited. */}
-              <Link href={orgSettingsHref(detach.selected)}>
+              <Link href={orgSettingsHref(detach.target)}>
                 <ExternalLink />
                 Org settings
               </Link>

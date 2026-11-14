@@ -275,7 +275,7 @@ export function ResourceList({
                 name={resource.name}
                 shared
                 edit={{ href: `${orgSettingsRoot}/${resource.id}` }}
-                remove={{ onSelect: () => detach.open(resource) }}
+                remove={{ onSelect: () => detach.request(resource) }}
               />
             ) : null
           ) : (
