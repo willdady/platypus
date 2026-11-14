@@ -11,6 +11,7 @@ import { selectOption } from "@/test/test-utils";
 function renderDialog(
   initial: Partial<ChatSettings> = {},
   reasoning?: ReasoningMap,
+  openAdvanced = true,
 ) {
   const onChange = vi.fn();
   // A stateful parent: the dialog is a controlled component, so its derived
@@ -46,7 +47,7 @@ function renderDialog(
   render(<Harness />);
   // The step ceiling sits beside the sampling settings under the collapsed
   // "Advanced settings" disclosure.
-  fireEvent.click(screen.getByText("Advanced settings"));
+  if (openAdvanced) fireEvent.click(screen.getByText("Advanced settings"));
   return onChange;
 }
 
@@ -71,6 +72,20 @@ describe("ChatSettingsDialog", () => {
       "max-h-[90vh]",
       "overflow-y-auto",
     );
+  });
+
+  // #1941: the Advanced section is the entity forms' FormAdvancedSection, so
+  // it still starts closed and toggles on its heading.
+  it("opens and closes the Advanced section", () => {
+    renderDialog({}, undefined, false);
+    expect(screen.queryByLabelText("Temperature")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Advanced settings"));
+    expect(screen.getByLabelText("Temperature")).toBeInTheDocument();
+    expect(screen.getByLabelText("Max steps")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Advanced settings"));
+    expect(screen.queryByLabelText("Temperature")).not.toBeInTheDocument();
   });
 
   // Issue #539: the per-chat step ceiling lives beside the sampling settings,

@@ -170,8 +170,6 @@ export type UseEntityFormResult<
   toFieldChange: (id: string) => (value: string) => void;
   /** Sets an integer field, `undefined` when cleared. */
   setNumberField: (id: string, value: string) => void;
-  /** Sets a float field, `undefined` when cleared. */
-  setFloatField: (id: string, value: string) => void;
   /** Retracts one or more fields' errors. */
   clearErrors: (...ids: string[]) => void;
   /**
@@ -300,13 +298,6 @@ export function useEntityForm<
     [setField],
   );
 
-  const setFloatField = useCallback(
-    (fieldId: string, value: string) => {
-      setField(fieldId, value === "" ? undefined : parseFloat(value));
-    },
-    [setField],
-  );
-
   const clearErrors = useCallback((...ids: string[]) => {
     setValidationErrors((prev) =>
       ids.reduce((errors, fieldId) => retractFieldError(errors, fieldId), prev),
@@ -404,7 +395,6 @@ export function useEntityForm<
     handleChange,
     toFieldChange,
     setNumberField,
-    setFloatField,
     clearErrors,
     submit,
   };
