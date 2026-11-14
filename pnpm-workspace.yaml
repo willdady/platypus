@@ -1,3 +1,19 @@
 packages:
   - apps/*
   - packages/*
+# Why: Nextra's build breaks on zod 4.4.x. Drop when Nextra supports it.
+overrides:
+  nextra>zod: 4.3.6
+  nextra-theme-docs>zod: 4.3.6
+# See patches/README.md for why and when to drop.
+patchedDependencies:
+  drizzle-kit@0.31.11: patches/drizzle-kit@0.31.11.patch
+# No dependency needs its install script: esbuild/workerd ship prebuilt
+# binaries as optional deps; ssh2/cpu-features compile optional native
+# speedups with a JS fallback; protobufjs's postinstall is a version check.
+allowBuilds:
+  cpu-features: false
+  esbuild: false
+  protobufjs: false
+  ssh2: false
+  workerd: false

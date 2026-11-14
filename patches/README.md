@@ -1,7 +1,7 @@
 # Patches
 
 Dependency patches applied by `pnpm install` (registered under
-`pnpm.patchedDependencies` in the root `package.json`). Each entry says why the
+`patchedDependencies` in `pnpm-workspace.yaml`). Each entry says why the
 patch exists and when to drop it.
 
 ## `drizzle-kit@0.31.11.patch`
