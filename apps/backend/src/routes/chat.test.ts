@@ -393,6 +393,114 @@ describe("Chat Routes", () => {
       expect(one).not.toHaveProperty("triggerRunId");
       expect(one).not.toHaveProperty("tags");
     });
+
+    // ADR-0046: the Chat is the run's record, so only reading and cancelling
+    // are open to a User. Every other Chat mutation refuses.
+    describe("read-only", () => {
+      const runChat = () =>
+        seedTenant({
+          chat: [
+            {
+              id: "run-1",
+              workspaceId,
+              title: "Digest · 2026-11-07 09:00 UTC",
+              triggerRunId: "run-1",
+              activeLeafId: "a1",
+            },
+          ],
+          chat_message: [
+            stored("u1", null, "user", 1, { chatId: "run-1" }),
+            stored("a1", "u1", "assistant", 2, { chatId: "run-1" }),
+          ],
+        });
+
+      const ask = (path: string, method: string, body?: unknown) =>
+        app.request(`${baseUrl}${path}`, {
+          method,
+          ...(body === undefined
+            ? {}
+            : {
+                body: JSON.stringify(body),
+                headers: { "Content-Type": "application/json" },
+              }),
+        });
+
+      const turn = (trigger: "submit" | "regenerate-message") =>
+        trigger === "submit"
+          ? {
+              trigger,
+              providerId: "p1",
+              modelId: "m1",
+              message: {
+                id: "u2",
+                role: "user",
+                parts: [{ type: "text", text: "hi" }],
+              },
+              parentId: "a1",
+            }
+          : {
+              trigger,
+              providerId: "p1",
+              modelId: "m1",
+              messageId: "a1",
+            };
+
+      it.each([
+        ["a turn", () => ask("/run-1/turns", "POST", turn("submit"))],
+        [
+          "a regenerate",
+          () => ask("/run-1/turns", "POST", turn("regenerate-message")),
+        ],
+        [
+          "an approval answer",
+          () =>
+            ask("/run-1/turns", "POST", {
+              trigger: "respond-to-approvals",
+              providerId: "p1",
+              modelId: "m1",
+              messageId: "a1",
+              responses: [{ approvalId: "call-1", approved: true }],
+            }),
+        ],
+        ["a compaction", () => ask("/run-1/compact", "POST", {})],
+        ["a message delete", () => ask("/run-1/messages/u1", "DELETE")],
+        [
+          "an active-leaf switch",
+          () => ask("/run-1/active-leaf", "PUT", { messageId: "u1" }),
+        ],
+        ["a rename", () => ask("/run-1", "PATCH", { title: "Mine now" })],
+        ["a Chat delete", () => ask("/run-1", "DELETE")],
+      ])("refuses %s with 409 and changes nothing", async (_, request) => {
+        mockSession();
+        const fake = runChat();
+
+        const res = await request();
+
+        expect(res.status).toBe(409);
+        expect(await res.json()).toEqual({
+          error: "A Trigger run's Chat is read-only",
+        });
+        expect(fake.tables.chat).toHaveLength(1);
+        expect(fake.tables.chat[0].title).toBe("Digest · 2026-11-07 09:00 UTC");
+        expect(fake.tables.chat[0].activeLeafId).toBe("a1");
+        expect(fake.tables.chat_message.map((row) => row.id)).toEqual([
+          "u1",
+          "a1",
+        ]);
+        expect(fake.tables.chat_message[0].deletedAt).toBeNull();
+        expect(mockPrepareChatTurn).not.toHaveBeenCalled();
+      });
+
+      it("still cancels, because the Chat id is the run id", async () => {
+        mockSession();
+        runChat();
+
+        const res = await ask("/run-1/cancel", "POST");
+
+        expect(res.status).toBe(200);
+        expect(mockCancelRun).toHaveBeenCalledWith("run-1");
+      });
+    });
   });
 
   describe("GET /:chatId", () => {
@@ -1026,6 +1134,9 @@ describe("Chat Routes", () => {
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
       ]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { id: "chat-1", triggerRunId: null },
+      ]); // the Chat is not a Trigger run's
 
       const mockChat = { id: "chat-1", title: "Updated Title" };
       mockDb.returning.mockResolvedValueOnce([mockChat]);
@@ -1048,6 +1159,9 @@ describe("Chat Routes", () => {
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
       ]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { id: "chat-1", triggerRunId: null },
+      ]); // the Chat is not a Trigger run's
       mockDb.returning.mockResolvedValueOnce([{ id: "chat-1", title: "Hi" }]);
 
       const res = await app.request(`${baseUrl}/chat-1`, {
@@ -1070,6 +1184,9 @@ describe("Chat Routes", () => {
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
       ]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { id: "chat-1", triggerRunId: null },
+      ]); // the Chat is not a Trigger run's
       mockDb.returning.mockResolvedValueOnce([
         { id: "chat-1", title: "A new title" },
       ]);

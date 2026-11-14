@@ -23,6 +23,7 @@ import {
   updateOwned,
   ownedWhere,
 } from "../services/workspace-resource.ts";
+import { requireWritableChat } from "../services/chat-write-guard.ts";
 import type { Variables } from "../server.ts";
 import { rewriteStorageUrls, deleteStoredPrefix } from "../storage/utils.ts";
 import { chatStorageKeyPrefix } from "../storage/keys.ts";
@@ -243,7 +244,7 @@ chat.delete(
     const chatId = c.req.param("chatId");
     const { orgId, workspaceId } = workspaceScopeOf(c);
 
-    await requireOwned(db, "chat", { id: chatId, workspaceId });
+    await requireWritableChat(db, { id: chatId, workspaceId });
 
     await db
       .delete(chatTable)
@@ -270,7 +271,7 @@ chat.delete(
     const { workspaceId } = workspaceScopeOf(c);
 
     refuseWhileRunning(
-      await requireOwned(db, "chat", { id: chatId, workspaceId }),
+      await requireWritableChat(db, { id: chatId, workspaceId }),
     );
 
     await deleteMessage(chatId, messageId);
@@ -297,7 +298,7 @@ chat.post(
     const { orgId, workspaceId } = workspaceScopeOf(c);
     const { instruction } = c.req.valid("json");
 
-    const row = await requireOwned(db, "chat", { id: chatId, workspaceId });
+    const row = await requireWritableChat(db, { id: chatId, workspaceId });
     // A summary of a path a run is still extending would miss its reply.
     refuseWhileRunning(row);
 
@@ -339,7 +340,7 @@ chat.put(
     const { messageId } = c.req.valid("json");
 
     refuseWhileRunning(
-      await requireOwned(db, "chat", { id: chatId, workspaceId }),
+      await requireWritableChat(db, { id: chatId, workspaceId }),
     );
 
     const { messages, tree } = await switchActivePath(chatId, messageId);
@@ -362,6 +363,8 @@ chat.patch(
     const chatId = c.req.param("chatId");
     const { workspaceId } = workspaceScopeOf(c);
     const { title, isPinned } = c.req.valid("json");
+
+    await requireWritableChat(db, { id: chatId, workspaceId });
 
     const result = await updateOwned(
       db,

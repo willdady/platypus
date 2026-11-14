@@ -44,3 +44,9 @@ the partial Chat it wrote, which is often the one worth reading.
   loader and memory extraction would each need a second reader for it.
 - **Show the Chat in the sidebar** as A2A Chats are, with a badge. Rejected for
   now: a Cron Trigger firing every few minutes would bury the User's own Chats.
+
+## Amended by ADR-0046
+
+ADR-0046 makes this ADR's record enforced: a Chat bound to a Trigger run is
+read-only, and every mutation but cancelling its run refuses it. Nothing above
+is narrowed or withdrawn.
