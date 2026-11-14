@@ -39,12 +39,6 @@ import {
   AGENT_INPUT_PLACEHOLDER_MAX_LENGTH,
   AGENT_MAX_STEPS_MIN,
   DEFAULT_AGENT_MAX_STEPS,
-  PENALTY_MAX,
-  PENALTY_MIN,
-  TEMPERATURE_MIN,
-  TOP_K_MIN,
-  TOP_P_MAX,
-  TOP_P_MIN,
   type ToolSet,
   type Agent,
   type AgentResponse,
@@ -67,6 +61,7 @@ import {
   ReasoningControls,
   type ReasoningValue,
 } from "@/components/reasoning-controls";
+import { SamplingControls } from "@/components/sampling-controls";
 import {
   decodeSelectionReference,
   encodeProviderSelection,
@@ -290,7 +285,6 @@ function AgentForm({
     handleChange,
     toFieldChange,
     setNumberField,
-    setFloatField,
     clearErrors,
     submit,
   } = useEntityForm<AgentFormData, Agent, AgentResponse>({
@@ -549,6 +543,13 @@ function AgentForm({
     }));
   };
 
+  // Both patch-reporting controls (Reasoning and Sampling) write their patch
+  // into the form and retract the error keyed to each field it touched.
+  const applyControlPatch = (patch: Partial<AgentFormData>) => {
+    setFormData((prev) => ({ ...prev, ...patch }));
+    clearErrors(...Object.keys(patch));
+  };
+
   // The selected model's Reasoning map, where its Provider honours one: the
   // Reasoning section shows only the controls it declares (ADR-0040).
   const selectedModel = resolveModel({
@@ -754,10 +755,7 @@ function AgentForm({
               <ReasoningControls
                 map={reasoningMap}
                 value={formData}
-                onChange={(patch) => {
-                  setFormData((prev) => ({ ...prev, ...patch }));
-                  clearErrors(...Object.keys(patch));
-                }}
+                onChange={applyControlPatch}
                 disabled={isSubmitting || readOnly}
                 budgetError={validationErrors.thinkingBudget}
               />
@@ -922,74 +920,12 @@ function AgentForm({
         )}
 
         <FormAdvancedSection contentClassName="mb-6">
-          <FieldGroup className="grid grid-cols-2">
-            <FormTextField
-              label="Temperature"
-              name="temperature"
-              type="number"
-              min={TEMPERATURE_MIN}
-              step="0.1"
-              value={String(formData.temperature ?? "")}
-              onChange={(value) => setFloatField("temperature", value)}
-              disabled={isSubmitting || readOnly}
-              error={validationErrors.temperature}
-            />
-            <FormTextField
-              label="Seed"
-              name="seed"
-              type="number"
-              value={String(formData.seed ?? "")}
-              onChange={(value) => setNumberField("seed", value)}
-              disabled={isSubmitting || readOnly}
-              error={validationErrors.seed}
-            />
-            <FormTextField
-              label="Top-p"
-              name="topP"
-              type="number"
-              min={TOP_P_MIN}
-              max={TOP_P_MAX}
-              step="0.1"
-              value={String(formData.topP ?? "")}
-              onChange={(value) => setFloatField("topP", value)}
-              disabled={isSubmitting || readOnly}
-              error={validationErrors.topP}
-            />
-            <FormTextField
-              label="Top-k"
-              name="topK"
-              type="number"
-              min={TOP_K_MIN}
-              value={String(formData.topK ?? "")}
-              onChange={(value) => setNumberField("topK", value)}
-              disabled={isSubmitting || readOnly}
-              error={validationErrors.topK}
-            />
-            <FormTextField
-              label="Presence Penalty"
-              name="presencePenalty"
-              type="number"
-              min={PENALTY_MIN}
-              max={PENALTY_MAX}
-              step="0.1"
-              value={String(formData.presencePenalty ?? "")}
-              onChange={(value) => setFloatField("presencePenalty", value)}
-              disabled={isSubmitting || readOnly}
-              error={validationErrors.presencePenalty}
-            />
-            <FormTextField
-              label="Frequency Penalty"
-              name="frequencyPenalty"
-              type="number"
-              min={PENALTY_MIN}
-              max={PENALTY_MAX}
-              step="0.1"
-              value={String(formData.frequencyPenalty ?? "")}
-              onChange={(value) => setFloatField("frequencyPenalty", value)}
-              disabled={isSubmitting || readOnly}
-              error={validationErrors.frequencyPenalty}
-            />
-          </FieldGroup>
+          <SamplingControls
+            value={formData}
+            onChange={applyControlPatch}
+            errors={validationErrors}
+            disabled={isSubmitting || readOnly}
+          />
         </FormAdvancedSection>
       </FieldSet>
 

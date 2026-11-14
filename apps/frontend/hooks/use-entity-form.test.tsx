@@ -67,8 +67,8 @@ describe("useEntityForm field adapters", () => {
     expect(result.current.canSubmit).toBe(true);
   });
 
-  it("sets numeric and float fields, clearing to undefined when emptied", () => {
-    type Numbers = { count?: number; ratio?: number };
+  it("sets a numeric field, clearing it to undefined when emptied", () => {
+    type Numbers = { count?: number };
     const { result } = renderHook(() =>
       useEntityForm<Numbers, unknown>({
         initialData: {},
@@ -80,9 +80,6 @@ describe("useEntityForm field adapters", () => {
 
     act(() => result.current.setNumberField("count", "12"));
     expect(result.current.formData.count).toBe(12);
-
-    act(() => result.current.setFloatField("ratio", "0.5"));
-    expect(result.current.formData.ratio).toBe(0.5);
 
     act(() => result.current.setNumberField("count", ""));
     expect(result.current.formData.count).toBeUndefined();
