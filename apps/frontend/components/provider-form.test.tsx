@@ -46,7 +46,10 @@ import { UnsavedChangesProvider } from "./unsaved-changes-guard";
 /** The body an accepted save resolves with, so the form can read it back. */
 const ACCEPTED_SAVE = { id: "p1", aliasRepoints: [] };
 
-function renderEditForm(modelIds: Provider["modelIds"]) {
+function renderEditForm(
+  modelIds: Provider["modelIds"],
+  overrides: Partial<Provider> = {},
+) {
   setData({
     id: "p1",
     name: "OpenAI",
@@ -56,6 +59,7 @@ function renderEditForm(modelIds: Provider["modelIds"]) {
     modelIds,
     taskModelId: "gpt-4o",
     memoryExtractionModelId: "gpt-4o",
+    ...overrides,
   } as unknown as Provider);
   return render(<ProviderForm orgId="org1" providerId="p1" />, {
     wrapper: UnsavedChangesProvider,
@@ -1010,20 +1014,8 @@ describe("ProviderForm headers", () => {
   const openAdvanced = () =>
     fireEvent.click(screen.getByRole("button", { name: "Toggle" }));
 
-  const renderProvider = (overrides: Partial<Provider> = {}) => {
-    setData({
-      id: "p1",
-      name: "OpenAI provider",
-      providerType: "OpenAI",
-      apiKey: "sk-test",
-      apiMode: "responses",
-      modelIds: [{ id: "gpt-4o", passthroughFileTypes: [] }],
-      taskModelId: "gpt-4o",
-      memoryExtractionModelId: "gpt-4o",
-      ...overrides,
-    } as unknown as Provider);
-    return render(<ProviderForm orgId="org1" providerId="p1" />);
-  };
+  const renderProvider = (overrides: Partial<Provider> = {}) =>
+    renderEditForm([{ id: "gpt-4o", passthroughFileTypes: [] }], overrides);
 
   const headerName = (n: number) =>
     screen.getByRole("textbox", { name: `Header ${n} name` });
@@ -1086,8 +1078,9 @@ describe("ProviderForm headers", () => {
     expect(savedProviderBody(fetchMock).headers).toEqual({});
   });
 
-  // The same shape as the MCP and Webhook forms: one value per header name.
-  it("keeps one value per header name, as the other header forms do", async () => {
+  // The same shape as the MCP and Webhook forms: one value per header name,
+  // and the last row for a repeated name is the one that is kept.
+  it("keeps one value per header name, the last row winning", async () => {
     const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
     renderProvider({ headers: { Duplicate: "first" } });
 
@@ -1133,17 +1126,10 @@ describe("ProviderForm headers", () => {
 
 describe("ProviderForm extra body", () => {
   const renderOpenRouter = () => {
-    setData({
-      id: "p1",
+    renderEditForm([{ id: "gpt-4o", passthroughFileTypes: [] }], {
       name: "OpenRouter provider",
       providerType: "OpenRouter",
-      apiKey: "sk-test",
-      apiMode: "responses",
-      modelIds: [{ id: "gpt-4o", passthroughFileTypes: [] }],
-      taskModelId: "gpt-4o",
-      memoryExtractionModelId: "gpt-4o",
-    } as unknown as Provider);
-    render(<ProviderForm orgId="org1" providerId="p1" />);
+    });
     fireEvent.click(screen.getByRole("button", { name: "Toggle" }));
   };
 

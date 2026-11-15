@@ -101,17 +101,17 @@ every turn fails no matter how correct the URL is.
 
 ### What a Provider holds
 
-| Field                | Meaning                                                                                                                                                                                                     |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `name`               | A human label for the connection.                                                                                                                                                                           |
-| `providerType`       | The vendor (`OpenAI`, `OpenRouter`, `Bedrock`, `Google`, `Anthropic`).                                                                                                                                      |
-| `apiKey`             | The vendor credential.                                                                                                                                                                                      |
-| `baseUrl`            | Optional override for OpenAI-compatible / self-hosted endpoints.                                                                                                                                            |
-| `headers`            | Optional extra HTTP headers, as a JSON object, sent with every request to this Provider. On OpenRouter, setting any [app attribution](#openrouter-app-attribution) header here replaces all three defaults. |
-| `region`             | Required for Bedrock (AWS region).                                                                                                                                                                          |
-| `modelIds`           | The models this Provider exposes for selection (at least one). Each entry is an object carrying that model's own settings — see [What each model entry holds](#what-each-model-entry-holds).                |
-| `taskModelId`        | The model used for background jobs (generating a chat title and summarising a long conversation), not chat turns. Must be a real model id — a Model alias is rejected.                                      |
-| `securityGuardrails` | Optional free-text security directives appended last in the system prompt for every run on this Provider.                                                                                                   |
+| Field                | Meaning                                                                                                                                                                                                                     |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`               | A human label for the connection.                                                                                                                                                                                           |
+| `providerType`       | The vendor (`OpenAI`, `OpenRouter`, `Bedrock`, `Google`, `Anthropic`).                                                                                                                                                      |
+| `apiKey`             | The vendor credential.                                                                                                                                                                                                      |
+| `baseUrl`            | Optional override for OpenAI-compatible / self-hosted endpoints.                                                                                                                                                            |
+| `headers`            | Optional extra HTTP headers, as a map of header name to value, sent with every request to this Provider. On OpenRouter, setting any [app attribution](#openrouter-app-attribution) header here replaces all three defaults. |
+| `region`             | Required for Bedrock (AWS region).                                                                                                                                                                                          |
+| `modelIds`           | The models this Provider exposes for selection (at least one). Each entry is an object carrying that model's own settings — see [What each model entry holds](#what-each-model-entry-holds).                                |
+| `taskModelId`        | The model used for background jobs (generating a chat title and summarising a long conversation), not chat turns. Must be a real model id — a Model alias is rejected.                                                      |
+| `securityGuardrails` | Optional free-text security directives appended last in the system prompt for every run on this Provider.                                                                                                                   |
 
 A Provider also carries the models used for **Memory** (extraction and
 embeddings), so background memory features have a model to call. Like
@@ -154,11 +154,12 @@ ranking. Nothing else changes: requests go to the same endpoint, on your own API
 key and your own OpenRouter account, at the same cost.
 
 To claim it for your own deployment instead, set the attribution headers you want
-in the Provider's **Headers** field, under **Advanced settings** — one row per
-header, name and value. It is all or nothing: set any one of the three and every
-Platypus default steps aside, so the request carries exactly what you wrote and
-nothing else. Names are matched case-insensitively, so `http-referer` counts as
-setting the referer. Write the whole set:
+in the Provider's **Headers** field (see [Header
+placeholders](/concepts/providers#header-placeholders) for how to add them). It
+is all or nothing: set any one of the three and every Platypus default steps
+aside, so the request carries exactly what you wrote and nothing else. Names are
+matched case-insensitively, so `http-referer` counts as setting the referer.
+Write the whole set:
 
 | Header                    | Value                         |
 | ------------------------- | ----------------------------- |

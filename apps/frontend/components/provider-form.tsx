@@ -357,6 +357,13 @@ type ProviderFormData = Omit<
   headerRows: KeyValueRow[];
 };
 
+/** The header map a save or a test sends. */
+function headersPayload(data: ProviderFormData): Record<string, string> {
+  // An empty map rather than an omitted field: the update replaces the stored
+  // row, so removing the last header row has to clear the headers it held.
+  return rowsToRecord(data.headerRows, {});
+}
+
 /** A ModelCard: its title, one line of detail, Edit and Remove. */
 function ModelCardSkeleton() {
   return (
@@ -581,7 +588,7 @@ function ProviderForm({
       apiKey: data.apiKey,
       region: data.region || undefined,
       baseUrl: data.baseUrl || undefined,
-      headers: rowsToRecord(data.headerRows, {}),
+      headers: headersPayload(data),
       extraBody: data.extraBody,
       organization: data.organization || undefined,
       project: data.project || undefined,
@@ -610,7 +617,7 @@ function ProviderForm({
       apiKey: data.apiKey,
       region: data.region || undefined,
       baseUrl: data.baseUrl || undefined,
-      headers: rowsToRecord(data.headerRows, {}),
+      headers: headersPayload(data),
       extraBody: data.extraBody,
       organization: data.organization || undefined,
       project: data.project || undefined,
@@ -669,17 +676,21 @@ function ProviderForm({
     formData.searchSource === SEARCH_SOURCE_NATIVE &&
     !providerHasNativeSearch(formData);
 
+  // Any Provider-level edit retracts this field's error, the save error, and
+  // every verdict: each described the values now on screen, which have just
+  // changed.
+  const beginEdit = (fieldId: string) => {
+    clearErrors(fieldId);
+    setError(null);
+    clearTestResults();
+  };
+
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
   ) => {
     const { id, value } = e.target;
 
-    // Clear validation error for this field
-    clearErrors(id);
-    setError(null);
-    // Any Provider-level edit retracts every verdict: each described the
-    // values now on screen, which have just changed.
-    clearTestResults();
+    beginEdit(id);
 
     if (id === "extraBody") {
       setExtraBodyString(value);
@@ -702,10 +713,7 @@ function ProviderForm({
   };
 
   const handleHeadersChange = (rows: KeyValueRow[]) => {
-    clearErrors("headers");
-    setError(null);
-    // A header edit retracts every verdict: each described values now changed.
-    clearTestResults();
+    beginEdit("headers");
     setFormData((prevData) => ({ ...prevData, headerRows: rows }));
   };
 
@@ -717,11 +725,7 @@ function ProviderForm({
     } as React.ChangeEvent<HTMLInputElement>);
 
   const handleSelectChange = (id: string, value: string) => {
-    // Clear validation error for this field
-    clearErrors(id);
-    setError(null);
-    // See handleChange: a Provider-level edit invalidates every verdict.
-    clearTestResults();
+    beginEdit(id);
 
     setFormData((prevData) => ({ ...prevData, [id]: value }));
   };
