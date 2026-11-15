@@ -7,9 +7,17 @@ import {
   FieldSet,
   FieldError,
   FieldDescription,
+  FieldTitle,
 } from "@/components/ui/field";
 import { ExpandableTextarea } from "@/components/expandable-textarea";
 import { FormTextareaField } from "@/components/form-textarea-field";
+import {
+  HEADER_ROW_LABELS,
+  KeyValueRowsEditor,
+  recordToRows,
+  rowsToRecord,
+  type KeyValueRow,
+} from "@/components/key-value-rows-editor";
 import { FormTextField } from "@/components/form-text-field";
 import { FormSelectField } from "@/components/form-select-field";
 import { Button } from "@/components/ui/button";
@@ -337,11 +345,24 @@ function ModelCard({
 
 type ProviderFormData = Omit<
   Provider,
-  "id" | "createdAt" | "updatedAt" | "workspaceId" | "embeddingDimensions"
+  | "id"
+  | "createdAt"
+  | "updatedAt"
+  | "workspaceId"
+  | "embeddingDimensions"
+  | "headers"
 > & {
   extraBody?: Record<string, unknown>;
   embeddingDimensions: string;
+  headerRows: KeyValueRow[];
 };
+
+/** The header map a save or a test sends. */
+function headersPayload(data: ProviderFormData): Record<string, string> {
+  // An empty map rather than an omitted field: the update replaces the stored
+  // row, so removing the last header row has to clear the headers it held.
+  return rowsToRecord(data.headerRows, {});
+}
 
 /** A ModelCard: its title, one line of detail, Edit and Remove. */
 function ModelCardSkeleton() {
@@ -428,8 +449,6 @@ function ProviderForm({
   const [savedEmbeddingDimensions, setSavedEmbeddingDimensions] = useState<
     string | null
   >(null);
-  const [headersError, setHeadersError] = useState<string | null>(null);
-  const [headersString, setHeadersString] = useState("{}");
   const [extraBodyError, setExtraBodyError] = useState<string | null>(null);
   const [extraBodyString, setExtraBodyString] = useState("{}");
   const [error, setError] = useState<string | null>(null);
@@ -466,7 +485,7 @@ function ProviderForm({
       apiKey: "",
       region: "",
       baseUrl: "",
-      headers: {},
+      headerRows: [],
       extraBody: {},
       organization: "",
       project: "",
@@ -479,8 +498,9 @@ function ProviderForm({
       embeddingModelId: "",
       embeddingDimensions: "",
     },
-    // The raw text, so JSON still being typed (and not yet valid) counts.
-    sideState: { headersString, extraBodyString },
+    // The raw Extra Body text, so JSON still being typed (and not yet valid)
+    // counts.
+    sideState: { extraBodyString },
     // The wizard advancing is the feedback for a staged draft.
     successMessage: draft
       ? undefined
@@ -520,7 +540,7 @@ function ProviderForm({
           apiKey: provider.apiKey ?? "",
           region: provider.region || "",
           baseUrl: provider.baseUrl || "",
-          headers: provider.headers || {},
+          headerRows: recordToRows(provider.headers),
           extraBody: provider.extraBody || {},
           organization: provider.organization || "",
           project: provider.project || "",
@@ -542,7 +562,6 @@ function ProviderForm({
           embeddingDimensions: provider.embeddingDimensions?.toString() || "",
         }),
         onSeed: (provider) => {
-          setHeadersString(JSON.stringify(provider.headers || {}, null, 2));
           setExtraBodyString(JSON.stringify(provider.extraBody || {}, null, 2));
           setSavedEmbeddingModelId(provider.embeddingModelId || null);
           setSavedEmbeddingDimensions(
@@ -569,7 +588,7 @@ function ProviderForm({
       apiKey: data.apiKey,
       region: data.region || undefined,
       baseUrl: data.baseUrl || undefined,
-      headers: data.headers,
+      headers: headersPayload(data),
       extraBody: data.extraBody,
       organization: data.organization || undefined,
       project: data.project || undefined,
@@ -598,7 +617,7 @@ function ProviderForm({
       apiKey: data.apiKey,
       region: data.region || undefined,
       baseUrl: data.baseUrl || undefined,
-      headers: data.headers,
+      headers: headersPayload(data),
       extraBody: data.extraBody,
       organization: data.organization || undefined,
       project: data.project || undefined,
@@ -657,31 +676,23 @@ function ProviderForm({
     formData.searchSource === SEARCH_SOURCE_NATIVE &&
     !providerHasNativeSearch(formData);
 
+  // Any Provider-level edit retracts this field's error, the save error, and
+  // every verdict: each described the values now on screen, which have just
+  // changed.
+  const beginEdit = (fieldId: string) => {
+    clearErrors(fieldId);
+    setError(null);
+    clearTestResults();
+  };
+
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
   ) => {
     const { id, value } = e.target;
 
-    // Clear validation error for this field
-    clearErrors(id);
-    setError(null);
-    // Any Provider-level edit retracts every verdict: each described the
-    // values now on screen, which have just changed.
-    clearTestResults();
+    beginEdit(id);
 
-    if (id === "headers") {
-      setHeadersString(value);
-      try {
-        const parsed = JSON.parse(value) as ProviderFormData["headers"];
-        setFormData((prevData) => ({
-          ...prevData,
-          headers: parsed,
-        }));
-        setHeadersError(null);
-      } catch {
-        setHeadersError("Invalid JSON");
-      }
-    } else if (id === "extraBody") {
+    if (id === "extraBody") {
       setExtraBodyString(value);
       try {
         const parsed = JSON.parse(value) as ProviderFormData["extraBody"];
@@ -701,6 +712,11 @@ function ProviderForm({
     }
   };
 
+  const handleHeadersChange = (rows: KeyValueRow[]) => {
+    beginEdit("headers");
+    setFormData((prevData) => ({ ...prevData, headerRows: rows }));
+  };
+
   // Adapts FormTextField's `onChange(value)` to handleChange's `onChange(e)`
   // so the centralized clear-error-and-set-formData logic stays in one place.
   const toFieldChange = (id: string) => (value: string) =>
@@ -709,11 +725,7 @@ function ProviderForm({
     } as React.ChangeEvent<HTMLInputElement>);
 
   const handleSelectChange = (id: string, value: string) => {
-    // Clear validation error for this field
-    clearErrors(id);
-    setError(null);
-    // See handleChange: a Provider-level edit invalidates every verdict.
-    clearTestResults();
+    beginEdit(id);
 
     setFormData((prevData) => ({ ...prevData, [id]: value }));
   };
@@ -957,7 +969,6 @@ function ProviderForm({
                       disabled:
                         isSubmitting ||
                         testingModel !== null ||
-                        !!headersError ||
                         !!extraBodyError,
                       pending: testingModel === index,
                       result: testResults[index],
@@ -1102,20 +1113,30 @@ function ProviderForm({
               </>
             )}
 
-            <FormTextareaField
-              label="Headers"
-              name="headers"
-              placeholder='{"Header Name": "Header Value"}'
-              value={headersString}
-              onChange={(value) =>
-                handleChange({
-                  target: { id: "headers", value },
-                } as React.ChangeEvent<HTMLTextAreaElement>)
-              }
-              disabled={isSubmitting || isReadOnly}
-              description="Optional headers as JSON object. Use ${SESSION_ID} in a value to send the Chat's id, or the Trigger run's id for a headless run."
-              error={headersError || validationErrors.headers}
-            />
+            <Field
+              aria-labelledby="provider-headers-label"
+              data-invalid={!!validationErrors.headers}
+            >
+              <FieldTitle id="provider-headers-label">Headers</FieldTitle>
+              <FieldDescription>
+                Optional HTTP headers sent with every request. Use{" "}
+                {"${SESSION_ID}"} in a value to send the Chat&apos;s id, or the
+                Trigger run&apos;s id for a headless run.
+              </FieldDescription>
+              <KeyValueRowsEditor
+                rows={formData.headerRows}
+                onChange={handleHeadersChange}
+                disabled={isSubmitting}
+                readOnly={isReadOnly}
+                keyPlaceholder="Header Name"
+                valuePlaceholder="Header Value"
+                labels={HEADER_ROW_LABELS}
+                addLabel="Add header"
+              />
+              {validationErrors.headers && (
+                <FieldError>{validationErrors.headers}</FieldError>
+              )}
+            </Field>
 
             {formData.providerType === "OpenRouter" && (
               <FormTextareaField
@@ -1234,7 +1255,7 @@ function ProviderForm({
           <Button
             type="button"
             onClick={handleSubmit}
-            disabled={isSubmitting || !!headersError || !!extraBodyError}
+            disabled={isSubmitting || !!extraBodyError}
           >
             {draft.submitText}
           </Button>
@@ -1246,13 +1267,13 @@ function ProviderForm({
             submitText={providerId ? "Update" : "Save"}
             pending={isSubmitting}
             submitDisabled={
-              isSubmitting || !!headersError || !!extraBodyError
+              isSubmitting || !!extraBodyError
               // No `canSubmit` gate: several fields here (apiMode, organization,
               // project) render only for certain provider types, so a
               // server-returned error can outlive the input that would retract
-              // it. Re-submitting simply re-validates. The JSON errors above are
-              // different: they are computed here as the user types and always
-              // clear themselves.
+              // it. Re-submitting simply re-validates. The Extra Body JSON error
+              // above is different: it is computed here as the user types and
+              // always clears itself.
             }
             deleteVisible={!!providerId}
             deleteDisabled={isSubmitting}
