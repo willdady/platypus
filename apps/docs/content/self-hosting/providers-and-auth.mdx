@@ -154,18 +154,17 @@ ranking. Nothing else changes: requests go to the same endpoint, on your own API
 key and your own OpenRouter account, at the same cost.
 
 To claim it for your own deployment instead, set the attribution headers you want
-in the Provider's **Headers** field. It is all or nothing: set any one of the
-three and every Platypus default steps aside, so the request carries exactly what
-you wrote and nothing else. Names are matched case-insensitively, so
-`http-referer` counts as setting the referer. Write the whole set:
+in the Provider's **Headers** field, under **Advanced settings** — one row per
+header, name and value. It is all or nothing: set any one of the three and every
+Platypus default steps aside, so the request carries exactly what you wrote and
+nothing else. Names are matched case-insensitively, so `http-referer` counts as
+setting the referer. Write the whole set:
 
-```json
-{
-  "HTTP-Referer": "https://acme.example",
-  "X-OpenRouter-Title": "Acme Assistant",
-  "X-OpenRouter-Categories": "personal-agent,general-chat"
-}
-```
+| Header                    | Value                         |
+| ------------------------- | ----------------------------- |
+| `HTTP-Referer`            | `https://acme.example`        |
+| `X-OpenRouter-Title`      | `Acme Assistant`              |
+| `X-OpenRouter-Categories` | `personal-agent,general-chat` |
 
 <Callout type="warning">
   Setting a title and expecting the Platypus referer to carry it gets you

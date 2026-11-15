@@ -1006,6 +1006,183 @@ describe("ProviderForm validation errors on model cards", () => {
   );
 });
 
+describe("ProviderForm headers", () => {
+  const openAdvanced = () =>
+    fireEvent.click(screen.getByRole("button", { name: "Toggle" }));
+
+  const renderProvider = (overrides: Partial<Provider> = {}) => {
+    setData({
+      id: "p1",
+      name: "OpenAI provider",
+      providerType: "OpenAI",
+      apiKey: "sk-test",
+      apiMode: "responses",
+      modelIds: [{ id: "gpt-4o", passthroughFileTypes: [] }],
+      taskModelId: "gpt-4o",
+      memoryExtractionModelId: "gpt-4o",
+      ...overrides,
+    } as unknown as Provider);
+    return render(<ProviderForm orgId="org1" providerId="p1" />);
+  };
+
+  const headerName = (n: number) =>
+    screen.getByRole("textbox", { name: `Header ${n} name` });
+  const headerValue = (n: number) =>
+    screen.getByRole("textbox", { name: `Header ${n} value` });
+
+  it("loads a saved Provider's headers as name and value rows", () => {
+    renderProvider({ headers: { "X-Api": "1", "X-Org": "acme" } });
+
+    openAdvanced();
+
+    expect(headerName(1)).toHaveValue("X-Api");
+    expect(headerValue(1)).toHaveValue("1");
+    expect(headerName(2)).toHaveValue("X-Org");
+    expect(headerValue(2)).toHaveValue("acme");
+  });
+
+  it("saves the rows as the same header map the API stores", async () => {
+    const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
+    renderProvider({ headers: { "X-Api": "1" } });
+
+    openAdvanced();
+    fireEvent.click(screen.getByRole("button", { name: "Add header" }));
+    fireEvent.change(headerName(2), { target: { value: "X-Org" } });
+    fireEvent.change(headerValue(2), { target: { value: "acme" } });
+    save();
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(savedProviderBody(fetchMock).headers).toEqual({
+      "X-Api": "1",
+      "X-Org": "acme",
+    });
+  });
+
+  // A row with no name is a half-typed entry, not a header.
+  it("drops a row with no name instead of saving an empty header name", async () => {
+    const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
+    renderProvider({ headers: { "X-Api": "1" } });
+
+    openAdvanced();
+    fireEvent.click(screen.getByRole("button", { name: "Add header" }));
+    fireEvent.change(headerValue(2), { target: { value: "orphan" } });
+    save();
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(savedProviderBody(fetchMock).headers).toEqual({ "X-Api": "1" });
+  });
+
+  // Removing the last row has to clear the stored headers, not leave them
+  // behind: the edit form sends the whole map.
+  it("clears the stored headers when every row is removed", async () => {
+    const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
+    renderProvider({ headers: { "X-Api": "1" } });
+
+    openAdvanced();
+    fireEvent.click(screen.getByRole("button", { name: "Remove header" }));
+    save();
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(savedProviderBody(fetchMock).headers).toEqual({});
+  });
+
+  // The same shape as the MCP and Webhook forms: one value per header name.
+  it("keeps one value per header name, as the other header forms do", async () => {
+    const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
+    renderProvider({ headers: { Duplicate: "first" } });
+
+    openAdvanced();
+    fireEvent.click(screen.getByRole("button", { name: "Add header" }));
+    fireEvent.change(headerName(2), { target: { value: "Duplicate" } });
+    fireEvent.change(headerValue(2), { target: { value: "second" } });
+    save();
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(savedProviderBody(fetchMock).headers).toEqual({
+      Duplicate: "second",
+    });
+  });
+
+  it("shows a headers error from the API and retracts it on a row edit", async () => {
+    stubRejectedSave([
+      {
+        path: ["headers"],
+        message: "Header values may only use the ${SESSION_ID} placeholder",
+      },
+    ]);
+    renderProvider({ headers: { "X-Api": "1" } });
+
+    openAdvanced();
+    save();
+
+    expect(
+      await screen.findByText(
+        "Header values may only use the ${SESSION_ID} placeholder",
+      ),
+    ).toBeInTheDocument();
+
+    fireEvent.change(headerValue(1), { target: { value: "2" } });
+
+    expect(
+      screen.queryByText(
+        "Header values may only use the ${SESSION_ID} placeholder",
+      ),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe("ProviderForm extra body", () => {
+  const renderOpenRouter = () => {
+    setData({
+      id: "p1",
+      name: "OpenRouter provider",
+      providerType: "OpenRouter",
+      apiKey: "sk-test",
+      apiMode: "responses",
+      modelIds: [{ id: "gpt-4o", passthroughFileTypes: [] }],
+      taskModelId: "gpt-4o",
+      memoryExtractionModelId: "gpt-4o",
+    } as unknown as Provider);
+    render(<ProviderForm orgId="org1" providerId="p1" />);
+    fireEvent.click(screen.getByRole("button", { name: "Toggle" }));
+  };
+
+  it("saves Extra Body as the JSON object typed into it", async () => {
+    const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
+    renderOpenRouter();
+
+    fireEvent.change(screen.getByLabelText("Extra Body"), {
+      target: { value: '{"customField": "value"}' },
+    });
+    save();
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(savedProviderBody(fetchMock).extraBody).toEqual({
+      customField: "value",
+    });
+  });
+
+  it("still refuses invalid JSON and re-enables Save once it is fixed", () => {
+    renderOpenRouter();
+    const saveButton = screen.getByRole("button", { name: "Update" });
+    expect(saveButton).toBeEnabled();
+
+    fireEvent.change(screen.getByLabelText("Extra Body"), {
+      target: { value: "{ not json" },
+    });
+
+    expect(screen.getByText("Invalid JSON")).toBeInTheDocument();
+    expect(saveButton).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText("Extra Body"), {
+      target: { value: "{}" },
+    });
+
+    expect(screen.queryByText("Invalid JSON")).not.toBeInTheDocument();
+    expect(saveButton).toBeEnabled();
+  });
+});
+
 describe("ProviderForm Web search selector", () => {
   const CATALOG = [
     { backend: "acme-search.searx", name: "SearXNG", plugin: "acme-search" },
