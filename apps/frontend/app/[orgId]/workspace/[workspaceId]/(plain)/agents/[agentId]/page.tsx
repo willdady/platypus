@@ -1,22 +1,12 @@
+import type { Metadata } from "next";
 import { AgentForm } from "@/components/agent-form";
 import { ResourcePage } from "@/components/resource-page";
 import { fetchToolSets, toolSetFormProps } from "@/lib/tool-sets-request";
-import { backendPath, readForLabel } from "@/lib/server-read";
-import type { Metadata } from "next";
+import { backendPath } from "@/lib/server-read";
 
 type Params = Promise<{ orgId: string; workspaceId: string; agentId: string }>;
 
-export async function generateMetadata({
-  params,
-}: {
-  params: Params;
-}): Promise<Metadata> {
-  const { orgId, workspaceId, agentId } = await params;
-  const agent = await readForLabel<{ name: string }>(
-    backendPath`/organizations/${orgId}/workspaces/${workspaceId}/agents/${agentId}`,
-  );
-  return { title: agent?.name || "Edit Agent" };
-}
+export const metadata: Metadata = { title: "Edit Agent" };
 
 async function AgentEditPage({ params }: { params: Params }) {
   const { orgId, workspaceId, agentId } = await params;
