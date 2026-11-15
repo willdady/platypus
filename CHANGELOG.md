@@ -1,5 +1,28 @@
 # Changelog
 
+## [4.5.0](https://github.com/willdady/platypus/compare/v4.4.0...v4.5.0) (2026-11-15)
+
+
+### Features
+
+* **backend:** make a Trigger run's Chat read-only ([#1964](https://github.com/willdady/platypus/issues/1964)) ([a5c442d](https://github.com/willdady/platypus/commit/a5c442d8d80c7627e8d47296ef16e93b081dae5f))
+* **frontend:** edit Provider headers as name and value rows ([#1993](https://github.com/willdady/platypus/issues/1993)) ([ae35b74](https://github.com/willdady/platypus/commit/ae35b7476d87126be2604cddd0d4d85d9b303514))
+* **frontend:** FormSwitchField for labelled switches ([#1972](https://github.com/willdady/platypus/issues/1972)) ([0e81411](https://github.com/willdady/platypus/commit/0e81411788e185dfc883149e2fffb561f2388748))
+* **frontend:** give edit pages a fixed tab title ([#1991](https://github.com/willdady/platypus/issues/1991)) ([17de7c4](https://github.com/willdady/platypus/commit/17de7c4617c4e8f597d1582ace8f7c4c62ab7756))
+* **frontend:** put admin table row actions in ⋮ menus ([#1963](https://github.com/willdady/platypus/issues/1963)) ([3612161](https://github.com/willdady/platypus/commit/3612161df89ae7896d206a0d8aac0db525c4d41c))
+* **frontend:** revealable secret inputs through FormTextField ([#1973](https://github.com/willdady/platypus/issues/1973)) ([5e3f795](https://github.com/willdady/platypus/commit/5e3f79570c22b7dc796b576c635d138492200613))
+* **frontend:** unify save and delete feedback across forms ([#1965](https://github.com/willdady/platypus/issues/1965)) ([8c0df2c](https://github.com/willdady/platypus/commit/8c0df2c565024587d5fa3c0fe251dc569df6ef5d))
+
+
+### Bug Fixes
+
+* correct docs claims traced against source ([#1932](https://github.com/willdady/platypus/issues/1932)) ([035c5e3](https://github.com/willdady/platypus/commit/035c5e3eceb0a2b30ee88d29c8a4f981223f959a))
+* **frontend:** Backspace removes the last composer chip in display order ([#1992](https://github.com/willdady/platypus/issues/1992)) ([6a6f504](https://github.com/willdady/platypus/commit/6a6f504d72e45eb3eae156eda50be3d8ad92891f))
+* **frontend:** exclude fired One-off Triggers from home count ([#1953](https://github.com/willdady/platypus/issues/1953)) ([3a895ac](https://github.com/willdady/platypus/commit/3a895aca5ca6fa382aae8e64aaeb19ee1ebab83f))
+* **frontend:** keep Kanban comment drafts when the open card changes ([#1952](https://github.com/willdady/platypus/issues/1952)) ([f2aa8ec](https://github.com/willdady/platypus/commit/f2aa8ec93b1843cf71cb6043be0e52a67f65eece))
+* **frontend:** keep unsaved Kanban card edits through board refreshes ([#1994](https://github.com/willdady/platypus/issues/1994)) ([1abe182](https://github.com/willdady/platypus/commit/1abe182bd196b8f4fa95bfd10d0882e3f80351be))
+* **frontend:** refresh the command menu's Trigger list after delete, clone or toggle ([#1954](https://github.com/willdady/platypus/issues/1954)) ([efa2bc8](https://github.com/willdady/platypus/commit/efa2bc8a0560dfa167676380ca94451aa94ab643))
+
 ## [4.4.0](https://github.com/willdady/platypus/compare/v4.3.0...v4.4.0) (2026-11-08)
 
 
