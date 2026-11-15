@@ -15,6 +15,10 @@ function getFileInput() {
   return screen.getByLabelText("Upload files") as HTMLInputElement;
 }
 
+function getSandboxFileInput() {
+  return screen.getByLabelText("Upload files to Sandbox") as HTMLInputElement;
+}
+
 function fireFileChange(input: HTMLInputElement, files: File[]) {
   Object.defineProperty(input, "files", {
     value: files,
@@ -429,6 +433,110 @@ describe("PromptInputTextarea onKeyDown", () => {
     fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
 
     expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  // issue #1938: Backspace removed the last file attachment even when a
+  // Sandbox upload chip sat after it on screen, and did nothing at all when
+  // only Sandbox uploads were attached. It must remove the last chip in
+  // display order — Sandbox uploads render after file attachments.
+  describe("Backspace", () => {
+    const renderComposer = () =>
+      render(
+        <PromptInput onSubmit={vi.fn()}>
+          <PromptInputAttachments className="w-full">
+            {(attachment) => <PromptInputAttachment data={attachment} />}
+          </PromptInputAttachments>
+          <PromptInputBody>
+            <PromptInputTextarea />
+          </PromptInputBody>
+        </PromptInput>,
+      );
+
+    const attachFile = (name: string) =>
+      fireFileChange(getFileInput(), [
+        new File(["x"], name, { type: "text/plain" }),
+      ]);
+
+    const attachSandboxFile = (name: string) =>
+      fireFileChange(getSandboxFileInput(), [
+        new File(["x"], name, { type: "text/plain" }),
+      ]);
+
+    const backspace = () =>
+      fireEvent.keyDown(screen.getByRole("textbox"), {
+        key: "Backspace",
+      });
+
+    it("removes a Sandbox upload before a file attachment", () => {
+      renderComposer();
+      attachFile("photo.txt");
+      attachSandboxFile("sandbox.txt");
+
+      backspace();
+
+      expect(screen.queryByText("sandbox.txt")).not.toBeInTheDocument();
+      expect(screen.getByText("photo.txt")).toBeInTheDocument();
+
+      backspace();
+
+      expect(screen.queryByText("photo.txt")).not.toBeInTheDocument();
+    });
+
+    // Sandbox uploads render after file attachments regardless of the order
+    // they were added, so the chip added most recently is not the one shown
+    // last.
+    it("removes the Sandbox upload even when a file was attached after it", () => {
+      renderComposer();
+      attachSandboxFile("sandbox.txt");
+      attachFile("photo.txt");
+
+      backspace();
+
+      expect(screen.queryByText("sandbox.txt")).not.toBeInTheDocument();
+      expect(screen.getByText("photo.txt")).toBeInTheDocument();
+    });
+
+    it("removes the last Sandbox upload when only Sandbox uploads are attached", () => {
+      renderComposer();
+      attachSandboxFile("first.txt");
+      attachSandboxFile("second.txt");
+
+      backspace();
+
+      expect(screen.queryByText("second.txt")).not.toBeInTheDocument();
+      expect(screen.getByText("first.txt")).toBeInTheDocument();
+    });
+
+    it("removes the last file attachment when only file attachments are attached", () => {
+      renderComposer();
+      attachFile("first.txt");
+      attachFile("second.txt");
+
+      backspace();
+
+      expect(screen.queryByText("second.txt")).not.toBeInTheDocument();
+      expect(screen.getByText("first.txt")).toBeInTheDocument();
+    });
+
+    it("removes no chip when the textarea is not empty", () => {
+      renderComposer();
+      attachFile("photo.txt");
+      const textarea = screen.getByRole("textbox");
+      fireEvent.change(textarea, { target: { value: "hello" } });
+
+      const notPrevented = backspace();
+
+      expect(notPrevented).toBe(true);
+      expect(screen.getByText("photo.txt")).toBeInTheDocument();
+    });
+
+    it("does nothing when there are no chips", () => {
+      renderComposer();
+
+      const notPrevented = backspace();
+
+      expect(notPrevented).toBe(true);
+    });
   });
 });
 
