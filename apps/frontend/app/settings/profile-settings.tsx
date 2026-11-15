@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useEntityForm } from "@/hooks/use-entity-form";
 import { useAuth, useAuthClient } from "@/components/auth-provider";
-import type { WriteOutcome } from "@/lib/api-write";
+import { toOutcome } from "@/lib/apply-write-outcome";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,17 +13,6 @@ import { getBrowserTimezone } from "@/lib/timezones";
 import { toast } from "sonner";
 import { Pencil } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
-
-// `updateUser` is an auth-client call, not a REST write — mapped onto the
-// shared outcome shape so the form hook can drive it.
-function toOutcome(
-  error: { message?: string } | null,
-  fallback: string,
-): WriteOutcome<unknown> {
-  return error
-    ? { outcome: "error", message: error.message || fallback }
-    : { outcome: "success", data: {}, revalidateKeys: [] };
-}
 
 function UserSettingsPage() {
   const { user } = useAuth();
