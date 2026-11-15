@@ -4,7 +4,6 @@ import {
   agentCreateSchema,
   AGENT_NAME_MAX_LENGTH,
   type Agent,
-  type Provider,
 } from "@platypus/schemas";
 import {
   authMock,
@@ -66,11 +65,9 @@ const workspaceAgent: AgentWithScope = {
   subAgentIds: [],
 } as unknown as AgentWithScope;
 
-const provider: Provider = { id: "p1", name: "OpenAI" } as unknown as Provider;
-
 /** Renders the Workspace surface with `agents` in the list. */
 function renderAgents(agents: AgentWithScope[], menuItem?: string) {
-  mockScopedSWR({ "/agents": agents, "/providers": [provider] });
+  mockScopedSWR({ "/agents": agents });
   return renderList(<AgentsList orgId="org1" workspaceId="ws1" />, menuItem);
 }
 
@@ -417,45 +414,6 @@ describe("AgentsList empty state", () => {
       expect.stringContaining("/agents/create"),
     );
   });
-
-  it("shows the no-providers state only once the providers list has loaded empty", async () => {
-    mockScopedSWR(
-      {
-        "/agents": [workspaceAgent],
-        "/providers": [],
-        "/tools": [],
-        "/skills": [],
-      },
-      { strict: true },
-    );
-
-    await renderList(<AgentsList orgId="org1" workspaceId="ws1" />);
-
-    expect(screen.getByText("No providers configured")).toBeInTheDocument();
-  });
-});
-
-describe("AgentsList secondary reads", () => {
-  it("shows the providers read failure, not a false no-providers prompt", async () => {
-    mockScopedSWR(
-      {
-        "/agents": [workspaceAgent],
-        "/providers": { error: new Error("500") },
-        "/tools": [],
-        "/skills": [],
-      },
-      { strict: true },
-    );
-
-    await renderList(<AgentsList orgId="org1" workspaceId="ws1" />);
-
-    expect(screen.getByText(/Failed to load providers/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
-    expect(
-      screen.queryByText("No providers configured"),
-    ).not.toBeInTheDocument();
-    expect(screen.queryByText("No agents yet")).not.toBeInTheDocument();
-  });
 });
 
 describe("AgentsList reference counts", () => {
@@ -494,7 +452,6 @@ describe("AgentsList card actions", () => {
   it("draws each skeleton card's actions once", async () => {
     mockScopedSWR({
       "/agents": { isLoading: true },
-      "/providers": [provider],
     });
     await renderList(<AgentsList orgId="org1" workspaceId="ws1" />);
 

@@ -31,6 +31,21 @@ beforeEach(() => {
 });
 
 describe("Workspace home", () => {
+  it("shows the workspace skeleton while providers are loading", async () => {
+    mockScopedSWR({
+      "/providers": { isLoading: true },
+      ...workspaceRead,
+    });
+    await renderList(<Workspace />);
+
+    expect(
+      screen.getByRole("status", { name: "Loading workspace" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("No providers configured"),
+    ).not.toBeInTheDocument();
+  });
+
   it("offers to add a provider when the workspace has none", async () => {
     mockScopedSWR({ "/providers": [], ...workspaceRead });
     await renderList(<Workspace />);
