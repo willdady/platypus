@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
+import { resolveActor } from "@/lib/authorization";
 
 // --- Module mocks ------------------------------------------------------------
 
@@ -16,7 +17,14 @@ const { authState } = vi.hoisted(() => ({
 }));
 
 vi.mock("@/components/auth-provider", () => ({
-  useAuth: () => authState,
+  useAuth: () => ({
+    ...authState,
+    actor: resolveActor({
+      isOperator: authState.user?.role === "admin",
+      orgRole: null,
+      ownsWorkspace: false,
+    }),
+  }),
   useAuthClient: () => ({ signOut: () => Promise.resolve() }),
 }));
 

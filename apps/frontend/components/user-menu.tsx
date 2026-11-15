@@ -2,6 +2,7 @@
 
 import { appRoutes } from "@/lib/routes";
 import { useAuth, useAuthClient } from "@/components/auth-provider";
+import { isOperator } from "@/lib/authorization";
 import { useRouter } from "next/navigation";
 import { LogOut, User } from "lucide-react";
 import Link from "next/link";
@@ -18,7 +19,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { userSettingsLinks } from "@/lib/settings-links";
 
 export function UserMenu() {
-  const { user, isPending } = useAuth();
+  const { user, actor, isPending } = useAuth();
   const authClient = useAuthClient();
   const router = useRouter();
 
@@ -59,7 +60,7 @@ export function UserMenu() {
         <DropdownMenuLabel className="text-xs text-muted-foreground">
           My settings
         </DropdownMenuLabel>
-        {userSettingsLinks(user.role === "admin").map(
+        {userSettingsLinks(isOperator(actor)).map(
           ({ href, icon: Icon, label }) => (
             <DropdownMenuItem key={href} asChild>
               <Link href={href}>

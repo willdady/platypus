@@ -118,9 +118,7 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
     <CommandItem
       key={agent.id}
       onSelect={() => {
-        runCommand(() =>
-          router.push(`${routes.chat.root}?agentId=${agent.id}`),
-        );
+        runCommand(() => router.push(routes.chat.forAgent(agent.id)));
       }}
     >
       <AgentAvatar agent={agent} className="size-4" />
