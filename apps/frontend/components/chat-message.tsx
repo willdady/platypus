@@ -1,3 +1,4 @@
+import { AgentAvatar } from "@/components/agent-avatar";
 import { Fragment, memo, type ReactNode } from "react";
 import {
   Message,
@@ -447,18 +448,11 @@ export const ChatMessage = memo(function ChatMessage({
   );
   const assistantAvatar = (partIndex: number) =>
     message.role === "assistant" &&
-    (messageAgent?.avatarUrl ? (
-      // Agent avatar URL is user-supplied (arbitrary host); not routable
-      // through the Next image optimizer.
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={messageAgent.avatarUrl}
+    (messageAgent ? (
+      <AgentAvatar
+        agent={messageAgent}
+        className="size-6"
         alt={partIndex === firstAvatarPart ? messageAgent.name : ""}
-        className="size-6 rounded-full object-cover"
-        width={24}
-        height={24}
-        loading="lazy"
-        decoding="async"
       />
     ) : (
       <div className="flex size-6 items-center justify-center rounded-full bg-muted">
