@@ -748,15 +748,14 @@ export function PromptInputTextarea({
       form?.requestSubmit();
     }
 
-    // Remove last attachment when Backspace is pressed and textarea is empty
-    if (
-      e.key === "Backspace" &&
-      e.currentTarget.value === "" &&
-      attachments.files.length > 0
-    ) {
-      e.preventDefault();
-      const lastAttachment = attachments.files.at(-1);
+    // Backspace on an empty textarea removes the last chip on screen.
+    // Sandbox uploads render after file attachments, so one of those wins
+    // whenever there is one (issue #1938).
+    if (e.key === "Backspace" && e.currentTarget.value === "") {
+      const lastAttachment =
+        attachments.sandboxFiles.at(-1) ?? attachments.files.at(-1);
       if (lastAttachment) {
+        e.preventDefault();
         attachments.remove(lastAttachment.id);
       }
     }
