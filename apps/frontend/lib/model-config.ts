@@ -185,19 +185,6 @@ export function getContextWindow(
 }
 
 /**
- * The output-token ceiling declared for a model, or `undefined` where the
- * Provider declares none (issue #454) — which leaves the vendor's own default
- * in force. Mirrors the backend's `maxOutputTokensForModel`.
- */
-export function getMaxOutputTokens(
-  provider: Pick<Provider, "modelIds">,
-  modelId: ConcreteModelId,
-): number | undefined {
-  return getModelConfigs(provider).find((m) => m.id === modelId)
-    ?.maxOutputTokens;
-}
-
-/**
  * Whether a searching turn against this Provider would actually serve search
  * tools — Provider-scoped rather than per-model, since `searchSource` is a
  * Provider setting (ADR-0014). `"none"` serves nothing; a value naming a
