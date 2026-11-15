@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { FieldGroup, FieldSet } from "@/components/ui/field";
 import { FormTextField } from "@/components/form-text-field";
 import { useEntityForm } from "@/hooks/use-entity-form";
+import { toOutcome } from "@/lib/apply-write-outcome";
 
 const RETRACTABLE_FIELDS = [
   "currentPassword",
@@ -40,12 +41,7 @@ export function ChangePasswordForm() {
         newPassword: data.newPassword,
         revokeOtherSessions: true,
       });
-      return error
-        ? {
-            outcome: "error",
-            message: error.message || "Failed to change password",
-          }
-        : { outcome: "success", data: {}, revalidateKeys: [] };
+      return toOutcome(error, "Failed to change password");
     },
     successMessage: "Password changed successfully",
     onSuccess: () => {

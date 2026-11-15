@@ -13,6 +13,7 @@ import { FieldGroup, FieldSet } from "@/components/ui/field";
 import { FormTextField } from "@/components/form-text-field";
 import { useAuthClient, type User } from "@/components/auth-provider";
 import { useEntityForm } from "@/hooks/use-entity-form";
+import { toOutcome } from "@/lib/apply-write-outcome";
 
 const RETRACTABLE_FIELDS = ["newPassword"] as const;
 const INITIAL_DATA = { newPassword: "" };
@@ -52,11 +53,15 @@ export function ChangePasswordDialog({
         userId: user.id,
         newPassword,
       });
-      if (!error) return { outcome: "success", data: {}, revalidateKeys: [] };
-      const message = error.message || "Failed to update password";
-      return error.status === 400
-        ? { outcome: "invalid", message, fieldErrors: { newPassword: message } }
-        : { outcome: "error", message };
+      if (error?.status === 400) {
+        const message = error.message || "Failed to update password";
+        return {
+          outcome: "invalid",
+          message,
+          fieldErrors: { newPassword: message },
+        };
+      }
+      return toOutcome(error, "Failed to update password");
     },
     successMessage: () => `Password updated successfully for ${user.name}`,
     // The dialog's field errors are already in view.

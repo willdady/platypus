@@ -4,6 +4,7 @@ import {
   applyWriteOutcome,
   applyDeleteOutcome,
   toastGuidanceOrError,
+  toOutcome,
 } from "./apply-write-outcome";
 import type { WriteOutcome } from "./api-write";
 
@@ -295,4 +296,28 @@ describe("toastGuidanceOrError", () => {
       expect(toast.info).not.toHaveBeenCalled();
     },
   );
+});
+
+describe("toOutcome", () => {
+  it("returns success with empty data and no keys when there is no error", () => {
+    expect(toOutcome(null, "Failed")).toEqual({
+      outcome: "success",
+      data: {},
+      revalidateKeys: [],
+    });
+  });
+
+  it("returns the error's message when present", () => {
+    expect(toOutcome({ message: "Nope" }, "Failed")).toEqual({
+      outcome: "error",
+      message: "Nope",
+    });
+  });
+
+  it("falls back when the error has no message", () => {
+    expect(toOutcome({}, "Failed")).toEqual({
+      outcome: "error",
+      message: "Failed",
+    });
+  });
 });

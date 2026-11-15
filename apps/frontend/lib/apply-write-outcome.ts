@@ -148,3 +148,17 @@ export function toastGuidanceOrError(
     toast.error(message);
   }
 }
+
+/**
+ * Maps an auth-client result to a `WriteOutcome`: an `error` outcome carrying
+ * the error's message or a fallback, otherwise a `success` outcome with empty
+ * data and no keys to revalidate.
+ */
+export function toOutcome(
+  error: { message?: string } | null,
+  fallback: string,
+): WriteOutcome<unknown> {
+  return error
+    ? { outcome: "error", message: error.message || fallback }
+    : { outcome: "success", data: {}, revalidateKeys: [] };
+}
