@@ -11,6 +11,7 @@ import {
   kanbanCardCommentUpdateSchema,
   type KanbanCard,
   type KanbanCardComment,
+  type KanbanLabel,
 } from "@platypus/schemas";
 
 // --- Module mocks ------------------------------------------------------------
@@ -53,6 +54,8 @@ import type { Serialized, WriteOutcome } from "@/lib/api-write";
 
 // --- Helpers -----------------------------------------------------------------
 
+type SaveHandler = Parameters<typeof KanbanCardDialog>[0]["onSave"];
+
 const card: Serialized<KanbanCard> = {
   id: "c1",
   title: "Ship the release",
@@ -94,27 +97,31 @@ function acceptedDelete(): Promise<WriteOutcome<unknown>> {
 
 function dialogElement({
   card: shownCard = card,
+  labels = [],
   columnId = null,
   open = true,
   onOpenChange = () => {},
+  onSave = () => {},
   onDelete = acceptedDelete,
 }: {
   card?: Serialized<KanbanCard> | null;
+  labels?: KanbanLabel[];
   columnId?: string | null;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  onSave?: SaveHandler;
   onDelete?: (cardId: string) => Promise<WriteOutcome<unknown>>;
 } = {}) {
   return (
     <UnsavedChangesProvider>
       <KanbanCardDialog
         card={shownCard}
-        labels={[]}
+        labels={labels}
         columns={[]}
         columnId={columnId}
         open={open}
         onOpenChange={onOpenChange}
-        onSave={() => {}}
+        onSave={onSave}
         onDelete={onDelete}
         orgId="org1"
         workspaceId="ws1"
@@ -296,6 +303,136 @@ describe("KanbanCardDialog editing", () => {
     });
     expect(description).toHaveValue("Details");
     expect(description.labels?.[0]).toHaveTextContent("Description");
+  });
+});
+
+describe("KanbanCardDialog fields across card updates", () => {
+  const newerCard: Serialized<KanbanCard> = {
+    ...card,
+    title: "Ship the release today",
+    body: "The board's copy",
+    updatedAt: new Date("2026-01-02").toISOString(),
+  };
+
+  it("keeps unsaved field edits when a newer version of the card arrives", () => {
+    const { rerender } = render(dialogElement());
+    fireEvent.click(screen.getByRole("button", { name: "Edit card" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Title" }), {
+      target: { value: "A title I am still typing" },
+    });
+
+    rerender(dialogElement({ card: newerCard }));
+
+    expect(
+      screen.getByRole<HTMLInputElement>("textbox", { name: "Title" }),
+    ).toHaveValue("A title I am still typing");
+  });
+
+  it("shows the newer version when the dialog has no unsaved edits", () => {
+    const { rerender } = render(dialogElement());
+
+    rerender(dialogElement({ card: newerCard }));
+
+    expect(screen.getByText("Ship the release today")).toBeInTheDocument();
+  });
+
+  it("shows a different card's values over the edits on the card before it", () => {
+    const { rerender } = render(dialogElement());
+    fireEvent.click(screen.getByRole("button", { name: "Edit card" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Title" }), {
+      target: { value: "A title I am still typing" },
+    });
+
+    rerender(
+      dialogElement({ card: { ...card, id: "c2", title: "Another card" } }),
+    );
+
+    expect(screen.getByText("Another card")).toBeInTheDocument();
+    expect(
+      screen.queryByDisplayValue("A title I am still typing"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows the newer version once the edits are reverted", () => {
+    const { rerender } = render(dialogElement());
+    fireEvent.click(screen.getByRole("button", { name: "Edit card" }));
+    const title = screen.getByRole<HTMLInputElement>("textbox", {
+      name: "Title",
+    });
+    fireEvent.change(title, { target: { value: "A title I am still typing" } });
+
+    rerender(dialogElement({ card: newerCard }));
+    expect(title).toHaveValue("A title I am still typing");
+
+    // Back to the value the dialog was seeded from, so it has no edits left
+    // to protect and can take the newer version.
+    fireEvent.change(title, { target: { value: "Ship the release" } });
+
+    expect(screen.getByText("Ship the release today")).toBeInTheDocument();
+    expect(screen.getByText("The board's copy")).toBeInTheDocument();
+  });
+
+  it("keeps a Label change when a newer version of the card arrives", () => {
+    const labels: KanbanLabel[] = [
+      { id: "l1", name: "Bug", color: "#ef4444" },
+      { id: "l2", name: "UI", color: "#3b82f6" },
+    ];
+    const onSave = vi.fn<SaveHandler>();
+    const { rerender } = render(dialogElement({ labels, onSave }));
+
+    fireEvent.click(screen.getByText("Bug"));
+    rerender(dialogElement({ labels, card: newerCard, onSave }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(onSave).toHaveBeenCalledWith(
+      "c1",
+      expect.objectContaining({ labelIds: ["l1"] }),
+    );
+  });
+
+  it("leaves a remote Column move alone when saving other edits", () => {
+    const onSave = vi.fn<SaveHandler>();
+    const { rerender } = render(dialogElement({ columnId: "col1", onSave }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit card" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Title" }), {
+      target: { value: "A title I am still typing" },
+    });
+
+    // Someone else moves the card while the dialog holds the edits.
+    rerender(
+      dialogElement({
+        card: { ...newerCard, title: card.title },
+        columnId: "col2",
+        onSave,
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(onSave).toHaveBeenCalledWith("c1", {
+      title: "A title I am still typing",
+      body: "Details",
+      labelIds: [],
+      assignees: [],
+      dueDate: null,
+      priority: "none",
+    });
+  });
+
+  it("reopens on the card's values after the edits are discarded", () => {
+    const { rerender } = render(dialogElement());
+    fireEvent.click(screen.getByRole("button", { name: "Edit card" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Title" }), {
+      target: { value: "A title I am still typing" },
+    });
+
+    // Closing is the discard: the board clears the card and the dialog closes.
+    rerender(dialogElement({ card: null, open: false }));
+    rerender(dialogElement());
+
+    expect(screen.getByText("Ship the release")).toBeInTheDocument();
+    expect(
+      screen.queryByDisplayValue("A title I am still typing"),
+    ).not.toBeInTheDocument();
   });
 });
 
