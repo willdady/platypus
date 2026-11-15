@@ -1,9 +1,26 @@
 ---
 name: form-conventions
-description: Post-save conventions for Platypus frontend forms — where a save lands the user, what toasts on success, how a failed save is shown, what the submit button is called, how a failed delete is shown, and the unsaved-changes guard. Use when adding or changing a form in apps/frontend, its submit button, what happens after it saves, the feedback a save or delete gives, or a dialog's Cancel button.
+description: Post-save conventions for Platypus frontend forms — where a save lands the user, what toasts on success, how a failed save is shown, what the submit button is called, how a failed delete is shown, the unsaved-changes guard, and the browser tab title an edit page uses. Use when adding or changing a form in apps/frontend, its submit button, what happens after it saves, the feedback a save or delete gives, a dialog's Cancel button, or an edit page's tab title.
 ---
 
 # Frontend Form Conventions
+
+## The browser tab title
+
+An edit page's tab title is a fixed string for the page type — "Edit Agent",
+"Edit Trigger", "Edit Provider" — and never names the entity it edits:
+
+```tsx
+export const metadata: Metadata = { title: "Edit Agent" };
+```
+
+Naming the entity would mean reading it on the server on top of the read the
+client form already makes, so the title stays off the server read path. The
+Board page follows the same fixed rule: it stays "Board", whichever board is
+open.
+
+`readForLabel` is not for edit pages. It remains for server-rendered labels
+that are not an edit page — the Organization home and settings layout use it.
 
 ## Where a save lands
 

@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { TriggerForm } from "@/components/trigger-form";
 import { ResourcePage } from "@/components/resource-page";
 import { workspaceRoutes } from "@/lib/routes";
-import { backendPath, readForLabel } from "@/lib/server-read";
 
 type Params = Promise<{
   orgId: string;
@@ -13,17 +12,7 @@ type Params = Promise<{
   triggerId: string;
 }>;
 
-export async function generateMetadata({
-  params,
-}: {
-  params: Params;
-}): Promise<Metadata> {
-  const { orgId, workspaceId, triggerId } = await params;
-  const trigger = await readForLabel<{ name: string }>(
-    backendPath`/organizations/${orgId}/workspaces/${workspaceId}/triggers/${triggerId}`,
-  );
-  return { title: trigger?.name || "Edit Trigger" };
-}
+export const metadata: Metadata = { title: "Edit Trigger" };
 
 async function EditTriggerPage({ params }: { params: Params }) {
   const { orgId, workspaceId, triggerId } = await params;
