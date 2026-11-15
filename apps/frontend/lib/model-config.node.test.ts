@@ -181,7 +181,6 @@ describe("getContextWindow", () => {
   });
 });
 
-
 describe("getSearchCapability", () => {
   it("is false when searchSource is none", () => {
     expect(
