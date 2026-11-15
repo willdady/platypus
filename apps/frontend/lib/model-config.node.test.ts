@@ -9,7 +9,6 @@ import {
   nativeFileTypeLabels,
   splitNativeFileTypes,
   getContextWindow,
-  getMaxOutputTokens,
   getSearchCapability,
 } from "./model-config";
 
@@ -182,30 +181,6 @@ describe("getContextWindow", () => {
   });
 });
 
-describe("getMaxOutputTokens", () => {
-  it("returns the declared ceiling for an aliased model", () => {
-    const p = provider([
-      {
-        id: "claude-sonnet",
-        passthroughFileTypes: [],
-        alias: "flagship",
-        maxOutputTokens: 64_000,
-      },
-    ]);
-    const resolved = resolveModelId(p, "alias:flagship")!;
-    expect(getMaxOutputTokens(p, resolved)).toBe(64_000);
-  });
-
-  it("returns undefined when undeclared or unknown", () => {
-    const declaredNone = provider([{ id: "gpt-4", passthroughFileTypes: [] }]);
-    expect(
-      getMaxOutputTokens(declaredNone, resolveModelId(declaredNone, "gpt-4")!),
-    ).toBeUndefined();
-    expect(
-      getMaxOutputTokens(declaredNone, "ghost" as ConcreteModelId),
-    ).toBeUndefined();
-  });
-});
 
 describe("getSearchCapability", () => {
   it("is false when searchSource is none", () => {

@@ -149,9 +149,6 @@ export const canManageOrgSharedResource = orgAdminOnly;
  */
 export const canConfigureSandbox = orgAdminOnly;
 
-/** May this actor list the Organization's members? The backend endpoint is admin-only. */
-export const canListOrgMembers = orgAdminOnly;
-
 /** ADR-0008: may this actor create a Workspace in this Organization? */
 export const canCreateWorkspace = orgAdminOnly;
 

@@ -6,7 +6,6 @@ import {
   canConfigureSandbox,
   canConfigureWorkspaceResource,
   canCreateWorkspace,
-  canListOrgMembers,
   canManageOrgSharedResource,
   canManageSharedResource,
   canManageWorkspaceDelegation,
@@ -121,7 +120,6 @@ describe("canConfigureWorkspaceResource — credential delegation (ADR-0006)", (
 describe.each([
   ["canManageOrgSharedResource", canManageOrgSharedResource],
   ["canConfigureSandbox", canConfigureSandbox],
-  ["canListOrgMembers", canListOrgMembers],
   ["canCreateWorkspace", canCreateWorkspace],
   ["canManageWorkspaceDelegation", canManageWorkspaceDelegation],
   ["canOpenOrgSettings", canOpenOrgSettings],

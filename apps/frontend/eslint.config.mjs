@@ -31,7 +31,6 @@ const HAND_BUILT_ORG_PATH = {
 // Call sites allowed a raw write `fetch()` (see the rule below).
 const RAW_FETCH_EXEMPT = [
   "lib/api-write.ts",
-  "components/change-password-dialog.tsx",
   "components/agent-form.tsx",
   "hooks/use-shared-resource-actions.ts",
 ];
