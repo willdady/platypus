@@ -15,6 +15,7 @@ import {
   toastError,
   toastSuccess,
 } from "@/test/list-test-harness";
+import { selectOption } from "@/test/test-utils";
 import { sandboxCreateSchema, sandboxUpdateSchema } from "@platypus/schemas";
 import { expectSentBodyToMatchSchema } from "@/test/test-utils";
 import type { WriteOutcome } from "@/lib/api-write";
@@ -536,6 +537,41 @@ describe("SandboxSettings save", () => {
   });
 });
 
+describe("SandboxSettings backend fields", () => {
+  it("shows the chosen backend's fields, keeping what the other one holds", async () => {
+    mockReads({
+      sandbox: { data: DOCKER_SANDBOX },
+      backends: [
+        { backend: "docker", name: "Docker" },
+        { backend: "ssh", name: "SSH" },
+      ],
+    });
+    await renderSettings();
+
+    const backend = () => screen.getByRole("combobox", { name: "Backend" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Add host" }));
+    fireEvent.change(screen.getByLabelText("hostname 1"), {
+      target: { value: "db" },
+    });
+    expect(screen.queryByLabelText("Host")).not.toBeInTheDocument();
+
+    await selectOption(backend(), "SSH");
+    expect(
+      screen.queryByRole("button", { name: "Add host" }),
+    ).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Host"), {
+      target: { value: "ssh.example.com" },
+    });
+
+    await selectOption(backend(), "Docker");
+    expect(screen.getByLabelText("hostname 1")).toHaveValue("db");
+
+    await selectOption(backend(), "SSH");
+    expect(screen.getByLabelText("Host")).toHaveValue("ssh.example.com");
+  });
+});
+
 describe("SandboxSettings delete", () => {
   const openDelete = async () => {
     fireEvent.click(screen.getByRole("button", { name: /Delete/ }));
@@ -662,6 +698,43 @@ describe("SandboxSettings field wiring", () => {
     expect(
       screen.getByLabelText("Key passphrase (optional)"),
     ).toHaveAccessibleDescription(/Enter a private key first/);
+  });
+
+  // Every backend-config field clears the config error the same way, whichever
+  // control (and, after the split, whichever component) edits it.
+  it("clears the config error when a Docker config field is edited", async () => {
+    stubRejectedSave(
+      [{ path: ["config"], message: "Invalid extra host" }],
+      400,
+    );
+    mockReads({ sandbox: { data: DOCKER_SANDBOX }, networks: ["bridge-a"] });
+    await renderSettings();
+
+    save();
+    expect(await screen.findByText("Invalid extra host")).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("switch", { name: "Attach network bridge-a" }),
+    );
+
+    expect(screen.queryByText("Invalid extra host")).not.toBeInTheDocument();
+  });
+
+  // `networks` is the one config field whose error is keyed to itself rather
+  // than to `config`, so its own edit has to retract it too.
+  it("clears a network's own error when the allowlist is edited", async () => {
+    stubRejectedSave([{ path: ["networks"], message: "Unknown network" }], 400);
+    mockReads({ sandbox: { data: DOCKER_SANDBOX }, networks: ["bridge-a"] });
+    await renderSettings();
+
+    save();
+    expect(await screen.findByText("Unknown network")).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("switch", { name: "Attach network bridge-a" }),
+    );
+
+    expect(screen.queryByText("Unknown network")).not.toBeInTheDocument();
   });
 
   it("marks a refused field invalid and describes it with the error", async () => {
