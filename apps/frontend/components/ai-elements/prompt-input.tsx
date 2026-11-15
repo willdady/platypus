@@ -68,9 +68,16 @@ import {
  */
 export type SandboxFile = { id: string; file: File };
 
+/** One composer chip, in the order the input shows them. */
+type AttachmentChip =
+  | { kind: "file"; file: FileUIPart & { id: string } }
+  | { kind: "sandbox"; file: SandboxFile };
+
 type AttachmentsContext = {
   files: (FileUIPart & { id: string })[];
   sandboxFiles: SandboxFile[];
+  /** Every chip in display order: file attachments first, Sandbox uploads after. */
+  chips: AttachmentChip[];
   add: (files: File[] | FileList) => void;
   /** Removes a File part or a Sandbox file, whichever holds the id. */
   remove: (id: string) => void;
@@ -264,7 +271,7 @@ export function PromptInputAttachments({
 }: PromptInputAttachmentsProps) {
   const attachments = usePromptInputAttachments();
 
-  if (!attachments.files.length && !attachments.sandboxFiles.length) {
+  if (!attachments.chips.length) {
     return null;
   }
 
@@ -273,12 +280,13 @@ export function PromptInputAttachments({
       className={cn("flex flex-wrap items-center gap-2 p-3", className)}
       {...props}
     >
-      {attachments.files.map((file) => (
-        <Fragment key={file.id}>{children(file)}</Fragment>
-      ))}
-      {attachments.sandboxFiles.map((file) => (
-        <PromptInputSandboxUpload data={file} key={file.id} />
-      ))}
+      {attachments.chips.map((chip) =>
+        chip.kind === "file" ? (
+          <Fragment key={chip.file.id}>{children(chip.file)}</Fragment>
+        ) : (
+          <PromptInputSandboxUpload data={chip.file} key={chip.file.id} />
+        ),
+      )}
     </div>
   );
 }
@@ -580,6 +588,13 @@ export function PromptInput({
     () => ({
       files: files.map((item) => ({ ...item, id: item.id })),
       sandboxFiles,
+      chips: [
+        ...files.map((file): AttachmentChip => ({ kind: "file", file })),
+        ...sandboxFiles.map((file): AttachmentChip => ({
+          kind: "sandbox",
+          file,
+        })),
+      ],
       add,
       remove,
       clear,
@@ -748,15 +763,14 @@ export function PromptInputTextarea({
       form?.requestSubmit();
     }
 
-    // Backspace on an empty textarea removes the last chip on screen.
-    // Sandbox uploads render after file attachments, so one of those wins
-    // whenever there is one (issue #1938).
+    // Backspace on an empty textarea removes the last chip on screen. `chips`
+    // is the composer's display order, so this cannot drift from the renderer
+    // (issue #1938).
     if (e.key === "Backspace" && e.currentTarget.value === "") {
-      const lastAttachment =
-        attachments.sandboxFiles.at(-1) ?? attachments.files.at(-1);
-      if (lastAttachment) {
+      const lastChip = attachments.chips.at(-1);
+      if (lastChip) {
         e.preventDefault();
-        attachments.remove(lastAttachment.id);
+        attachments.remove(lastChip.file.id);
       }
     }
   };

@@ -439,7 +439,7 @@ describe("PromptInputTextarea onKeyDown", () => {
   // Sandbox upload chip sat after it on screen, and did nothing at all when
   // only Sandbox uploads were attached. It must remove the last chip in
   // display order — Sandbox uploads render after file attachments.
-  describe("Backspace on an empty textarea", () => {
+  describe("Backspace", () => {
     const renderComposer = () =>
       render(
         <PromptInput onSubmit={vi.fn()}>
@@ -482,6 +482,20 @@ describe("PromptInputTextarea onKeyDown", () => {
       expect(screen.queryByText("photo.txt")).not.toBeInTheDocument();
     });
 
+    // Sandbox uploads render after file attachments regardless of the order
+    // they were added, so the chip added most recently is not the one shown
+    // last.
+    it("removes the Sandbox upload even when a file was attached after it", () => {
+      renderComposer();
+      attachSandboxFile("sandbox.txt");
+      attachFile("photo.txt");
+
+      backspace();
+
+      expect(screen.queryByText("sandbox.txt")).not.toBeInTheDocument();
+      expect(screen.getByText("photo.txt")).toBeInTheDocument();
+    });
+
     it("removes the last Sandbox upload when only Sandbox uploads are attached", () => {
       renderComposer();
       attachSandboxFile("first.txt");
@@ -504,7 +518,7 @@ describe("PromptInputTextarea onKeyDown", () => {
       expect(screen.getByText("first.txt")).toBeInTheDocument();
     });
 
-    it("deletes text and removes no chip when the textarea is not empty", () => {
+    it("removes no chip when the textarea is not empty", () => {
       renderComposer();
       attachFile("photo.txt");
       const textarea = screen.getByRole("textbox");
