@@ -129,15 +129,11 @@ function UserInvitationsPage() {
       />
 
       <ConfirmDialog
-        open={decline.open}
-        onOpenChange={(open) => !open && decline.close()}
         title="Decline invitation"
         description="Are you sure you want to decline this invitation?"
         confirmLabel="Decline"
         loadingLabel="Declining..."
-        onConfirm={decline.confirm}
-        loading={decline.deleting}
-        error={decline.error}
+        {...decline.dialogProps}
       />
     </div>
   );

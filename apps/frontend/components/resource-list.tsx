@@ -337,13 +337,9 @@ export function ResourceList({
         orgSettingsHref={(selected) => `${orgSettingsRoot}/${selected.id}`}
       />
       <DeleteConfirmDialog
-        open={deleteFlow.open}
-        onOpenChange={(open) => !open && deleteFlow.close()}
         noun={config.labels.noun}
         name={deleteFlow.target?.name}
-        onConfirm={deleteFlow.confirm}
-        loading={deleteFlow.deleting}
-        error={deleteFlow.error}
+        {...deleteFlow.dialogProps}
       />
       <DeleteBlockedDialog
         guard={deleteGuard}

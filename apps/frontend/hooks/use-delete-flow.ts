@@ -29,10 +29,30 @@ export type UseDeleteFlowOptions<T> = {
   readonly onSuccess?: (target: T) => void;
 };
 
+/**
+ * The five props every delete confirm dialog took by hand (#1944), ready to
+ * spread onto `DeleteConfirmDialog` or a plain `ConfirmDialog`. Only the
+ * wording is left to the call site.
+ *
+ * Both hooks wire it the same way: opening is the hook's own affordance
+ * (`request` / `openDeleteDialog`), and dismissing the dialog clears whatever
+ * refusal it was showing.
+ */
+export type DeleteDialogProps = {
+  readonly open: boolean;
+  readonly onOpenChange: (open: boolean) => void;
+  /** Fires the delete; the dialog's own prop is void-returning. */
+  readonly onConfirm: () => void;
+  readonly loading: boolean;
+  readonly error: string | null;
+};
+
 export type DeleteFlow<T> = {
   /** The item the confirm dialog is open for, or null when closed. */
   readonly target: T | null;
   readonly open: boolean;
+  /** `open`, `onOpenChange`, `onConfirm`, `loading` and `error`, ready to spread. */
+  readonly dialogProps: DeleteDialogProps;
   /** A refused delete's message, shown inline in the dialog. */
   readonly error: string | null;
   readonly deleting: boolean;
@@ -101,9 +121,21 @@ export function useDeleteFlow<T>({
     }
   };
 
+  const open = target !== null;
+
   return {
     target,
-    open: target !== null,
+    open,
+    dialogProps: {
+      open,
+      // Closing is the only transition the dialog drives; opening is `request`.
+      onOpenChange: (next) => {
+        if (!next) close();
+      },
+      onConfirm: () => void confirm(),
+      loading: deleting,
+      error,
+    },
     error,
     deleting,
     request,

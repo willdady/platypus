@@ -121,14 +121,7 @@ export function WorkspaceContextForm({ contextId }: { contextId?: string }) {
     onSuccess: () => router.push(userRoutes.contexts),
   });
 
-  const {
-    isDeleteDialogOpen,
-    setIsDeleteDialogOpen,
-    isDeleting,
-    deleteError,
-    openDeleteDialog,
-    handleDelete,
-  } = useEntityDelete({
+  const { dialogProps, openDeleteDialog } = useEntityDelete({
     entity: "users/me/contexts",
     scope: {},
     id: contextId,
@@ -344,14 +337,7 @@ export function WorkspaceContextForm({ contextId }: { contextId?: string }) {
           onDelete={openDeleteDialog}
         />
 
-        <DeleteConfirmDialog
-          open={isDeleteDialogOpen}
-          onOpenChange={setIsDeleteDialogOpen}
-          noun="context"
-          onConfirm={handleDelete}
-          loading={isDeleting}
-          error={deleteError}
-        />
+        <DeleteConfirmDialog noun="context" {...dialogProps} />
       </form>
     </DetailFormState>
   );

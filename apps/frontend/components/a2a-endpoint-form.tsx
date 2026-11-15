@@ -119,14 +119,7 @@ function A2aEndpointForm({
       ),
   });
 
-  const {
-    isDeleteDialogOpen,
-    setIsDeleteDialogOpen,
-    isDeleting,
-    deleteError,
-    openDeleteDialog,
-    handleDelete,
-  } = useEntityDelete({
+  const { dialogProps, openDeleteDialog } = useEntityDelete({
     entity: "a2a-endpoints",
     scope,
     id: endpointId,
@@ -257,13 +250,9 @@ function A2aEndpointForm({
       )}
 
       <DeleteConfirmDialog
-        open={isDeleteDialogOpen}
-        onOpenChange={setIsDeleteDialogOpen}
         noun="A2A endpoint"
         consequence="Its URL and every one of its tokens stop working straight away."
-        onConfirm={handleDelete}
-        loading={isDeleting}
-        error={deleteError}
+        {...dialogProps}
       />
     </form>
   );

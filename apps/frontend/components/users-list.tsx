@@ -190,8 +190,6 @@ export function UsersList() {
 
       {deleteFlow.target && (
         <DeleteConfirmDialog
-          open={deleteFlow.open}
-          onOpenChange={(open) => !open && deleteFlow.close()}
           noun="user"
           name={deleteFlow.target.name}
           consequence={
@@ -202,9 +200,7 @@ export function UsersList() {
           }
           requireTypedConfirmation
           confirmLabel="Delete user"
-          onConfirm={deleteFlow.confirm}
-          loading={deleteFlow.deleting}
-          error={deleteFlow.error}
+          {...deleteFlow.dialogProps}
         />
       )}
     </>

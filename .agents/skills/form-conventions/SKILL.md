@@ -78,8 +78,9 @@ other failure of that form still toasts.
 A refused delete is shown **inline, in the confirm dialog, which stays open**.
 The spinner stops and the user can read the message, then retry or cancel.
 This holds for every delete, form or list: use `useEntityDelete` or
-`useDeleteFlow` and pass the error to the dialog. Never toast a failed delete
-and close the dialog.
+`useDeleteFlow` and spread its `dialogProps` onto the dialog, which carries the
+open state, the confirm handler, the pending flag and the inline error. Never
+toast a failed delete and close the dialog.
 
 The one exception is `guidanceOnForbidden`, on both hooks, and it is for
 Shared-resource deletes only. Deleting a Shared resource from a Workspace is

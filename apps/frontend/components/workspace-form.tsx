@@ -168,14 +168,7 @@ function WorkspaceForm({ orgId, workspaceId }: WorkspaceFormProps) {
     },
   });
 
-  const {
-    isDeleteDialogOpen,
-    setIsDeleteDialogOpen,
-    isDeleting,
-    deleteError,
-    openDeleteDialog,
-    handleDelete,
-  } = useEntityDelete<Workspace>({
+  const { dialogProps, openDeleteDialog } = useEntityDelete<Workspace>({
     entity: "workspaces",
     scope: { orgId },
     id: workspaceId,
@@ -388,13 +381,9 @@ function WorkspaceForm({ orgId, workspaceId }: WorkspaceFormProps) {
         </div>
 
         <DeleteConfirmDialog
-          open={isDeleteDialogOpen}
-          onOpenChange={setIsDeleteDialogOpen}
           noun="workspace"
           requireTypedConfirmation
-          onConfirm={handleDelete}
-          loading={isDeleting}
-          error={deleteError}
+          {...dialogProps}
         />
       </form>
     </DetailFormState>

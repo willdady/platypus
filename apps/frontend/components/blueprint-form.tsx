@@ -308,14 +308,7 @@ function BlueprintForm({
     onSuccess: () => router.push(returnPath),
   });
 
-  const {
-    isDeleteDialogOpen,
-    setIsDeleteDialogOpen,
-    isDeleting,
-    deleteError,
-    openDeleteDialog,
-    handleDelete,
-  } = useEntityDelete({
+  const { dialogProps, openDeleteDialog } = useEntityDelete({
     entity: "blueprints",
     scope: { orgId },
     id: blueprintId,
@@ -498,13 +491,9 @@ function BlueprintForm({
       />
 
       <DeleteConfirmDialog
-        open={isDeleteDialogOpen}
-        onOpenChange={setIsDeleteDialogOpen}
         noun="blueprint"
         consequence="Workspaces already provisioned from it are unaffected."
-        onConfirm={handleDelete}
-        loading={isDeleting}
-        error={deleteError}
+        {...dialogProps}
       />
     </form>
   );

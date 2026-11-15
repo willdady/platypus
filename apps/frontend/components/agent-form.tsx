@@ -437,14 +437,7 @@ function AgentForm({
     },
   });
 
-  const {
-    isDeleteDialogOpen,
-    setIsDeleteDialogOpen,
-    isDeleting,
-    deleteError,
-    openDeleteDialog,
-    handleDelete,
-  } = useEntityDelete<Agent>({
+  const { dialogProps, openDeleteDialog } = useEntityDelete<Agent>({
     entity: "agents",
     scope,
     id: agentId,
@@ -935,14 +928,7 @@ function AgentForm({
         onDelete={openDeleteDialog}
       />
 
-      <DeleteConfirmDialog
-        open={isDeleteDialogOpen}
-        onOpenChange={setIsDeleteDialogOpen}
-        noun="agent"
-        onConfirm={handleDelete}
-        loading={isDeleting}
-        error={deleteError}
-      />
+      <DeleteConfirmDialog noun="agent" {...dialogProps} />
     </form>
   );
 

@@ -550,14 +550,10 @@ export function TriggerList({
       )}
 
       <DeleteConfirmDialog
-        open={deleteFlow.open}
-        onOpenChange={(open) => !open && deleteFlow.close()}
         noun="trigger"
         name={deleteFlow.target?.name}
         consequence="This will also delete all run history for this trigger."
-        onConfirm={deleteFlow.confirm}
-        loading={deleteFlow.deleting}
-        error={deleteFlow.error}
+        {...deleteFlow.dialogProps}
       />
     </>,
     <ListPagination

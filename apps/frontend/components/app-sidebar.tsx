@@ -577,14 +577,7 @@ export function AppSidebar() {
         </DialogContent>
       </Dialog>
 
-      <DeleteConfirmDialog
-        open={chatDelete.open}
-        onOpenChange={(open) => !open && chatDelete.close()}
-        noun="chat"
-        onConfirm={chatDelete.confirm}
-        loading={chatDelete.deleting}
-        error={chatDelete.error}
-      />
+      <DeleteConfirmDialog noun="chat" {...chatDelete.dialogProps} />
     </>
   );
 }

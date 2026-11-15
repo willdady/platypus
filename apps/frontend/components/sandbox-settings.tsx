@@ -274,37 +274,31 @@ function SandboxSettings({
     onSuccess: draft ? undefined : () => reseedFromServer(),
   });
 
-  const {
-    isDeleteDialogOpen,
-    setIsDeleteDialogOpen,
-    isDeleting,
-    deleteError,
-    openDeleteDialog,
-    handleDelete,
-  } = useEntityDelete({
-    entity: "sandbox",
-    scope,
-    id: data?.id,
-    successMessage: DELETED_MESSAGE,
-    write: () => deleteSandbox(),
-    // A failed destroy is offered as a forced retry in its own dialog; every
-    // other refusal stays inline.
-    onError: (_message, outcome) => {
-      if (!isForceRetry(outcome)) return false;
-      setIsDeleteDialogOpen(false);
-      setForceDialog({
-        open: true,
-        kind: "delete",
-        message: "Failed to destroy sandbox — delete anyway?",
-        error: null,
-      });
-      return true;
-    },
-    onSuccess: async () => {
-      setIsDeleteDialogOpen(false);
-      await clearDeleted();
-    },
-  });
+  const { setIsDeleteDialogOpen, dialogProps, openDeleteDialog } =
+    useEntityDelete({
+      entity: "sandbox",
+      scope,
+      id: data?.id,
+      successMessage: DELETED_MESSAGE,
+      write: () => deleteSandbox(),
+      // A failed destroy is offered as a forced retry in its own dialog; every
+      // other refusal stays inline.
+      onError: (_message, outcome) => {
+        if (!isForceRetry(outcome)) return false;
+        setIsDeleteDialogOpen(false);
+        setForceDialog({
+          open: true,
+          kind: "delete",
+          message: "Failed to destroy sandbox — delete anyway?",
+          error: null,
+        });
+        return true;
+      },
+      onSuccess: async () => {
+        setIsDeleteDialogOpen(false);
+        await clearDeleted();
+      },
+    });
 
   function seedFrom(record: Serialized<Sandbox>) {
     setIsReplacingKey(false);
@@ -1004,14 +998,7 @@ function SandboxSettings({
         </div>
       )}
 
-      <DeleteConfirmDialog
-        open={isDeleteDialogOpen}
-        onOpenChange={setIsDeleteDialogOpen}
-        noun="sandbox"
-        onConfirm={handleDelete}
-        loading={isDeleting}
-        error={deleteError}
-      />
+      <DeleteConfirmDialog noun="sandbox" {...dialogProps} />
 
       <ConfirmDialog
         open={forceDialog.open}

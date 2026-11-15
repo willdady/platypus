@@ -25,6 +25,7 @@ import { useBackendUrl } from "@/components/auth-provider";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useUnsavedChangesGuard } from "@/components/unsaved-changes-guard";
+import type { DeleteDialogProps } from "@/hooks/use-delete-flow";
 import { deepEqual } from "@/lib/deep-equal";
 
 /** The success copy a write shows, or a thunk for a message that varies. */
@@ -432,6 +433,8 @@ export type UseEntityDeleteResult = {
   setIsDeleteDialogOpen: (open: boolean) => void;
   isDeleting: boolean;
   deleteError: string | null;
+  /** `open`, `onOpenChange`, `onConfirm`, `loading` and `error`, ready to spread. */
+  dialogProps: DeleteDialogProps;
   /** Opens the shared delete dialog. */
   openDeleteDialog: () => void;
   handleDelete: () => Promise<void>;
@@ -465,6 +468,11 @@ export function useEntityDelete<TResult = unknown>({
     setIsDeleting(false);
     setDeleteError(null);
     setIsDeleteDialogOpen(true);
+  }, []);
+
+  const closeDeleteDialog = useCallback(() => {
+    setIsDeleteDialogOpen(false);
+    setDeleteError(null);
   }, []);
 
   const handleDelete = useCallback(async () => {
@@ -519,6 +527,18 @@ export function useEntityDelete<TResult = unknown>({
     setIsDeleteDialogOpen,
     isDeleting,
     deleteError,
+    dialogProps: {
+      open: isDeleteDialogOpen,
+      // Closing is the only transition the dialog drives; opening is
+      // `openDeleteDialog`. A dismissed refusal goes with the dialog, as it
+      // does in `useDeleteFlow`.
+      onOpenChange: (open) => {
+        if (!open) closeDeleteDialog();
+      },
+      onConfirm: () => void handleDelete(),
+      loading: isDeleting,
+      error: deleteError,
+    },
     openDeleteDialog,
     handleDelete,
   };

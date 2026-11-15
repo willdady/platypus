@@ -132,15 +132,11 @@ export function OrgInboundTriggersList({ orgId }: { orgId: string }) {
       </TableList>
 
       <ConfirmDialog
-        open={revoke.open}
-        onOpenChange={(open) => !open && revoke.close()}
         title="Revoke token"
         description={`Calls with the token for "${revoke.target?.name}" are refused from now on, and ${revoke.target?.ownerName ?? "the workspace owner"} gets a notification. The owner can issue a new token; to stop the workspace taking calls for good, change the organization's Inbound Triggers setting.`}
         confirmLabel="Revoke token"
         confirmVariant="destructive"
-        onConfirm={() => void revoke.confirm()}
-        loading={revoke.deleting}
-        error={revoke.error}
+        {...revoke.dialogProps}
       />
     </>
   );

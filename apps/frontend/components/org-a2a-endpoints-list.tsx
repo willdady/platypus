@@ -150,8 +150,6 @@ export function OrgA2aEndpointsList({ orgId }: { orgId: string }) {
       </TableList>
 
       <ConfirmDialog
-        open={revoke.open}
-        onOpenChange={(open) => !open && revoke.close()}
         title={revoke.target?.token ? "Revoke token" : "Revoke endpoint"}
         description={
           revoke.target?.token
@@ -160,9 +158,7 @@ export function OrgA2aEndpointsList({ orgId }: { orgId: string }) {
         }
         confirmLabel={revoke.target?.token ? "Revoke token" : "Revoke endpoint"}
         confirmVariant="destructive"
-        onConfirm={() => void revoke.confirm()}
-        loading={revoke.deleting}
-        error={revoke.error}
+        {...revoke.dialogProps}
       />
     </>
   );

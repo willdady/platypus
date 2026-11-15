@@ -1221,22 +1221,14 @@ export function KanbanCardDialog({
         </DialogFooter>
       </DialogContent>
       <DeleteConfirmDialog
-        open={cardDelete.open}
-        onOpenChange={(next) => !next && cardDelete.close()}
         noun="card"
-        onConfirm={cardDelete.confirm}
-        loading={cardDelete.deleting}
-        error={cardDelete.error}
         onCloseAutoFocus={restoreDeleteFocus}
+        {...cardDelete.dialogProps}
       />
       <DeleteConfirmDialog
-        open={commentDelete.open}
-        onOpenChange={(next) => !next && commentDelete.close()}
         noun="comment"
-        onConfirm={commentDelete.confirm}
-        loading={commentDelete.deleting}
-        error={commentDelete.error}
         onCloseAutoFocus={restoreDeleteFocus}
+        {...commentDelete.dialogProps}
       />
     </Dialog>
   );

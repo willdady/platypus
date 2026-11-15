@@ -223,14 +223,7 @@ function McpForm({
     failureMessage: "Failed to save MCP server",
   });
 
-  const {
-    isDeleteDialogOpen,
-    setIsDeleteDialogOpen,
-    isDeleting,
-    deleteError,
-    openDeleteDialog,
-    handleDelete,
-  } = useEntityDelete({
+  const { dialogProps, openDeleteDialog } = useEntityDelete({
     entity: "mcps",
     scope,
     id: mcpId,
@@ -778,14 +771,7 @@ function McpForm({
         onDelete={openDeleteDialog}
       />
 
-      <DeleteConfirmDialog
-        open={isDeleteDialogOpen}
-        onOpenChange={setIsDeleteDialogOpen}
-        noun="MCP server"
-        onConfirm={handleDelete}
-        loading={isDeleting}
-        error={deleteError}
-      />
+      <DeleteConfirmDialog noun="MCP server" {...dialogProps} />
     </form>
   );
 

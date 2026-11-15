@@ -135,15 +135,11 @@ export function BoardsList({
       </ListFooter>
 
       <DeleteConfirmDialog
-        open={deleteFlow.open}
-        onOpenChange={(open) => !open && deleteFlow.close()}
         noun="board"
         name={deleteFlow.target?.name}
         consequence="This also deletes all of its data."
         requireTypedConfirmation
-        onConfirm={deleteFlow.confirm}
-        loading={deleteFlow.deleting}
-        error={deleteFlow.error}
+        {...deleteFlow.dialogProps}
       />
     </>
   );
