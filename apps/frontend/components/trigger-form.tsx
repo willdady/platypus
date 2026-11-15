@@ -32,7 +32,14 @@ import { TriggerCronFields } from "@/components/trigger-cron-fields";
 import { TriggerEventFields } from "@/components/trigger-event-fields";
 import { useEventFilterListsLoading } from "@/hooks/use-event-filter-lists-loading";
 import { TriggerInboundFields } from "@/components/trigger-inbound-fields";
-import { type Trigger, type Agent, type TriggerType } from "@platypus/schemas";
+import {
+  type Trigger,
+  type Agent,
+  type TriggerType,
+  type CronTriggerConfig,
+  type EventTriggerConfig,
+  type InboundTriggerConfig,
+} from "@platypus/schemas";
 import {
   gateAdmits,
   triggerTypeSchema,
@@ -68,11 +75,8 @@ export type SavedTrigger = {
   tokenExpiresAt?: string | null;
 };
 
-/** What a trigger type's fields contribute to the save. */
-export type TriggerTypeFields = {
-  type: TriggerType;
-  /** The payload's `config`. */
-  config: unknown;
+/** What every trigger type's fields report, whatever the type. */
+type TriggerTypeFieldsBase = {
   /** Whether the fields let the trigger save. */
   valid: boolean;
   /**
@@ -81,6 +85,12 @@ export type TriggerTypeFields = {
    */
   onSaved?: (saved: SavedTrigger) => boolean;
 };
+
+/** What a trigger type's fields contribute to the save. */
+export type TriggerTypeFields =
+  | (TriggerTypeFieldsBase & { type: "cron"; config: CronTriggerConfig })
+  | (TriggerTypeFieldsBase & { type: "event"; config: EventTriggerConfig })
+  | (TriggerTypeFieldsBase & { type: "inbound"; config: InboundTriggerConfig });
 
 /** The props every trigger type's fields component takes. */
 export type TriggerFieldsProps = {
@@ -258,22 +268,54 @@ function TriggerForm({
     sideState: { triggerType, configChanged },
     onSeed: (trigger) => setTriggerType(trigger.type),
     retractableFields: RETRACTABLE_FIELDS,
-    buildPayload: (data): unknown => ({
-      // The route supplies the Workspace on create; an update does not carry
-      // scope at all.
-      ...(triggerId ? {} : { workspaceId }),
-      agentId: data.agentId || defaultAgentId,
-      name: data.name,
-      description: data.description || undefined,
-      instruction: data.instruction,
-      enabled: data.enabled,
-      maxRunsToKeep: data.maxRunsToKeep,
-      search: data.search,
-      includeMemories: data.includeMemories,
-      extractMemories: data.extractMemories,
-      type: triggerType,
-      config: selectedFields?.config,
-    }),
+    buildPayload: (data) => {
+      const base = {
+        agentId: data.agentId || defaultAgentId,
+        name: data.name,
+        description: data.description || undefined,
+        instruction: data.instruction,
+        enabled: data.enabled,
+        maxRunsToKeep: data.maxRunsToKeep,
+        search: data.search,
+        includeMemories: data.includeMemories,
+        extractMemories: data.extractMemories,
+      };
+      // An update never carries scope, and its config is validated against the
+      // stored Trigger's type.
+      if (triggerId) {
+        return { ...base, type: triggerType, config: selectedFields?.config };
+      }
+      // The route supplies the Workspace on create, and the create schema
+      // discriminates on `type` with a matching `config`. A union-typed pair
+      // can't satisfy that, so each type comes back from its own arm; the
+      // alternative is a cast.
+      switch (selectedFields?.type) {
+        case "cron":
+          return {
+            ...base,
+            workspaceId,
+            type: "cron",
+            config: selectedFields.config,
+          };
+        case "event":
+          return {
+            ...base,
+            workspaceId,
+            type: "event",
+            config: selectedFields.config,
+          };
+        case "inbound":
+          return {
+            ...base,
+            workspaceId,
+            type: "inbound",
+            config: selectedFields.config,
+          };
+      }
+      // No type's fields have reported yet, so there is no create body to
+      // send; Save stays disabled until one does.
+      return undefined;
+    },
     successMessage: () => (triggerId ? "Trigger updated" : "Trigger created"),
     onSuccess: (saved) => {
       if (selectedFields?.onSaved?.(saved)) return;

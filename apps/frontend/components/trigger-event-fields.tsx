@@ -20,6 +20,7 @@ import { useScopedList } from "@/hooks/use-scoped-list";
 import { useEffect, useState } from "react";
 import {
   eventTriggerEventSchema,
+  type EventTriggerEvent,
   type KanbanBoard,
   type KanbanBoardState,
 } from "@platypus/schemas";
@@ -53,7 +54,7 @@ function TriggerEventFields({
 }: TriggerFieldsProps) {
   const saved = trigger?.type === "event" ? trigger.config : undefined;
 
-  const [selectedEvents, setSelectedEvents] = useState<string[]>(
+  const [selectedEvents, setSelectedEvents] = useState<EventTriggerEvent[]>(
     saved?.events ?? [],
   );
   const [filterBoardId, setFilterBoardId] = useState<string>(
@@ -104,7 +105,7 @@ function TriggerEventFields({
 
   if (!active) return null;
 
-  const handleEventToggle = (event: string) => {
+  const handleEventToggle = (event: EventTriggerEvent) => {
     clearErrors("config");
     setSelectedEvents((prev) => {
       const next = prev.includes(event)

@@ -23,6 +23,7 @@ import {
   triggerRunWebhookEventSchema,
   WEBHOOK_NAME_MAX_LENGTH,
   type Webhook,
+  type WebhookEvent,
 } from "@platypus/schemas";
 import { FormTextField } from "@/components/form-text-field";
 import { FormSwitchField } from "@/components/form-switch-field";
@@ -108,7 +109,7 @@ const INITIAL_DATA = {
   name: "",
   url: "",
   enabled: true,
-  events: [...ALL_EVENTS] as string[],
+  events: [...ALL_EVENTS],
   headers: [] as KeyValueRow[],
 };
 
@@ -210,7 +211,7 @@ function WebhookForm({ orgId, workspaceId, webhookId }: WebhookFormProps) {
 
   const { events, headers } = formData;
 
-  const toggleEvent = (event: string) => {
+  const toggleEvent = (event: WebhookEvent) => {
     clearErrors("events");
     setFormData((prev) => {
       const on = !prev.events.includes(event);

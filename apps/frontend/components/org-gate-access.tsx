@@ -111,8 +111,6 @@ export function OrgGateAccess({
     submit,
   } = useEntityForm<object, Access>({
     initialData: {},
-    entity: copy.entity,
-    scope,
     // The staged access is guarded above from the saved one; the hook's own
     // `formData` never changes here.
     guardUnsavedChanges: false,

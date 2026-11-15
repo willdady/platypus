@@ -31,8 +31,6 @@ export function ChangePasswordForm() {
     submit,
   } = useEntityForm<typeof INITIAL_DATA, unknown>({
     initialData: INITIAL_DATA,
-    entity: "password",
-    scope: {},
     retractableFields: RETRACTABLE_FIELDS,
     // The password change is an auth-client call, not a REST write — kept
     // local, mapped onto the shared outcome shape.

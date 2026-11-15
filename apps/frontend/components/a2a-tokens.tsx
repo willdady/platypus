@@ -94,8 +94,6 @@ export function A2aTokens({
     guardUnsavedChanges: false,
     // The token form's errors are already in view.
     invalidMessage: null,
-    entity: "tokens",
-    scope: {},
     write: (data) =>
       writeAt<IssuedToken>(tokensUrl, {
         method: "POST",

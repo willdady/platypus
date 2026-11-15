@@ -250,8 +250,6 @@ function SandboxSettings({
     submit,
   } = useEntityForm<SandboxFormData>({
     initialData: DEFAULT_FORM,
-    entity: "sandbox",
-    scope,
     write: () => writeSandbox(),
     // A rejected save toasts, as there is no one field to key a conflict to.
     conflictField: null,

@@ -27,10 +27,11 @@ type Data = { name: string; description: string };
 
 const baseOptions = {
   initialData: { name: "", description: "" },
-  entity: "skills",
+  entity: "skills" as const,
   scope: { orgId: "org1" },
   retractableFields: ["name", "description"],
-  buildPayload: (data: Data) => data,
+  // A Skill create's required body, alongside the form's own fields.
+  buildPayload: (data: Data) => ({ ...data, body: "" }),
 };
 
 describe("useEntityForm field adapters", () => {
@@ -97,7 +98,12 @@ describe("useEntityForm record read", () => {
   });
 
   const renderRead = (
-    options: Partial<Parameters<typeof useEntityForm<Data, unknown, Row>>[0]>,
+    options: Partial<
+      Extract<
+        Parameters<typeof useEntityForm<Data, unknown, Row>>[0],
+        { entity: "skills" }
+      >
+    >,
   ) =>
     renderHook(
       (props: { id?: string }) =>
@@ -127,7 +133,17 @@ describe("useEntityForm record read", () => {
 
   it("reads a user-scoped record from the root scope", () => {
     setDataFor("http://test/users/me/contexts/s1", row);
-    const { result } = renderRead({ entity: "users/me/contexts", scope: {} });
+    const { result } = renderHook(() =>
+      useEntityForm<{ content: string }, unknown, Row>({
+        initialData: { content: "" },
+        entity: "users/me/contexts",
+        scope: {},
+        id: "s1",
+        fromRecord: () => ({ content: row.description }),
+        // A global Context names no Workspace.
+        buildPayload: (data) => ({ content: data.content, workspaceId: null }),
+      }),
+    );
     expect(result.current.record).toBe(row);
   });
 
@@ -277,6 +293,7 @@ describe("useEntityForm submit lifecycle", () => {
     expect(JSON.parse(String(init.body))).toEqual({
       name: "Deploy",
       description: "",
+      body: "",
     });
   });
 
@@ -604,6 +621,70 @@ describe("useEntityDelete dialogProps", () => {
 
     expect(result.current.dialogProps.open).toBe(false);
     expect(result.current.dialogProps.error).toBeNull();
+  });
+});
+
+describe("useEntityForm option types", () => {
+  it("takes a form's own write with no entity or scope", () => {
+    const { result } = renderHook(() =>
+      useEntityForm<Data, unknown>({
+        initialData: { name: "", description: "" },
+        write: async () => ({
+          outcome: "success",
+          data: undefined,
+          revalidateKeys: [],
+        }),
+      }),
+    );
+
+    expect(result.current.formData).toEqual({ name: "", description: "" });
+  });
+
+  // The three cases below are compile-time claims: their assertion is the
+  // `@ts-expect-error`, which `pnpm typecheck` holds to being an error. They
+  // still render, so a regression to a runtime throw would show here too.
+  // eslint-disable-next-line vitest/expect-expect -- the `@ts-expect-error` is the assertion
+  it("rejects a form that names neither an entity nor a write", () => {
+    renderHook(() =>
+      // @ts-expect-error a form writes through an entity or its own write
+      useEntityForm<Data, unknown>({
+        initialData: { name: "", description: "" },
+      }),
+    );
+  });
+
+  // eslint-disable-next-line vitest/expect-expect -- the `@ts-expect-error` is the assertion
+  it("rejects a form that names an entity and brings its own write", () => {
+    renderHook(() =>
+      useEntityForm<Data, unknown>({
+        initialData: { name: "", description: "" },
+        entity: "skills",
+        scope: { orgId: "org1" },
+        // @ts-expect-error the entity is the write's target, or the form owns it
+        write: async () => ({
+          outcome: "success",
+          data: undefined,
+          revalidateKeys: [],
+        }),
+      }),
+    );
+  });
+
+  // eslint-disable-next-line vitest/expect-expect -- the `@ts-expect-error` is the assertion
+  it("checks buildPayload against the entity's request schema", () => {
+    renderHook(() =>
+      // @ts-expect-error a Skill has no `nonsense` field; the strict request
+      // schema would refuse it with a 400.
+      useEntityForm<Data, unknown>({
+        initialData: { name: "", description: "" },
+        entity: "skills",
+        scope: { orgId: "org1" },
+        buildPayload: (data) => ({
+          name: data.name,
+          nonsense: data.description,
+        }),
+      }),
+    );
   });
 });
 
