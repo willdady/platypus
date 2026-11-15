@@ -100,6 +100,39 @@ type CardSaveData = {
 
 type AgentOption = { id: string; name: string; avatarUrl?: string };
 
+/** The card dialog's editable fields, as its own state holds them. */
+type CardFields = {
+  title: string;
+  body: string;
+  labelIds: string[];
+  assignees: KanbanCardAssignee[];
+  dueDate: string | null;
+  priority: KanbanCardPriority;
+  columnId: string | null;
+};
+
+/** The values a card's fields start from, with `targetColumnId` as the Column. */
+function fieldsFromCard(
+  card: Serialized<KanbanCard>,
+  targetColumnId: string | null,
+): CardFields {
+  return {
+    title: card.title,
+    body: card.body ?? "",
+    labelIds: card.labelIds ?? [],
+    assignees: card.assignees ?? [],
+    dueDate: (card.dueDate as string) ?? null,
+    priority: card.priority ?? "none",
+    columnId: targetColumnId,
+  };
+}
+
+// Labels compared as a set: toggling one off and back on moves it to the end,
+// which is not an edit.
+function comparableFields(fields: CardFields): CardFields {
+  return { ...fields, labelIds: [...fields.labelIds].sort() };
+}
+
 function AssigneePicker({
   user,
   agents,
@@ -774,6 +807,14 @@ export function KanbanCardDialog({
   const [isEditing, setIsEditing] = useState(false);
   const [focusField, setFocusField] = useState<"title" | "body">("title");
 
+  // The card and target column the fields were last seeded from. The fields
+  // are the user's own while they differ from these, which is what tells a
+  // board refresh apart from an edit (#1935).
+  const [seeded, setSeeded] = useState<{
+    card: Serialized<KanbanCard>;
+    columnId: string | null;
+  } | null>(null);
+
   const cardDeleteTrigger = useRef<HTMLButtonElement | null>(null);
 
   // Above the layouts, not inside the comments section: the tabbed layout
@@ -796,56 +837,68 @@ export function KanbanCardDialog({
     setIsEditing(true);
   };
 
-  // Re-initialise the card's fields whenever a different card is shown, the
-  // card is updated server-side, or the target column changes.
-  useResetOnChange(
-    `${card?.id ?? ""}:${String(card?.updatedAt ?? "")}:${initialColumnId ?? ""}`,
-    () => {
-      if (card) {
-        setTitle(card.title);
-        setBody(card.body ?? "");
-        setSelectedLabelIds(card.labelIds ?? []);
-        setSelectedAssignees(card.assignees ?? []);
-        setSelectedDueDate((card.dueDate as string) ?? null);
-        setSelectedPriority(card.priority ?? "none");
-        setSelectedColumnId(initialColumnId);
-        setIsEditing(false);
-      }
-    },
-  );
+  // Re-initialise the card's fields whenever a different card is shown, or a
+  // newer version of this one arrives while the fields hold no unsaved edits.
+  // A dirty dialog keeps what the user typed, and the next version applies once
+  // those edits are gone; saving overwrites it (#1935).
+  const fields: CardFields = {
+    title,
+    body,
+    labelIds: selectedLabelIds,
+    assignees: selectedAssignees,
+    dueDate: selectedDueDate,
+    priority: selectedPriority,
+    columnId: selectedColumnId,
+  };
+  const seededFields = seeded
+    ? fieldsFromCard(seeded.card, seeded.columnId)
+    : null;
+  // A difference from the card is not an edit: a board refresh changes the card
+  // under an untouched dialog. Only a difference from the seeded values is.
+  const fieldsEdited =
+    !!seededFields &&
+    !deepEqual(comparableFields(fields), comparableFields(seededFields));
+
+  if (!card) {
+    // Closed: the next card seeds from scratch, rather than reviving the
+    // values a discarded edit left behind.
+    if (seeded) setSeeded(null);
+  } else {
+    const newerVersion =
+      !!seeded &&
+      (String(seeded.card.updatedAt) !== String(card.updatedAt) ||
+        seeded.columnId !== initialColumnId);
+    if (
+      !seeded ||
+      seeded.card.id !== card.id ||
+      (newerVersion && !fieldsEdited)
+    ) {
+      const values = fieldsFromCard(card, initialColumnId);
+      setTitle(values.title);
+      setBody(values.body);
+      setSelectedLabelIds(values.labelIds);
+      setSelectedAssignees(values.assignees);
+      setSelectedDueDate(values.dueDate);
+      setSelectedPriority(values.priority);
+      setSelectedColumnId(values.columnId);
+      setSeeded({ card, columnId: initialColumnId });
+      setIsEditing(false);
+    }
+  }
+
+  // A Column the user picked is the one to move the card to; a remote move a
+  // dirty dialog ignored is not the user's edit to send back.
+  const columnChanged = !!seeded && selectedColumnId !== seeded.columnId;
 
   // A comment draft is not derived from the card's data, so a server-side
   // update to the open card must not clear it. Reset the draft and any
   // in-progress edit only when the dialog shows a different card or closes.
   useResetOnChange(open ? (card?.id ?? "") : "", comments.reset);
 
-  // Dirty while the fields differ from the card, a new comment is drafted, or
-  // a comment is being edited. A save closes the dialog itself, not through
-  // `onOpenChange`, so only a dismissal is held.
-  const isDirty =
-    !!card &&
-    (!deepEqual(
-      {
-        title,
-        body,
-        // Sorted: toggling a label off and back on moves it to the end.
-        labelIds: [...selectedLabelIds].sort(),
-        assignees: selectedAssignees,
-        dueDate: selectedDueDate,
-        priority: selectedPriority,
-        columnId: selectedColumnId,
-      },
-      {
-        title: card.title,
-        body: card.body ?? "",
-        labelIds: [...(card.labelIds ?? [])].sort(),
-        assignees: card.assignees ?? [],
-        dueDate: (card.dueDate as string) ?? null,
-        priority: card.priority ?? "none",
-        columnId: initialColumnId,
-      },
-    ) ||
-      comments.dirty);
+  // Dirty while the fields hold the user's own values, a new comment is
+  // drafted, or a comment is being edited. A save closes the dialog itself, not
+  // through `onOpenChange`, so only a dismissal is held.
+  const isDirty = !!card && (fieldsEdited || comments.dirty);
   const confirmDiscard = useUnsavedChangesGuard(isDirty);
 
   // Save's own guard, so a double click sends nothing twice. The Delete
@@ -1062,7 +1115,7 @@ export function KanbanCardDialog({
                 dueDate: selectedDueDate,
                 priority: selectedPriority,
                 ...(selectedColumnId &&
-                  selectedColumnId !== initialColumnId && {
+                  columnChanged && {
                     columnId: selectedColumnId,
                   }),
               })

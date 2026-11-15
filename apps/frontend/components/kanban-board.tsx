@@ -271,8 +271,8 @@ export function KanbanBoard({
       );
       if (!column) return;
       const { columnId: targetColumnId, ...updateData } = cardData;
-      // Fields first: moving first would, on a failed update, reseed the
-      // dialog from the new column and wipe the user's unsaved edits.
+      // Fields first, so a refused update sends nothing else: moving first would
+      // leave the card in its new column with the edits unsaved.
       const updateOutcome = await writeEntity(
         backendUrl,
         `${boardPath}/cards`,
