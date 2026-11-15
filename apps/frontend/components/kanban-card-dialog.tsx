@@ -73,20 +73,19 @@ import {
   Link2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import {
-  writeEntity,
-  type Serialized,
-  type WriteOutcome,
-} from "@/lib/api-write";
+import type { Serialized, WriteOutcome } from "@/lib/api-write";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { formatRelativeTime } from "@/lib/relative-time";
-import { useAuth, useBackendUrl } from "@/components/auth-provider";
+import { useAuth } from "@/components/auth-provider";
+import {
+  useCardComments,
+  type CardCommentsSectionProps,
+} from "@/hooks/use-card-comments";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AgentAvatar } from "@/components/agent-avatar";
 import { KanbanCardHistory } from "@/components/kanban-card-history";
 import { Calendar } from "@/components/ui/calendar";
-import { toast } from "sonner";
 import { copyWithToast } from "@/lib/clipboard";
 
 type CardSaveData = {
@@ -434,7 +433,8 @@ function commentLabel(comment: Serialized<KanbanCardComment>) {
   return `${comment.createdByName ?? "Unknown"}, ${formatRelativeTime(comment.createdAt)}`;
 }
 
-// The comment list and composer. Shared by both layouts.
+// The comment list and composer. Shared by both layouts, and driven by
+// `useCardComments` so the draft outlives the tab the section is in.
 function CommentsSection({
   className,
   comments,
@@ -450,30 +450,7 @@ function CommentsSection({
   onCancelEditComment,
   commentAction,
   commentDeleting,
-}: {
-  className?: string;
-  comments: Serialized<KanbanCardComment>[];
-  newCommentBody: string;
-  onNewCommentBodyChange: (body: string) => void;
-  editingCommentId: string | null;
-  editingCommentBody: string;
-  onEditingCommentBodyChange: (body: string) => void;
-  onAddComment: () => void;
-  onSaveComment: (commentId: string) => void;
-  onDeleteComment: (
-    comment: Serialized<KanbanCardComment>,
-    trigger: HTMLElement | null,
-  ) => void;
-  onStartEditComment: (comment: Serialized<KanbanCardComment>) => void;
-  onCancelEditComment: () => void;
-  /**
-   * The comment write in flight — `add` or `edit:<id>` — or null. Every
-   * comment button waits for it; only its own reads as pending.
-   */
-  commentAction: string | null;
-  /** A comment delete is running in its confirm dialog. */
-  commentDeleting: boolean;
-}) {
+}: { className?: string } & CardCommentsSectionProps) {
   const commentBusy = !!commentAction || commentDeleting;
 
   return (
@@ -781,7 +758,6 @@ export function KanbanCardDialog({
   workspaceId: string;
   boardId: string;
 }) {
-  const backendUrl = useBackendUrl();
   const { user } = useAuth();
   const isMobile = useIsMobile();
 
@@ -798,18 +774,16 @@ export function KanbanCardDialog({
   const [isEditing, setIsEditing] = useState(false);
   const [focusField, setFocusField] = useState<"title" | "body">("title");
 
-  const [newCommentBody, setNewCommentBody] = useState("");
-  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
-  const [editingCommentBody, setEditingCommentBody] = useState("");
+  const cardDeleteTrigger = useRef<HTMLButtonElement | null>(null);
 
-  // The thread's key, shared by its read and its delete so the two can't
-  // drift onto different spellings. No card yet means nothing is read.
-  const commentsEntity = `boards/${boardId}/cards/${card?.id ?? ""}/comments`;
-  const { results: comments, mutate: mutateComments } =
-    useScopedList<KanbanCardComment>(
-      commentsEntity,
-      card ? { orgId, workspaceId } : null,
-    );
+  // Above the layouts, not inside the comments section: the tabbed layout
+  // unmounts the tab it leaves, and a draft must survive a look at the
+  // details.
+  const comments = useCardComments({
+    scope: { orgId, workspaceId },
+    boardId,
+    cardId: card?.id ?? null,
+  });
 
   // Fetch workspace agents for assignee picker
   const { results: agents } = useScopedList<AgentOption>("agents", {
@@ -820,11 +794,6 @@ export function KanbanCardDialog({
   const enterEditing = (field: "title" | "body") => {
     setFocusField(field);
     setIsEditing(true);
-  };
-
-  const cancelEditingComment = () => {
-    setEditingCommentId(null);
-    setEditingCommentBody("");
   };
 
   // Re-initialise the card's fields whenever a different card is shown, the
@@ -848,10 +817,7 @@ export function KanbanCardDialog({
   // A comment draft is not derived from the card's data, so a server-side
   // update to the open card must not clear it. Reset the draft and any
   // in-progress edit only when the dialog shows a different card or closes.
-  useResetOnChange(open ? (card?.id ?? "") : "", () => {
-    setNewCommentBody("");
-    cancelEditingComment();
-  });
+  useResetOnChange(open ? (card?.id ?? "") : "", comments.reset);
 
   // Dirty while the fields differ from the card, a new comment is drafted, or
   // a comment is being edited. A save closes the dialog itself, not through
@@ -879,8 +845,7 @@ export function KanbanCardDialog({
         columnId: initialColumnId,
       },
     ) ||
-      newCommentBody.trim() !== "" ||
-      editingCommentId !== null);
+      comments.dirty);
   const confirmDiscard = useUnsavedChangesGuard(isDirty);
 
   // Save's own guard, so a double click sends nothing twice. The Delete
@@ -888,17 +853,6 @@ export function KanbanCardDialog({
   // makes sense while the other runs.
   const cardSave = useMutation(async (cardId: string, data: CardSaveData) =>
     onSave(cardId, data),
-  );
-  const [commentAction, setCommentAction] = useState<string | null>(null);
-  const commentWrite = useMutation(
-    async (action: string, write: () => Promise<void>) => {
-      setCommentAction(action);
-      try {
-        await write();
-      } finally {
-        setCommentAction(null);
-      }
-    },
   );
 
   // The card's delete confirm. The board owns the write — on success it clears
@@ -909,27 +863,12 @@ export function KanbanCardDialog({
     mutate: () => {},
   });
 
-  // A refused comment delete stays in its dialog, and a successful one
-  // revalidates the thread so the comment disappears.
-  const commentDelete = useDeleteFlow<Serialized<KanbanCardComment>>({
-    delete: (comment, backendUrl) =>
-      writeEntity(
-        backendUrl,
-        commentsEntity,
-        { orgId, workspaceId },
-        { id: comment.id },
-      ),
-    mutate: mutateComments,
-  });
-
-  // The button each confirm was opened from, so closing it puts focus back
-  // where the reader was rather than on the body. A comment's own Delete goes
-  // away with the comment it deleted, so focus falls back to the card's.
-  const deleteTrigger = useRef<HTMLElement | null>(null);
-  const cardDeleteTrigger = useRef<HTMLButtonElement | null>(null);
-  const restoreDeleteFocus = (event: Event) => {
-    const target = deleteTrigger.current?.isConnected
-      ? deleteTrigger.current
+  // Closing a confirm puts focus back on the button it was opened from, not
+  // on the body. A comment's own Delete goes away with the comment it deleted,
+  // so that confirm falls back to the card's.
+  const restoreDeleteFocus = (event: Event, trigger: HTMLElement | null) => {
+    const target = trigger?.isConnected
+      ? trigger
       : cardDeleteTrigger.current?.isConnected
         ? cardDeleteTrigger.current
         : null;
@@ -969,62 +908,91 @@ export function KanbanCardDialog({
     });
   };
 
-  const startEditingComment = (comment: Serialized<KanbanCardComment>) => {
-    setEditingCommentId(comment.id);
-    setEditingCommentBody(comment.body);
-  };
-
-  const requestCommentDelete = (
-    comment: Serialized<KanbanCardComment>,
-    trigger: HTMLElement | null,
-  ) => {
-    deleteTrigger.current = trigger;
-    commentDelete.request(comment);
-  };
-
-  const handleAddComment = () =>
-    commentWrite.run("add", async () => {
-      if (!newCommentBody.trim() || !backendUrl) return;
-      const outcome = await writeEntity(
-        backendUrl,
-        commentsEntity,
-        { orgId, workspaceId },
-        { data: { body: newCommentBody.trim() } },
-      );
-      if (outcome.outcome !== "success") {
-        toast.error(outcome.message);
-        return;
-      }
-      setNewCommentBody("");
-      await mutateComments();
-    });
-
-  const handleEditComment = (commentId: string) =>
-    commentWrite.run(`edit:${commentId}`, async () => {
-      if (!editingCommentBody.trim() || !backendUrl) return;
-      const outcome = await writeEntity(
-        backendUrl,
-        commentsEntity,
-        { orgId, workspaceId },
-        {
-          id: commentId,
-          method: "PATCH",
-          data: { body: editingCommentBody.trim() },
-        },
-      );
-      if (outcome.outcome !== "success") {
-        toast.error(outcome.message);
-        return;
-      }
-      cancelEditingComment();
-      await mutateComments();
-    });
-
   const handleDetailsBlur: FocusEventHandler<HTMLDivElement> = (event) => {
     if (!event.currentTarget.contains(event.relatedTarget)) {
       setIsEditing(false);
     }
   };
+
+  // Each section is built once here and placed by whichever layout is showing;
+  // only the container that pads or scrolls it differs.
+  const metadataSection = (
+    <CardMetadataSection
+      className={cn(
+        "flex flex-col gap-4",
+        isMobile ? "border-t pt-4 min-w-0" : "w-52 shrink-0 overflow-y-auto",
+      )}
+      createdAt={card.createdAt}
+      createdByName={card.createdByName}
+      updatedAt={card.updatedAt}
+      lastEditedByName={card.lastEditedByName}
+      columns={columns}
+      selectedColumnId={selectedColumnId}
+      onColumnChange={setSelectedColumnId}
+      labels={labels}
+      selectedLabelIds={selectedLabelIds}
+      onToggleLabel={toggleLabel}
+      selectedPriority={selectedPriority}
+      onPriorityChange={setSelectedPriority}
+      selectedDueDate={selectedDueDate}
+      onDueDateChange={setSelectedDueDate}
+      user={user}
+      agents={agents}
+      selectedAssignees={selectedAssignees}
+      onToggleAssignee={toggleAssignee}
+    />
+  );
+
+  // Stacked in the details pane it needs the rule above it; its own tab is
+  // already framed by the layout.
+  const commentsSection = (
+    <CommentsSection
+      className={isMobile ? undefined : "border-t pt-4"}
+      {...comments.sectionProps}
+    />
+  );
+
+  // Spaced off the comments where the pane stacks it, flush in its own tab.
+  const historySection = (
+    <div className={isMobile ? undefined : "mt-2"}>
+      <KanbanCardHistory
+        orgId={orgId}
+        workspaceId={workspaceId}
+        boardId={boardId}
+        cardId={card.id}
+      />
+    </div>
+  );
+
+  // The title and body pane. The narrow layout stacks the metadata beneath it;
+  // the wide one puts the comments and history there instead, with the
+  // metadata in a sibling sidebar.
+  const detailsSection = (
+    <CardDetailsPane
+      className={isMobile ? undefined : "min-w-0 [&>*]:pr-6"}
+      title={title}
+      body={body}
+      isEditing={isEditing}
+      focusField={focusField}
+      onTitleChange={setTitle}
+      onBodyChange={setBody}
+      onCopyLink={handleCopyLink}
+      onCopyMarkdown={handleCopyToClipboard}
+      onEdit={() => enterEditing("title")}
+      onBlur={handleDetailsBlur}
+    >
+      {isMobile ? (
+        metadataSection
+      ) : (
+        // The gutter pads the pane's children, not the pane, so the body's
+        // scrollbar sits in the gutter instead of over the text.
+        <>
+          {commentsSection}
+          {historySection}
+        </>
+      )}
+    </CardDetailsPane>
+  );
 
   return (
     <Dialog
@@ -1051,149 +1019,34 @@ export function KanbanCardDialog({
               value="details"
               className="flex-1 min-h-0 flex flex-col mt-0 pt-4 min-w-0"
             >
-              <CardDetailsPane
-                title={title}
-                body={body}
-                isEditing={isEditing}
-                focusField={focusField}
-                onTitleChange={setTitle}
-                onBodyChange={setBody}
-                onCopyLink={handleCopyLink}
-                onCopyMarkdown={handleCopyToClipboard}
-                onEdit={() => enterEditing("title")}
-                onBlur={handleDetailsBlur}
-              >
-                <CardMetadataSection
-                  className="border-t pt-4 flex flex-col gap-4 min-w-0"
-                  createdAt={card.createdAt}
-                  createdByName={card.createdByName}
-                  updatedAt={card.updatedAt}
-                  lastEditedByName={card.lastEditedByName}
-                  columns={columns}
-                  selectedColumnId={selectedColumnId}
-                  onColumnChange={setSelectedColumnId}
-                  labels={labels}
-                  selectedLabelIds={selectedLabelIds}
-                  onToggleLabel={toggleLabel}
-                  selectedPriority={selectedPriority}
-                  onPriorityChange={setSelectedPriority}
-                  selectedDueDate={selectedDueDate}
-                  onDueDateChange={setSelectedDueDate}
-                  user={user}
-                  agents={agents}
-                  selectedAssignees={selectedAssignees}
-                  onToggleAssignee={toggleAssignee}
-                />
-              </CardDetailsPane>
+              {detailsSection}
             </TabsContent>
             <TabsContent
               value="comments"
               className="flex-1 overflow-y-auto mt-0 pt-4 min-w-0"
             >
-              <CommentsSection
-                comments={comments}
-                newCommentBody={newCommentBody}
-                onNewCommentBodyChange={setNewCommentBody}
-                editingCommentId={editingCommentId}
-                editingCommentBody={editingCommentBody}
-                onEditingCommentBodyChange={setEditingCommentBody}
-                onAddComment={handleAddComment}
-                onSaveComment={handleEditComment}
-                onDeleteComment={requestCommentDelete}
-                onStartEditComment={startEditingComment}
-                onCancelEditComment={cancelEditingComment}
-                commentAction={commentAction}
-                commentDeleting={commentDelete.deleting}
-              />
+              {commentsSection}
             </TabsContent>
             <TabsContent
               value="history"
               className="flex-1 overflow-y-auto mt-0 pt-4 min-w-0"
             >
-              <KanbanCardHistory
-                orgId={orgId}
-                workspaceId={workspaceId}
-                boardId={boardId}
-                cardId={card.id}
-              />
+              {historySection}
             </TabsContent>
           </Tabs>
         ) : (
           <div className="flex flex-row gap-2 min-h-0 flex-1 overflow-hidden">
             {/* Main content - Title, Body, Comments, and History */}
-            {/* The gutter pads the pane's children, not the pane, so the
-              body's scrollbar sits in the gutter instead of over the text. */}
-            <CardDetailsPane
-              className="min-w-0 [&>*]:pr-6"
-              title={title}
-              body={body}
-              isEditing={isEditing}
-              focusField={focusField}
-              onTitleChange={setTitle}
-              onBodyChange={setBody}
-              onCopyLink={handleCopyLink}
-              onCopyMarkdown={handleCopyToClipboard}
-              onEdit={() => enterEditing("title")}
-              onBlur={handleDetailsBlur}
-            >
-              <CommentsSection
-                className="border-t pt-4"
-                comments={comments}
-                newCommentBody={newCommentBody}
-                onNewCommentBodyChange={setNewCommentBody}
-                editingCommentId={editingCommentId}
-                editingCommentBody={editingCommentBody}
-                onEditingCommentBodyChange={setEditingCommentBody}
-                onAddComment={handleAddComment}
-                onSaveComment={handleEditComment}
-                onDeleteComment={requestCommentDelete}
-                onStartEditComment={startEditingComment}
-                onCancelEditComment={cancelEditingComment}
-                commentAction={commentAction}
-                commentDeleting={commentDelete.deleting}
-              />
-              <div className="mt-2">
-                <KanbanCardHistory
-                  orgId={orgId}
-                  workspaceId={workspaceId}
-                  boardId={boardId}
-                  cardId={card.id}
-                />
-              </div>
-            </CardDetailsPane>
-
+            {detailsSection}
             {/* Sidebar - Column, Labels, Assignees, Due Date, Priority, and Metadata */}
-            <CardMetadataSection
-              className="w-52 shrink-0 flex flex-col gap-4 overflow-y-auto"
-              createdAt={card.createdAt}
-              createdByName={card.createdByName}
-              updatedAt={card.updatedAt}
-              lastEditedByName={card.lastEditedByName}
-              columns={columns}
-              selectedColumnId={selectedColumnId}
-              onColumnChange={setSelectedColumnId}
-              labels={labels}
-              selectedLabelIds={selectedLabelIds}
-              onToggleLabel={toggleLabel}
-              selectedPriority={selectedPriority}
-              onPriorityChange={setSelectedPriority}
-              selectedDueDate={selectedDueDate}
-              onDueDateChange={setSelectedDueDate}
-              user={user}
-              agents={agents}
-              selectedAssignees={selectedAssignees}
-              onToggleAssignee={toggleAssignee}
-            />
+            {metadataSection}
           </div>
         )}
         <DialogFooter className="shrink-0 flex-row justify-end">
           <Button
             ref={cardDeleteTrigger}
             variant="secondary"
-            onClick={(event) => {
-              deleteTrigger.current = event.currentTarget;
-              cardDelete.request(card);
-            }}
+            onClick={() => cardDelete.request(card)}
             disabled={cardSave.pending || cardDelete.deleting}
           >
             <Trash2 />
@@ -1222,13 +1075,17 @@ export function KanbanCardDialog({
       </DialogContent>
       <DeleteConfirmDialog
         noun="card"
-        onCloseAutoFocus={restoreDeleteFocus}
+        onCloseAutoFocus={(event) =>
+          restoreDeleteFocus(event, cardDeleteTrigger.current)
+        }
         {...cardDelete.dialogProps}
       />
       <DeleteConfirmDialog
         noun="comment"
-        onCloseAutoFocus={restoreDeleteFocus}
-        {...commentDelete.dialogProps}
+        onCloseAutoFocus={(event) =>
+          restoreDeleteFocus(event, comments.deleteTrigger())
+        }
+        {...comments.deleteDialogProps}
       />
     </Dialog>
   );

@@ -6,7 +6,12 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import type { KanbanCard, KanbanCardComment } from "@platypus/schemas";
+import {
+  kanbanCardCommentCreateSchema,
+  kanbanCardCommentUpdateSchema,
+  type KanbanCard,
+  type KanbanCardComment,
+} from "@platypus/schemas";
 
 // --- Module mocks ------------------------------------------------------------
 
@@ -39,6 +44,7 @@ vi.mock("swr", () => ({
 import { KanbanCardDialog } from "./kanban-card-dialog";
 import { UnsavedChangesProvider } from "./unsaved-changes-guard";
 import {
+  expectSentBodyToMatchSchema,
   jsonResponse,
   stubAcceptedSave,
   stubPendingSave,
@@ -137,6 +143,11 @@ async function openCommentDeleteConfirm() {
     screen.getByRole("button", { name: /^Delete comment by Bob/ }),
   );
   return screen.findByRole("dialog", { name: "Delete comment" });
+}
+
+/** Selects a tab in the narrow layout's tabbed dialog. */
+function openTab(name: "Details" | "Comments" | "History") {
+  fireEvent.mouseDown(screen.getByRole("tab", { name }), { button: 0 });
 }
 
 afterEach(() => {
@@ -566,13 +577,114 @@ describe("KanbanCardDialog mobile composition", () => {
     expect(
       screen.queryByRole("textbox", { name: "Add a comment" }),
     ).not.toBeInTheDocument();
-    fireEvent.mouseDown(screen.getByRole("tab", { name: "Comments" }), {
-      button: 0,
-    });
+    openTab("Comments");
     expect(screen.getByText("First comment")).toBeInTheDocument();
     expect(
       screen.getByRole("textbox", { name: "Add a comment" }),
     ).toBeInTheDocument();
+  });
+});
+
+describe("KanbanCardDialog mobile comments", () => {
+  // The tabbed layout unmounts the tab it leaves, so the comment state has to
+  // live above the tabs for a draft to survive a look at the details.
+  it("keeps a comment draft when the user switches tabs and back", () => {
+    setViewportWidth(375);
+    renderDialog();
+
+    openTab("Comments");
+    fireEvent.change(screen.getByRole("textbox", { name: "Add a comment" }), {
+      target: { value: "Half-written" },
+    });
+    openTab("Details");
+    expect(
+      screen.queryByRole("textbox", { name: "Add a comment" }),
+    ).not.toBeInTheDocument();
+
+    openTab("Comments");
+    expect(
+      screen.getByRole<HTMLTextAreaElement>("textbox", {
+        name: "Add a comment",
+      }),
+    ).toHaveValue("Half-written");
+  });
+
+  it("adds a comment from the Comments tab", async () => {
+    setViewportWidth(375);
+    const fetchMock = stubAcceptedSave({ id: "cm2" });
+    renderDialog();
+
+    openTab("Comments");
+    fireEvent.change(screen.getByRole("textbox", { name: "Add a comment" }), {
+      target: { value: "A new comment" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Comment" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+    expect(fetchMock.mock.calls[0][0]).toContain(
+      "/boards/b1/cards/c1/comments",
+    );
+    expect(
+      expectSentBodyToMatchSchema(fetchMock, kanbanCardCommentCreateSchema),
+    ).toEqual({ body: "A new comment" });
+    await waitFor(() => expect(mutateCommentsSpy).toHaveBeenCalledOnce());
+  });
+
+  it("edits a comment from the Comments tab", async () => {
+    setViewportWidth(375);
+    comments = [existingComment];
+    const fetchMock = stubAcceptedSave({ id: "cm1" });
+    renderDialog();
+
+    openTab("Comments");
+    fireEvent.click(
+      screen.getByRole("button", { name: /^Edit comment by Bob/ }),
+    );
+    fireEvent.change(screen.getByDisplayValue("First comment"), {
+      target: { value: "Edited comment" },
+    });
+    fireEvent.click(screen.getAllByRole("button", { name: "Save" })[0]);
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+    expect(fetchMock.mock.calls[0][0]).toContain(
+      "/boards/b1/cards/c1/comments/cm1",
+    );
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({ method: "PATCH" });
+    expect(
+      expectSentBodyToMatchSchema(fetchMock, kanbanCardCommentUpdateSchema),
+    ).toEqual({ body: "Edited comment" });
+    await waitFor(() => expect(mutateCommentsSpy).toHaveBeenCalledOnce());
+  });
+
+  it("deletes a comment from the Comments tab", async () => {
+    setViewportWidth(375);
+    comments = [existingComment];
+    stubAcceptedSave();
+    renderDialog();
+
+    openTab("Comments");
+    const confirmDialog = await openCommentDeleteConfirm();
+    fireEvent.click(
+      within(confirmDialog).getByRole("button", { name: "Delete" }),
+    );
+
+    await waitFor(() => expect(mutateCommentsSpy).toHaveBeenCalledOnce());
+  });
+
+  it("treats a drafted comment as unsaved on the narrow layout", () => {
+    setViewportWidth(375);
+    const onOpenChange = vi.fn();
+    renderDialog(onOpenChange);
+
+    openTab("Comments");
+    fireEvent.change(screen.getByRole("textbox", { name: "Add a comment" }), {
+      target: { value: "Draft" },
+    });
+    openTab("Details");
+    fireEvent.click(screen.getAllByRole("button", { name: "Close" })[0]);
+
+    expect(screen.getByText("Discard unsaved changes?")).toBeInTheDocument();
+    expect(onOpenChange).not.toHaveBeenCalled();
   });
 });
 
