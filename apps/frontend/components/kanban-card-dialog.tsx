@@ -1,6 +1,5 @@
 "use client";
 
-import { readableTextColor } from "@/lib/color";
 import {
   useRef,
   useState,
@@ -35,7 +34,6 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { FieldLabel } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Popover,
   PopoverContent,
@@ -73,6 +71,7 @@ import {
   Link2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { KanbanLabelToggles } from "@/components/kanban-label-toggles";
 import type { Serialized, WriteOutcome } from "@/lib/api-write";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { formatRelativeTime } from "@/lib/relative-time";
@@ -648,30 +647,18 @@ function CardMetadataSection({
       )}
       {labels.length > 0 && (
         <div>
-          <p className="text-xs font-medium text-muted-foreground mb-2">
+          <p
+            id="card-labels-label"
+            className="text-xs font-medium text-muted-foreground mb-2"
+          >
             Labels
           </p>
-          <div className="flex flex-wrap gap-1.5">
-            {labels.map((label) => {
-              const isActive = selectedLabelIds.includes(label.id);
-              return (
-                <Badge
-                  key={label.id}
-                  className={cn(
-                    "cursor-pointer transition-opacity border-0",
-                    !isActive && "opacity-40",
-                  )}
-                  style={{
-                    backgroundColor: label.color,
-                    color: readableTextColor(label.color),
-                  }}
-                  onClick={() => onToggleLabel(label.id)}
-                >
-                  {label.name}
-                </Badge>
-              );
-            })}
-          </div>
+          <KanbanLabelToggles
+            labels={labels}
+            selectedIds={selectedLabelIds}
+            onToggle={onToggleLabel}
+            labelledBy="card-labels-label"
+          />
         </div>
       )}
 
