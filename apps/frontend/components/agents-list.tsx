@@ -32,7 +32,6 @@ import {
   AGENT_NAME_MAX_LENGTH,
   type Agent,
   type AgentResponse,
-  type Provider,
   type ToolSet,
   type Skill,
 } from "@platypus/schemas";
@@ -45,7 +44,6 @@ import {
   canManageSharedResource,
   canPinAgent,
 } from "@/lib/authorization";
-import { NoProvidersEmptyState } from "@/components/no-providers-empty-state";
 import { ListError } from "@/components/list-state";
 import {
   AttachSharedAction,
@@ -139,17 +137,9 @@ export function AgentsList({
     data: agentsData,
     results: allAgents,
     error: agentsError,
-    isLoading: isLoadingAgents,
+    isLoading,
     mutate,
   } = useScopedList<SerializedAgent>("agents", scope);
-
-  const {
-    data: providersData,
-    results: providers,
-    error: providersError,
-    isLoading: isLoadingProviders,
-    mutate: mutateProviders,
-  } = useScopedList<Provider>("providers", scope);
 
   const {
     results: toolSets,
@@ -293,41 +283,10 @@ export function AgentsList({
     });
   };
 
-  const isLoading = isLoadingAgents || isLoadingProviders;
-
-  // A failed providers read cannot tell a workspace with no Providers from one
-  // whose Providers didn't load, so neither the "add a provider" prompt nor the
-  // list behind it is shown.
-  if (providersError && !providersData) {
-    return (
-      <div className="flex items-center justify-center h-full p-8">
-        <div className="w-full xl:w-4/5 max-w-4xl">
-          <ListError
-            error={providersError}
-            subject="providers"
-            onRetry={() => void mutateProviders()}
-          />
-        </div>
-      </div>
-    );
-  }
-
   // A clone keeps only references found in lists that have actually landed:
   // filtering against a failed or in-flight read would drop every one of them.
   const referencesReady =
     !isLoadingToolSets && !isLoadingSkills && !toolSetsError && !skillsError;
-
-  // A Workspace with no Provider can't run an Agent: say so before the list's
-  // own ladder, and don't offer to create one.
-  if (!isLoading && !agentsError && !providers.length) {
-    return (
-      <div className="flex items-center justify-center h-full p-8">
-        <div className="w-full xl:w-4/5 max-w-4xl">
-          <NoProvidersEmptyState orgId={orgId} workspaceId={workspaceId} />
-        </div>
-      </div>
-    );
-  }
 
   const renderMenu = (agent: SerializedAgent) => {
     const isOrgScoped = agent.scope === "organization";
