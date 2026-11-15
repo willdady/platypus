@@ -1,12 +1,13 @@
 import { useState } from "react";
-import type { WriteOutcome } from "@/lib/api-write";
+import type { Serialized, WriteOutcome } from "@/lib/api-write";
 import {
   applyDeleteOutcome,
   toastGuidanceOrError,
 } from "@/lib/apply-write-outcome";
 import { useBackendUrl } from "@/components/auth-provider";
+import { useMutation } from "@/hooks/use-mutation";
 
-export type UseDeleteFlowOptions<T> = {
+export type UseDeleteFlowOptions<T, TResult = unknown> = {
   /**
    * Runs the delete for one target and resolves to its outcome. The base URL is
    * passed in so the caller never has to non-null-assert the auth context.
@@ -14,7 +15,7 @@ export type UseDeleteFlowOptions<T> = {
   readonly delete: (
     target: T,
     backendUrl: string,
-  ) => Promise<WriteOutcome<unknown>>;
+  ) => Promise<WriteOutcome<TResult>>;
   /** Revalidates the list after a successful delete. */
   readonly mutate: () => void | Promise<unknown>;
   /**
@@ -25,8 +26,16 @@ export type UseDeleteFlowOptions<T> = {
    * forbidden delete stays inline like every other refusal.
    */
   readonly guidanceOnForbidden?: boolean;
-  /** Extra work after a successful delete — e.g. a per-list success toast. */
-  readonly onSuccess?: (target: T) => void;
+  /**
+   * Extra work after a successful delete — e.g. a per-list success toast, or
+   * showing a value only the write's response carries (a regenerated token).
+   * `data` is that response, so a confirmation that isn't a delete can hand
+   * back the secret it minted (#1945).
+   */
+  readonly onSuccess?: (
+    target: T,
+    data: Serialized<TResult>,
+  ) => void | Promise<void>;
 };
 
 /**
@@ -70,17 +79,21 @@ export type DeleteFlow<T> = {
  * through the ADR-0010 seam. Every refusal stays inline so the user can read it
  * and retry, except a Shared-resource `forbidden` on a list that opts into
  * guidance.
+ *
+ * The same sequence answers a confirmation that isn't a delete — revoking
+ * Organization access, declining an invitation, regenerating a secret — where
+ * the write's response is what the caller shows next. That name is
+ * {@link useConfirmFlow}; this is the one implementation.
  */
-export function useDeleteFlow<T>({
+export function useDeleteFlow<T, TResult = unknown>({
   delete: perform,
   mutate,
   guidanceOnForbidden = false,
   onSuccess,
-}: UseDeleteFlowOptions<T>): DeleteFlow<T> {
+}: UseDeleteFlowOptions<T, TResult>): DeleteFlow<T> {
   const backendUrl = useBackendUrl();
   const [target, setTarget] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [deleting, setDeleting] = useState(false);
 
   const close = () => {
     setTarget(null);
@@ -92,20 +105,21 @@ export function useDeleteFlow<T>({
     setTarget(item);
   };
 
-  const confirm = async () => {
-    if (!target || !backendUrl) return;
-    setDeleting(true);
-    setError(null);
-    try {
-      const outcome = await perform(target, backendUrl);
+  // Ref-guarded so two clicks in the same tick can't send the write twice;
+  // `pending` drives the dialog's loading state.
+  const { run: deleteTarget, pending: deleting } = useMutation(
+    async (item: T) => {
+      if (!backendUrl) return;
+      setError(null);
+      const outcome = await perform(item, backendUrl);
       await applyDeleteOutcome(outcome, {
         // The hook owns list revalidation rather than relying on the write's
         // revalidateKeys, so a `writeAt` delete needs no key bookkeeping.
         mutate: () => {},
-        onSuccess: async () => {
+        onSuccess: async (data) => {
           await mutate();
           close();
-          onSuccess?.(target);
+          await onSuccess?.(item, data);
         },
         onError: (message, result) => {
           if (guidanceOnForbidden && result.outcome === "forbidden") {
@@ -116,9 +130,12 @@ export function useDeleteFlow<T>({
           }
         },
       });
-    } finally {
-      setDeleting(false);
-    }
+    },
+  );
+
+  const confirm = async () => {
+    if (!target) return;
+    await deleteTarget(target);
   };
 
   const open = target !== null;
@@ -143,3 +160,10 @@ export function useDeleteFlow<T>({
     confirm,
   };
 }
+
+/**
+ * `useDeleteFlow` under a name that fits a confirmation whose write isn't a
+ * delete: revoking Organization access, declining an invitation, regenerating
+ * a secret (#1945). The same function, so the two names cannot drift.
+ */
+export const useConfirmFlow = useDeleteFlow;

@@ -242,6 +242,35 @@ describe("applyDeleteOutcome", () => {
       });
     },
   );
+
+  it("routes a 400 whose message is mapped to a field through onError", async () => {
+    const onError = vi.fn();
+    const rejected: WriteOutcome<null> = {
+      outcome: "invalid",
+      message: "A new token can't be issued yet",
+      fieldErrors: { tokenExpiryDays: "Pick a lifetime" },
+    };
+
+    await applyDeleteOutcome(rejected, { mutate: vi.fn(), onError });
+
+    expect(onError).toHaveBeenCalledWith(
+      "A new token can't be issued yet",
+      rejected,
+    );
+  });
+
+  it("toasts a 400 whose message is mapped to a field when no onError is given", async () => {
+    await applyDeleteOutcome(
+      {
+        outcome: "invalid",
+        message: "A new token can't be issued yet",
+        fieldErrors: { tokenExpiryDays: "Pick a lifetime" },
+      },
+      { mutate: vi.fn() },
+    );
+
+    expect(toast.error).toHaveBeenCalledWith("A new token can't be issued yet");
+  });
 });
 
 describe("toastGuidanceOrError", () => {

@@ -36,7 +36,7 @@ import { scopedUrl, writeAt, type Serialized } from "@/lib/api-write";
 import { a2aCardUrl } from "@/lib/a2a-endpoint";
 import { TOKEN_STATUS_LABELS, TOKEN_STATUS_VARIANTS } from "@/lib/bearer-token";
 import { ListState } from "@/components/list-state";
-import { useDeleteFlow } from "@/hooks/use-delete-flow";
+import { useConfirmFlow, useDeleteFlow } from "@/hooks/use-delete-flow";
 import { useEntityForm } from "@/hooks/use-entity-form";
 
 /** The anchor a new endpoint's page opens at, so its first token is next. */
@@ -64,9 +64,6 @@ export function A2aTokens({
   const readOnly = !ownsWorkspace;
 
   const [issued, setIssued] = useState<string | null>(null);
-  const [tokenToRegenerate, setTokenToRegenerate] =
-    useState<Serialized<A2aToken> | null>(null);
-  const [regenerateError, setRegenerateError] = useState<string | null>(null);
 
   // The browser's own jump to #access fires before the endpoint loads, so
   // land on the card URL and token controls once they render.
@@ -115,36 +112,22 @@ export function A2aTokens({
     delete: (token) =>
       writeAt(`${tokensUrl}/${token.id}`, { method: "DELETE" }),
     mutate,
-    onSuccess: () => toast.success("Token deleted"),
+    onSuccess: () => {
+      toast.success("Token deleted");
+    },
   });
 
-  // The token is the target, not a field: `write` reads it off the open dialog.
-  const { isSubmitting: isRegenerating, submit: submitRegenerate } =
-    useEntityForm<object, IssuedToken>({
-      initialData: {},
-      entity: "tokens",
-      scope: {},
-      conflictField: null,
-      write: () =>
-        writeAt<IssuedToken>(
-          `${tokensUrl}/${tokenToRegenerate?.id}/regenerate`,
-          { method: "POST" },
-        ),
-      onSuccess: async (token) => {
-        setIssued(token.token);
-        await mutate();
-      },
-      // Every refusal, including a validation failure, shows in the confirm
-      // dialog instead of the default toast.
-      onInvalid: (_fieldErrors, message) => setRegenerateError(message),
-      onError: (message) => setRegenerateError(message),
-    });
-
-  const regenerateToken = async () => {
-    setRegenerateError(null);
-    const result = await submitRegenerate();
-    if (result) setTokenToRegenerate(null);
-  };
+  // A regenerate is a confirmation, not a form: the hook owns the token the
+  // dialog is open for, the pending state and the inline refusal, and the
+  // response carries the token to show once.
+  const regenerateToken = useConfirmFlow<Serialized<A2aToken>, IssuedToken>({
+    delete: (token) =>
+      writeAt<IssuedToken>(`${tokensUrl}/${token.id}/regenerate`, {
+        method: "POST",
+      }),
+    mutate,
+    onSuccess: (_token, data) => setIssued(data.token),
+  });
 
   return (
     <div
@@ -200,10 +183,7 @@ export function A2aTokens({
                       variant="outline"
                       size="icon"
                       aria-label={`Regenerate token ${token.name}`}
-                      onClick={() => {
-                        setRegenerateError(null);
-                        setTokenToRegenerate(token);
-                      }}
+                      onClick={() => regenerateToken.request(token)}
                     >
                       <RefreshCw />
                     </Button>
@@ -279,19 +259,10 @@ export function A2aTokens({
       />
 
       <ConfirmDialog
-        open={tokenToRegenerate !== null}
-        onOpenChange={(open) => {
-          if (!open) {
-            setTokenToRegenerate(null);
-            setRegenerateError(null);
-          }
-        }}
         title="Regenerate token"
-        description={`The current "${tokenToRegenerate?.name}" token stops working straight away. Update the client that uses it with the new one.`}
+        description={`The current "${regenerateToken.target?.name}" token stops working straight away. Update the client that uses it with the new one.`}
         confirmLabel="Regenerate"
-        onConfirm={() => void regenerateToken()}
-        loading={isRegenerating}
-        error={regenerateError}
+        {...regenerateToken.dialogProps}
       />
 
       {/* Whenever a token was issued, card URL or not: this is the only time

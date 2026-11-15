@@ -113,8 +113,9 @@ export type ApplyDeleteOutcomeOptions<TResult> = {
 /**
  * `applyWriteOutcome` for a delete: there's no field to validate or key a
  * conflict to (e.g. a 409 "still referenced" delete refusal), so every
- * failure — `conflict` included — surfaces through `onError` alongside
- * `forbidden`/`notFound`/`error`.
+ * failure — `conflict` and a body-mapped 400 alike — surfaces through
+ * `onError`. A validation message mapped to a field would otherwise land in a
+ * `setValidationErrors` nobody reads, and the dialog would say nothing.
  */
 export async function applyDeleteOutcome<TResult>(
   result: WriteOutcome<TResult>,
@@ -124,6 +125,10 @@ export async function applyDeleteOutcome<TResult>(
     ...options,
     setValidationErrors: () => {},
     conflictField: null,
+    onInvalid: (_fieldErrors, message) => {
+      if (options.onError) options.onError(message, result);
+      else toast.error(message);
+    },
   });
 }
 

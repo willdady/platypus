@@ -55,6 +55,8 @@ export function useOrgRevoke<T>({
       return outcome;
     },
     mutate,
-    onSuccess: (row) => toast.success(revokeFor(row).message),
+    onSuccess: (row) => {
+      toast.success(revokeFor(row).message);
+    },
   });
 }
