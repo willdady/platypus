@@ -299,3 +299,55 @@ describe("WebhookForm delete", () => {
     expect(push).not.toHaveBeenCalled();
   });
 });
+
+describe("WebhookForm duplicate header names", () => {
+  beforeEach(() => resetFormHarness());
+
+  async function addHeaders() {
+    fireEvent.change(screen.getByLabelText("URL"), {
+      target: { value: "https://example.com/hook" },
+    });
+    await setupUser().type(screen.getByLabelText("Name"), "Deploy hook");
+
+    fireEvent.click(screen.getByRole("button", { name: "Add header" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Header 1 name" }), {
+      target: { value: "X-Trace" },
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "Header 1 value" }), {
+      target: { value: "one" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add header" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Header 2 name" }), {
+      target: { value: "x-trace" },
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "Header 2 value" }), {
+      target: { value: "two" },
+    });
+  }
+
+  it("refuses to save two headers whose names differ only in case", async () => {
+    const fetchMock = stubAcceptedSave({ id: "w1" });
+    renderForm();
+    await addHeaders();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(
+      await screen.findByText(/Duplicate header name "x-trace"/),
+    ).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("saves once the duplicate is renamed", async () => {
+    const fetchMock = stubAcceptedSave({ id: "w1" });
+    renderForm();
+    await addHeaders();
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Header 2 name" }), {
+      target: { value: "X-Request-Id" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+  });
+});
