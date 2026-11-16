@@ -4,11 +4,13 @@ import {
   FieldGroup,
   FieldSet,
   FieldDescription,
+  FieldError,
   FieldTitle,
 } from "@/components/ui/field";
 import {
   HEADER_ROW_LABELS,
   KeyValueRowsEditor,
+  findDuplicateKey,
   recordToRows,
   rowsToRecord,
   type KeyValueRow,
@@ -159,6 +161,7 @@ function McpForm({
     setFormData,
     seedFormData,
     validationErrors,
+    setValidationErrors,
     clearErrors,
     isSubmitting,
     canSubmit,
@@ -263,9 +266,25 @@ function McpForm({
    * authorize path passes `silent` because the authorization that follows is
    * the feedback.
    */
+  // rowsToRecord builds an object, so a repeated name would silently drop the
+  // earlier value and Test connection would send the collapsed set. Both paths
+  // refuse instead, and header names are matched case-insensitively.
+  const rejectDuplicateHeader = (): boolean => {
+    const duplicate = findDuplicateKey(formData.headerRows, {
+      caseSensitive: false,
+    });
+    if (!duplicate) return false;
+    setValidationErrors((prev) => ({
+      ...prev,
+      headers: `Duplicate header name "${duplicate}". Header names are case-insensitive, so each one may appear once.`,
+    }));
+    return true;
+  };
+
   const saveMcp = async ({
     silent = false,
   }: { silent?: boolean } = {}): Promise<string | null> => {
+    if (rejectDuplicateHeader()) return null;
     const saved = await submit({ silent });
     // The form stays open after Authorize's save, so it takes the Client ID
     // the backend stored, not the one it sent: a new URL clears the client
@@ -288,6 +307,7 @@ function McpForm({
   const { run: handleTestConnection, pending: isTesting } = useMutation(
     async () => {
       setTestResult(null);
+      if (rejectDuplicateHeader()) return;
 
       const payload: Record<string, unknown> = {
         url: formData.url,
@@ -614,6 +634,7 @@ function McpForm({
             <KeyValueRowsEditor
               rows={formData.headerRows}
               onChange={(rows, changed) => {
+                clearErrors("headers");
                 setFormData((prev) => ({ ...prev, headerRows: rows }));
                 // An empty new row changes nothing that was tested.
                 if (changed) setTestResult(null);
@@ -624,6 +645,9 @@ function McpForm({
               labels={HEADER_ROW_LABELS}
               addLabel="Add header"
             />
+            {validationErrors.headers && (
+              <FieldError>{validationErrors.headers}</FieldError>
+            )}
           </div>
 
           {/* OAuth Authorization Section */}
