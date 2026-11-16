@@ -117,6 +117,18 @@ describe("ChatMessage agent attribution", () => {
     expect(screen.queryByAltText("Research Agent")).not.toBeInTheDocument();
   });
 
+  it("shows the fallback for a resolved agent with no avatar URL", () => {
+    const { container } = renderMessage(
+      assistantMessage({ agentId: "agent-1" }),
+      { agents: [makeAgent({ avatarUrl: undefined })] },
+    );
+
+    expect(
+      container.querySelector('[data-slot="avatar-fallback"] svg'),
+    ).not.toBeNull();
+    expect(screen.queryByAltText("Research Agent")).not.toBeInTheDocument();
+  });
+
   // A direct provider/model run carries no attribution; an agentId that no
   // longer resolves (deleted agent) has to degrade the same way.
   it.each([
