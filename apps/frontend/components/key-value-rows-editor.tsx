@@ -44,6 +44,29 @@ export function rowsToRecord<E>(
   return Object.keys(out).length > 0 ? out : empty;
 }
 
+/**
+ * Returns the first name that appears on more than one row, or null when every
+ * name is unique. Blank rows are ignored, matching `rowsToRecord`.
+ *
+ * HTTP header names are case-insensitive, so header fields pass
+ * `{ caseSensitive: false }`; environment variable names are case-sensitive and
+ * keep the default.
+ */
+export function findDuplicateKey(
+  rows: KeyValueRow[],
+  { caseSensitive = true }: { caseSensitive?: boolean } = {},
+): string | null {
+  const seen = new Set<string>();
+  for (const { key } of rows) {
+    const trimmed = key.trim();
+    if (trimmed === "") continue;
+    const normalized = caseSensitive ? trimmed : trimmed.toLowerCase();
+    if (seen.has(normalized)) return trimmed;
+    seen.add(normalized);
+  }
+  return null;
+}
+
 export type RowAriaLabels = {
   key: (n: number) => string;
   value: (n: number) => string;

@@ -24,6 +24,7 @@ import { retractFieldError, type FormErrors } from "@/lib/form-errors";
 import { Button } from "@/components/ui/button";
 import {
   KeyValueRowsEditor,
+  findDuplicateKey,
   newRow,
   recordToRows,
   rowsToRecord,
@@ -157,17 +158,6 @@ function rowsToExtraHosts(rows: KeyValueRow[]): string[] {
   return rows
     .filter((r) => r.key.trim() !== "")
     .map((r) => `${r.key.trim()}:${r.value.trim()}`);
-}
-
-function findDuplicateKey(rows: KeyValueRow[]): string | null {
-  const seen = new Set<string>();
-  for (const { key } of rows) {
-    const trimmed = key.trim();
-    if (trimmed === "") continue;
-    if (seen.has(trimmed)) return trimmed;
-    seen.add(trimmed);
-  }
-  return null;
 }
 
 const SAVED_MESSAGE = "Sandbox configured";
