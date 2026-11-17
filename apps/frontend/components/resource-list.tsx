@@ -321,7 +321,7 @@ export function ResourceList({
           </AttachmentCount>
         )}
       />
-      {!isLoading && !error && resources.length > 0 && (
+      {resources.length > 0 && (
         <ListFooter className="mt-4">{actions}</ListFooter>
       )}
       <ManageAttachmentsDialog
