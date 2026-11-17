@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import {
   WEB_TOOL_NORMALIZED_KEY,
   type Agent,
@@ -67,6 +67,19 @@ function renderMessage(
   );
 }
 
+// jsdom never loads remote images. Model the image status that Radix reads.
+class TestImage extends EventTarget {
+  src = "";
+  complete = true;
+
+  get naturalWidth() {
+    return this.src.endsWith("/broken.png") ? 0 : 32;
+  }
+}
+
+beforeEach(() => vi.stubGlobal("Image", TestImage));
+afterEach(() => vi.unstubAllGlobals());
+
 describe("ChatMessage agent attribution", () => {
   it("renders the agent avatar when the message is attributed to an agent", () => {
     renderMessage(assistantMessage({ agentId: "agent-1" }));
@@ -90,6 +103,32 @@ describe("ChatMessage agent attribution", () => {
     ).toHaveLength(2);
   });
 
+  it("shows the fallback when the agent image fails to load", async () => {
+    const { container } = renderMessage(
+      assistantMessage({ agentId: "agent-1" }),
+      { agents: [makeAgent({ avatarUrl: "https://example.com/broken.png" })] },
+    );
+
+    await waitFor(() =>
+      expect(
+        container.querySelector('[data-slot="avatar-fallback"]'),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.queryByAltText("Research Agent")).not.toBeInTheDocument();
+  });
+
+  it("shows the fallback for a resolved agent with no avatar URL", () => {
+    const { container } = renderMessage(
+      assistantMessage({ agentId: "agent-1" }),
+      { agents: [makeAgent({ avatarUrl: undefined })] },
+    );
+
+    expect(
+      container.querySelector('[data-slot="avatar-fallback"] svg'),
+    ).not.toBeNull();
+    expect(screen.queryByAltText("Research Agent")).not.toBeInTheDocument();
+  });
+
   // A direct provider/model run carries no attribution; an agentId that no
   // longer resolves (deleted agent) has to degrade the same way.
   it.each([
@@ -99,9 +138,10 @@ describe("ChatMessage agent attribution", () => {
     const { container } = renderMessage(assistantMessage(metadata));
 
     expect(screen.queryByAltText("Research Agent")).not.toBeInTheDocument();
-    // The fallback is our own `bg-muted` circle wrapping an icon — asserted
-    // via markup we own rather than a lucide-generated class name.
-    expect(container.querySelector("div.bg-muted > svg")).not.toBeNull();
+    // Same AgentAvatar fallback as a resolved agent without an image.
+    expect(
+      container.querySelector('[data-slot="avatar-fallback"] svg'),
+    ).not.toBeNull();
   });
 });
 

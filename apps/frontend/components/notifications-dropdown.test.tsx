@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { afterEach, describe, it, expect, vi, beforeEach } from "vitest";
 import {
   act,
   fireEvent,
@@ -313,6 +313,51 @@ describe("NotificationsDropdown feed", () => {
         `${NOTIFICATIONS_URL}/read-all`,
         expect.objectContaining({ method: "POST" }),
       ),
+    );
+  });
+});
+
+describe("NotificationsDropdown avatar", () => {
+  // jsdom never loads remote images. Model the image status that Radix reads.
+  class TestImage extends EventTarget {
+    src = "";
+    complete = true;
+    get naturalWidth() {
+      return this.src.endsWith("/broken.png") ? 0 : 32;
+    }
+  }
+  beforeEach(() => vi.stubGlobal("Image", TestImage));
+  afterEach(() => vi.unstubAllGlobals());
+
+  it.each([
+    ["whose avatar image fails to load", "https://example.com/broken.png"],
+    ["with no avatar URL", undefined],
+  ] as const)(
+    "shows the Bot icon for an Agent %s",
+    async (_, agentAvatarUrl) => {
+      feeds["/notifications"] = { results: [{ ...unread, agentAvatarUrl }] };
+      render(<NotificationsDropdown orgId="org1" workspaceId="ws1" />);
+      await openDropdownMenu();
+
+      await waitFor(() =>
+        expect(
+          document.querySelector('[data-slot="avatar-fallback"] svg'),
+        ).not.toBeNull(),
+      );
+      expect(screen.queryByAltText("Scout")).not.toBeInTheDocument();
+    },
+  );
+
+  it("shows the Agent's avatar image when it loads", async () => {
+    feeds["/notifications"] = {
+      results: [{ ...unread, agentAvatarUrl: "https://example.com/scout.png" }],
+    };
+    render(<NotificationsDropdown orgId="org1" workspaceId="ws1" />);
+    await openDropdownMenu();
+
+    expect(await screen.findByAltText("Scout")).toHaveAttribute(
+      "src",
+      "https://example.com/scout.png",
     );
   });
 });

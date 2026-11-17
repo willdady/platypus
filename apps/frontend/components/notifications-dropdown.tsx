@@ -2,7 +2,8 @@
 
 import { Fragment, useState } from "react";
 import { useBackendUrl } from "@/components/auth-provider";
-import { Bell, Mail, Bot, ChevronDown, ChevronUp, X } from "lucide-react";
+import { Bell, Mail, ChevronDown, ChevronUp, X } from "lucide-react";
+import { AgentAvatar } from "@/components/agent-avatar";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -12,7 +13,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { writeEntity, type Serialized } from "@/lib/api-write";
 import { formatRelativeTime } from "@/lib/relative-time";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
@@ -221,17 +221,13 @@ export function NotificationsDropdown({
                         handleDismiss(notif.id);
                       }}
                     >
-                      <Avatar className="size-7 shrink-0 mt-0.5">
-                        {notif.agentAvatarUrl ? (
-                          <AvatarImage
-                            src={notif.agentAvatarUrl}
-                            alt={notif.agentName ?? "Platypus"}
-                          />
-                        ) : null}
-                        <AvatarFallback>
-                          <Bot className="size-3.5" />
-                        </AvatarFallback>
-                      </Avatar>
+                      <AgentAvatar
+                        agent={{
+                          name: notif.agentName ?? "Platypus",
+                          avatarUrl: notif.agentAvatarUrl,
+                        }}
+                        className="size-7 shrink-0 mt-0.5"
+                      />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="text-xs text-muted-foreground truncate">
