@@ -363,7 +363,7 @@ export function TriggerList({
 
   // Shown even with nothing listed: fired One-offs may be all there is.
   const controls =
-    !error && allTriggers.length ? (
+    allTriggers.length ? (
       <ListToolbar>
         <Select
           value={typeFilter}
