@@ -1,5 +1,5 @@
-import { AgentAvatar } from "@/components/agent-avatar";
 import { Fragment, memo, type ReactNode } from "react";
+import { AgentAvatar } from "@/components/agent-avatar";
 import {
   Message,
   MessageContent,
@@ -53,7 +53,6 @@ import {
   toolErrorText,
 } from "@/lib/message-parts";
 import {
-  BotIcon,
   FileIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -449,15 +448,16 @@ export const ChatMessage = memo(function ChatMessage({
   const assistantAvatar = (partIndex: number) =>
     message.role === "assistant" &&
     (messageAgent ? (
+      // A streamed reply re-renders often; the delay keeps the Bot icon from
+      // flickering before the avatar image loads.
       <AgentAvatar
         agent={messageAgent}
         className="size-6"
         alt={partIndex === firstAvatarPart ? messageAgent.name : ""}
+        delayMs={600}
       />
     ) : (
-      <div className="flex size-6 items-center justify-center rounded-full bg-muted">
-        <BotIcon className="size-3.5 text-muted-foreground" />
-      </div>
+      <AgentAvatar agent={{ name: "" }} className="size-6" />
     ));
   const fileParts = message.parts?.filter(
     (part): part is FileUIPart =>

@@ -347,6 +347,19 @@ describe("NotificationsDropdown avatar", () => {
       expect(screen.queryByAltText("Scout")).not.toBeInTheDocument();
     },
   );
+
+  it("shows the Agent's avatar image when it loads", async () => {
+    feeds["/notifications"] = {
+      results: [{ ...unread, agentAvatarUrl: "https://example.com/scout.png" }],
+    };
+    render(<NotificationsDropdown orgId="org1" workspaceId="ws1" />);
+    await openDropdownMenu();
+
+    expect(await screen.findByAltText("Scout")).toHaveAttribute(
+      "src",
+      "https://example.com/scout.png",
+    );
+  });
 });
 
 describe("NotificationsDropdown keyboard", () => {

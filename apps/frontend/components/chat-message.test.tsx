@@ -138,9 +138,10 @@ describe("ChatMessage agent attribution", () => {
     const { container } = renderMessage(assistantMessage(metadata));
 
     expect(screen.queryByAltText("Research Agent")).not.toBeInTheDocument();
-    // The fallback is our own `bg-muted` circle wrapping an icon — asserted
-    // via markup we own rather than a lucide-generated class name.
-    expect(container.querySelector("div.bg-muted > svg")).not.toBeNull();
+    // Same AgentAvatar fallback as a resolved agent without an image.
+    expect(
+      container.querySelector('[data-slot="avatar-fallback"] svg'),
+    ).not.toBeNull();
   });
 });
 

@@ -6,11 +6,17 @@ export function AgentAvatar({
   agent,
   className,
   alt,
+  delayMs,
 }: {
   agent: Pick<Agent, "name" | "avatarUrl">;
   className?: string;
   /** Overrides the image's accessible name; defaults to the agent's name. */
   alt?: string;
+  /**
+   * Waits this long before showing the Bot icon while the image loads, so a
+   * slow image does not flash the icon first. Off by default.
+   */
+  delayMs?: number;
 }) {
   return (
     <Avatar className={className}>
@@ -21,7 +27,7 @@ export function AgentAvatar({
           alt={alt ?? agent.name}
         />
       )}
-      <AvatarFallback delayMs={agent.avatarUrl ? 600 : undefined}>
+      <AvatarFallback delayMs={agent.avatarUrl ? delayMs : undefined}>
         <Bot className="size-3/5 text-muted-foreground" />
       </AvatarFallback>
     </Avatar>
