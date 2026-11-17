@@ -448,13 +448,10 @@ export const ChatMessage = memo(function ChatMessage({
   const assistantAvatar = (partIndex: number) =>
     message.role === "assistant" &&
     (messageAgent ? (
-      // A streamed reply re-renders often; the delay keeps the Bot icon from
-      // flickering before the avatar image loads.
       <AgentAvatar
         agent={messageAgent}
         className="size-6"
         alt={partIndex === firstAvatarPart ? messageAgent.name : ""}
-        delayMs={600}
       />
     ) : (
       <AgentAvatar agent={{ name: "" }} className="size-6" />
