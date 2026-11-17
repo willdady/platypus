@@ -67,6 +67,18 @@ export function findDuplicateKey(
   return null;
 }
 
+/**
+ * The error for a header field whose rows repeat a name, or null when every
+ * name is unique. Header names are compared case-insensitively, as HTTP does;
+ * the message keeps the casing the user typed so they can find the row.
+ */
+export function duplicateHeaderError(rows: KeyValueRow[]): string | null {
+  const duplicate = findDuplicateKey(rows, { caseSensitive: false });
+  return duplicate
+    ? `Duplicate header name "${duplicate}". Header names are case-insensitive, so each one may appear once.`
+    : null;
+}
+
 export type RowAriaLabels = {
   key: (n: number) => string;
   value: (n: number) => string;

@@ -10,7 +10,7 @@ import {
 import {
   HEADER_ROW_LABELS,
   KeyValueRowsEditor,
-  findDuplicateKey,
+  duplicateHeaderError,
   recordToRows,
   rowsToRecord,
   type KeyValueRow,
@@ -260,27 +260,22 @@ function McpForm({
     setTestResult(null);
   };
 
+  // rowsToRecord builds an object, so a repeated name would silently drop the
+  // earlier value and Test connection would send the collapsed set. Both paths
+  // refuse instead.
+  const rejectDuplicateHeader = (): boolean => {
+    const error = duplicateHeaderError(formData.headerRows);
+    if (!error) return false;
+    setValidationErrors((prev) => ({ ...prev, headers: error }));
+    return true;
+  };
+
   /**
    * Saves the MCP (create or update). Returns the saved record's ID on
    * success, or null on failure. A normal submit toasts success; the OAuth
    * authorize path passes `silent` because the authorization that follows is
    * the feedback.
    */
-  // rowsToRecord builds an object, so a repeated name would silently drop the
-  // earlier value and Test connection would send the collapsed set. Both paths
-  // refuse instead, and header names are matched case-insensitively.
-  const rejectDuplicateHeader = (): boolean => {
-    const duplicate = findDuplicateKey(formData.headerRows, {
-      caseSensitive: false,
-    });
-    if (!duplicate) return false;
-    setValidationErrors((prev) => ({
-      ...prev,
-      headers: `Duplicate header name "${duplicate}". Header names are case-insensitive, so each one may appear once.`,
-    }));
-    return true;
-  };
-
   const saveMcp = async ({
     silent = false,
   }: { silent?: boolean } = {}): Promise<string | null> => {
@@ -623,6 +618,7 @@ function McpForm({
           <div
             role="group"
             aria-labelledby="mcp-headers-label"
+            data-invalid={!!validationErrors.headers}
             className="flex flex-col gap-3"
           >
             <div className="flex flex-col gap-1">

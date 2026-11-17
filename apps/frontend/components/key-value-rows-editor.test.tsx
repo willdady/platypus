@@ -4,6 +4,8 @@ import { render, screen, fireEvent } from "@testing-library/react";
 
 import {
   KeyValueRowsEditor,
+  duplicateHeaderError,
+  findDuplicateKey,
   newRow,
   recordToRows,
   rowsToRecord,
@@ -72,5 +74,37 @@ describe("recordToRows / rowsToRecord", () => {
     expect(rowsToRecord([], null)).toBeNull();
     expect(rowsToRecord([newRow()], undefined)).toBeUndefined();
     expect(rowsToRecord([], {})).toEqual({});
+  });
+});
+
+describe("findDuplicateKey", () => {
+  it("matches names exactly by default, so names differing only by case are allowed", () => {
+    expect(findDuplicateKey([newRow("PATH"), newRow("path")])).toBeNull();
+    expect(findDuplicateKey([newRow("PATH"), newRow(" PATH ")])).toBe("PATH");
+  });
+
+  it("ignores case when asked, returning the repeat as typed", () => {
+    expect(
+      findDuplicateKey([newRow("X-Trace"), newRow("x-trace")], {
+        caseSensitive: false,
+      }),
+    ).toBe("x-trace");
+  });
+
+  it("ignores blank rows", () => {
+    expect(
+      findDuplicateKey([newRow(""), newRow("  "), newRow("A")]),
+    ).toBeNull();
+  });
+});
+
+describe("duplicateHeaderError", () => {
+  it("names a case-insensitive repeat, and is null when names are unique", () => {
+    expect(
+      duplicateHeaderError([newRow("X-Trace"), newRow("x-trace")]),
+    ).toContain('"x-trace"');
+    expect(
+      duplicateHeaderError([newRow("X-Trace"), newRow("X-Other")]),
+    ).toBeNull();
   });
 });
