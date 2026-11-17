@@ -1,6 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { screen } from "@testing-library/react";
-import type { Agent, Blueprint, Skill, Trigger } from "@platypus/schemas";
+import type {
+  Agent,
+  Blueprint,
+  Provider,
+  Skill,
+  Trigger,
+} from "@platypus/schemas";
 import {
   authMock,
   swrMock,
@@ -16,12 +22,23 @@ vi.mock("swr", () => swrMock);
 
 import { AgentsList } from "./agents-list";
 import { BlueprintsList } from "./blueprints-list";
+import { ProvidersList } from "./providers-list";
 import { SkillsList } from "./skills-list";
 import { TriggerList } from "./trigger-list";
 
 // --- Fixtures ----------------------------------------------------------------
 
-const blueprint = { id: "b1", name: "Starter", items: [] } as unknown as Blueprint;
+const blueprint = {
+  id: "b1",
+  name: "Starter",
+  items: [],
+} as unknown as Blueprint;
+const provider = {
+  id: "p1",
+  name: "Local OpenAI",
+  providerType: "OpenAI",
+  scope: "workspace",
+} as unknown as Provider;
 const agent = {
   id: "a1",
   name: "Triage",
@@ -38,23 +55,38 @@ const trigger = {
 } as unknown as Trigger;
 
 /**
- * A failed revalidation, with the rows it already returned still held — the
- * state a list reaches when a background refresh fails after a successful
- * first load.
+ * A background refresh that failed after a successful first load: the error
+ * is set and the rows it already returned are still held.
  */
-const failedRefresh = { error: new Error("500"), data: { results: [] } };
-function held(read: unknown[], fix: typeof failedRefresh) {
-  return { ...fix, data: { results: read } };
+function failedRefresh(rows: unknown[]) {
+  return { error: new Error("500"), data: { results: rows } };
 }
+
+// Matches every URL under the Organization, so it is spread in last: reads
+// match in registration order.
+const organization = { "/organizations/org1": { data: { id: "org1" } } };
 
 beforeEach(resetListHarness);
 
 // --- Tests -------------------------------------------------------------------
 
 describe("a list keeps its chrome when a refresh fails with rows held", () => {
+  it("keeps the Providers footer", async () => {
+    mockScopedSWR(
+      { "/providers": failedRefresh([provider]) },
+      { strict: true },
+    );
+
+    await renderList(<ProvidersList orgId="org1" workspaceId="ws1" />);
+
+    expect(screen.getByText("Local OpenAI")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /^Add/ })).toBeInTheDocument();
+  });
+
   it("keeps the Blueprints footer", async () => {
     mockScopedSWR(
-      { "/blueprints": held([blueprint], failedRefresh) },
+      { "/blueprints": failedRefresh([blueprint]) },
+      { strict: true },
     );
 
     await renderList(<BlueprintsList orgId="org1" />);
@@ -66,10 +98,12 @@ describe("a list keeps its chrome when a refresh fails with rows held", () => {
   it("keeps the Agents footer", async () => {
     mockScopedSWR(
       {
-        "/agents": held([agent], failedRefresh),
+        "/agents": failedRefresh([agent]),
         "/providers": [],
         "/tools": [],
+        "/skills": [],
       },
+      { strict: true },
     );
 
     await renderList(<AgentsList orgId="org1" workspaceId="ws1" />);
@@ -80,7 +114,8 @@ describe("a list keeps its chrome when a refresh fails with rows held", () => {
 
   it("keeps the Skills toolbar", async () => {
     mockScopedSWR(
-      { "/skills": held([skill], failedRefresh), "/agents": [] },
+      { "/skills": failedRefresh([skill]), "/agents": [], ...organization },
+      { strict: true },
     );
 
     await renderList(<SkillsList orgId="org1" workspaceId="ws1" />);
@@ -89,9 +124,27 @@ describe("a list keeps its chrome when a refresh fails with rows held", () => {
     expect(screen.getByLabelText("Search skills")).toBeInTheDocument();
   });
 
+  it("keeps the Organization Skills footer", async () => {
+    mockScopedSWR(
+      {
+        "/skills": failedRefresh([skill]),
+        "/agents": [],
+        "/attachments?": [],
+        ...organization,
+      },
+      { strict: true },
+    );
+
+    await renderList(<SkillsList orgId="org1" />);
+
+    expect(screen.getByText("Triage skill")).toBeInTheDocument();
+    expect(screen.getByText(/Create skill/)).toBeInTheDocument();
+  });
+
   it("keeps the Triggers toolbar", async () => {
     mockScopedSWR(
-      { "/triggers": held([trigger], failedRefresh), "/agents": [] },
+      { "/triggers": failedRefresh([trigger]), "/agents": [] },
+      { strict: true },
     );
 
     await renderList(<TriggerList orgId="org1" workspaceId="ws1" />);

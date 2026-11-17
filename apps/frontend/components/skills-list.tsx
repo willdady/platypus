@@ -400,8 +400,7 @@ export function SkillsList({
   // An EmptyCard screen shows its footer once there are rows; a ListState
   // section (the workspace home) shows it under every state, loading and
   // failed included.
-  const showFooter =
-    Boolean(workspaceId) || (!isLoading && !error && !showEmptyCard);
+  const showFooter = Boolean(workspaceId) || !showEmptyCard;
 
   const actions = (
     <>
