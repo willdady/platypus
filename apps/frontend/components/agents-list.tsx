@@ -463,7 +463,7 @@ export function AgentsList({
         menu={renderMenu}
       />
 
-      {!isLoading && !agentsError && agents.length > 0 && (
+      {agents.length > 0 && (
         <ListFooter
           pagination={
             <ListPagination
