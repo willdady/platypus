@@ -13,6 +13,7 @@ import {
 import {
   HEADER_ROW_LABELS,
   KeyValueRowsEditor,
+  duplicateHeaderError,
   recordToRows,
   rowsToRecord,
   type KeyValueRow,
@@ -267,12 +268,23 @@ function WebhookForm({ orgId, workspaceId, webhookId }: WebhookFormProps) {
     (header) => !!validationErrors[headerRowErrorKey(header.key)],
   );
 
+  // rowsToRecord builds an object, so a repeated name would silently drop the
+  // earlier value. Refuse the save instead, and keep the casing the user typed.
+  const handleSubmit = () => {
+    const error = duplicateHeaderError(headers);
+    if (error) {
+      setValidationErrors((prev) => ({ ...prev, headers: error }));
+      return;
+    }
+    void submit();
+  };
+
   const form = (
     <form
       noValidate
       onSubmit={(e) => {
         e.preventDefault();
-        void submit();
+        handleSubmit();
       }}
     >
       <FieldSet className="mb-6">

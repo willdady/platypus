@@ -4,11 +4,13 @@ import {
   FieldGroup,
   FieldSet,
   FieldDescription,
+  FieldError,
   FieldTitle,
 } from "@/components/ui/field";
 import {
   HEADER_ROW_LABELS,
   KeyValueRowsEditor,
+  duplicateHeaderError,
   recordToRows,
   rowsToRecord,
   type KeyValueRow,
@@ -159,6 +161,7 @@ function McpForm({
     setFormData,
     seedFormData,
     validationErrors,
+    setValidationErrors,
     clearErrors,
     isSubmitting,
     canSubmit,
@@ -257,6 +260,16 @@ function McpForm({
     setTestResult(null);
   };
 
+  // rowsToRecord builds an object, so a repeated name would silently drop the
+  // earlier value and Test connection would send the collapsed set. Both paths
+  // refuse instead.
+  const rejectDuplicateHeader = (): boolean => {
+    const error = duplicateHeaderError(formData.headerRows);
+    if (!error) return false;
+    setValidationErrors((prev) => ({ ...prev, headers: error }));
+    return true;
+  };
+
   /**
    * Saves the MCP (create or update). Returns the saved record's ID on
    * success, or null on failure. A normal submit toasts success; the OAuth
@@ -266,6 +279,7 @@ function McpForm({
   const saveMcp = async ({
     silent = false,
   }: { silent?: boolean } = {}): Promise<string | null> => {
+    if (rejectDuplicateHeader()) return null;
     const saved = await submit({ silent });
     // The form stays open after Authorize's save, so it takes the Client ID
     // the backend stored, not the one it sent: a new URL clears the client
@@ -288,6 +302,7 @@ function McpForm({
   const { run: handleTestConnection, pending: isTesting } = useMutation(
     async () => {
       setTestResult(null);
+      if (rejectDuplicateHeader()) return;
 
       const payload: Record<string, unknown> = {
         url: formData.url,
@@ -603,6 +618,7 @@ function McpForm({
           <div
             role="group"
             aria-labelledby="mcp-headers-label"
+            data-invalid={!!validationErrors.headers}
             className="flex flex-col gap-3"
           >
             <div className="flex flex-col gap-1">
@@ -614,6 +630,7 @@ function McpForm({
             <KeyValueRowsEditor
               rows={formData.headerRows}
               onChange={(rows, changed) => {
+                clearErrors("headers");
                 setFormData((prev) => ({ ...prev, headerRows: rows }));
                 // An empty new row changes nothing that was tested.
                 if (changed) setTestResult(null);
@@ -624,6 +641,9 @@ function McpForm({
               labels={HEADER_ROW_LABELS}
               addLabel="Add header"
             />
+            {validationErrors.headers && (
+              <FieldError>{validationErrors.headers}</FieldError>
+            )}
           </div>
 
           {/* OAuth Authorization Section */}

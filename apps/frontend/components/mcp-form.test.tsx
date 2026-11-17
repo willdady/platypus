@@ -646,3 +646,50 @@ describe("McpForm OAuth", () => {
     );
   });
 });
+
+describe("McpForm duplicate header names", () => {
+  afterEach(() => resetFormHarness());
+
+  function renderWithOneHeader() {
+    setData({
+      id: "m1",
+      name: "Docs",
+      url: "http://mcp.test",
+      authType: "None",
+      headers: { "X-Trace": "one" },
+    });
+    render(<McpForm orgId="org1" mcpId="m1" />);
+  }
+
+  function addCollidingHeader() {
+    fireEvent.click(screen.getByRole("button", { name: "Add header" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Header 2 name" }), {
+      target: { value: "x-trace" },
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "Header 2 value" }), {
+      target: { value: "two" },
+    });
+  }
+
+  it("refuses to save headers whose names differ only in case", () => {
+    const fetchMock = stubAcceptedSave({ id: "m1" });
+    renderWithOneHeader();
+    addCollidingHeader();
+
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+
+    expect(screen.getByText(/Duplicate header name "x-trace"/)).toBeVisible();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses to test the connection with a duplicate header", () => {
+    const fetchMock = stubAcceptedSave({ id: "m1" });
+    renderWithOneHeader();
+    addCollidingHeader();
+
+    fireEvent.click(screen.getByRole("button", { name: "Test connection" }));
+
+    expect(screen.getByText(/Duplicate header name "x-trace"/)).toBeVisible();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
