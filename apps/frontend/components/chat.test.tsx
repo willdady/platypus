@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import { memo } from "react";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import {
   DefaultChatTransport,
@@ -57,13 +58,6 @@ const { harness } = vi.hoisted(() => ({
     sandboxFiles: [] as File[],
     chatMutate: vi.fn(),
     agentsMutate: vi.fn(),
-    chatMessageRenders: 0,
-    lastChatMessageProps: null as null | {
-      onMessageDelete: (messageId: string) => void;
-      onRegenerate?: (messageId: string) => void;
-      onSwitchAlternative: (fromId: string, toId: string) => void;
-      staleToolCallIds?: ReadonlySet<string>;
-    },
     /** What the Chat configured the chat hook with. */
     chatOptions: undefined as
       | undefined
@@ -74,6 +68,30 @@ const { harness } = vi.hoisted(() => ({
         },
   },
 }));
+
+// The render counters live outside `harness` so the stub below calls a plain
+// function instead of writing through the hoisted object — the immutability
+// rule has no way to tell that write apart from a render-time mutation.
+let chatMessageRenders = 0;
+let chatMessageRendersById: Record<string, number> = {};
+function countChatMessageRender(messageId: string) {
+  chatMessageRenders += 1;
+  chatMessageRendersById[messageId] =
+    (chatMessageRendersById[messageId] ?? 0) + 1;
+}
+
+let lastChatMessageProps: null | {
+  onMessageDelete: (messageId: string) => void;
+  onRegenerate?: (messageId: string) => void;
+  onSwitchAlternative: (fromId: string, toId: string) => void;
+  staleToolCallIds?: ReadonlySet<string>;
+  copied?: boolean;
+} = null;
+function recordChatMessageProps(
+  props: NonNullable<typeof lastChatMessageProps>,
+) {
+  lastChatMessageProps = props;
+}
 
 vi.mock("swr", () => ({
   __esModule: true,
@@ -130,7 +148,11 @@ vi.mock("@/components/auth-provider", () => ({
   useAuth: () => harness.auth,
 }));
 vi.mock("sonner", () => ({
-  toast: { error: harness.toastError, info: harness.toastInfo },
+  toast: {
+    error: harness.toastError,
+    info: harness.toastInfo,
+    success: vi.fn(),
+  },
 }));
 
 // The presentational tree, stubbed to the props under test. `PromptInputTextarea`
@@ -248,7 +270,9 @@ vi.mock("@/components/ai-elements/prompt-input", () => ({
 // whatever edit surface the Chat hands down for the one being edited. The
 // transcript itself is `chat-message`'s own test's business.
 vi.mock("./chat-message", () => ({
-  ChatMessage: ({
+  // Memoised like the real one: whether a prop change reaches this stub is
+  // exactly what the transcript-stability tests below are about.
+  ChatMessage: memo(function ChatMessageStub({
     message,
     editor,
     onEditStart,
@@ -256,6 +280,8 @@ vi.mock("./chat-message", () => ({
     onRegenerate,
     alternatives,
     onSwitchAlternative,
+    onCopyMessage,
+    copied,
     staleToolCallIds,
     onApprovalResponse,
   }: {
@@ -266,16 +292,19 @@ vi.mock("./chat-message", () => ({
     onRegenerate?: (messageId: string) => void;
     alternatives?: AlternativePosition;
     onSwitchAlternative: (fromId: string, toId: string) => void;
+    onCopyMessage: (content: string, messageId: string) => void;
+    copied: boolean;
     staleToolCallIds?: ReadonlySet<string>;
     onApprovalResponse?: (approvalId: string, approved: boolean) => void;
-  }) => {
-    harness.chatMessageRenders += 1;
-    harness.lastChatMessageProps = {
+  }) {
+    countChatMessageRender(message.id);
+    recordChatMessageProps({
       onMessageDelete,
       onRegenerate,
       onSwitchAlternative,
       staleToolCallIds,
-    };
+      copied,
+    });
     return (
       <div>
         {editor ?? (
@@ -285,6 +314,12 @@ vi.mock("./chat-message", () => ({
             </button>
             <button type="button" onClick={() => onMessageDelete(message.id)}>
               Delete {message.id}
+            </button>
+            <button
+              type="button"
+              onClick={() => onCopyMessage(`text of ${message.id}`, message.id)}
+            >
+              Copy {message.id}
             </button>
             {onRegenerate && (
               <button type="button" onClick={() => onRegenerate(message.id)}>
@@ -328,7 +363,7 @@ vi.mock("./chat-message", () => ({
         )}
       </div>
     );
-  },
+  }),
 }));
 
 // Stubbed to what the Chat hands the edit surface, and to the one thing the
@@ -821,8 +856,9 @@ beforeEach(() => {
   harness.chatMutate.mockResolvedValue(undefined);
   harness.agentsMutate.mockReset();
   harness.agentsMutate.mockResolvedValue(undefined);
-  harness.chatMessageRenders = 0;
-  harness.lastChatMessageProps = null;
+  chatMessageRenders = 0;
+  chatMessageRendersById = {};
+  lastChatMessageProps = null;
 });
 
 describe("Chat detail read", () => {
@@ -1442,33 +1478,59 @@ describe("transcript stability", () => {
   it("keeps the stale tool-call set and the callbacks stable across renders", () => {
     harness.turn.messages = [message("u1", "q"), message("a1", "a")];
     const view = renderChat();
-    const first = harness.lastChatMessageProps!;
+    const first = lastChatMessageProps!;
 
     view.rerender(<Chat orgId="org1" workspaceId="ws1" chatId={CHAT_ID} />);
 
-    expect(harness.lastChatMessageProps!.onMessageDelete).toBe(
-      first.onMessageDelete,
-    );
-    expect(harness.lastChatMessageProps!.onRegenerate).toBe(first.onRegenerate);
-    expect(harness.lastChatMessageProps!.onSwitchAlternative).toBe(
+    expect(lastChatMessageProps!.onMessageDelete).toBe(first.onMessageDelete);
+    expect(lastChatMessageProps!.onRegenerate).toBe(first.onRegenerate);
+    expect(lastChatMessageProps!.onSwitchAlternative).toBe(
       first.onSwitchAlternative,
     );
-    expect(harness.lastChatMessageProps!.staleToolCallIds).toBe(
-      first.staleToolCallIds,
-    );
+    expect(lastChatMessageProps!.staleToolCallIds).toBe(first.staleToolCallIds);
   });
 
   it("does not re-render the transcript while the composer is typed into", () => {
     harness.turn.messages = [message("u1", "q"), message("a1", "a")];
     renderChat();
-    const before = harness.chatMessageRenders;
+    const before = chatMessageRenders;
 
     fireEvent.change(
       screen.getByPlaceholderText("What would you like to know?"),
       { target: { value: "hello" } },
     );
 
-    expect(harness.chatMessageRenders).toBe(before);
+    expect(chatMessageRenders).toBe(before);
+  });
+
+  // Copying one message should re-render that message and nothing else: the
+  // "copied" indication is the only thing that changes, and every message
+  // reading the same `copiedMessageId` prop made it change for all of them.
+  it("re-renders only the copied message and not the rest of the transcript", async () => {
+    // jsdom implements neither the Clipboard API nor execCommand, so the copy
+    // path has nothing to answer it here. Stand in for the legacy command.
+    Object.defineProperty(document, "execCommand", {
+      value: vi.fn(() => true),
+      configurable: true,
+    });
+    harness.turn.messages = [
+      message("u1", "q"),
+      message("a1", "a"),
+      message("a2", "b"),
+    ];
+    renderChat();
+    chatMessageRendersById = {};
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy a1" }));
+
+    // The copy lands asynchronously, so wait for the message it was for to
+    // render again before reading which of the others did.
+    await waitFor(() => {
+      expect(chatMessageRendersById.a1).toBe(1);
+    });
+
+    expect(chatMessageRendersById.u1).toBeUndefined();
+    expect(chatMessageRendersById.a2).toBeUndefined();
   });
 
   // With clearing ACTIVE the set is non-empty, and the function rebuilds it
@@ -1507,7 +1569,7 @@ describe("transcript stability", () => {
     );
     harness.turn.messages = [...toolResults, message("a-last", "an answer")];
     const view = renderChat();
-    const first = harness.lastChatMessageProps!.staleToolCallIds;
+    const first = lastChatMessageProps!.staleToolCallIds;
     expect(first?.size).toBe(4);
 
     harness.turn.messages = [
@@ -1516,7 +1578,7 @@ describe("transcript stability", () => {
     ];
     view.rerender(<Chat orgId="org1" workspaceId="ws1" chatId={CHAT_ID} />);
 
-    expect(harness.lastChatMessageProps!.staleToolCallIds).toBe(first);
+    expect(lastChatMessageProps!.staleToolCallIds).toBe(first);
   });
 });
 

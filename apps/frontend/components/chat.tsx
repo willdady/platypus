@@ -269,6 +269,10 @@ export function Chat({
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
   const [isAgentInfoDialogOpen, setIsAgentInfoDialogOpen] = useState(false);
   const [showErrorDialog, setShowErrorDialog] = useState(false);
+  // Which message shows the two-second "copied" state. Each message is told
+  // only whether it is that one, rather than the id it would have to compare
+  // against: every message received the same id prop, so copying any message
+  // changed a prop on all of them and defeated `ChatMessage`'s memo.
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const scheduleCopiedReset = useTimeout();
 
@@ -705,7 +709,7 @@ export function Chat({
                     alternatives={positions.get(message.id)}
                     onSwitchAlternative={switchAlternative}
                     onCopyMessage={handleCopyMessage}
-                    copiedMessageId={copiedMessageId}
+                    copied={copiedMessageId === message.id}
                     staleToolCallIds={staleToolCallIds}
                     onApprovalResponse={
                       // Only the Active leaf can be resumed, and only while
