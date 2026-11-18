@@ -85,7 +85,6 @@ let lastChatMessageProps: null | {
   onRegenerate?: (messageId: string) => void;
   onSwitchAlternative: (fromId: string, toId: string) => void;
   staleToolCallIds?: ReadonlySet<string>;
-  copied?: boolean;
 } = null;
 function recordChatMessageProps(
   props: NonNullable<typeof lastChatMessageProps>,
@@ -148,12 +147,9 @@ vi.mock("@/components/auth-provider", () => ({
   useAuth: () => harness.auth,
 }));
 vi.mock("sonner", () => ({
-  toast: {
-    error: harness.toastError,
-    info: harness.toastInfo,
-    success: vi.fn(),
-  },
+  toast: { error: harness.toastError, info: harness.toastInfo },
 }));
+vi.mock("@/lib/clipboard", () => ({ copyWithToast: async () => true }));
 
 // The presentational tree, stubbed to the props under test. `PromptInputTextarea`
 // and `PromptInputSubmit` keep theirs, because the composer guard is one of the
@@ -281,7 +277,6 @@ vi.mock("./chat-message", () => ({
     alternatives,
     onSwitchAlternative,
     onCopyMessage,
-    copied,
     staleToolCallIds,
     onApprovalResponse,
   }: {
@@ -293,7 +288,6 @@ vi.mock("./chat-message", () => ({
     alternatives?: AlternativePosition;
     onSwitchAlternative: (fromId: string, toId: string) => void;
     onCopyMessage: (content: string, messageId: string) => void;
-    copied: boolean;
     staleToolCallIds?: ReadonlySet<string>;
     onApprovalResponse?: (approvalId: string, approved: boolean) => void;
   }) {
@@ -303,7 +297,6 @@ vi.mock("./chat-message", () => ({
       onRegenerate,
       onSwitchAlternative,
       staleToolCallIds,
-      copied,
     });
     return (
       <div>
@@ -1503,16 +1496,7 @@ describe("transcript stability", () => {
     expect(chatMessageRenders).toBe(before);
   });
 
-  // Copying one message should re-render that message and nothing else: the
-  // "copied" indication is the only thing that changes, and every message
-  // reading the same `copiedMessageId` prop made it change for all of them.
   it("re-renders only the copied message and not the rest of the transcript", async () => {
-    // jsdom implements neither the Clipboard API nor execCommand, so the copy
-    // path has nothing to answer it here. Stand in for the legacy command.
-    Object.defineProperty(document, "execCommand", {
-      value: vi.fn(() => true),
-      configurable: true,
-    });
     harness.turn.messages = [
       message("u1", "q"),
       message("a1", "a"),
