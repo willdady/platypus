@@ -26,6 +26,11 @@ export type FormSelectFieldProps = {
   disabled?: boolean;
   className?: string;
   triggerClassName?: string;
+  /**
+   * Overrides the trigger's accessible name when the visible label alone is
+   * ambiguous, e.g. a list of rows each labelled only by the row's name.
+   */
+  triggerAriaLabel?: string;
 };
 
 // Composes the ui/field + ui/select atoms so the
@@ -43,6 +48,7 @@ export function FormSelectField({
   disabled,
   className,
   triggerClassName,
+  triggerAriaLabel,
 }: FormSelectFieldProps) {
   const ids = formFieldIds(name, { description, error });
   return (
@@ -52,6 +58,7 @@ export function FormSelectField({
         <SelectTrigger
           id={name}
           disabled={disabled}
+          aria-label={triggerAriaLabel}
           aria-invalid={!!error}
           aria-describedby={ids.describedBy}
           className={triggerClassName}

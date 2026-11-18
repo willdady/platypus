@@ -10,14 +10,9 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { FieldGroup } from "@/components/ui/field";
+import { SelectItem } from "@/components/ui/select";
+import { FormSelectField } from "@/components/form-select-field";
 import { useState } from "react";
 import { useSWRConfig } from "swr";
 import {
@@ -179,31 +174,22 @@ export function RemoveMemberDialog({
                 const draft = draftOf(w.id);
                 return (
                   <FieldGroup key={w.id} className="rounded-md border p-3">
-                    <Field>
-                      <FieldLabel htmlFor={`action-${w.id}`}>
-                        {w.name}
-                      </FieldLabel>
-                      <Select
-                        value={draft.action ?? ""}
-                        onValueChange={(value) =>
-                          update(w.id, { action: value as Draft["action"] })
-                        }
-                        disabled={pending}
-                      >
-                        <SelectTrigger
-                          id={`action-${w.id}`}
-                          aria-label={`Action for ${w.name}`}
-                        >
-                          <SelectValue placeholder="Choose what happens" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {recipients.length > 0 && (
-                            <SelectItem value="transfer">Transfer</SelectItem>
-                          )}
-                          <SelectItem value="delete">Delete</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </Field>
+                    <FormSelectField
+                      label={w.name}
+                      name={`action-${w.id}`}
+                      triggerAriaLabel={`Action for ${w.name}`}
+                      value={draft.action ?? ""}
+                      onValueChange={(value) =>
+                        update(w.id, { action: value as Draft["action"] })
+                      }
+                      placeholder="Choose what happens"
+                      disabled={pending}
+                    >
+                      {recipients.length > 0 && (
+                        <SelectItem value="transfer">Transfer</SelectItem>
+                      )}
+                      <SelectItem value="delete">Delete</SelectItem>
+                    </FormSelectField>
                     {draft.action === "transfer" && (
                       <TransferFields
                         idPrefix={w.id}

@@ -9,16 +9,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SelectItem } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Field, FieldLabel } from "@/components/ui/field";
+import { FormSelectField } from "@/components/form-select-field";
 import type { Workspace } from "@platypus/schemas";
 import { useScopedList } from "@/hooks/use-scoped-list";
 import { scopedUrl, writeAt } from "@/lib/api-write";
@@ -110,21 +104,20 @@ export function ApplyBlueprintDialog({
               : "."}
           </div>
         ) : (
-          <Field>
-            <FieldLabel htmlFor="apply-workspace">Workspace</FieldLabel>
-            <Select value={workspaceId} onValueChange={setWorkspaceId}>
-              <SelectTrigger id="apply-workspace" disabled={pending}>
-                <SelectValue placeholder="Select a workspace" />
-              </SelectTrigger>
-              <SelectContent>
-                {workspaces.map((ws) => (
-                  <SelectItem key={ws.id} value={ws.id}>
-                    {ws.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
+          <FormSelectField
+            label="Workspace"
+            name="apply-workspace"
+            value={workspaceId}
+            onValueChange={setWorkspaceId}
+            placeholder="Select a workspace"
+            disabled={pending}
+          >
+            {workspaces.map((ws) => (
+              <SelectItem key={ws.id} value={ws.id}>
+                {ws.name}
+              </SelectItem>
+            ))}
+          </FormSelectField>
         )}
 
         {error && (
