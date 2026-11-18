@@ -8,13 +8,8 @@ import {
   FieldTitle,
 } from "@/components/ui/field";
 import { Switch } from "@/components/ui/switch";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SelectItem } from "@/components/ui/select";
+import { FormSelectField } from "@/components/form-select-field";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { useScopedList } from "@/hooks/use-scoped-list";
 import { useEffect, useState } from "react";
@@ -156,56 +151,42 @@ function TriggerEventFields({
       {/* Board and column filters for card events */}
       {selectedEvents.some((e) => e.startsWith("card.")) && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Field>
-            <FieldLabel htmlFor="trigger-filter-board">
-              Only cards in this Board
-            </FieldLabel>
-            <Select
-              value={filterBoardId || "__all__"}
-              onValueChange={(value) => {
-                setFilterBoardId(value === "__all__" ? "" : value);
-                setFilterColumnId("");
-              }}
+          <FormSelectField
+            label="Only cards in this Board"
+            name="trigger-filter-board"
+            value={filterBoardId || "__all__"}
+            onValueChange={(value) => {
+              setFilterBoardId(value === "__all__" ? "" : value);
+              setFilterColumnId("");
+            }}
+            placeholder="All boards"
+            disabled={disabled}
+          >
+            <SelectItem value="__all__">All boards</SelectItem>
+            {boards.map((board) => (
+              <SelectItem key={board.id} value={board.id}>
+                {board.name}
+              </SelectItem>
+            ))}
+          </FormSelectField>
+          {filterBoardId && (
+            <FormSelectField
+              label="Only cards in this Column"
+              name="trigger-filter-column"
+              value={filterColumnId || "__all__"}
+              onValueChange={(value) =>
+                setFilterColumnId(value === "__all__" ? "" : value)
+              }
+              placeholder="All columns"
               disabled={disabled}
             >
-              <SelectTrigger id="trigger-filter-board" disabled={disabled}>
-                <SelectValue placeholder="All boards" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__all__">All boards</SelectItem>
-                {boards.map((board) => (
-                  <SelectItem key={board.id} value={board.id}>
-                    {board.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-          {filterBoardId && (
-            <Field>
-              <FieldLabel htmlFor="trigger-filter-column">
-                Only cards in this Column
-              </FieldLabel>
-              <Select
-                value={filterColumnId || "__all__"}
-                onValueChange={(value) =>
-                  setFilterColumnId(value === "__all__" ? "" : value)
-                }
-                disabled={disabled}
-              >
-                <SelectTrigger id="trigger-filter-column" disabled={disabled}>
-                  <SelectValue placeholder="All columns" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all__">All columns</SelectItem>
-                  {columns.map((col) => (
-                    <SelectItem key={col.id} value={col.id}>
-                      {col.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
+              <SelectItem value="__all__">All columns</SelectItem>
+              {columns.map((col) => (
+                <SelectItem key={col.id} value={col.id}>
+                  {col.name}
+                </SelectItem>
+              ))}
+            </FormSelectField>
           )}
         </div>
       )}
