@@ -705,7 +705,7 @@ export function Chat({
                     alternatives={positions.get(message.id)}
                     onSwitchAlternative={switchAlternative}
                     onCopyMessage={handleCopyMessage}
-                    copiedMessageId={copiedMessageId}
+                    copied={copiedMessageId === message.id}
                     staleToolCallIds={staleToolCallIds}
                     onApprovalResponse={
                       // Only the Active leaf can be resumed, and only while

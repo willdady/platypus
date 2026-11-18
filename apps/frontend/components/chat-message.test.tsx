@@ -61,7 +61,7 @@ function renderMessage(
       onRegenerate={vi.fn()}
       onSwitchAlternative={vi.fn()}
       onCopyMessage={vi.fn()}
-      copiedMessageId={null}
+      copied={false}
       {...overrides}
     />,
   );
@@ -1625,7 +1625,7 @@ describe("ChatMessage Tool call groups", () => {
         onMessageDelete={vi.fn()}
         onSwitchAlternative={vi.fn()}
         onCopyMessage={vi.fn()}
-        copiedMessageId={null}
+        copied={false}
       />,
     );
 

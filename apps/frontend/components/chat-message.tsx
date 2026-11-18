@@ -391,8 +391,12 @@ type ChatMessageProps = {
   onSwitchAlternative: (fromId: string, toId: string) => void;
   /** Callback when user copies message content */
   onCopyMessage: (content: string, messageId: string) => void;
-  /** ID of the message that was recently copied, or null */
-  copiedMessageId: string | null;
+  /**
+   * Whether this message is the one recently copied. Per message rather than
+   * the copied id, so copying one message leaves every other one's props
+   * unchanged and its memo intact.
+   */
+  copied: boolean;
   /**
    * `toolCallId`s whose result Tool-result clearing (ADR-0018 Notes, issue
    * #524), or whose input Tool-input clearing (issue #1722), would leave out
@@ -421,7 +425,7 @@ export const ChatMessage = memo(function ChatMessage({
   alternatives,
   onSwitchAlternative,
   onCopyMessage,
-  copiedMessageId,
+  copied,
   staleToolCallIds,
   onApprovalResponse,
 }: ChatMessageProps) {
@@ -819,7 +823,7 @@ export const ChatMessage = memo(function ChatMessage({
           <MessageAction
             className="text-muted-foreground"
             onClick={() => onCopyMessage(textContent, message.id)}
-            variant={copiedMessageId === message.id ? "secondary" : "ghost"}
+            variant={copied ? "secondary" : "ghost"}
             size="icon"
             label="Copy"
           >
