@@ -1,19 +1,12 @@
 "use client";
 
-import { Field, FieldLabel, FieldTitle } from "@/components/ui/field";
+import { Field, FieldTitle } from "@/components/ui/field";
 import { FormTextField } from "@/components/form-text-field";
 import { FormSelectField } from "@/components/form-select-field";
 import { FormSwitchField } from "@/components/form-switch-field";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SelectGroup, SelectItem } from "@/components/ui/select";
 import { useAuth } from "@/components/auth-provider";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useEffect, useMemo, useState } from "react";
@@ -176,43 +169,29 @@ function TriggerCronFields({
       {/* Simple Mode Fields */}
       {scheduleMode === "simple" && (
         <>
-          <Field>
-            <FieldLabel htmlFor="trigger-frequency">Frequency</FieldLabel>
-            <Select
-              value={simpleSchedule.frequency}
-              onValueChange={(value) =>
-                setSimpleSchedule((prev) => ({
-                  ...prev,
-                  frequency: value as Frequency,
-                }))
-              }
-              disabled={scheduleLocked}
-            >
-              <SelectTrigger id="trigger-frequency" disabled={scheduleLocked}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  <SelectItem value="every-5-minutes">
-                    Every 5 minutes
-                  </SelectItem>
-                  <SelectItem value="every-10-minutes">
-                    Every 10 minutes
-                  </SelectItem>
-                  <SelectItem value="every-15-minutes">
-                    Every 15 minutes
-                  </SelectItem>
-                  <SelectItem value="every-30-minutes">
-                    Every 30 minutes
-                  </SelectItem>
-                  <SelectItem value="hourly">Hourly</SelectItem>
-                  <SelectItem value="daily">Daily</SelectItem>
-                  <SelectItem value="weekly">Weekly</SelectItem>
-                  <SelectItem value="monthly">Monthly</SelectItem>
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-          </Field>
+          <FormSelectField
+            label="Frequency"
+            name="trigger-frequency"
+            value={simpleSchedule.frequency}
+            onValueChange={(value) =>
+              setSimpleSchedule((prev) => ({
+                ...prev,
+                frequency: value as Frequency,
+              }))
+            }
+            disabled={scheduleLocked}
+          >
+            <SelectGroup>
+              <SelectItem value="every-5-minutes">Every 5 minutes</SelectItem>
+              <SelectItem value="every-10-minutes">Every 10 minutes</SelectItem>
+              <SelectItem value="every-15-minutes">Every 15 minutes</SelectItem>
+              <SelectItem value="every-30-minutes">Every 30 minutes</SelectItem>
+              <SelectItem value="hourly">Hourly</SelectItem>
+              <SelectItem value="daily">Daily</SelectItem>
+              <SelectItem value="weekly">Weekly</SelectItem>
+              <SelectItem value="monthly">Monthly</SelectItem>
+            </SelectGroup>
+          </FormSelectField>
 
           {simpleSchedule.frequency !== "every-5-minutes" &&
             simpleSchedule.frequency !== "every-10-minutes" &&
@@ -220,133 +199,97 @@ function TriggerCronFields({
             simpleSchedule.frequency !== "every-30-minutes" && (
               <div className="flex gap-4">
                 {simpleSchedule.frequency !== "hourly" && (
-                  <Field className="flex-1">
-                    <FieldLabel htmlFor="trigger-hour">Hour</FieldLabel>
-                    <Select
-                      value={simpleSchedule.hour}
-                      onValueChange={(value) =>
-                        setSimpleSchedule((prev) => ({
-                          ...prev,
-                          hour: value,
-                        }))
-                      }
-                      disabled={scheduleLocked}
-                    >
-                      <SelectTrigger
-                        id="trigger-hour"
-                        disabled={scheduleLocked}
-                      >
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectGroup>
-                          {HOUR_OPTIONS.map((opt) => (
-                            <SelectItem key={opt.value} value={opt.value}>
-                              {opt.label}
-                            </SelectItem>
-                          ))}
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
-                  </Field>
-                )}
-
-                <Field className="flex-1">
-                  <FieldLabel htmlFor="trigger-minute">Minute</FieldLabel>
-                  <Select
-                    value={simpleSchedule.minute}
+                  <FormSelectField
+                    label="Hour"
+                    name="trigger-hour"
+                    className="flex-1"
+                    value={simpleSchedule.hour}
                     onValueChange={(value) =>
                       setSimpleSchedule((prev) => ({
                         ...prev,
-                        minute: value,
+                        hour: value,
                       }))
                     }
                     disabled={scheduleLocked}
                   >
-                    <SelectTrigger
-                      id="trigger-minute"
-                      disabled={scheduleLocked}
-                    >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectGroup>
-                        {MINUTE_OPTIONS.map((opt) => (
-                          <SelectItem key={opt.value} value={opt.value}>
-                            {opt.label}
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
-                </Field>
-              </div>
-            )}
+                    <SelectGroup>
+                      {HOUR_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </FormSelectField>
+                )}
 
-          {simpleSchedule.frequency === "weekly" && (
-            <Field>
-              <FieldLabel htmlFor="trigger-day-of-week">Day of Week</FieldLabel>
-              <Select
-                value={simpleSchedule.dayOfWeek}
-                onValueChange={(value) =>
-                  setSimpleSchedule((prev) => ({
-                    ...prev,
-                    dayOfWeek: value,
-                  }))
-                }
-                disabled={scheduleLocked}
-              >
-                <SelectTrigger
-                  id="trigger-day-of-week"
+                <FormSelectField
+                  label="Minute"
+                  name="trigger-minute"
+                  className="flex-1"
+                  value={simpleSchedule.minute}
+                  onValueChange={(value) =>
+                    setSimpleSchedule((prev) => ({
+                      ...prev,
+                      minute: value,
+                    }))
+                  }
                   disabled={scheduleLocked}
                 >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
                   <SelectGroup>
-                    {DAYS_OF_WEEK.map((day) => (
-                      <SelectItem key={day.value} value={day.value}>
-                        {day.label}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            </Field>
-          )}
-
-          {simpleSchedule.frequency === "monthly" && (
-            <Field>
-              <FieldLabel htmlFor="trigger-day-of-month">
-                Day of Month
-              </FieldLabel>
-              <Select
-                value={simpleSchedule.dayOfMonth}
-                onValueChange={(value) =>
-                  setSimpleSchedule((prev) => ({
-                    ...prev,
-                    dayOfMonth: value,
-                  }))
-                }
-                disabled={scheduleLocked}
-              >
-                <SelectTrigger
-                  id="trigger-day-of-month"
-                  disabled={scheduleLocked}
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    {DAY_OF_MONTH_OPTIONS.map((opt) => (
+                    {MINUTE_OPTIONS.map((opt) => (
                       <SelectItem key={opt.value} value={opt.value}>
                         {opt.label}
                       </SelectItem>
                     ))}
                   </SelectGroup>
-                </SelectContent>
-              </Select>
-            </Field>
+                </FormSelectField>
+              </div>
+            )}
+
+          {simpleSchedule.frequency === "weekly" && (
+            <FormSelectField
+              label="Day of Week"
+              name="trigger-day-of-week"
+              value={simpleSchedule.dayOfWeek}
+              onValueChange={(value) =>
+                setSimpleSchedule((prev) => ({
+                  ...prev,
+                  dayOfWeek: value,
+                }))
+              }
+              disabled={scheduleLocked}
+            >
+              <SelectGroup>
+                {DAYS_OF_WEEK.map((day) => (
+                  <SelectItem key={day.value} value={day.value}>
+                    {day.label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </FormSelectField>
+          )}
+
+          {simpleSchedule.frequency === "monthly" && (
+            <FormSelectField
+              label="Day of Month"
+              name="trigger-day-of-month"
+              value={simpleSchedule.dayOfMonth}
+              onValueChange={(value) =>
+                setSimpleSchedule((prev) => ({
+                  ...prev,
+                  dayOfMonth: value,
+                }))
+              }
+              disabled={scheduleLocked}
+            >
+              <SelectGroup>
+                {DAY_OF_MONTH_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </FormSelectField>
           )}
         </>
       )}
