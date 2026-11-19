@@ -16,7 +16,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { RevealableInput } from "@/components/ui/revealable-input";
 import { Label } from "@/components/ui/label";
-import { InviteShell } from "../invite-shell";
+import { AuthShell } from "@/components/auth-shell";
 import { LoadingRegion, SkeletonLine } from "@/components/list-skeletons";
 import { Skeleton } from "@/components/ui/skeleton";
 import type {
@@ -154,7 +154,7 @@ export default function InviteTokenPage() {
     // Shaped like the registration form, the state a fresh link most often
     // lands on: heading and invite line, then email, name, password, submit.
     return (
-      <InviteShell>
+      <AuthShell>
         <LoadingRegion
           label="Loading invitation"
           className="flex flex-col gap-8"
@@ -179,19 +179,19 @@ export default function InviteTokenPage() {
             <Skeleton className="h-3.5 w-52" />
           </div>
         </LoadingRegion>
-      </InviteShell>
+      </AuthShell>
     );
   }
 
   if (error !== undefined || !data) {
     return (
-      <InviteShell className="flex flex-col gap-4 text-center">
+      <AuthShell className="flex flex-col gap-4 text-center">
         <h1 className="text-2xl font-bold">Invitation not found</h1>
         <p className="text-muted-foreground">
           This invitation link is not valid. It may have already been used,
           declined, or expired. Ask whoever invited you to send a new one.
         </p>
-      </InviteShell>
+      </AuthShell>
     );
   }
 
@@ -199,7 +199,7 @@ export default function InviteTokenPage() {
   // offer sign-out, and leave the Invitation pending (untouched).
   if (user && user.email !== data.email) {
     return (
-      <InviteShell className="flex flex-col gap-4 text-center">
+      <AuthShell className="flex flex-col gap-4 text-center">
         <h1 className="text-2xl font-bold">Wrong account</h1>
         <p className="text-muted-foreground">
           This invitation to join{" "}
@@ -210,14 +210,14 @@ export default function InviteTokenPage() {
         <Button onClick={handleSignOut} className="w-full">
           Sign out
         </Button>
-      </InviteShell>
+      </AuthShell>
     );
   }
 
   // Signed in as the invited address: a single Accept action.
   if (user && user.email === data.email) {
     return (
-      <InviteShell className="flex flex-col gap-6 text-center">
+      <AuthShell className="flex flex-col gap-6 text-center">
         <div>
           <h1 className="text-2xl font-bold">You&apos;re invited</h1>
           <p className="text-muted-foreground mt-2">
@@ -237,13 +237,13 @@ export default function InviteTokenPage() {
         >
           {isSubmitting ? "Accepting..." : "Accept invitation"}
         </Button>
-      </InviteShell>
+      </AuthShell>
     );
   }
 
   // No session: register or sign in here, retaining the resolved token.
   return (
-    <InviteShell className="flex flex-col gap-8">
+    <AuthShell className="flex flex-col gap-8">
       <div className="text-center">
         <h1 className="text-2xl font-bold">You&apos;re invited</h1>
         <p className="text-muted-foreground mt-2">
@@ -321,6 +321,6 @@ export default function InviteTokenPage() {
           ? "Need an account? Create one"
           : "Already have an account? Sign in"}
       </Button>
-    </InviteShell>
+    </AuthShell>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { MAIN_CONTENT_ID } from "@/components/skip-link";
+import { AuthShell } from "@/components/auth-shell";
 import { appRoutes } from "@/lib/routes";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -49,37 +49,33 @@ export default function SignUpPage() {
   };
 
   return (
-    <main
-      id={MAIN_CONTENT_ID}
-      className="flex min-h-screen items-center justify-center"
-    >
-      <div className="w-full max-w-md flex flex-col gap-8 p-8">
-        {/* The Operator requires an invitation (#550, ADR-0019): say so rather
-            than offer a form the backend would refuse. The route stays — a 404
-            would read as a broken deployment, not a closed door. */}
-        {signUpOpen === false && (
-          <div className="text-center">
-            <h1 className="text-2xl font-bold">Sign-up is by invitation</h1>
-            <p className="text-muted-foreground mt-2">
-              This deployment does not accept open sign-ups. Ask an
-              administrator of the Organization you are joining for an
-              invitation link, and open that link to create your account.
-            </p>
-          </div>
-        )}
-
-        {/* The form waits for the backend to confirm sign-up is open: a form
-            that appears and then vanishes is the dead end this avoids. */}
-        {signUpOpen && (
+    <AuthShell
+      // The Operator requires an invitation (#550, ADR-0019): say so rather
+      // than offer a form the backend would refuse. The route stays — a 404
+      // would read as a broken deployment, not a closed door.
+      title={
+        signUpOpen === false
+          ? "Sign-up is by invitation"
+          : signUpOpen
+            ? "Create an account"
+            : undefined
+      }
+      description={
+        signUpOpen === false ? (
           <>
-            <div className="text-center">
-              <h1 className="text-2xl font-bold">Create an account</h1>
-              <p className="text-muted-foreground mt-2">
-                Sign up to get started with Platypus
-              </p>
-            </div>
-
-            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            This deployment does not accept open sign-ups. Ask an administrator
+            of the Organization you are joining for an invitation link, and open
+            that link to create your account.
+          </>
+        ) : signUpOpen ? (
+          "Sign up to get started with Platypus"
+        ) : undefined
+      }
+    >
+      {/* The form waits for the backend to confirm sign-up is open: a form
+          that appears and then vanishes is the dead end this avoids. */}
+      {signUpOpen && (
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
               {error && (
                 <Alert variant="destructive">
                   <AlertDescription>{error}</AlertDescription>
@@ -128,19 +124,17 @@ export default function SignUpPage() {
                 {isLoading ? "Creating account..." : "Sign up"}
               </Button>
             </form>
-          </>
-        )}
+      )}
 
-        <p className="text-center text-sm text-muted-foreground">
-          Already have an account?{" "}
-          <Link
-            href={appRoutes.signIn}
-            className="text-primary hover:underline"
-          >
-            Sign in
-          </Link>
-        </p>
-      </div>
-    </main>
+      <p className="text-center text-sm text-muted-foreground">
+        Already have an account?{" "}
+        <Link
+          href={appRoutes.signIn}
+          className="text-primary hover:underline"
+        >
+          Sign in
+        </Link>
+      </p>
+    </AuthShell>
   );
 }

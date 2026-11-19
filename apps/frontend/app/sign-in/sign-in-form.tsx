@@ -1,6 +1,6 @@
 "use client";
 
-import { MAIN_CONTENT_ID } from "@/components/skip-link";
+import { AuthShell } from "@/components/auth-shell";
 import { appRoutes, signInDestination } from "@/lib/routes";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -52,18 +52,10 @@ export default function SignInPage() {
   };
 
   return (
-    <main
-      id={MAIN_CONTENT_ID}
-      className="flex min-h-screen items-center justify-center"
+    <AuthShell
+      title="Sign in to Platypus"
+      description="Enter your credentials to continue"
     >
-      <div className="w-full max-w-md flex flex-col gap-8 p-8">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold">Sign in to Platypus</h1>
-          <p className="text-muted-foreground mt-2">
-            Enter your credentials to continue
-          </p>
-        </div>
-
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           {error && (
             <Alert variant="destructive">
@@ -115,7 +107,6 @@ export default function SignInPage() {
             </Link>
           </p>
         )}
-      </div>
-    </main>
+    </AuthShell>
   );
 }
