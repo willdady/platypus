@@ -9,20 +9,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Field,
-  FieldError,
-  FieldLabel,
-  FieldGroup,
-  FieldSet,
-} from "@/components/ui/field";
+import { SelectItem } from "@/components/ui/select";
+import { FieldGroup, FieldSet } from "@/components/ui/field";
+import { FormSelectField } from "@/components/form-select-field";
 import { type OrgMemberListItem } from "@platypus/schemas";
 import { type Serialized } from "@/lib/api-write";
 import { useEntityForm } from "@/hooks/use-entity-form";
@@ -72,25 +61,17 @@ export function MemberEditDialog({
 
         <FieldSet>
           <FieldGroup>
-            <Field data-invalid={!!validationErrors.role}>
-              <FieldLabel htmlFor="role">Organization Role</FieldLabel>
-              <Select
-                value={role}
-                onValueChange={(value) => setField("role", value)}
-                disabled={isSubmitting}
-              >
-                <SelectTrigger id="role">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="admin">Admin</SelectItem>
-                  <SelectItem value="member">Member</SelectItem>
-                </SelectContent>
-              </Select>
-              {validationErrors.role && (
-                <FieldError>{validationErrors.role}</FieldError>
-              )}
-            </Field>
+            <FormSelectField
+              label="Organization Role"
+              name="role"
+              value={role}
+              onValueChange={(value) => setField("role", value)}
+              error={validationErrors.role}
+              disabled={isSubmitting}
+            >
+              <SelectItem value="admin">Admin</SelectItem>
+              <SelectItem value="member">Member</SelectItem>
+            </FormSelectField>
           </FieldGroup>
         </FieldSet>
 

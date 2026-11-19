@@ -3,15 +3,10 @@ import {
   type ReasoningEffort,
   type ReasoningMap,
 } from "@platypus/schemas";
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { FieldGroup } from "@/components/ui/field";
 import { FormTextField } from "@/components/form-text-field";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { FormSelectField } from "@/components/form-select-field";
+import { SelectItem } from "@/components/ui/select";
 
 /** An unset control, as a Select value (Radix refuses an empty string). */
 const MODEL_DEFAULT = "default";
@@ -71,63 +66,48 @@ export function ReasoningControls({
   return (
     <FieldGroup className="grid grid-cols-2">
       {map.thinking && (
-        <Field>
-          <FieldLabel htmlFor="reasoningThinking">Thinking</FieldLabel>
-          <Select
-            value={
-              value.reasoningThinking === undefined
-                ? MODEL_DEFAULT
-                : value.reasoningThinking
-                  ? "on"
-                  : "off"
-            }
-            onValueChange={(v) =>
-              onChange({
-                reasoningThinking: v === MODEL_DEFAULT ? undefined : v === "on",
-              })
-            }
-            disabled={disabled}
-          >
-            <SelectTrigger id="reasoningThinking" disabled={disabled}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={MODEL_DEFAULT}>Model default</SelectItem>
-              <SelectItem value="on">On</SelectItem>
-              <SelectItem value="off">Off</SelectItem>
-            </SelectContent>
-          </Select>
-        </Field>
+        <FormSelectField
+          label="Thinking"
+          name="reasoningThinking"
+          value={
+            value.reasoningThinking === undefined
+              ? MODEL_DEFAULT
+              : value.reasoningThinking
+                ? "on"
+                : "off"
+          }
+          onValueChange={(v) =>
+            onChange({
+              reasoningThinking: v === MODEL_DEFAULT ? undefined : v === "on",
+            })
+          }
+          disabled={disabled}
+        >
+          <SelectItem value={MODEL_DEFAULT}>Model default</SelectItem>
+          <SelectItem value="on">On</SelectItem>
+          <SelectItem value="off">Off</SelectItem>
+        </FormSelectField>
       )}
       {steps.length > 0 && (
-        <Field>
-          <FieldLabel htmlFor="reasoningEffort">Effort</FieldLabel>
-          <Select
-            value={effort}
-            onValueChange={(v) =>
-              onChange({
-                reasoningEffort:
-                  v === MODEL_DEFAULT ? undefined : (v as ReasoningEffort),
-              })
-            }
-            disabled={disabled || thinkingOff}
-          >
-            <SelectTrigger
-              id="reasoningEffort"
-              disabled={disabled || thinkingOff}
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={MODEL_DEFAULT}>Model default</SelectItem>
-              {steps.map((step) => (
-                <SelectItem key={step} value={step}>
-                  {EFFORT_LABELS[step]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
+        <FormSelectField
+          label="Effort"
+          name="reasoningEffort"
+          value={effort}
+          onValueChange={(v) =>
+            onChange({
+              reasoningEffort:
+                v === MODEL_DEFAULT ? undefined : (v as ReasoningEffort),
+            })
+          }
+          disabled={disabled || thinkingOff}
+        >
+          <SelectItem value={MODEL_DEFAULT}>Model default</SelectItem>
+          {steps.map((step) => (
+            <SelectItem key={step} value={step}>
+              {EFFORT_LABELS[step]}
+            </SelectItem>
+          ))}
+        </FormSelectField>
       )}
       {map.budget && (
         <FormTextField
