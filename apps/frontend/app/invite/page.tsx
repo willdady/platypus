@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { InviteShell } from "./invite-shell";
+import { AuthShell } from "@/components/auth-shell";
 
 export const metadata: Metadata = { title: "Invitation" };
 
@@ -10,12 +10,11 @@ export const metadata: Metadata = { title: "Invitation" };
  */
 export default function InvitePage() {
   return (
-    <InviteShell className="flex flex-col gap-4 text-center">
-      <h1 className="text-2xl font-bold">Open your invitation link</h1>
-      <p className="text-muted-foreground">
-        The link you used is no longer in the address bar. Open the invitation
-        link you were sent again to continue.
-      </p>
-    </InviteShell>
+    <AuthShell
+      title="Open your invitation link"
+      description="The link you used is no longer in the address bar. Open the invitation link you were sent again to continue."
+      className="flex flex-col gap-4"
+      headingClassName="flex flex-col gap-4"
+    />
   );
 }
