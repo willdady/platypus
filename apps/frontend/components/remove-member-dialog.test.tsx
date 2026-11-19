@@ -74,7 +74,7 @@ function removeButton() {
   return screen.getByRole("button", { name: "Remove" });
 }
 function actionFor(name: string) {
-  return screen.getByRole("combobox", { name: `Action for ${name}` });
+  return screen.getByRole("combobox", { name });
 }
 function sentBody(fetchMock: ReturnType<typeof stubAcceptedSave>) {
   const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
