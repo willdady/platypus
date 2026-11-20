@@ -32,7 +32,7 @@ import {
   contextWindowForModel,
   pointerSettingModelId,
 } from "./model-capability.ts";
-import { jobCallSettings } from "./reasoning.ts";
+import { jobCallSettings, jobMaxOutputTokens } from "./reasoning.ts";
 import { jobInputBudgetChars } from "./job-input-budget.ts";
 import {
   resolveTaskModelProvider,
@@ -588,6 +588,9 @@ export type TranscriptSummaryModel = {
   /** The task model's Job settings as call options (ADR-0045). The Chat's
    *  own model carries them only when it is the task model. */
   settings?: ReturnType<typeof jobCallSettings>;
+  /** The output cap raised by the Job settings' Thinking budget; absent, the
+   *  pass's own cap. */
+  maxOutputTokens?: number;
   /** The task model's declared context window, which a pass checks its input
    *  against before calling; absent, the model's own error is the measure. */
   contextWindow?: number;
@@ -736,7 +739,8 @@ export const takeTranscriptSummary = async (
           { role: "user" as const, content: TRANSCRIPT_SUMMARY_REQUEST },
         ],
         ...entry.settings,
-        maxOutputTokens: TRANSCRIPT_SUMMARY_MAX_OUTPUT_TOKENS,
+        maxOutputTokens:
+          entry.maxOutputTokens ?? TRANSCRIPT_SUMMARY_MAX_OUTPUT_TOKENS,
         abortSignal: signal,
       });
 
@@ -1003,11 +1007,17 @@ const withTaskSummariserModel = async (args: {
       pointerSettingModelId(taskModelId),
       taskProvider.provider.taskModelSettings,
     );
+    const maxOutputTokens = jobMaxOutputTokens(
+      taskProvider.provider,
+      pointerSettingModelId(taskModelId),
+      taskProvider.provider.taskModelSettings,
+      TRANSCRIPT_SUMMARY_MAX_OUTPUT_TOKENS,
+    );
     if (
       taskProvider.provider.id === chatProviderId &&
       taskModelId === chat.modelId
     ) {
-      return { chat: { ...chat, settings } };
+      return { chat: { ...chat, settings, maxOutputTokens } };
     }
     const contextWindow = contextWindowForModel(
       taskProvider.provider,
@@ -1020,6 +1030,7 @@ const withTaskSummariserModel = async (args: {
         ),
         modelId: taskModelId,
         settings,
+        maxOutputTokens,
         ...(contextWindow !== undefined ? { contextWindow } : {}),
       },
       chat,

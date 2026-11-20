@@ -186,6 +186,29 @@ const offeredReasoningSet = (
 };
 
 /**
+ * A job's output cap raised by the Thinking budget its Job settings send. On
+ * an OpenAI-compatible server thinking counts toward `max_tokens`, so a budget
+ * at or above the job's cap would be cut off before any answer is written.
+ * Native Providers never send a stored budget (see `resolveSdkReasoning`).
+ */
+export const jobMaxOutputTokens = (
+  provider: ReasoningProvider,
+  modelId: ConcreteModelId,
+  settings: JobSettings | null | undefined,
+  cap: number,
+): number => {
+  const budget = settings?.thinkingBudget;
+  if (budget == null || !providerHonoursReasoningMap(provider)) return cap;
+  const map = reasoningMapForModel(provider, modelId);
+  if (!map?.budget) return cap;
+  // Mirrors `resolveReasoning`: Thinking off drops the budget.
+  const thinking = map.thinking
+    ? (settings?.reasoningThinking ?? map.default?.thinking)
+    : true;
+  return thinking === false ? cap : cap + budget;
+};
+
+/**
  * The call options one of a Provider's own jobs is sent for its Job settings
  * (ADR-0045): the job's built-in `defaults` with every sampling parameter set
  * laid over them, and the Reasoning controls resolved against the job model's

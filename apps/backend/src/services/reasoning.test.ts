@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vitest";
 import type { ConcreteModelId, ReasoningMap } from "@platypus/schemas";
-import { jobCallSettings, resolveReasoning } from "./reasoning.ts";
+import {
+  jobCallSettings,
+  jobMaxOutputTokens,
+  resolveReasoning,
+} from "./reasoning.ts";
 import { makeProviderRow } from "./provider-row.test-fixtures.ts";
 
 // Qwen-shaped: everything rides in `chat_template_kwargs`, so the deep merge
@@ -290,5 +294,40 @@ describe("jobCallSettings", () => {
     expect(
       jobCallSettings(anthropic, qwen, { reasoningThinking: false }),
     ).toEqual({ reasoning: "none" });
+  });
+});
+
+describe("jobMaxOutputTokens", () => {
+  const qwen = "qwen3" as ConcreteModelId;
+  const compat = makeProviderRow({
+    name: "local",
+    modelIds: [{ id: qwen, passthroughFileTypes: [], reasoning: QWEN }],
+  });
+
+  it("adds a sent Thinking budget to the cap, so thinking cannot crowd out the answer", () => {
+    expect(
+      jobMaxOutputTokens(compat, qwen, { thinkingBudget: 4096 }, 2048),
+    ).toBe(6144);
+  });
+
+  it.each([
+    ["no budget", compat, { reasoningThinking: true }],
+    [
+      "Thinking off",
+      compat,
+      { thinkingBudget: 4096, reasoningThinking: false },
+    ],
+    [
+      "a native Provider",
+      makeProviderRow({ providerType: "Anthropic" }),
+      { thinkingBudget: 4096 },
+    ],
+    [
+      "a model without a map",
+      makeProviderRow({ name: "local" }),
+      { thinkingBudget: 4096 },
+    ],
+  ] as const)("keeps the cap for %s", (_, provider, settings) => {
+    expect(jobMaxOutputTokens(provider, qwen, settings, 2048)).toBe(2048);
   });
 });

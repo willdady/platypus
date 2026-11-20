@@ -533,8 +533,9 @@ after a reply finishes, so your next message is not delayed.
 The summary is normally written by the **Task Model ID** of the Provider set as
 the Workspace's **Task Model Provider**, or of the Chat's own Provider where the
 Workspace sets none. That is the same fast, inexpensive model that names Chats.
-If it cannot take the conversation — an error, an unknown model, or an empty
-reply — the Chat's own model writes the summary instead, over the same messages.
+If it cannot take the conversation — an error, an unknown model, an empty reply,
+or a conversation over half the **Context window** declared on its model entry —
+the Chat's own model writes the summary instead, over the same messages.
 Every summary follows that order, including `/compact` and the one taken after
 a reply is refused as too long.
 

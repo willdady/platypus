@@ -25,7 +25,7 @@ import {
 import { logger } from "../logger.ts";
 import type { PlatypusUIMessage } from "../types.ts";
 import { openProvider } from "./provider.ts";
-import { jobCallSettings } from "./reasoning.ts";
+import { jobCallSettings, jobMaxOutputTokens } from "./reasoning.ts";
 import { CHARS_PER_TOKEN, jobInputBudgetChars } from "./job-input-budget.ts";
 import {
   contextWindowForModel,
@@ -306,7 +306,12 @@ const processChat = async (
             extractionProvider.memoryExtractionModelSettings,
             { temperature: 0.3 },
           ),
-          maxOutputTokens: SUMMARY_MAX_OUTPUT_TOKENS,
+          maxOutputTokens: jobMaxOutputTokens(
+            extractionProvider,
+            modelId,
+            extractionProvider.memoryExtractionModelSettings,
+            SUMMARY_MAX_OUTPUT_TOKENS,
+          ),
           maxRetries: SUMMARY_MAX_RETRIES,
           abortSignal,
         }),
