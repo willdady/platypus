@@ -8,6 +8,7 @@ import {
 } from "../db/schema.ts";
 import { openProvider } from "./provider.ts";
 import { pointerSettingModelId } from "./model-capability.ts";
+import { jobCallSettings } from "./reasoning.ts";
 import {
   drizzleTaskModelQueries,
   resolveTaskModelProvider,
@@ -139,8 +140,9 @@ export const generateChatMetadata = async (
   }
   const provider = taskProvider.provider;
 
+  const taskModelId = pointerSettingModelId(provider.taskModelId);
   const model = openProvider(provider, { sessionId: chatId }).languageModel(
-    pointerSettingModelId(provider.taskModelId),
+    taskModelId,
   );
 
   const conversationText = messages
@@ -190,6 +192,7 @@ export const generateChatMetadata = async (
             }),
           }),
           prompt: promptParts.join("\n"),
+          ...jobCallSettings(provider, taskModelId, provider.taskModelSettings),
           maxOutputTokens: TITLE_MAX_OUTPUT_TOKENS,
           maxRetries: TITLE_MAX_RETRIES,
           abortSignal,

@@ -330,6 +330,24 @@ export type ReasoningChoice = {
 };
 
 /**
+ * The Job settings a Provider applies to one of its own background jobs
+ * (ADR-0045): an Agent's sampling parameters and Reasoning controls, without
+ * Max steps. Nullable for the same reason as those (#263); an empty block
+ * sends nothing.
+ */
+export const jobSettingsSchema = z.object({
+  temperature: samplingFields.temperature.nullable().optional(),
+  topP: samplingFields.topP.nullable().optional(),
+  topK: samplingFields.topK.nullable().optional(),
+  seed: samplingFields.seed.nullable().optional(),
+  presencePenalty: samplingFields.presencePenalty.nullable().optional(),
+  frequencyPenalty: samplingFields.frequencyPenalty.nullable().optional(),
+  ...reasoningFields,
+});
+
+export type JobSettings = z.infer<typeof jobSettingsSchema>;
+
+/**
  * Wide enough for a Trigger-run Chat's derived title: the longest Trigger name
  * plus ` · YYYY-MM-DD HH:MM UTC` (ADR-0044). Model-generated titles stay at 30
  * characters by their prompt.
@@ -2563,6 +2581,9 @@ const providerBaseSchema = z.object({
   // validate with those two, which is exactly where the guard has to bite.
   taskModelId: pointerModelIdSchema,
   memoryExtractionModelId: pointerModelIdSchema,
+  // Job settings for each of the two pointers above (ADR-0045).
+  taskModelSettings: jobSettingsSchema.nullable().optional(),
+  memoryExtractionModelSettings: jobSettingsSchema.nullable().optional(),
   embeddingModelId: pointerModelIdSchema.nullable().optional(),
   embeddingDimensions: embeddingDimensionsSchema.nullable().optional(),
   createdAt: z.date(),
@@ -2613,6 +2634,8 @@ export const providerRecordSchema = providerBaseSchema.extend({
   organization: z.string().nullish(),
   project: z.string().nullish(),
   securityGuardrails: providerSecurityGuardrailsSchema.nullish(),
+  taskModelSettings: jobSettingsSchema.nullish(),
+  memoryExtractionModelSettings: jobSettingsSchema.nullish(),
   embeddingModelId: pointerModelIdSchema.nullish(),
   embeddingDimensions: embeddingDimensionsSchema.nullish(),
 });
@@ -2832,6 +2855,8 @@ export const providerCreateSchema = strictRequest(
     modelIds: true,
     taskModelId: true,
     memoryExtractionModelId: true,
+    taskModelSettings: true,
+    memoryExtractionModelSettings: true,
     embeddingModelId: true,
     embeddingDimensions: true,
   }),
@@ -3123,6 +3148,8 @@ export const providerUpdateSchema = strictRequest(
     modelIds: true,
     taskModelId: true,
     memoryExtractionModelId: true,
+    taskModelSettings: true,
+    memoryExtractionModelSettings: true,
     embeddingModelId: true,
     embeddingDimensions: true,
   }),

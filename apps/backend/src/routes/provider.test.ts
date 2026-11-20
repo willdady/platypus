@@ -194,6 +194,44 @@ describe("Provider Routes", () => {
       expect(fake.tables.provider).toHaveLength(1);
     });
 
+    it("stores and returns both Job settings blocks (ADR-0045)", async () => {
+      mockSession();
+      fake = world({ rows: { provider: [] } });
+      const taskModelSettings = { reasoningThinking: false, temperature: 0.2 };
+      const memoryExtractionModelSettings = { reasoningEffort: "low", seed: 7 };
+
+      const res = await post({
+        ...createBody,
+        taskModelSettings,
+        memoryExtractionModelSettings,
+      });
+
+      expect(res.status).toBe(201);
+      expect(await res.json()).toMatchObject({
+        taskModelSettings,
+        memoryExtractionModelSettings,
+      });
+      expect(fake.tables.provider[0]).toMatchObject({
+        taskModelSettings,
+        memoryExtractionModelSettings,
+      });
+    });
+
+    it.each([
+      ["a Temperature below zero", { temperature: -1 }],
+      ["a Top-p above one", { topP: 2 }],
+      ["an Effort step off the scale", { reasoningEffort: "extreme" }],
+      ["a zero Thinking budget", { thinkingBudget: 0 }],
+    ])("rejects Job settings with %s", async (_, taskModelSettings) => {
+      mockSession();
+      fake = world({ rows: { provider: [] } });
+
+      const res = await post({ ...createBody, taskModelSettings });
+
+      expect(res.status).toBe(400);
+      expect(fake.tables.provider).toHaveLength(0);
+    });
+
     it("rejects any scope in the body", async () => {
       // A workspace-surface create takes its scope from the route; naming one
       // in the body is a 400 rather than a silently dropped field.
@@ -497,6 +535,32 @@ describe("Provider Routes", () => {
         }),
       );
       expect(fake.tables.provider[0]).toMatchObject({ name: "Renamed" });
+    });
+
+    it("replaces and clears Job settings", async () => {
+      mockSession();
+      fake = world({
+        rows: {
+          provider: [
+            workspaceProvider({
+              taskModelSettings: { temperature: 0.2 },
+              memoryExtractionModelSettings: { seed: 1 },
+            }),
+          ],
+        },
+      });
+
+      const res = await put("p1", {
+        ...updateBody,
+        taskModelSettings: { topK: 40 },
+        memoryExtractionModelSettings: null,
+      });
+
+      expect(res.status).toBe(200);
+      expect(fake.tables.provider[0]).toMatchObject({
+        taskModelSettings: { topK: 40 },
+        memoryExtractionModelSettings: null,
+      });
     });
 
     it("reports how many Agents and Chats were repointed when an alias is removed", async () => {

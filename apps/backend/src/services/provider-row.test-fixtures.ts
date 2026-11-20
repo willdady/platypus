@@ -18,6 +18,8 @@ export const makeProviderRow = (
   modelIds: [{ id: "gpt-4", passthroughFileTypes: [] }],
   taskModelId: "gpt-4",
   memoryExtractionModelId: "gpt-4",
+  taskModelSettings: null,
+  memoryExtractionModelSettings: null,
   region: null,
   baseUrl: null,
   headers: null,

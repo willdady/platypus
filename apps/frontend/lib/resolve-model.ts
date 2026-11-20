@@ -22,6 +22,21 @@ const NATIVE_REASONING_CONTROLS: ReasoningMap = {
   effort: Object.fromEntries(REASONING_EFFORT_STEPS.map((step) => [step, {}])),
 };
 
+/**
+ * The Reasoning controls to show for a model: its Reasoning map (ADR-0040)
+ * where the Provider honours one — an OpenAI Provider in chat mode — or the
+ * native controls (#1689) on any other, so no control shows that would do
+ * nothing.
+ */
+export function reasoningControlsFor(
+  provider: Pick<Provider, "providerType" | "apiMode">,
+  entry: { reasoning?: ReasoningMap } | undefined,
+): ReasoningMap | undefined {
+  return providerHonoursReasoningMap(provider)
+    ? entry?.reasoning
+    : NATIVE_REASONING_CONTROLS;
+}
+
 export type ModelSelectionInput = {
   /** Omit entirely for a caller (like the Agent form) that never selects by Agent. */
   agentId?: string;
@@ -41,11 +56,7 @@ export type ResolvedModel = {
   passthroughFileTypes: string[];
   /** Whether a searching turn against this model would serve search tools. */
   canSearch: boolean;
-  /**
-   * The Reasoning controls to show: the model's Reasoning map (ADR-0040) where
-   * the Provider honours one — an OpenAI Provider in chat mode — or the native
-   * controls (#1689) on any other, so no control shows that would do nothing.
-   */
+  /** The Reasoning controls to show — see {@link reasoningControlsFor}. */
   reasoning: ReasoningMap | undefined;
 };
 
@@ -102,8 +113,6 @@ export function resolveModel(input: {
     maxOutputTokens: entry?.maxOutputTokens,
     passthroughFileTypes: entry?.passthroughFileTypes ?? [],
     canSearch: getSearchCapability(provider),
-    reasoning: providerHonoursReasoningMap(provider)
-      ? entry?.reasoning
-      : NATIVE_REASONING_CONTROLS,
+    reasoning: reasoningControlsFor(provider, entry),
   };
 }

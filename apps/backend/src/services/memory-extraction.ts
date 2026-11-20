@@ -25,6 +25,7 @@ import {
 import { logger } from "../logger.ts";
 import type { PlatypusUIMessage } from "../types.ts";
 import { openProvider } from "./provider.ts";
+import { jobCallSettings } from "./reasoning.ts";
 import {
   contextWindowForModel,
   pointerSettingModelId,
@@ -299,6 +300,12 @@ const processChat = async (
           model,
           prompt: summaryPrompt,
           temperature: 0.3,
+          // After the default, so a Temperature the admin set beats it.
+          ...jobCallSettings(
+            extractionProvider,
+            modelId,
+            extractionProvider.memoryExtractionModelSettings,
+          ),
           maxOutputTokens: SUMMARY_MAX_OUTPUT_TOKENS,
           maxRetries: SUMMARY_MAX_RETRIES,
           abortSignal,

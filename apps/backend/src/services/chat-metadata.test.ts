@@ -132,6 +132,28 @@ describe("generateChatMetadata", () => {
     );
   });
 
+  it("sends the task model's Job settings, and none without them", async () => {
+    const title = async (taskModelSettings: unknown) => {
+      stubReads({
+        chat: { id: "chat-1", title: "Untitled", messages: [userMessage] },
+        workspace: { id: "ws-1", taskModelProviderId: null },
+        provider: { ...provider, taskModelSettings },
+      });
+      mockGenerateText.mockResolvedValueOnce({ output: { title: "A title" } });
+      mockDb.returning.mockResolvedValueOnce([{ id: "chat-1" }]);
+      await generateChatMetadata(params);
+      return mockGenerateText.mock.lastCall?.[0] as Record<string, unknown>;
+    };
+
+    expect(await title({ temperature: 0.1, seed: 7 })).toMatchObject({
+      temperature: 0.1,
+      seed: 7,
+    });
+    const plain = await title(null);
+    expect(plain).not.toHaveProperty("temperature");
+    expect(plain).not.toHaveProperty("seed");
+  });
+
   it("asks for a title alone and sends only the text of each message", async () => {
     stubReads({
       chat: {

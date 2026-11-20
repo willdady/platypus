@@ -25,6 +25,7 @@ import { FormAdvancedSection } from "@/components/form-advanced-section";
 import { Badge } from "@/components/ui/badge";
 import { ListState } from "@/components/list-state";
 import { ModelEntryDialog } from "@/components/model-entry-dialog";
+import { JobModelField } from "@/components/job-model-field";
 import {
   Building,
   Check,
@@ -64,6 +65,7 @@ import {
   SEARCH_SOURCE_NATIVE,
   SEARCH_SOURCE_NONE,
   type AliasRepoint,
+  type JobSettings,
   type Provider,
   type ProviderResponse,
 } from "@platypus/schemas";
@@ -495,6 +497,8 @@ function ProviderForm({
       modelIds: [],
       taskModelId: "",
       memoryExtractionModelId: "",
+      taskModelSettings: null,
+      memoryExtractionModelSettings: null,
       embeddingModelId: "",
       embeddingDimensions: "",
     },
@@ -558,6 +562,9 @@ function ProviderForm({
           modelIds: provider.modelIds ? getModelConfigs(provider) : [],
           taskModelId: provider.taskModelId,
           memoryExtractionModelId: provider.memoryExtractionModelId,
+          taskModelSettings: provider.taskModelSettings ?? null,
+          memoryExtractionModelSettings:
+            provider.memoryExtractionModelSettings ?? null,
           embeddingModelId: provider.embeddingModelId || "",
           embeddingDimensions: provider.embeddingDimensions?.toString() || "",
         }),
@@ -598,6 +605,9 @@ function ProviderForm({
       modelIds: data.modelIds,
       taskModelId: data.taskModelId,
       memoryExtractionModelId: data.memoryExtractionModelId,
+      // Null rather than omitted: the update replaces the stored row.
+      taskModelSettings: data.taskModelSettings ?? null,
+      memoryExtractionModelSettings: data.memoryExtractionModelSettings ?? null,
       embeddingModelId: data.embeddingModelId || null,
       embeddingDimensions: data.embeddingDimensions
         ? parseInt(data.embeddingDimensions)
@@ -727,6 +737,14 @@ function ProviderForm({
   const handleSelectChange = (id: string, value: string) => {
     beginEdit(id);
 
+    setFormData((prevData) => ({ ...prevData, [id]: value }));
+  };
+
+  const setJobSettings = (
+    id: "taskModelSettings" | "memoryExtractionModelSettings",
+    value: JobSettings | null,
+  ) => {
+    beginEdit(id);
     setFormData((prevData) => ({ ...prevData, [id]: value }));
   };
 
@@ -1010,25 +1028,44 @@ function ProviderForm({
             {modelIdsError && <FieldError>{modelIdsError}</FieldError>}
           </Field>
 
-          <FormTextField
+          <JobModelField
             label="Task Model ID"
             name="taskModelId"
-            placeholder="gpt-4"
             value={formData.taskModelId}
-            onChange={toFieldChange("taskModelId")}
-            disabled={isSubmitting || isReadOnly}
-            error={validationErrors.taskModelId}
+            settings={formData.taskModelSettings ?? null}
+            models={formData.modelIds}
+            provider={formData}
+            onChange={(value) => handleSelectChange("taskModelId", value)}
+            onSettingsChange={(value) =>
+              setJobSettings("taskModelSettings", value)
+            }
+            disabled={isSubmitting}
+            readOnly={isReadOnly}
+            error={
+              validationErrors.taskModelId ?? validationErrors.taskModelSettings
+            }
             description="Used for background jobs: naming Chats and summarising long conversations. Choose a fast, inexpensive model with a large context window. If it can't take a long conversation, the Chat's own model writes the summary instead."
           />
 
-          <FormTextField
+          <JobModelField
             label="Memory Extraction Model ID"
             name="memoryExtractionModelId"
-            placeholder="gpt-4"
             value={formData.memoryExtractionModelId}
-            onChange={toFieldChange("memoryExtractionModelId")}
-            disabled={isSubmitting || isReadOnly}
-            error={validationErrors.memoryExtractionModelId}
+            settings={formData.memoryExtractionModelSettings ?? null}
+            models={formData.modelIds}
+            provider={formData}
+            onChange={(value) =>
+              handleSelectChange("memoryExtractionModelId", value)
+            }
+            onSettingsChange={(value) =>
+              setJobSettings("memoryExtractionModelSettings", value)
+            }
+            disabled={isSubmitting}
+            readOnly={isReadOnly}
+            error={
+              validationErrors.memoryExtractionModelId ??
+              validationErrors.memoryExtractionModelSettings
+            }
             description="Used to pull memories from conversations in the background. Choose a fast, inexpensive model."
           />
 

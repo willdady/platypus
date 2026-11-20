@@ -273,6 +273,28 @@ describe("Workspace Routes", () => {
       ]);
     });
 
+    it("keeps the provisioned Provider's Job settings", async () => {
+      mockSession({ id: "user-1", role: "user" });
+      const fake = world({ role: "admin", rows: sharedProviders });
+      const taskModelSettings = { reasoningThinking: false };
+      const memoryExtractionModelSettings = { temperature: 0.1 };
+
+      const res = await post({
+        name: "Ready",
+        provider: {
+          ...provider,
+          taskModelSettings,
+          memoryExtractionModelSettings,
+        },
+      });
+
+      expect(res.status).toBe(201);
+      expect(fake.tables.provider.at(-1)).toMatchObject({
+        taskModelSettings,
+        memoryExtractionModelSettings,
+      });
+    });
+
     it("writes nothing when a later step of the transaction fails", async () => {
       mockSession({ id: "user-1", role: "user" });
       const fake = world({

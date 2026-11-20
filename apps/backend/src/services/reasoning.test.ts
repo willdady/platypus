@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
-import type { ReasoningMap } from "@platypus/schemas";
-import { resolveReasoning } from "./reasoning.ts";
+import type { ConcreteModelId, ReasoningMap } from "@platypus/schemas";
+import { jobCallSettings, resolveReasoning } from "./reasoning.ts";
+import { makeProviderRow } from "./provider-row.test-fixtures.ts";
 
 // Qwen-shaped: everything rides in `chat_template_kwargs`, so the deep merge
 // across always / thinking / effort is what this map exercises.
@@ -159,5 +160,62 @@ describe("resolveReasoning", () => {
         resolveReasoning(map, {}, { temperature: 0.2, topP: 0.5 }),
       ).toEqual({ chat_template_kwargs: { temperature: 1 } });
     });
+  });
+});
+
+describe("jobCallSettings", () => {
+  const qwen = "qwen3" as ConcreteModelId;
+  // OpenAI chat mode: the path that honours a Reasoning map (ADR-0040).
+  const compat = makeProviderRow({
+    name: "local",
+    modelIds: [{ id: qwen, passthroughFileTypes: [], reasoning: QWEN }],
+  });
+
+  it.each([
+    ["no block", null],
+    ["a block of nulls", { temperature: null, reasoningThinking: null }],
+  ] as const)(
+    "sends nothing for %s, not even the map's always and default",
+    (_, settings) => {
+      expect(jobCallSettings(compat, qwen, settings)).toEqual({});
+    },
+  );
+
+  it("sends Thinking off as the map's fragment, dropping the default effort", () => {
+    expect(jobCallSettings(compat, qwen, { reasoningThinking: false })).toEqual(
+      {
+        providerOptions: {
+          local: {
+            chat_template_kwargs: {
+              preserve_thinking: true,
+              enable_thinking: false,
+            },
+          },
+        },
+      },
+    );
+  });
+
+  it("resolves an Effort step the map lacks to the map's default", () => {
+    expect(
+      jobCallSettings(compat, qwen, { reasoningEffort: "max" }),
+    ).toMatchObject({
+      providerOptions: {
+        local: { chat_template_kwargs: { reasoning_effort: "low" } },
+      },
+    });
+  });
+
+  it("sends set sampling fields under their SDK names", () => {
+    expect(
+      jobCallSettings(makeProviderRow(), qwen, { temperature: 0.9, topK: 20 }),
+    ).toEqual({ temperature: 0.9, topK: 20 });
+  });
+
+  it("sends a native Provider the SDK reasoning level", () => {
+    const anthropic = makeProviderRow({ providerType: "Anthropic" });
+    expect(
+      jobCallSettings(anthropic, qwen, { reasoningThinking: false }),
+    ).toEqual({ reasoning: "none" });
   });
 });

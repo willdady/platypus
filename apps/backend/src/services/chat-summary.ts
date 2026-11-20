@@ -29,6 +29,7 @@ import { isContextOverflowError } from "./context-overflow.ts";
 import { resolveScoped } from "./scoped-resource.ts";
 import { openProvider } from "./provider.ts";
 import { pointerSettingModelId } from "./model-capability.ts";
+import { jobCallSettings } from "./reasoning.ts";
 import {
   resolveTaskModelProvider,
   type TaskModelWorkspace,
@@ -580,10 +581,13 @@ export const TRANSCRIPT_SUMMARY_REQUEST =
 export type TranscriptSummaryModel = {
   model: LanguageModel;
   modelId: string;
+  /** The task model's Job settings as call options (ADR-0045); the Chat's
+   *  own model carries none. */
+  settings?: ReturnType<typeof jobCallSettings>;
 };
 
 /** The models a pass tries: the Chat's own model, and the task model first
- *  where it differs from the Chat's. */
+ *  where it differs from the Chat's or carries Job settings. */
 export type TranscriptSummaryModels = {
   chat: TranscriptSummaryModel;
   task?: TranscriptSummaryModel;
@@ -718,6 +722,7 @@ export const takeTranscriptSummary = async (
           ...input.modelMessages,
           { role: "user" as const, content: TRANSCRIPT_SUMMARY_REQUEST },
         ],
+        ...entry.settings,
         maxOutputTokens: TRANSCRIPT_SUMMARY_MAX_OUTPUT_TOKENS,
         abortSignal: signal,
       });
@@ -919,8 +924,10 @@ const resolveSummariserModels = async (
 
 /**
  * The task model a pass should try before the Chat's own, or `undefined` when
- * there is nothing else to try: the same Provider and model as the Chat, or a
- * Provider this Workspace cannot see. Resolution never makes the pass fail —
+ * there is nothing else to try: the same Provider and model as the Chat with
+ * no Job settings, or a Provider this Workspace cannot see. The same model
+ * WITH Job settings is tried first, settings applied (ADR-0045), so a failure
+ * there still falls back to the Chat's plain call. Resolution never makes the pass fail —
  * an unavailable task model just means the Chat's model writes the summary.
  */
 const resolveTaskSummariserModel = async (args: {
@@ -965,10 +972,16 @@ const resolveTaskSummariserModel = async (args: {
     const taskModelId = taskProvider.provider.taskModelId;
     // An empty Task Model ID is a Provider with no task model configured, not
     // a model to call: the form allows it, and every call would be doomed.
+    if (taskModelId.trim() === "") return undefined;
+    const settings = jobCallSettings(
+      taskProvider.provider,
+      pointerSettingModelId(taskModelId),
+      taskProvider.provider.taskModelSettings,
+    );
     if (
-      taskModelId.trim() === "" ||
-      (taskProvider.provider.id === chatProviderId &&
-        taskModelId === chatModelId)
+      taskProvider.provider.id === chatProviderId &&
+      taskModelId === chatModelId &&
+      Object.keys(settings).length === 0
     ) {
       return undefined;
     }
@@ -977,6 +990,7 @@ const resolveTaskSummariserModel = async (args: {
         pointerSettingModelId(taskModelId),
       ),
       modelId: taskModelId,
+      settings,
     };
   } catch (error) {
     logger.warn(
