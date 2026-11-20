@@ -247,6 +247,44 @@ describe("jobCallSettings", () => {
     expect(jobCallSettings(withTemp, qwen, null, defaults)).toEqual(defaults);
   });
 
+  describe("a value kept from a model that offered a control this one does not", () => {
+    // Always thinks, so no switch; a turn that chooses nothing gets `high`.
+    const r1 = "r1-distill" as ConcreteModelId;
+    const both = makeProviderRow({
+      name: "local",
+      modelIds: [
+        { id: qwen, passthroughFileTypes: [], reasoning: QWEN },
+        {
+          id: r1,
+          passthroughFileTypes: [],
+          reasoning: {
+            effort: { low: { effort: "low" }, high: { effort: "high" } },
+            default: { effort: "high" },
+          },
+        },
+      ],
+    });
+
+    it("sends nothing, not the new map's default effort", () => {
+      expect(jobCallSettings(both, r1, { reasoningThinking: false })).toEqual(
+        {},
+      );
+    });
+
+    it("applies again on a model that offers the control", () => {
+      expect(
+        jobCallSettings(both, qwen, { reasoningThinking: false }),
+      ).toHaveProperty("providerOptions");
+    });
+
+    it("ignores a Thinking budget on a native Provider, which offers none", () => {
+      const anthropic = makeProviderRow({ providerType: "Anthropic" });
+      expect(
+        jobCallSettings(anthropic, qwen, { thinkingBudget: 2048 }),
+      ).toEqual({});
+    });
+  });
+
   it("sends a native Provider the SDK reasoning level", () => {
     const anthropic = makeProviderRow({ providerType: "Anthropic" });
     expect(

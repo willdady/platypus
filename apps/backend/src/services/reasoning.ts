@@ -1,5 +1,6 @@
 import {
   providerHonoursReasoningMap,
+  REASONING_EFFORT_STEPS,
   type ConcreteModelId,
   type JobSettings,
   type ReasoningChoice,
@@ -160,6 +161,31 @@ export const reasoningCallSettings = (
 };
 
 /**
+ * Whether `choice` sets a Reasoning control this model offers — the controls
+ * the Settings dialog shows for it. A native Provider offers Thinking and
+ * Effort (#1689); a Reasoning map offers what it declares (ADR-0040). Effort
+ * counts wherever the control is offered, even for a step the map lacks,
+ * because that step resolves to the map's default.
+ */
+const offeredReasoningSet = (
+  provider: ReasoningProvider,
+  modelId: ConcreteModelId,
+  choice: ReasoningChoice,
+): boolean => {
+  if (!providerHonoursReasoningMap(provider)) {
+    return choice.reasoningThinking != null || choice.reasoningEffort != null;
+  }
+  const map = reasoningMapForModel(provider, modelId);
+  if (!map) return false;
+  return (
+    (map.thinking !== undefined && choice.reasoningThinking != null) ||
+    (REASONING_EFFORT_STEPS.some((step) => map.effort?.[step]) &&
+      choice.reasoningEffort != null) ||
+    (map.budget !== undefined && choice.thinkingBudget != null)
+  );
+};
+
+/**
  * The call options one of a Provider's own jobs is sent for its Job settings
  * (ADR-0045): the job's built-in `defaults` with every sampling parameter set
  * laid over them, and the Reasoning controls resolved against the job model's
@@ -167,10 +193,12 @@ export const reasoningCallSettings = (
  * stripped from the map's fragment, so a fragment's `temperature` beats neither
  * a set value nor the job's default.
  *
- * Reasoning resolves only once a Reasoning control is set, never for a block
- * of sampling alone: the jobs sent no fragment before Job settings existed, so
- * the map's `always` and `default` fragments a turn would get must not appear
- * because someone set a Temperature.
+ * Reasoning resolves only once a Reasoning control the model offers is set,
+ * never for a block of sampling alone: the jobs sent no fragment before Job
+ * settings existed, so the map's `always` and `default` fragments a turn would
+ * get must not appear because someone set a Temperature — nor because of a
+ * value kept from a model that offered a control this one does not, which the
+ * Settings dialog no longer shows.
  */
 export const jobCallSettings = (
   provider: ReasoningProvider,
@@ -180,11 +208,7 @@ export const jobCallSettings = (
 ): SamplingSettings & ReasoningCallSettings => {
   const choice = settings ?? {};
   const sampling = { ...defaults, ...resolveSamplingSettings(choice) };
-  const reasoningSet =
-    choice.reasoningThinking != null ||
-    choice.reasoningEffort != null ||
-    choice.thinkingBudget != null;
-  return reasoningSet
+  return offeredReasoningSet(provider, modelId, choice)
     ? {
         ...sampling,
         ...reasoningCallSettings(provider, modelId, choice, sampling),

@@ -14,7 +14,7 @@ A Provider's own background jobs (the task model's titles and Transcript summari
 ## Consequences
 
 - A Transcript summary that falls back to the Chat's model sends no Job settings. They belong to the task model and may not be valid for the Chat's model. When the task model is the Chat's model, the task block applies to the Chat's own call, and there is no plain retry on the same model.
-- Reasoning resolves only once a Reasoning control is set. A block with none set — empty, or sampling alone — sends no fragment, not even the Reasoning map's `always` and `default` a turn would get, so a Provider nobody has touched sends its jobs as before. Once a control is set, the block resolves exactly as ADR-0040.
+- Reasoning resolves only once a Reasoning control the model offers is set. A block with none set — empty, sampling alone, or only a value kept from a model that offered a control this one does not — sends no fragment, not even the Reasoning map's `always` and `default` a turn would get, so a Provider nobody has touched sends its jobs as before. A kept value stays stored, as on an Agent, and applies again on a model that offers its control. Once an offered control is set, the block resolves exactly as ADR-0040.
 - A job's built-in default, such as extraction's `temperature: 0.3`, counts as set sampling: it is removed from the map's fragment, so only a Temperature in the block replaces it.
 - Output caps stay internal.
 - Existing Providers whose pointer is not a declared entry keep working; the form flags the stale id.
