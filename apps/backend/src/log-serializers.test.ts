@@ -159,6 +159,23 @@ describe("errorSerializers", () => {
       "upstream connection reset",
     );
   });
+
+  // A web backend's and a tool set factory's failure lines carry the error as
+  // `cause`. Unregistered, pino wrote it as `{}`: the line said a read failed
+  // and nothing about why.
+  it("writes an error logged as cause with its message, not as {}", () => {
+    const line = JSON.parse(
+      logLine({
+        tool: "read_url",
+        cause: new Error("The browser rendered no readable text"),
+      }),
+    ) as { cause: { message?: string; type?: string } };
+
+    expect(line.cause).toMatchObject({
+      type: "Error",
+      message: "The browser rendered no readable text",
+    });
+  });
 });
 
 describe("serializeLoggedError", () => {
