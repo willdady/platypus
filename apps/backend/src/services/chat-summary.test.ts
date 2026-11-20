@@ -550,6 +550,8 @@ const seedTaskModelProviders = (
     taskModelProviderId?: string | null;
     taskModelId?: string;
     taskModelSettings?: JobSettings;
+    /** The task model's declared context window, as its Model entry. */
+    taskContextWindow?: number;
     agent?: boolean;
   } = {},
 ) => {
@@ -558,6 +560,17 @@ const seedTaskModelProviders = (
     workspaceId: "ws-1",
     taskModelId: over.taskModelId ?? "task-model",
     taskModelSettings: over.taskModelSettings ?? null,
+    ...(over.taskContextWindow !== undefined
+      ? {
+          modelIds: [
+            {
+              id: over.taskModelId ?? "task-model",
+              passthroughFileTypes: [],
+              contextWindow: over.taskContextWindow,
+            },
+          ],
+        }
+      : {}),
   });
   const overrideProvider = makeProviderRow({
     id: "p2",
@@ -869,10 +882,66 @@ describe("afterTurn", () => {
 
     await vi.waitFor(() => expect(fake.tables.chat_summary).toHaveLength(1));
     expect(mockGenerateText).toHaveBeenCalledTimes(1);
+    // The Chat's own entry, carrying the task block: one model, one call.
     expect(mockGenerateText.mock.calls[0][0]).toMatchObject({
-      model: { modelId: "m1" },
+      model: { id: "chat-model" },
       temperature: 0.2,
     });
+  });
+
+  it("skips a task model whose declared window the input exceeds", async () => {
+    // 100 tokens: a budget of 200 characters, under the summary prompt alone.
+    const fake = seedTaskModelProviders({ taskContextWindow: 100 });
+
+    afterTurn({
+      chatId: "chat-1",
+      ...direct,
+      path: withReading(fiveTurns(), 8_100),
+      contextWindow: 10_000,
+    });
+
+    await vi.waitFor(() => expect(fake.tables.chat_summary).toHaveLength(1));
+    expect(mockGenerateText).toHaveBeenCalledTimes(1);
+    expect(mockGenerateText.mock.calls[0][0]).toMatchObject({
+      model: { id: "chat-model" },
+    });
+  });
+
+  it("tries a task model whose declared window the input fits", async () => {
+    const fake = seedTaskModelProviders({ taskContextWindow: 1_000_000 });
+
+    afterTurn({
+      chatId: "chat-1",
+      ...direct,
+      path: withReading(fiveTurns(), 8_100),
+      contextWindow: 10_000,
+    });
+
+    await vi.waitFor(() => expect(fake.tables.chat_summary).toHaveLength(1));
+    expect(mockGenerateText).toHaveBeenCalledTimes(1);
+    expect(mockGenerateText.mock.calls[0][0]).toMatchObject({
+      model: { modelId: "task-model" },
+    });
+  });
+
+  it("does not retry the Chat's own model plain when it is the task model", async () => {
+    const fake = seedTaskModelProviders({
+      taskModelId: "m1",
+      taskModelSettings: { temperature: 0.2 },
+    });
+    mockGenerateText.mockRejectedValueOnce(new Error("provider exploded"));
+
+    afterTurn({
+      chatId: "chat-1",
+      ...direct,
+      path: withReading(fiveTurns(), 8_100),
+      contextWindow: 10_000,
+    });
+
+    await vi.waitFor(() => expect(mockGenerateText).toHaveBeenCalledTimes(1));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(mockGenerateText).toHaveBeenCalledTimes(1);
+    expect(fake.tables.chat_summary).toHaveLength(0);
   });
 
   it("skips a blank Task Model ID rather than making a doomed call", async () => {

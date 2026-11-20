@@ -218,6 +218,20 @@ describe("ProviderForm Job settings (ADR-0045)", () => {
     });
   });
 
+  it("clears a chosen model back to None, saving an empty id", async () => {
+    const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
+    renderEditForm(models, { taskModelId: "gpt-4o" });
+
+    await selectOption(await screen.findByLabelText("Task Model ID"), "None");
+    expect(
+      screen.getByRole("button", { name: "Task Model ID settings" }),
+    ).toBeDisabled();
+    save();
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(savedProviderBody(fetchMock)).toMatchObject({ taskModelId: "" });
+  });
+
   it("disables Settings until a model is chosen", () => {
     render(<ProviderForm orgId="org1" />);
     expect(

@@ -26,6 +26,7 @@ import { logger } from "../logger.ts";
 import type { PlatypusUIMessage } from "../types.ts";
 import { openProvider } from "./provider.ts";
 import { jobCallSettings } from "./reasoning.ts";
+import { CHARS_PER_TOKEN, jobInputBudgetChars } from "./job-input-budget.ts";
 import {
   contextWindowForModel,
   pointerSettingModelId,
@@ -37,14 +38,13 @@ import { errorMessage } from "../utils/error-message.ts";
 import { withDeadline } from "../utils/abort-race.ts";
 
 /**
- * How much one pass may send, in tokens estimated as characters ÷ 4: half the
- * extraction model's context window, or 32k when it declares none. The context
- * gets at most a quarter of it, and only what the new messages leave.
+ * How much one pass may send: the job budget of the extraction model's
+ * context window (`jobInputBudgetChars`), or 32k tokens when it declares none.
+ * The context gets at most a quarter of it, and only what the new messages
+ * leave.
  */
-const BUDGET_SHARE = 0.5;
 const DEFAULT_BUDGET_TOKENS = 32_000;
 const CONTEXT_SHARE = 0.25;
-const CHARS_PER_TOKEN = 4;
 
 /**
  * Bounds on the summary call (issue #1618). The batch holds the cluster-wide
@@ -224,9 +224,9 @@ const processChat = async (
     extractionProvider.memoryExtractionModelId,
   );
   const contextWindow = contextWindowForModel(extractionProvider, modelId);
-  const budgetChars =
-    (contextWindow ? contextWindow * BUDGET_SHARE : DEFAULT_BUDGET_TOKENS) *
-    CHARS_PER_TOKEN;
+  const budgetChars = contextWindow
+    ? jobInputBudgetChars(contextWindow)
+    : DEFAULT_BUDGET_TOKENS * CHARS_PER_TOKEN;
   const room = budgetChars - buildSummaryPrompt(existingSummary, "", "").length;
 
   // The new messages first, oldest first, as many as fit.
@@ -299,12 +299,12 @@ const processChat = async (
         generateText({
           model,
           prompt: summaryPrompt,
-          temperature: 0.3,
-          // After the default, so a Temperature the admin set beats it.
+          // The built-in Temperature, unless the Job settings set one.
           ...jobCallSettings(
             extractionProvider,
             modelId,
             extractionProvider.memoryExtractionModelSettings,
+            { temperature: 0.3 },
           ),
           maxOutputTokens: SUMMARY_MAX_OUTPUT_TOKENS,
           maxRetries: SUMMARY_MAX_RETRIES,

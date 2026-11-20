@@ -41,6 +41,10 @@ import { parseValidationErrors, type FormErrors } from "@/lib/form-errors";
 import type { ModelConfigView } from "@/lib/model-config";
 import { reasoningControlsFor } from "@/lib/resolve-model";
 
+/** The Select's stand-in for an empty id, which turns the job off. Not "none":
+ *  model ids are free text, and Radix rejects an empty item value. */
+const NO_MODEL = "__none__";
+
 /** Job settings as the controls hold them: unset is `undefined`, never null. */
 type JobSettingsDraft = {
   [K in keyof JobSettings]?: NonNullable<JobSettings[K]>;
@@ -99,8 +103,8 @@ export function JobModelField({
       <FieldLabel htmlFor={name}>{label}</FieldLabel>
       <div className="flex gap-2">
         <Select
-          value={value}
-          onValueChange={onChange}
+          value={value || NO_MODEL}
+          onValueChange={(next) => onChange(next === NO_MODEL ? "" : next)}
           disabled={disabled || readOnly}
         >
           <SelectTrigger
@@ -112,6 +116,7 @@ export function JobModelField({
             <SelectValue placeholder="Select a model" />
           </SelectTrigger>
           <SelectContent>
+            <SelectItem value={NO_MODEL}>None</SelectItem>
             {stale && (
               <SelectItem value={value}>
                 {value} (not in the model list)

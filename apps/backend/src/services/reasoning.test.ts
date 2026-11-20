@@ -212,6 +212,41 @@ describe("jobCallSettings", () => {
     ).toEqual({ temperature: 0.9, topK: 20 });
   });
 
+  it("sends no fragment for a block of sampling alone, even on a mapped model", () => {
+    expect(jobCallSettings(compat, qwen, { temperature: 0.2 })).toEqual({
+      temperature: 0.2,
+    });
+  });
+
+  it("keeps the job's default over a fragment's temperature, and a set value over both", () => {
+    const withTemp = makeProviderRow({
+      name: "local",
+      modelIds: [
+        {
+          id: qwen,
+          passthroughFileTypes: [],
+          reasoning: {
+            thinking: {
+              on: {},
+              off: { enable_thinking: false, temperature: 0.7 },
+            },
+          },
+        },
+      ],
+    });
+    const defaults = { temperature: 0.3 };
+    expect(
+      jobCallSettings(withTemp, qwen, { reasoningThinking: false }, defaults),
+    ).toEqual({
+      temperature: 0.3,
+      providerOptions: { local: { enable_thinking: false } },
+    });
+    expect(
+      jobCallSettings(withTemp, qwen, { temperature: 0.9 }, defaults),
+    ).toEqual({ temperature: 0.9 });
+    expect(jobCallSettings(withTemp, qwen, null, defaults)).toEqual(defaults);
+  });
+
   it("sends a native Provider the SDK reasoning level", () => {
     const anthropic = makeProviderRow({ providerType: "Anthropic" });
     expect(

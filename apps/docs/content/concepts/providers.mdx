@@ -29,7 +29,10 @@ A Provider carries:
   summarising a long conversation — rather than full turns. Choose a fast,
   inexpensive model with a large context window: a summary can send it most of
   a conversation. If it cannot take that much, the Chat's own model writes the
-  summary instead,
+  summary instead. Give the task model's entry a **Context window**: a summary
+  that would fill more than half of it goes straight to the Chat's model, so a
+  server that silently cuts off an overlong prompt never summarises half a
+  conversation,
 - and the models used for memory extraction and embeddings, plus per-model
   settings such as the context window,
 - and the [Job settings](#job-settings) sent with the task model and the memory
@@ -135,7 +138,9 @@ you removed a model they named directly.
 ## Job settings
 
 The **Task Model ID** and **Memory Extraction Model ID** are each chosen from
-the Provider's **Models** list. **Settings**, beside each one, opens its **Job
+the Provider's **Models** list, or set to **None**. With no task model, Chats
+stay _Untitled_. A Provider with no memory extraction model can't be chosen for
+memory extraction. **Settings**, beside each one, opens its **Job
 settings**: the reasoning controls and sampling parameters sent with that
 model's background jobs. The task model's settings apply when it names a Chat
 and when it writes a Transcript summary. The memory extraction model's apply
@@ -149,9 +154,10 @@ chosen.
 
 Leave a field empty to send nothing, so the model's own default applies. A
 Provider whose settings are all empty sends its jobs exactly as it did before
-Job settings existed. A value you set beats the job's own default: memory
-extraction normally sends a **Temperature** of `0.3`, and yours replaces it.
-Nothing is stored until you save the Provider.
+Job settings existed, and setting only sampling parameters sends no reasoning
+fields. A value you set beats the job's own default: memory extraction normally
+sends a **Temperature** of `0.3`, and only a **Temperature** you set replaces
+it. Nothing is stored until you save the Provider.
 
 <Callout type="warning">
   **A self-hosted thinking model thinks through every Chat title too.** The task
@@ -164,8 +170,9 @@ Nothing is stored until you save the Provider.
 
 A Transcript summary falls back to the Chat's own model when the task model
 fails. That fallback sends none of the task model's Job settings, which were
-chosen for a different model. Where the task model is the Chat's own model, the
-first attempt carries its Job settings and the fallback retries without them.
+chosen for a different model. Where the task model is the Chat's own model, there
+is nothing to fall back to: the summary is written once, with the task model's
+Job settings.
 
 A **Task Model ID** or **Memory Extraction Model ID** saved before it was chosen
 from a list may name a model that is not on it. It keeps working, and the form

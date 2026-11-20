@@ -1035,7 +1035,11 @@ function ProviderForm({
             settings={formData.taskModelSettings ?? null}
             models={formData.modelIds}
             provider={formData}
-            onChange={(value) => handleSelectChange("taskModelId", value)}
+            onChange={(value) => {
+              // The field shows the settings' error too; a new model retracts it.
+              beginEdit("taskModelSettings");
+              handleSelectChange("taskModelId", value);
+            }}
             onSettingsChange={(value) =>
               setJobSettings("taskModelSettings", value)
             }
@@ -1054,9 +1058,10 @@ function ProviderForm({
             settings={formData.memoryExtractionModelSettings ?? null}
             models={formData.modelIds}
             provider={formData}
-            onChange={(value) =>
-              handleSelectChange("memoryExtractionModelId", value)
-            }
+            onChange={(value) => {
+              beginEdit("memoryExtractionModelSettings");
+              handleSelectChange("memoryExtractionModelId", value);
+            }}
             onSettingsChange={(value) =>
               setJobSettings("memoryExtractionModelSettings", value)
             }

@@ -161,26 +161,33 @@ export const reasoningCallSettings = (
 
 /**
  * The call options one of a Provider's own jobs is sent for its Job settings
- * (ADR-0045): the sampling parameters set, and the Reasoning controls resolved
- * against the job model's Reasoning map exactly as a turn's are (ADR-0040).
- * Spread after a job's own defaults, a set value beats them.
+ * (ADR-0045): the job's built-in `defaults` with every sampling parameter set
+ * laid over them, and the Reasoning controls resolved against the job model's
+ * Reasoning map exactly as a turn's are (ADR-0040). The resolved sampling is
+ * stripped from the map's fragment, so a fragment's `temperature` beats neither
+ * a set value nor the job's default.
  *
- * A block with nothing set resolves to `{}`, not to the map's `always` and
- * `default` fragments a turn would get: the jobs sent no fragment before Job
- * settings existed, and a Provider nobody has touched must keep sending none.
+ * Reasoning resolves only once a Reasoning control is set, never for a block
+ * of sampling alone: the jobs sent no fragment before Job settings existed, so
+ * the map's `always` and `default` fragments a turn would get must not appear
+ * because someone set a Temperature.
  */
 export const jobCallSettings = (
   provider: ReasoningProvider,
   modelId: ConcreteModelId,
   settings: JobSettings | null | undefined,
+  defaults: SamplingSettings = {},
 ): SamplingSettings & ReasoningCallSettings => {
-  if (!settings || Object.values(settings).every((value) => value == null)) {
-    return {};
-  }
-  const choice = settings;
-  const sampling = resolveSamplingSettings(choice);
-  return {
-    ...sampling,
-    ...reasoningCallSettings(provider, modelId, choice, sampling),
-  };
+  const choice = settings ?? {};
+  const sampling = { ...defaults, ...resolveSamplingSettings(choice) };
+  const reasoningSet =
+    choice.reasoningThinking != null ||
+    choice.reasoningEffort != null ||
+    choice.thinkingBudget != null;
+  return reasoningSet
+    ? {
+        ...sampling,
+        ...reasoningCallSettings(provider, modelId, choice, sampling),
+      }
+    : sampling;
 };
