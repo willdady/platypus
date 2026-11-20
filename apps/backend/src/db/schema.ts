@@ -21,6 +21,7 @@ import type {
   ChatStatus,
   EventTriggerEvent,
   EventTriggerEventPayload,
+  JobSettings,
   KanbanCardAssignee,
   KanbanCardHistoryChange,
   KanbanCardPriority,
@@ -166,6 +167,11 @@ export const provider = pgTable(
     modelIds: t.jsonb().$type<ModelConfig[]>().notNull(),
     taskModelId: t.text("task_model_id").notNull(),
     memoryExtractionModelId: t.text("memory_extraction_model_id").notNull(),
+    // Job settings for the two pointers above (ADR-0045); null sends nothing.
+    taskModelSettings: t.jsonb("task_model_settings").$type<JobSettings>(),
+    memoryExtractionModelSettings: t
+      .jsonb("memory_extraction_model_settings")
+      .$type<JobSettings>(),
     embeddingModelId: t.text("embedding_model_id"),
     embeddingDimensions: t.integer("embedding_dimensions"),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),

@@ -29,9 +29,14 @@ A Provider carries:
   summarising a long conversation — rather than full turns. Choose a fast,
   inexpensive model with a large context window: a summary can send it most of
   a conversation. If it cannot take that much, the Chat's own model writes the
-  summary instead,
+  summary instead. Give the task model's entry a **Context window**: a summary
+  that would fill more than half of it goes straight to the Chat's model, so a
+  server that silently cuts off an overlong prompt never summarises half a
+  conversation,
 - and the models used for memory extraction and embeddings, plus per-model
-  settings such as the context window.
+  settings such as the context window,
+- and the [Job settings](#job-settings) sent with the task model and the memory
+  extraction model.
 
 When you run a Chat turn, you either pick a Provider and one of its models
 directly, or you select an **[Agent](/concepts/agents)** that already points at a
@@ -101,10 +106,11 @@ conversation to the model it started on.
 
 <Callout type="warning">
   Aliases work on the **Agent and Chat model only**. A Provider's own **Task
-  Model ID**, **Memory Extraction Model ID** and **Embedding Model ID** must
-  each name a real model id, and they don't resolve aliases: typing `flagship`
-  there saves, is sent to the vendor as if it were a model id, and the job
-  fails.
+  Model ID**, **Memory Extraction Model ID** and **Embedding Model ID** name a
+  real model id and don't resolve aliases. The first two offer the model ids
+  from the **Models** list, never an alias. **Embedding Model ID** is typed:
+  typing `flagship` there saves, is sent to the vendor as if it were a model id,
+  and the job fails.
 </Callout>
 
 <Callout type="warning">
@@ -128,6 +134,52 @@ running on the same model as before, and the Provider form tells you how many
 moved. Delete the model itself at the same time and there is no id left to fall
 back to — those Agents and Chats fail their next turn, exactly as they would if
 you removed a model they named directly.
+
+## Job settings
+
+The **Task Model ID** and **Memory Extraction Model ID** are each chosen from
+the Provider's **Models** list, or set to **None**. With no task model, Chats
+stay _Untitled_. A Provider with no memory extraction model can't be chosen for
+memory extraction. **Settings**, beside each one, opens that model's Job
+settings: the Reasoning controls and sampling parameters sent with its
+background jobs. The task model's settings apply when it names a Chat
+and when it writes a Transcript summary. The memory extraction model's apply
+when it pulls memories from a Chat. **Settings** is greyed out until a model is
+chosen.
+
+| Field                                                                                        | What it does                                                                                                                      |
+| -------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| **Thinking**, **Effort**, **Thinking budget**                                                | The Agent's [Reasoning controls](/building-with-platypus/agents#reasoning-controls). Each appears only where the model offers it. |
+| **Temperature**, **Seed**, **Top-p**, **Top-k**, **Presence Penalty**, **Frequency Penalty** | The Agent's sampling parameters, with the [same ranges](/building-with-platypus/agents#tune-generation).                          |
+
+Leave a field empty to send nothing, so the model's own default applies. A
+Provider whose settings are all empty sends its jobs exactly as it did before
+Job settings existed, and setting only sampling parameters sends no reasoning
+fields. A value you set beats the job's own default: memory extraction normally
+sends a **Temperature** of `0.3`, and only a **Temperature** you set replaces
+it. Nothing is stored until you save the Provider.
+
+A reasoning control you set stays saved when you switch to a model that
+doesn't offer it, and does nothing there. Switch back, and it applies again.
+
+<Callout type="warning">
+  **A self-hosted thinking model thinks through every Chat title too.** The task
+  model runs at its server's default, so a model that thinks by default spends a
+  long reasoning pass on a five-word title and on every Transcript summary. Turn
+  **Thinking** off in the task model's **Settings**. The control appears only
+  once the model's Reasoning map declares it — see [Declaring a Reasoning
+  map](/self-hosting/providers-and-auth#declaring-a-reasoning-map).
+</Callout>
+
+A Transcript summary falls back to the Chat's own model when the task model
+fails. That fallback sends none of the task model's Job settings, which were
+chosen for a different model. Where the task model is the Chat's own model, there
+is nothing to fall back to: the summary is written once, with the task model's
+Job settings.
+
+A **Task Model ID** or **Memory Extraction Model ID** saved before it was chosen
+from a list may name a model that is not on it. It keeps working, and the form
+marks it **not in the model list** until you add that model or choose another.
 
 ## Testing a model
 

@@ -28,7 +28,12 @@ import { logger } from "../logger.ts";
 import { isContextOverflowError } from "./context-overflow.ts";
 import { resolveScoped } from "./scoped-resource.ts";
 import { openProvider } from "./provider.ts";
-import { pointerSettingModelId } from "./model-capability.ts";
+import {
+  contextWindowForModel,
+  pointerSettingModelId,
+} from "./model-capability.ts";
+import { jobCallSettings, jobMaxOutputTokens } from "./reasoning.ts";
+import { jobInputBudgetChars } from "./job-input-budget.ts";
 import {
   resolveTaskModelProvider,
   type TaskModelWorkspace,
@@ -580,6 +585,15 @@ export const TRANSCRIPT_SUMMARY_REQUEST =
 export type TranscriptSummaryModel = {
   model: LanguageModel;
   modelId: string;
+  /** The task model's Job settings as call options (ADR-0045). The Chat's
+   *  own model carries them only when it is the task model. */
+  settings?: ReturnType<typeof jobCallSettings>;
+  /** The output cap raised by the Job settings' Thinking budget; absent, the
+   *  pass's own cap. */
+  maxOutputTokens?: number;
+  /** The task model's declared context window, which a pass checks its input
+   *  against before calling; absent, the model's own error is the measure. */
+  contextWindow?: number;
 };
 
 /** The models a pass tries: the Chat's own model, and the task model first
@@ -639,8 +653,14 @@ export type TranscriptSummaryPassInput = {
  *
  * The pass tries the task model first where the caller supplied one, falling
  * back to the Chat's own model on any failure — a context overflow, an
- * unknown model, an auth error, or a blank reply. The task model's window is
- * normally undeclared, so its own error is the only measurement available.
+ * unknown model, an auth error, or a blank reply. Where the task model
+ * declares a context window, an input over the job budget of it skips the
+ * task model outright: a server that truncates an overlong prompt instead of
+ * rejecting it would otherwise write a summary of a cut-off conversation, and
+ * no error would trigger the fallback. A summary cannot be trimmed to fit the
+ * way memory extraction trims its input, because every covered message is
+ * replaced by it. Without a declared window, the model's own error is the
+ * only measurement available.
  *
  * Overflow on the Chat's model retries once with an earlier anchor (one more
  * turn kept verbatim); a second failure is an ordinary failed summary. A
@@ -718,7 +738,9 @@ export const takeTranscriptSummary = async (
           ...input.modelMessages,
           { role: "user" as const, content: TRANSCRIPT_SUMMARY_REQUEST },
         ],
-        maxOutputTokens: TRANSCRIPT_SUMMARY_MAX_OUTPUT_TOKENS,
+        ...entry.settings,
+        maxOutputTokens:
+          entry.maxOutputTokens ?? TRANSCRIPT_SUMMARY_MAX_OUTPUT_TOKENS,
         abortSignal: signal,
       });
 
@@ -779,9 +801,33 @@ export const takeTranscriptSummary = async (
     }
   };
 
+  // Characters ÷ 4 over the serialised messages over-counts (keys, escaping,
+  // inline file data), so a misjudged input is one the Chat's model writes —
+  // the behaviour before a task model existed — never a summary lost.
+  const fitsDeclaredWindow = (
+    entry: TranscriptSummaryModel,
+    input: SummaryInput,
+  ): boolean =>
+    entry.contextWindow === undefined ||
+    TRANSCRIPT_SUMMARY_PROMPT(instruction).length +
+      (input.priorText?.length ?? 0) +
+      JSON.stringify(input.modelMessages).length +
+      TRANSCRIPT_SUMMARY_REQUEST.length <=
+      jobInputBudgetChars(entry.contextWindow);
+
   let summaryInput = await anchorInput(anchorIndex);
 
-  if (taskModel) {
+  if (taskModel && !fitsDeclaredWindow(taskModel, summaryInput)) {
+    logger.info(
+      {
+        chatId,
+        modelId: taskModel.modelId,
+        contextWindow: taskModel.contextWindow,
+        fallbackModelId: chatModel.modelId,
+      },
+      "Transcript summary skipped the task model: the input exceeds its declared context window",
+    );
+  } else if (taskModel) {
     const outcome = await attempt(taskModel, summaryInput);
     if (outcome.kind === "row") return outcome.row;
     if (outcome.kind === "storage-error") return undefined;
@@ -902,43 +948,33 @@ const resolveSummariserModels = async (
     { orgId, workspaceId, sessionId },
     queries,
   );
-  const chat: TranscriptSummaryModel = {
-    model: plan.model,
-    modelId: resolvedModelId,
-  };
-  const task = await resolveTaskSummariserModel({
+  return withTaskSummariserModel({
     orgId,
     workspaceId,
+    chat: { model: plan.model, modelId: resolvedModelId },
     chatProviderId: provider.id,
-    chatModelId: resolvedModelId,
     sessionId,
     queries,
   });
-  return task ? { task, chat } : { chat };
 };
 
 /**
- * The task model a pass should try before the Chat's own, or `undefined` when
- * there is nothing else to try: the same Provider and model as the Chat, or a
- * Provider this Workspace cannot see. Resolution never makes the pass fail —
+ * The Chat's model with the task model in front of it, where there is one to
+ * try. There is none for a Provider this Workspace cannot see, or an empty
+ * Task Model ID. A task model that IS the Chat's model is not tried twice:
+ * the Chat's entry carries its Job settings (ADR-0045), so the pass makes one
+ * call and keeps its overflow ladder. Resolution never makes the pass fail —
  * an unavailable task model just means the Chat's model writes the summary.
  */
-const resolveTaskSummariserModel = async (args: {
+const withTaskSummariserModel = async (args: {
   orgId: string;
   workspaceId: string;
+  chat: TranscriptSummaryModel;
   chatProviderId: string;
-  chatModelId: string;
   sessionId: string;
   queries: TranscriptSummaryQueries;
-}): Promise<TranscriptSummaryModel | undefined> => {
-  const {
-    orgId,
-    workspaceId,
-    chatProviderId,
-    chatModelId,
-    sessionId,
-    queries,
-  } = args;
+}): Promise<TranscriptSummaryModels> => {
+  const { orgId, workspaceId, chat, chatProviderId, sessionId, queries } = args;
   try {
     const workspace = await queries.getWorkspace(orgId, workspaceId);
     const taskProvider = await resolveTaskModelProvider(
@@ -960,30 +996,51 @@ const resolveTaskSummariserModel = async (args: {
         },
         "Transcript summary task model skipped: provider is not visible in this workspace",
       );
-      return undefined;
+      return { chat };
     }
     const taskModelId = taskProvider.provider.taskModelId;
     // An empty Task Model ID is a Provider with no task model configured, not
     // a model to call: the form allows it, and every call would be doomed.
+    if (taskModelId.trim() === "") return { chat };
+    const settings = jobCallSettings(
+      taskProvider.provider,
+      pointerSettingModelId(taskModelId),
+      taskProvider.provider.taskModelSettings,
+    );
+    const maxOutputTokens = jobMaxOutputTokens(
+      taskProvider.provider,
+      pointerSettingModelId(taskModelId),
+      taskProvider.provider.taskModelSettings,
+      TRANSCRIPT_SUMMARY_MAX_OUTPUT_TOKENS,
+    );
     if (
-      taskModelId.trim() === "" ||
-      (taskProvider.provider.id === chatProviderId &&
-        taskModelId === chatModelId)
+      taskProvider.provider.id === chatProviderId &&
+      taskModelId === chat.modelId
     ) {
-      return undefined;
+      return { chat: { ...chat, settings, maxOutputTokens } };
     }
+    const contextWindow = contextWindowForModel(
+      taskProvider.provider,
+      pointerSettingModelId(taskModelId),
+    );
     return {
-      model: openProvider(taskProvider.provider, { sessionId }).languageModel(
-        pointerSettingModelId(taskModelId),
-      ),
-      modelId: taskModelId,
+      task: {
+        model: openProvider(taskProvider.provider, { sessionId }).languageModel(
+          pointerSettingModelId(taskModelId),
+        ),
+        modelId: taskModelId,
+        settings,
+        maxOutputTokens,
+        ...(contextWindow !== undefined ? { contextWindow } : {}),
+      },
+      chat,
     };
   } catch (error) {
     logger.warn(
       { error, orgId, workspaceId },
       "Transcript summary task model unavailable; using the Chat's model",
     );
-    return undefined;
+    return { chat };
   }
 };
 
@@ -1154,20 +1211,20 @@ export const beforeTurn = async (args: {
   ) {
     const chat: TranscriptSummaryModel = { model, modelId };
     const summary = await registerTranscriptSummary(chatId, async () => {
-      const task =
+      const models =
         taskModel === undefined
-          ? undefined
-          : await resolveTaskSummariserModel({
+          ? { chat }
+          : await withTaskSummariserModel({
               orgId: taskModel.scope.orgId,
               workspaceId: taskModel.scope.workspaceId,
+              chat,
               chatProviderId: taskModel.providerId,
-              chatModelId: modelId,
               sessionId: chatId,
               queries: drizzleTranscriptSummaryQueries,
             });
       return takeFromReading({
         chatId,
-        models: task ? { task, chat } : { chat },
+        models,
         path,
         summaries,
         triggeredFromOccupancy: reading?.projected,

@@ -1,6 +1,11 @@
 import { describe, it, expect } from "vitest";
-import type { ReasoningMap } from "@platypus/schemas";
-import { resolveReasoning } from "./reasoning.ts";
+import type { ConcreteModelId, ReasoningMap } from "@platypus/schemas";
+import {
+  jobCallSettings,
+  jobMaxOutputTokens,
+  resolveReasoning,
+} from "./reasoning.ts";
+import { makeProviderRow } from "./provider-row.test-fixtures.ts";
 
 // Qwen-shaped: everything rides in `chat_template_kwargs`, so the deep merge
 // across always / thinking / effort is what this map exercises.
@@ -159,5 +164,170 @@ describe("resolveReasoning", () => {
         resolveReasoning(map, {}, { temperature: 0.2, topP: 0.5 }),
       ).toEqual({ chat_template_kwargs: { temperature: 1 } });
     });
+  });
+});
+
+describe("jobCallSettings", () => {
+  const qwen = "qwen3" as ConcreteModelId;
+  // OpenAI chat mode: the path that honours a Reasoning map (ADR-0040).
+  const compat = makeProviderRow({
+    name: "local",
+    modelIds: [{ id: qwen, passthroughFileTypes: [], reasoning: QWEN }],
+  });
+
+  it.each([
+    ["no block", null],
+    ["a block of nulls", { temperature: null, reasoningThinking: null }],
+  ] as const)(
+    "sends nothing for %s, not even the map's always and default",
+    (_, settings) => {
+      expect(jobCallSettings(compat, qwen, settings)).toEqual({});
+    },
+  );
+
+  it("sends Thinking off as the map's fragment, dropping the default effort", () => {
+    expect(jobCallSettings(compat, qwen, { reasoningThinking: false })).toEqual(
+      {
+        providerOptions: {
+          local: {
+            chat_template_kwargs: {
+              preserve_thinking: true,
+              enable_thinking: false,
+            },
+          },
+        },
+      },
+    );
+  });
+
+  it("resolves an Effort step the map lacks to the map's default", () => {
+    expect(
+      jobCallSettings(compat, qwen, { reasoningEffort: "max" }),
+    ).toMatchObject({
+      providerOptions: {
+        local: { chat_template_kwargs: { reasoning_effort: "low" } },
+      },
+    });
+  });
+
+  it("sends set sampling fields under their SDK names", () => {
+    expect(
+      jobCallSettings(makeProviderRow(), qwen, { temperature: 0.9, topK: 20 }),
+    ).toEqual({ temperature: 0.9, topK: 20 });
+  });
+
+  it("sends no fragment for a block of sampling alone, even on a mapped model", () => {
+    expect(jobCallSettings(compat, qwen, { temperature: 0.2 })).toEqual({
+      temperature: 0.2,
+    });
+  });
+
+  it("keeps the job's default over a fragment's temperature, and a set value over both", () => {
+    const withTemp = makeProviderRow({
+      name: "local",
+      modelIds: [
+        {
+          id: qwen,
+          passthroughFileTypes: [],
+          reasoning: {
+            thinking: {
+              on: {},
+              off: { enable_thinking: false, temperature: 0.7 },
+            },
+          },
+        },
+      ],
+    });
+    const defaults = { temperature: 0.3 };
+    expect(
+      jobCallSettings(withTemp, qwen, { reasoningThinking: false }, defaults),
+    ).toEqual({
+      temperature: 0.3,
+      providerOptions: { local: { enable_thinking: false } },
+    });
+    expect(
+      jobCallSettings(withTemp, qwen, { temperature: 0.9 }, defaults),
+    ).toEqual({ temperature: 0.9 });
+    expect(jobCallSettings(withTemp, qwen, null, defaults)).toEqual(defaults);
+  });
+
+  describe("a value kept from a model that offered a control this one does not", () => {
+    // Always thinks, so no switch; a turn that chooses nothing gets `high`.
+    const r1 = "r1-distill" as ConcreteModelId;
+    const both = makeProviderRow({
+      name: "local",
+      modelIds: [
+        { id: qwen, passthroughFileTypes: [], reasoning: QWEN },
+        {
+          id: r1,
+          passthroughFileTypes: [],
+          reasoning: {
+            effort: { low: { effort: "low" }, high: { effort: "high" } },
+            default: { effort: "high" },
+          },
+        },
+      ],
+    });
+
+    it("sends nothing, not the new map's default effort", () => {
+      expect(jobCallSettings(both, r1, { reasoningThinking: false })).toEqual(
+        {},
+      );
+    });
+
+    it("applies again on a model that offers the control", () => {
+      expect(
+        jobCallSettings(both, qwen, { reasoningThinking: false }),
+      ).toHaveProperty("providerOptions");
+    });
+
+    it("ignores a Thinking budget on a native Provider, which offers none", () => {
+      const anthropic = makeProviderRow({ providerType: "Anthropic" });
+      expect(
+        jobCallSettings(anthropic, qwen, { thinkingBudget: 2048 }),
+      ).toEqual({});
+    });
+  });
+
+  it("sends a native Provider the SDK reasoning level", () => {
+    const anthropic = makeProviderRow({ providerType: "Anthropic" });
+    expect(
+      jobCallSettings(anthropic, qwen, { reasoningThinking: false }),
+    ).toEqual({ reasoning: "none" });
+  });
+});
+
+describe("jobMaxOutputTokens", () => {
+  const qwen = "qwen3" as ConcreteModelId;
+  const compat = makeProviderRow({
+    name: "local",
+    modelIds: [{ id: qwen, passthroughFileTypes: [], reasoning: QWEN }],
+  });
+
+  it("adds a sent Thinking budget to the cap, so thinking cannot crowd out the answer", () => {
+    expect(
+      jobMaxOutputTokens(compat, qwen, { thinkingBudget: 4096 }, 2048),
+    ).toBe(6144);
+  });
+
+  it.each([
+    ["no budget", compat, { reasoningThinking: true }],
+    [
+      "Thinking off",
+      compat,
+      { thinkingBudget: 4096, reasoningThinking: false },
+    ],
+    [
+      "a native Provider",
+      makeProviderRow({ providerType: "Anthropic" }),
+      { thinkingBudget: 4096 },
+    ],
+    [
+      "a model without a map",
+      makeProviderRow({ name: "local" }),
+      { thinkingBudget: 4096 },
+    ],
+  ] as const)("keeps the cap for %s", (_, provider, settings) => {
+    expect(jobMaxOutputTokens(provider, qwen, settings, 2048)).toBe(2048);
   });
 });

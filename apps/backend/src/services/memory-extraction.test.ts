@@ -9,7 +9,10 @@ const { mockGenerateText, mockOpenProvider, mockGenerateEmbedding } =
   }));
 
 vi.mock("ai", () => ({ generateText: mockGenerateText }));
-vi.mock("./provider.ts", () => ({ openProvider: mockOpenProvider }));
+vi.mock("./provider.ts", async (importActual) => ({
+  ...(await importActual<typeof import("./provider.ts")>()),
+  openProvider: mockOpenProvider,
+}));
 vi.mock("./embedding.ts", () => ({ generateEmbedding: mockGenerateEmbedding }));
 // The real path read wherever rows are seeded; the chainable-mock tests below
 // stub it, since the mock cannot answer its queries by position.
@@ -341,6 +344,77 @@ describe("processMemoryExtractionBatch", () => {
     expect(mockDb.values).toHaveBeenCalledWith(
       expect.objectContaining({ embedding: [0.1, 0.2, 0.3] }),
     );
+  });
+  describe("Job settings (ADR-0045)", () => {
+    /** The options the one extraction call was made with. */
+    const extractWith = async (provider: Record<string, unknown>) => {
+      setupWhere([makeWorkspace()], [makeProvider(provider)]);
+      mockDb.limit
+        .mockResolvedValueOnce([makeChat()])
+        .mockResolvedValueOnce([]);
+      mockDb.execute.mockResolvedValue({ rowCount: 0 });
+      mockOpenProvider.mockReturnValue({
+        languageModel: vi.fn(() => ({ id: "model" })),
+      });
+      mockGenerateText.mockResolvedValue({ text: "Updated summary" });
+      await processMemoryExtractionBatch();
+      expect(mockGenerateText).toHaveBeenCalledTimes(1);
+      const [options] = mockGenerateText.mock.calls[0] as [
+        Record<string, unknown>,
+      ];
+      return options;
+    };
+
+    const thinkingModel = {
+      name: "local",
+      apiMode: "chat",
+      modelIds: [
+        {
+          id: "gpt-4o-mini",
+          passthroughFileTypes: [],
+          reasoning: {
+            always: { chat_template_kwargs: { preserve_thinking: true } },
+            thinking: {
+              on: { chat_template_kwargs: { enable_thinking: true } },
+              off: { chat_template_kwargs: { enable_thinking: false } },
+            },
+            default: { thinking: true },
+          },
+        },
+      ],
+    };
+
+    it("sends only the built-in default with no Job settings, even on a mapped model", async () => {
+      const options = await extractWith({
+        ...thinkingModel,
+        memoryExtractionModelSettings: null,
+      });
+      expect(options.temperature).toBe(0.3);
+      expect(options).not.toHaveProperty("providerOptions");
+      expect(options).not.toHaveProperty("reasoning");
+    });
+
+    it("lets a set Temperature beat the extraction default", async () => {
+      const options = await extractWith({
+        memoryExtractionModelSettings: { temperature: 0.9 },
+      });
+      expect(options.temperature).toBe(0.9);
+    });
+
+    it("puts Thinking off on the wire for a model with a Reasoning map", async () => {
+      const options = await extractWith({
+        ...thinkingModel,
+        memoryExtractionModelSettings: { reasoningThinking: false },
+      });
+      expect(options.providerOptions).toEqual({
+        local: {
+          chat_template_kwargs: {
+            preserve_thinking: true,
+            enable_thinking: false,
+          },
+        },
+      });
+    });
   });
 });
 

@@ -1,11 +1,21 @@
-import type {
-  ReasoningChoice,
-  ReasoningEffort,
-  ReasoningFragment,
-  ReasoningMap,
+import {
+  providerHonoursReasoningMap,
+  REASONING_EFFORT_STEPS,
+  type ConcreteModelId,
+  type JobSettings,
+  type ReasoningChoice,
+  type ReasoningEffort,
+  type ReasoningFragment,
+  type ReasoningMap,
 } from "@platypus/schemas";
 import type { JSONObject } from "@ai-sdk/provider";
-import type { SamplingSettings } from "./sampling-settings.ts";
+import { compatProviderOptionsName } from "./provider.ts";
+import { reasoningMapForModel } from "./model-capability.ts";
+import type { ProviderRow } from "./provider-write.ts";
+import {
+  resolveSamplingSettings,
+  type SamplingSettings,
+} from "./sampling-settings.ts";
 
 /** The request-body key each SDK sampling setting goes out under. */
 const SAMPLING_WIRE_KEYS: Record<keyof SamplingSettings, string> = {
@@ -106,3 +116,125 @@ export const resolveSdkReasoning = (
   choice.reasoningThinking === false
     ? "none"
     : (choice.reasoningEffort ?? undefined);
+
+/** Where a turn's Reasoning controls go on the call, when anywhere. */
+export type ReasoningCallSettings = {
+  reasoning?: SdkReasoning;
+  providerOptions?: Record<string, JSONObject>;
+};
+
+type ReasoningProvider = Pick<
+  ProviderRow,
+  "name" | "providerType" | "apiMode" | "modelIds"
+>;
+
+/**
+ * Where a turn's Reasoning controls reach the wire, absent when there is
+ * nothing to send. An OpenAI chat-mode Provider sends the Model entry's
+ * Reasoning map as a body fragment (ADR-0040); every other Provider is native
+ * and takes the SDK's `reasoning` level (#1689) — except OpenRouter, whose
+ * adapter ignores that option and reads its own, which has no `max` step.
+ */
+export const reasoningCallSettings = (
+  provider: ReasoningProvider,
+  modelId: ConcreteModelId,
+  choice: ReasoningChoice,
+  sampling: SamplingSettings,
+): ReasoningCallSettings => {
+  if (providerHonoursReasoningMap(provider)) {
+    const fragment = resolveReasoning(
+      reasoningMapForModel(provider, modelId),
+      choice,
+      sampling,
+    );
+    return fragment
+      ? { providerOptions: { [compatProviderOptionsName(provider)]: fragment } }
+      : {};
+  }
+  const reasoning = resolveSdkReasoning(choice);
+  if (!reasoning) return {};
+  if (provider.providerType === "OpenRouter") {
+    const effort = reasoning === "max" ? "xhigh" : reasoning;
+    return { providerOptions: { openrouter: { reasoning: { effort } } } };
+  }
+  return { reasoning };
+};
+
+/**
+ * Whether `choice` sets a Reasoning control this model offers — the controls
+ * the Settings dialog shows for it. A native Provider offers Thinking and
+ * Effort (#1689); a Reasoning map offers what it declares (ADR-0040). Effort
+ * counts wherever the control is offered, even for a step the map lacks,
+ * because that step resolves to the map's default.
+ */
+const offeredReasoningSet = (
+  provider: ReasoningProvider,
+  modelId: ConcreteModelId,
+  choice: ReasoningChoice,
+): boolean => {
+  if (!providerHonoursReasoningMap(provider)) {
+    return choice.reasoningThinking != null || choice.reasoningEffort != null;
+  }
+  const map = reasoningMapForModel(provider, modelId);
+  if (!map) return false;
+  return (
+    (map.thinking !== undefined && choice.reasoningThinking != null) ||
+    (REASONING_EFFORT_STEPS.some((step) => map.effort?.[step]) &&
+      choice.reasoningEffort != null) ||
+    (map.budget !== undefined && choice.thinkingBudget != null)
+  );
+};
+
+/**
+ * A job's output cap raised by the Thinking budget its Job settings send. On
+ * an OpenAI-compatible server thinking counts toward `max_tokens`, so a budget
+ * at or above the job's cap would be cut off before any answer is written.
+ * Native Providers never send a stored budget (see `resolveSdkReasoning`).
+ */
+export const jobMaxOutputTokens = (
+  provider: ReasoningProvider,
+  modelId: ConcreteModelId,
+  settings: JobSettings | null | undefined,
+  cap: number,
+): number => {
+  const budget = settings?.thinkingBudget;
+  if (budget == null || !providerHonoursReasoningMap(provider)) return cap;
+  const map = reasoningMapForModel(provider, modelId);
+  if (!map?.budget) return cap;
+  // Mirrors `resolveReasoning`: Thinking off drops the budget.
+  const thinking = map.thinking
+    ? (settings?.reasoningThinking ?? map.default?.thinking)
+    : true;
+  return thinking === false ? cap : cap + budget;
+};
+
+/**
+ * The call options one of a Provider's own jobs is sent for its Job settings
+ * (ADR-0045): the job's built-in `defaults` with every sampling parameter set
+ * laid over them, and the Reasoning controls resolved against the job model's
+ * Reasoning map exactly as a turn's are (ADR-0040). The resolved sampling is
+ * stripped from the map's fragment, so a fragment's `temperature` beats neither
+ * a set value nor the job's default.
+ *
+ * Reasoning resolves only once a Reasoning control the model offers is set,
+ * never for a block of sampling alone: the jobs sent no fragment before Job
+ * settings existed, so the map's `always` and `default` fragments a turn would
+ * get must not appear because someone set a Temperature — nor because of a
+ * value kept from a model that offered a control this one does not, which the
+ * Settings dialog no longer shows.
+ */
+export const jobCallSettings = (
+  provider: ReasoningProvider,
+  modelId: ConcreteModelId,
+  settings: JobSettings | null | undefined,
+  defaults: SamplingSettings = {},
+): SamplingSettings & ReasoningCallSettings => {
+  const choice = settings ?? {};
+  const sampling = { ...defaults, ...resolveSamplingSettings(choice) };
+  return offeredReasoningSet(provider, modelId, choice)
+    ? {
+        ...sampling,
+        ...reasoningCallSettings(provider, modelId, choice, sampling),
+      }
+    : sampling;
+};
