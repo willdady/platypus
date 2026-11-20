@@ -789,13 +789,25 @@ function ProviderForm({
     // Editing a card retracts that card's verdict; the others still describe
     // values nobody has touched.
     if (typeof modelDialog === "number") clearTestResult(modelDialog);
-    setFormData((prev) => ({
-      ...prev,
-      modelIds:
-        modelDialog === "new"
-          ? [...prev.modelIds, model]
-          : prev.modelIds.map((m, i) => (i === modelDialog ? model : m)),
-    }));
+    setFormData((prev) => {
+      // A renamed entry takes the job pointers aimed at it along, so its Job
+      // settings keep matching its Reasoning map.
+      const oldId =
+        typeof modelDialog === "number"
+          ? prev.modelIds[modelDialog]?.id
+          : undefined;
+      const follow = (pointer: string) =>
+        oldId !== undefined && pointer === oldId ? model.id : pointer;
+      return {
+        ...prev,
+        taskModelId: follow(prev.taskModelId),
+        memoryExtractionModelId: follow(prev.memoryExtractionModelId),
+        modelIds:
+          modelDialog === "new"
+            ? [...prev.modelIds, model]
+            : prev.modelIds.map((m, i) => (i === modelDialog ? model : m)),
+      };
+    });
     setModelDialog(null);
   };
 

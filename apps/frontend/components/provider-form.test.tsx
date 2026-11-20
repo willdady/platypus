@@ -642,6 +642,28 @@ describe("ProviderForm model dialog", () => {
     ]);
   });
 
+  it("carries the task and memory pointers along when their model is renamed", async () => {
+    const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
+    renderEditForm(
+      [
+        { id: "gpt-4o", passthroughFileTypes: [] },
+        { id: "o3", passthroughFileTypes: [] },
+      ],
+      { taskModelId: "gpt-4o", memoryExtractionModelId: "o3" },
+    );
+
+    const dialog = openEditDialog("gpt-4o");
+    type(dialog, "Model ID", "gpt-5");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+    save();
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(savedProviderBody(fetchMock)).toMatchObject({
+      taskModelId: "gpt-5",
+      memoryExtractionModelId: "o3",
+    });
+  });
+
   // The dialog is portalled out of the DOM tree but not the React tree, so its
   // submit would otherwise bubble to the Provider form it sits in.
   it("saves the model on Enter without submitting the Provider form", () => {
