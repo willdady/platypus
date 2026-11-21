@@ -120,13 +120,16 @@ export const serializeLoggedError = (value: unknown): unknown => {
 };
 
 /**
- * The registration the logger installs. Both keys are in use across the
+ * The registration the logger installs. All three keys are in use across the
  * backend, and registering `err` deliberately displaces pino's standard error
  * serializer, whose uncapped `cause` walk is the larger half of what this
- * replaces. Exported as a map so the pairing can be asserted without building a
- * logger.
+ * replaces. `cause` is what a web backend's and a tool set factory's failure
+ * lines carry; without it pino writes an `Error` there as `{}`, since its
+ * message and stack are not enumerable. Exported as a map so the pairing can be
+ * asserted without building a logger.
  */
 export const errorSerializers = {
   error: serializeLoggedError,
   err: serializeLoggedError,
+  cause: serializeLoggedError,
 };
