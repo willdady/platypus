@@ -14,6 +14,7 @@ import { FormTextareaField } from "@/components/form-textarea-field";
 import {
   HEADER_ROW_LABELS,
   KeyValueRowsEditor,
+  duplicateHeaderError,
   recordToRows,
   rowsToRecord,
   type KeyValueRow,
@@ -583,6 +584,7 @@ function ProviderForm({
     formData,
     setFormData,
     validationErrors,
+    setValidationErrors,
     isSubmitting,
     clearErrors,
     submit,
@@ -827,8 +829,17 @@ function ProviderForm({
    * it — nothing is saved first, so a wrong key or Base URL is reported before
    * it reaches a Chat. The verdict lands back on the same card.
    */
-  const testModel = (index: number, modelId: string) =>
-    runModelTest(index, modelId, buildTestPayload(formData));
+  const rejectDuplicateHeaders = (): boolean => {
+    const message = duplicateHeaderError(formData.headerRows);
+    if (!message) return false;
+    setValidationErrors((prev) => ({ ...prev, headers: message }));
+    return true;
+  };
+
+  const testModel = (index: number, modelId: string) => {
+    if (rejectDuplicateHeaders()) return;
+    return runModelTest(index, modelId, buildTestPayload(formData));
+  };
 
   /**
    * Removing or renaming an alias silently rewrites every Agent and Chat that
@@ -873,6 +884,7 @@ function ProviderForm({
   };
 
   const handleSubmit = () => {
+    if (rejectDuplicateHeaders()) return;
     if (hasEmbeddingConfigChanged()) {
       setIsEmbeddingChangeDialogOpen(true);
     } else {

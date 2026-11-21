@@ -1250,21 +1250,35 @@ describe("ProviderForm headers", () => {
     expect(savedProviderBody(fetchMock).headers).toEqual({});
   });
 
-  // The same shape as the MCP and Webhook forms: one value per header name,
-  // and the last row for a repeated name is the one that is kept.
-  it("keeps one value per header name, the last row winning", async () => {
+  it("rejects duplicate header names before saving and clears the error after editing", async () => {
     const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
-    renderProvider({ headers: { Duplicate: "first" } });
+    renderProvider({ headers: { "X-Trace": "first" } });
 
     openAdvanced();
     fireEvent.click(screen.getByRole("button", { name: "Add header" }));
-    fireEvent.change(headerName(2), { target: { value: "Duplicate" } });
+    fireEvent.change(headerName(2), { target: { value: "x-trace" } });
     fireEvent.change(headerValue(2), { target: { value: "second" } });
     save();
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(
+      screen.getByText(
+        'Duplicate header name "x-trace". Header names are case-insensitive, so each one may appear once.',
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Headers").closest("[data-invalid]"),
+    ).toHaveAttribute("data-invalid", "true");
+
+    fireEvent.change(headerName(2), { target: { value: "X-Request-Id" } });
+
+    expect(screen.queryByText(/Duplicate header name/)).not.toBeInTheDocument();
+    save();
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     expect(savedProviderBody(fetchMock).headers).toEqual({
-      Duplicate: "second",
+      "X-Trace": "first",
+      "X-Request-Id": "second",
     });
   });
 
