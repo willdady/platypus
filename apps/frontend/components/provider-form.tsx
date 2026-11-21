@@ -1041,7 +1041,7 @@ function ProviderForm({
           </Field>
 
           <JobModelField
-            label="Task Model ID"
+            label="Task Model"
             name="taskModelId"
             value={formData.taskModelId}
             settings={formData.taskModelSettings ?? null}
@@ -1064,7 +1064,7 @@ function ProviderForm({
           />
 
           <JobModelField
-            label="Memory Extraction Model ID"
+            label="Memory Extraction Model"
             name="memoryExtractionModelId"
             value={formData.memoryExtractionModelId}
             settings={formData.memoryExtractionModelSettings ?? null}

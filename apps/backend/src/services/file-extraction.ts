@@ -5,6 +5,7 @@ import {
   type FileMetadata,
 } from "@platypus/schemas";
 import { logger } from "../logger.ts";
+import { sliceWhole } from "../utils/storable.ts";
 
 /**
  * Binary document → text extraction (issue #342).
@@ -164,7 +165,7 @@ export const extractDocumentText = async (
   const maxChars = options.maxChars;
   return {
     status: "ok",
-    text: text.length > maxChars ? text.slice(0, maxChars) : text,
+    text: text.length > maxChars ? sliceWhole(text, maxChars) : text,
     truncated: text.length > maxChars,
     totalChars: text.length,
   };

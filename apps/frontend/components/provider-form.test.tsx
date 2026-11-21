@@ -155,9 +155,9 @@ describe("ProviderForm form submission", () => {
     const dialog = openAddDialog();
     type(dialog, "Model ID", "gpt-4o");
     fireEvent.click(within(dialog).getByRole("button", { name: "Add" }));
-    await selectOption(screen.getByLabelText("Task Model ID"), "gpt-4o");
+    await selectOption(screen.getByLabelText("Task Model"), "gpt-4o");
     await selectOption(
-      screen.getByLabelText("Memory Extraction Model ID"),
+      screen.getByLabelText("Memory Extraction Model"),
       "gpt-4o",
     );
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -191,14 +191,14 @@ describe("ProviderForm Job settings (ADR-0045)", () => {
   it("offers the Provider's models and flags a stored id that is not one", async () => {
     renderEditForm(models, { memoryExtractionModelId: "retired-model" });
 
-    const memory = await screen.findByLabelText("Memory Extraction Model ID");
+    const memory = await screen.findByLabelText("Memory Extraction Model");
     expect(memory).toHaveTextContent("retired-model (not in the model list)");
     expect(
       screen.getByText(/retired-model is not in this provider's model list/),
     ).toBeInTheDocument();
 
-    await selectOption(screen.getByLabelText("Task Model ID"), "gpt-4o-mini");
-    expect(screen.getByLabelText("Task Model ID")).toHaveTextContent(
+    await selectOption(screen.getByLabelText("Task Model"), "gpt-4o-mini");
+    expect(screen.getByLabelText("Task Model")).toHaveTextContent(
       "gpt-4o-mini",
     );
   });
@@ -222,9 +222,9 @@ describe("ProviderForm Job settings (ADR-0045)", () => {
     const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
     renderEditForm(models, { taskModelId: "gpt-4o" });
 
-    await selectOption(await screen.findByLabelText("Task Model ID"), "None");
+    await selectOption(await screen.findByLabelText("Task Model"), "None");
     expect(
-      screen.getByRole("button", { name: "Task Model ID settings" }),
+      screen.getByRole("button", { name: "Task Model settings" }),
     ).toBeDisabled();
     save();
 
@@ -235,7 +235,7 @@ describe("ProviderForm Job settings (ADR-0045)", () => {
   it("disables Settings until a model is chosen", () => {
     render(<ProviderForm orgId="org1" />);
     expect(
-      screen.getByRole("button", { name: "Task Model ID settings" }),
+      screen.getByRole("button", { name: "Task Model settings" }),
     ).toBeDisabled();
   });
 
@@ -244,9 +244,9 @@ describe("ProviderForm Job settings (ADR-0045)", () => {
     renderEditForm(models, {
       taskModelSettings: { temperature: 0.2 },
     });
-    await screen.findByLabelText("Task Model ID");
+    await screen.findByLabelText("Task Model");
 
-    const dialog = openSettings("Task Model ID");
+    const dialog = openSettings("Task Model");
     expect(
       screen.getByText(
         "Leave a field empty to send nothing and use the model's own default.",
@@ -267,9 +267,9 @@ describe("ProviderForm Job settings (ADR-0045)", () => {
   it("stores a block emptied in the dialog as no block", async () => {
     const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
     renderEditForm(models, { taskModelSettings: { temperature: 0.2 } });
-    await screen.findByLabelText("Task Model ID");
+    await screen.findByLabelText("Task Model");
 
-    const dialog = openSettings("Task Model ID");
+    const dialog = openSettings("Task Model");
     type(dialog, "Temperature", "");
     fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
     save();
@@ -282,9 +282,9 @@ describe("ProviderForm Job settings (ADR-0045)", () => {
 
   it("shows a validation error inline and keeps the dialog open", async () => {
     renderEditForm(models);
-    await screen.findByLabelText("Task Model ID");
+    await screen.findByLabelText("Task Model");
 
-    const dialog = openSettings("Task Model ID");
+    const dialog = openSettings("Task Model");
     type(dialog, "Top-p", "2");
     fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
 
@@ -313,14 +313,14 @@ describe("ProviderForm Job settings (ADR-0045)", () => {
         memoryExtractionModelId: "plain",
       },
     );
-    await screen.findByLabelText("Task Model ID");
+    await screen.findByLabelText("Task Model");
 
-    const task = openSettings("Task Model ID");
+    const task = openSettings("Task Model");
     expect(within(task).getByLabelText("Thinking")).toBeInTheDocument();
     expect(within(task).queryByLabelText("Effort")).not.toBeInTheDocument();
     fireEvent.click(within(task).getByRole("button", { name: "Cancel" }));
 
-    const memory = openSettings("Memory Extraction Model ID");
+    const memory = openSettings("Memory Extraction Model");
     expect(within(memory).queryByLabelText("Thinking")).not.toBeInTheDocument();
     expect(within(memory).getByLabelText("Temperature")).toBeInTheDocument();
   });
@@ -340,10 +340,10 @@ describe("ProviderForm save feedback", () => {
     const dialog = openAddDialog();
     type(dialog, "Model ID", "gpt-4o");
     fireEvent.click(within(dialog).getByRole("button", { name: "Add" }));
-    fireEvent.change(screen.getByLabelText("Task Model ID"), {
+    fireEvent.change(screen.getByLabelText("Task Model"), {
       target: { value: "gpt-4o" },
     });
-    fireEvent.change(screen.getByLabelText("Memory Extraction Model ID"), {
+    fireEvent.change(screen.getByLabelText("Memory Extraction Model"), {
       target: { value: "gpt-4o" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));

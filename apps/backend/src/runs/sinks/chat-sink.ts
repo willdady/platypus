@@ -11,6 +11,7 @@ import { generateChatMetadata } from "../../services/chat-metadata.ts";
 import { stillAwaits } from "../../services/chat-messages.ts";
 import { afterTurn } from "../../services/chat-summary.ts";
 import { extractFiles } from "../../storage/utils.ts";
+import { storable } from "../../utils/storable.ts";
 import type { PlatypusUIMessage } from "../../types.ts";
 import { FlushScheduler } from "../flush-scheduler.ts";
 import {
@@ -225,7 +226,7 @@ export class ChatSink implements RunSink {
           id: message.id,
           parentId,
           role: "user",
-          parts: message.parts,
+          parts: storable(message.parts),
         });
       }
 
@@ -252,7 +253,7 @@ export class ChatSink implements RunSink {
         }
         await tx
           .update(chatMessage)
-          .set({ parts: answered.parts })
+          .set({ parts: storable(answered.parts) })
           .where(
             and(
               eq(chatMessage.chatId, ctx.runId),
@@ -603,10 +604,10 @@ export class ChatSink implements RunSink {
         if (reply) {
           // Only the content: a reply deleted since the last write stays
           // deleted.
-          const content = {
+          const content = storable({
             parts: reply.parts,
             metadata: reply.metadata ?? null,
-          };
+          });
           const updated = await tx
             .update(chatMessage)
             .set(content)
