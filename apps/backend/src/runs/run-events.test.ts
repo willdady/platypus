@@ -282,6 +282,15 @@ describe("capRunEventError", () => {
     expect(capRunEventError("no\u0000pe \uD800").message).toBe("nope �");
   });
 
+  it("does not call an error cut when only NUL removal brought it under the cap", () => {
+    const error = "a".repeat(RUN_EVENT_ERROR_MAX_BYTES) + "\u0000";
+    expect(capRunEventError(error)).toEqual({
+      message: "a".repeat(RUN_EVENT_ERROR_MAX_BYTES),
+      truncated: false,
+      originalBytes: RUN_EVENT_ERROR_MAX_BYTES,
+    });
+  });
+
   it("never splits a multi-byte character at the cap", () => {
     // 4-byte characters: 1024 is divisible by 4, so shift by one byte with an
     // ASCII prefix and the cap lands mid-character unless the cut respects it.

@@ -79,8 +79,9 @@ type CloseSpec = { status: Exclude<RunEventStatus, "running">; error?: string };
  * can carry what `jsonb` rejects.
  */
 export const capRunEventError = (error: string): RunEventError => {
-  const originalBytes = Buffer.byteLength(error, "utf8");
+  // Measured after `storable`: what it removes must not count as a cut.
   const message = storable(error);
+  const originalBytes = Buffer.byteLength(message, "utf8");
   if (originalBytes <= RUN_EVENT_ERROR_MAX_BYTES) {
     return { message, truncated: false, originalBytes };
   }
