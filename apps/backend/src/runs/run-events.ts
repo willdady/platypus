@@ -9,6 +9,7 @@ import {
   type RunEventType,
 } from "@platypus/schemas";
 import type { PlatypusUIMessage } from "../types.ts";
+import { storable } from "../utils/storable.ts";
 import type { RunStatus } from "./types.ts";
 import { DELEGATE_TOOL_NAME } from "../tools/turn-tool-names.ts";
 
@@ -74,10 +75,12 @@ type CloseSpec = { status: Exclude<RunEventStatus, "running">; error?: string };
  * character boundary so a multi-byte codepoint is never split — a lone
  * surrogate breaks serialization. A cut is explicit: the preview is marked
  * truncated and the original byte length kept, so a reader can tell a short
- * error from a clipped one.
+ * error from a clipped one. Made {@link storable} first: tool and model text
+ * can carry what `jsonb` rejects.
  */
-export const capRunEventError = (message: string): RunEventError => {
-  const originalBytes = Buffer.byteLength(message, "utf8");
+export const capRunEventError = (error: string): RunEventError => {
+  const originalBytes = Buffer.byteLength(error, "utf8");
+  const message = storable(error);
   if (originalBytes <= RUN_EVENT_ERROR_MAX_BYTES) {
     return { message, truncated: false, originalBytes };
   }

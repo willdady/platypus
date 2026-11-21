@@ -564,6 +564,49 @@ describe("ChatSink", () => {
   });
 
   describe("the rows a turn writes", () => {
+    // Postgres `jsonb` rejects NUL and a lone surrogate, failing the write.
+    it("stores the message and reply without NUL, lone surrogates as U+FFFD", async () => {
+      const fake = seedChat();
+      const message: PlatypusUIMessage = {
+        id: "u1",
+        role: "user",
+        parts: [{ type: "text", text: "lo\u0000gs" }],
+      };
+      const tool = (output: string) =>
+        ({
+          type: "tool-readLogs",
+          toolCallId: "call-1",
+          state: "output-available",
+          input: {},
+          output,
+        }) as unknown as PlatypusUIMessage["parts"][number];
+      const final: PlatypusUIMessage = {
+        id: "r1",
+        role: "assistant",
+        parts: [
+          tool("line\u0000one"),
+          { type: "text", text: "cut \uD83D" },
+          { type: "text", text: "\uDE00 cut" },
+        ],
+      };
+
+      await runTurn(
+        submitSink({ message }),
+        [u0, a0, message],
+        [u0, a0, message, final],
+      );
+
+      expect(rowOf(fake, "chat_message", "u1")?.parts).toEqual([
+        { type: "text", text: "logs" },
+      ]);
+      expect(rowOf(fake, "chat_message", "r1")?.parts).toEqual([
+        tool("lineone"),
+        { type: "text", text: "cut �" },
+        { type: "text", text: "� cut" },
+      ]);
+      expect(rowOf(fake, "chat", "chat-1")?.status).toBe("succeeded");
+    });
+
     it("never rewrites a row from history", async () => {
       const fake = seedChat();
       const rewritten = {

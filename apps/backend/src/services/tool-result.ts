@@ -5,6 +5,7 @@ import {
   isThenable,
   wrapToolExecutes,
 } from "../utils/tool-execution.ts";
+import { sliceWhole } from "../utils/storable.ts";
 
 /**
  * Coerce a tool result to plain JSON (issue #321).
@@ -61,11 +62,7 @@ export const capToolResult = (value: unknown, toolName: string): unknown => {
     { toolName, length: text.length, limit: MAX_TOOL_RESULT_CHARS },
     "Tool result truncated",
   );
-  // Never split a surrogate pair: Postgres rejects the lone half in `jsonb`,
-  // and the cut result is persisted.
-  let end = MAX_TOOL_RESULT_CHARS;
-  if (/[\uD800-\uDBFF]/.test(text.charAt(end - 1))) end--;
-  return `${text.slice(0, end)}\n${truncatedToolResultMarker(text.length)}`;
+  return `${sliceWhole(text, MAX_TOOL_RESULT_CHARS)}\n${truncatedToolResultMarker(text.length)}`;
 };
 
 /**

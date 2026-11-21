@@ -4,6 +4,7 @@ import { isPresentableUrl, WEB_BACKEND_TOOL_MARKER } from "@platypus/schemas";
 import { logger } from "../logger.ts";
 import { createContributionRegistry } from "../registry/contribution-registry.ts";
 import { checkEgress, EGRESS_BLOCKED_MESSAGE } from "../utils/egress-guard.ts";
+import { sliceWhole } from "../utils/storable.ts";
 import {
   CallerAbortedError,
   DeadlineExceededError,
@@ -509,7 +510,7 @@ export const composeWebBackend = (
           );
         }
         const content = capped
-          ? full.slice(0, MAX_READ_URL_CONTENT_CHARS)
+          ? sliceWhole(full, MAX_READ_URL_CONTENT_CHARS)
           : full;
 
         // Clamped, not schema-rejected: `max_length` mirrors `fetchUrl`'s bound so

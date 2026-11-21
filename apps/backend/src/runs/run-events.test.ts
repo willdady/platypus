@@ -278,6 +278,10 @@ describe("capRunEventError", () => {
     });
   });
 
+  it("drops NUL and replaces a lone surrogate, which jsonb rejects", () => {
+    expect(capRunEventError("no\u0000pe \uD800").message).toBe("nope �");
+  });
+
   it("never splits a multi-byte character at the cap", () => {
     // 4-byte characters: 1024 is divisible by 4, so shift by one byte with an
     // ASCII prefix and the cap lands mid-character unless the cut respects it.
