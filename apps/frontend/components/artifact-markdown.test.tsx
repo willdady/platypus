@@ -54,6 +54,35 @@ describe("ArtifactMarkdown images", () => {
     expect(screen.getByText("/files/../auth/x")).toBeInTheDocument();
   });
 
+  it("loads an image from the deployment's storage base", () => {
+    render(
+      <ArtifactMarkdown
+        content={
+          "![Chart](https://cdn.example.com/org/ws/chat/message/0-a.png)"
+        }
+        storageBaseUrl="https://cdn.example.com"
+      />,
+    );
+
+    expect(screen.getByRole("img")).toHaveAttribute(
+      "src",
+      "https://cdn.example.com/org/ws/chat/message/0-a.png",
+    );
+  });
+
+  it("blocks a storage base image until the read names that base", () => {
+    render(
+      <ArtifactMarkdown
+        content={
+          "![Chart](https://cdn.example.com/org/ws/chat/message/0-a.png)"
+        }
+      />,
+    );
+
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+    expect(screen.getByText(/Image blocked: Chart/)).toBeInTheDocument();
+  });
+
   it("strips an img's srcset, which the image rule never sees", () => {
     render(
       <ArtifactMarkdown

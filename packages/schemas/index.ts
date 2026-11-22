@@ -4797,6 +4797,13 @@ export const artifactReadSchema = z.object({
    * without a setting of its own.
    */
   scriptOrigins: z.array(artifactScriptOriginSchema),
+  /**
+   * The public base this deployment serves stored files from, when a bucket or
+   * CDN is configured, so a markdown Artifact may load images from there; null
+   * when files come from `/files`. Sent with every read, so the viewer needs no
+   * setting of its own.
+   */
+  storageBaseUrl: z.string().nullable(),
 });
 
 export type ArtifactRead = z.infer<typeof artifactReadSchema>;

@@ -22,6 +22,7 @@ import {
   workspaceScopeOf,
 } from "../middleware/authorization.ts";
 import { env } from "../env.ts";
+import { storagePublicBaseUrl } from "../storage/file-reference.ts";
 import {
   createUploadedArtifact,
   deleteArtifact,
@@ -55,14 +56,19 @@ const listQuerySchema = paginationQuerySchema(50).extend({
 });
 
 /**
- * One Artifact read, with the library origins the Artifact frame may load from.
- * Every read carries them, so the viewer builds the frame's policy without
- * fetching a setting of its own.
+ * One Artifact read, with the deployment settings the viewer needs: the library
+ * origins the Artifact frame may load from, and the base stored files are served
+ * from. Every read carries them, so the viewer builds the frame's policy and
+ * recognises the deployment's own images without fetching a setting of its own.
  */
-function withScriptOrigins(
+function withViewerSettings(
   read: Awaited<ReturnType<typeof getArtifactWithVersion>>,
 ) {
-  return { ...read, scriptOrigins: env().ARTIFACT_SCRIPT_ORIGINS };
+  return {
+    ...read,
+    scriptOrigins: env().ARTIFACT_SCRIPT_ORIGINS,
+    storageBaseUrl: storagePublicBaseUrl(),
+  };
 }
 
 artifacts.get(
@@ -121,7 +127,7 @@ artifacts.post(
     return respond(
       c,
       artifactReadSchema,
-      withScriptOrigins(
+      withViewerSettings(
         await saveArtifactContent(
           db,
           { workspaceId },
@@ -144,7 +150,7 @@ artifacts.get(
     return respond(
       c,
       artifactReadSchema,
-      withScriptOrigins(
+      withViewerSettings(
         await getArtifactWithVersion(
           db,
           { workspaceId },

@@ -210,10 +210,11 @@ well-known library mirror; an Operator can approve more, or none at all, with
 ## Images inside a Markdown Artifact
 
 A Markdown Artifact renders images only when they are inline `data:` URIs or
-files from Platypus's own storage. Any other image source is not fetched at all:
-the viewer shows a blocked placeholder with the address as a link, so you can
-decide whether to open it. Viewing a document never contacts a third-party host
-on its own.
+files from Platypus's own storage — the `/files` route, or the public storage
+address when the deployment serves files from a bucket or CDN. Any other image
+source is not fetched at all: the viewer shows a blocked placeholder with the
+address as a link, so you can decide whether to open it. Viewing a document
+never contacts a third-party host on its own.
 
 ## Versions
 

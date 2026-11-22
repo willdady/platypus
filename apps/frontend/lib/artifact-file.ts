@@ -92,9 +92,6 @@ export function artifactFileName(
     : `${name}.${extension}`;
 }
 
-/** The path this deployment serves stored files on. */
-const STORED_FILE_PATH = "/files/";
-
 /** The Artifact an uploaded file becomes: its title, type and code language. */
 export type ArtifactUpload = {
   title: string;
@@ -147,36 +144,23 @@ export function decodeArtifactText(bytes: Uint8Array): string | undefined {
   }
 }
 
+/** The path this deployment serves stored files under. */
+const STORED_FILE_PATH = "/files";
+
+/** A URL scheme at the start of an absolute URL, as opposed to a relative path. */
+const ABSOLUTE_URL_SCHEME = /^[a-zA-Z][a-zA-Z0-9+.-]*:/;
+
+/** One base an image may load from: a host, and the path on it that is ours. */
+type ImageBase = { origin: string; path: string };
+
 /**
- * The URL a markdown Artifact may load an image from, or `undefined` when it
- * must not be requested. Inline content and this deployment's own stored files
- * qualify; every other host is refused, and the reader sees a blocked
- * placeholder with the URL as a link instead.
- *
- * The decision is taken on the URL the browser will request, not the string as
- * written: the path is resolved against the backend and percent-decoded the way
- * a server decodes it, so `..` and encoded variants cannot climb out of
- * `/files/` into another backend route. A path still changing after repeated
- * decoding is refused.
+ * The path a server would act on, after the percent-decoding every server does,
+ * or `undefined` when it never settles. A path still changing after repeated
+ * decoding is hiding what it will finally name, so it is refused rather than
+ * matched on a prefix it may later shed.
  */
-export function resolveArtifactImageSource(
-  src: string,
-  backendUrl?: string,
-): string | undefined {
-  if (src.startsWith("data:")) return src;
-  if (!backendUrl) return undefined;
-
-  let base: URL;
-  let url: URL;
-  try {
-    base = new URL(backendUrl);
-    url = new URL(src, base);
-  } catch {
-    return undefined;
-  }
-  if (url.origin !== base.origin) return undefined;
-
-  let path = url.pathname;
+function settledPath(pathname: string): string | undefined {
+  let path = pathname;
   for (let pass = 0; pass < 3; pass += 1) {
     let decoded: string;
     try {
@@ -184,20 +168,49 @@ export function resolveArtifactImageSource(
     } catch {
       return undefined;
     }
-    if (decoded === path) break;
+    if (decoded === path) return path;
     path = decoded;
   }
+  return undefined;
+}
+
+/** The base a URL must be at or under: same origin, and a path below it. */
+function baseOf(origin: string, pathname: string): ImageBase {
+  return { origin, path: pathname.replace(/\/+$/, "") };
+}
+
+/** Whether `candidate` names something below `base.path` — not a sibling path. */
+function isUnder(candidate: string, base: ImageBase): boolean {
+  return base.path === ""
+    ? candidate.startsWith("/")
+    : candidate.startsWith(`${base.path}/`);
+}
+
+/**
+ * The URL this base serves for `url`, or `undefined` when it does not. The
+ * decision is taken on the path a server would see, not the string as written:
+ * dot segments and encoded variants resolve before the prefix is checked, so
+ * neither can climb out of the base into a sibling path or another route.
+ */
+function resolveUnderBase(url: URL, base: ImageBase): string | undefined {
+  if (url.origin !== base.origin) return undefined;
+
+  const path = settledPath(url.pathname);
+  if (path === undefined) return undefined;
   if (path.split("/").includes("..")) return undefined;
+  if (!isUnder(path, base)) return undefined;
 
   let normalized: URL;
   try {
-    normalized = new URL(path, base);
+    normalized = new URL(path, base.origin);
   } catch {
     return undefined;
   }
+  const normalizedPath = settledPath(normalized.pathname);
   if (
     normalized.origin !== base.origin ||
-    !normalized.pathname.startsWith(STORED_FILE_PATH)
+    normalizedPath === undefined ||
+    !isUnder(normalizedPath, base)
   ) {
     return undefined;
   }
@@ -207,10 +220,77 @@ export function resolveArtifactImageSource(
   return normalized.href;
 }
 
+/**
+ * The URL a markdown Artifact may load an image from, or `undefined` when it
+ * must not be requested. Inline content, this deployment's `/files` route and
+ * the public base it serves stored files from (a bucket or CDN, when
+ * `STORAGE_PUBLIC_URL` is set) qualify; every other host is refused, and the
+ * reader sees a blocked placeholder with the URL as a link instead.
+ *
+ * The decision is taken on the URL the browser will request, not the string as
+ * written: the path is resolved and percent-decoded the way a server decodes
+ * it, so `..` and encoded variants cannot climb out of the base into another
+ * route. A path still changing after repeated decoding is refused.
+ */
+export function resolveArtifactImageSource(
+  src: string,
+  backendUrl?: string,
+  storageBaseUrl?: string | null,
+): string | undefined {
+  if (src.startsWith("data:")) return src;
+  // A scheme other than http(s) is never a stored-file URL, whatever its origin
+  // looks like once parsed.
+  if (ABSOLUTE_URL_SCHEME.test(src) && !/^https?:/i.test(src)) return undefined;
+
+  const bases: ImageBase[] = [];
+  if (storageBaseUrl) {
+    try {
+      const storage = new URL(storageBaseUrl);
+      const path = settledPath(storage.pathname);
+      if (path !== undefined) bases.push(baseOf(storage.origin, path));
+    } catch {
+      // A malformed base allows nothing, rather than everything.
+    }
+  }
+  if (backendUrl) {
+    try {
+      const backend = new URL(backendUrl);
+      bases.push({
+        origin: backend.origin,
+        path: STORED_FILE_PATH,
+      });
+    } catch {
+      // Same as the storage base: a malformed base allows nothing.
+    }
+  }
+
+  // A relative URL resolves against the backend when the viewer has one, as it
+  // always has, and against the storage base otherwise; an absolute one needs
+  // no resolver at all.
+  const resolver = backendUrl ?? storageBaseUrl ?? undefined;
+  if (bases.length === 0) return undefined;
+
+  let url: URL;
+  try {
+    url = new URL(src, resolver);
+  } catch {
+    return undefined;
+  }
+
+  for (const base of bases) {
+    const resolved = resolveUnderBase(url, base);
+    if (resolved !== undefined) return resolved;
+  }
+  return undefined;
+}
+
 /** Whether a markdown Artifact may load an image from `src`. */
 export function isAllowedArtifactImageSource(
   src: string,
   backendUrl?: string,
+  storageBaseUrl?: string | null,
 ): boolean {
-  return resolveArtifactImageSource(src, backendUrl) !== undefined;
+  return (
+    resolveArtifactImageSource(src, backendUrl, storageBaseUrl) !== undefined
+  );
 }

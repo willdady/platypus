@@ -172,3 +172,151 @@ describe("isAllowedArtifactImageSource", () => {
     ).toBe("https://app.example.com/files/org/ws/chat/msg/0-a.png");
   });
 });
+
+// A deployment with a bucket or CDN in front serves stored files from that
+// base instead of `/files`, and the Artifact read response carries it.
+describe("isAllowedArtifactImageSource with a storage base", () => {
+  const backend = "https://app.example.com";
+  const storage = "https://cdn.example.com";
+
+  it("allows a file under the storage base", () => {
+    expect(
+      isAllowedArtifactImageSource(
+        "https://cdn.example.com/org/ws/chat/msg/0-a.png",
+        backend,
+        storage,
+      ),
+    ).toBe(true);
+    expect(
+      resolveArtifactImageSource(
+        "https://cdn.example.com/org/ws/chat/msg/0-a.png",
+        backend,
+        storage,
+      ),
+    ).toBe("https://cdn.example.com/org/ws/chat/msg/0-a.png");
+  });
+
+  it("still allows this deployment's own /files route beside the base", () => {
+    expect(
+      resolveArtifactImageSource(
+        "/files/org/ws/chat/msg/0-a.png",
+        backend,
+        storage,
+      ),
+    ).toBe("https://app.example.com/files/org/ws/chat/msg/0-a.png");
+  });
+
+  it("allows a file under the path a shared host mounts the bucket on", () => {
+    expect(
+      isAllowedArtifactImageSource(
+        "https://cdn.example.com/bucket/org/ws/0-a.png",
+        backend,
+        "https://cdn.example.com/bucket",
+      ),
+    ).toBe(true);
+    // A trailing slash on the configured base names the same path.
+    expect(
+      isAllowedArtifactImageSource(
+        "https://cdn.example.com/bucket/org/ws/0-a.png",
+        backend,
+        "https://cdn.example.com/bucket/",
+      ),
+    ).toBe(true);
+  });
+
+  it("matches an encoded base path against the encoded request", () => {
+    expect(
+      resolveArtifactImageSource(
+        "https://cdn.example.com/my%20bucket/org/ws/0-a.png",
+        backend,
+        "https://cdn.example.com/my%20bucket",
+      ),
+    ).toBe("https://cdn.example.com/my%20bucket/org/ws/0-a.png");
+  });
+
+  it("refuses a sibling path on the base's host", () => {
+    expect(
+      isAllowedArtifactImageSource(
+        "https://cdn.example.com/bucket-other/0-a.png",
+        backend,
+        "https://cdn.example.com/bucket",
+      ),
+    ).toBe(false);
+    expect(
+      isAllowedArtifactImageSource(
+        "https://cdn.example.com/elsewhere/0-a.png",
+        backend,
+        "https://cdn.example.com/bucket",
+      ),
+    ).toBe(false);
+  });
+
+  it("refuses a look-alike host", () => {
+    expect(
+      isAllowedArtifactImageSource(
+        "https://cdn.example.com.evil.test/bucket/0-a.png",
+        backend,
+        "https://cdn.example.com/bucket",
+      ),
+    ).toBe(false);
+    // A host hidden in the userinfo is the look-alike host, not the base.
+    expect(
+      isAllowedArtifactImageSource(
+        "https://cdn.example.com@evil.test/bucket/0-a.png",
+        backend,
+        "https://cdn.example.com/bucket",
+      ),
+    ).toBe(false);
+  });
+
+  it.each([
+    "https://cdn.example.com/bucket/../secret.png",
+    "https://cdn.example.com/bucket/%2e%2e/secret.png",
+    "https://cdn.example.com/bucket/%2E%2E/secret.png",
+    "https://cdn.example.com/bucket/..%2fsecret.png",
+    "https://cdn.example.com/bucket/%252e%252e/secret.png",
+    "https://cdn.example.com/bucket/%25252e%25252e/secret.png",
+  ])("refuses a path that climbs out of the base: %s", (src) => {
+    expect(
+      isAllowedArtifactImageSource(
+        src,
+        backend,
+        "https://cdn.example.com/bucket",
+      ),
+    ).toBe(false);
+    expect(
+      resolveArtifactImageSource(
+        src,
+        backend,
+        "https://cdn.example.com/bucket",
+      ),
+    ).toBeUndefined();
+  });
+
+  it("still refuses every other host", () => {
+    expect(
+      isAllowedArtifactImageSource(
+        "https://elsewhere.test/org/ws/0-a.png",
+        backend,
+        storage,
+      ),
+    ).toBe(false);
+  });
+
+  it("leaves the rule unchanged when no storage base is configured", () => {
+    expect(
+      isAllowedArtifactImageSource(
+        "https://cdn.example.com/org/ws/0-a.png",
+        backend,
+        undefined,
+      ),
+    ).toBe(false);
+    expect(
+      isAllowedArtifactImageSource(
+        "data:image/png;base64,abc",
+        backend,
+        undefined,
+      ),
+    ).toBe(true);
+  });
+});
