@@ -6,17 +6,23 @@ vi.mock("@/components/auth-provider", () => ({
   useBackendUrl: () => "https://app.example.com",
 }));
 
-import { ArtifactMarkdown, fencedCode } from "./artifact-markdown";
+import {
+  ArtifactMarkdown,
+  artifactSchema,
+  fencedCode,
+} from "./artifact-markdown";
+
+const DATA_IMAGE = "data:image/png;base64,iVBORw0KGgo=";
 
 describe("ArtifactMarkdown images", () => {
   it("does not load an image from a remote host, and shows its URL instead", () => {
-    const { container } = render(
+    render(
       <ArtifactMarkdown
         content={"![Chart](https://elsewhere.test/chart.png)"}
       />,
     );
 
-    expect(container.querySelector("img")).toBeNull();
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
     expect(screen.getByText(/Image blocked: Chart/)).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "https://elsewhere.test/chart.png" }),
@@ -24,26 +30,68 @@ describe("ArtifactMarkdown images", () => {
   });
 
   it("loads a data: image", () => {
-    const src = "data:image/png;base64,iVBORw0KGgo=";
-    const { container } = render(
-      <ArtifactMarkdown content={`![Chart](${src})`} />,
-    );
+    render(<ArtifactMarkdown content={`![Chart](${DATA_IMAGE})`} />);
 
-    expect(container.querySelector("img")).toHaveAttribute("src", src);
+    expect(screen.getByRole("img")).toHaveAttribute("src", DATA_IMAGE);
   });
 
   it.each([
     ["https://app.example.com/files/org/ws/chat/message/0-a.png"],
     ["/files/org/ws/chat/message/0-a.png"],
   ])("loads an image from the app's own file storage: %s", (src) => {
-    const { container } = render(
-      <ArtifactMarkdown content={`![Chart](${src})`} />,
-    );
+    render(<ArtifactMarkdown content={`![Chart](${src})`} />);
 
-    expect(container.querySelector("img")).toHaveAttribute(
+    expect(screen.getByRole("img")).toHaveAttribute(
       "src",
       "https://app.example.com/files/org/ws/chat/message/0-a.png",
     );
+  });
+
+  it("blocks a stored-file path that escapes /files/, showing its URL", () => {
+    render(<ArtifactMarkdown content={"![x](/files/../auth/x)"} />);
+
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+    expect(screen.getByText("/files/../auth/x")).toBeInTheDocument();
+  });
+
+  it("strips an img's srcset, which the image rule never sees", () => {
+    render(
+      <ArtifactMarkdown
+        content={`<img src="${DATA_IMAGE}" srcset="https://elsewhere.test/a.png 1x" alt="Chart">`}
+      />,
+    );
+
+    const image = screen.getByRole("img");
+    expect(image).toHaveAttribute("src", DATA_IMAGE);
+    expect(image).not.toHaveAttribute("srcset");
+  });
+});
+
+describe("the Artifact markdown schema", () => {
+  // Some elements make the browser request a URL without the image rule
+  // seeing it — `source`'s srcSet is the reproduction that mattered. The
+  // schema drops them whole, so no element but a sanitiser-approved `img` can
+  // start a fetch.
+  it.each([
+    "audio",
+    "base",
+    "embed",
+    "form",
+    "iframe",
+    "link",
+    "meta",
+    "object",
+    "picture",
+    "script",
+    "source",
+    "track",
+    "video",
+  ])("drops %s", (tag) => {
+    expect(artifactSchema.tagNames).not.toContain(tag);
+  });
+
+  it("keeps data: images for the image component to decide", () => {
+    expect(artifactSchema.protocols?.src).toContain("data");
   });
 });
 

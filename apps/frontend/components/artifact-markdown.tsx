@@ -6,21 +6,46 @@ import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import type { ExtraProps } from "streamdown";
 import { useBackendUrl } from "@/components/auth-provider";
-import { isAllowedArtifactImageSource } from "@/lib/artifact-file";
-import { joinUrl } from "@/lib/utils";
+import { resolveArtifactImageSource } from "@/lib/artifact-file";
 import {
   MessageResponse,
   type MessageResponseProps,
 } from "./ai-elements/message";
 
 /**
+ * Elements that make the browser request a URL by themselves. The default
+ * schema allows `picture`/`source` and their `srcSet`, which no `img` renderer
+ * sees — a remote image there would load without passing the image rule below.
+ */
+const REQUEST_TRIGGERING_ELEMENTS = new Set([
+  "audio",
+  "base",
+  "embed",
+  "form",
+  "iframe",
+  "link",
+  "meta",
+  "object",
+  "picture",
+  "script",
+  "source",
+  "track",
+  "video",
+]);
+
+/**
  * Streamdown's own chain blocks a `data:` image before any renderer sees it.
  * This is the same sanitisation without that one rule: the image component
  * below is the decision point, and every other tag and attribute still goes
- * through the default schema. Links keep their protocol rules.
+ * through the default schema. Connectors that bypass that renderer — `source`
+ * and `picture`, a media element, a frame — are dropped whole. Links keep
+ * their protocol rules.
  */
-const artifactSchema = {
+export const artifactSchema = {
   ...defaultSchema,
+  tagNames: (defaultSchema.tagNames ?? []).filter(
+    (tag) => !REQUEST_TRIGGERING_ELEMENTS.has(tag),
+  ),
   protocols: {
     ...defaultSchema.protocols,
     src: [...(defaultSchema.protocols?.src ?? []), "data"],
@@ -45,12 +70,11 @@ function ArtifactImage(props: ArtifactImageProps) {
   const backendUrl = useBackendUrl();
   const url = typeof props.src === "string" ? props.src : undefined;
   const alt = typeof props.alt === "string" ? props.alt : undefined;
+  const resolved = url
+    ? resolveArtifactImageSource(url, backendUrl)
+    : undefined;
 
-  if (url !== undefined && isAllowedArtifactImageSource(url, backendUrl)) {
-    // A stored-file path is written relative when the author does not know the
-    // deployment's origin; point it at the backend that serves `/files/`.
-    const resolved =
-      url.startsWith("/") && backendUrl ? joinUrl(backendUrl, url) : url;
+  if (resolved !== undefined) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img

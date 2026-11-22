@@ -3,6 +3,7 @@ import {
   artifactFileExtension,
   artifactFileName,
   isAllowedArtifactImageSource,
+  resolveArtifactImageSource,
 } from "./artifact-file";
 
 describe("artifactFileExtension", () => {
@@ -70,5 +71,36 @@ describe("isAllowedArtifactImageSource", () => {
     expect(
       isAllowedArtifactImageSource("//elsewhere.test/x.png", backend),
     ).toBe(false);
+    expect(
+      isAllowedArtifactImageSource("//elsewhere.test/files/x.png", backend),
+    ).toBe(false);
+  });
+
+  // The decision is made on the URL the browser will actually request, not on
+  // the prefix as written: a path that climbs out of `/files/` reaches another
+  // backend route.
+  it.each([
+    "/files/../auth/x",
+    "/files/a/../../auth/x",
+    "/files/%2e%2e/auth/x",
+    "/files/%2E%2E/auth/x",
+    "/files/..%2fauth/x",
+    "/files/%252e%252e/auth/x",
+    "https://app.example.com/files/../auth/x",
+  ])("refuses a stored-file path that escapes /files/: %s", (src) => {
+    expect(isAllowedArtifactImageSource(src, backend)).toBe(false);
+    expect(resolveArtifactImageSource(src, backend)).toBeUndefined();
+  });
+
+  it("resolves a stored-file path to the absolute backend URL", () => {
+    expect(
+      resolveArtifactImageSource("/files/org/ws/chat/msg/0-a.png", backend),
+    ).toBe("https://app.example.com/files/org/ws/chat/msg/0-a.png");
+    expect(
+      resolveArtifactImageSource(
+        "https://app.example.com/files/org/ws/chat/msg/0-a.png",
+        backend,
+      ),
+    ).toBe("https://app.example.com/files/org/ws/chat/msg/0-a.png");
   });
 });

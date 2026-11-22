@@ -86,25 +86,73 @@ export function artifactFileName(
   return `${/[a-zA-Z0-9]/.test(base) ? base : "artifact"}.${artifactFileExtension(type, language)}`;
 }
 
+/** The path this deployment serves stored files on. */
+const STORED_FILE_PATH = "/files/";
+
 /**
- * Whether a markdown Artifact may load an image from `src`. Only inline
- * content and this deployment's own stored files qualify: any other host is
- * not contacted at all, and the reader sees a blocked placeholder with the URL
- * as a link instead.
+ * The URL a markdown Artifact may load an image from, or `undefined` when it
+ * must not be requested. Inline content and this deployment's own stored files
+ * qualify; every other host is refused, and the reader sees a blocked
+ * placeholder with the URL as a link instead.
+ *
+ * The decision is taken on the URL the browser will request, not the string as
+ * written: the path is resolved against the backend and percent-decoded the way
+ * a server decodes it, so `..` and encoded variants cannot climb out of
+ * `/files/` into another backend route. A path still changing after repeated
+ * decoding is refused.
  */
+export function resolveArtifactImageSource(
+  src: string,
+  backendUrl?: string,
+): string | undefined {
+  if (src.startsWith("data:")) return src;
+  if (!backendUrl) return undefined;
+
+  let base: URL;
+  let url: URL;
+  try {
+    base = new URL(backendUrl);
+    url = new URL(src, base);
+  } catch {
+    return undefined;
+  }
+  if (url.origin !== base.origin) return undefined;
+
+  let path = url.pathname;
+  for (let pass = 0; pass < 3; pass += 1) {
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(path);
+    } catch {
+      return undefined;
+    }
+    if (decoded === path) break;
+    path = decoded;
+  }
+  if (path.split("/").includes("..")) return undefined;
+
+  let normalized: URL;
+  try {
+    normalized = new URL(path, base);
+  } catch {
+    return undefined;
+  }
+  if (
+    normalized.origin !== base.origin ||
+    !normalized.pathname.startsWith(STORED_FILE_PATH)
+  ) {
+    return undefined;
+  }
+
+  normalized.search = url.search;
+  normalized.hash = url.hash;
+  return normalized.href;
+}
+
+/** Whether a markdown Artifact may load an image from `src`. */
 export function isAllowedArtifactImageSource(
   src: string,
   backendUrl?: string,
 ): boolean {
-  if (src.startsWith("data:")) return true;
-  if (src.startsWith("/files/")) return true;
-  if (!backendUrl) return false;
-
-  try {
-    const base = new URL(backendUrl);
-    const url = new URL(src, base);
-    return url.origin === base.origin && url.pathname.startsWith("/files/");
-  } catch {
-    return false;
-  }
+  return resolveArtifactImageSource(src, backendUrl) !== undefined;
 }
