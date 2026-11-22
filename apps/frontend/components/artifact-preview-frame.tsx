@@ -34,20 +34,30 @@ export function ArtifactPreviewFrame({
   className?: string;
 }) {
   const frame = useRef<HTMLIFrameElement>(null);
-  const [blocked, setBlocked] = useState<string[]>([]);
+  const srcDoc = buildArtifactFrameDocument({ type, content, scriptOrigins });
+  // A report belongs to the document it came from. A new document starts with
+  // no notice, without an effect resetting state on every streamed delta.
+  const [report, setReport] = useState<{ doc: string; origins: string[] }>({
+    doc: srcDoc,
+    origins: [],
+  });
+  const blocked = report.doc === srcDoc ? report.origins : [];
 
   useEffect(() => {
     function onMessage(event: MessageEvent) {
       if (event.source !== frame.current?.contentWindow) return;
       const origin = artifactFrameBlockedOrigin(event.data);
       if (!origin) return;
-      setBlocked((current) =>
-        current.includes(origin) ? current : [...current, origin],
-      );
+      setReport((current) => {
+        const origins = current.doc === srcDoc ? current.origins : [];
+        return origins.includes(origin)
+          ? { doc: srcDoc, origins }
+          : { doc: srcDoc, origins: [...origins, origin] };
+      });
     }
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, []);
+  }, [srcDoc]);
 
   return (
     <div className={cn("flex h-full min-h-0 flex-col gap-3", className)}>
@@ -65,7 +75,7 @@ export function ArtifactPreviewFrame({
         ref={frame}
         title="Artifact preview"
         sandbox={ARTIFACT_FRAME_SANDBOX}
-        srcDoc={buildArtifactFrameDocument({ type, content, scriptOrigins })}
+        srcDoc={srcDoc}
         className="min-h-0 w-full flex-1 border-0 bg-white"
       />
     </div>

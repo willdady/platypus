@@ -30,8 +30,28 @@ const TYPE_MEDIA: Record<ArtifactType, string> = {
   svg: "image/svg+xml",
 };
 
+/**
+ * A `createArtifact` call's content before it is stored. The viewer shows it
+ * while the call streams, and keeps showing it until the saved version has been
+ * read, so opening or completing the call does not jump the panel from one
+ * rendering to another. A failed call never presents its partial content as a
+ * saved Artifact.
+ */
+export type ArtifactLive = {
+  status: "streaming" | "failed";
+  title?: string;
+  type?: ArtifactType;
+  language?: string | null;
+  content: string;
+  error?: string;
+};
+
 /** The language a Preview tab's fenced block is rendered as. */
-function previewLanguage(type: ArtifactType, language?: string | null): string {
+function previewLanguage(
+  type: ArtifactType | undefined,
+  language?: string | null,
+): string {
+  if (type === undefined) return "text";
   switch (type) {
     case "markdown":
       return "markdown";
@@ -43,6 +63,11 @@ function previewLanguage(type: ArtifactType, language?: string | null): string {
       return "html";
     case "svg":
       return "svg";
+    default: {
+      // A new ArtifactType must decide its own Preview language, not fall to text.
+      const exhaustive: never = type;
+      return exhaustive;
+    }
   }
 }
 
@@ -51,32 +76,37 @@ function previewLanguage(type: ArtifactType, language?: string | null): string {
  * `text` here rather than `mermaid`, because the renderer draws a `mermaid`
  * fence as a diagram — the opposite of showing its source.
  */
-function codeTabLanguage(type: ArtifactType, language?: string | null): string {
+function codeTabLanguage(
+  type: ArtifactType | undefined,
+  language?: string | null,
+): string {
   return type === "mermaid" ? "text" : previewLanguage(type, language);
 }
 
 /**
- * The one Artifact viewer: the Chat's side panel and, in later slices, the
- * full-page view. It owns the Preview and Code tabs, copy and download for
- * every type, while the version picker is a later addition.
- *
- * Markdown, code and Mermaid render in the app's own DOM. HTML and SVG run
- * only inside the Artifact frame, which is why their Preview is a sandboxed
- * `iframe` fed by `srcDoc` rather than anything the page itself renders.
+ * The one Artifact viewer: the Chat's side panel and the full-page view. It
+ * owns the Preview and Code tabs, copy and download for every type, while the
+ * version picker is a later addition. Markdown, code and Mermaid render in the
+ * app's own DOM; HTML and SVG run only inside the Artifact frame. While a
+ * `createArtifact` call streams it takes the partial content as `live`; a
+ * stored version always wins once read.
  */
 export function ArtifactViewer({
   orgId,
   workspaceId,
   artifactId,
   version,
+  live,
   onClose,
   className,
 }: {
   orgId: string;
   workspaceId: string;
-  artifactId: string;
+  /** The stored Artifact; absent while a call's content is not yet stored. */
+  artifactId?: string;
   /** A named version; omitted reads the latest. */
   version?: number;
+  live?: ArtifactLive;
   onClose?: () => void;
   className?: string;
 }) {
@@ -86,7 +116,146 @@ export function ArtifactViewer({
     version,
   );
 
-  if (isLoading && !data) {
+  if (error && isArtifactDeleted(error)) {
+    return (
+      <ArtifactFrame className={className} onClose={onClose} title="Artifact">
+        <div className="p-4">
+          <ListState variant="empty">This Artifact has been deleted.</ListState>
+        </div>
+      </ArtifactFrame>
+    );
+  }
+
+  if (data) {
+    const { artifact, version: current } = data;
+
+    return (
+      <ArtifactFrame
+        className={className}
+        onClose={onClose}
+        title={artifact.title}
+        subtitle={
+          <span className="flex flex-wrap items-center gap-2">
+            <Badge variant="secondary">
+              {artifactTypeLabel(artifact.type)}
+            </Badge>
+            <span className="text-muted-foreground text-xs">
+              Version {current.version}
+            </span>
+          </span>
+        }
+        actions={
+          <>
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="ghost"
+              aria-label="Copy Artifact source"
+              onClick={() => void copyWithToast(current.content, "Copied")}
+            >
+              <CopyIcon />
+            </Button>
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="ghost"
+              aria-label="Download Artifact"
+              onClick={() =>
+                downloadArtifact(
+                  artifact.title,
+                  artifact.type,
+                  artifact.language,
+                  current,
+                )
+              }
+            >
+              <DownloadIcon />
+            </Button>
+          </>
+        }
+      >
+        <ArtifactTabs
+          type={artifact.type}
+          language={artifact.language}
+          content={current.content}
+          scriptOrigins={data.scriptOrigins}
+        />
+      </ArtifactFrame>
+    );
+  }
+
+  if (error) {
+    return (
+      <ArtifactFrame className={className} onClose={onClose} title="Artifact">
+        <div className="p-4">
+          <ListError
+            error={error}
+            subject="this artifact"
+            onRetry={() => void mutate()}
+          />
+        </div>
+      </ArtifactFrame>
+    );
+  }
+
+  if (live?.status === "failed") {
+    const title = live.title?.trim() || "Artifact";
+    return (
+      <ArtifactFrame
+        className={className}
+        onClose={onClose}
+        title={title}
+        subtitle={
+          live.type ? (
+            <Badge variant="secondary">{artifactTypeLabel(live.type)}</Badge>
+          ) : undefined
+        }
+      >
+        <div className="flex flex-col gap-2 p-4">
+          <ListState variant="empty">This Artifact was not saved.</ListState>
+          {live.error && (
+            <p className="text-destructive text-xs">{live.error}</p>
+          )}
+        </div>
+      </ArtifactFrame>
+    );
+  }
+
+  if (live) {
+    const title = live.title?.trim() || "Creating Artifact…";
+
+    return (
+      <ArtifactFrame
+        className={className}
+        onClose={onClose}
+        title={title}
+        subtitle={
+          <span className="flex flex-wrap items-center gap-2">
+            {live.type && (
+              <Badge variant="secondary">{artifactTypeLabel(live.type)}</Badge>
+            )}
+            <span className="text-muted-foreground text-xs">Streaming</span>
+          </span>
+        }
+      >
+        {live.content === "" ? (
+          <div className="p-4">
+            <ListState variant="empty">
+              Waiting for the Agent to write this Artifact…
+            </ListState>
+          </div>
+        ) : (
+          <ArtifactTabs
+            type={live.type}
+            language={live.language}
+            content={live.content}
+          />
+        )}
+      </ArtifactFrame>
+    );
+  }
+
+  if (isLoading) {
     return (
       <ArtifactFrame className={className} onClose={onClose} title="Artifact">
         <LoadingRegion
@@ -101,128 +270,92 @@ export function ArtifactViewer({
     );
   }
 
-  if (error && isArtifactDeleted(error)) {
-    return (
-      <ArtifactFrame className={className} onClose={onClose} title="Artifact">
-        <div className="p-4">
-          <ListState variant="empty">This Artifact has been deleted.</ListState>
-        </div>
-      </ArtifactFrame>
-    );
-  }
-
-  if (error || !data) {
-    return (
-      <ArtifactFrame className={className} onClose={onClose} title="Artifact">
-        <div className="p-4">
-          <ListError
-            error={error}
-            subject="this artifact"
-            onRetry={() => void mutate()}
-          />
-        </div>
-      </ArtifactFrame>
-    );
-  }
-
-  const { artifact, version: current } = data;
-  const type = artifact.type;
-  const framed = isFramedArtifactType(type);
-
   return (
-    <ArtifactFrame
-      className={className}
-      onClose={onClose}
-      title={artifact.title}
-      subtitle={
-        <span className="flex flex-wrap items-center gap-2">
-          <Badge variant="secondary">{artifactTypeLabel(artifact.type)}</Badge>
-          <span className="text-muted-foreground text-xs">
-            Version {current.version}
-          </span>
-        </span>
-      }
-      actions={
-        <>
-          <Button
-            type="button"
-            size="icon-sm"
-            variant="ghost"
-            aria-label="Copy Artifact source"
-            onClick={() => void copyWithToast(current.content, "Copied")}
-          >
-            <CopyIcon />
-          </Button>
-          <Button
-            type="button"
-            size="icon-sm"
-            variant="ghost"
-            aria-label="Download Artifact"
-            onClick={() =>
-              downloadArtifact(
-                artifact.title,
-                artifact.type,
-                artifact.language,
-                current,
-              )
-            }
-          >
-            <DownloadIcon />
-          </Button>
-        </>
-      }
-    >
-      <Tabs
-        defaultValue="preview"
-        className="flex min-h-0 flex-1 flex-col gap-0"
-      >
-        <TabsList className="mx-4 mt-3 h-auto self-start p-0.5">
-          <TabsTrigger value="preview" className="px-2 py-0.5 text-xs">
-            Preview
-          </TabsTrigger>
-          <TabsTrigger value="code" className="px-2 py-0.5 text-xs">
-            Code
-          </TabsTrigger>
-        </TabsList>
-        <TabsContent
-          value="preview"
-          className={
-            framed
-              ? "mt-0 min-h-0 flex-1 overflow-hidden p-4"
-              : "mt-0 min-h-0 flex-1 overflow-auto p-4"
-          }
-        >
-          {framed ? (
-            <ArtifactPreviewFrame
-              key={current.id}
-              type={type}
-              content={current.content}
-              scriptOrigins={data.scriptOrigins}
-            />
-          ) : artifact.type === "markdown" ? (
-            <ArtifactMarkdown content={current.content} />
-          ) : (
-            <ArtifactMarkdown
-              content={fencedCode(
-                current.content,
-                previewLanguage(artifact.type, artifact.language),
-              )}
-            />
-          )}
-        </TabsContent>
-        <TabsContent
-          value="code"
-          className="mt-0 min-h-0 flex-1 overflow-auto p-4"
-        >
-          <ArtifactMarkdown
-            content={fencedCode(
-              current.content,
-              codeTabLanguage(artifact.type, artifact.language),
-            )}
-          />
-        </TabsContent>
-      </Tabs>
+    <ArtifactFrame className={className} onClose={onClose} title="Artifact">
+      <div className="p-4">
+        <ListError
+          error={error}
+          subject="this artifact"
+          onRetry={() => void mutate()}
+        />
+      </div>
     </ArtifactFrame>
+  );
+}
+
+/**
+ * The Preview and Code tabs for one piece of content. Preview is available for
+ * every type once it is known; HTML and SVG run in the Artifact frame. A
+ * streaming call whose type is still unknown opens on source rather than
+ * guessing, and its frame has no approved origins until the saved version is
+ * read.
+ */
+function ArtifactTabs({
+  type,
+  language,
+  content,
+  scriptOrigins = [],
+}: {
+  type: ArtifactType | undefined;
+  language?: string | null;
+  content: string;
+  scriptOrigins?: readonly string[];
+}) {
+  const framed = type !== undefined && isFramedArtifactType(type);
+  const previewAvailable = type !== undefined;
+  return (
+    <Tabs
+      defaultValue={previewAvailable ? "preview" : "code"}
+      className="flex min-h-0 flex-1 flex-col gap-0"
+    >
+      <TabsList className="mx-4 mt-3 h-auto self-start p-0.5">
+        <TabsTrigger
+          value="preview"
+          disabled={!previewAvailable}
+          title={
+            previewAvailable
+              ? undefined
+              : "Preview is unavailable until the Artifact's type is known"
+          }
+          className="px-2 py-0.5 text-xs"
+        >
+          Preview
+        </TabsTrigger>
+        <TabsTrigger value="code" className="px-2 py-0.5 text-xs">
+          Code
+        </TabsTrigger>
+      </TabsList>
+      <TabsContent
+        value="preview"
+        className={
+          framed
+            ? "mt-0 min-h-0 flex-1 overflow-hidden p-4"
+            : "mt-0 min-h-0 flex-1 overflow-auto p-4"
+        }
+      >
+        {type !== undefined && isFramedArtifactType(type) ? (
+          <ArtifactPreviewFrame
+            type={type}
+            content={content}
+            scriptOrigins={scriptOrigins}
+          />
+        ) : type === "markdown" ? (
+          <ArtifactMarkdown content={content} />
+        ) : (
+          <ArtifactMarkdown
+            content={fencedCode(content, previewLanguage(type, language))}
+          />
+        )}
+      </TabsContent>
+      <TabsContent
+        value="code"
+        className="mt-0 min-h-0 flex-1 overflow-auto p-4"
+      >
+        <ArtifactMarkdown
+          content={fencedCode(content, codeTabLanguage(type, language))}
+        />
+      </TabsContent>
+    </Tabs>
   );
 }
 
