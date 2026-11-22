@@ -77,6 +77,68 @@ beforeEach(() => {
   path.current = `/${params.orgId}/workspace/${params.workspaceId}`;
 });
 
+describe("WorkspaceShell rail", () => {
+  it("draws the rail with a link to Home, Boards and Artifacts", () => {
+    renderWorkspace();
+
+    const rail = screen.getByRole("navigation", { name: "Workspace" });
+    expect(within(rail).getAllByRole("link")).toHaveLength(3);
+    expect(within(rail).getByRole("link", { name: "Home" })).toHaveAttribute(
+      "href",
+      "/org1/workspace/ws1",
+    );
+    expect(within(rail).getByRole("link", { name: "Boards" })).toHaveAttribute(
+      "href",
+      "/org1/workspace/ws1/boards",
+    );
+    expect(
+      within(rail).getByRole("link", { name: "Artifacts" }),
+    ).toHaveAttribute("href", "/org1/workspace/ws1/artifacts");
+  });
+
+  it.each([
+    ["the Workspace home", "/org1/workspace/ws1", "Home"],
+    ["a Board", "/org1/workspace/ws1/boards/b1", "Boards"],
+    ["the Boards list", "/org1/workspace/ws1/boards", "Boards"],
+    ["a Board's settings", "/org1/workspace/ws1/boards/b1/settings", "Boards"],
+    ["an Artifact", "/org1/workspace/ws1/artifacts/a1", "Artifacts"],
+    ["the Artifacts list", "/org1/workspace/ws1/artifacts", "Artifacts"],
+    ["an Agent", "/org1/workspace/ws1/agents/a1", "Home"],
+    ["a Skill", "/org1/workspace/ws1/skills/create", "Home"],
+    ["a Trigger", "/org1/workspace/ws1/triggers/t1", "Home"],
+    ["a Trigger run", "/org1/workspace/ws1/trigger-runs/r1", "Home"],
+    ["a Chat", "/org1/workspace/ws1/chat/c1", null],
+    ["settings", "/org1/workspace/ws1/settings", null],
+  ])("marks the rail link for %s", (_, pathname, current) => {
+    path.current = pathname;
+    renderWorkspace();
+
+    const rail = screen.getByRole("navigation", { name: "Workspace" });
+    const lit = within(rail)
+      .getAllByRole("link")
+      .filter((link) => link.getAttribute("aria-current") === "page")
+      .map((link) => link.getAttribute("aria-label"));
+    expect(lit).toEqual(current ? [current] : []);
+  });
+
+  it("names a rail link in a tooltip when it takes focus", async () => {
+    renderWorkspace();
+
+    const rail = screen.getByRole("navigation", { name: "Workspace" });
+    within(rail).getByRole("link", { name: "Boards" }).focus();
+
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Boards");
+  });
+
+  it("draws no rail on a shell with no Workspace", () => {
+    render(<WorkspaceShell orgId="org1">content</WorkspaceShell>);
+
+    expect(
+      screen.queryByRole("navigation", { name: "Workspace" }),
+    ).not.toBeInTheDocument();
+  });
+});
+
 describe("WorkspaceShell header", () => {
   it("puts the switcher where Home was on a Workspace screen", () => {
     seedSwitcher();
@@ -200,16 +262,24 @@ describe("WorkspaceShell switcher", () => {
 
 describe("WorkspaceShell Back", () => {
   it.each([
+    ["the Boards list", "/org1/workspace/ws1/boards"],
+    ["the Artifacts list", "/org1/workspace/ws1/artifacts"],
+  ])("leaves Back off %s", (_, pathname) => {
+    path.current = pathname;
+    renderWorkspace();
+
+    expect(
+      screen.queryByRole("button", { name: "Back" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it.each([
     ["a Board", "/org1/workspace/ws1/boards/b1"],
     ["a Board's settings", "/org1/workspace/ws1/boards/b1/settings"],
     ["the create form", "/org1/workspace/ws1/boards/create"],
   ])("sends the Back fallback from %s to the Boards list", (_, pathname) => {
     path.current = pathname;
-    render(
-      <WorkspaceShell orgId="org1" workspaceId="ws1">
-        content
-      </WorkspaceShell>,
-    );
+    renderWorkspace();
 
     expect(screen.getByRole("button", { name: "Back" })).toHaveAttribute(
       "data-fallback-href",
@@ -217,17 +287,25 @@ describe("WorkspaceShell Back", () => {
     );
   });
 
+  it.each([["an Artifact", "/org1/workspace/ws1/artifacts/a1"]])(
+    "sends the Back fallback from %s to the Artifacts list",
+    (_, pathname) => {
+      path.current = pathname;
+      renderWorkspace();
+
+      expect(screen.getByRole("button", { name: "Back" })).toHaveAttribute(
+        "data-fallback-href",
+        "/org1/workspace/ws1/artifacts",
+      );
+    },
+  );
+
   it.each([
     ["an Agent", "/org1/workspace/ws1/agents/a1"],
     ["settings", "/org1/workspace/ws1/settings"],
-    ["the Artifacts list", "/org1/workspace/ws1/artifacts"],
   ])("sends the Back fallback from %s to the Workspace home", (_, pathname) => {
     path.current = pathname;
-    render(
-      <WorkspaceShell orgId="org1" workspaceId="ws1">
-        content
-      </WorkspaceShell>,
-    );
+    renderWorkspace();
 
     expect(screen.getByRole("button", { name: "Back" })).toHaveAttribute(
       "data-fallback-href",

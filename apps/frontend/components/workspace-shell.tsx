@@ -7,6 +7,7 @@ import { Header } from "@/components/header";
 import { HeaderHomeButton } from "@/components/header-home-button";
 import { MAIN_CONTENT_ID } from "@/components/skip-link";
 import { WorkspaceBackButton } from "@/components/workspace-back-button";
+import { WorkspaceRail } from "@/components/workspace-rail";
 import { WorkspaceScrollContainer } from "@/components/workspace-scroll-container";
 import { WorkspaceSwitcher } from "@/components/workspace-switcher";
 import { Kbd } from "@/components/ui/kbd";
@@ -16,6 +17,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { orgRoutes, workspaceRoutes } from "@/lib/routes";
+import { cn } from "@/lib/utils";
 
 type WorkspaceShellProps = {
   orgId: string;
@@ -50,8 +52,15 @@ export function WorkspaceShell({
 
   return (
     <SidebarProvider className="min-h-0 h-dvh">
+      {workspaceId && <WorkspaceRail orgId={orgId} workspaceId={workspaceId} />}
       {sidebar && <AppSidebar />}
-      <SidebarInset id={MAIN_CONTENT_ID} className="min-w-0">
+      <SidebarInset
+        id={MAIN_CONTENT_ID}
+        // The rail is fixed to the window's left edge; the inset leaves the
+        // same 3rem clear so the content — and the sidebar above it — starts
+        // to its right.
+        className={cn("min-w-0", workspaceId && "md:pl-12")}
+      >
         <Header
           bordered={!sidebar}
           leftContent={

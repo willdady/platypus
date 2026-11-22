@@ -40,6 +40,9 @@ describe("Workspace (sidebar) layout", () => {
     render(await SidebarLayout({ children: <p>page</p>, params }));
 
     expect(screen.getByTestId("app-sidebar")).toBeInTheDocument();
+    expect(
+      screen.getByRole("navigation", { name: "Workspace" }),
+    ).toBeInTheDocument();
     expect(screen.getByTestId("workspace-switcher")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Toggle sidebar" }),
@@ -60,6 +63,9 @@ describe("Workspace (plain) layout", () => {
     expect(
       screen.queryByRole("button", { name: "Toggle sidebar" }),
     ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("navigation", { name: "Workspace" }),
+    ).toBeInTheDocument();
     expect(screen.getByTestId("header")).toHaveAttribute(
       "data-bordered",
       "true",

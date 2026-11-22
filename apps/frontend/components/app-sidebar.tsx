@@ -71,7 +71,6 @@ import {
   CalendarDays,
   Loader2,
   Network,
-  FileText,
 } from "lucide-react";
 import { SearchInput } from "@/components/search-input";
 import { FormTextField } from "@/components/form-text-field";
@@ -265,7 +264,9 @@ export function AppSidebar() {
 
   return (
     <>
-      <Sidebar>
+      {/* The Workspace rail holds the window's left edge; the open sidebar
+          starts to its right. Collapsed, it slides away as before. */}
+      <Sidebar className="group-data-[state=expanded]:left-12">
         <nav aria-label="Workspace" className="flex min-h-0 flex-1 flex-col">
           <SidebarHeader>
             <SidebarMenu>
@@ -305,17 +306,6 @@ export function AppSidebar() {
                     </Link>
                   </Button>
                 )}
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  asChild
-                  isActive={pathname.startsWith(routes.artifacts.root)}
-                >
-                  <Link href={routes.artifacts.root}>
-                    <FileText />
-                    <span>Artifacts</span>
-                  </Link>
-                </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>
           </SidebarHeader>

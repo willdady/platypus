@@ -455,14 +455,21 @@ describe("AppSidebar chat actions", () => {
     }
   });
 
-  it("links to the Workspace's Artifacts", () => {
+  it("keeps New chat and the Chat list, with no Artifacts button", () => {
     setRead("ws1", "providers", { results: [{ id: "p1" }] });
     seedHeader();
+    setRead("ws1", CHAT_LIST, { results: [chat("c1", "First chat")] });
     renderSidebar();
 
-    expect(screen.getByRole("link", { name: "Artifacts" })).toHaveAttribute(
+    expect(
+      screen.queryByRole("link", { name: "Artifacts" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "New chat" })).toHaveAttribute(
       "href",
-      "/org1/workspace/ws1/artifacts",
+      "/org1/workspace/ws1/chat",
     );
+    expect(
+      screen.getByRole("link", { name: "First chat" }),
+    ).toBeInTheDocument();
   });
 });
