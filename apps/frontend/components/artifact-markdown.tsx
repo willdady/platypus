@@ -125,9 +125,11 @@ function ArtifactImage({
 export function ArtifactMarkdown({
   content,
   storageBaseUrl,
+  className,
 }: {
   content: string;
   storageBaseUrl?: string | null;
+  className?: string;
 }) {
   const components = useMemo(
     () => ({
@@ -140,6 +142,7 @@ export function ArtifactMarkdown({
 
   return (
     <MessageResponse
+      className={className}
       components={components}
       rehypePlugins={artifactRehypePlugins}
       // The sanitised source is handed over unchanged: the renderer above is

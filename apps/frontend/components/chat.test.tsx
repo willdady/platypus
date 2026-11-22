@@ -575,6 +575,26 @@ describe("Chat Artifact panel", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("keeps the open Artifact in the URL, so a refresh reopens it", () => {
+    harness.turn.messages = [message("a1", "Hello")];
+    const first = renderChat();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open artifact a1" }));
+    expect(window.location.search).toBe("?artifact=artifact-1%3A1");
+
+    // A refresh: a fresh mount reading the same URL.
+    first.unmount();
+    renderChat();
+    expect(
+      screen.getByText("Artifact panel artifact-1 v1"),
+    ).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Close artifact panel" }),
+    );
+    expect(window.location.search).toBe("");
+  });
+
   it("asks before a Card click replaces an Artifact panel with unsaved changes", () => {
     harness.turn.messages = [message("a1", "Hello")];
     render(
