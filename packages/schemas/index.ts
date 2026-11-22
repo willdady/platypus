@@ -4834,6 +4834,19 @@ export const artifactCreateSchema = z.strictObject({
 export type ArtifactCreate = z.infer<typeof artifactCreateSchema>;
 
 /**
+ * A hand edit saved as a new `user` version. `baseVersion` is the version the
+ * text was edited from: the save is refused as a conflict when that is no
+ * longer the latest, so neither the User's edit nor an Agent's change is
+ * silently overwritten.
+ */
+export const artifactSaveSchema = z.strictObject({
+  content: artifactContentSchema,
+  baseVersion: z.number().int().positive(),
+});
+
+export type ArtifactSave = z.infer<typeof artifactSaveSchema>;
+
+/**
  * One targeted replacement in an Agent's `updateArtifact` call. `old` must
  * occur exactly once in the content it is applied to; an empty needle would
  * match at every position, so it is refused before the edit runs.

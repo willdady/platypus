@@ -1,12 +1,16 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { ComponentProps } from "react";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { toast } from "sonner";
 import { formatDateTime } from "@/lib/format-date";
+import { UnsavedChangesProvider } from "./unsaved-changes-guard";
 
-const { artifactHook, versionsHook, copy } = vi.hoisted(() => ({
+const { artifactHook, versionsHook, copy, save, auth } = vi.hoisted(() => ({
   artifactHook: vi.fn(),
   versionsHook: vi.fn(),
   copy: vi.fn(async () => true),
+  save: vi.fn(),
+  auth: { ownsWorkspace: true },
 }));
 
 vi.mock("@/hooks/use-artifact", async (importOriginal) => {
@@ -19,9 +23,20 @@ vi.mock("@/hooks/use-artifact", async (importOriginal) => {
       versionsHook(...args),
   };
 });
+vi.mock("@/lib/api-write", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/api-write")>();
+  return {
+    ...actual,
+    writeAt: (...args: Parameters<typeof save>) => save(...args),
+  };
+});
 vi.mock("@/lib/clipboard", () => ({ copyWithToast: copy }));
 vi.mock("@/components/auth-provider", () => ({
-  useAuth: () => ({ user: { id: "u1" }, isPending: false }),
+  useAuth: () => ({
+    user: { id: "u1" },
+    isPending: false,
+    ownsWorkspace: auth.ownsWorkspace,
+  }),
   useBackendUrl: () => "http://test",
 }));
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
@@ -105,6 +120,8 @@ beforeEach(() => {
   artifactHook.mockReturnValue({ data: markdown, isLoading: false });
   versionsHook.mockReset();
   versionsHook.mockReturnValue({ data: versionList, isLoading: false });
+  save.mockReset();
+  auth.ownsWorkspace = true;
 });
 
 afterEach(() => {
@@ -443,6 +460,283 @@ describe("ArtifactViewer", () => {
     fireEvent.click(screen.getByRole("button", { name: "Close Artifact" }));
 
     expect(onClose).toHaveBeenCalledOnce();
+  });
+});
+
+describe("ArtifactViewer hand editing a markdown Artifact", () => {
+  const savedVersion = {
+    id: "v3",
+    artifactId: "artifact-1",
+    version: 3,
+    content: "# Version three",
+    author: "user",
+    createdAt: "2026-01-03T00:00:00.000Z",
+  };
+
+  const savedRead = {
+    artifact: markdown.artifact,
+    version: savedVersion,
+    scriptOrigins: markdown.scriptOrigins,
+  };
+
+  const conflictMessage =
+    "This Artifact changed while you were editing it. Reload to see the latest version.";
+
+  const editor = () =>
+    screen.getByRole("textbox", { name: "Artifact content" });
+
+  const openEditor = () => {
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+  };
+
+  const type = (content: string) => {
+    fireEvent.change(editor(), { target: { value: content } });
+  };
+
+  it("offers Edit on the latest markdown version and previews what is typed", () => {
+    renderViewer();
+
+    openEditor();
+
+    expect(editor()).toHaveValue("# Version two");
+    // The rendered preview beside the text area follows the text as it changes.
+    expect(
+      screen.getByText("# Version two", { selector: "pre" }),
+    ).toBeInTheDocument();
+    type("# Version two, edited");
+    expect(
+      screen.getByText("# Version two, edited", { selector: "pre" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
+  });
+
+  it("does not offer Edit on an older version", () => {
+    artifactHook.mockImplementation(
+      (_scope: unknown, _id: string, version?: number) => ({
+        data: version === 1 ? firstVersion : markdown,
+        isLoading: false,
+      }),
+    );
+    renderViewer({ version: 1 });
+
+    expect(screen.getByText("Read-only")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Edit" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not offer Edit on an Artifact that is not markdown", () => {
+    artifactHook.mockReturnValue({
+      data: {
+        ...markdown,
+        artifact: { ...markdown.artifact, type: "code", language: "ts" },
+      },
+      isLoading: false,
+    });
+    renderViewer();
+
+    expect(
+      screen.queryByRole("button", { name: "Edit" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not offer Edit to a member who does not own the Workspace", () => {
+    auth.ownsWorkspace = false;
+    renderViewer();
+
+    expect(
+      screen.queryByRole("button", { name: "Edit" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not offer Edit while the Agent is still writing", () => {
+    artifactHook.mockReturnValue({ data: undefined, isLoading: false });
+    renderViewer({
+      artifactId: undefined,
+      live: {
+        status: "streaming",
+        title: "Release notes",
+        type: "markdown",
+        content: "# Half a document",
+      },
+    });
+
+    expect(
+      screen.queryByRole("button", { name: "Edit" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("saves the edit as a new version based on the one it was edited from", async () => {
+    const mutateArtifact = vi.fn();
+    const mutateVersions = vi.fn();
+    let hasSaved = false;
+    artifactHook.mockImplementation(
+      (_scope: unknown, _id: string, version?: number) => ({
+        data: version === 3 ? savedRead : markdown,
+        isLoading: false,
+        mutate: mutateArtifact,
+      }),
+    );
+    versionsHook.mockImplementation(() => ({
+      data: hasSaved
+        ? {
+            results: [
+              {
+                id: "v3",
+                artifactId: "artifact-1",
+                version: 3,
+                author: "user",
+                createdAt: "2026-01-03T00:00:00.000Z",
+              },
+              ...versionList.results,
+            ],
+          }
+        : versionList,
+      isLoading: false,
+      mutate: mutateVersions,
+    }));
+    save.mockImplementation(async () => {
+      hasSaved = true;
+      return { outcome: "success", data: savedRead, revalidateKeys: [] };
+    });
+    renderViewer();
+
+    openEditor();
+    type("# Version three");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(artifactHook).toHaveBeenLastCalledWith(
+        { orgId: "org-1", workspaceId: "ws-1" },
+        "artifact-1",
+        3,
+      ),
+    );
+    expect(save).toHaveBeenCalledWith(
+      expect.stringContaining("/artifacts/artifact-1/versions"),
+      expect.objectContaining({
+        method: "POST",
+        data: { content: "# Version three", baseVersion: 2 },
+      }),
+    );
+    expect(mutateVersions).toHaveBeenCalled();
+    expect(toast.success).toHaveBeenCalledWith("Artifact updated");
+    // Both reads are revalidated: the viewer shows the new version and the
+    // picker lists it as one you wrote.
+    expect(await screen.findByText("Version 3")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("textbox", { name: "Artifact content" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
+  });
+
+  it("keeps the text and says the Artifact changed when the base version is stale", async () => {
+    save.mockResolvedValue({ outcome: "conflict", message: conflictMessage });
+    renderViewer();
+
+    openEditor();
+    type("# Version three");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByText("Artifact changed")).toBeInTheDocument();
+    expect(screen.getByText(conflictMessage)).toBeInTheDocument();
+    expect(editor()).toHaveValue("# Version three");
+    expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
+    expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  it("shows a refusal for content over the limit", async () => {
+    const message = "Artifact content must be at most 512 KB";
+    save.mockResolvedValue({
+      outcome: "invalid",
+      message,
+      fieldErrors: { content: message },
+    });
+    renderViewer();
+
+    openEditor();
+    type("too much");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByText(message)).toBeInTheDocument();
+    expect(editor()).toHaveValue("too much");
+    expect(editor()).toHaveAttribute("aria-invalid", "true");
+  });
+
+  it("keeps the editor open when a newer version appears while editing", () => {
+    let latestVersion = 2;
+    const newer = {
+      id: "v3",
+      artifactId: "artifact-1",
+      version: 3,
+      author: "agent",
+      createdAt: "2026-01-03T00:00:00.000Z",
+    };
+    versionsHook.mockImplementation(() => ({
+      data:
+        latestVersion === 3
+          ? { results: [newer, ...versionList.results] }
+          : versionList,
+      isLoading: false,
+    }));
+    renderViewer();
+
+    openEditor();
+    type("# Half typed");
+
+    // The Agent's version lands and the version list revalidates; the edit is
+    // still open, still pinned to version 2, and still shows the text.
+    latestVersion = 3;
+    type("# Half typed, still");
+
+    expect(editor()).toHaveValue("# Half typed, still");
+    expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
+    expect(screen.getByText("Version 2")).toBeInTheDocument();
+  });
+
+  it("asks before leaving the edit with unsaved changes", async () => {
+    render(
+      <UnsavedChangesProvider>
+        <ArtifactViewer
+          orgId="org-1"
+          workspaceId="ws-1"
+          artifactId="artifact-1"
+        />
+      </UnsavedChangesProvider>,
+    );
+
+    openEditor();
+    type("# Changed");
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(screen.getByText("Discard unsaved changes?")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
+    expect(
+      screen.queryByText("Discard unsaved changes?"),
+    ).not.toBeInTheDocument();
+    // Keeping the edit keeps what was typed.
+    expect(editor()).toHaveValue("# Changed");
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+
+    expect(
+      screen.queryByRole("textbox", { name: "Artifact content" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
+  });
+
+  it("leaves the edit without asking when nothing changed", () => {
+    renderViewer();
+
+    openEditor();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(
+      screen.queryByRole("textbox", { name: "Artifact content" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
   });
 });
 

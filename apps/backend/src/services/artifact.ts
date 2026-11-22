@@ -14,16 +14,16 @@ import {
   artifactVersion as artifactVersionTable,
 } from "../db/schema.ts";
 import { oneRow } from "../db/one-row.ts";
-import { NotFoundError, ValidationError } from "../errors.ts";
+import { ConflictError, NotFoundError, ValidationError } from "../errors.ts";
 import type { db, Tx } from "../index.ts";
 
 /**
  * The Artifact model shared by the HTTP routes and the Agent Tool set: both
  * surfaces resolve an Artifact by id inside one Workspace. This module owns
- * creation, reads, the paged list, the two human edits — rename and delete —
- * and the Agent-driven versions: a whole rewrite and targeted edits. Every
- * write appends, never overwrites, and every write takes the Artifact's row
- * lock inside its transaction.
+ * creation, reads, the paged list, the three human edits — rename, delete and
+ * a markdown hand edit saved as a version — and the Agent-driven versions: a
+ * whole rewrite and targeted edits. Every write appends, never overwrites, and
+ * every write takes the Artifact's row lock inside its transaction.
  */
 
 export type ArtifactDatabase = typeof db;
@@ -256,6 +256,46 @@ export async function rewriteArtifact(
           input.type === "code" ? (input.language ?? artifact.language) : null,
       },
     );
+  });
+}
+
+/**
+ * What a save based on a stale version tells the reader: the Artifact moved on
+ * under the edit, and the text they typed is still theirs to copy.
+ */
+export const ARTIFACT_CHANGED_CONFLICT =
+  "This Artifact changed while you were editing it. Reload to see the latest version.";
+
+/**
+ * Saves a hand edit as a new `user` version. The text is written against the
+ * version it was edited from — named by the caller — so the check and the
+ * insert both happen under the Artifact's row lock: an Agent's change that
+ * lands between them makes the save a conflict instead of overwriting it.
+ * Only markdown can be hand-edited; every other type is refused.
+ */
+export async function saveArtifactContent(
+  database: ArtifactDatabase,
+  scope: ArtifactScope,
+  artifactId: string,
+  input: { content: string; baseVersion: number },
+) {
+  assertArtifactContent(input.content);
+
+  return await database.transaction(async (tx) => {
+    const artifact = await findArtifact(tx, scope, artifactId, true);
+
+    if (artifact.type !== "markdown") {
+      throw new ValidationError("Only markdown Artifacts can be hand-edited");
+    }
+
+    const latest = await latestVersion(tx, artifact.id);
+    if (!latest) throw new NotFoundError("Artifact version not found");
+
+    if (latest.version !== input.baseVersion) {
+      throw new ConflictError(ARTIFACT_CHANGED_CONFLICT);
+    }
+
+    return await appendVersion(tx, artifact, latest, input.content, "user");
   });
 }
 

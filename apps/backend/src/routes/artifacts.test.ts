@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { ARTIFACT_CONTENT_MAX_BYTES } from "@platypus/schemas";
 import {
   mockSession,
   mockNoSession,
@@ -354,6 +355,205 @@ describe("Artifact Routes", () => {
       const res = await app.request(`${baseUrl}?type=spreadsheet`);
 
       expect(res.status).toBe(400);
+    });
+  });
+
+  describe("hand edit", () => {
+    const handEditWorld = (owner = "user-1") =>
+      seedDb({
+        organization_member: [
+          {
+            id: "m1",
+            userId: "user-1",
+            organizationId: orgId,
+            role: "member",
+          },
+        ],
+        workspace: [
+          { id: workspaceId, organizationId: orgId, ownerId: owner },
+          { id: "ws-2", organizationId: orgId, ownerId: "other-user" },
+        ],
+        user: [{ id: "user-1", name: "Ada", image: null }],
+        artifact: [
+          {
+            id: artifactId,
+            workspaceId,
+            sourceChatId: null,
+            title: "Plan",
+            type: "markdown",
+            language: null,
+            createdAt: new Date("2026-01-01T00:00:00.000Z"),
+            updatedAt: new Date("2026-01-02T00:00:00.000Z"),
+          },
+          {
+            id: "script",
+            workspaceId,
+            sourceChatId: null,
+            title: "Deploy script",
+            type: "code",
+            language: "bash",
+            createdAt: new Date("2026-01-01T00:00:00.000Z"),
+            updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+          },
+          {
+            id: "artifact-2",
+            workspaceId: "ws-2",
+            sourceChatId: null,
+            title: "Theirs",
+            type: "markdown",
+            language: null,
+            createdAt: new Date("2026-01-01T00:00:00.000Z"),
+            updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+          },
+        ],
+        artifact_version: [
+          {
+            id: "v1",
+            artifactId,
+            version: 1,
+            content: "First",
+            author: "agent",
+            createdAt: new Date("2026-01-01T00:00:00.000Z"),
+          },
+          {
+            id: "v2",
+            artifactId,
+            version: 2,
+            content: "Second",
+            author: "agent",
+            createdAt: new Date("2026-01-02T00:00:00.000Z"),
+          },
+          {
+            id: "v-script",
+            artifactId: "script",
+            version: 1,
+            content: "echo hi",
+            author: "agent",
+            createdAt: new Date("2026-01-01T00:00:00.000Z"),
+          },
+        ],
+      });
+
+    const save = (id: string, body: unknown) =>
+      app.request(`${baseUrl}/${id}/versions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+    it("saves a hand edit as a new version the User wrote", async () => {
+      handEditWorld();
+      mockSession();
+
+      const res = await save(artifactId, {
+        content: "Second, with a typo fixed",
+        baseVersion: 2,
+      });
+
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        artifact: { title: string; updatedAt: string };
+        version: { version: number; content: string; author: string };
+        scriptOrigins: string[];
+      };
+      expect(body.artifact.title).toBe("Plan");
+      expect(body.version).toMatchObject({
+        version: 3,
+        content: "Second, with a typo fixed",
+        author: "user",
+      });
+      expect(body.scriptOrigins).toEqual(["https://cdnjs.cloudflare.com"]);
+    });
+
+    it("refuses a save based on a version that is no longer the latest", async () => {
+      const fake = handEditWorld();
+      mockSession();
+
+      const res = await save(artifactId, {
+        content: "Edited from a stale copy",
+        baseVersion: 1,
+      });
+
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({
+        error:
+          "This Artifact changed while you were editing it. Reload to see the latest version.",
+      });
+      expect(fake.tables.artifact_version).toHaveLength(3);
+    });
+
+    it("refuses a hand edit to a non-markdown Artifact", async () => {
+      const fake = handEditWorld();
+      mockSession();
+
+      const res = await save("script", {
+        content: "echo bye",
+        baseVersion: 1,
+      });
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({
+        error: "Only markdown Artifacts can be hand-edited",
+      });
+      expect(fake.tables.artifact_version).toHaveLength(3);
+    });
+
+    it("refuses content over the limit", async () => {
+      handEditWorld();
+      mockSession();
+
+      const res = await save(artifactId, {
+        content: "x".repeat(ARTIFACT_CONTENT_MAX_BYTES + 1),
+        baseVersion: 2,
+      });
+
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as {
+        error: Array<{ path: string[]; message: string }>;
+      };
+      expect(body.error).toContainEqual(
+        expect.objectContaining({
+          path: ["content"],
+          message: "Artifact content must be at most 512 KB",
+        }),
+      );
+    });
+
+    it("does not find an Artifact from another Workspace", async () => {
+      handEditWorld();
+      mockSession();
+
+      const res = await save("artifact-2", {
+        content: "Not mine",
+        baseVersion: 1,
+      });
+
+      expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({ error: "Artifact not found" });
+    });
+
+    it("refuses a member who does not own the workspace", async () => {
+      handEditWorld("other-user");
+      mockSession();
+
+      const res = await save(artifactId, {
+        content: "Edited",
+        baseVersion: 1,
+      });
+
+      expect(res.status).toBe(403);
+    });
+
+    it("requires authentication", async () => {
+      handEditWorld();
+      mockNoSession();
+
+      const res = await save(artifactId, {
+        content: "Edited",
+        baseVersion: 2,
+      });
+
+      expect(res.status).toBe(401);
     });
   });
 
