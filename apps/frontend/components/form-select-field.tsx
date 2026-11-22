@@ -26,6 +26,12 @@ export type FormSelectFieldProps = {
   disabled?: boolean;
   className?: string;
   triggerClassName?: string;
+  /**
+   * Accessible name for the trigger, e.g. "Action for <Workspace name>".
+   * The visible label still renders above the trigger; pass nothing to keep
+   * the label as the accessible name.
+   */
+  ariaLabel?: string;
 };
 
 // Composes the ui/field + ui/select atoms so the
@@ -43,6 +49,7 @@ export function FormSelectField({
   disabled,
   className,
   triggerClassName,
+  ariaLabel,
 }: FormSelectFieldProps) {
   const ids = formFieldIds(name, { description, error });
   return (
@@ -52,6 +59,7 @@ export function FormSelectField({
         <SelectTrigger
           id={name}
           disabled={disabled}
+          aria-label={ariaLabel}
           aria-invalid={!!error}
           aria-describedby={ids.describedBy}
           className={triggerClassName}

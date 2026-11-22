@@ -74,7 +74,7 @@ function removeButton() {
   return screen.getByRole("button", { name: "Remove" });
 }
 function actionFor(name: string) {
-  return screen.getByRole("combobox", { name });
+  return screen.getByRole("combobox", { name: `Action for ${name}` });
 }
 function sentBody(fetchMock: ReturnType<typeof stubAcceptedSave>) {
   const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
@@ -232,6 +232,25 @@ describe("RemoveMemberDialog", () => {
         keepHistory: false,
       })),
     );
+  });
+
+  it("names each select for what it decides, keeping the Workspace name as its visible label", async () => {
+    mockScopedSWR(
+      {
+        "/workspaces": [workspace("ws-a", "Alpha"), workspace("ws-b", "Beta")],
+      },
+      { strict: true },
+    );
+    await renderDialog([olive, nina]);
+
+    expect(
+      screen.getByRole("combobox", { name: "Action for Alpha" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("combobox", { name: "Action for Beta" }),
+    ).toBeVisible();
+    expect(screen.getByText("Alpha")).toBeVisible();
+    expect(screen.getByText("Beta")).toBeVisible();
   });
 
   it("offers only Delete when nobody can receive a transfer", async () => {
