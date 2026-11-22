@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import {
+  artifactCreateSchema,
   artifactListSchema,
   artifactReadSchema,
   artifactSchema,
@@ -21,6 +22,7 @@ import {
 } from "../middleware/authorization.ts";
 import { env } from "../env.ts";
 import {
+  createUploadedArtifact,
   deleteArtifact,
   getArtifactWithVersion,
   listArtifacts,
@@ -31,10 +33,10 @@ import type { Variables } from "../server.ts";
 
 /**
  * The human-facing Artifact routes: the paged list, one Artifact at a named or
- * latest version, its version history, rename and delete, under the same
- * access rule as Chats. Creating from an upload and hand edits arrive with
- * later slices. Reads are open to anyone with Workspace access; the writes
- * that change what everyone sees are the Workspace Owner's.
+ * latest version, its version history, create from an upload, rename and
+ * delete, under the same access rule as Chats. Hand edits arrive with a later
+ * slice. Reads are open to anyone with Workspace access; the writes that
+ * change what everyone sees are the Workspace Owner's.
  */
 const artifacts = new Hono<{ Variables: Variables }>();
 
@@ -63,6 +65,23 @@ artifacts.get(
       artifactListSchema,
       await listArtifacts(db, { workspaceId }, { limit, offset, search, type }),
     );
+  },
+);
+
+artifacts.post(
+  "/",
+  ...owner,
+  validate("json", artifactCreateSchema),
+  async (c) => {
+    const { workspaceId } = workspaceScopeOf(c);
+
+    const { artifact } = await createUploadedArtifact(
+      db,
+      { workspaceId },
+      c.req.valid("json"),
+    );
+
+    return respond(c, artifactSchema, artifact, 201);
   },
 );
 

@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   artifactFileExtension,
   artifactFileName,
+  artifactUploadFromFileName,
+  decodeArtifactText,
   isAllowedArtifactImageSource,
   resolveArtifactImageSource,
 } from "./artifact-file";
@@ -34,6 +36,72 @@ describe("artifactFileName", () => {
 
   it("never returns an empty name", () => {
     expect(artifactFileName("///", "svg")).toBe("artifact.svg");
+  });
+
+  it("does not append an extension the title already ends with", () => {
+    expect(artifactFileName("notes.md", "markdown")).toBe("notes.md");
+    expect(artifactFileName("README.MD", "markdown")).toBe("README.MD");
+    expect(artifactFileName("notes.txt", "markdown")).toBe("notes.txt.md");
+  });
+});
+
+describe("artifactUploadFromFileName", () => {
+  it.each([
+    ["notes.md", "markdown", undefined],
+    ["page.html", "html", undefined],
+    ["diagram.mmd", "mermaid", undefined],
+    ["logo.svg", "svg", undefined],
+    ["script.ts", "code", "ts"],
+    ["Makefile", "code", undefined],
+    [".env", "code", undefined],
+  ] as const)("%s uploads as %s", (fileName, type, language) => {
+    const upload = artifactUploadFromFileName(fileName);
+    expect(typeof upload.title).toBe("string");
+    expect(upload.type).toBe(type);
+    expect(upload.language).toBe(language);
+  });
+
+  it("takes the title from the file name, extension and all", () => {
+    expect(artifactUploadFromFileName("Q3 plan.md").title).toBe("Q3 plan.md");
+    expect(artifactUploadFromFileName("a.b.py").title).toBe("a.b.py");
+    expect(artifactUploadFromFileName("Makefile").title).toBe("Makefile");
+    expect(artifactUploadFromFileName(".env").title).toBe(".env");
+  });
+
+  it("reads the extension case-insensitively", () => {
+    expect(artifactUploadFromFileName("PAGE.HTML").type).toBe("html");
+    expect(artifactUploadFromFileName("SCRIPT.TS")).toMatchObject({
+      type: "code",
+      language: "ts",
+    });
+  });
+});
+
+describe("decodeArtifactText", () => {
+  const encode = (text: string) => new TextEncoder().encode(text);
+
+  it("decodes UTF-8 text", () => {
+    expect(decodeArtifactText(encode("héllo — 世界"))).toBe("héllo — 世界");
+    expect(decodeArtifactText(new Uint8Array())).toBe("");
+  });
+
+  it("refuses bytes that are not UTF-8", () => {
+    expect(decodeArtifactText(new Uint8Array([0xff, 0xfe, 0x00]))).toBe(
+      undefined,
+    );
+    expect(decodeArtifactText(new Uint8Array([0x89, 0x50, 0x4e, 0x47]))).toBe(
+      undefined,
+    );
+  });
+
+  it("refuses bytes holding a NUL, which no text file uses", () => {
+    expect(decodeArtifactText(encode("before\u0000after"))).toBe(undefined);
+  });
+
+  it("keeps a replacement character, which is ordinary text", () => {
+    expect(decodeArtifactText(encode("before\uFFFDafter"))).toBe(
+      "before\uFFFDafter",
+    );
   });
 });
 

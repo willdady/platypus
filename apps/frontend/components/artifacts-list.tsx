@@ -39,6 +39,7 @@ import { formatRelativeTime } from "@/lib/relative-time";
 import { workspaceRoutes } from "@/lib/routes";
 import { ALL } from "@/lib/search-params";
 import { ArtifactRenameDialog } from "./artifact-rename-dialog";
+import { ArtifactUploadButton } from "./artifact-upload";
 
 /** Artifacts per page. The route caps a request at 100. */
 const PAGE_SIZE = 20;
@@ -137,6 +138,19 @@ export function ArtifactsList({
   const isFiltered = term !== "" || type !== undefined;
   const hasRows = totalCount > 0;
 
+  // One element, placed by emptiness: inside the empty card while there are no
+  // Artifacts, and below the list — outline, like a footer's other controls —
+  // once there are rows or a filter matched nothing. Upload is the Owner's,
+  // like rename and delete.
+  const upload = canManage ? (
+    <ArtifactUploadButton
+      orgId={orgId}
+      workspaceId={workspaceId}
+      variant={hasRows || isFiltered ? "outline" : "default"}
+      onUploaded={() => void mutate()}
+    />
+  ) : undefined;
+
   const [renameTarget, setRenameTarget] = useState<Serialized<Artifact> | null>(
     null,
   );
@@ -217,7 +231,8 @@ export function ArtifactsList({
             <EmptyCard
               icon={<FileText />}
               title="No artifacts yet"
-              description="Artifacts are the documents, diagrams, pages and scripts Agents make. Ask an Agent with the Artifacts Tool set for one in a Chat, and it will be kept here."
+              description="Artifacts are the documents, diagrams, pages and scripts Agents make, or that you upload. Ask an Agent with the Artifacts Tool set for one in a Chat, or use Upload to bring in a text file."
+              action={upload}
             />
           )
         }
@@ -268,7 +283,7 @@ export function ArtifactsList({
         )}
       />
 
-      {hasRows && (
+      {hasRows ? (
         <ListFooter
           pagination={
             <ListPagination
@@ -277,8 +292,12 @@ export function ArtifactsList({
               aria-label="Artifacts pages"
             />
           }
-        />
-      )}
+        >
+          {upload}
+        </ListFooter>
+      ) : isFiltered && canManage ? (
+        <ListFooter>{upload}</ListFooter>
+      ) : null}
 
       {renameTarget && (
         <ArtifactRenameDialog

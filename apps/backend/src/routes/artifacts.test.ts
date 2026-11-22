@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { ARTIFACT_CONTENT_MAX_BYTES } from "@platypus/schemas";
 import {
   mockSession,
   mockNoSession,
@@ -22,24 +23,30 @@ describe("Artifact Routes", () => {
     vi.unstubAllEnvs();
   });
 
+  /** The members, Workspaces and User every Artifact test runs against. */
+  const baseWorld = (owner = "user-1") => ({
+    organization_member: [
+      { id: "m1", userId: "user-1", organizationId: orgId, role: "member" },
+    ],
+    workspace: [
+      { id: workspaceId, organizationId: orgId, ownerId: owner },
+      { id: "ws-2", organizationId: orgId, ownerId: "other-user" },
+    ],
+    chat: [
+      { id: "chat-1", workspaceId, title: "Source", status: "succeeded" },
+      {
+        id: "chat-2",
+        workspaceId: "ws-2",
+        title: "Theirs",
+        status: "succeeded",
+      },
+    ],
+    user: [{ id: "user-1", name: "Ada", image: null }],
+  });
+
   const world = (owner = "user-1") =>
     seedDb({
-      organization_member: [
-        { id: "m1", userId: "user-1", organizationId: orgId, role: "member" },
-      ],
-      workspace: [
-        { id: workspaceId, organizationId: orgId, ownerId: owner },
-        { id: "ws-2", organizationId: orgId, ownerId: "other-user" },
-      ],
-      chat: [
-        { id: "chat-1", workspaceId, title: "Source", status: "succeeded" },
-        {
-          id: "chat-2",
-          workspaceId: "ws-2",
-          title: "Theirs",
-          status: "succeeded",
-        },
-      ],
+      ...baseWorld(owner),
       artifact: [
         {
           id: artifactId,
@@ -88,7 +95,6 @@ describe("Artifact Routes", () => {
           createdAt: new Date("2026-01-01T00:00:00.000Z"),
         },
       ],
-      user: [{ id: "user-1", name: "Ada", image: null }],
     });
 
   it("returns 401 when not authenticated", async () => {
@@ -417,6 +423,157 @@ describe("Artifact Routes", () => {
       });
 
       expect(res.status).toBe(403);
+    });
+  });
+
+  describe("create from upload", () => {
+    const uploadWorld = (owner = "user-1") =>
+      seedDb({
+        ...baseWorld(owner),
+        artifact: [],
+        artifact_version: [],
+      });
+
+    const uploadBody = (over: Record<string, unknown> = {}) => ({
+      title: "Release notes",
+      type: "markdown",
+      content: "# 1.0\n",
+      ...over,
+    });
+
+    const post = (body: unknown) =>
+      app.request(baseUrl, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+    it("writes version 1 as the User, with no source Chat", async () => {
+      const fake = uploadWorld();
+      mockSession();
+
+      const res = await post(uploadBody());
+
+      expect(res.status).toBe(201);
+      const body = (await res.json()) as {
+        id: string;
+        title: string;
+        type: string;
+        sourceChatId: string | null;
+      };
+      expect(body).toMatchObject({
+        title: "Release notes",
+        type: "markdown",
+        sourceChatId: null,
+      });
+
+      expect(fake.tables.artifact).toEqual([
+        expect.objectContaining({
+          id: body.id,
+          workspaceId,
+          sourceChatId: null,
+          title: "Release notes",
+          type: "markdown",
+          language: null,
+        }),
+      ]);
+      expect(fake.tables.artifact_version).toEqual([
+        expect.objectContaining({
+          artifactId: body.id,
+          version: 1,
+          content: "# 1.0\n",
+          author: "user",
+        }),
+      ]);
+    });
+
+    it("stores a code Artifact's language from the upload", async () => {
+      const fake = uploadWorld();
+      mockSession();
+
+      const res = await post(
+        uploadBody({ title: "build", type: "code", language: "py" }),
+      );
+
+      expect(res.status).toBe(201);
+      expect(fake.tables.artifact[0].language).toBe("py");
+    });
+
+    it("refuses content over the limit, storing nothing", async () => {
+      const fake = uploadWorld();
+      mockSession();
+
+      const res = await post(
+        uploadBody({ content: "x".repeat(ARTIFACT_CONTENT_MAX_BYTES + 1) }),
+      );
+
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as {
+        error: Array<{ path: string[]; message: string }>;
+      };
+      expect(body.error).toContainEqual(
+        expect.objectContaining({ path: ["content"] }),
+      );
+      expect(fake.tables.artifact).toEqual([]);
+      expect(fake.tables.artifact_version).toEqual([]);
+    });
+
+    it("accepts content exactly at the cap", async () => {
+      uploadWorld();
+      mockSession();
+
+      const res = await post(
+        uploadBody({ content: "x".repeat(ARTIFACT_CONTENT_MAX_BYTES) }),
+      );
+
+      expect(res.status).toBe(201);
+    });
+
+    it("refuses content that is not text, storing nothing", async () => {
+      const fake = uploadWorld();
+      mockSession();
+
+      const res = await post(uploadBody({ content: "before\u0000after" }));
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({
+        error: "Artifact content is not text",
+      });
+      expect(fake.tables.artifact).toEqual([]);
+      expect(fake.tables.artifact_version).toEqual([]);
+    });
+
+    it("keeps a replacement character, which is ordinary text", async () => {
+      const fake = uploadWorld();
+      mockSession();
+
+      const res = await post(uploadBody({ content: "before\uFFFDafter" }));
+
+      expect(res.status).toBe(201);
+      expect(fake.tables.artifact_version).toEqual([
+        expect.objectContaining({
+          content: "before\uFFFDafter",
+          author: "user",
+        }),
+      ]);
+    });
+
+    it("refuses a member who does not own the workspace", async () => {
+      uploadWorld("other-user");
+      mockSession();
+
+      const res = await post(uploadBody());
+
+      expect(res.status).toBe(403);
+    });
+
+    it("returns 401 when not authenticated", async () => {
+      uploadWorld();
+      mockNoSession();
+
+      const res = await post(uploadBody());
+
+      expect(res.status).toBe(401);
     });
   });
 
