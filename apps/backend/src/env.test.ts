@@ -128,6 +128,62 @@ describe("parseEnv", () => {
   });
 });
 
+describe("ARTIFACT_SCRIPT_ORIGINS", () => {
+  it("approves cdnjs when the Operator sets nothing", () => {
+    expect(parseEnv(valid).ARTIFACT_SCRIPT_ORIGINS).toEqual([
+      "https://cdnjs.cloudflare.com",
+    ]);
+  });
+
+  it("splits the approved origins on spaces", () => {
+    expect(
+      parseEnv({
+        ...valid,
+        ARTIFACT_SCRIPT_ORIGINS:
+          " https://cdnjs.cloudflare.com   https://cdn.jsdelivr.net ",
+      }).ARTIFACT_SCRIPT_ORIGINS,
+    ).toEqual(["https://cdnjs.cloudflare.com", "https://cdn.jsdelivr.net"]);
+  });
+
+  it("approves nothing when the list is empty", () => {
+    expect(
+      parseEnv({ ...valid, ARTIFACT_SCRIPT_ORIGINS: "" })
+        .ARTIFACT_SCRIPT_ORIGINS,
+    ).toEqual([]);
+  });
+
+  it("canonicalises host case, a trailing slash and an explicit default port", () => {
+    expect(
+      parseEnv({
+        ...valid,
+        ARTIFACT_SCRIPT_ORIGINS: "https://CDNJS.Cloudflare.com:443/",
+      }).ARTIFACT_SCRIPT_ORIGINS,
+    ).toEqual(["https://cdnjs.cloudflare.com"]);
+  });
+
+  it.each([
+    "http://cdnjs.cloudflare.com",
+    "cdnjs.cloudflare.com",
+    "https://cdnjs.cloudflare.com/ajax/libs",
+    "https://cdnjs.cloudflare.com?x=1",
+    "https://user:pass@cdnjs.cloudflare.com",
+  ])("stops the backend at boot naming %s", (entry) => {
+    expect(() =>
+      parseEnv({ ...valid, ARTIFACT_SCRIPT_ORIGINS: entry }),
+    ).toThrow(entry);
+  });
+
+  it("names the offending entry out of a longer list", () => {
+    expect(() =>
+      parseEnv({
+        ...valid,
+        ARTIFACT_SCRIPT_ORIGINS:
+          "https://cdnjs.cloudflare.com http://cdn.jsdelivr.net",
+      }),
+    ).toThrow(/ARTIFACT_SCRIPT_ORIGINS.*http:\/\/cdn\.jsdelivr\.net/);
+  });
+});
+
 describe("databaseUrl", () => {
   it("validates only DATABASE_URL, so the migration runner needs no other setting", () => {
     expect(

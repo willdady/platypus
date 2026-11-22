@@ -16,6 +16,8 @@ import {
 import { cn } from "@/lib/utils";
 import { isArtifactDeleted, useArtifact } from "@/hooks/use-artifact";
 import { ArtifactMarkdown, fencedCode } from "./artifact-markdown";
+import { ArtifactPreviewFrame } from "./artifact-preview-frame";
+import { isFramedArtifactType } from "@/lib/artifact-frame";
 import { ListError, ListState } from "./list-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LoadingRegion } from "./list-skeletons";
@@ -56,9 +58,11 @@ function codeTabLanguage(type: ArtifactType, language?: string | null): string {
 /**
  * The one Artifact viewer: the Chat's side panel and, in later slices, the
  * full-page view. It owns the Preview and Code tabs, copy and download for
- * every type, while the frame and the version picker are later additions.
- * HTML and SVG are source-only here — their frame is a separate slice — so
- * Preview is offered disabled rather than faking one.
+ * every type, while the version picker is a later addition.
+ *
+ * Markdown, code and Mermaid render in the app's own DOM. HTML and SVG run
+ * only inside the Artifact frame, which is why their Preview is a sandboxed
+ * `iframe` fed by `srcDoc` rather than anything the page itself renders.
  */
 export function ArtifactViewer({
   orgId,
@@ -122,8 +126,8 @@ export function ArtifactViewer({
   }
 
   const { artifact, version: current } = data;
-  const previewAvailable = artifact.type !== "html" && artifact.type !== "svg";
-  const initialTab = previewAvailable ? "preview" : "code";
+  const type = artifact.type;
+  const framed = isFramedArtifactType(type);
 
   return (
     <ArtifactFrame
@@ -169,20 +173,11 @@ export function ArtifactViewer({
       }
     >
       <Tabs
-        defaultValue={initialTab}
+        defaultValue="preview"
         className="flex min-h-0 flex-1 flex-col gap-0"
       >
         <TabsList className="mx-4 mt-3 h-auto self-start p-0.5">
-          <TabsTrigger
-            value="preview"
-            disabled={!previewAvailable}
-            title={
-              previewAvailable
-                ? undefined
-                : "Preview is unavailable for HTML and SVG Artifacts"
-            }
-            className="px-2 py-0.5 text-xs"
-          >
+          <TabsTrigger value="preview" className="px-2 py-0.5 text-xs">
             Preview
           </TabsTrigger>
           <TabsTrigger value="code" className="px-2 py-0.5 text-xs">
@@ -191,9 +186,20 @@ export function ArtifactViewer({
         </TabsList>
         <TabsContent
           value="preview"
-          className="mt-0 min-h-0 flex-1 overflow-auto p-4"
+          className={
+            framed
+              ? "mt-0 min-h-0 flex-1 overflow-hidden p-4"
+              : "mt-0 min-h-0 flex-1 overflow-auto p-4"
+          }
         >
-          {artifact.type === "markdown" ? (
+          {framed ? (
+            <ArtifactPreviewFrame
+              key={current.id}
+              type={type}
+              content={current.content}
+              scriptOrigins={data.scriptOrigins}
+            />
+          ) : artifact.type === "markdown" ? (
             <ArtifactMarkdown content={current.content} />
           ) : (
             <ArtifactMarkdown

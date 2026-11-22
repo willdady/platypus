@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { ARTIFACT_CONTENT_MAX_BYTES } from "@platypus/schemas";
 import {
   callOkTool,
@@ -41,11 +41,34 @@ describe("createArtifactTools", () => {
     tools = createArtifactTools(workspaceId, chatId);
   });
 
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   const artifacts = () => fake.tables.artifact as ArtifactRow[];
   const versions = () => fake.tables.artifact_version as VersionRow[];
 
   it("contributes createArtifact only in this slice", () => {
     expect(Object.keys(tools)).toEqual(["createArtifact"]);
+  });
+
+  it("tells the model which library origins Artifacts may load from", () => {
+    expect(tools.createArtifact.description).toContain(
+      "https://cdnjs.cloudflare.com",
+    );
+  });
+
+  it("says no external origins are allowed when the list is empty", () => {
+    vi.stubEnv("ARTIFACT_SCRIPT_ORIGINS", "");
+
+    const turnTools = createArtifactTools(workspaceId, chatId);
+
+    expect(turnTools.createArtifact.description).toMatch(
+      /no external origins are approved/i,
+    );
+    expect(turnTools.createArtifact.description).not.toContain(
+      "https://cdnjs.cloudflare.com",
+    );
   });
 
   it("creates the Artifact with version 1, written by the agent", async () => {
