@@ -167,3 +167,96 @@ describe("ArtifactViewer", () => {
     expect(onClose).toHaveBeenCalledOnce();
   });
 });
+
+describe("ArtifactViewer while the Agent is still writing", () => {
+  beforeEach(() => {
+    hook.result = { data: undefined, isLoading: false };
+  });
+
+  it("renders the partial content with the title and type once known", () => {
+    renderViewer({
+      artifactId: undefined,
+      live: {
+        status: "streaming",
+        title: "Release notes",
+        type: "markdown",
+        content: "# Half a document",
+      },
+    });
+
+    expect(screen.getByText("Release notes")).toBeInTheDocument();
+    expect(screen.getByText("Markdown")).toBeInTheDocument();
+    expect(screen.getByText("Streaming")).toBeInTheDocument();
+    expect(screen.getByText("# Half a document")).toBeInTheDocument();
+  });
+
+  it("waits for content without inventing a title", () => {
+    renderViewer({
+      artifactId: undefined,
+      live: { status: "streaming", content: "" },
+    });
+
+    expect(screen.getByText("Creating Artifact…")).toBeInTheDocument();
+    expect(
+      screen.getByText("Waiting for the Agent to write this Artifact…"),
+    ).toBeInTheDocument();
+  });
+
+  it("shows partial HTML as source and offers no Preview", () => {
+    renderViewer({
+      artifactId: undefined,
+      live: {
+        status: "streaming",
+        title: "Chart",
+        type: "html",
+        content: "<p>Half",
+      },
+    });
+
+    expect(screen.getByRole("tab", { name: "Preview" })).toBeDisabled();
+    expect(screen.getByRole("tab", { name: "Code" })).toHaveAttribute(
+      "data-state",
+      "active",
+    );
+    expect(screen.getByText(/```html/)).toBeInTheDocument();
+  });
+
+  it("keeps showing the streamed content while the saved version loads", () => {
+    hook.result = { data: undefined, isLoading: true };
+    renderViewer({
+      live: {
+        status: "streaming",
+        title: "Release notes",
+        type: "markdown",
+        content: "# Half a document",
+      },
+    });
+
+    expect(screen.getByText("# Half a document")).toBeInTheDocument();
+    expect(screen.queryByText("Loading artifact")).not.toBeInTheDocument();
+  });
+
+  it("never presents a failed call's partial content as a saved Artifact", () => {
+    renderViewer({
+      artifactId: undefined,
+      live: {
+        status: "failed",
+        title: "Release notes",
+        type: "markdown",
+        content: "# Half a document",
+        error: "Artifact content must be at most 512 KB",
+      },
+    });
+
+    expect(
+      screen.getByText("This Artifact was not saved."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Artifact content must be at most 512 KB"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("# Half a document")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("tab", { name: "Preview" }),
+    ).not.toBeInTheDocument();
+  });
+});
