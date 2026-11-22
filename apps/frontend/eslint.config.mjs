@@ -247,6 +247,11 @@ const eslintConfig = defineConfig([
     rules: { "no-restricted-syntax": syntaxRules("rowActionsMenu") },
   },
   {
+    // The Organization/Workspace switcher, not a row's actions.
+    files: ["components/workspace-switcher.tsx"],
+    rules: { "no-restricted-syntax": syntaxRules("rowActionsMenu") },
+  },
+  {
     // The board switcher in the board's own header, not a row's actions.
     files: ["components/kanban-board.tsx"],
     rules: { "no-restricted-syntax": syntaxRules("rowActionsMenu") },

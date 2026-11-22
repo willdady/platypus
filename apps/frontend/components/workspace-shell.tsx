@@ -6,7 +6,11 @@ import { CommandMenu } from "@/components/command-menu";
 import { Header } from "@/components/header";
 import { HeaderHomeButton } from "@/components/header-home-button";
 import { MAIN_CONTENT_ID } from "@/components/skip-link";
+import { WorkspaceBackButton } from "@/components/workspace-back-button";
+import { WorkspaceMenu } from "@/components/workspace-menu";
+import { WorkspaceRail } from "@/components/workspace-rail";
 import { WorkspaceScrollContainer } from "@/components/workspace-scroll-container";
+import { WorkspaceSwitcher } from "@/components/workspace-switcher";
 import { Kbd } from "@/components/ui/kbd";
 import {
   SidebarInset,
@@ -14,6 +18,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { orgRoutes, workspaceRoutes } from "@/lib/routes";
+import { cn } from "@/lib/utils";
 
 type WorkspaceShellProps = {
   orgId: string;
@@ -48,18 +53,45 @@ export function WorkspaceShell({
 
   return (
     <SidebarProvider className="min-h-0 h-dvh">
+      {workspaceId && <WorkspaceRail orgId={orgId} workspaceId={workspaceId} />}
       {sidebar && <AppSidebar />}
-      <SidebarInset id={MAIN_CONTENT_ID} className="min-w-0">
+      <SidebarInset
+        id={MAIN_CONTENT_ID}
+        // The rail is fixed to the window's left edge; the inset leaves the
+        // same column clear so the content — and the sidebar above it —
+        // starts to its right.
+        className={cn(
+          "min-w-0",
+          workspaceId && "md:pl-(--workspace-rail-width)",
+        )}
+      >
         <Header
-          bordered={!sidebar}
           leftContent={
-            <div className="flex items-center gap-2">
+            <div className="flex min-w-0 items-center gap-2">
               {sidebar ? (
                 <SidebarTrigger />
+              ) : workspaceId ? (
+                <>
+                  <WorkspaceMenu orgId={orgId} workspaceId={workspaceId} />
+                  <WorkspaceBackButton
+                    orgId={orgId}
+                    workspaceId={workspaceId}
+                  />
+                </>
               ) : (
                 <BackButton variant="header" fallbackHref={home.href} />
               )}
-              <HeaderHomeButton href={home.href} label={home.label} />
+              {workspaceId ? (
+                <div className="hidden md:block">
+                  <WorkspaceSwitcher
+                    orgId={orgId}
+                    workspaceId={workspaceId}
+                    presentation="bar"
+                  />
+                </div>
+              ) : (
+                <HeaderHomeButton href={home.href} label={home.label} />
+              )}
             </div>
           }
           rightContent={

@@ -34,8 +34,8 @@ empty thing _is_ on the page:
 
 | The empty thing is…                                            | Component                   | Examples                                                                                           |
 | -------------------------------------------------------------- | --------------------------- | -------------------------------------------------------------------------------------------------- |
-| A **screen's** main content: a settings page, a top-level list | `EmptyCard`                 | Providers, MCP, Sandbox, Webhooks, A2A endpoints, Organization Skills, Blueprints, Agents, Members |
-| A **section** within a page, or a list **filtered** to nothing | `ListState variant="empty"` | Workspace home Skills / Boards / Triggers, "No skills match your filters", A2A tokens              |
+| A **screen's** main content: a settings page, a top-level list | `EmptyCard`                 | Providers, MCP, Sandbox, Webhooks, A2A endpoints, Organization Skills, Blueprints, Agents, Boards, Members |
+| A **section** within a page, or a list **filtered** to nothing | `ListState variant="empty"` | Workspace home Skills / Triggers, "No skills match your filters", "No boards match your filters", A2A tokens |
 | A picker or command list inside a popover                      | `CommandEmpty`              | Command menu, timezone and model pickers                                                           |
 
 The same list can take both: `SkillsList` shows `EmptyCard` on the

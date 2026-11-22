@@ -357,8 +357,8 @@ export function KanbanBoard({
         <FetchErrorNotice
           error={error}
           subject="board"
-          backHref={routes.root}
-          backLabel="Back to workspace"
+          backHref={routes.boards.root}
+          backLabel="Back to boards"
           onRetry={() => void mutate()}
         />
       </div>

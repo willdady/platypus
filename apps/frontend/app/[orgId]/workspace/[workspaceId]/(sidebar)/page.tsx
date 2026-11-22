@@ -7,7 +7,6 @@ import {
   TriggerList,
   hasFired,
 } from "@/components/trigger-list";
-import { BoardsList } from "@/components/boards-list";
 import { CollapsibleSection } from "@/components/collapsible-section";
 import { useSectionOpen } from "@/hooks/use-section-open";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,7 +24,6 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   ButtonRowSkeleton,
-  CardGridSkeleton,
   LoadingRegion,
   SkeletonLine,
 } from "@/components/list-skeletons";
@@ -47,7 +45,6 @@ import type { Trigger } from "@platypus/schemas";
 /** Where each collapsible section persists its open state. */
 const SECTION_KEYS = {
   skills: "section:skills:open",
-  boards: "section:boards:open",
   triggers: "section:triggers:open",
 } as const;
 
@@ -155,17 +152,6 @@ function WorkspaceSkeleton() {
       >
         <SkillCardsSkeleton cards={2} agentLine />
         <ButtonRowSkeleton widths={["w-32"]} />
-      </CollapsibleSectionSkeleton>
-
-      <Separator />
-
-      <CollapsibleSectionSkeleton
-        storageKey={SECTION_KEYS.boards}
-        titleWidth="w-24"
-        descriptionWidth="w-80"
-      >
-        <CardGridSkeleton cards={2} descriptionLines={1} />
-        <ButtonRowSkeleton widths={["w-36"]} />
       </CollapsibleSectionSkeleton>
 
       <Separator />
@@ -430,21 +416,6 @@ function Workspace() {
             storageKey={SECTION_KEYS.skills}
           >
             <SkillsList orgId={orgId} workspaceId={workspaceId} />
-          </CollapsibleSection>
-
-          <Separator />
-
-          {/* Boards List Section */}
-          <CollapsibleSection
-            title={
-              <>
-                <KanbanSquare className="size-5" /> Boards
-              </>
-            }
-            description="Visual work management boards for organizing tasks."
-            storageKey={SECTION_KEYS.boards}
-          >
-            <BoardsList orgId={orgId} workspaceId={workspaceId} />
           </CollapsibleSection>
 
           <Separator />

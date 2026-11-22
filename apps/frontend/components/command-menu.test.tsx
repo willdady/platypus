@@ -103,6 +103,39 @@ describe("CommandMenu", () => {
     ).not.toBeInTheDocument();
   });
 
+  it.each<[string, string]>([
+    ["Home", "/org1/workspace/ws1"],
+    ["Boards", "/org1/workspace/ws1/boards"],
+    ["Artifacts", "/org1/workspace/ws1/artifacts"],
+  ])("navigates from the Go to group's %s", async (label, path) => {
+    await openMenu();
+
+    const goTo = screen.getByRole("group", { name: "Go to" });
+    fireEvent.click(within(goTo).getByRole("option", { name: label }));
+
+    expect(push).toHaveBeenCalledWith(path);
+  });
+
+  it("groups Home, Boards and Artifacts under Go to, with Home only once", async () => {
+    await openMenu();
+
+    const goTo = screen.getByRole("group", { name: "Go to" });
+    expect(
+      within(goTo)
+        .getAllByRole("option")
+        .map((option) => option.textContent),
+    ).toEqual(["Home", "Boards", "Artifacts"]);
+    expect(screen.getAllByRole("option", { name: "Home" })).toHaveLength(1);
+  });
+
+  it("keeps each Board in the menu beside the Go to group", async () => {
+    mockScopedSWR({ "/boards": [{ id: "b1", name: "Sprint planning" }] });
+    await openMenu();
+
+    fireEvent.click(screen.getByRole("option", { name: "Sprint planning" }));
+    expect(push).toHaveBeenCalledWith("/org1/workspace/ws1/boards/b1");
+  });
+
   it("disables New chat once the workspace is known to have no providers", async () => {
     mockScopedSWR({ "/providers": [] });
     await openMenu();
