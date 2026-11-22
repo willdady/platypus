@@ -8,6 +8,9 @@ vi.mock("@/components/app-sidebar", () => ({
   AppSidebar: () => <nav data-testid="app-sidebar" />,
 }));
 vi.mock("@/components/command-menu", () => ({ CommandMenu: () => null }));
+vi.mock("@/components/workspace-switcher", () => ({
+  WorkspaceSwitcher: () => <div data-testid="workspace-switcher" />,
+}));
 vi.mock("@/components/workspace-scroll-container", () => ({
   WorkspaceScrollContainer: ({ children }: { children: React.ReactNode }) =>
     children,
@@ -36,6 +39,7 @@ describe("Workspace (sidebar) layout", () => {
     render(await SidebarLayout({ children: <p>page</p>, params }));
 
     expect(screen.getByTestId("app-sidebar")).toBeInTheDocument();
+    expect(screen.getByTestId("workspace-switcher")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Toggle sidebar" }),
     ).toBeInTheDocument();
@@ -48,7 +52,7 @@ describe("Workspace (sidebar) layout", () => {
 });
 
 describe("Workspace (plain) layout", () => {
-  it("draws no sidebar; the bordered header holds Back and Workspace home", async () => {
+  it("draws no sidebar; the bordered header holds Back and the switcher", async () => {
     render(await PlainLayout({ children: <p>page</p>, params }));
 
     expect(screen.queryByTestId("app-sidebar")).not.toBeInTheDocument();
@@ -60,9 +64,10 @@ describe("Workspace (plain) layout", () => {
       "true",
     );
     expect(screen.getByRole("button", { name: "Back" })).toBeInTheDocument();
+    expect(screen.getByTestId("workspace-switcher")).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: "Workspace home" }),
-    ).toHaveAttribute("href", "/org1/workspace/ws1");
+      screen.queryByRole("link", { name: "Workspace home" }),
+    ).not.toBeInTheDocument();
     expect(screen.getByText("page")).toBeInTheDocument();
   });
 });

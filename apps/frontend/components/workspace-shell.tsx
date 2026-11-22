@@ -7,6 +7,7 @@ import { Header } from "@/components/header";
 import { HeaderHomeButton } from "@/components/header-home-button";
 import { MAIN_CONTENT_ID } from "@/components/skip-link";
 import { WorkspaceScrollContainer } from "@/components/workspace-scroll-container";
+import { WorkspaceSwitcher } from "@/components/workspace-switcher";
 import { Kbd } from "@/components/ui/kbd";
 import {
   SidebarInset,
@@ -53,13 +54,23 @@ export function WorkspaceShell({
         <Header
           bordered={!sidebar}
           leftContent={
-            <div className="flex items-center gap-2">
+            <div className="flex min-w-0 items-center gap-2">
               {sidebar ? (
                 <SidebarTrigger />
               ) : (
                 <BackButton variant="header" fallbackHref={home.href} />
               )}
-              <HeaderHomeButton href={home.href} label={home.label} />
+              {workspaceId ? (
+                <div className="hidden md:block">
+                  <WorkspaceSwitcher
+                    orgId={orgId}
+                    workspaceId={workspaceId}
+                    presentation="bar"
+                  />
+                </div>
+              ) : (
+                <HeaderHomeButton href={home.href} label={home.label} />
+              )}
             </div>
           }
           rightContent={
