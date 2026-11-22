@@ -1,4 +1,4 @@
-import type { ArtifactRead } from "@platypus/schemas";
+import type { ArtifactRead, ArtifactVersionList } from "@platypus/schemas";
 import { scopedUrl, type Scope, type Serialized } from "@/lib/api-write";
 import { errorStatus, fetcher } from "@/lib/utils";
 import { useScopedSWR } from "./use-scoped-swr";
@@ -14,6 +14,11 @@ export function artifactEntity(artifactId: string, version?: number): string {
   }`;
 }
 
+/** The read key for an Artifact's version list, which the picker reads. */
+export function artifactVersionsEntity(artifactId: string): string {
+  return `artifacts/${artifactId}/versions`;
+}
+
 /**
  * Reads one Artifact with one version. `scope: null` or no id withholds the
  * read — a streaming Tool card has no id yet, and a Chat with no Workspace
@@ -26,6 +31,20 @@ export function useArtifact(
 ) {
   return useScopedSWR<ArtifactRead>(
     artifactEntity(artifactId ?? "", version),
+    artifactId ? scope : null,
+  );
+}
+
+/**
+ * Reads every version of one Artifact — number, author and time — for the
+ * viewer's picker. Withheld on the same terms as `useArtifact`.
+ */
+export function useArtifactVersions(
+  scope: Scope | null,
+  artifactId: string | undefined,
+) {
+  return useScopedSWR<ArtifactVersionList>(
+    artifactVersionsEntity(artifactId ?? ""),
     artifactId ? scope : null,
   );
 }

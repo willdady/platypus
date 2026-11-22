@@ -232,6 +232,12 @@ const EXPECTED_CLEARABLE: Record<string, boolean> = {
   memoryGet: false,
   // Not clearable: the id and version are how the model refers to what it made.
   createArtifact: false,
+  // Not clearable: a write's id and version are how the model continues from it.
+  updateArtifact: false,
+  // Clearable: a read whose content the model can read again with readArtifact.
+  readArtifact: true,
+  // Not clearable: a small listing the model uses to choose what to read next.
+  listArtifacts: false,
 
   // Not clearable: instructions the model is meant to keep following.
   loadSkill: false,

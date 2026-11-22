@@ -271,11 +271,16 @@ export type CustomUITools = {
   };
   createArtifact: {
     input: {
+      id?: string;
       title: string;
       type: ArtifactType;
       language?: string;
       content: string;
     };
+    output: { id: string; title: string; version: number } | { error: string };
+  };
+  updateArtifact: {
+    input: { id: string; edits: { old: string; new: string }[] };
     output: { id: string; title: string; version: number } | { error: string };
   };
 };

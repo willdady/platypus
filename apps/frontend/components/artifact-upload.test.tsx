@@ -86,6 +86,20 @@ describe("ArtifactUploadButton", () => {
     });
   });
 
+  it("uploads a file that genuinely contains a replacement character", async () => {
+    const fetchMock = stubAcceptedSave({ id: "a3" });
+    const { input } = renderUpload();
+
+    choose(input, file("before\uFFFDafter", "encoding-notes.md"));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+    const [, init] = fetchMock.mock.calls[0] as [string, { body: string }];
+    expect(JSON.parse(init.body)).toMatchObject({
+      content: "before\uFFFDafter",
+    });
+    expect(push).toHaveBeenCalledWith("/org1/workspace/ws1/artifacts/a3");
+  });
+
   it("refuses a file over the limit without sending it", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);

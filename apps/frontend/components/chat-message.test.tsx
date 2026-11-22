@@ -780,6 +780,35 @@ describe("ChatMessage Artifact Card", () => {
       version: 1,
     });
   });
+
+  it("draws an update call as a card and opens its version", () => {
+    const onOpenArtifact = vi.fn();
+    renderMessage(
+      {
+        ...assistantMessage(),
+        parts: [
+          {
+            type: "tool-updateArtifact",
+            toolCallId: "call-2",
+            state: "output-available",
+            input: { id: "artifact-1", edits: [{ old: "1.0", new: "1.1" }] },
+            output: { id: "artifact-1", title: "Release notes", version: 2 },
+          },
+        ],
+      } as unknown as PlatypusUIMessage,
+      { onOpenArtifact },
+    );
+
+    expect(screen.getByText("Release notes")).toBeInTheDocument();
+    expect(screen.getByText(/Version 2/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Release notes/ }));
+
+    expect(onOpenArtifact).toHaveBeenCalledWith({
+      id: "artifact-1",
+      version: 2,
+    });
+  });
 });
 
 // Issue #578: the dispatch used to be an if/else-if chain where a specialised
@@ -828,6 +857,18 @@ describe("ChatMessage generic tool renderer exclusion", () => {
         state: "output-available",
         input: { title: "Plan", type: "markdown", content: "# Plan" },
         output: { id: "artifact-1", title: "Plan", version: 1 },
+      } as unknown as Parameters<typeof isGenericToolPart>[0]),
+    ).toBe(false);
+  });
+
+  it("never matches an Artifact update Card part", () => {
+    expect(
+      isGenericToolPart({
+        type: "tool-updateArtifact",
+        toolCallId: "c1",
+        state: "output-available",
+        input: { id: "artifact-1", edits: [{ old: "a", new: "b" }] },
+        output: { id: "artifact-1", title: "Plan", version: 2 },
       } as unknown as Parameters<typeof isGenericToolPart>[0]),
     ).toBe(false);
   });

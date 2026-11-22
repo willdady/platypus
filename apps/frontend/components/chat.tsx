@@ -153,9 +153,16 @@ export function Chat({
   // The Artifact open in the side panel. A completed Card opens the version its
   // turn produced; a Card still streaming opens by call id, so the panel
   // follows that call's content and swaps to the saved version once it lands.
+  // Every Card click increments `openCount`, which remounts the panel so
+  // clicking the same Card again returns to its own version after browsing.
   const [openArtifact, setOpenArtifact] = useState<ArtifactOpenTarget | null>(
     null,
   );
+  const [openArtifactCount, setOpenArtifactCount] = useState(0);
+  const openArtifactFromCard = useCallback((target: ArtifactOpenTarget) => {
+    setOpenArtifact(target);
+    setOpenArtifactCount((count) => count + 1);
+  }, []);
   const chatUrl = joinUrl(
     backendUrl || "",
     `${scopedPath("chat", scope)}/${chatId}`,
@@ -742,7 +749,7 @@ export function Chat({
                       copied={copiedMessageId === message.id}
                       staleToolCallIds={staleToolCallIds}
                       artifactScope={scope}
-                      onOpenArtifact={setOpenArtifact}
+                      onOpenArtifact={openArtifactFromCard}
                       onApprovalResponse={
                         // Only the Active leaf can be resumed, and only while
                         // no turn holds the Chat.
@@ -950,6 +957,7 @@ export function Chat({
       {openArtifact && (openStoredArtifact || openLiveArtifact) && (
         <aside className="absolute inset-0 z-20 flex flex-col border-l bg-background lg:static lg:w-[min(560px,45vw)] lg:shrink-0">
           <ArtifactViewer
+            key={openArtifactCount}
             orgId={orgId}
             workspaceId={workspaceId}
             artifactId={openStoredArtifact?.id}

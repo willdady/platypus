@@ -154,6 +154,9 @@ const toolToToolSet: Record<string, string> = {
   readTranscript: "chats",
   // artifacts
   createArtifact: "artifacts",
+  updateArtifact: "artifacts",
+  readArtifact: "artifacts",
+  listArtifacts: "artifacts",
   // sandbox
   shellExec: "sandbox",
   fsRead: "sandbox",

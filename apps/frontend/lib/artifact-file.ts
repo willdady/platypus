@@ -132,17 +132,16 @@ const utf8 = new TextDecoder("utf-8", { fatal: true });
 
 /**
  * The text an uploaded file holds, or `undefined` when its bytes are not text.
- * Decoding is strict, so invalid UTF-8 fails rather than arriving as U+FFFD.
- * A NUL byte, or a replacement character, is refused too: neither belongs in a
- * text file, and the second is what a lossy decode leaves behind. The route
- * refuses the same two shapes again, so a client that skipped this check cannot
- * store a mangled document.
+ * Decoding is strict, so bytes outside UTF-8 fail rather than arriving as
+ * U+FFFD, and a NUL byte — which no text file uses — is refused. U+FFFD itself
+ * is ordinary text: a file that genuinely holds one is a valid upload. The
+ * route refuses the NUL again, so a client that skipped this check cannot store
+ * what Postgres cannot hold.
  */
 export function decodeArtifactText(bytes: Uint8Array): string | undefined {
   if (bytes.includes(0)) return undefined;
   try {
-    const text = utf8.decode(bytes);
-    return text.includes("\uFFFD") ? undefined : text;
+    return utf8.decode(bytes);
   } catch {
     return undefined;
   }

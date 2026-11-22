@@ -106,7 +106,7 @@ export const plugin: PlatypusPlugin = {
         name: "Artifacts",
         category: "Productivity",
         description:
-          "Create standalone, versioned content — documents, code, Mermaid diagrams, HTML pages and SVG images — in this workspace",
+          "Create, change, read and list standalone, versioned content — documents, code, Mermaid diagrams, HTML pages and SVG images — in this workspace",
         // `sessionId` is the Chat's id, or the Trigger run's chat id, so the
         // Artifact records where it came from.
         tools: ({ workspaceId, sessionId }) =>

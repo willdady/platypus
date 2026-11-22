@@ -98,8 +98,10 @@ describe("decodeArtifactText", () => {
     expect(decodeArtifactText(encode("before\u0000after"))).toBe(undefined);
   });
 
-  it("refuses a replacement character, which a lossy decode leaves behind", () => {
-    expect(decodeArtifactText(encode("before\uFFFDafter"))).toBe(undefined);
+  it("keeps a replacement character, which is ordinary text", () => {
+    expect(decodeArtifactText(encode("before\uFFFDafter"))).toBe(
+      "before\uFFFDafter",
+    );
   });
 });
 
