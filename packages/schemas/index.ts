@@ -4676,6 +4676,13 @@ export const artifactTypeSchema = z.enum([
 
 export type ArtifactType = z.infer<typeof artifactTypeSchema>;
 
+/**
+ * Whether an Artifact of this type can be edited by hand in the viewer. Markdown
+ * is the only one: the others are changed by asking an Agent.
+ */
+export const isHandEditableArtifactType = (type: ArtifactType): boolean =>
+  type === "markdown";
+
 /** Who wrote one Artifact version: an Agent's tool call, or the User. */
 export const artifactAuthorSchema = z.enum(["agent", "user"]);
 
@@ -4832,6 +4839,19 @@ export const artifactCreateSchema = z.strictObject({
 });
 
 export type ArtifactCreate = z.infer<typeof artifactCreateSchema>;
+
+/**
+ * A hand edit saved as a new `user` version. `baseVersion` is the version the
+ * text was edited from: the save is refused as a conflict when that is no
+ * longer the latest, so neither the User's edit nor an Agent's change is
+ * silently overwritten.
+ */
+export const artifactSaveSchema = z.strictObject({
+  content: artifactContentSchema,
+  baseVersion: z.number().int().positive(),
+});
+
+export type ArtifactSave = z.infer<typeof artifactSaveSchema>;
 
 /**
  * One targeted replacement in an Agent's `updateArtifact` call. `old` must

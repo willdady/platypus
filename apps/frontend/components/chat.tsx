@@ -61,6 +61,7 @@ import { TurnStatus } from "./turn-status";
 import { useStableSet } from "@/hooks/use-stable-set";
 import { useTimeout } from "@/hooks/use-timeout";
 import { useStreamingFavicon } from "@/hooks/use-streaming-favicon";
+import { useConfirmDiscard } from "./unsaved-changes-guard";
 import {
   ContextMeter,
   ContextMeterEntrance,
@@ -159,10 +160,18 @@ export function Chat({
     null,
   );
   const [openArtifactCount, setOpenArtifactCount] = useState(0);
-  const openArtifactFromCard = useCallback((target: ArtifactOpenTarget) => {
-    setOpenArtifact(target);
-    setOpenArtifactCount((count) => count + 1);
-  }, []);
+  // A Card click remounts the panel, so it is one way out of a hand edit: it
+  // goes through the same "Discard unsaved changes?" guard every other exit
+  // uses, and the draft stays put when the User keeps editing.
+  const confirmDiscard = useConfirmDiscard();
+  const openArtifactFromCard = useCallback(
+    (target: ArtifactOpenTarget) =>
+      confirmDiscard(() => {
+        setOpenArtifact(target);
+        setOpenArtifactCount((count) => count + 1);
+      }),
+    [confirmDiscard],
+  );
   const chatUrl = joinUrl(
     backendUrl || "",
     `${scopedPath("chat", scope)}/${chatId}`,

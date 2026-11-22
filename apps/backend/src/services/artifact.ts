@@ -5,6 +5,7 @@ import {
   ARTIFACT_TITLE_MAX_LENGTH,
   ARTIFACT_TITLE_MIN_LENGTH,
   artifactContentByteLength,
+  isHandEditableArtifactType,
   type ArtifactAuthor,
   type ArtifactEdit,
   type ArtifactType,
@@ -14,16 +15,16 @@ import {
   artifactVersion as artifactVersionTable,
 } from "../db/schema.ts";
 import { oneRow } from "../db/one-row.ts";
-import { NotFoundError, ValidationError } from "../errors.ts";
+import { ConflictError, NotFoundError, ValidationError } from "../errors.ts";
 import type { db, Tx } from "../index.ts";
 
 /**
  * The Artifact model shared by the HTTP routes and the Agent Tool set: both
  * surfaces resolve an Artifact by id inside one Workspace. This module owns
- * creation, reads, the paged list, the two human edits — rename and delete —
- * and the Agent-driven versions: a whole rewrite and targeted edits. Every
- * write appends, never overwrites, and every write takes the Artifact's row
- * lock inside its transaction.
+ * creation, reads, the paged list, the three human edits — rename, delete and
+ * a markdown hand edit saved as a version — and the Agent-driven versions: a
+ * whole rewrite and targeted edits. Every write appends, never overwrites, and
+ * every write takes the Artifact's row lock inside its transaction.
  */
 
 export type ArtifactDatabase = typeof db;
@@ -85,13 +86,14 @@ export function assertArtifactContent(content: string): void {
 }
 
 /**
- * The rule an uploaded file's content is held to. The browser decodes the
- * file's bytes strictly before posting; this is the same rule from the other
- * side, so a client that skipped it cannot store a document Postgres cannot
- * hold. A NUL character is refused; U+FFFD is ordinary text and is kept. Not
- * applied to an Agent's own content, which never reaches this path.
+ * The rule User-supplied content is held to — an upload, or a hand edit. The
+ * browser decodes an uploaded file's bytes strictly before posting; this is
+ * the same rule from the other side, so a client that skipped it cannot store
+ * a document Postgres cannot hold. A NUL character is refused; U+FFFD is
+ * ordinary text and is kept. Not applied to an Agent's own content, which
+ * never reaches this path.
  */
-function assertUploadText(content: string): void {
+function assertArtifactText(content: string): void {
   if (content.includes("\u0000")) {
     throw new ValidationError("Artifact content is not text");
   }
@@ -166,7 +168,7 @@ export async function createUploadedArtifact(
   scope: ArtifactScope,
   input: CreateUploadedArtifactInput,
 ) {
-  assertUploadText(input.content);
+  assertArtifactText(input.content);
   return await createArtifact(database, scope, {
     ...input,
     author: "user",
@@ -298,6 +300,47 @@ export async function rewriteArtifact(
           input.type === "code" ? (input.language ?? artifact.language) : null,
       },
     );
+  });
+}
+
+/**
+ * What a save based on a stale version tells the reader: the Artifact moved on
+ * under the edit, and the text they typed is still theirs to copy.
+ */
+export const ARTIFACT_CHANGED_CONFLICT =
+  "This Artifact changed while you were editing it. Reload to see the latest version.";
+
+/**
+ * Saves a hand edit as a new `user` version. The text is written against the
+ * version it was edited from — named by the caller — so the check and the
+ * insert both happen under the Artifact's row lock: an Agent's change that
+ * lands between them makes the save a conflict instead of overwriting it.
+ * Only markdown can be hand-edited; every other type is refused.
+ */
+export async function saveArtifactContent(
+  database: ArtifactDatabase,
+  scope: ArtifactScope,
+  artifactId: string,
+  input: { content: string; baseVersion: number },
+) {
+  assertArtifactContent(input.content);
+  assertArtifactText(input.content);
+
+  return await database.transaction(async (tx) => {
+    const artifact = await findArtifact(tx, scope, artifactId, true);
+
+    if (!isHandEditableArtifactType(artifact.type)) {
+      throw new ValidationError("Only markdown Artifacts can be hand-edited");
+    }
+
+    const latest = await latestVersion(tx, artifact.id);
+    if (!latest) throw new NotFoundError("Artifact version not found");
+
+    if (latest.version !== input.baseVersion) {
+      throw new ConflictError(ARTIFACT_CHANGED_CONFLICT);
+    }
+
+    return await appendVersion(tx, artifact, latest, input.content, "user");
   });
 }
 

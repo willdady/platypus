@@ -16,6 +16,7 @@ import {
 } from "@/test/test-utils";
 import type { AlternativePosition } from "@/lib/chat-alternatives";
 import type { ArtifactOpenTarget } from "./artifact-tool-card";
+import { UnsavedChangesProvider } from "./unsaved-changes-guard";
 
 /**
  * What the Chat component wires, not what the transcript read decides.
@@ -348,6 +349,14 @@ vi.mock("./chat-message", () => ({
                 >
                   Open streaming artifact {message.id}
                 </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    onOpenArtifact({ id: "artifact-2", version: 2 })
+                  }
+                >
+                  Open other artifact {message.id}
+                </button>
               </>
             )}
             {alternatives && (
@@ -412,33 +421,47 @@ vi.mock("./message-editor", () => ({
     </div>
   ),
 }));
-vi.mock("./artifact-viewer", () => ({
-  ArtifactViewer: ({
-    artifactId,
-    version,
-    live,
-    onClose,
-  }: {
-    artifactId?: string;
-    version?: number;
-    live?: { status: string; content: string };
-    onClose?: () => void;
-  }) => (
-    <div>
-      Artifact panel {artifactId ?? "streaming"} v{version}
-      {live && (
+vi.mock("./artifact-viewer", async () => {
+  const { useState } = await import("react");
+  const { useUnsavedChangesGuard } = await import("./unsaved-changes-guard");
+  return {
+    // Registers a dirty edit with the same guard the real editor does, so the
+    // Chat's handling of a Card click over unsaved work is what is under test.
+    ArtifactViewer: ({
+      artifactId,
+      version,
+      live,
+      onClose,
+    }: {
+      artifactId?: string;
+      version?: number;
+      live?: { status: string; content: string };
+      onClose?: () => void;
+    }) => {
+      const [dirty, setDirty] = useState(false);
+      useUnsavedChangesGuard(dirty);
+      return (
         <div>
-          Live {live.status} {live.content}
+          Artifact panel {artifactId ?? "streaming"} v{version}
+          {live && (
+            <div>
+              Live {live.status} {live.content}
+            </div>
+          )}
+          <button type="button" onClick={() => setDirty(true)}>
+            Type in artifact panel
+          </button>
+          {dirty && <span>Draft kept</span>}
+          {onClose && (
+            <button type="button" onClick={onClose}>
+              Close artifact panel
+            </button>
+          )}
         </div>
-      )}
-      {onClose && (
-        <button type="button" onClick={onClose}>
-          Close artifact panel
-        </button>
-      )}
-    </div>
-  ),
-}));
+      );
+    },
+  };
+});
 
 vi.mock("./context-meter", async (importOriginal) => {
   const contextMeter = await importOriginal<typeof import("./context-meter")>();
@@ -550,6 +573,66 @@ describe("Chat Artifact panel", () => {
     expect(
       screen.queryByText("Artifact panel artifact-1 v1"),
     ).not.toBeInTheDocument();
+  });
+
+  it("asks before a Card click replaces an Artifact panel with unsaved changes", () => {
+    harness.turn.messages = [message("a1", "Hello")];
+    render(
+      <UnsavedChangesProvider>
+        <Chat orgId="org1" workspaceId="ws1" chatId={CHAT_ID} />
+      </UnsavedChangesProvider>,
+    );
+
+    // Clean: a Card click switches straight away, as it does today.
+    fireEvent.click(screen.getByRole("button", { name: "Open artifact a1" }));
+    expect(
+      screen.getByText("Artifact panel artifact-1 v1"),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open other artifact a1" }),
+    );
+    expect(
+      screen.getByText("Artifact panel artifact-2 v2"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Discard unsaved changes?"),
+    ).not.toBeInTheDocument();
+
+    // Dirty: the same Card again, and a different Artifact's Card, both ask.
+    fireEvent.click(screen.getByRole("button", { name: "Open artifact a1" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Type in artifact panel" }),
+    );
+    expect(screen.getByText("Draft kept")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open artifact a1" }));
+    expect(screen.getByText("Discard unsaved changes?")).toBeInTheDocument();
+    expect(
+      screen.getByText("Artifact panel artifact-1 v1"),
+    ).toBeInTheDocument();
+
+    // Keeping the edit keeps the panel and what was typed in it.
+    fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
+    expect(
+      screen.queryByText("Discard unsaved changes?"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Artifact panel artifact-1 v1"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Draft kept")).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open other artifact a1" }),
+    );
+    expect(screen.getByText("Discard unsaved changes?")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+
+    expect(
+      screen.queryByText("Discard unsaved changes?"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Artifact panel artifact-2 v2"),
+    ).toBeInTheDocument();
   });
 
   it("opens a Card whose content is still streaming and follows the call to the stored version", () => {

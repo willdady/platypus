@@ -4,6 +4,7 @@ import {
   artifactCreateSchema,
   artifactListSchema,
   artifactReadSchema,
+  artifactSaveSchema,
   artifactSchema,
   artifactTypeSchema,
   artifactUpdateSchema,
@@ -28,14 +29,15 @@ import {
   listArtifacts,
   listArtifactVersions,
   renameArtifact,
+  saveArtifactContent,
 } from "../services/artifact.ts";
 import type { Variables } from "../server.ts";
 
 /**
  * The human-facing Artifact routes: the paged list, one Artifact at a named or
- * latest version, its version history, create from an upload, rename and
- * delete, under the same access rule as Chats. Hand edits arrive with a later
- * slice. Reads are open to anyone with Workspace access; the writes that
+ * latest version, its version history, create from an upload, a hand edit
+ * saved as a new version, rename and delete, under the same access rule as
+ * Chats. Reads are open to anyone with Workspace access; the writes that
  * change what everyone sees are the Workspace Owner's.
  */
 const artifacts = new Hono<{ Variables: Variables }>();
@@ -51,6 +53,17 @@ const listQuerySchema = paginationQuerySchema(50).extend({
   search: z.string().optional(),
   type: artifactTypeSchema.optional(),
 });
+
+/**
+ * One Artifact read, with the library origins the Artifact frame may load from.
+ * Every read carries them, so the viewer builds the frame's policy without
+ * fetching a setting of its own.
+ */
+function withScriptOrigins(
+  read: Awaited<ReturnType<typeof getArtifactWithVersion>>,
+) {
+  return { ...read, scriptOrigins: env().ARTIFACT_SCRIPT_ORIGINS };
+}
 
 artifacts.get(
   "/",
@@ -97,6 +110,29 @@ artifacts.get("/:artifactId/versions", ...readers, async (c) => {
   });
 });
 
+artifacts.post(
+  "/:artifactId/versions",
+  ...owner,
+  validate("json", artifactSaveSchema),
+  async (c) => {
+    const { workspaceId } = workspaceScopeOf(c);
+    const { content, baseVersion } = c.req.valid("json");
+
+    return respond(
+      c,
+      artifactReadSchema,
+      withScriptOrigins(
+        await saveArtifactContent(
+          db,
+          { workspaceId },
+          c.req.param("artifactId"),
+          { content, baseVersion },
+        ),
+      ),
+    );
+  },
+);
+
 artifacts.get(
   "/:artifactId",
   ...readers,
@@ -105,16 +141,18 @@ artifacts.get(
     const { workspaceId } = workspaceScopeOf(c);
     const { version } = c.req.valid("query");
 
-    return respond(c, artifactReadSchema, {
-      ...(await getArtifactWithVersion(
-        db,
-        { workspaceId },
-        c.req.param("artifactId"),
-        version,
-      )),
-      // The viewer builds the Artifact frame's policy from the Operator's list.
-      scriptOrigins: env().ARTIFACT_SCRIPT_ORIGINS,
-    });
+    return respond(
+      c,
+      artifactReadSchema,
+      withScriptOrigins(
+        await getArtifactWithVersion(
+          db,
+          { workspaceId },
+          c.req.param("artifactId"),
+          version,
+        ),
+      ),
+    );
   },
 );
 
