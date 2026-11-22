@@ -39,6 +39,7 @@ import {
   a2aEndpointSchema,
   a2aTokenSchema,
   agentSchema,
+  artifactSchema,
   chatSchema,
   invitationRedemptionRegisterSchema,
   DEFAULT_DIRECT_MAX_STEPS,
@@ -1591,6 +1592,12 @@ const LIMIT_CLAIMS: LimitClaim[] = [
     },
   },
   {
+    doc: "building-with-platypus/artifacts.mdx",
+    anchor: "The title is",
+    source: "packages/schemas/index.ts (artifactSchema.title)",
+    expected: stringField(artifactSchema, "title"),
+  },
+  {
     doc: "building-with-platypus/agents.mdx",
     anchor: "**Name** — what to call the Agent",
     source: "packages/schemas/index.ts (agentSchema.name)",
@@ -2066,6 +2073,13 @@ const BACKEND_CONSTANTS = [
     phrase: (bytes: number) => `**${bytes / 1024 / 1024} MiB**`,
     files: ["self-hosting/configuration.mdx"],
     cost: "A reader expecting a whole large page to be read gets it cut at a size the page never stated.",
+  },
+  {
+    source: "packages/schemas/index.ts",
+    name: "ARTIFACT_CONTENT_MAX_BYTES",
+    phrase: (bytes: number) => `**${bytes / 1024} KB**`,
+    files: ["building-with-platypus/artifacts.mdx"],
+    cost: "A reader writing a large Artifact is refused at a size the page never warned of.",
   },
   {
     source: "packages/schemas/index.ts",

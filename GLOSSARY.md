@@ -17,6 +17,10 @@ A persisted conversation in a Workspace. Composed of its messages, which may hol
 A single round of running the model: given the prior messages and a Workspace + Agent (or Provider + model) selection, produce the assistant's next streamed response. Distinct from one-shot Provider executions like metadata generation.
 _Avoid_: chat request, chat invocation, chat run.
 
+**Artifact**:
+A standalone, versioned piece of content in a Workspace — markdown, code, a Mermaid diagram, an HTML page or an SVG image — created by an Agent's Artifacts Tool set and kept apart from the Chat that made it. Its versions are append-only and each stores the whole content, so the latest version is its current content and any older one is readable on its own. The source Chat is optional: deleting that Chat keeps the Artifact. Deleting the Workspace deletes its Artifacts. Not the A2A protocol's "artifact", which is a part of a Task's output and never a stored, versioned resource in a Workspace.
+_Avoid_: document (that names one type), output (that names a turn's by-product), A2A artifact.
+
 **File part**:
 A file a User attached to a message in a Chat, carried alongside the message's text and persisted as a storage reference. On every Chat turn each File part is resolved to bytes and routed by the target model's declared capability.
 _Avoid_: attachment (an **Attachment** is the Shared-resource reference), upload (a file placed in the Sandbox is a **Sandbox upload**).
@@ -343,7 +347,7 @@ _Avoid_: registration, self-registration.
 ## Relationships
 
 - An **Organization** has many **Workspaces**.
-- A **Workspace** has many **Chats**, **Agents**, **MCPs**, **Skills**, **Boards**, **Triggers**, **Webhooks**, and **Notifications**, and zero-or-one **Sandbox**.
+- A **Workspace** has many **Chats**, **Agents**, **MCPs**, **Skills**, **Boards**, **Artifacts**, **Triggers**, **Webhooks**, and **Notifications**, and zero-or-one **Sandbox**.
 - A **Chat** is produced by a sequence of **Chat turns**.
 - A **Chat**'s messages form a tree: each message follows exactly one parent, or opens the Chat, and messages following the same parent — or all opening it — are **Alternatives**. Exactly one path through it is the **Active path**, and that path is the **Transcript**.
 - A **Chat turn** runs in two sequential phases: **Turn resolution** assembles what the turn needs, then the **Drive** runs the model loop. A slow turn is slow in one phase or the other, and they are attributed separately.

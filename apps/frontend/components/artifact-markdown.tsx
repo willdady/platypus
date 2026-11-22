@@ -1,0 +1,117 @@
+"use client";
+
+import { isPresentableUrl } from "@platypus/schemas";
+import type { ClassAttributes, ImgHTMLAttributes } from "react";
+import rehypeRaw from "rehype-raw";
+import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
+import type { ExtraProps } from "streamdown";
+import { useBackendUrl } from "@/components/auth-provider";
+import { isAllowedArtifactImageSource } from "@/lib/artifact-file";
+import { joinUrl } from "@/lib/utils";
+import {
+  MessageResponse,
+  type MessageResponseProps,
+} from "./ai-elements/message";
+
+/**
+ * Streamdown's own chain blocks a `data:` image before any renderer sees it.
+ * This is the same sanitisation without that one rule: the image component
+ * below is the decision point, and every other tag and attribute still goes
+ * through the default schema. Links keep their protocol rules.
+ */
+const artifactSchema = {
+  ...defaultSchema,
+  protocols: {
+    ...defaultSchema.protocols,
+    src: [...(defaultSchema.protocols?.src ?? []), "data"],
+  },
+};
+const artifactRehypePlugins: NonNullable<
+  MessageResponseProps["rehypePlugins"]
+> = [rehypeRaw, [rehypeSanitize, artifactSchema]];
+
+/** The props Streamdown hands an `img` renderer. */
+type ArtifactImageProps = ClassAttributes<HTMLImageElement> &
+  ImgHTMLAttributes<HTMLImageElement> &
+  ExtraProps;
+
+/**
+ * An image inside a markdown Artifact. Only `data:` URIs and this deployment's
+ * own stored files are given a `src`, so any other host is never contacted.
+ * A blocked image keeps its URL visible as a link, because a silently missing
+ * picture is worse than one the reader can open deliberately.
+ */
+function ArtifactImage(props: ArtifactImageProps) {
+  const backendUrl = useBackendUrl();
+  const url = typeof props.src === "string" ? props.src : undefined;
+  const alt = typeof props.alt === "string" ? props.alt : undefined;
+
+  if (url !== undefined && isAllowedArtifactImageSource(url, backendUrl)) {
+    // A stored-file path is written relative when the author does not know the
+    // deployment's origin; point it at the backend that serves `/files/`.
+    const resolved =
+      url.startsWith("/") && backendUrl ? joinUrl(backendUrl, url) : url;
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={resolved}
+        alt={alt ?? ""}
+        className="max-w-full rounded-lg border"
+        loading="lazy"
+        decoding="async"
+      />
+    );
+  }
+
+  return (
+    <span
+      data-blocked-image=""
+      className="my-2 inline-flex max-w-full flex-col gap-1 rounded-lg border-2 border-dashed px-3 py-2 text-muted-foreground text-xs"
+    >
+      <span>Image blocked{alt ? `: ${alt}` : ""}</span>
+      {url &&
+        (isPresentableUrl(url) ? (
+          <a
+            href={url}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="truncate underline"
+          >
+            {url}
+          </a>
+        ) : (
+          <span className="truncate">{url}</span>
+        ))}
+    </span>
+  );
+}
+
+/**
+ * Markdown rendered the way a Chat message is, with the Artifact's own image
+ * rule applied. Markdown, code and Mermaid Artifacts all reach the same
+ * renderer; a code Artifact is wrapped in a fenced block so it highlights.
+ */
+export function ArtifactMarkdown({ content }: { content: string }) {
+  return (
+    <MessageResponse
+      components={{ img: ArtifactImage }}
+      rehypePlugins={artifactRehypePlugins}
+      // The sanitised source is handed over unchanged: the renderer above is
+      // what decides which ones become a request, and a blocked one renders
+      // as a placeholder rather than disappearing.
+      urlTransform={(url) => url}
+    >
+      {content}
+    </MessageResponse>
+  );
+}
+
+/** A fenced code block whose fence outruns any backticks in the content. */
+export function fencedCode(content: string, language: string): string {
+  const longestRun = Math.max(
+    2,
+    ...(content.match(/`+/g) ?? []).map((run) => run.length),
+  );
+  const fence = "`".repeat(longestRun + 1);
+  return `${fence}${language}\n${content}\n${fence}`;
+}

@@ -9,10 +9,11 @@ import { createAgentManagementTools } from "../../tools/agent-management.ts";
 import { createNotificationTools } from "../../tools/notification.ts";
 import { createMemoryTools } from "../../tools/memory.ts";
 import { createChatTools } from "../../tools/chats.ts";
+import { createArtifactTools } from "../../tools/artifacts.ts";
 
 // Core plugin: the Platypus-domain Tool sets — the ones that touch Platypus's
 // own data (kanban boards, triggers, memory, notifications, agent
-// discovery/management, skill management). Grouped by cohesion per ADR-0013: no
+// discovery/management, skill management, artifacts). Grouped by cohesion per ADR-0013: no
 // single one of these is a capability an Operator would deny in isolation (that
 // carve-out is reserved for @platypus/web-fetch's egress and @platypus/docker's
 // infra). Every id stays unprefixed (core), so persisted `agent.toolSetIds`
@@ -99,6 +100,17 @@ export const plugin: PlatypusPlugin = {
           "Read-only tools for listing the workspace's chats and reading a chat's transcript",
         tools: ({ orgId, workspaceId, sessionId }) =>
           createChatTools(orgId, workspaceId, sessionId),
+      },
+      {
+        id: "artifacts",
+        name: "Artifacts",
+        category: "Productivity",
+        description:
+          "Create standalone, versioned content — documents, code, Mermaid diagrams, HTML pages and SVG images — in this workspace",
+        // `sessionId` is the Chat's id, or the Trigger run's chat id, so the
+        // Artifact records where it came from.
+        tools: ({ workspaceId, sessionId }) =>
+          createArtifactTools(workspaceId, sessionId),
       },
       {
         id: "memory",

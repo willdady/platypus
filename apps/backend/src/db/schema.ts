@@ -16,6 +16,8 @@ export * from "./auth-schema.ts";
 import { user } from "./auth-schema.ts";
 import type { z } from "zod";
 import type {
+  ArtifactAuthor,
+  ArtifactType,
   AttachmentResourceType,
   ChatMessageMetadata,
   ChatStatus,
@@ -510,6 +512,69 @@ export const chatSummary = pgTable(
       columns: [t.chatId, t.anchorId],
       foreignColumns: [chatMessage.chatId, chatMessage.id],
     }).onDelete("cascade"),
+  ],
+);
+
+// Artifact
+
+/**
+ * A standalone, versioned piece of content an Agent creates in a Workspace
+ * (issue #2003). It belongs to the Workspace, not the Chat that made it: the
+ * source Chat is nullable and cleared when that Chat is deleted, so tidying
+ * Chats never destroys finished work. Versions are append-only; the latest is
+ * the Artifact's current content.
+ */
+export const artifact = pgTable(
+  "artifact",
+  (t) => ({
+    id: t.text("id").primaryKey(),
+    workspaceId: t
+      .text("workspace_id")
+      .notNull()
+      .references(() => workspace.id, { onDelete: "cascade" }),
+    sourceChatId: t
+      .text("source_chat_id")
+      .references(() => chat.id, { onDelete: "set null" }),
+    title: t.text("title").notNull(),
+    type: t.text("type").$type<ArtifactType>().notNull(),
+    // Code Artifacts only; null for every other type.
+    language: t.text("language"),
+    createdAt: t.timestamp("created_at").notNull().defaultNow(),
+    updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
+  }),
+  (t) => [
+    index("idx_artifact_workspace_id").on(t.workspaceId),
+    index("idx_artifact_source_chat_id").on(t.sourceChatId),
+    // The list page's default order: a Workspace's Artifacts, most recently
+    // changed first.
+    index("idx_artifact_workspace_updated_at").on(
+      t.workspaceId,
+      t.updatedAt.desc(),
+    ),
+  ],
+);
+
+/**
+ * One version of an Artifact's content. Rows are append-only: no version is
+ * ever updated or deleted on its own, and deleting the Artifact removes them
+ * all. Each row stores the whole content, so reading any version is one row.
+ */
+export const artifactVersion = pgTable(
+  "artifact_version",
+  (t) => ({
+    id: t.text("id").primaryKey(),
+    artifactId: t
+      .text("artifact_id")
+      .notNull()
+      .references(() => artifact.id, { onDelete: "cascade" }),
+    version: t.integer("version").notNull(),
+    content: t.text("content").notNull(),
+    author: t.text("author").$type<ArtifactAuthor>().notNull(),
+    createdAt: t.timestamp("created_at").notNull().defaultNow(),
+  }),
+  (t) => [
+    // One row per version number, and the index that covers the artifact FK.
+    unique("unique_artifact_version").on(t.artifactId, t.version),
   ],
 );
 

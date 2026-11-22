@@ -1,5 +1,9 @@
 import type { UIMessage } from "ai";
-import type { CachedInputTokens, SandboxUpload } from "./index.ts";
+import type {
+  ArtifactType,
+  CachedInputTokens,
+  SandboxUpload,
+} from "./index.ts";
 
 /**
  * The Chat UI message contract: the shape of a message as the frontend renders
@@ -264,6 +268,15 @@ export type CustomUITools = {
   fsDownload: {
     input: { path: string };
     output: { path: string; size: number | undefined };
+  };
+  createArtifact: {
+    input: {
+      title: string;
+      type: ArtifactType;
+      language?: string;
+      content: string;
+    };
+    output: { id: string; title: string; version: number } | { error: string };
   };
 };
 

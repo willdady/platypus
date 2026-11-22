@@ -279,6 +279,7 @@ vi.mock("./chat-message", () => ({
     onCopyMessage,
     staleToolCallIds,
     onApprovalResponse,
+    onOpenArtifact,
   }: {
     message: PlatypusUIMessage;
     editor?: React.ReactNode;
@@ -290,6 +291,7 @@ vi.mock("./chat-message", () => ({
     onCopyMessage: (content: string, messageId: string) => void;
     staleToolCallIds?: ReadonlySet<string>;
     onApprovalResponse?: (approvalId: string, approved: boolean) => void;
+    onOpenArtifact?: (target: { id: string; version: number }) => void;
   }) {
     countChatMessageRender(message.id);
     recordChatMessageProps({
@@ -325,6 +327,14 @@ vi.mock("./chat-message", () => ({
                 onClick={() => onApprovalResponse("ap1", true)}
               >
                 Approve {message.id}
+              </button>
+            )}
+            {onOpenArtifact && (
+              <button
+                type="button"
+                onClick={() => onOpenArtifact({ id: "artifact-1", version: 1 })}
+              >
+                Open artifact {message.id}
               </button>
             )}
             {alternatives && (
@@ -389,6 +399,27 @@ vi.mock("./message-editor", () => ({
     </div>
   ),
 }));
+vi.mock("./artifact-viewer", () => ({
+  ArtifactViewer: ({
+    artifactId,
+    version,
+    onClose,
+  }: {
+    artifactId: string;
+    version?: number;
+    onClose?: () => void;
+  }) => (
+    <div>
+      Artifact panel {artifactId} v{version}
+      {onClose && (
+        <button type="button" onClick={onClose}>
+          Close artifact panel
+        </button>
+      )}
+    </div>
+  ),
+}));
+
 vi.mock("./context-meter", async (importOriginal) => {
   const contextMeter = await importOriginal<typeof import("./context-meter")>();
   return {
@@ -460,6 +491,27 @@ function message(id: string, text: string): PlatypusUIMessage {
 function renderChat() {
   return render(<Chat orgId="org1" workspaceId="ws1" chatId={CHAT_ID} />);
 }
+
+describe("Chat Artifact panel", () => {
+  it("opens the viewer beside the transcript and closes it", () => {
+    harness.turn.messages = [message("a1", "Hello")];
+    renderChat();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open artifact a1" }));
+
+    expect(
+      screen.getByText("Artifact panel artifact-1 v1"),
+    ).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Close artifact panel" }),
+    );
+
+    expect(
+      screen.queryByText("Artifact panel artifact-1 v1"),
+    ).not.toBeInTheDocument();
+  });
+});
 
 /** Two Providers differing only in whether they can search. */
 const searchProvider = {

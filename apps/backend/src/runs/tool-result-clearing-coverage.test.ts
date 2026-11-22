@@ -230,6 +230,8 @@ const EXPECTED_CLEARABLE: Record<string, boolean> = {
   deleteNotification: false,
   memorySearch: false,
   memoryGet: false,
+  // Not clearable: the id and version are how the model refers to what it made.
+  createArtifact: false,
 
   // Not clearable: instructions the model is meant to keep following.
   loadSkill: false,
