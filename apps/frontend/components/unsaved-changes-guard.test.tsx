@@ -1,11 +1,10 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { push } from "@/test/test-utils";
 import Link from "next/link";
 import { interceptedHref } from "@/lib/unsaved-changes";
 import {
   UnsavedChangesProvider,
-  useConfirmDiscard,
   useUnsavedChangesGuard,
 } from "./unsaved-changes-guard";
 
@@ -55,16 +54,6 @@ describe("interceptedHref", () => {
 function Surface({ dirty }: { dirty: boolean }) {
   useUnsavedChangesGuard(dirty);
   return <Link href="/elsewhere">Elsewhere</Link>;
-}
-
-/** A caller with no dirty state of its own, like a Chat Card click. */
-function Requester({ onDiscard }: { onDiscard: () => void }) {
-  const confirmDiscard = useConfirmDiscard();
-  return (
-    <button type="button" onClick={() => confirmDiscard(onDiscard)}>
-      Switch
-    </button>
-  );
 }
 
 function renderGuarded(dirty: boolean) {
@@ -118,44 +107,5 @@ describe("UnsavedChangesProvider", () => {
     expect(
       screen.queryByText("Discard unsaved changes?"),
     ).not.toBeInTheDocument();
-  });
-});
-
-describe("useConfirmDiscard", () => {
-  it("runs at once when nothing is dirty", () => {
-    const onDiscard = vi.fn();
-    render(
-      <UnsavedChangesProvider>
-        <Requester onDiscard={onDiscard} />
-      </UnsavedChangesProvider>,
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "Switch" }));
-
-    expect(onDiscard).toHaveBeenCalledOnce();
-    expect(
-      screen.queryByText("Discard unsaved changes?"),
-    ).not.toBeInTheDocument();
-  });
-
-  it("holds a switch for as long as another surface is dirty", () => {
-    const onDiscard = vi.fn();
-    render(
-      <UnsavedChangesProvider>
-        <Surface dirty />
-        <Requester onDiscard={onDiscard} />
-      </UnsavedChangesProvider>,
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "Switch" }));
-    expect(screen.getByText("Discard unsaved changes?")).toBeInTheDocument();
-    expect(onDiscard).not.toHaveBeenCalled();
-
-    fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
-    expect(onDiscard).not.toHaveBeenCalled();
-
-    fireEvent.click(screen.getByRole("button", { name: "Switch" }));
-    fireEvent.click(screen.getByRole("button", { name: "Discard" }));
-    expect(onDiscard).toHaveBeenCalledOnce();
   });
 });

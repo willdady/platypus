@@ -1,16 +1,15 @@
 ---
 title: Artifacts
-description: Standalone, versioned content — documents, code, diagrams, pages and images — made by an Agent, uploaded by you, or edited by hand, and where you read it.
+description: Standalone, versioned content an Agent or you create — documents, code, diagrams, pages and images — and where you read it.
 ---
 
 import { Callout } from "nextra/components";
 
 # Artifacts
 
-An **Artifact** is a standalone piece of content in your Workspace — something
-an Agent makes, a file you upload, or a Markdown document you edit by hand. It
-is separate from the Chat that made it: the Chat can be deleted and the
-Artifact stays, ready to open, download, or point another Agent at.
+An **Artifact** is a standalone piece of content an Agent or you create in your
+Workspace. It is separate from the Chat that made it: the Chat can be deleted
+and the Artifact stays, ready to open, download, or point another Agent at.
 
 Use one when the result is worth keeping apart from the conversation around it
 — a document, a script, a diagram, a whole web page — rather than a paragraph
@@ -59,8 +58,8 @@ panel beside the Chat. The panel has two tabs:
 - **Code** shows the source for every type, highlighted for its language.
 
 On a wide screen, **View full screen** in the panel's header expands it to
-fill the whole window, and **Exit full screen** puts it back beside it. On a narrow screen
-the panel already covers the Chat.
+fill the whole window, and **Exit full screen** puts it back beside it. On a
+narrow screen the panel already covers the Chat.
 
 You do not have to wait for the Agent to finish. The Card appears as soon as
 the tool call starts, and clicking it opens the panel with the content growing
@@ -85,8 +84,7 @@ Markdown, Code, Mermaid, HTML or SVG.
 Each card shows the Artifact's title, its type and when it last changed. Click
 a card to open it full page at its own address, which you can bookmark or
 share with someone who can open the Workspace. The page uses the same viewer
-as the Chat panel, with **Preview**, **Code**, **Copy** and **Download**, and
-**Edit** on a Markdown Artifact's latest version.
+as the Chat panel, with **Preview**, **Code**, **Copy** and **Download**.
 
 The card's ⋮ menu offers:
 
@@ -96,9 +94,8 @@ The card's ⋮ menu offers:
 - **Delete** removes the Artifact after you confirm. Every version goes with
   it, and any Chat card for it then reads as deleted.
 
-**Rename** and **Delete** are the Workspace Owner's, and so is saving a hand
-edit. A member with access to the Workspace sees **Download** and **Open source
-Chat** only.
+**Rename** and **Delete** are the Workspace Owner's. A member with access to
+the Workspace sees **Download** and **Open source Chat** only.
 
 ## Upload a file
 
@@ -157,31 +154,6 @@ conversation may be out of date — after a change from another Chat. The
 `listArtifacts` tool lets it find an Artifact by title or type in a new Chat,
 so work carries across conversations.
 
-## Editing a Markdown Artifact by hand
-
-A Markdown Artifact can be changed without a Chat turn. Open its latest version
-— in the Chat panel or the full-page view — and choose **Edit**. The text
-appears in a plain text area with the rendered document beside it, updating as
-you type. In the Chat panel, **Edit** expands the panel to full screen, and it
-returns beside the Chat when you save or cancel. **Exit full screen** also ends
-the edit. **Save** writes the text as a
-new version, which the version picker lists as one you wrote.
-
-**Cancel** leaves the edit. If you have unsaved changes, Platypus asks before
-discarding them, and the browser asks before you close the tab or follow a link
-away. The Agent's next change starts from your version, so it builds on what
-you wrote instead of undoing it.
-
-The save is made against the version you started from. If a new version is
-written while you are editing — by an Agent, or from another Chat — the save is
-refused and your text stays in the editor with a notice that the Artifact
-changed. Nothing is overwritten either way: copy your text, reload to see the
-latest version, and make the change there.
-
-Only Markdown Artifacts can be edited by hand. Code, Mermaid, HTML and SVG
-Artifacts are changed by asking an Agent. A hand edit obeys the same size limit
-as any other version, and content over it is refused rather than cut short.
-
 ## How HTML and SVG are contained
 
 An HTML or SVG Artifact is a page an Agent wrote, so Platypus treats it as one
@@ -228,8 +200,7 @@ Every change to an Artifact is a new version, and nothing an Agent or you wrote
 is lost. Creating one writes the first version — attributed to the Agent when
 its Tool made it and to you when you uploaded it. A targeted update adds one
 version for the whole call, however many replacements it carried; a rewrite
-adds one version with the whole content; a hand edit adds one version written
-by you.
+adds one version with the whole content.
 
 The version picker in the viewer lists each version with its number, whether an
 Agent or you wrote it, and when. Pick an earlier one to see what the Artifact

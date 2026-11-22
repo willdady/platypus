@@ -169,7 +169,7 @@ export function createReadArtifactTool(workspaceId: string) {
     description:
       "Read an Artifact's title, type, version number and content — its latest " +
       "version, or a named older one. Use it when the copy you saw may be " +
-      "stale, since a hand edit or a change from another Chat can replace it. " +
+      "stale, since a change from another Chat can replace it. " +
       "An Artifact from another workspace is not found.",
     inputSchema: z.object({
       id: z.string().describe("The Artifact id to read"),

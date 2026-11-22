@@ -4,7 +4,6 @@ import {
   artifactCreateSchema,
   artifactListSchema,
   artifactReadSchema,
-  artifactSaveSchema,
   artifactSchema,
   artifactTypeSchema,
   artifactUpdateSchema,
@@ -30,15 +29,13 @@ import {
   listArtifacts,
   listArtifactVersions,
   renameArtifact,
-  saveArtifactContent,
 } from "../services/artifact.ts";
 import type { Variables } from "../server.ts";
 
 /**
  * The human-facing Artifact routes: the paged list, one Artifact at a named or
- * latest version, its version history, create from an upload, a hand edit
- * saved as a new version, rename and delete, under the same access rule as
- * Chats. Reads are open to anyone with Workspace access; the writes that
+ * latest version, its version history, create from an upload, rename and
+ * delete, under the same access rule as Chats. Reads are open to anyone with Workspace access; the writes that
  * change what everyone sees are the Workspace Owner's.
  */
 const artifacts = new Hono<{ Variables: Variables }>();
@@ -115,29 +112,6 @@ artifacts.get("/:artifactId/versions", ...readers, async (c) => {
     ),
   });
 });
-
-artifacts.post(
-  "/:artifactId/versions",
-  ...owner,
-  validate("json", artifactSaveSchema),
-  async (c) => {
-    const { workspaceId } = workspaceScopeOf(c);
-    const { content, baseVersion } = c.req.valid("json");
-
-    return respond(
-      c,
-      artifactReadSchema,
-      withViewerSettings(
-        await saveArtifactContent(
-          db,
-          { workspaceId },
-          c.req.param("artifactId"),
-          { content, baseVersion },
-        ),
-      ),
-    );
-  },
-);
 
 artifacts.get(
   "/:artifactId",

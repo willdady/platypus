@@ -472,7 +472,7 @@ describe("createArtifactTools", () => {
       expect(artifacts()[0].updatedAt.getTime()).toBe(day(1).getTime());
     });
 
-    it("works from the latest version, including a User's hand edit", async () => {
+    it("works from the latest version, including one the User wrote", async () => {
       fake = seedDb({
         artifact: [
           {
