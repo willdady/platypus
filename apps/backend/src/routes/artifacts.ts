@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import {
   artifactReadSchema,
+  artifactVersionListSchema,
   artifactVersionQuerySchema,
 } from "@platypus/schemas";
 import { validate } from "../validate.ts";
@@ -12,16 +13,37 @@ import {
   requireWorkspaceAccess,
   workspaceScopeOf,
 } from "../middleware/authorization.ts";
-import { getArtifactWithVersion } from "../services/artifact.ts";
+import {
+  getArtifactWithVersion,
+  listArtifactVersions,
+} from "../services/artifact.ts";
 import type { Variables } from "../server.ts";
 
 /**
- * The human-facing Artifact read. This slice exposes exactly one route — read
- * one Artifact at a named or latest version — under the same access rule as
- * Chats. Creating from an upload, hand edits, rename, delete and the paged
- * list arrive with later slices.
+ * The human-facing Artifact reads — one version at a time, and the list the
+ * version picker is built from — under the same access rule as Chats. Creating
+ * from an upload, hand edits, rename, delete and the paged list arrive with
+ * later slices.
  */
 const artifacts = new Hono<{ Variables: Variables }>();
+
+artifacts.get(
+  "/:artifactId/versions",
+  requireAuth,
+  requireOrgAccess(),
+  requireWorkspaceAccess,
+  async (c) => {
+    const { workspaceId } = workspaceScopeOf(c);
+
+    return respond(c, artifactVersionListSchema, {
+      results: await listArtifactVersions(
+        db,
+        { workspaceId },
+        c.req.param("artifactId"),
+      ),
+    });
+  },
+);
 
 artifacts.get(
   "/:artifactId",

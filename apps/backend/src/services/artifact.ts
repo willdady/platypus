@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import {
   ARTIFACT_CONTENT_MAX_BYTES,
@@ -6,6 +6,7 @@ import {
   ARTIFACT_TITLE_MIN_LENGTH,
   artifactContentByteLength,
   type ArtifactAuthor,
+  type ArtifactEdit,
   type ArtifactType,
 } from "@platypus/schemas";
 import {
@@ -14,20 +15,25 @@ import {
 } from "../db/schema.ts";
 import { oneRow } from "../db/one-row.ts";
 import { NotFoundError, ValidationError } from "../errors.ts";
-import type { db } from "../index.ts";
+import type { db, Tx } from "../index.ts";
 
 /**
- * The Artifact model shared by the HTTP read route and the Agent Tool set:
- * both surfaces resolve an Artifact by id inside one Workspace, and the Tool
- * set writes version 1. Editing, renaming, paging and the other tools arrive
- * with later slices of the feature; this module holds only what the creation
- * path needs, so the rules live in one place from the start.
+ * The Artifact model shared by the HTTP read routes and the Agent Tool set:
+ * both surfaces resolve an Artifact by id inside one Workspace, and both append
+ * versions through here. Every write takes the Artifact's row lock inside one
+ * transaction and allocates the next version number there, so two writers race
+ * for the lock rather than for the same number.
  */
 
 export type ArtifactDatabase = typeof db;
+type ArtifactExecutor = ArtifactDatabase | Tx;
 
 /** Everything an Artifact read is confined to: its Workspace, never across it. */
 export type ArtifactScope = { workspaceId: string };
+
+/** What an edit failure tells the model to do next; the tool description repeats it. */
+export const ARTIFACT_EDIT_RECOVERY =
+  "Add surrounding context to make it unique, or call readArtifact to read the current content.";
 
 export type CreateArtifactInput = {
   title: string;
@@ -37,6 +43,15 @@ export type CreateArtifactInput = {
   content: string;
   /** The Chat, or Trigger run Chat, whose turn created it. */
   sourceChatId?: string | null;
+  author: ArtifactAuthor;
+};
+
+/** The whole content of a rewrite: the `createArtifact({ id })` path. */
+export type RewriteArtifactInput = {
+  title: string;
+  type: ArtifactType;
+  language?: string;
+  content: string;
   author: ArtifactAuthor;
 };
 
@@ -110,6 +125,209 @@ export async function createArtifact(
 }
 
 /**
+ * Resolves an Artifact inside its Workspace — the one lookup every read and
+ * write is built on. With `lock`, the row is held `FOR UPDATE` for the rest of
+ * the transaction: everything a write does next (reading the latest version,
+ * choosing the next number, updating `updatedAt`) happens under that lock, so
+ * a second writer waits and then sees the first one's version instead of
+ * choosing the same number. An id from another Workspace is indistinguishable
+ * from one that never existed.
+ */
+async function findArtifact(
+  runner: ArtifactExecutor,
+  scope: ArtifactScope,
+  artifactId: string,
+  lock = false,
+) {
+  const scoped = and(
+    eq(artifactTable.id, artifactId),
+    eq(artifactTable.workspaceId, scope.workspaceId),
+  );
+
+  const [artifact] = lock
+    ? await runner
+        .select()
+        .from(artifactTable)
+        .where(scoped)
+        .for("update")
+        .limit(1)
+    : await runner.select().from(artifactTable).where(scoped).limit(1);
+
+  if (!artifact) throw new NotFoundError("Artifact not found");
+  return artifact;
+}
+
+/** The newest version of an Artifact, the one an edit is applied to. */
+async function latestVersion(tx: Tx, artifactId: string) {
+  const [version] = await tx
+    .select()
+    .from(artifactVersionTable)
+    .where(eq(artifactVersionTable.artifactId, artifactId))
+    .orderBy(desc(artifactVersionTable.version))
+    .limit(1);
+
+  return version;
+}
+
+type ArtifactRow = typeof artifactTable.$inferSelect;
+type ArtifactVersionRow = typeof artifactVersionTable.$inferSelect;
+type ArtifactPatch = Partial<{ title: string; language: string | null }>;
+
+/**
+ * Appends one whole-content version and moves the Artifact's `updatedAt` with
+ * it. The caller holds the Artifact's row lock and has already read `latest`,
+ * so `latest.version + 1` cannot be claimed by anyone else in the meantime.
+ */
+async function appendVersion(
+  tx: Tx,
+  artifact: ArtifactRow,
+  latest: ArtifactVersionRow,
+  content: string,
+  author: ArtifactAuthor,
+  patch: ArtifactPatch = {},
+) {
+  const now = new Date();
+  const version = oneRow(
+    await tx
+      .insert(artifactVersionTable)
+      .values({
+        id: nanoid(),
+        artifactId: artifact.id,
+        version: latest.version + 1,
+        content,
+        author,
+        createdAt: now,
+      })
+      .returning(),
+  );
+
+  const updated = oneRow(
+    await tx
+      .update(artifactTable)
+      .set({ ...patch, updatedAt: now })
+      .where(eq(artifactTable.id, artifact.id))
+      .returning(),
+  );
+
+  return { artifact: updated, version };
+}
+
+/**
+ * Writes the whole content as a new version — `createArtifact({ id })`'s
+ * full-rewrite path. The type is fixed when the Artifact is created, so a call
+ * that names another one is refused before anything is written. A code
+ * Artifact keeps its language unless the rewrite names another.
+ */
+export async function rewriteArtifact(
+  database: ArtifactDatabase,
+  scope: ArtifactScope,
+  artifactId: string,
+  input: RewriteArtifactInput,
+) {
+  assertArtifactTitle(input.title);
+  assertArtifactContent(input.content);
+
+  return await database.transaction(async (tx) => {
+    const artifact = await findArtifact(tx, scope, artifactId, true);
+
+    if (artifact.type !== input.type) {
+      throw new ValidationError(
+        `Artifact type cannot change from ${artifact.type} to ${input.type}`,
+      );
+    }
+
+    const latest = await latestVersion(tx, artifact.id);
+    if (!latest) throw new NotFoundError("Artifact version not found");
+
+    return await appendVersion(
+      tx,
+      artifact,
+      latest,
+      input.content,
+      input.author,
+      {
+        title: input.title,
+        language:
+          input.type === "code" ? (input.language ?? artifact.language) : null,
+      },
+    );
+  });
+}
+
+/** The quoted, shortened needle an edit failure names. */
+function editPreview(old: string): string {
+  const shown = old.length > 60 ? `${old.slice(0, 60)}…` : old;
+  return JSON.stringify(shown);
+}
+
+/** The first occurrence of `needle` and how many times it occurs, overlaps included. */
+function findMatches(
+  content: string,
+  needle: string,
+): { first: number; count: number } {
+  let first = -1;
+  let count = 0;
+  let index = content.indexOf(needle);
+  while (index !== -1) {
+    if (first === -1) first = index;
+    count += 1;
+    index = content.indexOf(needle, index + 1);
+  }
+  return { first, count };
+}
+
+/**
+ * Applies targeted edits to the latest version, in order, and writes exactly
+ * one new version. Each `old` is matched against the text as it stands when
+ * that edit runs — so a chain can build on the previous replacement — and must
+ * occur exactly once there. Every edit is checked before anything is written:
+ * a needle that matches zero times or more than once fails the call, names the
+ * edit and tells the model how to recover, and leaves the Artifact untouched.
+ */
+export async function editArtifact(
+  database: ArtifactDatabase,
+  scope: ArtifactScope,
+  artifactId: string,
+  edits: ArtifactEdit[],
+  author: ArtifactAuthor,
+) {
+  if (edits.length === 0) {
+    throw new ValidationError("At least one edit is required");
+  }
+
+  return await database.transaction(async (tx) => {
+    const artifact = await findArtifact(tx, scope, artifactId, true);
+    const latest = await latestVersion(tx, artifact.id);
+    if (!latest) throw new NotFoundError("Artifact version not found");
+
+    let content = latest.content;
+    edits.forEach((edit, index) => {
+      if (edit.old.length === 0) {
+        throw new ValidationError(
+          `Edit ${index + 1} must have a non-empty \`old\` string. ${ARTIFACT_EDIT_RECOVERY}`,
+        );
+      }
+
+      const { first, count } = findMatches(content, edit.old);
+      if (count !== 1) {
+        throw new ValidationError(
+          `Edit ${index + 1} (${editPreview(edit.old)}) must match exactly once, but matched ${count} ${count === 1 ? "time" : "times"}. ${ARTIFACT_EDIT_RECOVERY}`,
+        );
+      }
+
+      content =
+        content.slice(0, first) +
+        edit.new +
+        content.slice(first + edit.old.length);
+    });
+
+    assertArtifactContent(content);
+
+    return await appendVersion(tx, artifact, latest, content, author);
+  });
+}
+
+/**
  * Reads one Artifact and one of its versions — the named one, or the latest
  * when none is named. A missing Artifact and a missing version are both
  * not-found, and an id from another Workspace is indistinguishable from one
@@ -121,18 +339,7 @@ export async function getArtifactWithVersion(
   artifactId: string,
   version?: number,
 ) {
-  const [artifact] = await database
-    .select()
-    .from(artifactTable)
-    .where(
-      and(
-        eq(artifactTable.id, artifactId),
-        eq(artifactTable.workspaceId, scope.workspaceId),
-      ),
-    )
-    .limit(1);
-
-  if (!artifact) throw new NotFoundError("Artifact not found");
+  const artifact = await findArtifact(database, scope, artifactId);
 
   const [versionRow] = await database
     .select()
@@ -151,4 +358,72 @@ export async function getArtifactWithVersion(
   if (!versionRow) throw new NotFoundError("Artifact version not found");
 
   return { artifact, version: versionRow };
+}
+
+/**
+ * Every version of one Artifact, newest first, without its content. Confined
+ * to the Workspace: another Workspace's Artifact is not found rather than
+ * listed empty. The viewer's version picker and the Agent's tool set both read
+ * this, so a version number is always shown with who wrote it and when.
+ */
+export async function listArtifactVersions(
+  database: ArtifactDatabase,
+  scope: ArtifactScope,
+  artifactId: string,
+) {
+  await findArtifact(database, scope, artifactId);
+
+  return await database
+    .select({
+      id: artifactVersionTable.id,
+      artifactId: artifactVersionTable.artifactId,
+      version: artifactVersionTable.version,
+      author: artifactVersionTable.author,
+      createdAt: artifactVersionTable.createdAt,
+    })
+    .from(artifactVersionTable)
+    .where(eq(artifactVersionTable.artifactId, artifactId))
+    .orderBy(desc(artifactVersionTable.version));
+}
+
+export type ListArtifactsInput = {
+  /** A case-insensitive title search; no content is searched. */
+  query?: string;
+  type?: ArtifactType;
+  limit?: number;
+};
+
+/**
+ * The Workspace's Artifacts, most recently changed first, as summaries: id,
+ * title, type and updated time. Content is never listed — a Workspace's
+ * documents would otherwise arrive whole in one model call; `readArtifact` is
+ * the way to read one.
+ */
+export async function listArtifacts(
+  database: ArtifactDatabase,
+  scope: ArtifactScope,
+  { query, type, limit = 20 }: ListArtifactsInput = {},
+) {
+  const term = query?.trim().replace(/[\\%_]/g, "\\$&");
+  const searchFilter = term
+    ? sql`${artifactTable.title} ILIKE ${`%${term}%`}`
+    : undefined;
+
+  return await database
+    .select({
+      id: artifactTable.id,
+      title: artifactTable.title,
+      type: artifactTable.type,
+      updatedAt: artifactTable.updatedAt,
+    })
+    .from(artifactTable)
+    .where(
+      and(
+        eq(artifactTable.workspaceId, scope.workspaceId),
+        type ? eq(artifactTable.type, type) : undefined,
+        searchFilter,
+      ),
+    )
+    .orderBy(desc(artifactTable.updatedAt), desc(artifactTable.id))
+    .limit(limit);
 }

@@ -15,16 +15,21 @@ import { isArtifactDeleted, useArtifact } from "@/hooks/use-artifact";
 
 type ArtifactToolPart = Extract<
   ToolUIPart<CustomUITools>,
-  { type: "tool-createArtifact" }
+  { type: "tool-createArtifact" | "tool-updateArtifact" }
 >;
+
+type ArtifactWriteOutput =
+  { id: string; title: string; version: number } | { error: string };
 
 export const ARTIFACT_DELETED_LABEL = "Artifact deleted";
 
 /**
  * The Chat's Artifact Card: a title, its type and the version the call
- * produced, opening the Artifact in the side panel. The Artifact is read back
- * by id and version so a later deletion reads as deleted rather than as an
- * error; while the call's input streams the Card shows the title it has so far.
+ * produced, opening the Artifact in the side panel. Both writes — a create (or
+ * whole rewrite) and a targeted update — render through this one card. The
+ * Artifact is read back by id and version so a later deletion reads as deleted
+ * rather than as an error; while the call's input streams the Card shows what
+ * it has so far.
  */
 export function ArtifactToolCard({
   toolPart,
@@ -36,15 +41,13 @@ export function ArtifactToolCard({
   scope?: Scope | null;
   onOpen: (target: { id: string; version: number }) => void;
 }) {
-  const input: { title?: string; type?: ArtifactType } | undefined =
-    toolPart.input;
-  const output:
-    | { id: string; title: string; version: number }
-    | { error: string }
-    | undefined = toolPart.output;
+  const updating = toolPart.type === "tool-updateArtifact";
+  const createInput =
+    toolPart.type === "tool-createArtifact" ? toolPart.input : undefined;
+  const output: ArtifactWriteOutput | undefined = toolPart.output;
   const created = output && "id" in output ? output : undefined;
 
-  const { error } = useArtifact(
+  const { data, error } = useArtifact(
     created ? (scope ?? null) : null,
     created?.id,
     created?.version,
@@ -55,8 +58,9 @@ export function ArtifactToolCard({
     toolPart.errorText ||
     (output && "error" in output ? String(output.error) : undefined);
 
-  const title = created?.title ?? input?.title;
-  const type = input?.type;
+  const title = created?.title ?? createInput?.title;
+  const type: ArtifactType | undefined =
+    createInput?.type ?? data?.artifact.type;
   const canOpen = created !== undefined && !deleted;
 
   return (
@@ -79,7 +83,10 @@ export function ArtifactToolCard({
         </span>
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span className="min-w-0 truncate font-medium text-sm">
-            {deleted ? ARTIFACT_DELETED_LABEL : (title ?? "Creating artifact…")}
+            {deleted
+              ? ARTIFACT_DELETED_LABEL
+              : (title ??
+                (updating ? "Updating artifact…" : "Creating artifact…"))}
           </span>
           <span className="truncate text-muted-foreground text-xs">
             {[

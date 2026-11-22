@@ -146,10 +146,21 @@ export function Chat({
   const scope = useMemo(() => ({ orgId, workspaceId }), [orgId, workspaceId]);
   // The Artifact open in the side panel; its version is the one the Card's
   // turn produced, so the panel keeps showing that piece of the transcript.
+  // `openCount` makes every Card click a fresh open, so clicking the same Card
+  // again returns to its own version after the reader browsed another.
   const [openArtifact, setOpenArtifact] = useState<{
     id: string;
     version: number;
+    openCount: number;
   } | null>(null);
+  const openArtifactFromCard = useCallback(
+    (target: { id: string; version: number }) =>
+      setOpenArtifact((previous) => ({
+        ...target,
+        openCount: (previous?.openCount ?? 0) + 1,
+      })),
+    [],
+  );
   const chatUrl = joinUrl(
     backendUrl || "",
     `${scopedPath("chat", scope)}/${chatId}`,
@@ -718,7 +729,7 @@ export function Chat({
                       copied={copiedMessageId === message.id}
                       staleToolCallIds={staleToolCallIds}
                       artifactScope={scope}
-                      onOpenArtifact={setOpenArtifact}
+                      onOpenArtifact={openArtifactFromCard}
                       onApprovalResponse={
                         // Only the Active leaf can be resumed, and only while
                         // no turn holds the Chat.
@@ -926,6 +937,7 @@ export function Chat({
       {openArtifact && (
         <aside className="absolute inset-0 z-20 flex flex-col border-l bg-background lg:static lg:w-[min(560px,45vw)] lg:shrink-0">
           <ArtifactViewer
+            key={openArtifact.openCount}
             orgId={orgId}
             workspaceId={workspaceId}
             artifactId={openArtifact.id}

@@ -1,20 +1,33 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { useState } from "react";
 import type { ArtifactType } from "@platypus/schemas";
 import { CopyIcon, DownloadIcon, XIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { copyWithToast } from "@/lib/clipboard";
+import { formatDateTime } from "@/lib/format-date";
 import {
   artifactFileName,
   artifactFileExtension,
   artifactTypeLabel,
 } from "@/lib/artifact-file";
 import { cn } from "@/lib/utils";
-import { isArtifactDeleted, useArtifact } from "@/hooks/use-artifact";
+import {
+  isArtifactDeleted,
+  useArtifact,
+  useArtifactVersions,
+} from "@/hooks/use-artifact";
 import { ArtifactMarkdown, fencedCode } from "./artifact-markdown";
 import { ListError, ListState } from "./list-state";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -56,9 +69,10 @@ function codeTabLanguage(type: ArtifactType, language?: string | null): string {
 /**
  * The one Artifact viewer: the Chat's side panel and, in later slices, the
  * full-page view. It owns the Preview and Code tabs, copy and download for
- * every type, while the frame and the version picker are later additions.
- * HTML and SVG are source-only here — their frame is a separate slice — so
- * Preview is offered disabled rather than faking one.
+ * every type, and the version picker: the version a Card opened stays put
+ * while later ones exist, and an older version is read-only. The frame is a
+ * separate slice, so HTML and SVG previews are offered disabled rather than
+ * faked.
  */
 export function ArtifactViewer({
   orgId,
@@ -71,16 +85,28 @@ export function ArtifactViewer({
   orgId: string;
   workspaceId: string;
   artifactId: string;
-  /** A named version; omitted reads the latest. */
+  /** The version a Chat Card opens; omitted reads the latest. */
   version?: number;
   onClose?: () => void;
   className?: string;
 }) {
+  const scope = { orgId, workspaceId };
+  // A version the reader picks in the panel. It is remembered only for the
+  // Artifact and opening version it was picked against: when a Card opens
+  // another version, the prop wins again without an effect resetting it.
+  const versionKey = `${artifactId}:${version ?? "latest"}`;
+  const [picked, setPicked] = useState<{
+    key: string;
+    version: number;
+  } | null>(null);
+  const selected = picked?.key === versionKey ? picked.version : version;
+
   const { data, error, isLoading, mutate } = useArtifact(
-    { orgId, workspaceId },
+    scope,
     artifactId,
-    version,
+    selected,
   );
+  const { data: versions } = useArtifactVersions(scope, artifactId);
 
   if (isLoading && !data) {
     return (
@@ -124,6 +150,9 @@ export function ArtifactViewer({
   const { artifact, version: current } = data;
   const previewAvailable = artifact.type !== "html" && artifact.type !== "svg";
   const initialTab = previewAvailable ? "preview" : "code";
+  const latestVersion = versions?.results[0]?.version;
+  const isLatest =
+    latestVersion === undefined || latestVersion === current.version;
 
   return (
     <ArtifactFrame
@@ -133,9 +162,40 @@ export function ArtifactViewer({
       subtitle={
         <span className="flex flex-wrap items-center gap-2">
           <Badge variant="secondary">{artifactTypeLabel(artifact.type)}</Badge>
-          <span className="text-muted-foreground text-xs">
-            Version {current.version}
-          </span>
+          {versions && versions.results.length > 0 ? (
+            <Select
+              value={String(selected ?? current.version)}
+              onValueChange={(value) =>
+                setPicked({ key: versionKey, version: Number(value) })
+              }
+            >
+              <SelectTrigger
+                size="sm"
+                aria-label="Artifact version"
+                className="h-6 gap-1 px-2 text-xs"
+              >
+                <SelectValue>{`Version ${selected ?? current.version}`}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {versions.results.map((entry) => (
+                  <SelectItem
+                    key={entry.version}
+                    value={String(entry.version)}
+                    className="text-xs"
+                  >
+                    {`Version ${entry.version} · ${
+                      entry.author === "agent" ? "Agent" : "You"
+                    } · ${formatDateTime(entry.createdAt)}`}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : (
+            <span className="text-muted-foreground text-xs">
+              Version {current.version}
+            </span>
+          )}
+          {!isLatest && <Badge variant="outline">Read-only</Badge>}
         </span>
       }
       actions={

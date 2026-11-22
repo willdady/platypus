@@ -27,7 +27,7 @@ import { ArtifactToolCard, ARTIFACT_DELETED_LABEL } from "./artifact-tool-card";
 
 type ArtifactPart = Extract<
   ToolUIPart<CustomUITools>,
-  { type: "tool-createArtifact" }
+  { type: "tool-createArtifact" | "tool-updateArtifact" }
 >;
 
 function part(over: Record<string, unknown>): ArtifactPart {
@@ -54,6 +54,16 @@ function completed() {
       content: "# 1.0",
     },
     output: { id: "artifact-1", title: "Release notes", version: 1 },
+  });
+}
+
+function updating(over: Record<string, unknown> = {}) {
+  return part({
+    type: "tool-updateArtifact",
+    state: "output-available",
+    input: { id: "artifact-1", edits: [{ old: "1.0", new: "1.1" }] },
+    output: { id: "artifact-1", title: "Release notes", version: 2 },
+    ...over,
   });
 }
 
@@ -95,6 +105,46 @@ describe("ArtifactToolCard", () => {
     expect(onOpen).toHaveBeenCalledWith({ id: "artifact-1", version: 1 });
   });
 
+  it("draws an update call as a card and opens the version it produced", () => {
+    const onOpen = vi.fn();
+    hook.result = buildResult({
+      data: {
+        artifact: { type: "markdown" },
+        version: { version: 2 },
+      },
+    });
+    render(
+      <ArtifactToolCard
+        toolPart={updating()}
+        scope={{ orgId: "org-1", workspaceId: "ws-1" }}
+        onOpen={onOpen}
+      />,
+    );
+
+    expect(screen.getByText("Release notes")).toBeInTheDocument();
+    expect(screen.getByText(/Markdown · Version 2/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Release notes/ }));
+
+    expect(onOpen).toHaveBeenCalledWith({ id: "artifact-1", version: 2 });
+  });
+
+  it("shows an update waiting on its result as updating", () => {
+    render(
+      <ArtifactToolCard
+        toolPart={updating({
+          state: "input-streaming",
+          output: undefined,
+        })}
+        scope={{ orgId: "org-1", workspaceId: "ws-1" }}
+        onOpen={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Updating artifact…")).toBeInTheDocument();
+    expect(screen.getByRole("button")).toBeDisabled();
+  });
+
   it("shows a deleted state, not an error, when the Artifact is gone", () => {
     hook.result = buildResult({ error: { status: 404 } });
     render(
@@ -111,6 +161,27 @@ describe("ArtifactToolCard", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("button")).toBeDisabled();
     expect(screen.queryByText("Error")).not.toBeInTheDocument();
+  });
+
+  it("shows a failed update's own error", () => {
+    render(
+      <ArtifactToolCard
+        toolPart={updating({
+          state: "output-available",
+          output: {
+            error:
+              'Edit 1 ("1.0") must match exactly once, but matched 0 times.',
+          },
+        })}
+        scope={{ orgId: "org-1", workspaceId: "ws-1" }}
+        onOpen={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByText(/must match exactly once, but matched 0 times/),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Completed")).toBeInTheDocument();
   });
 
   it("shows the tool's own error", () => {

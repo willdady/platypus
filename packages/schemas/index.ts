@@ -1798,6 +1798,7 @@ export const CLEARABLE_TOOL_NAMES: ReadonlySet<string> = new Set([
   "readSkillFile",
   "listChats",
   "readTranscript",
+  "readArtifact",
 ]);
 
 /**
@@ -4762,6 +4763,38 @@ export const artifactCreateSchema = z.strictObject({
 });
 
 export type ArtifactCreate = z.infer<typeof artifactCreateSchema>;
+
+/**
+ * One targeted replacement in an Agent's `updateArtifact` call. `old` must
+ * occur exactly once in the content it is applied to; an empty needle would
+ * match at every position, so it is refused before the edit runs.
+ */
+export const artifactEditSchema = z.strictObject({
+  old: z.string().min(1),
+  new: z.string(),
+});
+
+export type ArtifactEdit = z.infer<typeof artifactEditSchema>;
+
+/**
+ * A version as a list shows it: its identity and who wrote it, never its
+ * content. The version picker needs one of these per version, and a page of
+ * whole versions would carry the Artifact many times over.
+ */
+export const artifactVersionSummarySchema = artifactVersionSchema.omit({
+  content: true,
+});
+
+export type ArtifactVersionSummary = z.infer<
+  typeof artifactVersionSummarySchema
+>;
+
+/** Every version of one Artifact, newest first. */
+export const artifactVersionListSchema = z.object({
+  results: z.array(artifactVersionSummarySchema),
+});
+
+export type ArtifactVersionList = z.infer<typeof artifactVersionListSchema>;
 
 export * from "./chat-ui-message.ts";
 export * from "./chat-summary.ts";

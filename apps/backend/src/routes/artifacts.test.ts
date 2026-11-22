@@ -166,4 +166,56 @@ describe("Artifact Routes", () => {
 
     expect(res.status).toBe(400);
   });
+
+  describe("GET /:artifactId/versions", () => {
+    it("lists every version newest first, without content", async () => {
+      world();
+      mockSession();
+
+      const res = await app.request(`${baseUrl}/${artifactId}/versions`);
+
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        results: {
+          version: number;
+          author: string;
+          createdAt: string;
+          content?: string;
+        }[];
+      };
+      expect(body.results).toHaveLength(2);
+      expect(body.results.map(({ version }) => version)).toEqual([2, 1]);
+      expect(body.results[0]).toMatchObject({
+        artifactId,
+        version: 2,
+        author: "user",
+        createdAt: "2026-01-02T00:00:00.000Z",
+      });
+      expect(body.results[0]).not.toHaveProperty("content");
+    });
+
+    it("requires authentication and Workspace access", async () => {
+      world();
+      mockNoSession();
+      expect(
+        (await app.request(`${baseUrl}/${artifactId}/versions`)).status,
+      ).toBe(401);
+
+      world("other-user");
+      mockSession();
+      expect(
+        (await app.request(`${baseUrl}/${artifactId}/versions`)).status,
+      ).toBe(403);
+    });
+
+    it("does not find another Workspace's Artifact", async () => {
+      world();
+      mockSession();
+
+      const res = await app.request(`${baseUrl}/artifact-2/versions`);
+
+      expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({ error: "Artifact not found" });
+    });
+  });
 });
