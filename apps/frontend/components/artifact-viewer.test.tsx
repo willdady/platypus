@@ -183,6 +183,39 @@ describe("ArtifactViewer", () => {
     expect(screen.getByText("Read-only")).toBeInTheDocument();
   });
 
+  // The full-page view mounts the viewer with no version, so it opens on the
+  // latest version and the picker is the only way to a history entry.
+  it("opens on the latest version when mounted without one, and picks an older", async () => {
+    artifactHook.mockImplementation(
+      (_scope: unknown, _id: string, version?: number) => ({
+        data: version === 1 ? firstVersion : markdown,
+        isLoading: false,
+      }),
+    );
+    renderViewer();
+
+    expect(artifactHook).toHaveBeenCalledWith(
+      { orgId: "org-1", workspaceId: "ws-1" },
+      "artifact-1",
+      undefined,
+    );
+    expect(screen.getByText("# Version two")).toBeInTheDocument();
+    expect(screen.queryByText("Read-only")).not.toBeInTheDocument();
+
+    await selectOption(
+      "Version 2",
+      `Version 1 · You · ${formatDateTime("2026-01-01T00:00:00.000Z")}`,
+    );
+
+    expect(artifactHook).toHaveBeenLastCalledWith(
+      { orgId: "org-1", workspaceId: "ws-1" },
+      "artifact-1",
+      1,
+    );
+    expect(screen.getByText("# Version one")).toBeInTheDocument();
+    expect(screen.getByText("Read-only")).toBeInTheDocument();
+  });
+
   it("switches to the Code tab's source", () => {
     renderViewer();
 

@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, count, desc, eq, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import {
   ARTIFACT_CONTENT_MAX_BYTES,
@@ -18,11 +18,12 @@ import { NotFoundError, ValidationError } from "../errors.ts";
 import type { db, Tx } from "../index.ts";
 
 /**
- * The Artifact model shared by the HTTP read routes and the Agent Tool set:
- * both surfaces resolve an Artifact by id inside one Workspace, and both append
- * versions through here. Every write takes the Artifact's row lock inside one
- * transaction and allocates the next version number there, so two writers race
- * for the lock rather than for the same number.
+ * The Artifact model shared by the HTTP routes and the Agent Tool set: both
+ * surfaces resolve an Artifact by id inside one Workspace. This module owns
+ * creation, reads, the paged list, the two human edits — rename and delete —
+ * and the Agent-driven versions: a whole rewrite and targeted edits. Every
+ * write appends, never overwrites, and every write takes the Artifact's row
+ * lock inside its transaction.
  */
 
 export type ArtifactDatabase = typeof db;
@@ -30,6 +31,13 @@ type ArtifactExecutor = ArtifactDatabase | Tx;
 
 /** Everything an Artifact read is confined to: its Workspace, never across it. */
 export type ArtifactScope = { workspaceId: string };
+
+/** An Artifact id inside one Workspace — the one predicate every read and write uses. */
+export const scopedArtifact = (artifactId: string, scope: ArtifactScope) =>
+  and(
+    eq(artifactTable.id, artifactId),
+    eq(artifactTable.workspaceId, scope.workspaceId),
+  );
 
 /** What an edit failure tells the model to do next; the tool description repeats it. */
 export const ARTIFACT_EDIT_RECOVERY =
@@ -139,10 +147,7 @@ async function findArtifact(
   artifactId: string,
   lock = false,
 ) {
-  const scoped = and(
-    eq(artifactTable.id, artifactId),
-    eq(artifactTable.workspaceId, scope.workspaceId),
-  );
+  const scoped = scopedArtifact(artifactId, scope);
 
   const [artifact] = lock
     ? await runner
@@ -363,8 +368,8 @@ export async function getArtifactWithVersion(
 /**
  * Every version of one Artifact, newest first, without its content. Confined
  * to the Workspace: another Workspace's Artifact is not found rather than
- * listed empty. The viewer's version picker and the Agent's tool set both read
- * this, so a version number is always shown with who wrote it and when.
+ * listed empty. The viewer's version picker reads this, so a version number is
+ * always shown with who wrote it and when.
  */
 export async function listArtifactVersions(
   database: ArtifactDatabase,
@@ -386,44 +391,100 @@ export async function listArtifactVersions(
     .orderBy(desc(artifactVersionTable.version));
 }
 
-export type ListArtifactsInput = {
-  /** A case-insensitive title search; no content is searched. */
-  query?: string;
+/** One page of a Workspace's Artifacts, plus the total the page was cut from. */
+export type ListArtifactsQuery = {
+  limit: number;
+  offset: number;
+  /** Title search, case-insensitive. Omitted or blank means every title. */
+  search?: string;
   type?: ArtifactType;
-  limit?: number;
 };
 
 /**
- * The Workspace's Artifacts, most recently changed first, as summaries: id,
- * title, type and updated time. Content is never listed — a Workspace's
- * documents would otherwise arrive whole in one model call; `readArtifact` is
- * the way to read one.
+ * Lists a Workspace's Artifacts, newest change first, so the page is quick to
+ * scan and a paged list stays put as Artifacts change. The search and type
+ * filter are applied by the database, not the caller, so paging counts what
+ * the reader is actually looking at. The Agent's `listArtifacts` tool reads the
+ * first page through this same query, so the two can never disagree.
  */
 export async function listArtifacts(
   database: ArtifactDatabase,
   scope: ArtifactScope,
-  { query, type, limit = 20 }: ListArtifactsInput = {},
+  query: ListArtifactsQuery,
 ) {
-  const term = query?.trim().replace(/[\\%_]/g, "\\$&");
-  const searchFilter = term
-    ? sql`${artifactTable.title} ILIKE ${`%${term}%`}`
-    : undefined;
+  // `\` is Postgres's default LIKE escape, so escaping `%`, `_` and `\` matches
+  // them literally rather than turning the reader's text into a wildcard.
+  const term = query.search?.trim().replace(/[\\%_]/g, "\\$&");
+  const where = and(
+    eq(artifactTable.workspaceId, scope.workspaceId),
+    term ? sql`${artifactTable.title} ILIKE ${`%${term}%`}` : undefined,
+    query.type ? eq(artifactTable.type, query.type) : undefined,
+  );
 
-  return await database
-    .select({
-      id: artifactTable.id,
-      title: artifactTable.title,
-      type: artifactTable.type,
-      updatedAt: artifactTable.updatedAt,
-    })
+  const results = await database
+    .select()
     .from(artifactTable)
-    .where(
-      and(
-        eq(artifactTable.workspaceId, scope.workspaceId),
-        type ? eq(artifactTable.type, type) : undefined,
-        searchFilter,
-      ),
-    )
+    .where(where)
     .orderBy(desc(artifactTable.updatedAt), desc(artifactTable.id))
-    .limit(limit);
+    .limit(query.limit)
+    .offset(query.offset);
+
+  const { totalCount } = oneRow(
+    await database
+      .select({ totalCount: count() })
+      .from(artifactTable)
+      .where(where),
+  );
+
+  return { results, totalCount };
+}
+
+/**
+ * Renames an Artifact. The title is held to the same bound as creation and
+ * refused whole; the change also moves the Artifact to the top of the
+ * most-recently-updated list.
+ */
+export async function renameArtifact(
+  database: ArtifactDatabase,
+  scope: ArtifactScope,
+  artifactId: string,
+  title: string,
+) {
+  assertArtifactTitle(title);
+
+  const [artifact] = await database
+    .update(artifactTable)
+    .set({ title, updatedAt: new Date() })
+    .where(scopedArtifact(artifactId, scope))
+    .returning();
+
+  if (!artifact) throw new NotFoundError("Artifact not found");
+  return artifact;
+}
+
+/**
+ * Deletes an Artifact and its versions as one unit. Versions are removed
+ * explicitly rather than leaning on the foreign key alone, so the rule holds
+ * for any database stand-in as well as Postgres. An id from another Workspace
+ * is a 404 and changes nothing.
+ */
+export async function deleteArtifact(
+  database: ArtifactDatabase,
+  scope: ArtifactScope,
+  artifactId: string,
+) {
+  await database.transaction(async (tx) => {
+    const [artifact] = await tx
+      .select({ id: artifactTable.id })
+      .from(artifactTable)
+      .where(scopedArtifact(artifactId, scope))
+      .limit(1);
+
+    if (!artifact) throw new NotFoundError("Artifact not found");
+
+    await tx
+      .delete(artifactVersionTable)
+      .where(eq(artifactVersionTable.artifactId, artifactId));
+    await tx.delete(artifactTable).where(scopedArtifact(artifactId, scope));
+  });
 }

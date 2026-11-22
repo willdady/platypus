@@ -1,6 +1,6 @@
 import type { ArtifactRead, ArtifactVersionList } from "@platypus/schemas";
-import type { Scope } from "@/lib/api-write";
-import { errorStatus } from "@/lib/utils";
+import { scopedUrl, type Scope, type Serialized } from "@/lib/api-write";
+import { errorStatus, fetcher } from "@/lib/utils";
 import { useScopedSWR } from "./use-scoped-swr";
 
 /**
@@ -55,4 +55,21 @@ export function useArtifactVersions(
  */
 export function isArtifactDeleted(error: unknown): boolean {
   return errorStatus(error) === 404;
+}
+
+/**
+ * Reads one Artifact on demand, outside the cache — for the list's Download
+ * action, which needs the latest content without rendering it. The viewer and
+ * the Chat Card read through {@link useArtifact} instead, so their content is
+ * subscribed and revalidated.
+ */
+export function readArtifact(
+  backendUrl: string,
+  scope: Scope,
+  artifactId: string,
+  version?: number,
+): Promise<Serialized<ArtifactRead>> {
+  return fetcher<Serialized<ArtifactRead>>(
+    scopedUrl(backendUrl, artifactEntity(artifactId, version), scope),
+  );
 }

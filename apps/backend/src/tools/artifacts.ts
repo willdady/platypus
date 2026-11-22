@@ -205,13 +205,22 @@ export function createListArtifactsTool(workspaceId: string) {
     }),
     execute: async ({ query, type, limit }) =>
       asToolResult(async () => {
-        const results = await listArtifacts(
+        // The first page of the same query the Artifacts page uses; the tool
+        // trims each row to what a model needs to choose one, never content.
+        const { results } = await listArtifacts(
           db,
           { workspaceId },
-          { query, type, limit: limit ?? 20 },
+          { limit: limit ?? 20, offset: 0, search: query, type },
         );
 
-        return { artifacts: results };
+        return {
+          artifacts: results.map(({ id, title, type, updatedAt }) => ({
+            id,
+            title,
+            type,
+            updatedAt,
+          })),
+        };
       }),
   });
 }
