@@ -22,7 +22,7 @@ import type { ArtifactLive } from "./artifact-viewer";
 
 type ArtifactToolPart = Extract<
   ToolUIPart<CustomUITools>,
-  { type: "tool-createArtifact" }
+  { type: "tool-createArtifact" | "tool-updateArtifact" }
 >;
 
 /** The input a `createArtifact` call carries; partial while it streams. */
@@ -33,7 +33,7 @@ type ArtifactInput = Partial<{
   content: string;
 }>;
 
-/** The stored Artifact a completed `createArtifact` call produced. */
+/** The stored Artifact a completed write call produced. */
 export type StoredArtifact = { id: string; title: string; version: number };
 
 /** What the Card asks the Chat to open in the side panel. */
@@ -43,7 +43,9 @@ export type ArtifactOpenTarget =
 export const ARTIFACT_DELETED_LABEL = "Artifact deleted";
 
 export function artifactInput(toolPart: ArtifactToolPart): ArtifactInput {
-  return toolPart.input ?? {};
+  // An update's input is an id and edits; only a create carries content the
+  // panel can show while it streams.
+  return toolPart.type === "tool-createArtifact" ? (toolPart.input ?? {}) : {};
 }
 
 /**
@@ -123,10 +125,12 @@ export function findArtifactToolPart(
 
 /**
  * The Chat's Artifact Card: a title, its type and the version the call
- * produced, opening the Artifact in the side panel. While the call's input
- * streams the Card can be opened too, so the panel shows the content as it
- * arrives. Once the call completes the Artifact is read back by id and version,
- * so a later deletion reads as deleted rather than as an error.
+ * produced, opening the Artifact in the side panel. Both writes — a create (or
+ * whole rewrite) and a targeted update — render through this one card. A
+ * create can be opened while it streams so the panel follows the content as it
+ * arrives; once the call completes, or for an update, the Artifact is read back
+ * by id and version, so a later deletion reads as deleted rather than as an
+ * error.
  */
 export function ArtifactToolCard({
   toolPart,
@@ -138,11 +142,12 @@ export function ArtifactToolCard({
   scope?: Scope | null;
   onOpen: (target: ArtifactOpenTarget) => void;
 }) {
+  const updating = toolPart.type === "tool-updateArtifact";
   const input = artifactInput(toolPart);
   const created = storedArtifactOf(toolPart);
   const failure = artifactFailureOf(toolPart);
 
-  const { error } = useArtifact(
+  const { data, error } = useArtifact(
     created ? (scope ?? null) : null,
     created?.id,
     created?.version,
@@ -150,8 +155,10 @@ export function ArtifactToolCard({
   const deleted = created !== undefined && isArtifactDeleted(error);
 
   const title = created?.title ?? input.title;
-  const type = artifactTypeOf(input.type);
-  const canOpen = !deleted;
+  const type = artifactTypeOf(input.type) ?? data?.artifact.type;
+  // A streaming update has no content to show and no version yet, so its Card
+  // waits for the result; a create can open its live panel as it writes.
+  const canOpen = !deleted && (created !== undefined || !updating);
 
   return (
     <div className="w-full min-w-0">
@@ -177,7 +184,10 @@ export function ArtifactToolCard({
         </span>
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span className="min-w-0 truncate font-medium text-sm">
-            {deleted ? ARTIFACT_DELETED_LABEL : (title ?? "Creating artifact…")}
+            {deleted
+              ? ARTIFACT_DELETED_LABEL
+              : (title ??
+                (updating ? "Updating artifact…" : "Creating artifact…"))}
           </span>
           <span className="truncate text-muted-foreground text-xs">
             {[

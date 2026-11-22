@@ -6,6 +6,7 @@ import {
   artifactSchema,
   artifactTypeSchema,
   artifactUpdateSchema,
+  artifactVersionListSchema,
   artifactVersionQuerySchema,
 } from "@platypus/schemas";
 import { paginationQuerySchema, validate } from "../validate.ts";
@@ -23,16 +24,17 @@ import {
   deleteArtifact,
   getArtifactWithVersion,
   listArtifacts,
+  listArtifactVersions,
   renameArtifact,
 } from "../services/artifact.ts";
 import type { Variables } from "../server.ts";
 
 /**
  * The human-facing Artifact routes: the paged list, one Artifact at a named or
- * latest version, rename and delete, under the same access rule as Chats.
- * Creating from an upload, hand edits and version listing arrive with later
- * slices. Reads are open to anyone with Workspace access; the writes that
- * change what everyone sees are the Workspace Owner's.
+ * latest version, its version history, rename and delete, under the same
+ * access rule as Chats. Creating from an upload and hand edits arrive with
+ * later slices. Reads are open to anyone with Workspace access; the writes
+ * that change what everyone sees are the Workspace Owner's.
  */
 const artifacts = new Hono<{ Variables: Variables }>();
 
@@ -63,6 +65,18 @@ artifacts.get(
     );
   },
 );
+
+artifacts.get("/:artifactId/versions", ...readers, async (c) => {
+  const { workspaceId } = workspaceScopeOf(c);
+
+  return respond(c, artifactVersionListSchema, {
+    results: await listArtifactVersions(
+      db,
+      { workspaceId },
+      c.req.param("artifactId"),
+    ),
+  });
+});
 
 artifacts.get(
   "/:artifactId",

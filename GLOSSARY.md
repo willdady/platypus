@@ -18,7 +18,7 @@ A single round of running the model: given the prior messages and a Workspace + 
 _Avoid_: chat request, chat invocation, chat run.
 
 **Artifact**:
-A standalone, versioned piece of content in a Workspace — markdown, code, a Mermaid diagram, an HTML page or an SVG image — created by an Agent's Artifacts Tool set and kept apart from the Chat that made it. Its versions are append-only and each stores the whole content, so the latest version is its current content and any older one is readable on its own. The source Chat is optional: deleting that Chat keeps the Artifact. Deleting the Workspace deletes its Artifacts. Not the A2A protocol's "artifact", which is a part of a Task's output and never a stored, versioned resource in a Workspace.
+A standalone, versioned piece of content in a Workspace — markdown, code, a Mermaid diagram, an HTML page or an SVG image — created and changed by an Agent's Artifacts Tool set and kept apart from the Chat that made it. Its versions are append-only and each stores the whole content, so the latest version is its current content and any older one is readable on its own; each version records whether an Agent or the User wrote it. The source Chat is optional: deleting that Chat keeps the Artifact. Deleting the Workspace deletes its Artifacts. Not the A2A protocol's "artifact", which is a part of a Task's output and never a stored, versioned resource in a Workspace.
 _Avoid_: document (that names one type), output (that names a turn's by-product), A2A artifact.
 
 **Artifact frame**:

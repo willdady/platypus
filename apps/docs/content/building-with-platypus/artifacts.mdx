@@ -31,11 +31,17 @@ The title is **1-200 characters**. Each version holds at most **512 KB** of
 content. A title or a body over its limit is refused whole — nothing is cut
 short to fit.
 
-## Letting an Agent create one
+## Letting an Agent work with Artifacts
 
-Grant the Agent the **Artifacts** Tool set on its **Tools** card. That gives it
-one tool, `createArtifact`, and nothing else: it can create a new Artifact, not
-read, edit or delete one.
+Grant the Agent the **Artifacts** Tool set on its **Tools** card. It brings four
+tools:
+
+| Tool             | What it does                                                                       |
+| ---------------- | ---------------------------------------------------------------------------------- |
+| `createArtifact` | Creates a new Artifact, or rewrites an existing one whole when it is given its id. |
+| `updateArtifact` | Applies small, targeted replacements to an existing Artifact.                      |
+| `readArtifact`   | Reads an Artifact's current content, or a named older version.                     |
+| `listArtifacts`  | Lists the Workspace's Artifacts with their id, title, type and last-changed time.  |
 
 Ask for the piece in the Chat:
 
@@ -43,9 +49,9 @@ Ask for the piece in the Chat:
 Write the migration guide as a Markdown Artifact called "Migrating to 2.0".
 ```
 
-When the Agent calls the tool, a Card appears in the reply with the title, the
-type and the version it wrote. Click the Card to open the Artifact in a panel
-beside the Chat. The panel has two tabs:
+When the Agent calls a write tool, a Card appears in the reply with the title,
+the type and the version it wrote. Click the Card to open the Artifact in a
+panel beside the Chat. The panel has two tabs:
 
 - **Preview** shows the rendered Artifact for Markdown, Code and Mermaid, and
   runs HTML and SVG inside a frame.
@@ -93,6 +99,33 @@ the Workspace sees **Download** and **Open source Chat** only.
   Workspace deletes its Artifacts.
 </Callout>
 
+## Asking for a change
+
+Asking for one line to change does not mean writing the piece out again. The
+Agent uses `updateArtifact` with a list of small replacements, each an exact
+piece of the old text and its replacement:
+
+```text
+In "Migrating to 2.0", change the install command and update the date.
+```
+
+Each piece of old text must appear exactly once in the current content. The
+replacements are applied in order and the whole call becomes one version. If a
+piece is missing, or appears more than once, the call fails and nothing is
+written: the Agent is told which replacement failed, and it adds surrounding
+context or reads the Artifact again before retrying. That way a stale edit from
+an earlier draft can never land in the wrong place.
+
+For a restructure, the Agent can rewrite the whole Artifact with
+`createArtifact` and its id. The type is fixed when the Artifact is created, so
+a rewrite cannot turn a document into a page; such an attempt is refused rather
+than quietly converting it.
+
+`readArtifact` gives the Agent the current content when the copy in the
+conversation may be out of date — after a change from another Chat. The
+`listArtifacts` tool lets it find an Artifact by title or type in a new Chat,
+so work carries across conversations.
+
 ## How HTML and SVG are contained
 
 An HTML or SVG Artifact is a page an Agent wrote, so Platypus treats it as one
@@ -134,5 +167,16 @@ on its own.
 
 ## Versions
 
-Every Artifact keeps its versions in order, and the newest is its current
-content. Creating one writes version 1, written by the Agent.
+Every change to an Artifact is a new version, and nothing an Agent or you wrote
+is lost. Creating one writes the first version, written by the Agent. A
+targeted update adds one version for the whole call, however many replacements
+it carried; a rewrite adds one version with the whole content.
+
+The version picker in the viewer lists each version with its number, whether an
+Agent or you wrote it, and when. Pick an earlier one to see what the Artifact
+used to say. Older versions are read-only; an Agent's next change always starts
+from the latest version, so it works from whatever came before it.
+
+Each Card in a Chat remembers the version its own tool call produced, so
+clicking it opens that version even after the Artifact has moved on. The
+version picker then lets you move to the latest or any other.

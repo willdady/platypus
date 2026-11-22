@@ -6,7 +6,10 @@ import type {
 } from "./tools/skill.ts";
 import type { DelegateTool } from "./tools/sub-agent.ts";
 import type { createFsDownloadTool } from "./sandbox/tools.ts";
-import type { createCreateArtifactTool } from "./tools/artifacts.ts";
+import type {
+  createCreateArtifactTool,
+  createUpdateArtifactTool,
+} from "./tools/artifacts.ts";
 
 // The Chat UI message contract lives in `@platypus/schemas`, hand-written, so
 // the frontend can type its messages without compiling backend source. The
@@ -56,6 +59,12 @@ export type CustomUIToolsMatchBackend = [
     Equal<
       InferUITool<ReturnType<typeof createCreateArtifactTool>>,
       CustomUITools["createArtifact"]
+    >
+  >,
+  Expect<
+    Equal<
+      InferUITool<ReturnType<typeof createUpdateArtifactTool>>,
+      CustomUITools["updateArtifact"]
     >
   >,
 ];

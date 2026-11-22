@@ -120,6 +120,12 @@ type MessagePart = NonNullable<PlatypusUIMessage["parts"]>[number];
 /** A tool part of a Chat message, typed by `CustomUITools`. */
 type MessageToolPart = ToolUIPart<CustomUITools>;
 
+/** The two Artifact writes that share the one Artifact Card. */
+type ArtifactMessagePart = Extract<
+  MessageToolPart,
+  { type: "tool-createArtifact" | "tool-updateArtifact" }
+>;
+
 type PartOfType<T extends MessagePart["type"]> = Extract<
   MessagePart,
   { type: T }
@@ -196,10 +202,10 @@ function isWebToolPart(part: MessagePart): part is MessageToolPart {
 }
 
 /** An Artifact Card has its own click target, so it stands alone. */
-function isArtifactToolPart(
-  part: MessagePart,
-): part is PartOfType<"tool-createArtifact"> {
-  return part.type === "tool-createArtifact";
+function isArtifactToolPart(part: MessagePart): part is ArtifactMessagePart {
+  return (
+    part.type === "tool-createArtifact" || part.type === "tool-updateArtifact"
+  );
 }
 
 /**

@@ -1,15 +1,23 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { ComponentProps } from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
+import { formatDateTime } from "@/lib/format-date";
 
-const { hook, copy } = vi.hoisted(() => ({
-  hook: { result: {} },
+const { artifactHook, versionsHook, copy } = vi.hoisted(() => ({
+  artifactHook: vi.fn(),
+  versionsHook: vi.fn(),
   copy: vi.fn(async () => true),
 }));
 
 vi.mock("@/hooks/use-artifact", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/hooks/use-artifact")>();
-  return { ...actual, useArtifact: () => hook.result };
+  return {
+    ...actual,
+    useArtifact: (...args: Parameters<typeof artifactHook>) =>
+      artifactHook(...args),
+    useArtifactVersions: (...args: Parameters<typeof versionsHook>) =>
+      versionsHook(...args),
+  };
 });
 vi.mock("@/lib/clipboard", () => ({ copyWithToast: copy }));
 vi.mock("@/components/auth-provider", () => ({
@@ -24,6 +32,7 @@ vi.mock("./artifact-markdown", () => ({
 }));
 
 import { ArtifactViewer } from "./artifact-viewer";
+import { selectOption, setupUser } from "@/test/test-utils";
 
 const markdown = {
   artifact: {
@@ -47,6 +56,37 @@ const markdown = {
   scriptOrigins: ["https://cdnjs.cloudflare.com"],
 };
 
+const firstVersion = {
+  artifact: markdown.artifact,
+  version: {
+    id: "v1",
+    artifactId: "artifact-1",
+    version: 1,
+    content: "# Version one",
+    author: "user",
+    createdAt: "2026-01-01T00:00:00.000Z",
+  },
+};
+
+const versionList = {
+  results: [
+    {
+      id: "v2",
+      artifactId: "artifact-1",
+      version: 2,
+      author: "agent",
+      createdAt: "2026-01-02T00:00:00.000Z",
+    },
+    {
+      id: "v1",
+      artifactId: "artifact-1",
+      version: 1,
+      author: "user",
+      createdAt: "2026-01-01T00:00:00.000Z",
+    },
+  ],
+};
+
 function renderViewer(
   over: Partial<ComponentProps<typeof ArtifactViewer>> = {},
 ) {
@@ -61,7 +101,10 @@ function renderViewer(
 }
 
 beforeEach(() => {
-  hook.result = { data: markdown, isLoading: false };
+  artifactHook.mockReset();
+  artifactHook.mockReturnValue({ data: markdown, isLoading: false });
+  versionsHook.mockReset();
+  versionsHook.mockReturnValue({ data: versionList, isLoading: false });
 });
 
 afterEach(() => {
@@ -77,6 +120,101 @@ describe("ArtifactViewer", () => {
     expect(screen.getByText("Markdown")).toBeInTheDocument();
     expect(screen.getByText(/Version 2/)).toBeInTheDocument();
     expect(screen.getByText("# Version two")).toBeInTheDocument();
+    expect(screen.queryByText("Read-only")).not.toBeInTheDocument();
+  });
+
+  it("shows each version's number, author and time in the picker", async () => {
+    renderViewer();
+
+    const user = setupUser();
+    const trigger = screen.getByRole("combobox", { name: "Artifact version" });
+    trigger.focus();
+    await user.keyboard("{ArrowDown}");
+
+    expect(
+      await screen.findByRole("option", {
+        name: `Version 2 · Agent · ${formatDateTime("2026-01-02T00:00:00.000Z")}`,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", {
+        name: `Version 1 · You · ${formatDateTime("2026-01-01T00:00:00.000Z")}`,
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("opens the version a Chat Card named, and marks it read-only", () => {
+    artifactHook.mockImplementation(
+      (_scope: unknown, _id: string, version?: number) => ({
+        data: version === 1 ? firstVersion : markdown,
+        isLoading: false,
+      }),
+    );
+    renderViewer({ version: 1 });
+
+    expect(artifactHook).toHaveBeenCalledWith(
+      { orgId: "org-1", workspaceId: "ws-1" },
+      "artifact-1",
+      1,
+    );
+    expect(screen.getByText("# Version one")).toBeInTheDocument();
+    expect(screen.getByText("Read-only")).toBeInTheDocument();
+  });
+
+  it("reads an earlier version the reader picks, and marks it read-only", async () => {
+    artifactHook.mockImplementation(
+      (_scope: unknown, _id: string, version?: number) => ({
+        data: version === 1 ? firstVersion : markdown,
+        isLoading: false,
+      }),
+    );
+    renderViewer({ version: 2 });
+
+    await selectOption(
+      "Version 2",
+      `Version 1 · You · ${formatDateTime("2026-01-01T00:00:00.000Z")}`,
+    );
+
+    expect(artifactHook).toHaveBeenLastCalledWith(
+      { orgId: "org-1", workspaceId: "ws-1" },
+      "artifact-1",
+      1,
+    );
+    expect(screen.getByText("# Version one")).toBeInTheDocument();
+    expect(screen.getByText("Read-only")).toBeInTheDocument();
+  });
+
+  // The full-page view mounts the viewer with no version, so it opens on the
+  // latest version and the picker is the only way to a history entry.
+  it("opens on the latest version when mounted without one, and picks an older", async () => {
+    artifactHook.mockImplementation(
+      (_scope: unknown, _id: string, version?: number) => ({
+        data: version === 1 ? firstVersion : markdown,
+        isLoading: false,
+      }),
+    );
+    renderViewer();
+
+    expect(artifactHook).toHaveBeenCalledWith(
+      { orgId: "org-1", workspaceId: "ws-1" },
+      "artifact-1",
+      undefined,
+    );
+    expect(screen.getByText("# Version two")).toBeInTheDocument();
+    expect(screen.queryByText("Read-only")).not.toBeInTheDocument();
+
+    await selectOption(
+      "Version 2",
+      `Version 1 · You · ${formatDateTime("2026-01-01T00:00:00.000Z")}`,
+    );
+
+    expect(artifactHook).toHaveBeenLastCalledWith(
+      { orgId: "org-1", workspaceId: "ws-1" },
+      "artifact-1",
+      1,
+    );
+    expect(screen.getByText("# Version one")).toBeInTheDocument();
+    expect(screen.getByText("Read-only")).toBeInTheDocument();
   });
 
   it("switches to the Code tab's source", () => {
@@ -90,14 +228,14 @@ describe("ArtifactViewer", () => {
   });
 
   it("shows a Mermaid Artifact's source in Code, not a second diagram", () => {
-    hook.result = {
+    artifactHook.mockReturnValue({
       data: {
         ...markdown,
         artifact: { ...markdown.artifact, type: "mermaid" },
         version: { ...markdown.version, content: "graph TD; A-->B;" },
       },
       isLoading: false,
-    };
+    });
     renderViewer();
 
     fireEvent.mouseDown(screen.getByRole("tab", { name: "Code" }), {
@@ -109,14 +247,14 @@ describe("ArtifactViewer", () => {
   });
 
   it("runs an HTML Artifact in a frame fed by srcDoc, with exactly allow-scripts", () => {
-    hook.result = {
+    artifactHook.mockReturnValue({
       data: {
         ...markdown,
         artifact: { ...markdown.artifact, type: "html" },
         version: { ...markdown.version, content: "<h1>Quarterly sales</h1>" },
       },
       isLoading: false,
-    };
+    });
     renderViewer();
 
     const frame = screen.getByTitle("Artifact preview");
@@ -134,14 +272,14 @@ describe("ArtifactViewer", () => {
   });
 
   it("keeps the Code tab available beside an HTML Artifact's preview", () => {
-    hook.result = {
+    artifactHook.mockReturnValue({
       data: {
         ...markdown,
         artifact: { ...markdown.artifact, type: "html" },
         version: { ...markdown.version, content: "<p>Hi</p>" },
       },
       isLoading: false,
-    };
+    });
     renderViewer();
 
     fireEvent.mouseDown(screen.getByRole("tab", { name: "Code" }), {
@@ -152,7 +290,7 @@ describe("ArtifactViewer", () => {
   });
 
   it("lets an approved library origin into the frame's policy", () => {
-    hook.result = {
+    artifactHook.mockReturnValue({
       data: {
         ...markdown,
         artifact: { ...markdown.artifact, type: "html" },
@@ -163,7 +301,7 @@ describe("ArtifactViewer", () => {
         },
       },
       isLoading: false,
-    };
+    });
     renderViewer();
 
     const doc = screen.getByTitle("Artifact preview").getAttribute("srcdoc");
@@ -173,7 +311,7 @@ describe("ArtifactViewer", () => {
   });
 
   it("shows a notice naming the site when its own frame reports a block", () => {
-    hook.result = {
+    artifactHook.mockReturnValue({
       data: {
         ...markdown,
         artifact: { ...markdown.artifact, type: "html" },
@@ -181,7 +319,7 @@ describe("ArtifactViewer", () => {
         scriptOrigins: [],
       },
       isLoading: false,
-    };
+    });
     renderViewer();
     const frame = screen.getByTitle("Artifact preview") as HTMLIFrameElement;
 
@@ -203,7 +341,7 @@ describe("ArtifactViewer", () => {
   });
 
   it("ignores a block report that does not come from its own frame", () => {
-    hook.result = {
+    artifactHook.mockReturnValue({
       data: {
         ...markdown,
         artifact: { ...markdown.artifact, type: "html" },
@@ -211,7 +349,7 @@ describe("ArtifactViewer", () => {
         scriptOrigins: [],
       },
       isLoading: false,
-    };
+    });
     renderViewer();
 
     fireEvent(
@@ -229,7 +367,7 @@ describe("ArtifactViewer", () => {
   });
 
   it("says an Artifact is deleted rather than showing an error", () => {
-    hook.result = { error: { status: 404 }, isLoading: false };
+    artifactHook.mockReturnValue({ error: { status: 404 }, isLoading: false });
     renderViewer();
 
     expect(
@@ -261,6 +399,43 @@ describe("ArtifactViewer", () => {
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:artifact");
   });
 
+  it("previews an older HTML version in the frame when the picker changes it", async () => {
+    artifactHook.mockImplementation(
+      (_scope: unknown, _id: string, version?: number) => ({
+        data: {
+          ...markdown,
+          artifact: { ...markdown.artifact, type: "html" },
+          version:
+            version === 1
+              ? {
+                  ...markdown.version,
+                  id: "v1",
+                  version: 1,
+                  content: "<h1>Old page</h1>",
+                }
+              : { ...markdown.version, content: "<h1>New page</h1>" },
+          scriptOrigins: [],
+        },
+        isLoading: false,
+      }),
+    );
+    renderViewer();
+
+    const frame = screen.getByTitle("Artifact preview") as HTMLIFrameElement;
+    expect(frame.srcdoc).toContain("<h1>New page</h1>");
+
+    await selectOption(
+      "Version 2",
+      `Version 1 · You · ${formatDateTime("2026-01-01T00:00:00.000Z")}`,
+    );
+
+    const doc = (screen.getByTitle("Artifact preview") as HTMLIFrameElement)
+      .srcdoc;
+    expect(doc).toContain("<h1>Old page</h1>");
+    expect(doc).not.toContain("New page");
+    expect(screen.getByText("Read-only")).toBeInTheDocument();
+  });
+
   it("closes from the header", () => {
     const onClose = vi.fn();
     renderViewer({ onClose });
@@ -273,7 +448,7 @@ describe("ArtifactViewer", () => {
 
 describe("ArtifactViewer while the Agent is still writing", () => {
   beforeEach(() => {
-    hook.result = { data: undefined, isLoading: false };
+    artifactHook.mockReturnValue({ data: undefined, isLoading: false });
   });
 
   it("renders the partial content with the title and type once known", () => {
@@ -339,7 +514,7 @@ describe("ArtifactViewer while the Agent is still writing", () => {
   });
 
   it("keeps showing the streamed content while the saved version loads", () => {
-    hook.result = { data: undefined, isLoading: true };
+    artifactHook.mockReturnValue({ data: undefined, isLoading: true });
     renderViewer({
       live: {
         status: "streaming",
