@@ -1,8 +1,38 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { GhostCards, pageOf } from "./list-pagination";
+import { GhostCards, pageBounds, pageOf, serverPage } from "./list-pagination";
 
 const items = ["a", "b", "c", "d", "e"];
+
+describe("pageBounds", () => {
+  it("clamps a malformed page to the first", () => {
+    expect(pageBounds("nope", 45, 20)).toEqual({ page: 1, pageCount: 3 });
+  });
+
+  it("clamps a page past the end to the last", () => {
+    expect(pageBounds("9", 45, 20)).toEqual({ page: 3, pageCount: 3 });
+  });
+
+  it("reads a numeric page", () => {
+    expect(pageBounds(2, 45, 20)).toEqual({ page: 2, pageCount: 3 });
+  });
+
+  it("keeps one page for an empty list", () => {
+    expect(pageBounds(null, 0, 20)).toEqual({ page: 1, pageCount: 1 });
+  });
+});
+
+describe("serverPage", () => {
+  it("passes the server's rows through with the shared ghost arithmetic", () => {
+    expect(serverPage(["d", "e"], 2, 3, 3)).toMatchObject({
+      items: ["d", "e"],
+      page: 2,
+      pageCount: 3,
+      ghosts: 1,
+      rowGhosts: 0,
+    });
+  });
+});
 
 describe("pageOf ghosts", () => {
   it("fills a short last page out to a full one", () => {

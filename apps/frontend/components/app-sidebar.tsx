@@ -83,6 +83,7 @@ import {
   Settings,
   Loader2,
   Network,
+  FileText,
 } from "lucide-react";
 import { SearchInput } from "@/components/search-input";
 import { FormTextField } from "@/components/form-text-field";
@@ -402,6 +403,17 @@ export function AppSidebar() {
                     </Link>
                   </Button>
                 )}
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={pathname.startsWith(routes.artifacts.root)}
+                >
+                  <Link href={routes.artifacts.root}>
+                    <FileText />
+                    <span>Artifacts</span>
+                  </Link>
+                </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>
           </SidebarHeader>

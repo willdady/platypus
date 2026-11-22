@@ -27,29 +27,58 @@ export type Page<T> = {
 export const NO_GHOSTS = { ghosts: 0, rowGhosts: 0 } as const;
 
 /**
+ * The page a requested value lands on, clamped rather than trusted: a
+ * malformed or too-small number reads as page 1, and one past the end — a
+ * hand-edited URL, or a list that shrank under it — as the last page.
+ *
+ * Separate from {@link pageOf} so a server-paged list can ask for the page
+ * bound before it has the page's rows.
+ */
+export function pageBounds(
+  requested: string | number | null,
+  totalCount: number,
+  pageSize: number,
+): { page: number; pageCount: number } {
+  const pageCount = Math.max(1, Math.ceil(totalCount / pageSize));
+  const parsed =
+    typeof requested === "number"
+      ? requested
+      : Number.parseInt(requested ?? "", 10) || 1;
+  return { page: Math.min(Math.max(parsed, 1), pageCount), pageCount };
+}
+
+/**
+ * A page of rows that are already the requested page — the shape a
+ * server-paged list has — in the same `Page` the client-paged lists use, so
+ * both share the ghost-slot arithmetic.
+ */
+export function serverPage<T>(
+  items: readonly T[],
+  page: number,
+  pageCount: number,
+  pageSize: number,
+): Page<T> {
+  return {
+    items,
+    page,
+    pageCount,
+    ghosts: pageCount > 1 ? pageSize - items.length : 0,
+    rowGhosts: pageCount > 1 ? 0 : items.length % 2,
+  };
+}
+
+/**
  * The page of `items` that `requested` (a URL param's raw value) asks for,
- * clamped rather than trusted: a malformed or too-small number reads as page
- * 1, and one past the end — a hand-edited URL, or a list that shrank under
- * it — as the last page.
+ * clamped rather than trusted. See {@link pageBounds}.
  */
 export function pageOf<T>(
   requested: string | null,
   items: readonly T[],
   pageSize: number,
 ): Page<T> {
-  const pageCount = Math.max(1, Math.ceil(items.length / pageSize));
-  const page = Math.min(
-    Math.max(Number.parseInt(requested ?? "", 10) || 1, 1),
-    pageCount,
-  );
+  const { page, pageCount } = pageBounds(requested, items.length, pageSize);
   const shown = items.slice((page - 1) * pageSize, page * pageSize);
-  return {
-    items: shown,
-    page,
-    pageCount,
-    ghosts: pageCount > 1 ? pageSize - shown.length : 0,
-    rowGhosts: pageCount > 1 ? 0 : shown.length % 2,
-  };
+  return serverPage(shown, page, pageCount, pageSize);
 }
 
 /**
@@ -145,8 +174,8 @@ export function ListFooter({
   pagination,
 }: {
   className?: string;
-  /** The Create controls. */
-  children: ReactNode;
+  /** The Create controls; omitted on a footer that holds only pagination. */
+  children?: ReactNode;
   pagination?: ReactNode;
 }) {
   return (
@@ -157,7 +186,7 @@ export function ListFooter({
         className,
       )}
     >
-      <div className="flex flex-wrap gap-2">{children}</div>
+      {children && <div className="flex flex-wrap gap-2">{children}</div>}
       {pagination}
     </div>
   );
