@@ -271,6 +271,10 @@ by default applies. Set it to the model's published output maximum when you want
 long answers, or lower to hold replies (and spend) down. The same ceiling
 applies when that model runs as a Sub-Agent.
 
+When a Chat's own model writes that Chat's Transcript summary, the summary is
+held to this ceiling too, and a summary cut off at it is thrown away. Set it too
+low and a long Chat stops condensing.
+
 <Callout type="warning">
   **On Amazon Bedrock, empty is not "the model's maximum".** Bedrock applies a
   default of its own when no ceiling is sent — AWS does not document the figure,

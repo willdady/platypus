@@ -602,6 +602,9 @@ refused while a reply is still running. Not happy with a summary? Send
 `/compact` again, with a sharper instruction: the newest summary is the one
 used.
 
+If neither model returns a complete summary, an error appears, nothing is
+condensed, and your `/compact` stays in the input to send again.
+
 ## When a Chat says it is too long for the model
 
 The reply stops with an error explaining that the Chat has outgrown the model.
