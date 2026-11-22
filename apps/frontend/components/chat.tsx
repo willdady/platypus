@@ -1,5 +1,7 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
+import { replaceSearchParam } from "@/lib/search-params";
 import { TurnAnnouncer } from "./turn-announcer";
 import {
   Conversation,
@@ -136,6 +138,33 @@ const CONTEXT_FOOTER_PLACEMENT =
 const CONTEXT_FOOTER_BAND =
   "mt-1.5 rounded-b-md bg-foreground/5 px-3 py-1.5 sm:mt-0 sm:rounded-none sm:bg-transparent sm:p-0";
 
+/** The URL param naming the Artifact open in the side panel. */
+const ARTIFACT_PARAM = "artifact";
+/** The prefix marking a param that names a tool call, not a stored Artifact. */
+const CALL_PREFIX = "call:";
+
+/** `<id>:<version>` for a stored Artifact, `call:<toolCallId>` for a call. */
+function artifactParamOf(target: ArtifactOpenTarget): string {
+  return "id" in target
+    ? `${target.id}:${target.version}`
+    : `${CALL_PREFIX}${target.toolCallId}`;
+}
+
+/** The target a URL value names, or `null` for none or one it cannot read. */
+function artifactTargetFromParam(
+  value: string | null,
+): ArtifactOpenTarget | null {
+  if (!value) return null;
+  if (value.startsWith(CALL_PREFIX)) {
+    return { toolCallId: value.slice(CALL_PREFIX.length) };
+  }
+  const split = value.lastIndexOf(":");
+  const version = Number(value.slice(split + 1));
+  return split > 0 && Number.isInteger(version) && version > 0
+    ? { id: value.slice(0, split), version }
+    : null;
+}
+
 export function Chat({
   orgId,
   workspaceId,
@@ -154,12 +183,22 @@ export function Chat({
   // The Artifact open in the side panel. A completed Card opens the version its
   // turn produced; a Card still streaming opens by call id, so the panel
   // follows that call's content and swaps to the saved version once it lands.
-  // Every Card click increments `openCount`, which remounts the panel so
-  // clicking the same Card again returns to its own version after browsing.
-  const [openArtifact, setOpenArtifact] = useState<ArtifactOpenTarget | null>(
-    null,
+  // The target lives in the URL, so the panel survives a refresh and a shared
+  // link opens on it. Every Card click increments `openCount`, which remounts
+  // the panel so clicking the same Card again returns to its own version after
+  // browsing.
+  const artifactParam = useSearchParams().get(ARTIFACT_PARAM);
+  const openArtifact = useMemo(
+    () => artifactTargetFromParam(artifactParam),
+    [artifactParam],
+  );
+  const setOpenArtifact = useCallback(
+    (target: ArtifactOpenTarget | null) =>
+      replaceSearchParam(ARTIFACT_PARAM, target && artifactParamOf(target)),
+    [],
   );
   const [openArtifactCount, setOpenArtifactCount] = useState(0);
+  const [artifactFullScreen, setArtifactFullScreen] = useState(false);
   // A Card click remounts the panel, so it is one way out of a hand edit: it
   // goes through the same "Discard unsaved changes?" guard every other exit
   // uses, and the draft stays put when the User keeps editing.
@@ -964,7 +1003,13 @@ export function Chat({
         />
       </div>
       {openArtifact && (openStoredArtifact || openLiveArtifact) && (
-        <aside className="absolute inset-0 z-20 flex flex-col border-l bg-background lg:static lg:w-[min(560px,45vw)] lg:shrink-0">
+        <aside
+          className={cn(
+            "absolute inset-0 z-20 flex flex-col border-l bg-background",
+            !artifactFullScreen &&
+              "lg:static lg:w-[min(560px,45vw)] lg:shrink-0",
+          )}
+        >
           <ArtifactViewer
             key={openArtifactCount}
             orgId={orgId}
@@ -972,7 +1017,14 @@ export function Chat({
             artifactId={openStoredArtifact?.id}
             version={openStoredArtifact?.version}
             live={openLiveArtifact}
-            onClose={() => setOpenArtifact(null)}
+            onClose={() => {
+              setOpenArtifact(null);
+              setArtifactFullScreen(false);
+            }}
+            fullScreen={{
+              active: artifactFullScreen,
+              onToggle: () => setArtifactFullScreen((on) => !on),
+            }}
             className="size-full"
           />
         </aside>

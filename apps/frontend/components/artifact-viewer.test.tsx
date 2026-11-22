@@ -480,6 +480,31 @@ describe("ArtifactViewer", () => {
 
     expect(onClose).toHaveBeenCalledOnce();
   });
+
+  it("offers the full-screen toggle only where the panel passes one", () => {
+    const onToggle = vi.fn();
+    const { unmount } = renderViewer({
+      fullScreen: { active: false, onToggle },
+    });
+
+    const expand = screen.getByRole("button", { name: "View full screen" });
+    // Hidden below `lg`, where the panel already covers the Chat.
+    expect(expand).toHaveClass("hidden", "lg:inline-flex");
+    fireEvent.click(expand);
+    expect(onToggle).toHaveBeenCalledOnce();
+    unmount();
+
+    const expanded = renderViewer({ fullScreen: { active: true, onToggle } });
+    expect(
+      screen.getByRole("button", { name: "Exit full screen" }),
+    ).toBeInTheDocument();
+    expanded.unmount();
+
+    renderViewer();
+    expect(
+      screen.queryByRole("button", { name: /full screen/ }),
+    ).not.toBeInTheDocument();
+  });
 });
 
 describe("ArtifactViewer hand editing a markdown Artifact", () => {
@@ -505,7 +530,7 @@ describe("ArtifactViewer hand editing a markdown Artifact", () => {
     screen.getByRole("textbox", { name: "Artifact content" });
 
   const openEditor = () => {
-    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit Artifact" }));
   };
 
   const type = (content: string) => {
@@ -540,7 +565,7 @@ describe("ArtifactViewer hand editing a markdown Artifact", () => {
 
     expect(screen.getByText("Read-only")).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Edit" }),
+      screen.queryByRole("button", { name: "Edit Artifact" }),
     ).not.toBeInTheDocument();
   });
 
@@ -555,7 +580,7 @@ describe("ArtifactViewer hand editing a markdown Artifact", () => {
     renderViewer();
 
     expect(
-      screen.queryByRole("button", { name: "Edit" }),
+      screen.queryByRole("button", { name: "Edit Artifact" }),
     ).not.toBeInTheDocument();
   });
 
@@ -564,7 +589,7 @@ describe("ArtifactViewer hand editing a markdown Artifact", () => {
     renderViewer();
 
     expect(
-      screen.queryByRole("button", { name: "Edit" }),
+      screen.queryByRole("button", { name: "Edit Artifact" }),
     ).not.toBeInTheDocument();
   });
 
@@ -581,7 +606,7 @@ describe("ArtifactViewer hand editing a markdown Artifact", () => {
     });
 
     expect(
-      screen.queryByRole("button", { name: "Edit" }),
+      screen.queryByRole("button", { name: "Edit Artifact" }),
     ).not.toBeInTheDocument();
   });
 
@@ -646,7 +671,9 @@ describe("ArtifactViewer hand editing a markdown Artifact", () => {
     expect(
       screen.queryByRole("textbox", { name: "Artifact content" }),
     ).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Edit Artifact" }),
+    ).toBeInTheDocument();
   });
 
   it("keeps the text and says the Artifact changed when the base version is stale", async () => {
@@ -746,7 +773,9 @@ describe("ArtifactViewer hand editing a markdown Artifact", () => {
     expect(
       screen.queryByRole("textbox", { name: "Artifact content" }),
     ).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Edit Artifact" }),
+    ).toBeInTheDocument();
   });
 
   it("leaves the edit without asking when nothing changed", () => {
@@ -758,7 +787,9 @@ describe("ArtifactViewer hand editing a markdown Artifact", () => {
     expect(
       screen.queryByRole("textbox", { name: "Artifact content" }),
     ).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Edit Artifact" }),
+    ).toBeInTheDocument();
   });
 });
 

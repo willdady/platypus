@@ -8,7 +8,14 @@ import {
   type ArtifactRead,
   type ArtifactType,
 } from "@platypus/schemas";
-import { CopyIcon, DownloadIcon, PencilIcon, XIcon } from "lucide-react";
+import {
+  CopyIcon,
+  DownloadIcon,
+  Maximize2Icon,
+  Minimize2Icon,
+  PencilIcon,
+  XIcon,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -115,6 +122,7 @@ export function ArtifactViewer({
   version,
   live,
   onClose,
+  fullScreen,
   className,
 }: {
   orgId: string;
@@ -125,6 +133,8 @@ export function ArtifactViewer({
   version?: number;
   live?: ArtifactLive;
   onClose?: () => void;
+  /** The Chat panel's expand toggle; the full-page view has none. */
+  fullScreen?: ArtifactFullScreen;
   className?: string;
 }) {
   const backendUrl = useBackendUrl();
@@ -252,7 +262,12 @@ export function ArtifactViewer({
 
   if (error && isArtifactDeleted(error)) {
     return (
-      <ArtifactFrame className={className} onClose={onClose} title="Artifact">
+      <ArtifactFrame
+        fullScreen={fullScreen}
+        className={className}
+        onClose={onClose}
+        title="Artifact"
+      >
         <div className="p-4">
           <ListState variant="empty">This Artifact has been deleted.</ListState>
         </div>
@@ -291,6 +306,7 @@ export function ArtifactViewer({
 
     return (
       <ArtifactFrame
+        fullScreen={fullScreen}
         className={className}
         onClose={
           onClose
@@ -298,6 +314,9 @@ export function ArtifactViewer({
             : undefined
         }
         title={artifact.title}
+        tabs={
+          showEditor ? undefined : { type: artifact.type, streaming: false }
+        }
         subtitle={
           <span className="flex flex-wrap items-center gap-2">
             <Badge variant="secondary">
@@ -311,7 +330,7 @@ export function ArtifactViewer({
                 <SelectTrigger
                   size="sm"
                   aria-label="Artifact version"
-                  className="h-6 gap-1 px-2 text-xs"
+                  className="gap-1 px-2 text-xs data-[size=sm]:h-6"
                 >
                   <SelectValue>{`Version ${selected ?? current.version}`}</SelectValue>
                 </SelectTrigger>
@@ -365,12 +384,12 @@ export function ArtifactViewer({
               {canEdit && (
                 <Button
                   type="button"
-                  size="sm"
-                  variant="outline"
+                  size="icon-sm"
+                  variant="ghost"
+                  aria-label="Edit Artifact"
                   onClick={() => startEditing(current.content, current.version)}
                 >
                   <PencilIcon />
-                  Edit
                 </Button>
               )}
               <Button
@@ -429,7 +448,12 @@ export function ArtifactViewer({
 
   if (error) {
     return (
-      <ArtifactFrame className={className} onClose={onClose} title="Artifact">
+      <ArtifactFrame
+        fullScreen={fullScreen}
+        className={className}
+        onClose={onClose}
+        title="Artifact"
+      >
         <div className="p-4">
           <ListError
             error={error}
@@ -445,6 +469,7 @@ export function ArtifactViewer({
     const title = live.title?.trim() || "Artifact";
     return (
       <ArtifactFrame
+        fullScreen={fullScreen}
         className={className}
         onClose={onClose}
         title={title}
@@ -469,9 +494,13 @@ export function ArtifactViewer({
 
     return (
       <ArtifactFrame
+        fullScreen={fullScreen}
         className={className}
         onClose={onClose}
         title={title}
+        tabs={
+          live.content === "" ? undefined : { type: live.type, streaming: true }
+        }
         subtitle={
           <span className="flex flex-wrap items-center gap-2">
             {live.type && (
@@ -501,7 +530,12 @@ export function ArtifactViewer({
 
   if (isLoading) {
     return (
-      <ArtifactFrame className={className} onClose={onClose} title="Artifact">
+      <ArtifactFrame
+        fullScreen={fullScreen}
+        className={className}
+        onClose={onClose}
+        title="Artifact"
+      >
         <LoadingRegion
           label="Loading artifact"
           className="flex flex-col gap-3 p-4"
@@ -515,7 +549,12 @@ export function ArtifactViewer({
   }
 
   return (
-    <ArtifactFrame className={className} onClose={onClose} title="Artifact">
+    <ArtifactFrame
+      fullScreen={fullScreen}
+      className={className}
+      onClose={onClose}
+      title="Artifact"
+    >
       <div className="p-4">
         <ListError
           error={error}
@@ -595,11 +634,35 @@ function ArtifactEditor({
 }
 
 /**
- * The Preview and Code tabs for one piece of content. Markdown, code and
- * Mermaid preview from the first byte. A stored HTML or SVG Artifact runs in
- * the Artifact frame; while a call is still streaming, partial HTML or SVG
- * stays on source — there is no complete document to run, and its approved
- * origins are only known once the saved version is read.
+ * A Mermaid Artifact is one diagram, so its block takes the panel's height
+ * rather than the renderer's in-message cap. The selectors are the renderer's
+ * own `data-streamdown` marks.
+ */
+const MERMAID_FILL = cn(
+  "flex flex-col",
+  "[&_[data-streamdown=mermaid-block]]:my-0 [&_[data-streamdown=mermaid-block]]:min-h-0 [&_[data-streamdown=mermaid-block]]:flex-1",
+  "[&_[data-streamdown=mermaid-block]>div:last-child]:min-h-0 [&_[data-streamdown=mermaid-block]>div:last-child]:flex-1",
+  "[&_[data-streamdown=mermaid]]:h-full [&_[data-streamdown=mermaid]]:max-h-none",
+  // The pan-and-zoom area sets its height inline to the diagram's own.
+  "[&_[data-streamdown=mermaid]>div]:!h-full [&_[data-streamdown=mermaid]>div]:!max-h-none",
+);
+
+/** Whether there is a Preview to show: not for an unknown type, nor for
+ * partial HTML or SVG, which has no complete document to run. */
+function isPreviewAvailable(
+  type: ArtifactType | undefined,
+  streaming: boolean,
+): boolean {
+  return type !== undefined && !(streaming && isFramedArtifactType(type));
+}
+
+/**
+ * The Preview and Code panels for one piece of content; their tab controls sit
+ * in the frame's header. Markdown, code and Mermaid preview from the first
+ * byte. A stored HTML or SVG Artifact runs in the Artifact frame; while a call
+ * is still streaming, partial HTML or SVG stays on source — there is no
+ * complete document to run, and its approved origins are only known once the
+ * saved version is read.
  */
 function ArtifactTabs({
   type,
@@ -618,32 +681,8 @@ function ArtifactTabs({
   streaming?: boolean;
 }) {
   const framed = !streaming && type !== undefined && isFramedArtifactType(type);
-  const previewAvailable =
-    type !== undefined && !(streaming && isFramedArtifactType(type));
   return (
-    <Tabs
-      defaultValue={previewAvailable ? "preview" : "code"}
-      className="flex min-h-0 flex-1 flex-col gap-0"
-    >
-      <TabsList className="mx-4 mt-3 h-auto self-start p-0.5">
-        <TabsTrigger
-          value="preview"
-          disabled={!previewAvailable}
-          title={
-            previewAvailable
-              ? undefined
-              : streaming
-                ? "Preview is unavailable until the Agent finishes writing this Artifact"
-                : "Preview is unavailable until the Artifact's type is known"
-          }
-          className="px-2 py-0.5 text-xs"
-        >
-          Preview
-        </TabsTrigger>
-        <TabsTrigger value="code" className="px-2 py-0.5 text-xs">
-          Code
-        </TabsTrigger>
-      </TabsList>
+    <>
       <TabsContent
         value="preview"
         className={
@@ -659,10 +698,17 @@ function ArtifactTabs({
             scriptOrigins={scriptOrigins}
           />
         ) : type === "markdown" ? (
-          <ArtifactMarkdown content={content} storageBaseUrl={storageBaseUrl} />
+          // A reading measure: full screen and the full-page view are far
+          // wider than prose reads well at; the side panel is narrower already.
+          <ArtifactMarkdown
+            content={content}
+            storageBaseUrl={storageBaseUrl}
+            className="mx-auto max-w-3xl"
+          />
         ) : (
           <ArtifactMarkdown
             content={fencedCode(content, previewLanguage(type, language))}
+            className={type === "mermaid" ? MERMAID_FILL : undefined}
           />
         )}
       </TabsContent>
@@ -674,53 +720,131 @@ function ArtifactTabs({
           content={fencedCode(content, codeTabLanguage(type, language))}
         />
       </TabsContent>
-    </Tabs>
+    </>
   );
 }
+
+/** Whether the Chat panel covers the Chat, and the toggle that flips it. */
+export type ArtifactFullScreen = {
+  readonly active: boolean;
+  readonly onToggle: () => void;
+};
 
 function ArtifactFrame({
   title,
   subtitle,
   actions,
   onClose,
+  fullScreen,
+  tabs,
   className,
   children,
 }: {
   title: string;
   subtitle?: ReactNode;
+  /**
+   * Set while the body is `ArtifactTabs`: the frame then owns the tab state
+   * and draws the Preview and Code controls beside the subtitle, so they cost
+   * no row of their own.
+   */
+  tabs?: { type: ArtifactType | undefined; streaming: boolean };
   actions?: ReactNode;
   onClose?: () => void;
+  fullScreen?: ArtifactFullScreen;
   className?: string;
   children: ReactNode;
 }) {
+  const previewAvailable =
+    tabs !== undefined && isPreviewAvailable(tabs.type, tabs.streaming);
+  const body = (
+    <>
+      <header className="flex flex-col gap-3 border-b p-4">
+        <div className="flex items-center gap-2">
+          <h2
+            className="min-w-0 flex-1 truncate font-semibold text-sm"
+            title={title}
+          >
+            {title}
+          </h2>
+          {/* The buttons are taller than the title's line; the negative margin
+          keeps them from growing the row. */}
+          <div className="-my-1.5 flex shrink-0 items-center gap-1">
+            {actions}
+            {fullScreen && (
+              // Below `lg` the panel already covers the Chat, so there is
+              // nothing to expand.
+              <Button
+                type="button"
+                size="icon-sm"
+                variant="ghost"
+                className="hidden lg:inline-flex"
+                aria-label={
+                  fullScreen.active ? "Exit full screen" : "View full screen"
+                }
+                onClick={fullScreen.onToggle}
+              >
+                {fullScreen.active ? <Minimize2Icon /> : <Maximize2Icon />}
+              </Button>
+            )}
+            {onClose && (
+              <Button
+                type="button"
+                size="icon-sm"
+                variant="ghost"
+                aria-label="Close Artifact"
+                onClick={onClose}
+              >
+                <XIcon />
+              </Button>
+            )}
+          </div>
+        </div>
+        {(subtitle || tabs) && (
+          <div className="flex flex-wrap items-center gap-2">
+            {subtitle}
+            {tabs && (
+              <TabsList className="ml-auto h-auto p-0.5">
+                <TabsTrigger
+                  value="preview"
+                  disabled={!previewAvailable}
+                  title={
+                    previewAvailable
+                      ? undefined
+                      : tabs.streaming
+                        ? "Preview is unavailable until the Agent finishes writing this Artifact"
+                        : "Preview is unavailable until the Artifact's type is known"
+                  }
+                  className="px-2 py-0.5 text-xs"
+                >
+                  Preview
+                </TabsTrigger>
+                <TabsTrigger value="code" className="px-2 py-0.5 text-xs">
+                  Code
+                </TabsTrigger>
+              </TabsList>
+            )}
+          </div>
+        )}
+      </header>
+      {children}
+    </>
+  );
+
   return (
     <section
       aria-label={`Artifact: ${title}`}
       className={cn("flex min-h-0 flex-col bg-background", className)}
     >
-      <header className="flex items-start gap-2 border-b p-4">
-        <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <h2 className="truncate font-semibold text-sm" title={title}>
-            {title}
-          </h2>
-          {subtitle}
-        </div>
-        <div className="flex shrink-0 items-center gap-1">
-          {actions}
-          {onClose && (
-            <Button
-              type="button"
-              size="icon-sm"
-              variant="ghost"
-              aria-label="Close Artifact"
-              onClick={onClose}
-            >
-              <XIcon />
-            </Button>
-          )}
-        </div>
-      </header>
-      {children}
+      {tabs ? (
+        <Tabs
+          defaultValue={previewAvailable ? "preview" : "code"}
+          className="flex min-h-0 flex-1 flex-col gap-0"
+        >
+          {body}
+        </Tabs>
+      ) : (
+        body
+      )}
     </section>
   );
 }

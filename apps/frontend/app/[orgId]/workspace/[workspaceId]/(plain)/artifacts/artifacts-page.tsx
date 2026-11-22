@@ -17,12 +17,15 @@ export default function ArtifactsPage({
   const { orgId, workspaceId } = use(params);
 
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-8 md:px-8">
+    <div className="mx-auto max-w-6xl px-4 py-8 md:px-8">
       <PageHeader
         title="Artifacts"
         description="Documents, diagrams, pages and scripts Agents made in this workspace, most recently changed first."
       />
-      <ArtifactsList orgId={orgId} workspaceId={workspaceId} />
+      {/* PageHeader spaces itself, so the gap belongs to the list alone. */}
+      <div className="flex flex-col gap-4">
+        <ArtifactsList orgId={orgId} workspaceId={workspaceId} />
+      </div>
     </div>
   );
 }
