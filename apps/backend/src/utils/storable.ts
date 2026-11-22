@@ -5,7 +5,8 @@ import { logger } from "../logger.ts";
  * rejects two kinds of string content: NUL, removed here, and a lone UTF-16
  * surrogate, replaced with U+FFFD; each changed string is logged. Applied to every string, object keys
  * included; a value with `toJSON` is replaced by its result, as
- * `JSON.stringify` would; everything else is returned unchanged.
+ * `JSON.stringify` would; everything else is returned unchanged. Keys that become equal after the
+ * change collapse into one and the earlier value is dropped; the collision is logged, with no content.
  */
 export const storable = <T>(value: T): T => {
   if (typeof value === "string") {
@@ -26,12 +27,21 @@ export const storable = <T>(value: T): T => {
     if (typeof toJSON === "function") {
       return storable((toJSON as () => unknown).call(value)) as T;
     }
-    return Object.fromEntries(
-      Object.entries(value).map(([key, entry]) => [
-        storable(key),
-        storable(entry),
-      ]),
-    ) as T;
+    const entries = Object.entries(value).map(
+      ([key, entry]) => [storable(key), storable(entry)] as const,
+    );
+    // A key changed in place can equal another key of the same object, and the
+    // earlier value is lost in the later one; say so, without content.
+    const seen = new Set<string>();
+    let dropped = false;
+    for (const [key] of entries) {
+      if (seen.has(key)) dropped = true;
+      seen.add(key);
+    }
+    if (dropped) {
+      logger.warn({}, "Dropped a value because of a key collision");
+    }
+    return Object.fromEntries(entries) as T;
   }
   return value;
 };
