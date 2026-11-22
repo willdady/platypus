@@ -99,8 +99,10 @@ describe("workspaceRoutes", () => {
   });
 
   it("builds the collection roots", () => {
+    expect(routes.agents.root).toBe("/org1/workspace/ws1/agents");
     expect(routes.skills.root).toBe("/org1/workspace/ws1/skills");
     expect(routes.boards.root).toBe("/org1/workspace/ws1/boards");
+    expect(routes.triggers.root).toBe("/org1/workspace/ws1/triggers");
   });
 
   it("builds the create paths", () => {

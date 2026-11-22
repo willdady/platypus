@@ -16,7 +16,6 @@ import { canCreateWorkspace, canOpenOrgSettings } from "@/lib/authorization";
 import { sortByName } from "@/lib/utils";
 import { useScopedList } from "@/hooks/use-scoped-list";
 import { useOrganization } from "@/hooks/use-organization";
-import { useIsMobile } from "@/hooks/use-mobile";
 import { orgRoutes, workspaceRoutes } from "@/lib/routes";
 import { Button } from "@/components/ui/button";
 import { SidebarMenuButton } from "@/components/ui/sidebar";
@@ -58,7 +57,6 @@ export function WorkspaceSwitcher({
   onNavigate,
 }: WorkspaceSwitcherProps) {
   const pathname = usePathname();
-  const isMobile = useIsMobile();
   const { actor } = useAuth();
   const org = orgRoutes(orgId);
 
@@ -138,7 +136,7 @@ export function WorkspaceSwitcher({
       <DropdownMenuContent
         className="w-56 bg-sidebar-panel"
         align="start"
-        side={presentation === "bar" ? "bottom" : isMobile ? "bottom" : "right"}
+        side="bottom"
       >
         <DropdownMenuLabel className="text-xs text-muted-foreground">
           Workspaces

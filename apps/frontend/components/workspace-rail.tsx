@@ -29,12 +29,12 @@ export function WorkspaceRail({
 }) {
   const pathname = usePathname();
   const routes = workspaceRoutes(orgId, workspaceId);
-  const current = workspaceSection(pathname, routes.root);
+  const current = workspaceSection(pathname, routes);
 
   return (
     <nav
       aria-label="Workspace"
-      className="fixed inset-y-0 left-0 z-20 hidden w-12 flex-col items-center gap-1 border-r bg-background py-2 md:flex"
+      className="fixed inset-y-0 left-0 z-20 hidden w-(--workspace-rail-width) flex-col items-center gap-1 border-r bg-background py-2 md:flex"
     >
       {workspaceNavItems(orgId, workspaceId).map(
         ({ section, label, href, icon: Icon }) => (

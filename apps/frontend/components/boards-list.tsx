@@ -1,9 +1,10 @@
 "use client";
 
 import { defaultFilter } from "cmdk";
-import { Plus } from "lucide-react";
+import { KanbanSquare, Plus } from "lucide-react";
 import Link from "next/link";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { EmptyCard } from "@/components/empty-card";
 import { EntityCardList } from "@/components/entity-card-list";
 import { ListState } from "@/components/list-state";
 import { CardGridSkeleton } from "@/components/list-skeletons";
@@ -78,6 +79,17 @@ export function BoardsList({
       ),
   });
 
+  // The Boards screen is a top-level list, so an empty one holds the empty
+  // card and its Create board. Once there are rows the button moves below the
+  // list, as on the other list screens.
+  const actions = (
+    <Button variant={rows.length === 0 ? "default" : "outline"} asChild>
+      <Link href={routes.create}>
+        <Plus /> Create board
+      </Link>
+    </Button>
+  );
+
   return (
     <>
       {/* Nothing to filter, no controls. */}
@@ -102,9 +114,16 @@ export function BoardsList({
         onRetry={() => void mutate()}
         skeleton={<CardGridSkeleton descriptionLines={1} />}
         empty={
-          <ListState variant="empty">
-            {rows.length ? "No boards match your filters." : "No boards yet."}
-          </ListState>
+          rows.length === 0 ? (
+            <EmptyCard
+              icon={<KanbanSquare />}
+              title="No boards yet"
+              description="Create a board to arrange work in columns and move cards across them."
+              action={actions}
+            />
+          ) : (
+            <ListState variant="empty">No boards match your filters.</ListState>
+          )
         }
         // Nothing follows the description, so one line is all it reserves.
         descriptionLines={1}
@@ -118,21 +137,20 @@ export function BoardsList({
         )}
       />
 
-      <ListFooter
-        pagination={
-          <ListPagination
-            page={page}
-            param={PAGE_PARAM}
-            aria-label="Boards pages"
-          />
-        }
-      >
-        <Button variant="outline" asChild>
-          <Link href={routes.create}>
-            <Plus /> Create board
-          </Link>
-        </Button>
-      </ListFooter>
+      {/* The empty card holds the button while there are no rows. */}
+      {rows.length > 0 && (
+        <ListFooter
+          pagination={
+            <ListPagination
+              page={page}
+              param={PAGE_PARAM}
+              aria-label="Boards pages"
+            />
+          }
+        >
+          {actions}
+        </ListFooter>
+      )}
 
       <DeleteConfirmDialog
         noun="board"

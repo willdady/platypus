@@ -124,6 +124,7 @@ export function workspaceRoutes(orgId: string, workspaceId: string) {
         `${root}/chat?agentId=${encodeURIComponent(agentId)}`,
     },
     agents: {
+      root: `${root}/agents`,
       create: `${root}/agents/create`,
       detail: (agentId: string) => `${root}/agents/${agentId}`,
     },
@@ -142,6 +143,7 @@ export function workspaceRoutes(orgId: string, workspaceId: string) {
       detail: (artifactId: string) => `${root}/artifacts/${artifactId}`,
     },
     triggers: {
+      root: `${root}/triggers`,
       create: `${root}/triggers/create`,
       detail: (triggerId: string) => `${root}/triggers/${triggerId}`,
     },

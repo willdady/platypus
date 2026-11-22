@@ -270,7 +270,7 @@ export function AppSidebar() {
     <>
       {/* The Workspace rail holds the window's left edge; the open sidebar
           starts to its right. Collapsed, it slides away as before. */}
-      <Sidebar className="group-data-[state=expanded]:left-12">
+      <Sidebar className="group-data-[state=expanded]:left-(--workspace-rail-width)">
         {isMobile && (
           <WorkspaceSheetNavigation
             orgId={orgId}

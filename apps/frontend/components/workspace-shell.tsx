@@ -58,9 +58,12 @@ export function WorkspaceShell({
       <SidebarInset
         id={MAIN_CONTENT_ID}
         // The rail is fixed to the window's left edge; the inset leaves the
-        // same 3rem clear so the content — and the sidebar above it — starts
-        // to its right.
-        className={cn("min-w-0", workspaceId && "md:pl-12")}
+        // same column clear so the content — and the sidebar above it —
+        // starts to its right.
+        className={cn(
+          "min-w-0",
+          workspaceId && "md:pl-(--workspace-rail-width)",
+        )}
       >
         <Header
           bordered={!sidebar}

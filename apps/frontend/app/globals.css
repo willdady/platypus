@@ -21,6 +21,8 @@
 
 :root {
   --radius: 0.5rem;
+  /* The Workspace rail's fixed column; the inset and sidebar start to its right. */
+  --workspace-rail-width: 3rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.141 0.005 220);
   --card: oklch(0.98 0 0);

@@ -1,4 +1,4 @@
-import { FolderOpen, Home, KanbanSquare, type LucideIcon } from "lucide-react";
+import { FileText, Home, KanbanSquare, type LucideIcon } from "lucide-react";
 import { workspaceRoutes } from "@/lib/routes";
 
 export type WorkspaceSection = "home" | "boards" | "artifacts";
@@ -22,16 +22,16 @@ function under(pathname: string, prefix: string) {
  */
 export function workspaceSection(
   pathname: string,
-  root: string,
+  routes: ReturnType<typeof workspaceRoutes>,
 ): WorkspaceSection | null {
-  if (under(pathname, `${root}/boards`)) return "boards";
-  if (under(pathname, `${root}/artifacts`)) return "artifacts";
+  if (under(pathname, routes.boards.root)) return "boards";
+  if (under(pathname, routes.artifacts.root)) return "artifacts";
   if (
-    pathname === root ||
-    under(pathname, `${root}/agents`) ||
-    under(pathname, `${root}/skills`) ||
-    under(pathname, `${root}/triggers`) ||
-    under(pathname, `${root}/trigger-runs`)
+    pathname === routes.root ||
+    under(pathname, routes.agents.root) ||
+    under(pathname, routes.skills.root) ||
+    under(pathname, routes.triggers.root) ||
+    under(pathname, routes.triggerRuns.root)
   ) {
     return "home";
   }
@@ -57,7 +57,7 @@ export function workspaceNavItems(
       section: "artifacts",
       label: "Artifacts",
       href: routes.artifacts.root,
-      icon: FolderOpen,
+      icon: FileText,
     },
   ];
 }

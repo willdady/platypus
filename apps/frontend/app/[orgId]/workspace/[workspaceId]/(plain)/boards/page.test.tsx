@@ -35,7 +35,10 @@ beforeEach(() => {
 describe("Boards screen", () => {
   it("is titled Boards and links each Board to its page", async () => {
     mockScopedSWR(
-      { "/boards": [{ id: "b1", name: "Sprint planning" }] },
+      {
+        "/providers": [{ id: "p1", name: "OpenAI" }],
+        "/boards": [{ id: "b1", name: "Sprint planning" }],
+      },
       { strict: true },
     );
     await renderPage();
@@ -47,7 +50,10 @@ describe("Boards screen", () => {
   });
 
   it("offers Create board", async () => {
-    mockScopedSWR({ "/boards": [] }, { strict: true });
+    mockScopedSWR(
+      { "/providers": [{ id: "p1", name: "OpenAI" }], "/boards": [] },
+      { strict: true },
+    );
     await renderPage();
 
     expect(screen.getByRole("link", { name: "Create board" })).toHaveAttribute(
@@ -57,15 +63,31 @@ describe("Boards screen", () => {
   });
 
   it("says there are no Boards yet", async () => {
-    mockScopedSWR({ "/boards": [] }, { strict: true });
+    mockScopedSWR(
+      { "/providers": [{ id: "p1", name: "OpenAI" }], "/boards": [] },
+      { strict: true },
+    );
     await renderPage();
 
-    expect(screen.getByText("No boards yet.")).toBeInTheDocument();
+    expect(screen.getByText("No boards yet")).toBeInTheDocument();
+  });
+
+  it("asks for a Provider, and offers no Create board, when the Workspace has none", async () => {
+    mockScopedSWR({ "/providers": [], "/boards": [] }, { strict: true });
+    await renderPage();
+
+    expect(screen.getByText("No providers configured")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Create board" }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows a failed read as an error with a retry, not as no Boards", async () => {
     mockScopedSWR(
-      { "/boards": { error: { status: 500, message: "Server error" } } },
+      {
+        "/providers": [{ id: "p1", name: "OpenAI" }],
+        "/boards": { error: { status: 500, message: "Server error" } },
+      },
       { strict: true },
     );
     await renderPage();
@@ -73,7 +95,7 @@ describe("Boards screen", () => {
     expect(
       screen.getByText("Failed to load boards. Server error"),
     ).toBeInTheDocument();
-    expect(screen.queryByText("No boards yet.")).not.toBeInTheDocument();
+    expect(screen.queryByText("No boards yet")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(mutate).toHaveBeenCalled();

@@ -13,7 +13,7 @@ import {
   Bot,
   Sparkles,
   KanbanSquare,
-  FolderOpen,
+  FileText,
   Zap,
   Radio,
   BookOpen,
@@ -156,7 +156,7 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
               runCommand(() => router.push(routes.artifacts.root));
             }}
           >
-            <FolderOpen />
+            <FileText />
             <span>Artifacts</span>
           </CommandItem>
         </CommandGroup>

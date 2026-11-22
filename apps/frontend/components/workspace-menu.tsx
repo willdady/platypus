@@ -3,6 +3,7 @@
 import { useState, type CSSProperties } from "react";
 import { Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SIDEBAR_WIDTH_MOBILE } from "@/components/ui/sidebar";
 import {
   Sheet,
   SheetContent,
@@ -42,7 +43,7 @@ export function WorkspaceMenu({
       <SheetContent
         side="left"
         className="bg-sidebar text-sidebar-foreground w-(--sidebar-width) p-0 [&>button]:hidden"
-        style={{ "--sidebar-width": "18rem" } as CSSProperties}
+        style={{ "--sidebar-width": SIDEBAR_WIDTH_MOBILE } as CSSProperties}
       >
         <SheetHeader className="sr-only">
           <SheetTitle>Navigation</SheetTitle>

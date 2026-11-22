@@ -32,7 +32,7 @@ export function WorkspaceSheetNavigation({
 }) {
   const pathname = usePathname();
   const routes = workspaceRoutes(orgId, workspaceId);
-  const current = workspaceSection(pathname, routes.root);
+  const current = workspaceSection(pathname, routes);
 
   return (
     <>

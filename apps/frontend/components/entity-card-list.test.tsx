@@ -121,7 +121,7 @@ describe.each(RESOURCES)(
     it("says when the workspace has none", async () => {
       await renderCards([]);
 
-      expect(screen.getByText(/^No .* yet\.$/)).toBeInTheDocument();
+      expect(screen.getByText(/^No .* yet$/)).toBeInTheDocument();
     });
 
     it("surfaces a failed read rather than rendering an empty list", async () => {
