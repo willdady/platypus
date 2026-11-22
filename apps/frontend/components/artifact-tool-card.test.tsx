@@ -84,7 +84,78 @@ describe("ArtifactToolCard", () => {
     expect(screen.getByText("Release notes")).toBeInTheDocument();
     expect(screen.getByText("Markdown")).toBeInTheDocument();
     expect(screen.getByText("Pending")).toBeInTheDocument();
-    expect(screen.getByRole("button")).toBeDisabled();
+  });
+
+  it("opens the Artifact while its content is still streaming", () => {
+    const onOpen = vi.fn();
+    render(
+      <ArtifactToolCard
+        toolPart={streaming()}
+        scope={{ orgId: "org-1", workspaceId: "ws-1" }}
+        onOpen={onOpen}
+      />,
+    );
+
+    expect(screen.getByRole("button")).toBeEnabled();
+
+    fireEvent.click(screen.getByRole("button"));
+
+    expect(onOpen).toHaveBeenCalledWith({ toolCallId: "call-1" });
+  });
+
+  it("opens a failed call so the panel can say it was not saved", () => {
+    const onOpen = vi.fn();
+    render(
+      <ArtifactToolCard
+        toolPart={part({
+          state: "output-error",
+          input: { title: "Release notes", type: "markdown", content: "# 1" },
+          errorText: "Artifact content must be at most 512 KB",
+        })}
+        scope={{ orgId: "org-1", workspaceId: "ws-1" }}
+        onOpen={onOpen}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button"));
+
+    expect(onOpen).toHaveBeenCalledWith({ toolCallId: "call-1" });
+  });
+
+  it("opens a rejected call so the panel can say it was not saved", () => {
+    const onOpen = vi.fn();
+    render(
+      <ArtifactToolCard
+        toolPart={part({
+          state: "output-denied",
+          input: { title: "Release notes", type: "markdown", content: "# 1" },
+          approval: { id: "approval-1", approved: false },
+        })}
+        scope={{ orgId: "org-1", workspaceId: "ws-1" }}
+        onOpen={onOpen}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button"));
+
+    expect(onOpen).toHaveBeenCalledWith({ toolCallId: "call-1" });
+  });
+
+  it("does not show a half-written type as if it were the type", () => {
+    render(
+      <ArtifactToolCard
+        toolPart={part({
+          state: "input-streaming",
+          input: { title: "Release notes", type: "markd" },
+        })}
+        scope={{ orgId: "org-1", workspaceId: "ws-1" }}
+        onOpen={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Release notes")).toBeInTheDocument();
+    expect(screen.queryByText("Markd")).not.toBeInTheDocument();
+    expect(screen.getByText("Artifact")).toBeInTheDocument();
   });
 
   it("opens the version the call produced once it completes", () => {

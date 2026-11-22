@@ -82,7 +82,13 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { ChatMessage } from "./chat-message";
-import { ArtifactViewer } from "./artifact-viewer";
+import { ArtifactViewer, type ArtifactLive } from "./artifact-viewer";
+import {
+  artifactLiveFromPart,
+  findArtifactToolPart,
+  storedArtifactOf,
+  type ArtifactOpenTarget,
+} from "./artifact-tool-card";
 import { MessageEditor } from "./message-editor";
 import { ChatReconnectingNotice } from "./chat-reconnecting-notice";
 import { toast } from "sonner";
@@ -144,23 +150,19 @@ export function Chat({
   const canSendMessages = canSendChatMessages(ownsWorkspace);
   const backendUrl = useBackendUrl();
   const scope = useMemo(() => ({ orgId, workspaceId }), [orgId, workspaceId]);
-  // The Artifact open in the side panel; its version is the one the Card's
-  // turn produced, so the panel keeps showing that piece of the transcript.
-  // `openCount` makes every Card click a fresh open, so clicking the same Card
-  // again returns to its own version after the reader browsed another.
-  const [openArtifact, setOpenArtifact] = useState<{
-    id: string;
-    version: number;
-    openCount: number;
-  } | null>(null);
-  const openArtifactFromCard = useCallback(
-    (target: { id: string; version: number }) =>
-      setOpenArtifact((previous) => ({
-        ...target,
-        openCount: (previous?.openCount ?? 0) + 1,
-      })),
-    [],
+  // The Artifact open in the side panel. A completed Card opens the version its
+  // turn produced; a Card still streaming opens by call id, so the panel
+  // follows that call's content and swaps to the saved version once it lands.
+  // Every Card click increments `openCount`, which remounts the panel so
+  // clicking the same Card again returns to its own version after browsing.
+  const [openArtifact, setOpenArtifact] = useState<ArtifactOpenTarget | null>(
+    null,
   );
+  const [openArtifactCount, setOpenArtifactCount] = useState(0);
+  const openArtifactFromCard = useCallback((target: ArtifactOpenTarget) => {
+    setOpenArtifact(target);
+    setOpenArtifactCount((count) => count + 1);
+  }, []);
   const chatUrl = joinUrl(
     backendUrl || "",
     `${scopedPath("chat", scope)}/${chatId}`,
@@ -236,6 +238,24 @@ export function Chat({
     // render of the whole Chat per chunk.
     experimental_throttle: 50,
   });
+
+  // A Card opened while its call was still streaming is resolved from the live
+  // part on every render: the panel follows the content as it arrives and,
+  // once the call has written a version, reads that version by id.
+  const openArtifactPart = useMemo(
+    () =>
+      openArtifact && "toolCallId" in openArtifact
+        ? findArtifactToolPart(messages, openArtifact.toolCallId)
+        : undefined,
+    [messages, openArtifact],
+  );
+  const openStoredArtifact =
+    openArtifact && "id" in openArtifact
+      ? openArtifact
+      : openArtifactPart && storedArtifactOf(openArtifactPart);
+  const openLiveArtifact: ArtifactLive | undefined = openArtifactPart
+    ? artifactLiveFromPart(openArtifactPart)
+    : undefined;
 
   // The server-owned Transcript's client side: the row's read and poll,
   // monotonic hydration, the switch between Alternatives, the tree the
@@ -934,14 +954,15 @@ export function Chat({
           error={error}
         />
       </div>
-      {openArtifact && (
+      {openArtifact && (openStoredArtifact || openLiveArtifact) && (
         <aside className="absolute inset-0 z-20 flex flex-col border-l bg-background lg:static lg:w-[min(560px,45vw)] lg:shrink-0">
           <ArtifactViewer
-            key={openArtifact.openCount}
+            key={openArtifactCount}
             orgId={orgId}
             workspaceId={workspaceId}
-            artifactId={openArtifact.id}
-            version={openArtifact.version}
+            artifactId={openStoredArtifact?.id}
+            version={openStoredArtifact?.version}
+            live={openLiveArtifact}
             onClose={() => setOpenArtifact(null)}
             className="size-full"
           />

@@ -15,6 +15,7 @@ import {
   stubRejectedSave,
 } from "@/test/test-utils";
 import type { AlternativePosition } from "@/lib/chat-alternatives";
+import type { ArtifactOpenTarget } from "./artifact-tool-card";
 
 /**
  * What the Chat component wires, not what the transcript read decides.
@@ -291,7 +292,7 @@ vi.mock("./chat-message", () => ({
     onCopyMessage: (content: string, messageId: string) => void;
     staleToolCallIds?: ReadonlySet<string>;
     onApprovalResponse?: (approvalId: string, approved: boolean) => void;
-    onOpenArtifact?: (target: { id: string; version: number }) => void;
+    onOpenArtifact?: (target: ArtifactOpenTarget) => void;
   }) {
     countChatMessageRender(message.id);
     recordChatMessageProps({
@@ -330,12 +331,24 @@ vi.mock("./chat-message", () => ({
               </button>
             )}
             {onOpenArtifact && (
-              <button
-                type="button"
-                onClick={() => onOpenArtifact({ id: "artifact-1", version: 1 })}
-              >
-                Open artifact {message.id}
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() =>
+                    onOpenArtifact({ id: "artifact-1", version: 1 })
+                  }
+                >
+                  Open artifact {message.id}
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    onOpenArtifact({ toolCallId: STREAMING_TOOL_CALL_ID })
+                  }
+                >
+                  Open streaming artifact {message.id}
+                </button>
+              </>
             )}
             {alternatives && (
               <span>
@@ -403,14 +416,21 @@ vi.mock("./artifact-viewer", () => ({
   ArtifactViewer: ({
     artifactId,
     version,
+    live,
     onClose,
   }: {
-    artifactId: string;
+    artifactId?: string;
     version?: number;
+    live?: { status: string; content: string };
     onClose?: () => void;
   }) => (
     <div>
-      Artifact panel {artifactId} v{version}
+      Artifact panel {artifactId ?? "streaming"} v{version}
+      {live && (
+        <div>
+          Live {live.status} {live.content}
+        </div>
+      )}
       {onClose && (
         <button type="button" onClick={onClose}>
           Close artifact panel
@@ -472,6 +492,7 @@ import { optionalFetcher } from "@/lib/utils";
 import { CHAT_MAX_STEPS_ERROR } from "@/lib/chat-turn";
 
 const CHAT_ID = "chat-1";
+const STREAMING_TOOL_CALL_ID = "call-1";
 const CHAT_KEY = `http://test/organizations/org1/workspaces/ws1/chat/${CHAT_ID}`;
 
 const provider = {
@@ -493,6 +514,25 @@ function renderChat() {
 }
 
 describe("Chat Artifact panel", () => {
+  function artifactCall(over: Record<string, unknown>): PlatypusUIMessage {
+    return {
+      id: "a2",
+      role: "assistant",
+      parts: [
+        {
+          type: "tool-createArtifact",
+          toolCallId: STREAMING_TOOL_CALL_ID,
+          input: {
+            title: "Release notes",
+            type: "markdown",
+            content: "# Half",
+          },
+          ...over,
+        },
+      ],
+    } as unknown as PlatypusUIMessage;
+  }
+
   it("opens the viewer beside the transcript and closes it", () => {
     harness.turn.messages = [message("a1", "Hello")];
     renderChat();
@@ -509,6 +549,67 @@ describe("Chat Artifact panel", () => {
 
     expect(
       screen.queryByText("Artifact panel artifact-1 v1"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("opens a Card whose content is still streaming and follows the call to the stored version", () => {
+    harness.turn.messages = [artifactCall({ state: "input-streaming" })];
+    const view = renderChat();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open streaming artifact a2" }),
+    );
+
+    expect(screen.getByText(/Artifact panel streaming/)).toBeInTheDocument();
+    expect(screen.getByText("Live streaming # Half")).toBeInTheDocument();
+
+    harness.turn.messages = [
+      artifactCall({
+        state: "output-available",
+        output: { id: "artifact-1", title: "Release notes", version: 1 },
+      }),
+    ];
+    view.rerender(<Chat orgId="org1" workspaceId="ws1" chatId={CHAT_ID} />);
+
+    expect(
+      screen.getByText("Artifact panel artifact-1 v1"),
+    ).toBeInTheDocument();
+    // The streamed content stays under the saved read until it lands.
+    expect(screen.getByText("Live streaming # Half")).toBeInTheDocument();
+  });
+
+  it("opens a failed call with its content marked as failed, not stored", () => {
+    harness.turn.messages = [
+      artifactCall({ state: "output-error", errorText: "Too big" }),
+    ];
+    renderChat();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open streaming artifact a2" }),
+    );
+
+    expect(screen.getByText("Live failed # Half")).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Artifact panel artifact-1/),
+    ).not.toBeInTheDocument();
+  });
+
+  it("opens a rejected call with its content marked as failed, not stored", () => {
+    harness.turn.messages = [
+      artifactCall({
+        state: "approval-responded",
+        approval: { id: "approval-1", approved: false },
+      }),
+    ];
+    renderChat();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open streaming artifact a2" }),
+    );
+
+    expect(screen.getByText("Live failed # Half")).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Artifact panel artifact-1/),
     ).not.toBeInTheDocument();
   });
 });

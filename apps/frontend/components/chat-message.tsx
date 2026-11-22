@@ -70,7 +70,10 @@ import { TurnStatus } from "./turn-status";
 import { MessagePartBoundary } from "./message-part-boundary";
 import { LoadSkillTool, ReadSkillFileTool } from "./load-skill-tool";
 import { SubAgentTool } from "./sub-agent-tool";
-import { ArtifactToolCard } from "./artifact-tool-card";
+import {
+  ArtifactToolCard,
+  type ArtifactOpenTarget,
+} from "./artifact-tool-card";
 import { ToolApprovalCard } from "./tool-approval-card";
 import { OfferedFiles, offeredFiles } from "./offered-files";
 import {
@@ -429,7 +432,7 @@ type ChatMessageProps = {
   /** The Workspace an Artifact Card reads its Artifact back from. */
   artifactScope?: { orgId: string; workspaceId: string };
   /** Opens an Artifact in the Chat's side panel beside this transcript. */
-  onOpenArtifact?: (target: { id: string; version: number }) => void;
+  onOpenArtifact?: (target: ArtifactOpenTarget) => void;
 };
 
 export const ChatMessage = memo(function ChatMessage({

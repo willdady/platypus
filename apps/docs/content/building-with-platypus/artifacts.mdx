@@ -56,6 +56,14 @@ panel beside the Chat. The panel has two tabs:
 - **Preview** shows the rendered Artifact for Markdown, Code and Mermaid.
 - **Code** shows the source for every type, highlighted for its language.
 
+You do not have to wait for the Agent to finish. The Card appears as soon as
+the tool call starts, and clicking it opens the panel with the content growing
+as it is written. The title and type appear as soon as the Agent has written
+them. HTML and SVG are shown as source while the Agent is still writing them.
+When the call completes, the panel shows the saved version, and a call that
+fails or is not approved leaves nothing saved — the panel says so rather than
+presenting the half-written content as an Artifact.
+
 **Copy** puts the source on your clipboard. **Download** saves it as a file
 named after the title, with an extension taken from the type — `.md`, `.html`,
 `.svg` or `.mmd`, and for Code the language's own extension where Platypus
