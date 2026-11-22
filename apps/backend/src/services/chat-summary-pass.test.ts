@@ -598,7 +598,7 @@ describe("takeTranscriptSummary", () => {
 
   describe("the summary prompt", () => {
     /** The system prompt and output cap one pass sends. */
-    const sentCall = async (instruction?: string) => {
+    const sentCall = async (instruction?: string, outputCeiling?: number) => {
       seedSummaryTable();
       const calls: { system: string; maxOutputTokens?: number }[] = [];
       await takeTranscriptSummary({
@@ -624,6 +624,7 @@ describe("takeTranscriptSummary", () => {
               },
             }),
             modelId: "openai:gpt",
+            ...(outputCeiling !== undefined ? { outputCeiling } : {}),
           },
         },
         path: sixTurns(),
@@ -678,6 +679,11 @@ describe("takeTranscriptSummary", () => {
       const { maxOutputTokens } = await sentCall();
       expect(maxOutputTokens).toBe(TRANSCRIPT_SUMMARY_MAX_OUTPUT_TOKENS);
       expect(TRANSCRIPT_SUMMARY_MAX_OUTPUT_TOKENS).toBe(8_192);
+    });
+
+    it("never asks for more than the model's declared output ceiling", async () => {
+      const { maxOutputTokens } = await sentCall(undefined, 4_096);
+      expect(maxOutputTokens).toBe(4_096);
     });
   });
 

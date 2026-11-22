@@ -30,6 +30,7 @@ import { resolveScoped } from "./scoped-resource.ts";
 import { openProvider } from "./provider.ts";
 import {
   contextWindowForModel,
+  maxOutputTokensForModel,
   pointerSettingModelId,
 } from "./model-capability.ts";
 import { jobCallSettings, jobMaxOutputTokens } from "./reasoning.ts";
@@ -620,6 +621,9 @@ export type TranscriptSummaryModel = {
   /** The output cap raised by the Job settings' Thinking budget; absent, the
    *  pass's own cap. */
   maxOutputTokens?: number;
+  /** The output ceiling declared on the model's entry. A summary call never
+   *  asks for more, since a vendor rejects a cap above the model's own. */
+  outputCeiling?: number;
   /** The task model's declared context window, which a pass checks its input
    *  against before calling; absent, the model's own error is the measure. */
   contextWindow?: number;
@@ -768,8 +772,10 @@ export const takeTranscriptSummary = async (
           { role: "user" as const, content: TRANSCRIPT_SUMMARY_REQUEST },
         ],
         ...entry.settings,
-        maxOutputTokens:
+        maxOutputTokens: Math.min(
           entry.maxOutputTokens ?? TRANSCRIPT_SUMMARY_MAX_OUTPUT_TOKENS,
+          entry.outputCeiling ?? Infinity,
+        ),
         abortSignal: signal,
       });
 
@@ -981,7 +987,13 @@ const resolveSummariserModels = async (
   return withTaskSummariserModel({
     orgId,
     workspaceId,
-    chat: { model: plan.model, modelId: resolvedModelId },
+    chat: {
+      model: plan.model,
+      modelId: resolvedModelId,
+      ...(plan.maxOutputTokens !== undefined
+        ? { outputCeiling: plan.maxOutputTokens }
+        : {}),
+    },
     chatProviderId: provider.id,
     sessionId,
     queries,
@@ -1053,6 +1065,10 @@ const withTaskSummariserModel = async (args: {
       taskProvider.provider,
       pointerSettingModelId(taskModelId),
     );
+    const outputCeiling = maxOutputTokensForModel(
+      taskProvider.provider,
+      pointerSettingModelId(taskModelId),
+    );
     return {
       task: {
         model: openProvider(taskProvider.provider, { sessionId }).languageModel(
@@ -1061,6 +1077,7 @@ const withTaskSummariserModel = async (args: {
         modelId: taskModelId,
         settings,
         maxOutputTokens,
+        ...(outputCeiling !== undefined ? { outputCeiling } : {}),
         ...(contextWindow !== undefined ? { contextWindow } : {}),
       },
       chat,
@@ -1199,6 +1216,8 @@ export const beforeTurn = async (args: {
   contextWindow?: number;
   model: LanguageModel;
   modelId: string;
+  /** The output ceiling declared on the turn's model, if any. */
+  maxOutputTokens?: number;
   /** Present on a Chat turn: where the task model is resolved from. */
   taskModel?: {
     scope: ScopeContext;
@@ -1219,6 +1238,7 @@ export const beforeTurn = async (args: {
     contextWindow,
     model,
     modelId,
+    maxOutputTokens,
     taskModel,
     readOnlyToolNames,
     signal,
@@ -1239,7 +1259,13 @@ export const beforeTurn = async (args: {
       path,
     })
   ) {
-    const chat: TranscriptSummaryModel = { model, modelId };
+    const chat: TranscriptSummaryModel = {
+      model,
+      modelId,
+      ...(maxOutputTokens !== undefined
+        ? { outputCeiling: maxOutputTokens }
+        : {}),
+    };
     const summary = await registerTranscriptSummary(chatId, async () => {
       const models =
         taskModel === undefined
