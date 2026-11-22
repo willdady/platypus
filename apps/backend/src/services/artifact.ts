@@ -69,6 +69,19 @@ export function assertArtifactContent(content: string): void {
 }
 
 /**
+ * The rule an uploaded file's content is held to. The browser decodes the
+ * file's bytes strictly before posting; this is the same rule from the other
+ * side, so a client that skipped it — or decoded lossily and sent replacement
+ * characters — cannot store a mangled document. It is not applied to an
+ * Agent's own content: a model may legitimately quote a rejection character.
+ */
+function assertUploadText(content: string): void {
+  if (content.includes("\u0000") || content.includes("\uFFFD")) {
+    throw new ValidationError("Artifact content is not text");
+  }
+}
+
+/**
  * Creates an Artifact and its version 1. Both rows land before the caller sees
  * anything, so a Card that receives the result can read it back at once.
  */
@@ -113,6 +126,34 @@ export async function createArtifact(
     );
 
     return { artifact, version };
+  });
+}
+
+/** What an uploaded file becomes: the fields the create body carries. */
+export type CreateUploadedArtifactInput = {
+  title: string;
+  type: ArtifactType;
+  language?: string;
+  content: string;
+};
+
+/**
+ * Creates an Artifact and its version 1 from a file the User uploaded: the
+ * version is the User's and there is no source Chat. The browser refuses a file
+ * over the cap or one outside UTF-8 text before sending it; this is the same
+ * two refusals enforced here, so a client that bypassed the browser cannot
+ * store a truncated or mangled document either.
+ */
+export async function createUploadedArtifact(
+  database: ArtifactDatabase,
+  scope: ArtifactScope,
+  input: CreateUploadedArtifactInput,
+) {
+  assertUploadText(input.content);
+  return await createArtifact(database, scope, {
+    ...input,
+    author: "user",
+    sourceChatId: null,
   });
 }
 

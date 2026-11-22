@@ -83,11 +83,70 @@ export function artifactFileName(
     .replace(/\s+/g, " ")
     .trim()
     .replace(/^\.+/, "");
-  return `${/[a-zA-Z0-9]/.test(base) ? base : "artifact"}.${artifactFileExtension(type, language)}`;
+  const name = /[a-zA-Z0-9]/.test(base) ? base : "artifact";
+  const extension = artifactFileExtension(type, language);
+  // A title that already ends in the suffix keeps the one it has: an uploaded
+  // file's title is its own file name, extension included.
+  return name.toLowerCase().endsWith(`.${extension}`)
+    ? name
+    : `${name}.${extension}`;
 }
 
 /** The path this deployment serves stored files on. */
 const STORED_FILE_PATH = "/files/";
+
+/** The Artifact an uploaded file becomes: its title, type and code language. */
+export type ArtifactUpload = {
+  title: string;
+  type: ArtifactType;
+  language?: string;
+};
+
+/**
+ * The types an upload's extension selects outright, inverted from the
+ * download extensions so the two cannot name different types.
+ */
+const UPLOAD_TYPES = Object.fromEntries(
+  Object.entries(TYPE_EXTENSIONS).map(([type, extension]) => [extension, type]),
+) as Record<string, ArtifactType>;
+
+/**
+ * What an uploaded file becomes: the title is the file's own name, the type is
+ * read from its extension, and a file of any other type is Code in that
+ * extension's language. A file with no extension is Code with no language.
+ */
+export function artifactUploadFromFileName(fileName: string): ArtifactUpload {
+  const dot = fileName.lastIndexOf(".");
+  const extension =
+    dot > 0 && dot < fileName.length - 1
+      ? fileName.slice(dot + 1).toLowerCase()
+      : undefined;
+
+  if (extension === undefined) return { title: fileName, type: "code" };
+  const type = UPLOAD_TYPES[extension];
+  if (type !== undefined) return { title: fileName, type };
+  return { title: fileName, type: "code", language: extension };
+}
+
+const utf8 = new TextDecoder("utf-8", { fatal: true });
+
+/**
+ * The text an uploaded file holds, or `undefined` when its bytes are not text.
+ * Decoding is strict, so invalid UTF-8 fails rather than arriving as U+FFFD.
+ * A NUL byte, or a replacement character, is refused too: neither belongs in a
+ * text file, and the second is what a lossy decode leaves behind. The route
+ * refuses the same two shapes again, so a client that skipped this check cannot
+ * store a mangled document.
+ */
+export function decodeArtifactText(bytes: Uint8Array): string | undefined {
+  if (bytes.includes(0)) return undefined;
+  try {
+    const text = utf8.decode(bytes);
+    return text.includes("\uFFFD") ? undefined : text;
+  } catch {
+    return undefined;
+  }
+}
 
 /**
  * The URL a markdown Artifact may load an image from, or `undefined` when it

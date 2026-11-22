@@ -84,6 +84,30 @@ describe("ArtifactsList", () => {
     ).toBeInTheDocument();
   });
 
+  it("offers Upload on an empty page", () => {
+    mockScopedSWR({ "/artifacts": list([]) }, { strict: true });
+    renderArtifacts();
+
+    expect(screen.getByRole("button", { name: "Upload" })).toBeInTheDocument();
+  });
+
+  it("offers Upload beside the rows once there are some", () => {
+    mockScopedSWR({ "/artifacts": list([artifact()]) }, { strict: true });
+    renderArtifacts();
+
+    expect(screen.getByRole("button", { name: "Upload" })).toBeInTheDocument();
+  });
+
+  it("offers no Upload to a member who does not own the workspace", () => {
+    authState.ownsWorkspace = false;
+    mockScopedSWR({ "/artifacts": list([artifact()]) }, { strict: true });
+    renderArtifacts();
+
+    expect(
+      screen.queryByRole("button", { name: "Upload" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("keeps the toolbar to clear a filter that matched nothing", () => {
     window.history.replaceState(null, "", "?artifactQuery=none");
     mockScopedSWR({ "/artifacts": list([]) }, { strict: true });
@@ -95,6 +119,8 @@ describe("ArtifactsList", () => {
     expect(
       screen.getByRole("searchbox", { name: "Search artifacts" }),
     ).toBeInTheDocument();
+    // The page's action stays reachable while the filter is on.
+    expect(screen.getByRole("button", { name: "Upload" })).toBeInTheDocument();
   });
 
   it("asks the route to search by title", () => {

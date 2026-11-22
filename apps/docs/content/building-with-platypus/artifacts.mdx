@@ -1,13 +1,13 @@
 ---
 title: Artifacts
-description: Standalone, versioned content an Agent creates — documents, code, diagrams, pages and images — and where you read it.
+description: Standalone, versioned content an Agent or you create — documents, code, diagrams, pages and images — and where you read it.
 ---
 
 import { Callout } from "nextra/components";
 
 # Artifacts
 
-An **Artifact** is a standalone piece of content an Agent creates in your
+An **Artifact** is a standalone piece of content an Agent or you create in your
 Workspace. It is separate from the Chat that made it: the Chat can be deleted
 and the Artifact stays, ready to open, download, or point another Agent at.
 
@@ -68,9 +68,9 @@ Preview stays unavailable. Their source is still copyable and downloadable.
 
 ## The Artifacts page
 
-**Artifacts** in the Workspace sidebar lists everything Agents have made in
-this Workspace, whatever Chat it came from. The list is newest change first.
-Use the search box to find one by title, or the type filter to see only
+**Artifacts** in the Workspace sidebar lists everything Agents and you have
+made in this Workspace, whatever Chat it came from. The list is newest change
+first. Use the search box to find one by title, or the type filter to see only
 Markdown, Code, Mermaid, HTML or SVG.
 
 Each card shows the Artifact's title, its type and when it last changed. Click
@@ -89,6 +89,28 @@ The card's ⋮ menu offers:
 **Rename** and **Delete** are the Workspace Owner's. A member with access to
 the Workspace sees **Download** and **Open source Chat** only.
 
+## Upload a file
+
+If you already have the content, **Upload** on the Artifacts page creates an
+Artifact from a file on your disk. The title is the file's name and the type
+comes from its extension — rename it afterwards if you want a different one.
+
+| Extension     | Type                                                          |
+| ------------- | ------------------------------------------------------------- |
+| `.md`         | Markdown                                                      |
+| `.html`       | HTML                                                          |
+| `.svg`        | SVG                                                           |
+| `.mmd`        | Mermaid                                                       |
+| anything else | Code, its language taken from the extension when there is one |
+
+A file over **512 KB**, or one that is not plain text — an image, a zip,
+another binary — is refused with the reason and nothing is saved. Files are not
+truncated to fit, and only one file is uploaded at a time.
+
+**Upload** is the Workspace Owner's, like **Rename** and **Delete**. After an
+upload you land on the new Artifact's own page, where you can read, download or
+rename it.
+
 <Callout type="info">
   An Artifact records the Chat it came from. If you delete that Chat, the
   Artifact is kept and simply has no source Chat to point back to. Deleting the
@@ -106,4 +128,5 @@ on its own.
 ## Versions
 
 Every Artifact keeps its versions in order, and the newest is its current
-content. Creating one writes version 1, written by the Agent.
+content. Creating one writes version 1, attributed to the Agent when its Tool
+made it and to you when you uploaded it.
