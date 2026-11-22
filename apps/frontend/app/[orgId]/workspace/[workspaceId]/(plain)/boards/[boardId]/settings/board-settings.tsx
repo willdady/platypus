@@ -30,7 +30,7 @@ function BoardSettingsPage({
     scope: { orgId, workspaceId },
     id: boardId,
     successMessage: "Board deleted",
-    onSuccess: () => router.push(routes.root),
+    onSuccess: () => router.push(routes.boards.root),
   });
 
   return (

@@ -100,7 +100,7 @@ describe("BoardSettingsPage", () => {
       fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
     };
 
-    it("deletes it and returns to the workspace", async () => {
+    it("deletes it and returns to the Boards list", async () => {
       setDataFor("/boards/b1", {
         id: "b1",
         name: "Roadmap",
@@ -113,7 +113,7 @@ describe("BoardSettingsPage", () => {
       confirmDelete();
 
       await waitFor(() =>
-        expect(push).toHaveBeenCalledWith("/org1/workspace/ws1"),
+        expect(push).toHaveBeenCalledWith("/org1/workspace/ws1/boards"),
       );
       expect(fetchMock).toHaveBeenCalledWith(
         BOARD,

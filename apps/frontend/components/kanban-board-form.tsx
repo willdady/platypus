@@ -152,8 +152,8 @@ export function KanbanBoardForm({
           <FooterSkeleton buttons={isEditing && onDelete ? 2 : 1} />
         </div>
       }
-      backHref={workspaceRoutes(orgId, workspaceId).root}
-      backLabel="Back to workspace"
+      backHref={workspaceRoutes(orgId, workspaceId).boards.root}
+      backLabel="Back to boards"
     >
       <form
         onSubmit={(e) => {

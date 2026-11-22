@@ -6,6 +6,7 @@ import { CommandMenu } from "@/components/command-menu";
 import { Header } from "@/components/header";
 import { HeaderHomeButton } from "@/components/header-home-button";
 import { MAIN_CONTENT_ID } from "@/components/skip-link";
+import { WorkspaceBackButton } from "@/components/workspace-back-button";
 import { WorkspaceScrollContainer } from "@/components/workspace-scroll-container";
 import { Kbd } from "@/components/ui/kbd";
 import {
@@ -56,6 +57,8 @@ export function WorkspaceShell({
             <div className="flex items-center gap-2">
               {sidebar ? (
                 <SidebarTrigger />
+              ) : workspaceId ? (
+                <WorkspaceBackButton orgId={orgId} workspaceId={workspaceId} />
               ) : (
                 <BackButton variant="header" fallbackHref={home.href} />
               )}
