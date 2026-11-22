@@ -30,7 +30,6 @@ import { resolveScoped } from "./scoped-resource.ts";
 import { openProvider } from "./provider.ts";
 import {
   contextWindowForModel,
-  maxOutputTokensForModel,
   pointerSettingModelId,
 } from "./model-capability.ts";
 import { jobCallSettings, jobMaxOutputTokens } from "./reasoning.ts";
@@ -621,8 +620,9 @@ export type TranscriptSummaryModel = {
   /** The output cap raised by the Job settings' Thinking budget; absent, the
    *  pass's own cap. */
   maxOutputTokens?: number;
-  /** The output ceiling declared on the model's entry. A summary call never
-   *  asks for more, since a vendor rejects a cap above the model's own. */
+  /** The output ceiling declared on the Chat's own model. A summary call
+   *  never asks for more, since a vendor rejects a cap above the model's own.
+   *  The task model's cap is held to its ceiling by its Job settings (#2025). */
   outputCeiling?: number;
   /** The task model's declared context window, which a pass checks its input
    *  against before calling; absent, the model's own error is the measure. */
@@ -1065,10 +1065,6 @@ const withTaskSummariserModel = async (args: {
       taskProvider.provider,
       pointerSettingModelId(taskModelId),
     );
-    const outputCeiling = maxOutputTokensForModel(
-      taskProvider.provider,
-      pointerSettingModelId(taskModelId),
-    );
     return {
       task: {
         model: openProvider(taskProvider.provider, { sessionId }).languageModel(
@@ -1077,7 +1073,6 @@ const withTaskSummariserModel = async (args: {
         modelId: taskModelId,
         settings,
         maxOutputTokens,
-        ...(outputCeiling !== undefined ? { outputCeiling } : {}),
         ...(contextWindow !== undefined ? { contextWindow } : {}),
       },
       chat,
