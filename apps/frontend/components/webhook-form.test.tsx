@@ -20,6 +20,7 @@ import {
   stubRejectedSave,
 } from "@/test/form-test-harness";
 import { webhookCreateSchema } from "@platypus/schemas";
+import { FIX_FORM_ERRORS_MESSAGE } from "@/lib/apply-write-outcome";
 import { expectSentBodyToMatchSchema } from "@/test/test-utils";
 
 // --- Module mocks ------------------------------------------------------------
@@ -303,7 +304,7 @@ describe("WebhookForm delete", () => {
 describe("WebhookForm duplicate header names", () => {
   beforeEach(() => resetFormHarness());
 
-  async function addHeaders() {
+  async function addHeaders(secondName = "x-trace") {
     fireEvent.change(screen.getByLabelText("URL"), {
       target: { value: "https://example.com/hook" },
     });
@@ -318,7 +319,7 @@ describe("WebhookForm duplicate header names", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Add header" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Header 2 name" }), {
-      target: { value: "x-trace" },
+      target: { value: secondName },
     });
     fireEvent.change(screen.getByRole("textbox", { name: "Header 2 value" }), {
       target: { value: "two" },
@@ -335,7 +336,19 @@ describe("WebhookForm duplicate header names", () => {
     expect(
       await screen.findByText(/Duplicate header name "x-trace"/),
     ).toBeInTheDocument();
+    expect(toastError).toHaveBeenCalledWith(FIX_FORM_ERRORS_MESSAGE);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("shows no error toast when the header names are unique", async () => {
+    const fetchMock = stubAcceptedSave({ id: "w1" });
+    renderForm();
+    await addHeaders("X-Request-Id");
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(toastError).not.toHaveBeenCalled();
   });
 
   it("saves once the duplicate is renamed", async () => {
