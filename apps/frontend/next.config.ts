@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 import rootPackage from "../../package.json" with { type: "json" };
+import { ARTIFACT_FRAME_HOST_CSP } from "./lib/artifact-frame";
 
 const allowedDevOrigins = process.env.ALLOWED_DEV_ORIGINS
   ? process.env.ALLOWED_DEV_ORIGINS.split(",").map((o) => o.trim())
@@ -20,7 +21,9 @@ const nextConfig: NextConfig = {
   },
   poweredByHeader: false,
   // A baseline for every response. `frame-ancestors` is the modern spelling of
-  // X-Frame-Options; both are sent for older browsers.
+  // X-Frame-Options; both are sent for older browsers. `frame-src 'none'`
+  // keeps the Artifact frame from navigating itself elsewhere; it does not
+  // block `srcDoc` frames, and nothing else on the page embeds one (ADR-0047).
   headers() {
     return Promise.resolve([
       {
@@ -28,7 +31,7 @@ const nextConfig: NextConfig = {
         headers: [
           {
             key: "Content-Security-Policy",
-            value: "frame-ancestors 'self'",
+            value: `frame-ancestors 'self'; ${ARTIFACT_FRAME_HOST_CSP}`,
           },
           { key: "X-Frame-Options", value: "SAMEORIGIN" },
           { key: "X-Content-Type-Options", value: "nosniff" },

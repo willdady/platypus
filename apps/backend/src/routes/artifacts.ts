@@ -19,6 +19,7 @@ import {
   requireWorkspaceOwner,
   workspaceScopeOf,
 } from "../middleware/authorization.ts";
+import { env } from "../env.ts";
 import {
   createUploadedArtifact,
   deleteArtifact,
@@ -90,16 +91,16 @@ artifacts.get(
     const { workspaceId } = workspaceScopeOf(c);
     const { version } = c.req.valid("query");
 
-    return respond(
-      c,
-      artifactReadSchema,
-      await getArtifactWithVersion(
+    return respond(c, artifactReadSchema, {
+      ...(await getArtifactWithVersion(
         db,
         { workspaceId },
         c.req.param("artifactId"),
         version,
-      ),
-    );
+      )),
+      // The viewer builds the Artifact frame's policy from the Operator's list.
+      scriptOrigins: env().ARTIFACT_SCRIPT_ORIGINS,
+    });
   },
 );
 

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { timezoneSchema } from "@platypus/schemas";
+import { artifactScriptOriginSchema, timezoneSchema } from "@platypus/schemas";
 
 /**
  * The backend's environment variables, typed and validated (#1617).
@@ -26,6 +26,7 @@ const DEFAULT_CHAT_PER_STEP_TIMEOUT_MS = 2 * 60 * 1000;
 const DEFAULT_CHAT_PER_RUN_TIMEOUT_MS = 30 * 60 * 1000;
 const DEFAULT_TRIGGER_PER_STEP_TIMEOUT_MS = 10 * 60 * 1000;
 const DEFAULT_TRIGGER_PER_RUN_TIMEOUT_MS = 60 * 60 * 1000;
+const DEFAULT_ARTIFACT_SCRIPT_ORIGINS = "https://cdnjs.cloudflare.com";
 
 const positiveInt = (fallback: number) =>
   z.coerce.number().int().positive().default(fallback);
@@ -49,6 +50,15 @@ const requiredUrl = (protocol?: RegExp) =>
   z
     .string({ error: "is required" })
     .pipe(protocol ? z.url({ protocol }) : z.url());
+
+/**
+ * The origins an HTML or SVG Artifact may load scripts, styles and fonts from.
+ */
+const artifactScriptOrigins = z
+  .string()
+  .default(DEFAULT_ARTIFACT_SCRIPT_ORIGINS)
+  .transform((value) => value.split(/\s+/).filter((entry) => entry.length > 0))
+  .pipe(z.array(artifactScriptOriginSchema));
 
 /**
  * The database connection string: required, and a Postgres URL rather than
@@ -109,6 +119,10 @@ const envSchema = z
     STORAGE_S3_SECRET_ACCESS_KEY: z.string().optional(),
     // Sent to api.github.com only, when installing Skills (ADR-0037).
     GITHUB_TOKEN: z.string().optional(),
+    // Space-separated `https` origins an HTML or SVG Artifact may load
+    // scripts, styles and fonts from. Empty approves none. Every other kind of
+    // entry stops boot rather than widening or silently breaking the policy.
+    ARTIFACT_SCRIPT_ORIGINS: artifactScriptOrigins,
   })
   .superRefine((env, ctx) => {
     if (env.STORAGE_BACKEND !== "s3") return;
@@ -138,14 +152,23 @@ const envSchema = z
 export type Env = z.infer<typeof envSchema>;
 
 /**
+ * Variables whose empty value is meaningful rather than "not configured". The
+ * rest count `VAR=` as unset, as an empty value in a `.env` means.
+ */
+const EMPTY_VALUE_IS_MEANINGFUL = new Set(["ARTIFACT_SCRIPT_ORIGINS"]);
+
+/**
  * Parse `source`, throwing one error that names every invalid variable. Values
- * are trimmed, and an empty one counts as unset, as `VAR=` in a `.env` means.
+ * are trimmed, and an empty one counts as unset — except where the value itself
+ * means "none", such as approving no Artifact library origins.
  */
 export const parseEnv = (source: NodeJS.ProcessEnv = process.env): Env => {
   const present = Object.fromEntries(
     Object.entries(source)
       .map(([key, value]): [string, string | undefined] => [key, value?.trim()])
-      .filter(([, value]) => value),
+      .filter(
+        ([key, value]) => EMPTY_VALUE_IS_MEANINGFUL.has(key) || Boolean(value),
+      ),
   );
   const result = envSchema.safeParse(present);
   if (result.success) return result.data;

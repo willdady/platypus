@@ -22,8 +22,8 @@ in a reply.
 | **Markdown** | Formatted text — headings, lists, tables, links and code blocks. Rendered the same way a Chat reply is.                       |
 | **Code**     | Source in any language the model names. Highlighted as that language in the Preview, and downloaded with its usual extension. |
 | **Mermaid**  | A diagram written as Mermaid notation. Drawn as the picture, not the notation.                                                |
-| **HTML**     | A complete HTML page. The viewer shows its source.                                                                            |
-| **SVG**      | A complete SVG image. The viewer shows its source.                                                                            |
+| **HTML**     | A complete HTML page. Runs in a sandboxed frame in the Preview, scripts included.                                             |
+| **SVG**      | A complete SVG image. Shown in Preview, and script inside it runs under the same rules as an HTML page.                       |
 
 ## Limits
 
@@ -47,7 +47,8 @@ When the Agent calls the tool, a Card appears in the reply with the title, the
 type and the version it wrote. Click the Card to open the Artifact in a panel
 beside the Chat. The panel has two tabs:
 
-- **Preview** shows the rendered Artifact for Markdown, Code and Mermaid.
+- **Preview** shows the rendered Artifact for Markdown, Code and Mermaid, and
+  runs HTML and SVG inside a frame.
 - **Code** shows the source for every type, highlighted for its language.
 
 You do not have to wait for the Agent to finish. The Card appears as soon as
@@ -62,9 +63,6 @@ presenting the half-written content as an Artifact.
 named after the title, with an extension taken from the type — `.md`, `.html`,
 `.svg` or `.mmd`, and for Code the language's own extension where Platypus
 knows it, `.txt` otherwise.
-
-HTML and SVG Artifacts have no Preview, so the panel opens on **Code** and
-Preview stays unavailable. Their source is still copyable and downloadable.
 
 ## The Artifacts page
 
@@ -115,6 +113,37 @@ rename it.
   An Artifact records the Chat it came from. If you delete that Chat, the
   Artifact is kept and simply has no source Chat to point back to. Deleting the
   Workspace deletes its Artifacts.
+</Callout>
+
+## How HTML and SVG are contained
+
+An HTML or SVG Artifact is a page an Agent wrote, so Platypus treats it as one
+it cannot trust. The Preview runs it in a frame that has no access to your
+session, your cookies, your saved browser data or the Platypus page around it.
+The frame cannot open windows, submit forms, change the address bar or send data
+anywhere. It keeps its own styles and scripts, so an interactive chart or a
+small app still works.
+
+The one exception is the library sites your Operator approves. A page can load
+scripts, styles and fonts from those sites — a chart library or a UI toolkit —
+and nothing else. A page that references any other site still loads, but that
+request is blocked. Platypus then shows a notice at the top of the Preview
+naming the site it stopped, so a page that looks broken does not leave you
+guessing why.
+
+Approving a site is a deployment decision: it applies to every Workspace in the
+deployment, not to one Artifact. Ask your Operator if a page needs a library
+that is blocked. The default approves [cdnjs](https://cdnjs.cloudflare.com), a
+well-known library mirror; an Operator can approve more, or none at all, with
+`ARTIFACT_SCRIPT_ORIGINS` in the
+[backend configuration](/reference/backend-configuration#artifacts).
+
+<Callout type="warning">
+  A library site is only as safe as everything it serves. A CDN that carries
+  user-published packages — jsDelivr and unpkg both do — lets anyone publish the
+  script an Artifact loads. The frame still cannot read your session or send
+  data out, but a deployment that needs tighter control should approve no sites
+  at all and keep Artifacts self-contained.
 </Callout>
 
 ## Images inside a Markdown Artifact

@@ -4663,7 +4663,7 @@ export const webhookEventScope = (
 /**
  * The content kinds an Artifact can hold. Fixed when the Artifact is created;
  * `markdown`, `code` and `mermaid` render in the app's own DOM, while `html`
- * and `svg` are source-only until the Artifact frame renders them.
+ * and `svg` render only inside the sandboxed Artifact frame.
  */
 export const artifactTypeSchema = z.enum([
   "markdown",
@@ -4679,6 +4679,51 @@ export type ArtifactType = z.infer<typeof artifactTypeSchema>;
 export const artifactAuthorSchema = z.enum(["agent", "user"]);
 
 export type ArtifactAuthor = z.infer<typeof artifactAuthorSchema>;
+
+/**
+ * A plain DNS hostname: dot-separated labels of letters, digits and hyphens,
+ * each starting and ending alphanumeric. The URL parser accepts far more than
+ * this — `*`, `;`, quotes, underscores, an empty label — and any of those in a
+ * CSP source list would silently widen or break the policy.
+ */
+const DNS_HOSTNAME =
+  /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*$/;
+
+/**
+ * The canonical `https` origin `value` names, or `undefined` when it is not a
+ * bare origin. A bare origin has a plain DNS host and no path, query,
+ * credentials or hash; host case and an explicit default port normalise away,
+ * so `https://CDNJS.Cloudflare.com:443` becomes `https://cdnjs.cloudflare.com`.
+ */
+export const bareHttpsOrigin = (value: string): string | undefined => {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:") return undefined;
+    if (url.username || url.password || url.search || url.hash)
+      return undefined;
+    if (url.pathname !== "/") return undefined;
+    if (!DNS_HOSTNAME.test(url.hostname)) return undefined;
+    return url.origin;
+  } catch {
+    return undefined;
+  }
+};
+
+/**
+ * One approved library origin: a bare `https` origin, canonicalised on the way
+ * through so the Operator's setting and the frame's policy name the same string.
+ */
+export const artifactScriptOriginSchema = z.string().transform((value, ctx) => {
+  const origin = bareHttpsOrigin(value);
+  if (origin === undefined) {
+    ctx.addIssue({
+      code: "custom",
+      message: `"${value}" is not a bare https origin (for example https://cdnjs.cloudflare.com)`,
+    });
+    return z.NEVER;
+  }
+  return origin;
+});
 
 export const ARTIFACT_TITLE_MIN_LENGTH = 1;
 export const ARTIFACT_TITLE_MAX_LENGTH = 200;
@@ -4738,6 +4783,12 @@ export type ArtifactVersion = z.infer<typeof artifactVersionSchema>;
 export const artifactReadSchema = z.object({
   artifact: artifactSchema,
   version: artifactVersionSchema,
+  /**
+   * The library origins this deployment's Operator approved for the Artifact
+   * frame. Sent with every read so the viewer can build the frame's policy
+   * without a setting of its own.
+   */
+  scriptOrigins: z.array(artifactScriptOriginSchema),
 });
 
 export type ArtifactRead = z.infer<typeof artifactReadSchema>;
