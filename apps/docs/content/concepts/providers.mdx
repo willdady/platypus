@@ -165,9 +165,11 @@ doesn't offer it, and does nothing there. Switch back, and it applies again.
 <Callout type="warning">
   **A self-hosted thinking model thinks through every Chat title too.** The task
   model runs at its server's default, so a model that thinks by default spends a
-  long reasoning pass on a five-word title and on every Transcript summary. Turn
-  **Thinking** off in the task model's **Settings**. The control appears only
-  once the model's Reasoning map declares it — see [Declaring a Reasoning
+  long reasoning pass on a five-word title and on every Transcript summary,
+  where a long pass can use up the summary's room, so the summary is thrown away
+  and written again by the Chat's model. Turn **Thinking** off in the task
+  model's **Settings**. The control appears only once the model's Reasoning map
+  declares it — see [Declaring a Reasoning
   map](/self-hosting/providers-and-auth#declaring-a-reasoning-map).
 </Callout>
 

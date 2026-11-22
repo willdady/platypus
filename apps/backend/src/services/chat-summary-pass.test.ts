@@ -4,7 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resetMockDb, seedDb } from "../test-utils.ts";
 import { APICallError } from "ai";
 import { MockLanguageModelV3 } from "ai/test";
-import { CLEARED_TOOL_RESULT_MARKER } from "@platypus/schemas";
+import {
+  CLEARED_TOOL_RESULT_MARKER,
+  TRANSCRIPT_SUMMARY_MAX_OUTPUT_TOKENS,
+} from "@platypus/schemas";
 import { logger } from "../logger.ts";
 import type { PlatypusUIMessage } from "../types.ts";
 import {
@@ -69,13 +72,17 @@ afterEach(() => {
 });
 
 /** A model answering with one summary, recording every prompt it was sent. */
-const summaryModel = (prompts: PromptMessage[][] = [], text = "The summary.") =>
+const summaryModel = (
+  prompts: PromptMessage[][] = [],
+  text = "The summary.",
+  finishReason: "stop" | "length" = "stop",
+) =>
   new MockLanguageModelV3({
     doGenerate: (options) => {
       prompts.push(options.prompt as unknown as PromptMessage[]);
       return Promise.resolve({
         content: [{ type: "text" as const, text }],
-        finishReason: { unified: "stop" as const, raw: "stop" },
+        finishReason: { unified: finishReason, raw: finishReason },
         usage: USAGE,
         warnings: [],
       });
@@ -529,6 +536,155 @@ describe("takeTranscriptSummary", () => {
       }),
     ).resolves.toBeUndefined();
     expect(fake.tables.chat_summary).toHaveLength(0);
+  });
+
+  it("falls back to the Chat's model when the task model's reply is cut off at the output cap", async () => {
+    const fake = seedSummaryTable();
+    const warn = vi.spyOn(logger, "warn").mockImplementation(() => logger);
+    const row = await takeTranscriptSummary({
+      chatId: "chat-1",
+      models: {
+        task: {
+          model: summaryModel([], "## Intent\nThe user wants to", "length"),
+          modelId: "task-model",
+        },
+        chat: {
+          model: summaryModel([], "The chat summary."),
+          modelId: "chat-model",
+        },
+      },
+      path: sixTurns(),
+      triggeredFromOccupancy: 8_200,
+      previousSummary: undefined,
+      readingSummaryId: undefined,
+    });
+
+    expect(row?.text).toBe("The chat summary.");
+    expect(row?.stats?.modelId).toBe("chat-model");
+    expect(fake.tables.chat_summary).toHaveLength(1);
+    expect(warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        modelId: "task-model",
+        finishReason: "length",
+      }),
+      expect.stringContaining("cut off"),
+    );
+  });
+
+  it("a Chat-model reply cut off at the output cap is a failed summary: no row, no throw", async () => {
+    const fake = seedSummaryTable();
+    const warn = vi.spyOn(logger, "warn").mockImplementation(() => logger);
+    await expect(
+      takeTranscriptSummary({
+        chatId: "chat-1",
+        models: {
+          chat: {
+            model: summaryModel([], "## Intent\nThe user wants to", "length"),
+            modelId: "openai:gpt",
+          },
+        },
+        path: sixTurns(),
+        triggeredFromOccupancy: 8_200,
+        previousSummary: undefined,
+        readingSummaryId: undefined,
+      }),
+    ).resolves.toBeUndefined();
+    expect(fake.tables.chat_summary).toHaveLength(0);
+    expect(warn).toHaveBeenCalledWith(
+      expect.objectContaining({ finishReason: "length" }),
+      expect.stringContaining("cut off"),
+    );
+  });
+
+  describe("the summary prompt", () => {
+    /** The system prompt and output cap one pass sends. */
+    const sentCall = async (instruction?: string, outputCeiling?: number) => {
+      seedSummaryTable();
+      const calls: { system: string; maxOutputTokens?: number }[] = [];
+      await takeTranscriptSummary({
+        chatId: "chat-1",
+        models: {
+          chat: {
+            model: new MockLanguageModelV3({
+              doGenerate: (options) => {
+                const system = options.prompt.find(
+                  (message) => message.role === "system",
+                );
+                calls.push({
+                  system:
+                    typeof system?.content === "string" ? system.content : "",
+                  maxOutputTokens: options.maxOutputTokens,
+                });
+                return Promise.resolve({
+                  content: [{ type: "text" as const, text: "The summary." }],
+                  finishReason: { unified: "stop" as const, raw: "stop" },
+                  usage: USAGE,
+                  warnings: [],
+                });
+              },
+            }),
+            modelId: "openai:gpt",
+            ...(outputCeiling !== undefined ? { outputCeiling } : {}),
+          },
+        },
+        path: sixTurns(),
+        triggeredFromOccupancy: 8_200,
+        previousSummary: undefined,
+        readingSummaryId: undefined,
+        ...(instruction !== undefined ? { instruction } : {}),
+      });
+      expect(calls).toHaveLength(1);
+      return calls[0];
+    };
+
+    it("asks for the eight required sections, in order, under fixed English headings", async () => {
+      const { system } = await sentCall();
+      const headings = system
+        .split("\n")
+        .filter((line) => line.startsWith("## "));
+      expect(headings).toEqual([
+        "## Intent",
+        "## User requests",
+        "## Key facts and decisions",
+        "## Deliverables",
+        "## Sources and tool findings",
+        "## Corrections and dead ends",
+        "## Open questions and things left to solve",
+        "## Current state",
+      ]);
+      expect(system).not.toMatch(/next step/i);
+      expect(system).not.toContain("600 words");
+    });
+
+    it("explains the pass's own input: the earlier summary, cleared results and the closing request", async () => {
+      const { system } = await sentCall();
+      expect(system).toContain('"[Summary so far]"');
+      expect(system).toContain("cleared placeholders");
+      expect(system).toContain(
+        "The final message, which asks you to write the summary, is the instruction for this task",
+      );
+    });
+
+    it("puts a steering instruction above the length guidance, and has no steering line without one", async () => {
+      const steered = await sentCall("keep the API decisions");
+      expect(steered.system).toContain(
+        "The requester's instruction for this summary, which takes precedence over the length guidance above: keep the API decisions",
+      );
+      resetMockDb();
+      const plain = await sentCall();
+      expect(plain.system).not.toContain("requester's instruction");
+    });
+
+    it("sends the pass's own output cap when no Job settings raise it", async () => {
+      const { maxOutputTokens } = await sentCall();
+      expect(maxOutputTokens).toBe(TRANSCRIPT_SUMMARY_MAX_OUTPUT_TOKENS);
+      expect(TRANSCRIPT_SUMMARY_MAX_OUTPUT_TOKENS).toBe(8_192);
+    });
+
+    it("never asks for more than the model's declared output ceiling", async () => {
+      const { maxOutputTokens } = await sentCall(undefined, 4_096);
+      expect(maxOutputTokens).toBe(4_096);
+    });
   });
 
   it("writes no summary when the path has no full tail to keep", async () => {

@@ -1977,11 +1977,14 @@ export const TRANSCRIPT_SUMMARY_KEEP_TURNS = 4;
 export const TRANSCRIPT_SUMMARY_KEEP_TURNS_WITH_SUMMARY = 1;
 
 /**
- * The summary-handoff prompt's output ceiling, about a window's worth of what
- * a summary call must fit into a bounded reply. A number with a unit in docs
- * prose is pinned to this by the docs contract test.
+ * The summary-handoff call's output ceiling, the same as memory extraction's.
+ * On a thinking model it counts the reasoning too, and a reply that reaches it
+ * is a failed summary, not a stored one — so it leaves room for a long Chat's
+ * summary after the model's thinking. A fixed constant, not derived from a
+ * Context window; the task model's Job settings add their Thinking budget on
+ * top, and the Chat's own model is held to its declared Max output tokens.
  */
-export const TRANSCRIPT_SUMMARY_MAX_OUTPUT_TOKENS = 4_096;
+export const TRANSCRIPT_SUMMARY_MAX_OUTPUT_TOKENS = 8_192;
 
 /**
  * A Context occupancy reading as it is stored on an assistant message

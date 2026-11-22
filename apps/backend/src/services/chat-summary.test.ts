@@ -32,7 +32,7 @@ vi.mock("./provider.ts", async (importOriginal) => {
 
 import { makeProviderRow } from "./provider-row.test-fixtures.ts";
 import type { PlatypusUIMessage } from "../types.ts";
-import type { JobSettings } from "@platypus/schemas";
+import type { JobSettings, ReasoningMap } from "@platypus/schemas";
 import {
   afterTurn,
   applyTranscriptSummary,
@@ -552,6 +552,8 @@ const seedTaskModelProviders = (
     taskModelSettings?: JobSettings;
     /** The task model's declared context window, as its Model entry. */
     taskContextWindow?: number;
+    /** The task model's Reasoning map, as its Model entry. */
+    taskReasoning?: ReasoningMap;
     agent?: boolean;
   } = {},
 ) => {
@@ -560,13 +562,16 @@ const seedTaskModelProviders = (
     workspaceId: "ws-1",
     taskModelId: over.taskModelId ?? "task-model",
     taskModelSettings: over.taskModelSettings ?? null,
-    ...(over.taskContextWindow !== undefined
+    ...(over.taskContextWindow !== undefined || over.taskReasoning
       ? {
           modelIds: [
             {
               id: over.taskModelId ?? "task-model",
               passthroughFileTypes: [],
-              contextWindow: over.taskContextWindow,
+              ...(over.taskContextWindow !== undefined
+                ? { contextWindow: over.taskContextWindow }
+                : {}),
+              ...(over.taskReasoning ? { reasoning: over.taskReasoning } : {}),
             },
           ],
         }
@@ -695,6 +700,34 @@ describe("beforeTurn", () => {
       stats: { modelId: "m1" },
     });
     expect(mockGenerateText).toHaveBeenCalledTimes(2);
+  });
+
+  it("adds the Thinking budget on top of the ceiling when the Chat's model is the task model", async () => {
+    seedTaskModelProviders({
+      taskModelId: "m1",
+      taskModelSettings: { thinkingBudget: 2_048 },
+      taskReasoning: { budget: { field: "thinking_token_budget" } },
+    });
+
+    await beforeTurn({
+      chatId: "chat-1",
+      path: withReading(fiveTurns(), 9_600),
+      summaries: [],
+      contextWindow: 10_000,
+      model: { id: "chat-model" } as never,
+      modelId: "m1",
+      outputCeiling: 4_096,
+      taskModel: {
+        scope: { orgId: "org-1", workspaceId: "ws-1" },
+        providerId: "p1",
+      },
+    });
+
+    expect(mockGenerateText).toHaveBeenCalledTimes(1);
+    expect(mockGenerateText.mock.calls[0][0]).toMatchObject({
+      model: { id: "chat-model" },
+      maxOutputTokens: 4_096 + 2_048,
+    });
   });
 
   it("applies only, never takes, without a chatId (a Trigger run)", async () => {

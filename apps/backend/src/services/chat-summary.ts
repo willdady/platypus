@@ -547,27 +547,56 @@ const incrementalInput = (
 };
 
 /**
- * The structured handoff a Transcript summary is written from: what the
- * conversation intended, decided and concluded, what files and tools were
- * touched, what is still open, and where it stands — compactly, with an
- * explicit length target. An optional steering instruction (the User's, from
- * `/compact`) tells the pass what to keep.
+ * The structured handoff a Transcript summary is written from (issue #2015):
+ * eight required sections under fixed English headings, so the User's own
+ * requests and the content of what was produced survive, done work stays
+ * apart from planned work, and a reader can find each section in any
+ * language. It explains the pass's own input — the leading `[Summary so far]`,
+ * cleared tool results, and the closing `TRANSCRIPT_SUMMARY_REQUEST` — and
+ * scales its length to the input. An optional steering instruction (the
+ * User's, from `/compact`) tells the pass what to keep.
  */
 const TRANSCRIPT_SUMMARY_PROMPT = (steering?: string) =>
-  `You are summarising the earlier part of a conversation, so a model that continues it can answer without seeing every earlier message.
+  `You are writing the handoff summary of the earlier part of a conversation. A model that continues the conversation reads your summary instead of those messages, so anything you leave out is lost for good.
 
-Write a single self-contained summary that preserves everything another model needs to continue the conversation faithfully:
+If the input begins with "[Summary so far]", that is the summary of the part before it. Merge it into your new summary. The newer messages take precedence: update or remove an item they resolved, superseded or made stale. Never drop something only because it came from the earlier summary. A user request carried in from the earlier summary that was fully answered may be shortened to the instructions, constraints and preferences it set.
 
-- The overall intent and goal of the conversation, restated in one paragraph.
-- The key decisions made and the facts established that later steps depend on — exact values, ids and names where they matter, never "some value was set".
-- What files were read or written, and what tools were used, with enough of their findings to continue without re-running them.
-- Any open threads, unanswered questions and pending approvals.
-- The current state of the work at the point the summary ends.
+Search results and pages that were read may appear only as cleared placeholders. Rely on what the assistant's replies concluded from them, and never present a result you cannot see as fact.
 
-Write in the language the conversation is mostly written in. The summary is read in place of the original messages, so it must stand alone: never refer to "the conversation above" or "earlier messages".
+The final message, which asks you to write the summary, is the instruction for this task, not part of the conversation. Leave it out of every section.
 
-Length: concise, dense headings and bullet points where useful. Aim for no more than 600 words unless the conversation genuinely needs more.
-${steering !== undefined ? `The requester's instruction for this summary: ${steering}` : ""}`;
+Before you write, go through the conversation in order and note every user request, every answer that produced something, every tool finding and every decision. Do not include these notes in the summary.
+
+Then write the summary under exactly these headings, in this order, starting directly with the first heading. Write "None." under a heading that has nothing to report.
+
+## Intent
+One paragraph: what the user is trying to achieve overall and why, including who they are or which organisation they represent where that was established.
+
+## User requests
+Requests carried in from the earlier summary come first. Then count the user messages in the conversation itself, leaving out the "[Summary so far]" message and the final message that asks for this summary; each one gets its own bullet, short follow-ups included. Copy each of them verbatim, in its original language, in order, one bullet each. Shorten only a message longer than about 300 characters, keeping every instruction, constraint, preference and correction (language, format, audience, deadlines, "not X but Y"). The number of these bullets must equal the number of user messages you counted. End each bullet with whether it was fully answered.
+
+## Key facts and decisions
+The facts established and the decisions made that later answers depend on, with exact values: names, numbers, dates, versions, ids, URLs. Never write "a value was set" or "several options were discussed". When the conversation states a date, number or name more than once with different values, give both and say they disagree instead of picking one.
+
+## Deliverables
+Each substantial thing the assistant produced (a guide, plan, policy, document, file, code, table): its title, language, format and audience, and its essential content: its main sections and the concrete recommendations, figures and dates in it, in enough detail that the continuing model could extend or reproduce it without asking the user again. "A plan was written" is not enough.
+
+## Sources and tool findings
+The tools used and what they found that still matters: sources consulted (with URLs where given), the key finding from each, and the sources or tool calls that failed or returned nothing.
+
+## Corrections and dead ends
+Mistakes found and fixed, approaches tried and dropped, and anything the user corrected or rejected, so it is not repeated.
+
+## Open questions and things left to solve
+Unanswered questions, requests the user made that were not fully delivered, unfinished work, pending decisions or approvals, and anything the assistant offered or promised to do later. Do not add suggestions of your own.
+
+## Current state
+What was being worked on where this part of the conversation ends, and whether the last user request was fully answered. Keep three things apart: what was done in the conversation, what was only proposed or planned, and what the user said already exists on their side. Only the assistant's own work (documents written, research performed) counts as done. Every step inside a plan, roadmap, policy or template the assistant wrote is planned, not done, even when it has a date in the past: never describe it as underway or finished unless the user said so.
+
+Keep the headings exactly as written above, in English, whatever language the conversation is in. Write the text under them in the language the conversation is mostly written in, but quote user messages in their original language. The summary must stand alone: never refer to "the conversation above" or "earlier messages".
+
+Length: keep specifics rather than brevity, in dense bullet points rather than prose. Scale it to what the conversation holds: a short exchange needs a line or two per heading; a long conversation with substantial deliverables can need 1,500–2,500 words. Do not pad.
+${steering !== undefined ? `The requester's instruction for this summary, which takes precedence over the length guidance above: ${steering}` : ""}`;
 
 /**
  * The user message that closes the pass's input. The range always ends with
@@ -591,6 +620,11 @@ export type TranscriptSummaryModel = {
   /** The output cap raised by the Job settings' Thinking budget; absent, the
    *  pass's own cap. */
   maxOutputTokens?: number;
+  /** The output ceiling declared on the Chat's own model when it writes
+   *  without Job settings. A summary call never asks for more, since a vendor
+   *  rejects a cap above the model's own. Absent on an entry carrying Job
+   *  settings: its `maxOutputTokens` already folds the ceiling in. */
+  outputCeiling?: number;
   /** The task model's declared context window, which a pass checks its input
    *  against before calling; absent, the model's own error is the measure. */
   contextWindow?: number;
@@ -653,8 +687,8 @@ export type TranscriptSummaryPassInput = {
  *
  * The pass tries the task model first where the caller supplied one, falling
  * back to the Chat's own model on any failure — a context overflow, an
- * unknown model, an auth error, or a blank reply. Where the task model
- * declares a context window, an input over the job budget of it skips the
+ * unknown model, an auth error, or a blank or cut-off reply. Where the task
+ * model declares a context window, an input over the job budget of it skips the
  * task model outright: a server that truncates an overlong prompt instead of
  * rejecting it would otherwise write a summary of a cut-off conversation, and
  * no error would trigger the fallback. A summary cannot be trimmed to fit the
@@ -715,7 +749,7 @@ export const takeTranscriptSummary = async (
     input: SummaryInput,
   ): Promise<
     | { kind: "row"; row: ChatSummaryRow }
-    | { kind: "blank"; finishReason: FinishReason }
+    | { kind: "unusable"; finishReason: FinishReason }
     | { kind: "error"; error: unknown }
     | { kind: "storage-error" }
   > => {
@@ -739,17 +773,20 @@ export const takeTranscriptSummary = async (
           { role: "user" as const, content: TRANSCRIPT_SUMMARY_REQUEST },
         ],
         ...entry.settings,
-        maxOutputTokens:
+        maxOutputTokens: Math.min(
           entry.maxOutputTokens ?? TRANSCRIPT_SUMMARY_MAX_OUTPUT_TOKENS,
+          entry.outputCeiling ?? Infinity,
+        ),
         abortSignal: signal,
       });
 
-      // A blank reply is a failed summary, not a summary: stored, it would
-      // stand in for every covered message and the next turn would read
-      // nothing. A task model that answers blank falls back like any other
+      // A blank reply, or one cut off at the output cap, is a failed summary,
+      // not a summary: stored, it would stand in for every covered message
+      // and the next turn would read nothing, or a summary ending
+      // mid-sentence. A task model that answers so falls back like any other
       // task-model failure.
-      if (result.text.trim() === "") {
-        return { kind: "blank", finishReason: result.finishReason };
+      if (result.finishReason === "length" || result.text.trim() === "") {
+        return { kind: "unusable", finishReason: result.finishReason };
       }
 
       const anchor = path[input.anchorIndex];
@@ -840,8 +877,8 @@ export const takeTranscriptSummary = async (
           ? { error: outcome.error }
           : { finishReason: outcome.finishReason }),
       },
-      outcome.kind === "blank"
-        ? "Transcript summary task model came back blank; falling back to the Chat's model"
+      outcome.kind === "unusable"
+        ? "Transcript summary task model came back blank or cut off; falling back to the Chat's model"
         : "Transcript summary task model failed; falling back to the Chat's model",
     );
   }
@@ -855,10 +892,10 @@ export const takeTranscriptSummary = async (
     }
     const outcome = await attempt(chatModel, summaryInput);
     if (outcome.kind === "row") return outcome.row;
-    if (outcome.kind === "blank") {
+    if (outcome.kind === "unusable") {
       logger.warn(
         { chatId, finishReason: outcome.finishReason },
-        "Transcript summary came back blank; proceeding without one",
+        "Transcript summary came back blank or cut off; proceeding without one",
       );
       return undefined;
     }
@@ -951,7 +988,13 @@ const resolveSummariserModels = async (
   return withTaskSummariserModel({
     orgId,
     workspaceId,
-    chat: { model: plan.model, modelId: resolvedModelId },
+    chat: {
+      model: plan.model,
+      modelId: resolvedModelId,
+      ...(plan.maxOutputTokens !== undefined
+        ? { outputCeiling: plan.maxOutputTokens }
+        : {}),
+    },
     chatProviderId: provider.id,
     sessionId,
     queries,
@@ -1007,17 +1050,31 @@ const withTaskSummariserModel = async (args: {
       pointerSettingModelId(taskModelId),
       taskProvider.provider.taskModelSettings,
     );
+    const isChatModel =
+      taskProvider.provider.id === chatProviderId &&
+      taskModelId === chat.modelId;
+    // On the Chat's own model, its declared ceiling bounds the pass's cap
+    // before the Thinking budget is added, so the budget still rides on top.
     const maxOutputTokens = jobMaxOutputTokens(
       taskProvider.provider,
       pointerSettingModelId(taskModelId),
       taskProvider.provider.taskModelSettings,
-      TRANSCRIPT_SUMMARY_MAX_OUTPUT_TOKENS,
+      isChatModel
+        ? Math.min(
+            TRANSCRIPT_SUMMARY_MAX_OUTPUT_TOKENS,
+            chat.outputCeiling ?? Infinity,
+          )
+        : TRANSCRIPT_SUMMARY_MAX_OUTPUT_TOKENS,
     );
-    if (
-      taskProvider.provider.id === chatProviderId &&
-      taskModelId === chat.modelId
-    ) {
-      return { chat: { ...chat, settings, maxOutputTokens } };
+    if (isChatModel) {
+      return {
+        chat: {
+          model: chat.model,
+          modelId: chat.modelId,
+          settings,
+          maxOutputTokens,
+        },
+      };
     }
     const contextWindow = contextWindowForModel(
       taskProvider.provider,
@@ -1169,6 +1226,8 @@ export const beforeTurn = async (args: {
   contextWindow?: number;
   model: LanguageModel;
   modelId: string;
+  /** The output ceiling declared on the turn's model, if any. */
+  outputCeiling?: number;
   /** Present on a Chat turn: where the task model is resolved from. */
   taskModel?: {
     scope: ScopeContext;
@@ -1189,6 +1248,7 @@ export const beforeTurn = async (args: {
     contextWindow,
     model,
     modelId,
+    outputCeiling,
     taskModel,
     readOnlyToolNames,
     signal,
@@ -1209,7 +1269,11 @@ export const beforeTurn = async (args: {
       path,
     })
   ) {
-    const chat: TranscriptSummaryModel = { model, modelId };
+    const chat: TranscriptSummaryModel = {
+      model,
+      modelId,
+      ...(outputCeiling !== undefined ? { outputCeiling } : {}),
+    };
     const summary = await registerTranscriptSummary(chatId, async () => {
       const models =
         taskModel === undefined
