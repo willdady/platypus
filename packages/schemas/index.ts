@@ -4681,10 +4681,19 @@ export const artifactAuthorSchema = z.enum(["agent", "user"]);
 export type ArtifactAuthor = z.infer<typeof artifactAuthorSchema>;
 
 /**
+ * A plain DNS hostname: dot-separated labels of letters, digits and hyphens,
+ * each starting and ending alphanumeric. The URL parser accepts far more than
+ * this — `*`, `;`, quotes, underscores, an empty label — and any of those in a
+ * CSP source list would silently widen or break the policy.
+ */
+const DNS_HOSTNAME =
+  /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*$/;
+
+/**
  * The canonical `https` origin `value` names, or `undefined` when it is not a
- * bare origin. A bare origin has no path, query, credentials or hash; host case
- * and an explicit default port normalise away, so
- * `https://CDNJS.Cloudflare.com:443` becomes `https://cdnjs.cloudflare.com`.
+ * bare origin. A bare origin has a plain DNS host and no path, query,
+ * credentials or hash; host case and an explicit default port normalise away,
+ * so `https://CDNJS.Cloudflare.com:443` becomes `https://cdnjs.cloudflare.com`.
  */
 export const bareHttpsOrigin = (value: string): string | undefined => {
   try {
@@ -4693,6 +4702,7 @@ export const bareHttpsOrigin = (value: string): string | undefined => {
     if (url.username || url.password || url.search || url.hash)
       return undefined;
     if (url.pathname !== "/") return undefined;
+    if (!DNS_HOSTNAME.test(url.hostname)) return undefined;
     return url.origin;
   } catch {
     return undefined;

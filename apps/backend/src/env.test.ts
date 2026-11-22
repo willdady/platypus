@@ -161,16 +161,43 @@ describe("ARTIFACT_SCRIPT_ORIGINS", () => {
     ).toEqual(["https://cdnjs.cloudflare.com"]);
   });
 
+  it("keeps a non-default port, which is still a bare origin", () => {
+    expect(
+      parseEnv({
+        ...valid,
+        ARTIFACT_SCRIPT_ORIGINS: "https://cdn.jsdelivr.net:8443",
+      }).ARTIFACT_SCRIPT_ORIGINS,
+    ).toEqual(["https://cdn.jsdelivr.net:8443"]);
+  });
+
   it.each([
     "http://cdnjs.cloudflare.com",
     "cdnjs.cloudflare.com",
     "https://cdnjs.cloudflare.com/ajax/libs",
     "https://cdnjs.cloudflare.com?x=1",
     "https://user:pass@cdnjs.cloudflare.com",
+    // Not a plain DNS name: each would widen or break the policy if it
+    // reached the CSP source list.
+    "https://*.cloudflare.com",
+    "https://a.com;",
+    "https://'unsafe-eval'",
+    "https://a.com.",
+    "https://a..com",
+    "https://-a.com",
+    "https://a_b.com",
   ])("stops the backend at boot naming %s", (entry) => {
     expect(() =>
       parseEnv({ ...valid, ARTIFACT_SCRIPT_ORIGINS: entry }),
     ).toThrow(entry);
+  });
+
+  it("refuses a comma-separated list, naming the whole entry", () => {
+    expect(() =>
+      parseEnv({
+        ...valid,
+        ARTIFACT_SCRIPT_ORIGINS: "https://a.com,https://b.com",
+      }),
+    ).toThrow(/https:\/\/a\.com,https:\/\/b\.com/);
   });
 
   it("names the offending entry out of a longer list", () => {

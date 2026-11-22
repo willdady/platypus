@@ -249,6 +249,7 @@ export function ArtifactViewer({
             type={live.type}
             language={live.language}
             content={live.content}
+            streaming
           />
         )}
       </ArtifactFrame>
@@ -284,25 +285,29 @@ export function ArtifactViewer({
 }
 
 /**
- * The Preview and Code tabs for one piece of content. Preview is available for
- * every type once it is known; HTML and SVG run in the Artifact frame. A
- * streaming call whose type is still unknown opens on source rather than
- * guessing, and its frame has no approved origins until the saved version is
- * read.
+ * The Preview and Code tabs for one piece of content. Markdown, code and
+ * Mermaid preview from the first byte. A stored HTML or SVG Artifact runs in
+ * the Artifact frame; while a call is still streaming, partial HTML or SVG
+ * stays on source — there is no complete document to run, and its approved
+ * origins are only known once the saved version is read.
  */
 function ArtifactTabs({
   type,
   language,
   content,
   scriptOrigins = [],
+  streaming = false,
 }: {
   type: ArtifactType | undefined;
   language?: string | null;
   content: string;
   scriptOrigins?: readonly string[];
+  /** True for a call that has not been saved yet. */
+  streaming?: boolean;
 }) {
-  const framed = type !== undefined && isFramedArtifactType(type);
-  const previewAvailable = type !== undefined;
+  const framed = !streaming && type !== undefined && isFramedArtifactType(type);
+  const previewAvailable =
+    type !== undefined && !(streaming && isFramedArtifactType(type));
   return (
     <Tabs
       defaultValue={previewAvailable ? "preview" : "code"}
@@ -315,7 +320,9 @@ function ArtifactTabs({
           title={
             previewAvailable
               ? undefined
-              : "Preview is unavailable until the Artifact's type is known"
+              : streaming
+                ? "Preview is unavailable until the Agent finishes writing this Artifact"
+                : "Preview is unavailable until the Artifact's type is known"
           }
           className="px-2 py-0.5 text-xs"
         >

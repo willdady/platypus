@@ -305,7 +305,7 @@ describe("ArtifactViewer while the Agent is still writing", () => {
     ).toBeInTheDocument();
   });
 
-  it("runs partial HTML in the frame, with no approved origins until saved", () => {
+  it("shows partial HTML as source and offers no Preview", () => {
     renderViewer({
       artifactId: undefined,
       live: {
@@ -316,14 +316,26 @@ describe("ArtifactViewer while the Agent is still writing", () => {
       },
     });
 
-    expect(screen.getByRole("tab", { name: "Preview" })).toHaveAttribute(
+    expect(screen.getByRole("tab", { name: "Preview" })).toBeDisabled();
+    expect(screen.getByRole("tab", { name: "Code" })).toHaveAttribute(
       "data-state",
       "active",
     );
-    const doc = screen.getByTitle("Artifact preview").getAttribute("srcdoc");
-    expect(doc).toContain("<p>Half");
-    // The read response's origin list arrives with the saved version.
-    expect(doc).toContain("script-src 'unsafe-inline';");
+    expect(screen.getByText(/```html/)).toBeInTheDocument();
+  });
+
+  it("renders no frame for a streaming HTML Artifact", () => {
+    renderViewer({
+      artifactId: undefined,
+      live: {
+        status: "streaming",
+        title: "Chart",
+        type: "html",
+        content: "<p>Half a page",
+      },
+    });
+
+    expect(screen.queryByTitle("Artifact preview")).not.toBeInTheDocument();
   });
 
   it("keeps showing the streamed content while the saved version loads", () => {
