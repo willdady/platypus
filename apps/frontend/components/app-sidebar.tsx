@@ -9,17 +9,13 @@ import {
   writeEntity,
   type Serialized,
 } from "@/lib/api-write";
-import type { Workspace, ChatListItem } from "@platypus/schemas";
+import type { ChatListItem } from "@platypus/schemas";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import {
   canChangeChat,
   canConfigureWorkspaceResource,
-  canCreateWorkspace,
-  canOpenOrgSettings,
 } from "@/lib/authorization";
-import { sortByName } from "@/lib/utils";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
-import { useScopedList } from "@/hooks/use-scoped-list";
 import { useEntityForm } from "@/hooks/use-entity-form";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
 import { useHasNoProviders } from "@/hooks/use-has-no-providers";
@@ -51,9 +47,7 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuGroup,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -67,20 +61,14 @@ import {
 } from "@/components/ui/dialog";
 import { useState, useEffect, useRef } from "react";
 import {
-  FolderOpen,
   BotMessageSquare,
   EllipsisVertical,
   Trash2,
   Pencil,
   Pin,
   PinOff,
-  FolderClosed,
-  ChevronsUpDown,
-  Plus,
   ClockFading,
   CalendarDays,
-  ArrowLeftRight,
-  Settings,
   Loader2,
   Network,
   FileText,
@@ -93,8 +81,8 @@ import {
   chatListPoll,
   type WatchedChat,
 } from "@/lib/chat-list-poll";
-import { orgRoutes, workspaceRoutes } from "@/lib/routes";
-import { useOrganization } from "@/hooks/use-organization";
+import { workspaceRoutes } from "@/lib/routes";
+import { WorkspaceSwitcher } from "@/components/workspace-switcher";
 
 export function AppSidebar() {
   const { orgId, workspaceId } = useParams<{
@@ -109,7 +97,6 @@ export function AppSidebar() {
   const isMobile = useIsMobile();
 
   const routes = workspaceRoutes(orgId, workspaceId);
-  const org = orgRoutes(orgId);
   const scope = { orgId, workspaceId };
 
   const pathname = usePathname();
@@ -138,9 +125,6 @@ export function AppSidebar() {
     mutate((key: unknown) =>
       matchesCollection(key, backendUrl, chatListEntity(), scope),
     );
-
-  const { results: allWorkspaces, isLoading: isWorkspacesLoading } =
-    useScopedList<Workspace>("workspaces", { orgId });
 
   const { data: chatData, isLoading: isChatListLoading } = useScopedSWR<{
     results: ChatListItem[];
@@ -174,8 +158,6 @@ export function AppSidebar() {
     workspaceDelegation?.providerSelfManagement === true,
   );
 
-  const { data: orgData, isLoading: isOrgLoading } = useOrganization(orgId);
-
   // Each search is its own SWR key, so the list would blank (and falsely read
   // as "no matches") on every debounced keystroke. Keep showing the last
   // settled list until the new one lands — but only within this Workspace:
@@ -197,9 +179,7 @@ export function AppSidebar() {
   const shownChatList =
     settledChatList?.scopeKey === chatListScopeKey ? settledChatList : null;
 
-  const workspaces = sortByName(allWorkspaces);
   const chats = pins.apply(shownChatList?.data.results ?? []);
-  const currentWorkspace = workspaces.find((w) => w.id === workspaceId);
 
   // Separate pinned chats from regular chats
   const pinnedChats = chats.filter((chat) => chat.isPinned);
@@ -289,95 +269,17 @@ export function AppSidebar() {
         <nav aria-label="Workspace" className="flex min-h-0 flex-1 flex-col">
           <SidebarHeader>
             <SidebarMenu>
-              <SidebarMenuItem>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <SidebarMenuButton className="h-auto py-2">
-                      <div className="flex flex-col flex-1 items-start leading-none">
-                        {/* Placeholders keep the button's height and width
-                          steady until the names land. `text-xs` carries a
-                          16px line box, so the bar is padded out to it. */}
-                        {!orgData && isOrgLoading ? (
-                          <Skeleton
-                            data-testid="org-name-skeleton"
-                            className="mt-0.5 mb-1.5 h-3 w-24"
-                          />
-                        ) : (
-                          <span className="text-xs text-muted-foreground mb-1">
-                            {orgData?.name}
-                          </span>
-                        )}
-                        <div className="flex items-center gap-2 w-full">
-                          <FolderOpen className="size-4 shrink-0" />
-                          {!currentWorkspace && isWorkspacesLoading ? (
-                            <Skeleton
-                              data-testid="workspace-name-skeleton"
-                              className="h-3.5 w-28"
-                            />
-                          ) : (
-                            <span className="font-medium">
-                              {currentWorkspace?.name}
-                            </span>
-                          )}
-                          <ChevronsUpDown className="ml-auto size-4 shrink-0" />
-                        </div>
-                      </div>
-                    </SidebarMenuButton>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent
-                    className="w-56 bg-sidebar-panel"
-                    align="start"
-                    side={isMobile ? "bottom" : "right"}
-                  >
-                    <DropdownMenuLabel className="text-xs text-muted-foreground">
-                      Workspaces
-                    </DropdownMenuLabel>
-                    <DropdownMenuGroup>
-                      {workspaces.map((workspace) => {
-                        const href = workspaceRoutes(
-                          workspace.organizationId,
-                          workspace.id,
-                        ).root;
-                        return (
-                          <DropdownMenuItem key={workspace.id} asChild>
-                            <Link href={href}>
-                              {pathname.startsWith(href) ? (
-                                <FolderOpen />
-                              ) : (
-                                <FolderClosed />
-                              )}{" "}
-                              {workspace.name}
-                            </Link>
-                          </DropdownMenuItem>
-                        );
-                      })}
-                    </DropdownMenuGroup>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuGroup>
-                      {/* ADR-0008: Workspace creation is org-admin-only. */}
-                      {canCreateWorkspace(actor) && (
-                        <DropdownMenuItem asChild>
-                          <Link href={org.createWorkspace}>
-                            <Plus /> Add workspace
-                          </Link>
-                        </DropdownMenuItem>
-                      )}
-                      <DropdownMenuItem asChild>
-                        <Link href={org.root}>
-                          <ArrowLeftRight /> Switch org
-                        </Link>
-                      </DropdownMenuItem>
-                      {canOpenOrgSettings(actor) && (
-                        <DropdownMenuItem asChild>
-                          <Link href={org.settings.root}>
-                            <Settings /> Organization settings
-                          </Link>
-                        </DropdownMenuItem>
-                      )}
-                    </DropdownMenuGroup>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </SidebarMenuItem>
+              {/* The desktop sidebar holds no switcher; the top bar does. On a
+                  phone this is the sheet, so the switcher stays here. */}
+              {isMobile && (
+                <SidebarMenuItem>
+                  <WorkspaceSwitcher
+                    orgId={orgId}
+                    workspaceId={workspaceId}
+                    presentation="sheet"
+                  />
+                </SidebarMenuItem>
+              )}
               <SidebarMenuItem>
                 {hasNoProviders ? (
                   <Tooltip>

@@ -40,8 +40,8 @@ export function Header({
         bordered && "border-b",
       )}
     >
-      <div className="flex items-center gap-2">{leftContent}</div>
-      <div className="flex items-center gap-2">
+      <div className="flex min-w-0 items-center gap-2">{leftContent}</div>
+      <div className="flex shrink-0 items-center gap-2">
         {rightContent}
         <NotificationsDropdown
           orgId={scope?.orgId}
