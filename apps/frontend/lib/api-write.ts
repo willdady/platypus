@@ -5,6 +5,7 @@ import type {
   a2aTokenCreateSchema,
   agentCreateSchema,
   agentUpdateSchema,
+  artifactUpdateSchema,
   attachmentCreateSchema,
   blueprintCreateSchema,
   blueprintUpdateSchema,
@@ -60,6 +61,7 @@ type EntityRequestSchemas = {
     create: typeof a2aEndpointCreateSchema;
     update: typeof a2aEndpointUpdateSchema;
   };
+  artifacts: { update: typeof artifactUpdateSchema };
   attachments: { create: typeof attachmentCreateSchema };
   blueprints: {
     create: typeof blueprintCreateSchema;

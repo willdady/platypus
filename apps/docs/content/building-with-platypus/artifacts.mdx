@@ -66,6 +66,29 @@ knows it, `.txt` otherwise.
 HTML and SVG Artifacts have no Preview, so the panel opens on **Code** and
 Preview stays unavailable. Their source is still copyable and downloadable.
 
+## The Artifacts page
+
+**Artifacts** in the Workspace sidebar lists everything Agents have made in
+this Workspace, whatever Chat it came from. The list is newest change first.
+Use the search box to find one by title, or the type filter to see only
+Markdown, Code, Mermaid, HTML or SVG.
+
+Each card shows the Artifact's title, its type and when it last changed. Click
+a card to open it full page at its own address, which you can bookmark or
+share with someone who can open the Workspace. The page uses the same viewer
+as the Chat panel, with **Preview**, **Code**, **Copy** and **Download**.
+
+The card's ⋮ menu offers:
+
+- **Rename** changes the title. It obeys the same limit as creating one.
+- **Download** saves the current version as a file.
+- **Open source Chat** jumps to the Chat that made it.
+- **Delete** removes the Artifact after you confirm. Every version goes with
+  it, and any Chat card for it then reads as deleted.
+
+**Rename** and **Delete** are the Workspace Owner's. A member with access to
+the Workspace sees **Download** and **Open source Chat** only.
+
 <Callout type="info">
   An Artifact records the Chat it came from. If you delete that Chat, the
   Artifact is kept and simply has no source Chat to point back to. Deleting the

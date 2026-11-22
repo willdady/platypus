@@ -3,30 +3,18 @@
 import type { ReactNode } from "react";
 import type { ArtifactType } from "@platypus/schemas";
 import { CopyIcon, DownloadIcon, XIcon } from "lucide-react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { copyWithToast } from "@/lib/clipboard";
-import {
-  artifactFileName,
-  artifactFileExtension,
-  artifactTypeLabel,
-} from "@/lib/artifact-file";
+import { artifactTypeLabel } from "@/lib/artifact-file";
+import { downloadArtifactContent } from "@/lib/artifact-download";
 import { cn } from "@/lib/utils";
 import { isArtifactDeleted, useArtifact } from "@/hooks/use-artifact";
 import { ArtifactMarkdown, fencedCode } from "./artifact-markdown";
 import { ListError, ListState } from "./list-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LoadingRegion } from "./list-skeletons";
-
-const TYPE_MEDIA: Record<ArtifactType, string> = {
-  markdown: "text/markdown",
-  code: "text/plain",
-  mermaid: "text/plain",
-  html: "text/html",
-  svg: "image/svg+xml",
-};
 
 /**
  * A `createArtifact` call's content before it is stored. The viewer shows it
@@ -160,14 +148,7 @@ export function ArtifactViewer({
               size="icon-sm"
               variant="ghost"
               aria-label="Download Artifact"
-              onClick={() =>
-                downloadArtifact(
-                  artifact.title,
-                  artifact.type,
-                  artifact.language,
-                  current,
-                )
-              }
+              onClick={() => downloadArtifactContent(artifact, current.content)}
             >
               <DownloadIcon />
             </Button>
@@ -393,29 +374,4 @@ function ArtifactFrame({
       {children}
     </section>
   );
-}
-
-function downloadArtifact(
-  title: string,
-  type: ArtifactType,
-  language: string | null | undefined,
-  version: { content: string },
-): void {
-  const blob = new Blob([version.content], { type: TYPE_MEDIA[type] });
-  const url = URL.createObjectURL(blob);
-  try {
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = artifactFileName(title, type, language);
-    link.rel = "noreferrer";
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-  } catch {
-    toast.error(
-      `Could not download this .${artifactFileExtension(type, language)} file`,
-    );
-  } finally {
-    URL.revokeObjectURL(url);
-  }
 }

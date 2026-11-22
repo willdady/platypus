@@ -166,4 +166,276 @@ describe("Artifact Routes", () => {
 
     expect(res.status).toBe(400);
   });
+
+  describe("list", () => {
+    const listWorld = () =>
+      seedDb({
+        organization_member: [
+          {
+            id: "m1",
+            userId: "user-1",
+            organizationId: orgId,
+            role: "member",
+          },
+        ],
+        workspace: [
+          { id: workspaceId, organizationId: orgId, ownerId: "user-1" },
+          { id: "ws-2", organizationId: orgId, ownerId: "other-user" },
+        ],
+        user: [{ id: "user-1", name: "Ada", image: null }],
+        artifact: [
+          {
+            id: "older-plan",
+            workspaceId,
+            sourceChatId: null,
+            title: "Old plan",
+            type: "markdown",
+            language: null,
+            createdAt: new Date("2026-01-01T00:00:00.000Z"),
+            updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+          },
+          {
+            id: "script",
+            workspaceId,
+            sourceChatId: null,
+            title: "Deploy script",
+            type: "code",
+            language: "bash",
+            createdAt: new Date("2026-01-02T00:00:00.000Z"),
+            updatedAt: new Date("2026-01-03T00:00:00.000Z"),
+          },
+          {
+            id: "new-plan",
+            workspaceId,
+            sourceChatId: null,
+            title: "New plan",
+            type: "markdown",
+            language: null,
+            createdAt: new Date("2026-01-04T00:00:00.000Z"),
+            updatedAt: new Date("2026-01-05T00:00:00.000Z"),
+          },
+          {
+            id: "theirs",
+            workspaceId: "ws-2",
+            sourceChatId: null,
+            title: "Theirs",
+            type: "markdown",
+            language: null,
+            createdAt: new Date("2026-01-01T00:00:00.000Z"),
+            updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+          },
+        ],
+      });
+
+    it("lists a Workspace's Artifacts, most recently updated first", async () => {
+      listWorld();
+      mockSession();
+
+      const res = await app.request(baseUrl);
+
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        results: Array<{ id: string }>;
+        totalCount: number;
+      };
+      expect(body.results.map((row) => row.id)).toEqual([
+        "new-plan",
+        "script",
+        "older-plan",
+      ]);
+      expect(body.totalCount).toBe(3);
+    });
+
+    it("pages server-side", async () => {
+      listWorld();
+      mockSession();
+
+      const res = await app.request(`${baseUrl}?limit=1&offset=1`);
+
+      const body = (await res.json()) as {
+        results: Array<{ id: string }>;
+        totalCount: number;
+      };
+      expect(body.results.map((row) => row.id)).toEqual(["script"]);
+      expect(body.totalCount).toBe(3);
+    });
+
+    it("searches titles, ignoring case", async () => {
+      listWorld();
+      mockSession();
+
+      const res = await app.request(`${baseUrl}?search=PLAN`);
+
+      const body = (await res.json()) as {
+        results: Array<{ id: string }>;
+        totalCount: number;
+      };
+      expect(body.results.map((row) => row.id)).toEqual([
+        "new-plan",
+        "older-plan",
+      ]);
+      expect(body.totalCount).toBe(2);
+    });
+
+    it("filters by type", async () => {
+      listWorld();
+      mockSession();
+
+      const res = await app.request(`${baseUrl}?type=code`);
+
+      const body = (await res.json()) as {
+        results: Array<{ id: string }>;
+        totalCount: number;
+      };
+      expect(body.results.map((row) => row.id)).toEqual(["script"]);
+      expect(body.totalCount).toBe(1);
+    });
+
+    it("breaks a last-updated tie by id, so paging stays stable", async () => {
+      const sameTime = new Date("2026-02-01T00:00:00.000Z");
+      seedDb({
+        organization_member: [
+          {
+            id: "m1",
+            userId: "user-1",
+            organizationId: orgId,
+            role: "member",
+          },
+        ],
+        workspace: [
+          { id: workspaceId, organizationId: orgId, ownerId: "user-1" },
+        ],
+        user: [{ id: "user-1", name: "Ada", image: null }],
+        artifact: ["tie-a", "tie-b"].map((id) => ({
+          id,
+          workspaceId,
+          sourceChatId: null,
+          title: id,
+          type: "markdown",
+          language: null,
+          createdAt: sameTime,
+          updatedAt: sameTime,
+        })),
+      });
+      mockSession();
+
+      const res = await app.request(baseUrl);
+
+      const body = (await res.json()) as { results: Array<{ id: string }> };
+      expect(body.results.map((row) => row.id)).toEqual(["tie-b", "tie-a"]);
+    });
+
+    it("rejects a type the domain does not have", async () => {
+      listWorld();
+      mockSession();
+
+      const res = await app.request(`${baseUrl}?type=spreadsheet`);
+
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe("rename", () => {
+    it("renames an Artifact", async () => {
+      world();
+      mockSession();
+
+      const res = await app.request(`${baseUrl}/${artifactId}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ title: "Renamed" }),
+      });
+
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { title: string };
+      expect(body.title).toBe("Renamed");
+    });
+
+    it("refuses a title over the limit, naming the rule", async () => {
+      world();
+      mockSession();
+
+      const res = await app.request(`${baseUrl}/${artifactId}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ title: "x".repeat(201) }),
+      });
+
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as {
+        error: Array<{ path: string[]; message: string }>;
+      };
+      expect(body.error).toContainEqual(
+        expect.objectContaining({ path: ["title"] }),
+      );
+    });
+
+    it("does not find an Artifact from another Workspace", async () => {
+      world();
+      mockSession();
+
+      const res = await app.request(`${baseUrl}/artifact-2`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ title: "Renamed" }),
+      });
+
+      expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({ error: "Artifact not found" });
+    });
+
+    it("refuses a member who does not own the workspace", async () => {
+      world("other-user");
+      mockSession();
+
+      const res = await app.request(`${baseUrl}/${artifactId}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ title: "Renamed" }),
+      });
+
+      expect(res.status).toBe(403);
+    });
+  });
+
+  describe("delete", () => {
+    it("deletes the Artifact and every version it holds", async () => {
+      const fake = world();
+      mockSession();
+
+      const res = await app.request(`${baseUrl}/${artifactId}`, {
+        method: "DELETE",
+      });
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ message: "Artifact deleted" });
+      expect(fake.tables.artifact.map((row) => row.id)).toEqual(["artifact-2"]);
+      expect(fake.tables.artifact_version.map((row) => row.id)).toEqual([
+        "v-theirs",
+      ]);
+    });
+
+    it("does not find an Artifact from another Workspace", async () => {
+      const fake = world();
+      mockSession();
+
+      const res = await app.request(`${baseUrl}/artifact-2`, {
+        method: "DELETE",
+      });
+
+      expect(res.status).toBe(404);
+      expect(fake.tables.artifact).toHaveLength(2);
+    });
+
+    it("refuses a member who does not own the workspace", async () => {
+      world("other-user");
+      mockSession();
+
+      const res = await app.request(`${baseUrl}/${artifactId}`, {
+        method: "DELETE",
+      });
+
+      expect(res.status).toBe(403);
+    });
+  });
 });
