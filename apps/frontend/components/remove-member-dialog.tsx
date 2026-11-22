@@ -177,6 +177,7 @@ export function RemoveMemberDialog({
                     <FormSelectField
                       label={w.name}
                       name={`action-${w.id}`}
+                      ariaLabel={`Action for ${w.name}`}
                       value={draft.action ?? ""}
                       onValueChange={(value) =>
                         update(w.id, { action: value as Draft["action"] })
