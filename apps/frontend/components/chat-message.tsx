@@ -70,6 +70,7 @@ import { TurnStatus } from "./turn-status";
 import { MessagePartBoundary } from "./message-part-boundary";
 import { LoadSkillTool, ReadSkillFileTool } from "./load-skill-tool";
 import { SubAgentTool } from "./sub-agent-tool";
+import { ArtifactToolCard } from "./artifact-tool-card";
 import { ToolApprovalCard } from "./tool-approval-card";
 import { OfferedFiles, offeredFiles } from "./offered-files";
 import {
@@ -191,6 +192,13 @@ function isWebToolPart(part: MessagePart): part is MessageToolPart {
   return isToolUIPart(part) && isNormalizedWebToolPart(part);
 }
 
+/** An Artifact Card has its own click target, so it stands alone. */
+function isArtifactToolPart(
+  part: MessagePart,
+): part is PartOfType<"tool-createArtifact"> {
+  return part.type === "tool-createArtifact";
+}
+
 /**
  * Every tool-shaped part that has its own specialised renderer below. Kept as
  * one list so the generic renderer's exclusion (`isGenericToolPart`) can be
@@ -206,6 +214,7 @@ const specializedToolMatchers: Array<(part: MessagePart) => boolean> = [
   isReadSkillFilePart,
   isWebToolPart,
   isSubAgentToolPart,
+  isArtifactToolPart,
   isOfferedFilePart,
 ];
 
@@ -237,6 +246,7 @@ function isGroupableToolPart(
   return (
     isToolUIPart(part) &&
     !isSubAgentToolPart(part) &&
+    !isArtifactToolPart(part) &&
     part.state !== "approval-requested"
   );
 }
@@ -410,6 +420,10 @@ type ChatMessageProps = {
    * while no turn is running, the one place an answer can resume the reply.
    */
   onApprovalResponse?: (approvalId: string, approved: boolean) => void;
+  /** The Workspace an Artifact Card reads its Artifact back from. */
+  artifactScope?: { orgId: string; workspaceId: string };
+  /** Opens an Artifact in the Chat's side panel beside this transcript. */
+  onOpenArtifact?: (target: { id: string; version: number }) => void;
 };
 
 export const ChatMessage = memo(function ChatMessage({
@@ -428,6 +442,8 @@ export const ChatMessage = memo(function ChatMessage({
   copied,
   staleToolCallIds,
   onApprovalResponse,
+  artifactScope,
+  onOpenArtifact,
 }: ChatMessageProps) {
   // An edit takes the message's place rather than sitting inside it: the
   // surface holds the text, the attachments and its own Save/Cancel, so
@@ -575,6 +591,14 @@ export const ChatMessage = memo(function ChatMessage({
         toolPart={part}
         messageMetadata={message.metadata}
         cleared={staleToolCallIds?.has(part.toolCallId)}
+      />
+    )),
+    partRenderer(isArtifactToolPart, (part, i) => (
+      <ArtifactToolCard
+        key={`${message.id}-${i}`}
+        toolPart={part}
+        scope={artifactScope}
+        onOpen={(target) => onOpenArtifact?.(target)}
       />
     )),
     partRenderer(isSubAgentToolPart, (part, i) => (

@@ -82,6 +82,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { ChatMessage } from "./chat-message";
+import { ArtifactViewer } from "./artifact-viewer";
 import { MessageEditor } from "./message-editor";
 import { ChatReconnectingNotice } from "./chat-reconnecting-notice";
 import { toast } from "sonner";
@@ -143,6 +144,12 @@ export function Chat({
   const canSendMessages = canSendChatMessages(ownsWorkspace);
   const backendUrl = useBackendUrl();
   const scope = useMemo(() => ({ orgId, workspaceId }), [orgId, workspaceId]);
+  // The Artifact open in the side panel; its version is the one the Card's
+  // turn produced, so the panel keeps showing that piece of the transcript.
+  const [openArtifact, setOpenArtifact] = useState<{
+    id: string;
+    version: number;
+  } | null>(null);
   const chatUrl = joinUrl(
     backendUrl || "",
     `${scopedPath("chat", scope)}/${chatId}`,
@@ -626,288 +633,308 @@ export function Chat({
   };
 
   return (
-    <div
-      className={cn(
-        "relative size-full flex flex-col overflow-hidden h-full",
-        messages.length === 0 && "justify-center",
-      )}
-    >
-      <h1 className="sr-only">
-        {chatData?.title && chatData.title !== UNTITLED_CHAT_TITLE
-          ? chatData.title
-          : "New chat"}
-      </h1>
-      {/* The transcript is a live log; marked busy while a reply streams so
-          screen readers wait for it rather than reading every token. */}
-      <Conversation
+    <div className="relative flex size-full min-h-0 overflow-hidden">
+      <div
         className={cn(
-          "overflow-y-hidden",
-          messages.length === 0 && "flex-none",
+          "relative flex h-full min-w-0 flex-1 flex-col overflow-hidden",
+          messages.length === 0 && "justify-center",
         )}
-        data-conversation
-        aria-busy={turnInFlight}
       >
-        <ConversationContent>
-          <div className="flex justify-center">
-            {/* The one owner of vertical spacing between chat items: messages,
+        <h1 className="sr-only">
+          {chatData?.title && chatData.title !== UNTITLED_CHAT_TITLE
+            ? chatData.title
+            : "New chat"}
+        </h1>
+        {/* The transcript is a live log; marked busy while a reply streams so
+          screen readers wait for it rather than reading every token. */}
+        <Conversation
+          className={cn(
+            "overflow-y-hidden",
+            messages.length === 0 && "flex-none",
+          )}
+          data-conversation
+          aria-busy={turnInFlight}
+        >
+          <ConversationContent>
+            <div className="flex justify-center">
+              {/* The one owner of vertical spacing between chat items: messages,
             Thinking and tool disclosures, Sources and notices carry no margins
             of their own, so every gap in the transcript is this one. */}
-            <div className="w-full flex flex-col gap-4 xl:w-4/5 max-w-4xl">
-              {chatData?.a2aClientName && (
-                <p className="text-center text-xs text-muted-foreground">
-                  Over A2A from {chatData.a2aClientName}
-                </p>
-              )}
-              {messages.map((message, messageIndex) => (
-                // A long transcript keeps every message in the DOM, rendered
-                // diagrams and highlighted code included; the browser skips
-                // laying out and painting the ones off screen. `auto` in the
-                // intrinsic size remembers each one's real height once it has
-                // rendered, so scrolling back over it does not jump. The last
-                // message gets it too: one first given containment when the
-                // next message lands has no remembered size, so for a frame
-                // it is 160px, the transcript collapses and the scroll resets.
-                // The padding cancelled by the margin keeps focus rings at the
-                // edge outside the paint clip this sets.
-                <div
-                  key={message.id}
-                  className="-m-1 flex flex-col gap-4 p-1 [contain-intrinsic-size:auto_160px] [content-visibility:auto]"
-                >
-                  <ChatMessage
-                    message={message}
-                    isLastMessage={messageIndex === messages.length - 1}
-                    status={status}
-                    canSendMessages={canSendMessages}
-                    editor={
-                      editing?.messageId === message.id ? (
-                        <MessageEditor
-                          // Remounted per message, so the surface reseeds from
-                          // the message it was opened on rather than carrying
-                          // the last one's text and attachments over.
-                          key={editing.messageId}
-                          initialText={editing.text}
-                          initialAttachments={editing.attachments}
-                          modelSelection={modelSelection}
-                          passthroughFileTypes={
-                            resolvedModel?.passthroughFileTypes ?? []
-                          }
-                          onSubmit={handleMessageEditSubmit}
-                          onCancel={handleMessageEditCancel}
-                        />
-                      ) : undefined
-                    }
-                    agents={agents}
-                    onEditStart={handleMessageEditStart}
-                    onMessageDelete={deleteMessage}
-                    onRegenerate={
-                      isRegenerable(messageIndex) ? turn.regenerate : undefined
-                    }
-                    alternatives={positions.get(message.id)}
-                    onSwitchAlternative={switchAlternative}
-                    onCopyMessage={handleCopyMessage}
-                    copied={copiedMessageId === message.id}
-                    staleToolCallIds={staleToolCallIds}
-                    onApprovalResponse={
-                      // Only the Active leaf can be resumed, and only while
-                      // no turn holds the Chat.
-                      canSendMessages &&
-                      !turnInFlight &&
-                      messageIndex === messages.length - 1
-                        ? turn.respond
-                        : undefined
-                    }
-                  />
-                  {/* The divider sits after the summary's anchor — the last
+              <div className="w-full flex flex-col gap-4 xl:w-4/5 max-w-4xl">
+                {chatData?.a2aClientName && (
+                  <p className="text-center text-xs text-muted-foreground">
+                    Over A2A from {chatData.a2aClientName}
+                  </p>
+                )}
+                {messages.map((message, messageIndex) => (
+                  // A long transcript keeps every message in the DOM, rendered
+                  // diagrams and highlighted code included; the browser skips
+                  // laying out and painting the ones off screen. `auto` in the
+                  // intrinsic size remembers each one's real height once it has
+                  // rendered, so scrolling back over it does not jump. The last
+                  // message gets it too: one first given containment when the
+                  // next message lands has no remembered size, so for a frame
+                  // it is 160px, the transcript collapses and the scroll resets.
+                  // The padding cancelled by the margin keeps focus rings at the
+                  // edge outside the paint clip this sets.
+                  <div
+                    key={message.id}
+                    className="-m-1 flex flex-col gap-4 p-1 [contain-intrinsic-size:auto_160px] [content-visibility:auto]"
+                  >
+                    <ChatMessage
+                      message={message}
+                      isLastMessage={messageIndex === messages.length - 1}
+                      status={status}
+                      canSendMessages={canSendMessages}
+                      editor={
+                        editing?.messageId === message.id ? (
+                          <MessageEditor
+                            // Remounted per message, so the surface reseeds from
+                            // the message it was opened on rather than carrying
+                            // the last one's text and attachments over.
+                            key={editing.messageId}
+                            initialText={editing.text}
+                            initialAttachments={editing.attachments}
+                            modelSelection={modelSelection}
+                            passthroughFileTypes={
+                              resolvedModel?.passthroughFileTypes ?? []
+                            }
+                            onSubmit={handleMessageEditSubmit}
+                            onCancel={handleMessageEditCancel}
+                          />
+                        ) : undefined
+                      }
+                      agents={agents}
+                      onEditStart={handleMessageEditStart}
+                      onMessageDelete={deleteMessage}
+                      onRegenerate={
+                        isRegenerable(messageIndex)
+                          ? turn.regenerate
+                          : undefined
+                      }
+                      alternatives={positions.get(message.id)}
+                      onSwitchAlternative={switchAlternative}
+                      onCopyMessage={handleCopyMessage}
+                      copied={copiedMessageId === message.id}
+                      staleToolCallIds={staleToolCallIds}
+                      artifactScope={scope}
+                      onOpenArtifact={setOpenArtifact}
+                      onApprovalResponse={
+                        // Only the Active leaf can be resumed, and only while
+                        // no turn holds the Chat.
+                        canSendMessages &&
+                        !turnInFlight &&
+                        messageIndex === messages.length - 1
+                          ? turn.respond
+                          : undefined
+                      }
+                    />
+                    {/* The divider sits after the summary's anchor — the last
                       message it covers — and expands to the summary text.
                       Every message above it stays readable. */}
-                  {appliedSummary?.anchorIndex === messageIndex && (
-                    <TranscriptSummaryDivider
-                      summary={appliedSummary.summary}
-                    />
-                  )}
-                </div>
-              ))}
+                    {appliedSummary?.anchorIndex === messageIndex && (
+                      <TranscriptSummaryDivider
+                        summary={appliedSummary.summary}
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-        </ConversationContent>
-        <ConversationScrollButton />
-      </Conversation>
-      <TurnAnnouncer status={effectiveStatus} />
-      <div className="grid shrink-0 gap-4 p-4">
-        <div className="flex justify-center min-w-0">
-          <div className="relative w-full xl:w-4/5 max-w-4xl min-w-0">
-            {isRecoveringRun && <ChatReconnectingNotice />}
-            {(summarisingStatus || compacting) && (
-              // This copy is the live region for a streamed status too: the
-              // transcript's copy sits inside the busy transcript, and is
-              // drawn for the eye rather than announced again.
-              <TurnStatus className="mb-2 sm:mb-1">
-                {summarisingStatus ?? COMPACTING_STATUS}
-              </TurnStatus>
-            )}
-            {canSendMessages ? (
-              <ChatComposer
-                onSubmit={handleSubmit}
-                canUploadToSandbox={canUploadToSandbox}
-                commands={slashCommands}
-                slashEnabled={slashCommands.length > 0}
-                className={messages.length === 0 ? "min-h-24" : undefined}
-                placeholder={
-                  runHeldElsewhere
-                    ? "Run in progress…"
-                    : selectedAgent?.inputPlaceholder ||
-                      "What would you like to know?"
-                }
-                status={composerStatus}
-                disabled={runHeldElsewhere || compacting}
-                passthroughFileTypes={resolvedModel?.passthroughFileTypes ?? []}
-                modelSelection={modelSelection}
-                tools={
-                  <>
-                    {resolvedModel?.canSearch && (
-                      <Tooltip delayDuration={1000}>
-                        <TooltipTrigger asChild>
-                          <PromptInputButton
-                            aria-label="Search"
-                            onClick={() => setSearch(!search)}
-                            variant={search ? "default" : "ghost"}
-                          >
-                            <GlobeIcon size={16} />
-                          </PromptInputButton>
-                        </TooltipTrigger>
-                        <TooltipContent>Search</TooltipContent>
-                      </Tooltip>
-                    )}
-                    {agentId && selectedAgent && (
-                      <Dialog
-                        open={isAgentInfoDialogOpen}
-                        onOpenChange={setIsAgentInfoDialogOpen}
-                      >
+          </ConversationContent>
+          <ConversationScrollButton />
+        </Conversation>
+        <TurnAnnouncer status={effectiveStatus} />
+        <div className="grid shrink-0 gap-4 p-4">
+          <div className="flex justify-center min-w-0">
+            <div className="relative w-full xl:w-4/5 max-w-4xl min-w-0">
+              {isRecoveringRun && <ChatReconnectingNotice />}
+              {(summarisingStatus || compacting) && (
+                // This copy is the live region for a streamed status too: the
+                // transcript's copy sits inside the busy transcript, and is
+                // drawn for the eye rather than announced again.
+                <TurnStatus className="mb-2 sm:mb-1">
+                  {summarisingStatus ?? COMPACTING_STATUS}
+                </TurnStatus>
+              )}
+              {canSendMessages ? (
+                <ChatComposer
+                  onSubmit={handleSubmit}
+                  canUploadToSandbox={canUploadToSandbox}
+                  commands={slashCommands}
+                  slashEnabled={slashCommands.length > 0}
+                  className={messages.length === 0 ? "min-h-24" : undefined}
+                  placeholder={
+                    runHeldElsewhere
+                      ? "Run in progress…"
+                      : selectedAgent?.inputPlaceholder ||
+                        "What would you like to know?"
+                  }
+                  status={composerStatus}
+                  disabled={runHeldElsewhere || compacting}
+                  passthroughFileTypes={
+                    resolvedModel?.passthroughFileTypes ?? []
+                  }
+                  modelSelection={modelSelection}
+                  tools={
+                    <>
+                      {resolvedModel?.canSearch && (
                         <Tooltip delayDuration={1000}>
-                          <DialogTrigger asChild>
-                            <TooltipTrigger asChild>
-                              <PromptInputButton aria-label="Agent info">
-                                <Info />
-                              </PromptInputButton>
-                            </TooltipTrigger>
-                          </DialogTrigger>
-                          <TooltipContent>Agent info</TooltipContent>
+                          <TooltipTrigger asChild>
+                            <PromptInputButton
+                              aria-label="Search"
+                              onClick={() => setSearch(!search)}
+                              variant={search ? "default" : "ghost"}
+                            >
+                              <GlobeIcon size={16} />
+                            </PromptInputButton>
+                          </TooltipTrigger>
+                          <TooltipContent>Search</TooltipContent>
                         </Tooltip>
-                        <AgentInfoDialog
-                          agent={selectedAgent}
-                          agents={agents}
-                          toolSets={toolSets}
-                          skills={skills}
-                          providers={providers}
-                          onClose={() => setIsAgentInfoDialogOpen(false)}
-                        />
-                      </Dialog>
-                    )}
-                    {!agentId && (
-                      <Dialog
-                        open={isSettingsDialogOpen}
-                        onOpenChange={setIsSettingsDialogOpen}
-                      >
-                        <Tooltip delayDuration={1000}>
-                          <DialogTrigger asChild>
-                            <TooltipTrigger asChild>
-                              <PromptInputButton aria-label="Settings">
-                                <Settings2 />
-                              </PromptInputButton>
-                            </TooltipTrigger>
-                          </DialogTrigger>
-                          <TooltipContent>Settings</TooltipContent>
-                        </Tooltip>
-                        <ChatSettingsDialog
-                          settings={settings}
-                          reasoning={resolvedModel?.reasoning}
-                          onChange={updateSettings}
-                          onClose={() => setIsSettingsDialogOpen(false)}
-                        />
-                      </Dialog>
-                    )}
-                  </>
-                }
-                footerContent={
-                  // Two placements from one element, because the footer wraps.
-                  // Narrow: ordered last onto a row of its own, so the tools and
-                  // Send keep the first row to themselves and Send is never
-                  // pushed off the edge. The row bleeds back over the footer's
-                  // own padding — hence the negative margins and the width that
-                  // adds them back — so the tint reaches the composer's edges and
-                  // reads as a band rather than a chip floating in the middle.
-                  // Wide: back in source order with `mr-auto` eating the free
-                  // space, which reads as the last item of the tool row rather
-                  // than drifting into the middle the way `justify-between`
-                  // alone would leave it.
-                  <AnimatePresence initial={false}>
-                    {contextWindow != null
-                      ? (occupancyAfterSummary ||
-                          projectedOccupancy != null) && (
-                          <ContextMeterEntrance
-                            key="context-meter"
-                            className={CONTEXT_FOOTER_PLACEMENT}
-                          >
-                            {occupancyAfterSummary ? (
-                              <span className="mt-1.5 inline-block text-xs text-muted-foreground tabular-nums sm:mt-0">
-                                —
-                              </span>
-                            ) : (
-                              <ContextMeter
+                      )}
+                      {agentId && selectedAgent && (
+                        <Dialog
+                          open={isAgentInfoDialogOpen}
+                          onOpenChange={setIsAgentInfoDialogOpen}
+                        >
+                          <Tooltip delayDuration={1000}>
+                            <DialogTrigger asChild>
+                              <TooltipTrigger asChild>
+                                <PromptInputButton aria-label="Agent info">
+                                  <Info />
+                                </PromptInputButton>
+                              </TooltipTrigger>
+                            </DialogTrigger>
+                            <TooltipContent>Agent info</TooltipContent>
+                          </Tooltip>
+                          <AgentInfoDialog
+                            agent={selectedAgent}
+                            agents={agents}
+                            toolSets={toolSets}
+                            skills={skills}
+                            providers={providers}
+                            onClose={() => setIsAgentInfoDialogOpen(false)}
+                          />
+                        </Dialog>
+                      )}
+                      {!agentId && (
+                        <Dialog
+                          open={isSettingsDialogOpen}
+                          onOpenChange={setIsSettingsDialogOpen}
+                        >
+                          <Tooltip delayDuration={1000}>
+                            <DialogTrigger asChild>
+                              <TooltipTrigger asChild>
+                                <PromptInputButton aria-label="Settings">
+                                  <Settings2 />
+                                </PromptInputButton>
+                              </TooltipTrigger>
+                            </DialogTrigger>
+                            <TooltipContent>Settings</TooltipContent>
+                          </Tooltip>
+                          <ChatSettingsDialog
+                            settings={settings}
+                            reasoning={resolvedModel?.reasoning}
+                            onChange={updateSettings}
+                            onClose={() => setIsSettingsDialogOpen(false)}
+                          />
+                        </Dialog>
+                      )}
+                    </>
+                  }
+                  footerContent={
+                    // Two placements from one element, because the footer wraps.
+                    // Narrow: ordered last onto a row of its own, so the tools and
+                    // Send keep the first row to themselves and Send is never
+                    // pushed off the edge. The row bleeds back over the footer's
+                    // own padding — hence the negative margins and the width that
+                    // adds them back — so the tint reaches the composer's edges and
+                    // reads as a band rather than a chip floating in the middle.
+                    // Wide: back in source order with `mr-auto` eating the free
+                    // space, which reads as the last item of the tool row rather
+                    // than drifting into the middle the way `justify-between`
+                    // alone would leave it.
+                    <AnimatePresence initial={false}>
+                      {contextWindow != null
+                        ? (occupancyAfterSummary ||
+                            projectedOccupancy != null) && (
+                            <ContextMeterEntrance
+                              key="context-meter"
+                              className={CONTEXT_FOOTER_PLACEMENT}
+                            >
+                              {occupancyAfterSummary ? (
+                                <span className="mt-1.5 inline-block text-xs text-muted-foreground tabular-nums sm:mt-0">
+                                  —
+                                </span>
+                              ) : (
+                                <ContextMeter
+                                  className={cn(
+                                    CONTEXT_FOOTER_BAND,
+                                    "justify-center sm:justify-start",
+                                  )}
+                                  occupancy={projectedOccupancy}
+                                  contextWindow={contextWindow}
+                                />
+                              )}
+                            </ContextMeterEntrance>
+                          )
+                        : resolvedModel && (
+                            <ContextMeterEntrance
+                              key="context-window-hint"
+                              className={CONTEXT_FOOTER_PLACEMENT}
+                            >
+                              <ContextWindowHint
+                                href={contextWindowHref}
                                 className={cn(
                                   CONTEXT_FOOTER_BAND,
-                                  "justify-center sm:justify-start",
+                                  "text-center sm:text-left",
                                 )}
-                                occupancy={projectedOccupancy}
-                                contextWindow={contextWindow}
                               />
-                            )}
-                          </ContextMeterEntrance>
-                        )
-                      : resolvedModel && (
-                          <ContextMeterEntrance
-                            key="context-window-hint"
-                            className={CONTEXT_FOOTER_PLACEMENT}
-                          >
-                            <ContextWindowHint
-                              href={contextWindowHref}
-                              className={cn(
-                                CONTEXT_FOOTER_BAND,
-                                "text-center sm:text-left",
-                              )}
-                            />
-                          </ContextMeterEntrance>
-                        )}
-                  </AnimatePresence>
-                }
-                // Named, not tooltipped: a Radix tooltip closes on Escape and
-                // would swallow the first press meant to stop the turn.
-                submit={
-                  <PromptInputSubmit
-                    status={composerStatus}
-                    {...(turnInFlight && { "aria-label": "Stop (Esc)" })}
-                  />
-                }
-              />
-            ) : (
-              <div className="flex items-center justify-center py-4 px-6 border rounded-lg bg-muted/50">
-                <p className="text-sm text-muted-foreground">
-                  Read-only mode. Only the workspace owner can send messages.
-                </p>
-              </div>
-            )}
+                            </ContextMeterEntrance>
+                          )}
+                    </AnimatePresence>
+                  }
+                  // Named, not tooltipped: a Radix tooltip closes on Escape and
+                  // would swallow the first press meant to stop the turn.
+                  submit={
+                    <PromptInputSubmit
+                      status={composerStatus}
+                      {...(turnInFlight && { "aria-label": "Stop (Esc)" })}
+                    />
+                  }
+                />
+              ) : (
+                <div className="flex items-center justify-center py-4 px-6 border rounded-lg bg-muted/50">
+                  <p className="text-sm text-muted-foreground">
+                    Read-only mode. Only the workspace owner can send messages.
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
+
+        {sandboxUploads.dialog}
+
+        {/* Error Dialog */}
+        <ChatErrorDialog
+          isOpen={showErrorDialog}
+          onOpenChange={setShowErrorDialog}
+          error={error}
+        />
       </div>
-
-      {sandboxUploads.dialog}
-
-      {/* Error Dialog */}
-      <ChatErrorDialog
-        isOpen={showErrorDialog}
-        onOpenChange={setShowErrorDialog}
-        error={error}
-      />
+      {openArtifact && (
+        <aside className="absolute inset-0 z-20 flex flex-col border-l bg-background lg:static lg:w-[min(560px,45vw)] lg:shrink-0">
+          <ArtifactViewer
+            orgId={orgId}
+            workspaceId={workspaceId}
+            artifactId={openArtifact.id}
+            version={openArtifact.version}
+            onClose={() => setOpenArtifact(null)}
+            className="size-full"
+          />
+        </aside>
+      )}
     </div>
   );
 }

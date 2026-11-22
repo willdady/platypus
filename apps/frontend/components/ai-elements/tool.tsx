@@ -28,6 +28,7 @@ import {
   FileIcon,
   FilePenIcon,
   FilePlusIcon,
+  FileTextIcon,
   FingerprintIcon,
   FileDownIcon,
   FolderIcon,
@@ -151,6 +152,8 @@ const toolToToolSet: Record<string, string> = {
   // chats
   listChats: "chats",
   readTranscript: "chats",
+  // artifacts
+  createArtifact: "artifacts",
   // sandbox
   shellExec: "sandbox",
   fsRead: "sandbox",
@@ -198,6 +201,7 @@ const toolSetIcons: Record<string, LucideIcon> = {
   notifications: BellIcon,
   memory: BrainIcon,
   chats: MessageSquareIcon,
+  artifacts: FileTextIcon,
   sandbox: BoxIcon,
 };
 

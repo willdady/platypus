@@ -1,0 +1,78 @@
+---
+title: Artifacts
+description: Standalone, versioned content an Agent creates — documents, code, diagrams, pages and images — and where you read it.
+---
+
+import { Callout } from "nextra/components";
+
+# Artifacts
+
+An **Artifact** is a standalone piece of content an Agent creates in your
+Workspace. It is separate from the Chat that made it: the Chat can be deleted
+and the Artifact stays, ready to open, download, or point another Agent at.
+
+Use one when the result is worth keeping apart from the conversation around it
+— a document, a script, a diagram, a whole web page — rather than a paragraph
+in a reply.
+
+## Types
+
+| Type         | What it holds                                                                                                                 |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| **Markdown** | Formatted text — headings, lists, tables, links and code blocks. Rendered the same way a Chat reply is.                       |
+| **Code**     | Source in any language the model names. Highlighted as that language in the Preview, and downloaded with its usual extension. |
+| **Mermaid**  | A diagram written as Mermaid notation. Drawn as the picture, not the notation.                                                |
+| **HTML**     | A complete HTML page. The viewer shows its source.                                                                            |
+| **SVG**      | A complete SVG image. The viewer shows its source.                                                                            |
+
+## Limits
+
+The title is **1-200 characters**. Each version holds at most **512 KB** of
+content. A title or a body over its limit is refused whole — nothing is cut
+short to fit.
+
+## Letting an Agent create one
+
+Grant the Agent the **Artifacts** Tool set on its **Tools** card. That gives it
+one tool, `createArtifact`, and nothing else: it can create a new Artifact, not
+read, edit or delete one.
+
+Ask for the piece in the Chat:
+
+```text
+Write the migration guide as a Markdown Artifact called "Migrating to 2.0".
+```
+
+When the Agent calls the tool, a Card appears in the reply with the title, the
+type and the version it wrote. Click the Card to open the Artifact in a panel
+beside the Chat. The panel has two tabs:
+
+- **Preview** shows the rendered Artifact for Markdown, Code and Mermaid.
+- **Code** shows the source for every type, highlighted for its language.
+
+**Copy** puts the source on your clipboard. **Download** saves it as a file
+named after the title, with an extension taken from the type — `.md`, `.html`,
+`.svg` or `.mmd`, and for Code the language's own extension where Platypus
+knows it, `.txt` otherwise.
+
+HTML and SVG Artifacts have no Preview, so the panel opens on **Code** and
+Preview stays unavailable. Their source is still copyable and downloadable.
+
+<Callout type="info">
+  An Artifact records the Chat it came from. If you delete that Chat, the
+  Artifact is kept and simply has no source Chat to point back to. Deleting the
+  Workspace deletes its Artifacts.
+</Callout>
+
+## Images inside a Markdown Artifact
+
+A Markdown Artifact renders images only when they are inline `data:` URIs or
+files from Platypus's own storage. Any other image source is not fetched at all:
+the viewer shows a blocked placeholder with the address as a link, so you can
+decide whether to open it. Viewing a document never contacts a third-party host
+on its own.
+
+## Versions
+
+Every Artifact keeps its versions in order, and the newest is its current
+content. Creating one writes version 1, written by the Agent.

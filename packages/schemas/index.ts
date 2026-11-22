@@ -4658,5 +4658,110 @@ export const webhookEventScope = (
       return {};
   }
 };
+// Artifact
+
+/**
+ * The content kinds an Artifact can hold. Fixed when the Artifact is created;
+ * `markdown`, `code` and `mermaid` render in the app's own DOM, while `html`
+ * and `svg` are source-only until the Artifact frame renders them.
+ */
+export const artifactTypeSchema = z.enum([
+  "markdown",
+  "code",
+  "mermaid",
+  "html",
+  "svg",
+]);
+
+export type ArtifactType = z.infer<typeof artifactTypeSchema>;
+
+/** Who wrote one Artifact version: an Agent's tool call, or the User. */
+export const artifactAuthorSchema = z.enum(["agent", "user"]);
+
+export type ArtifactAuthor = z.infer<typeof artifactAuthorSchema>;
+
+export const ARTIFACT_TITLE_MIN_LENGTH = 1;
+export const ARTIFACT_TITLE_MAX_LENGTH = 200;
+
+/** The most a single Artifact version may hold, measured in UTF-8 bytes. */
+export const ARTIFACT_CONTENT_MAX_BYTES = 512 * 1024;
+
+/** The exact UTF-8 byte length of Artifact content, which is what the cap bounds. */
+export const artifactContentByteLength = (content: string): number =>
+  new TextEncoder().encode(content).length;
+
+/**
+ * Artifact content within its per-version cap. Bytes rather than characters:
+ * the cap protects storage and the wire, and a multi-byte character is worth
+ * more of both. Nothing truncates — a version over the cap is refused whole.
+ */
+export const artifactContentSchema = z
+  .string()
+  .refine(
+    (content) =>
+      artifactContentByteLength(content) <= ARTIFACT_CONTENT_MAX_BYTES,
+    {
+      message: `Artifact content must be at most ${ARTIFACT_CONTENT_MAX_BYTES / 1024} KB`,
+    },
+  );
+
+export const artifactSchema = z.object({
+  id: z.string(),
+  workspaceId: z.string(),
+  /** The Chat that first produced the Artifact; null once that Chat is gone. */
+  sourceChatId: z.string().nullable().optional(),
+  title: z
+    .string()
+    .min(ARTIFACT_TITLE_MIN_LENGTH)
+    .max(ARTIFACT_TITLE_MAX_LENGTH),
+  type: artifactTypeSchema,
+  /** Set for `code` Artifacts only; null for every other type. */
+  language: z.string().nullable().optional(),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+});
+
+export type Artifact = z.infer<typeof artifactSchema>;
+
+export const artifactVersionSchema = z.object({
+  id: z.string(),
+  artifactId: z.string(),
+  version: z.number().int().positive(),
+  content: z.string(),
+  author: artifactAuthorSchema,
+  createdAt: z.date(),
+});
+
+export type ArtifactVersion = z.infer<typeof artifactVersionSchema>;
+
+/** One Artifact with the single version the reader asked for (or the latest). */
+export const artifactReadSchema = z.object({
+  artifact: artifactSchema,
+  version: artifactVersionSchema,
+});
+
+export type ArtifactRead = z.infer<typeof artifactReadSchema>;
+
+/**
+ * A version to read; omitted means the latest. Named in the query string so a
+ * Chat card can open the version its turn produced.
+ */
+export const artifactVersionQuerySchema = z.strictObject({
+  version: z.coerce.number().int().positive().optional(),
+});
+
+/** The body an Agent's `createArtifact` call writes into version 1. */
+export const artifactCreateSchema = z.strictObject({
+  title: z
+    .string()
+    .min(ARTIFACT_TITLE_MIN_LENGTH)
+    .max(ARTIFACT_TITLE_MAX_LENGTH),
+  type: artifactTypeSchema,
+  language: z.string().optional(),
+  content: artifactContentSchema,
+});
+
+export type ArtifactCreate = z.infer<typeof artifactCreateSchema>;
+
 export * from "./chat-ui-message.ts";
 export * from "./chat-summary.ts";

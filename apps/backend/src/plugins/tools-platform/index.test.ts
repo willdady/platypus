@@ -38,6 +38,7 @@ const EXPECTED_IDS = [
   "agent-management",
   "notifications",
   "chats",
+  "artifacts",
   "memory",
 ];
 
@@ -80,7 +81,7 @@ describe("@platypus/tools-platform — loaded into the core registry", () => {
     }));
   });
 
-  it("registers all nine domain tool sets with bare ids", () => {
+  it("registers all ten domain tool sets with bare ids", () => {
     expect(before.filter((id) => EXPECTED_IDS.includes(id))).toEqual([]);
     expect(loaded).toEqual([
       expect.objectContaining({

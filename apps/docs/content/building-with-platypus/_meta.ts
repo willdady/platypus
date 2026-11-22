@@ -13,6 +13,7 @@ const meta = {
   mcp: "MCP servers",
   triggers: "Triggers",
   boards: "Boards",
+  artifacts: "Artifacts",
   notifications: "Notifications",
   webhooks: "Webhooks",
   "a2a-endpoints": "A2A endpoints",

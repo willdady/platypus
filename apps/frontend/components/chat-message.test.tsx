@@ -747,6 +747,41 @@ describe("ChatMessage and provider-executed web_search", () => {
   });
 });
 
+describe("ChatMessage Artifact Card", () => {
+  it("draws the card and opens the Artifact its call produced", () => {
+    const onOpenArtifact = vi.fn();
+    renderMessage(
+      {
+        ...assistantMessage(),
+        parts: [
+          {
+            type: "tool-createArtifact",
+            toolCallId: "call-1",
+            state: "output-available",
+            input: {
+              title: "Release notes",
+              type: "markdown",
+              content: "# 1.0",
+            },
+            output: { id: "artifact-1", title: "Release notes", version: 1 },
+          },
+        ],
+      } as unknown as PlatypusUIMessage,
+      { onOpenArtifact },
+    );
+
+    expect(screen.getByText("Release notes")).toBeInTheDocument();
+    expect(screen.getByText(/Markdown/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Release notes/ }));
+
+    expect(onOpenArtifact).toHaveBeenCalledWith({
+      id: "artifact-1",
+      version: 1,
+    });
+  });
+});
+
 // Issue #578: the dispatch used to be an if/else-if chain where a specialised
 // tool part had to be checked before the generic catch-all or it would land
 // there too, rendering its raw JSON body a second time alongside the
@@ -781,6 +816,18 @@ describe("ChatMessage generic tool renderer exclusion", () => {
         state: "output-available",
         input: { subAgent: "Research Bot", task: "x" },
         output: { entries: [] },
+      } as unknown as Parameters<typeof isGenericToolPart>[0]),
+    ).toBe(false);
+  });
+
+  it("never matches an Artifact Card part", () => {
+    expect(
+      isGenericToolPart({
+        type: "tool-createArtifact",
+        toolCallId: "c1",
+        state: "output-available",
+        input: { title: "Plan", type: "markdown", content: "# Plan" },
+        output: { id: "artifact-1", title: "Plan", version: 1 },
       } as unknown as Parameters<typeof isGenericToolPart>[0]),
     ).toBe(false);
   });
