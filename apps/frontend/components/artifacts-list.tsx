@@ -8,6 +8,7 @@ import { artifactTypeSchema } from "@platypus/schemas";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EmptyCard } from "@/components/empty-card";
+import { Badge } from "@/components/ui/badge";
 import { EntityCardList } from "@/components/entity-card-list";
 import { ListState } from "@/components/list-state";
 import { CardGridSkeleton } from "@/components/list-skeletons";
@@ -179,7 +180,8 @@ export function ArtifactsList({
   const cards: ArtifactCard[] = rows.map((row) => ({
     ...row,
     name: row.title,
-    description: artifactTypeLabel(row.type),
+    // The line a card always reserves, so it carries the last change.
+    description: `Updated ${formatRelativeTime(row.updatedAt)}`,
   }));
 
   return (
@@ -237,13 +239,9 @@ export function ArtifactsList({
           )
         }
         href={(card) => routes.artifacts.detail(card.id)}
-        meta={(card) => (
-          <span
-            className="flex h-4 items-center gap-1 text-xs text-muted-foreground"
-            title={new Date(card.updatedAt).toLocaleString()}
-          >
-            Updated {formatRelativeTime(card.updatedAt)}
-          </span>
+        // The viewer's own type badge, so a card reads like the Artifact it opens.
+        badges={(card) => (
+          <Badge variant="secondary">{artifactTypeLabel(card.type)}</Badge>
         )}
         menu={(card) => (
           <RowActionsMenu

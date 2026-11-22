@@ -16,8 +16,6 @@ import { interceptedHref } from "@/lib/unsaved-changes";
 
 type UnsavedChangesContextValue = {
   setDirty: (key: string, dirty: boolean) => void;
-  /** Whether any registered surface is dirty. */
-  isDirty: boolean;
   confirmDiscard: (onDiscard: () => void) => void;
 };
 
@@ -78,7 +76,6 @@ export function UnsavedChangesProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<UnsavedChangesContextValue>(
     () => ({
-      isDirty,
       setDirty: (key, dirty) =>
         setDirtyKeys((prev) => {
           if (prev.has(key) === dirty) return prev;
@@ -89,7 +86,7 @@ export function UnsavedChangesProvider({ children }: { children: ReactNode }) {
         }),
       confirmDiscard: (onDiscard) => setPendingDiscard(() => onDiscard),
     }),
-    [isDirty],
+    [],
   );
 
   return (
@@ -136,23 +133,5 @@ export function useUnsavedChangesGuard(isDirty: boolean) {
       else onDiscard();
     },
     [context, isDirty],
-  );
-}
-
-/**
- * The provider's guard for a caller that has no dirty state of its own but must
- * not replace a dirty surface — a Chat Card click that remounts the Artifact
- * panel. Runs `onDiscard` at once when nothing is dirty; otherwise it opens the
- * one "Discard unsaved changes?" dialog and runs `onDiscard` only on Discard.
- * Without a provider (a surface rendered alone in a test) nothing is held.
- */
-export function useConfirmDiscard() {
-  const context = useContext(UnsavedChangesContext);
-  return useCallback(
-    (onDiscard: () => void) => {
-      if (context?.isDirty) context.confirmDiscard(onDiscard);
-      else onDiscard();
-    },
-    [context],
   );
 }

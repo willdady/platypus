@@ -86,12 +86,10 @@ Any other failure — a fieldless 400, `forbidden`, `notFound`, or `error` —
 toasts the backend's message. `useEntityForm` does that by default; leave
 `onError` alone unless the form has its own guidance rule.
 
-The one inline exception is a `conflict` the user must act on with the form
-still in front of them: render it in a destructive `Alert` at the top of the
-form. Today that is the Provider form, through `onConflict`, where the message
-names the records blocking the save, and the Artifact hand editor, where it
-says the Artifact changed under the edit and the typed text must be kept.
-Every other failure of those forms still toasts.
+The one inline exception is a `conflict` whose message names the records
+blocking the save: render it in a destructive `Alert` at the top of the
+form. Today that is only the Provider form, through `onConflict`. Every
+other failure of that form still toasts.
 
 ## When a delete fails
 

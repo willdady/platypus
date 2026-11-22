@@ -63,7 +63,6 @@ import { TurnStatus } from "./turn-status";
 import { useStableSet } from "@/hooks/use-stable-set";
 import { useTimeout } from "@/hooks/use-timeout";
 import { useStreamingFavicon } from "@/hooks/use-streaming-favicon";
-import { useConfirmDiscard } from "./unsaved-changes-guard";
 import {
   ContextMeter,
   ContextMeterEntrance,
@@ -199,20 +198,15 @@ export function Chat({
   );
   const [openArtifactCount, setOpenArtifactCount] = useState(0);
   const [artifactFullScreen, setArtifactFullScreen] = useState(false);
-  // A Card click remounts the panel, so it is one way out of a hand edit: it
-  // goes through the same "Discard unsaved changes?" guard every other exit
-  // uses, and the draft stays put when the User keeps editing.
-  const confirmDiscard = useConfirmDiscard();
   const openArtifactFromCard = useCallback(
-    (target: ArtifactOpenTarget) =>
-      confirmDiscard(() => {
-        setOpenArtifact(target);
-        setOpenArtifactCount((count) => count + 1);
-        // Reset here, not on close: the URL change lands a render after a
-        // state change, so resetting on close flashes the side panel.
-        setArtifactFullScreen(false);
-      }),
-    [confirmDiscard, setOpenArtifact],
+    (target: ArtifactOpenTarget) => {
+      setOpenArtifact(target);
+      setOpenArtifactCount((count) => count + 1);
+      // Reset here, not on close: the URL change lands a render after a
+      // state change, so resetting on close flashes the side panel.
+      setArtifactFullScreen(false);
+    },
+    [setOpenArtifact],
   );
   const chatUrl = joinUrl(
     backendUrl || "",
