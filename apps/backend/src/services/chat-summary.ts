@@ -620,9 +620,10 @@ export type TranscriptSummaryModel = {
   /** The output cap raised by the Job settings' Thinking budget; absent, the
    *  pass's own cap. */
   maxOutputTokens?: number;
-  /** The output ceiling declared on the Chat's own model. A summary call
-   *  never asks for more, since a vendor rejects a cap above the model's own.
-   *  The task model's cap is held to its ceiling by its Job settings (#2025). */
+  /** The output ceiling declared on the Chat's own model when it writes
+   *  without Job settings. A summary call never asks for more, since a vendor
+   *  rejects a cap above the model's own. Absent on an entry carrying Job
+   *  settings: its `maxOutputTokens` already folds the ceiling in. */
   outputCeiling?: number;
   /** The task model's declared context window, which a pass checks its input
    *  against before calling; absent, the model's own error is the measure. */
@@ -1049,17 +1050,31 @@ const withTaskSummariserModel = async (args: {
       pointerSettingModelId(taskModelId),
       taskProvider.provider.taskModelSettings,
     );
+    const isChatModel =
+      taskProvider.provider.id === chatProviderId &&
+      taskModelId === chat.modelId;
+    // On the Chat's own model, its declared ceiling bounds the pass's cap
+    // before the Thinking budget is added, so the budget still rides on top.
     const maxOutputTokens = jobMaxOutputTokens(
       taskProvider.provider,
       pointerSettingModelId(taskModelId),
       taskProvider.provider.taskModelSettings,
-      TRANSCRIPT_SUMMARY_MAX_OUTPUT_TOKENS,
+      isChatModel
+        ? Math.min(
+            TRANSCRIPT_SUMMARY_MAX_OUTPUT_TOKENS,
+            chat.outputCeiling ?? Infinity,
+          )
+        : TRANSCRIPT_SUMMARY_MAX_OUTPUT_TOKENS,
     );
-    if (
-      taskProvider.provider.id === chatProviderId &&
-      taskModelId === chat.modelId
-    ) {
-      return { chat: { ...chat, settings, maxOutputTokens } };
+    if (isChatModel) {
+      return {
+        chat: {
+          model: chat.model,
+          modelId: chat.modelId,
+          settings,
+          maxOutputTokens,
+        },
+      };
     }
     const contextWindow = contextWindowForModel(
       taskProvider.provider,
@@ -1212,7 +1227,7 @@ export const beforeTurn = async (args: {
   model: LanguageModel;
   modelId: string;
   /** The output ceiling declared on the turn's model, if any. */
-  maxOutputTokens?: number;
+  outputCeiling?: number;
   /** Present on a Chat turn: where the task model is resolved from. */
   taskModel?: {
     scope: ScopeContext;
@@ -1233,7 +1248,7 @@ export const beforeTurn = async (args: {
     contextWindow,
     model,
     modelId,
-    maxOutputTokens,
+    outputCeiling,
     taskModel,
     readOnlyToolNames,
     signal,
@@ -1257,9 +1272,7 @@ export const beforeTurn = async (args: {
     const chat: TranscriptSummaryModel = {
       model,
       modelId,
-      ...(maxOutputTokens !== undefined
-        ? { outputCeiling: maxOutputTokens }
-        : {}),
+      ...(outputCeiling !== undefined ? { outputCeiling } : {}),
     };
     const summary = await registerTranscriptSummary(chatId, async () => {
       const models =

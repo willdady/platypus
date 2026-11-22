@@ -858,7 +858,7 @@ export const prepareChatTurn = async (
       contextWindow: context.plan.contextWindow,
       model: context.plan.model,
       modelId: context.resolvedModelId,
-      maxOutputTokens: context.plan.maxOutputTokens,
+      outputCeiling: context.plan.maxOutputTokens,
       // The backstop tries the Workspace's task model first, falling back to
       // the model this turn already opened.
       taskModel: {
