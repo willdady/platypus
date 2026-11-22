@@ -165,7 +165,9 @@ export class RunEventRecorder {
    * Opens an event under `parentEventId`. Returns its id, or `null` once the
    * ceiling is reached — in which case the run is marked truncated and so is
    * the open parent, so a delegate whose children were dropped does not read
-   * as a delegate that did nothing.
+   * as a delegate that did nothing. A tool name is made storable here — the
+   * one place every Run event is created — so an event never carries what
+   * its column rejects.
    */
   open(parentEventId: string | null, spec: OpenSpec): string | null {
     if (this.records.length >= this.ceiling) {
@@ -186,7 +188,7 @@ export class RunEventRecorder {
       parentEventId,
       seq: this.records.length,
       type: spec.type,
-      toolName: spec.toolName ?? null,
+      toolName: spec.toolName === undefined ? null : storable(spec.toolName),
       startedAt: this.clocks.now(),
       durationMs: null,
       status: "running",

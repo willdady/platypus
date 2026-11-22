@@ -48,6 +48,11 @@ const recorderOf = (
   return { recorder, c };
 };
 
+const scopeOf = (): { scope: RunEventScope; recorder: RunEventRecorder } => {
+  const { recorder } = recorderOf();
+  return { scope: { recorder, parentEventId: null }, recorder };
+};
+
 describe("RunEventRecorder", () => {
   it("records a tool call's shape, start and duration — never its payload", () => {
     const { recorder, c } = recorderOf();
@@ -304,12 +309,53 @@ describe("capRunEventError", () => {
   });
 });
 
-describe("recordUiChunk", () => {
-  const scopeOf = (): { scope: RunEventScope; recorder: RunEventRecorder } => {
+describe("Run event toolName", () => {
+  it("removes NUL held in a tool-call's name", () => {
     const { recorder } = recorderOf();
-    return { scope: { recorder, parentEventId: null }, recorder };
-  };
 
+    recorder.open(null, { type: "tool-call", toolName: "se\u0000arch" });
+
+    expect(recorder.events[0].toolName).toBe("search");
+  });
+
+  it("removes NUL held in a tool-input's name", () => {
+    const { scope, recorder } = scopeOf();
+
+    recordUiChunk(scope, {
+      type: "tool-input-start",
+      toolCallId: "tc1",
+      toolName: "se\u0000arch",
+    });
+
+    expect(recorder.events[0].toolName).toBe("search");
+  });
+
+  it("removes NUL held in a delegate's subAgent name", () => {
+    const { scope, recorder } = scopeOf();
+
+    recordUiChunk(scope, {
+      type: "tool-input-available",
+      toolCallId: "tc1",
+      toolName: DELEGATE_TOOL_NAME,
+      input: { subAgent: "Re\u0000searcher", task: "find everything" },
+    });
+
+    expect(recorder.events[0]).toMatchObject({
+      type: "delegate",
+      toolName: "Researcher",
+    });
+  });
+
+  it("stores a name with no NUL unchanged", () => {
+    const { recorder } = recorderOf();
+
+    recorder.open(null, { type: "tool-call", toolName: "search" });
+
+    expect(recorder.events[0].toolName).toBe("search");
+  });
+});
+
+describe("recordUiChunk", () => {
   it("turns text and reasoning stretches into events opened at start and closed at end", () => {
     const { scope, recorder } = scopeOf();
 
