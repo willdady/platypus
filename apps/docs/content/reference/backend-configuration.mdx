@@ -482,6 +482,10 @@ attached to its container or instance (IRSA, an ECS task role, an EC2 instance
 profile). Setting only one of the two stops the backend at boot, as does
 `STORAGE_BACKEND=s3` without a bucket.
 
+With `STORAGE_PUBLIC_URL` set, Markdown Artifacts load their stored images from
+that address too, so a deployment serving files from a bucket or CDN shows its
+own images inside a document.
+
 <Callout type="warning">
   With `STORAGE_PUBLIC_URL` set, the browser fetches files from the bucket or
   CDN, not from Platypus, so the protective headers the `/files` endpoint sends

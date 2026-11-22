@@ -166,6 +166,30 @@ describe("Artifact Routes", () => {
     ]);
   });
 
+  it("sends the base this deployment serves stored files from", async () => {
+    world();
+    mockSession();
+    vi.stubEnv("STORAGE_PUBLIC_URL", "https://cdn.example.com/bucket");
+
+    const res = await app.request(`${baseUrl}/${artifactId}`);
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { storageBaseUrl: string | null };
+    expect(body.storageBaseUrl).toBe("https://cdn.example.com/bucket");
+  });
+
+  it("sends no storage base when files are served from /files", async () => {
+    world();
+    mockSession();
+    vi.stubEnv("STORAGE_PUBLIC_URL", "");
+
+    const res = await app.request(`${baseUrl}/${artifactId}`);
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { storageBaseUrl: string | null };
+    expect(body.storageBaseUrl).toBeNull();
+  });
+
   it("does not find an Artifact from another Workspace", async () => {
     world();
     mockSession();
@@ -448,6 +472,7 @@ describe("Artifact Routes", () => {
         artifact: { title: string; updatedAt: string };
         version: { version: number; content: string; author: string };
         scriptOrigins: string[];
+        storageBaseUrl: string | null;
       };
       expect(body.artifact.title).toBe("Plan");
       expect(body.version).toMatchObject({
@@ -456,6 +481,7 @@ describe("Artifact Routes", () => {
         author: "user",
       });
       expect(body.scriptOrigins).toEqual(["https://cdnjs.cloudflare.com"]);
+      expect(body.storageBaseUrl).toBeNull();
     });
 
     it("refuses a save based on a version that is no longer the latest", async () => {

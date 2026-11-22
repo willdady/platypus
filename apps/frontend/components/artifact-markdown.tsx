@@ -1,7 +1,7 @@
 "use client";
 
 import { isPresentableUrl } from "@platypus/schemas";
-import type { ClassAttributes, ImgHTMLAttributes } from "react";
+import { useMemo, type ClassAttributes, type ImgHTMLAttributes } from "react";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import type { ExtraProps } from "streamdown";
@@ -66,12 +66,15 @@ type ArtifactImageProps = ClassAttributes<HTMLImageElement> &
  * A blocked image keeps its URL visible as a link, because a silently missing
  * picture is worse than one the reader can open deliberately.
  */
-function ArtifactImage(props: ArtifactImageProps) {
+function ArtifactImage({
+  storageBaseUrl,
+  ...props
+}: ArtifactImageProps & { storageBaseUrl?: string | null }) {
   const backendUrl = useBackendUrl();
   const url = typeof props.src === "string" ? props.src : undefined;
   const alt = typeof props.alt === "string" ? props.alt : undefined;
   const resolved = url
-    ? resolveArtifactImageSource(url, backendUrl)
+    ? resolveArtifactImageSource(url, backendUrl, storageBaseUrl)
     : undefined;
 
   if (resolved !== undefined) {
@@ -114,11 +117,30 @@ function ArtifactImage(props: ArtifactImageProps) {
  * Markdown rendered the way a Chat message is, with the Artifact's own image
  * rule applied. Markdown, code and Mermaid Artifacts all reach the same
  * renderer; a code Artifact is wrapped in a fenced block so it highlights.
+ * `storageBaseUrl` is the base the Artifact read named for this deployment's
+ * stored files (a bucket or CDN when one is configured), so an image served
+ * from there loads; while a call is still streaming there is no read to carry
+ * it, and such an image stays blocked until the stored version is read.
  */
-export function ArtifactMarkdown({ content }: { content: string }) {
+export function ArtifactMarkdown({
+  content,
+  storageBaseUrl,
+}: {
+  content: string;
+  storageBaseUrl?: string | null;
+}) {
+  const components = useMemo(
+    () => ({
+      img: (props: ArtifactImageProps) => (
+        <ArtifactImage {...props} storageBaseUrl={storageBaseUrl} />
+      ),
+    }),
+    [storageBaseUrl],
+  );
+
   return (
     <MessageResponse
-      components={{ img: ArtifactImage }}
+      components={components}
       rehypePlugins={artifactRehypePlugins}
       // The sanitised source is handed over unchanged: the renderer above is
       // what decides which ones become a request, and a blocked one renders

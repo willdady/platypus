@@ -65,6 +65,15 @@ export const isUnresolvedReference = (url: string): boolean =>
 const publicBaseUrl = (): string | undefined => env().STORAGE_PUBLIC_URL;
 
 /**
+ * The base a reader is served stored files from — `STORAGE_PUBLIC_URL`, or null
+ * when there is none and files come from the `/files` route. The Artifact read
+ * response carries it, so the viewer's image rule names the same base this
+ * module serves on rather than parsing storage URLs itself.
+ */
+export const storagePublicBaseUrl = (): string | null =>
+  publicBaseUrl() ?? null;
+
+/**
  * The URL a reader is served for `key`: the public base when one is configured
  * (the browser fetches the bucket or CDN directly), otherwise this deployment's
  * own `/files/*` route.

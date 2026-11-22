@@ -401,6 +401,7 @@ export function ArtifactViewer({
           <ArtifactEditor
             formId={editFormId}
             content={draft}
+            storageBaseUrl={data.storageBaseUrl}
             onChange={(value) => {
               setDraft(value);
               if (saveError?.kind === "content") setSaveError(null);
@@ -419,6 +420,7 @@ export function ArtifactViewer({
             language={artifact.language}
             content={current.content}
             scriptOrigins={data.scriptOrigins}
+            storageBaseUrl={data.storageBaseUrl}
           />
         )}
       </ArtifactFrame>
@@ -534,6 +536,7 @@ export function ArtifactViewer({
 function ArtifactEditor({
   formId,
   content,
+  storageBaseUrl,
   onChange,
   conflict,
   contentError,
@@ -543,6 +546,7 @@ function ArtifactEditor({
 }: {
   formId: string;
   content: string;
+  storageBaseUrl?: string | null;
   onChange: (value: string) => void;
   conflict: string | null;
   contentError: string | null;
@@ -583,7 +587,7 @@ function ArtifactEditor({
           />
         </div>
         <div className="min-h-0 overflow-auto p-4">
-          <ArtifactMarkdown content={content} />
+          <ArtifactMarkdown content={content} storageBaseUrl={storageBaseUrl} />
         </div>
       </div>
     </form>
@@ -602,12 +606,14 @@ function ArtifactTabs({
   language,
   content,
   scriptOrigins = [],
+  storageBaseUrl,
   streaming = false,
 }: {
   type: ArtifactType | undefined;
   language?: string | null;
   content: string;
   scriptOrigins?: readonly string[];
+  storageBaseUrl?: string | null;
   /** True for a call that has not been saved yet. */
   streaming?: boolean;
 }) {
@@ -653,7 +659,7 @@ function ArtifactTabs({
             scriptOrigins={scriptOrigins}
           />
         ) : type === "markdown" ? (
-          <ArtifactMarkdown content={content} />
+          <ArtifactMarkdown content={content} storageBaseUrl={storageBaseUrl} />
         ) : (
           <ArtifactMarkdown
             content={fencedCode(content, previewLanguage(type, language))}

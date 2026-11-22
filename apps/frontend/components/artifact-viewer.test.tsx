@@ -41,7 +41,13 @@ vi.mock("@/components/auth-provider", () => ({
 }));
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 vi.mock("./artifact-markdown", () => ({
-  ArtifactMarkdown: ({ content }: { content: string }) => <pre>{content}</pre>,
+  ArtifactMarkdown: ({
+    content,
+    storageBaseUrl,
+  }: {
+    content: string;
+    storageBaseUrl?: string | null;
+  }) => <pre data-storage-base={storageBaseUrl ?? ""}>{content}</pre>,
   fencedCode: (content: string, language: string) =>
     `\`\`\`${language}\n${content}\n\`\`\``,
 }));
@@ -138,6 +144,19 @@ describe("ArtifactViewer", () => {
     expect(screen.getByText(/Version 2/)).toBeInTheDocument();
     expect(screen.getByText("# Version two")).toBeInTheDocument();
     expect(screen.queryByText("Read-only")).not.toBeInTheDocument();
+  });
+
+  it("passes the deployment's storage base from the read into the document", () => {
+    artifactHook.mockReturnValue({
+      data: { ...markdown, storageBaseUrl: "https://cdn.example.com" },
+      isLoading: false,
+    });
+    renderViewer();
+
+    expect(screen.getByText("# Version two")).toHaveAttribute(
+      "data-storage-base",
+      "https://cdn.example.com",
+    );
   });
 
   it("shows each version's number, author and time in the picker", async () => {
