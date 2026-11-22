@@ -10,8 +10,10 @@ import {
   stubAcceptedSave,
   stubRejectedSave,
   stubSaveSequence,
+  toastError,
   toastSuccess,
 } from "@/test/form-test-harness";
+import { FIX_FORM_ERRORS_MESSAGE } from "@/lib/apply-write-outcome";
 import {
   mcpCreateSchema,
   mcpTestSchema,
@@ -661,15 +663,17 @@ describe("McpForm duplicate header names", () => {
     render(<McpForm orgId="org1" mcpId="m1" />);
   }
 
-  function addCollidingHeader() {
+  function addHeader(name: string) {
     fireEvent.click(screen.getByRole("button", { name: "Add header" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Header 2 name" }), {
-      target: { value: "x-trace" },
+      target: { value: name },
     });
     fireEvent.change(screen.getByRole("textbox", { name: "Header 2 value" }), {
       target: { value: "two" },
     });
   }
+
+  const addCollidingHeader = () => addHeader("x-trace");
 
   it("refuses to save headers whose names differ only in case", () => {
     const fetchMock = stubAcceptedSave({ id: "m1" });
@@ -679,7 +683,19 @@ describe("McpForm duplicate header names", () => {
     fireEvent.click(screen.getByRole("button", { name: "Update" }));
 
     expect(screen.getByText(/Duplicate header name "x-trace"/)).toBeVisible();
+    expect(toastError).toHaveBeenCalledWith(FIX_FORM_ERRORS_MESSAGE);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("shows no error toast when the header names are unique", async () => {
+    const fetchMock = stubAcceptedSave({ id: "m1" });
+    renderWithOneHeader();
+    addHeader("X-Request-Id");
+
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(toastError).not.toHaveBeenCalled();
   });
 
   it("refuses to test the connection with a duplicate header", () => {

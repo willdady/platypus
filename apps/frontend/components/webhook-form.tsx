@@ -49,6 +49,7 @@ import { useConfirmFlow } from "@/hooks/use-delete-flow";
 import { useRouter } from "next/navigation";
 import { retractExactKeys } from "@/lib/form-errors";
 import { scopedUrl, writeAt, type Serialized } from "@/lib/api-write";
+import { FIX_FORM_ERRORS_MESSAGE } from "@/lib/apply-write-outcome";
 import { toast } from "sonner";
 import { copyWithToast } from "@/lib/clipboard";
 import { Eye, EyeOff, Copy, RefreshCw } from "lucide-react";
@@ -274,6 +275,10 @@ function WebhookForm({ orgId, workspaceId, webhookId }: WebhookFormProps) {
     const error = duplicateHeaderError(headers);
     if (error) {
       setValidationErrors((prev) => ({ ...prev, headers: error }));
+      // Same feedback as any other field-level rejection: the headers can be
+      // scrolled out of view, so the toast is what tells the reader why
+      // nothing happened.
+      toast.error(FIX_FORM_ERRORS_MESSAGE);
       return;
     }
     void submit();
