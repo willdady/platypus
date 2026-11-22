@@ -554,6 +554,40 @@ describe("ArtifactViewer hand editing a markdown Artifact", () => {
     expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
   });
 
+  it("edits in full screen and hands the side panel back after", () => {
+    const onToggle = vi.fn();
+    const { rerender } = renderViewer({
+      fullScreen: { active: false, onToggle },
+    });
+
+    openEditor();
+    expect(onToggle).toHaveBeenCalledOnce();
+
+    rerender(
+      <ArtifactViewer
+        orgId="org-1"
+        workspaceId="ws-1"
+        artifactId="artifact-1"
+        fullScreen={{ active: true, onToggle }}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(onToggle).toHaveBeenCalledTimes(2);
+  });
+
+  it("ends the edit when the User exits full screen", () => {
+    const onToggle = vi.fn();
+    renderViewer({ fullScreen: { active: true, onToggle } });
+    openEditor();
+
+    fireEvent.click(screen.getByRole("button", { name: "Exit full screen" }));
+
+    expect(onToggle).toHaveBeenCalledOnce();
+    expect(
+      screen.queryByRole("textbox", { name: "Artifact content" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("does not offer Edit on an older version", () => {
     artifactHook.mockImplementation(
       (_scope: unknown, _id: string, version?: number) => ({

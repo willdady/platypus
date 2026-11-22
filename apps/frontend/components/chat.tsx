@@ -208,8 +208,11 @@ export function Chat({
       confirmDiscard(() => {
         setOpenArtifact(target);
         setOpenArtifactCount((count) => count + 1);
+        // Reset here, not on close: the URL change lands a render after a
+        // state change, so resetting on close flashes the side panel.
+        setArtifactFullScreen(false);
       }),
-    [confirmDiscard],
+    [confirmDiscard, setOpenArtifact],
   );
   const chatUrl = joinUrl(
     backendUrl || "",
@@ -1006,8 +1009,9 @@ export function Chat({
         <aside
           className={cn(
             "absolute inset-0 z-20 flex flex-col border-l bg-background",
-            !artifactFullScreen &&
-              "lg:static lg:w-[min(560px,45vw)] lg:shrink-0",
+            artifactFullScreen
+              ? "lg:fixed lg:z-50 lg:border-l-0"
+              : "lg:static lg:w-[min(560px,45vw)] lg:shrink-0",
           )}
         >
           <ArtifactViewer
@@ -1017,10 +1021,7 @@ export function Chat({
             artifactId={openStoredArtifact?.id}
             version={openStoredArtifact?.version}
             live={openLiveArtifact}
-            onClose={() => {
-              setOpenArtifact(null);
-              setArtifactFullScreen(false);
-            }}
+            onClose={() => setOpenArtifact(null)}
             fullScreen={{
               active: artifactFullScreen,
               onToggle: () => setArtifactFullScreen((on) => !on),

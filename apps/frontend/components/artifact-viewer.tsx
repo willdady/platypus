@@ -169,6 +169,7 @@ export function ArtifactViewer({
   // been overtaken. `saveError` is the save's refusal, shown beside the text it
   // belongs to; the text itself is never replaced by it.
   const [editing, setEditing] = useState(false);
+  const [expandedForEdit, setExpandedForEdit] = useState(false);
   const [draft, setDraft] = useState("");
   const [baseVersion, setBaseVersion] = useState<number>();
   const [saveError, setSaveError] = useState<{
@@ -213,16 +214,45 @@ export function ArtifactViewer({
       );
       setPicked({ key: versionKey, version: fromVersion });
     }
+    // The side panel is too narrow for text beside its preview, so editing
+    // takes the full screen and hands it back when it ends.
+    if (fullScreen && !fullScreen.active) {
+      fullScreen.onToggle();
+      setExpandedForEdit(true);
+    }
     setDraft(content);
     setBaseVersion(fromVersion);
     setSaveError(null);
     setEditing(true);
   };
 
+  const leaveEditor = () => {
+    setEditing(false);
+    // Unless the User already left full screen themselves.
+    if (expandedForEdit && fullScreen?.active) fullScreen.onToggle();
+    setExpandedForEdit(false);
+  };
+
   const stopEditing = () => {
     setSaveError(null);
-    setEditing(false);
+    leaveEditor();
   };
+
+  // Exit full screen ends the edit too: the editor is never left in the
+  // side panel, which is too narrow for it.
+  const frameFullScreen =
+    fullScreen && editing && fullScreen.active
+      ? {
+          active: true,
+          onToggle: () =>
+            confirmDiscard(() => {
+              setSaveError(null);
+              setEditing(false);
+              setExpandedForEdit(false);
+              fullScreen.onToggle();
+            }),
+        }
+      : fullScreen;
 
   const cancelEditing = () => confirmDiscard(stopEditing);
 
@@ -234,7 +264,7 @@ export function ArtifactViewer({
     switch (result.outcome) {
       case "success": {
         const saved = result.data;
-        setEditing(false);
+        leaveEditor();
         setDraft(saved.version.content);
         // Show the version the save wrote, and revalidate both reads behind
         // the viewer: the version being edited and the picker's list.
@@ -306,7 +336,7 @@ export function ArtifactViewer({
 
     return (
       <ArtifactFrame
-        fullScreen={fullScreen}
+        fullScreen={frameFullScreen}
         className={className}
         onClose={
           onClose
@@ -647,6 +677,14 @@ const MERMAID_FILL = cn(
   "[&_[data-streamdown=mermaid]>div]:!h-full [&_[data-streamdown=mermaid]>div]:!max-h-none",
 );
 
+/** The same for a code block: it takes the panel's height, not the
+ * renderer's 400px cap, before its content scrolls. */
+const CODE_FILL = cn(
+  "flex flex-col",
+  "[&_[data-streamdown=code-block]]:my-0 [&_[data-streamdown=code-block]]:min-h-0 [&_[data-streamdown=code-block]]:flex-1",
+  "[&_[data-streamdown=code-block-body]]:min-h-0 [&_[data-streamdown=code-block-body]]:flex-1 [&_[data-streamdown=code-block-body]]:!max-h-none",
+);
+
 /** Whether there is a Preview to show: not for an unknown type, nor for
  * partial HTML or SVG, which has no complete document to run. */
 function isPreviewAvailable(
@@ -708,7 +746,7 @@ function ArtifactTabs({
         ) : (
           <ArtifactMarkdown
             content={fencedCode(content, previewLanguage(type, language))}
-            className={type === "mermaid" ? MERMAID_FILL : undefined}
+            className={type === "mermaid" ? MERMAID_FILL : CODE_FILL}
           />
         )}
       </TabsContent>
@@ -718,6 +756,7 @@ function ArtifactTabs({
       >
         <ArtifactMarkdown
           content={fencedCode(content, codeTabLanguage(type, language))}
+          className={CODE_FILL}
         />
       </TabsContent>
     </>
@@ -791,6 +830,9 @@ function ArtifactFrame({
                 type="button"
                 size="icon-sm"
                 variant="ghost"
+                // In full screen, Exit full screen is the way out; below `lg`
+                // that button is hidden, so Close stays there.
+                className={fullScreen?.active ? "lg:hidden" : undefined}
                 aria-label="Close Artifact"
                 onClick={onClose}
               >
