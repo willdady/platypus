@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type CSSProperties } from "react";
-import { Menu } from "lucide-react";
+import { PanelLeftIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SIDEBAR_WIDTH_MOBILE } from "@/components/ui/sidebar";
 import {
@@ -37,7 +37,7 @@ export function WorkspaceMenu({
           aria-label="Open menu"
           className="md:hidden"
         >
-          <Menu />
+          <PanelLeftIcon />
         </Button>
       </SheetTrigger>
       <SheetContent

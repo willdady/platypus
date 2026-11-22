@@ -343,7 +343,7 @@ describe("AppSidebar mobile sheet", () => {
       .map((link) => link.textContent?.trim());
     const newChat = within(sheet).getByRole("link", { name: "New chat" });
 
-    expect(rows).toEqual(["Home", "Boards", "Artifacts"]);
+    expect(rows).toEqual(["Home", "Boards", "Artifacts", "Workspace settings"]);
     expect(
       within(workspaceNav).getByRole("link", { name: "Home" }),
     ).toHaveAttribute("href", "/org1/workspace/ws1");

@@ -17,16 +17,8 @@ vi.mock("@/components/workspace-switcher", () => ({
 }));
 
 vi.mock("@/components/header", () => ({
-  Header: ({
-    leftContent,
-    bordered = true,
-  }: {
-    leftContent?: React.ReactNode;
-    bordered?: boolean;
-  }) => (
-    <header data-testid="header" data-bordered={bordered}>
-      {leftContent}
-    </header>
+  Header: ({ leftContent }: { leftContent?: React.ReactNode }) => (
+    <header data-testid="header">{leftContent}</header>
   ),
 }));
 

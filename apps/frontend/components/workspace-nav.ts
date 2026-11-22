@@ -1,7 +1,13 @@
-import { FileText, Home, KanbanSquare, type LucideIcon } from "lucide-react";
+import {
+  FileText,
+  Home,
+  KanbanSquare,
+  Settings,
+  type LucideIcon,
+} from "lucide-react";
 import { workspaceRoutes } from "@/lib/routes";
 
-export type WorkspaceSection = "home" | "boards" | "artifacts";
+export type WorkspaceSection = "home" | "boards" | "artifacts" | "settings";
 
 export type WorkspaceNavItem = {
   section: WorkspaceSection;
@@ -17,8 +23,8 @@ function under(pathname: string, prefix: string) {
 /**
  * Which part of the Workspace a path belongs to. Boards and Artifacts light
  * for anything under their path; Home for the Workspace root and the screens
- * that hang off it — Agents, Skills, Triggers and their runs. A Chat or a
- * settings screen belongs to none of them.
+ * that hang off it — Agents, Skills, Triggers and their runs; Settings for
+ * every Workspace settings screen. A Chat belongs to none of them.
  */
 export function workspaceSection(
   pathname: string,
@@ -26,6 +32,7 @@ export function workspaceSection(
 ): WorkspaceSection | null {
   if (under(pathname, routes.boards.root)) return "boards";
   if (under(pathname, routes.artifacts.root)) return "artifacts";
+  if (under(pathname, routes.settings.root)) return "settings";
   if (
     pathname === routes.root ||
     under(pathname, routes.agents.root) ||
@@ -58,6 +65,12 @@ export function workspaceNavItems(
       label: "Artifacts",
       href: routes.artifacts.root,
       icon: FileText,
+    },
+    {
+      section: "settings",
+      label: "Workspace settings",
+      href: routes.settings.root,
+      icon: Settings,
     },
   ];
 }

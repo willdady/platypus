@@ -309,7 +309,7 @@ export function AppSidebar() {
               </SidebarMenuItem>
             </SidebarMenu>
           </SidebarHeader>
-          <SidebarSeparator className="mx-0 mt-1" />
+          <SidebarSeparator className="mx-0" />
           <div className="p-2">
             <SearchInput
               placeholder="Search chats..."

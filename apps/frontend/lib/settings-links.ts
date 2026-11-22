@@ -17,8 +17,7 @@ import { userRoutes, workspaceRoutes } from "@/lib/routes";
 // Plain module, not "use client": the server-rendered header reads these too.
 
 /**
- * The Workspace settings pages, shared by its sidebar and the header's
- * settings dropdown. `exact` marks a link only active on its own path.
+ * The Workspace settings pages, listed in its settings sidebar. `exact` marks a link only active on its own path.
  */
 export function workspaceSettingsLinks(orgId: string, workspaceId: string) {
   const routes = workspaceRoutes(orgId, workspaceId).settings;

@@ -13,6 +13,7 @@ import {
   workspaceSection,
 } from "@/components/workspace-nav";
 import { workspaceRoutes } from "@/lib/routes";
+import { cn } from "@/lib/utils";
 
 /**
  * The Workspace rail: the leftmost column on every Workspace screen, holding
@@ -34,7 +35,7 @@ export function WorkspaceRail({
   return (
     <nav
       aria-label="Workspace"
-      className="fixed inset-y-0 left-0 z-20 hidden w-(--workspace-rail-width) flex-col items-center gap-1 border-r bg-background py-2 md:flex"
+      className="fixed inset-y-0 left-0 z-20 hidden w-(--workspace-rail-width) flex-col items-center gap-1 border-r bg-rail py-2 md:flex"
     >
       {workspaceNavItems(orgId, workspaceId).map(
         ({ section, label, href, icon: Icon }) => (
@@ -43,13 +44,17 @@ export function WorkspaceRail({
               <Button
                 asChild
                 variant="ghost"
-                size="icon-sm"
+                size="icon"
                 aria-label={label}
                 aria-current={current === section ? "page" : undefined}
-                className="aria-[current=page]:bg-accent aria-[current=page]:text-accent-foreground"
+                className={cn(
+                  "aria-[current=page]:bg-sidebar aria-[current=page]:text-foreground",
+                  // Settings sits apart, at the foot of the rail.
+                  section === "settings" && "mt-auto",
+                )}
               >
                 <Link href={href}>
-                  <Icon />
+                  <Icon className="size-5" />
                 </Link>
               </Button>
             </TooltipTrigger>

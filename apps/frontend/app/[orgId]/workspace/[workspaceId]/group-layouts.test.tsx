@@ -17,16 +17,8 @@ vi.mock("@/components/workspace-scroll-container", () => ({
     children,
 }));
 vi.mock("@/components/header", () => ({
-  Header: ({
-    leftContent,
-    bordered = true,
-  }: {
-    leftContent?: React.ReactNode;
-    bordered?: boolean;
-  }) => (
-    <header data-testid="header" data-bordered={bordered}>
-      {leftContent}
-    </header>
+  Header: ({ leftContent }: { leftContent?: React.ReactNode }) => (
+    <header data-testid="header">{leftContent}</header>
   ),
 }));
 
@@ -36,7 +28,7 @@ import PlainLayout from "./(plain)/layout";
 const params = Promise.resolve({ orgId: "org1", workspaceId: "ws1" });
 
 describe("Workspace (sidebar) layout", () => {
-  it("draws the app sidebar and its trigger above an unbordered header", async () => {
+  it("draws the app sidebar and its trigger above the header", async () => {
     render(await SidebarLayout({ children: <p>page</p>, params }));
 
     expect(screen.getByTestId("app-sidebar")).toBeInTheDocument();
@@ -47,16 +39,12 @@ describe("Workspace (sidebar) layout", () => {
     expect(
       screen.getByRole("button", { name: "Toggle sidebar" }),
     ).toBeInTheDocument();
-    expect(screen.getByTestId("header")).toHaveAttribute(
-      "data-bordered",
-      "false",
-    );
     expect(screen.getByText("page")).toBeInTheDocument();
   });
 });
 
 describe("Workspace (plain) layout", () => {
-  it("draws no sidebar; the bordered header holds Back and the switcher", async () => {
+  it("draws no sidebar; the header holds Back and the switcher", async () => {
     render(await PlainLayout({ children: <p>page</p>, params }));
 
     expect(screen.queryByTestId("app-sidebar")).not.toBeInTheDocument();
@@ -66,10 +54,6 @@ describe("Workspace (plain) layout", () => {
     expect(
       screen.getByRole("navigation", { name: "Workspace" }),
     ).toBeInTheDocument();
-    expect(screen.getByTestId("header")).toHaveAttribute(
-      "data-bordered",
-      "true",
-    );
     expect(screen.getByRole("button", { name: "Back" })).toBeInTheDocument();
     expect(screen.getByTestId("workspace-switcher")).toBeInTheDocument();
     expect(
