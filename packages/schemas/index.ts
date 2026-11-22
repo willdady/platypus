@@ -4742,6 +4742,24 @@ export const artifactReadSchema = z.object({
 
 export type ArtifactRead = z.infer<typeof artifactReadSchema>;
 
+/** A server-side page of Artifacts, plus the count the page was cut from. */
+export const artifactListSchema = z.object({
+  results: z.array(artifactSchema),
+  totalCount: z.number().int().nonnegative(),
+});
+
+export type ArtifactList = z.infer<typeof artifactListSchema>;
+
+/** The body that renames an Artifact; the title obeys the same bound as create. */
+export const artifactUpdateSchema = z.strictObject({
+  title: z
+    .string()
+    .min(ARTIFACT_TITLE_MIN_LENGTH)
+    .max(ARTIFACT_TITLE_MAX_LENGTH),
+});
+
+export type ArtifactUpdate = z.infer<typeof artifactUpdateSchema>;
+
 /**
  * A version to read; omitted means the latest. Named in the query string so a
  * Chat card can open the version its turn produced.

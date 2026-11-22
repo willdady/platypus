@@ -512,4 +512,15 @@ describe("AppSidebar chat actions", () => {
       ).not.toBeInTheDocument();
     }
   });
+
+  it("links to the Workspace's Artifacts", () => {
+    setRead("ws1", "providers", { results: [{ id: "p1" }] });
+    seedHeader();
+    renderSidebar();
+
+    expect(screen.getByRole("link", { name: "Artifacts" })).toHaveAttribute(
+      "href",
+      "/org1/workspace/ws1/artifacts",
+    );
+  });
 });

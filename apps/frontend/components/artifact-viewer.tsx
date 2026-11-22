@@ -3,30 +3,18 @@
 import type { ReactNode } from "react";
 import type { ArtifactType } from "@platypus/schemas";
 import { CopyIcon, DownloadIcon, XIcon } from "lucide-react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { copyWithToast } from "@/lib/clipboard";
-import {
-  artifactFileName,
-  artifactFileExtension,
-  artifactTypeLabel,
-} from "@/lib/artifact-file";
+import { artifactTypeLabel } from "@/lib/artifact-file";
+import { downloadArtifactContent } from "@/lib/artifact-download";
 import { cn } from "@/lib/utils";
 import { isArtifactDeleted, useArtifact } from "@/hooks/use-artifact";
 import { ArtifactMarkdown, fencedCode } from "./artifact-markdown";
 import { ListError, ListState } from "./list-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LoadingRegion } from "./list-skeletons";
-
-const TYPE_MEDIA: Record<ArtifactType, string> = {
-  markdown: "text/markdown",
-  code: "text/plain",
-  mermaid: "text/plain",
-  html: "text/html",
-  svg: "image/svg+xml",
-};
 
 /** The language a Preview tab's fenced block is rendered as. */
 function previewLanguage(type: ArtifactType, language?: string | null): string {
@@ -54,11 +42,11 @@ function codeTabLanguage(type: ArtifactType, language?: string | null): string {
 }
 
 /**
- * The one Artifact viewer: the Chat's side panel and, in later slices, the
- * full-page view. It owns the Preview and Code tabs, copy and download for
- * every type, while the frame and the version picker are later additions.
- * HTML and SVG are source-only here — their frame is a separate slice — so
- * Preview is offered disabled rather than faking one.
+ * The one Artifact viewer: the Chat's side panel and the full-page view. It
+ * owns the Preview and Code tabs, copy and download for every type, while the
+ * frame and the version picker are later additions. HTML and SVG are
+ * source-only here — their frame is a separate slice — so Preview is offered
+ * disabled rather than faking one.
  */
 export function ArtifactViewer({
   orgId,
@@ -154,14 +142,7 @@ export function ArtifactViewer({
             size="icon-sm"
             variant="ghost"
             aria-label="Download Artifact"
-            onClick={() =>
-              downloadArtifact(
-                artifact.title,
-                artifact.type,
-                artifact.language,
-                current,
-              )
-            }
+            onClick={() => downloadArtifactContent(artifact, current.content)}
           >
             <DownloadIcon />
           </Button>
@@ -265,29 +246,4 @@ function ArtifactFrame({
       {children}
     </section>
   );
-}
-
-function downloadArtifact(
-  title: string,
-  type: ArtifactType,
-  language: string | null | undefined,
-  version: { content: string },
-): void {
-  const blob = new Blob([version.content], { type: TYPE_MEDIA[type] });
-  const url = URL.createObjectURL(blob);
-  try {
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = artifactFileName(title, type, language);
-    link.rel = "noreferrer";
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-  } catch {
-    toast.error(
-      `Could not download this .${artifactFileExtension(type, language)} file`,
-    );
-  } finally {
-    URL.revokeObjectURL(url);
-  }
 }
