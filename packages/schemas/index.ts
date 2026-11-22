@@ -1982,8 +1982,7 @@ export const TRANSCRIPT_SUMMARY_KEEP_TURNS_WITH_SUMMARY = 1;
  * is a failed summary, not a stored one — so it leaves room for a long Chat's
  * summary after the model's thinking. A fixed constant, not derived from a
  * Context window; the task model's Job settings add their Thinking budget on
- * top. A number with a unit in docs prose is pinned to this by the docs
- * contract test.
+ * top, and the Chat's own model is held to its declared Max output tokens.
  */
 export const TRANSCRIPT_SUMMARY_MAX_OUTPUT_TOKENS = 8_192;
 
