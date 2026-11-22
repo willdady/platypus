@@ -3,7 +3,11 @@
 import type { ReactNode } from "react";
 import { useId, useState } from "react";
 import { useSWRConfig } from "swr";
-import type { ArtifactRead, ArtifactType } from "@platypus/schemas";
+import {
+  isHandEditableArtifactType,
+  type ArtifactRead,
+  type ArtifactType,
+} from "@platypus/schemas";
 import { CopyIcon, DownloadIcon, PencilIcon, XIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -264,7 +268,8 @@ export function ArtifactViewer({
     // Edit is offered only once the version list confirms this is the latest:
     // a Card that opened an older version must not offer it while the list is
     // still loading.
-    const canEdit = ownsWorkspace && artifact.type === "markdown" && onLatest;
+    const canEdit =
+      ownsWorkspace && isHandEditableArtifactType(artifact.type) && onLatest;
     // Once open, the editor stays open: a revalidation that reveals a newer
     // version must not hide the text the User is typing. Its save then
     // conflicts, which is the case the editor is built for.
@@ -329,7 +334,9 @@ export function ArtifactViewer({
                 Version {current.version}
               </span>
             )}
-            {!isLatest && <Badge variant="outline">Read-only</Badge>}
+            {!isLatest && !editing && (
+              <Badge variant="outline">Read-only</Badge>
+            )}
           </span>
         }
         actions={

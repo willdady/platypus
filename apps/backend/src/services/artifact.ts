@@ -5,6 +5,7 @@ import {
   ARTIFACT_TITLE_MAX_LENGTH,
   ARTIFACT_TITLE_MIN_LENGTH,
   artifactContentByteLength,
+  isHandEditableArtifactType,
   type ArtifactAuthor,
   type ArtifactEdit,
   type ArtifactType,
@@ -328,7 +329,7 @@ export async function saveArtifactContent(
   return await database.transaction(async (tx) => {
     const artifact = await findArtifact(tx, scope, artifactId, true);
 
-    if (artifact.type !== "markdown") {
+    if (!isHandEditableArtifactType(artifact.type)) {
       throw new ValidationError("Only markdown Artifacts can be hand-edited");
     }
 

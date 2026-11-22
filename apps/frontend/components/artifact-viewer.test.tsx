@@ -692,6 +692,9 @@ describe("ArtifactViewer hand editing a markdown Artifact", () => {
     expect(editor()).toHaveValue("# Half typed, still");
     expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
     expect(screen.getByText("Version 2")).toBeInTheDocument();
+    // The version is no longer the latest, but it is being edited, so the open
+    // editor is not labelled read-only.
+    expect(screen.queryByText("Read-only")).not.toBeInTheDocument();
   });
 
   it("asks before leaving the edit with unsaved changes", async () => {

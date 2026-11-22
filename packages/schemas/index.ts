@@ -4676,6 +4676,13 @@ export const artifactTypeSchema = z.enum([
 
 export type ArtifactType = z.infer<typeof artifactTypeSchema>;
 
+/**
+ * Whether an Artifact of this type can be edited by hand in the viewer. Markdown
+ * is the only one: the others are changed by asking an Agent.
+ */
+export const isHandEditableArtifactType = (type: ArtifactType): boolean =>
+  type === "markdown";
+
 /** Who wrote one Artifact version: an Agent's tool call, or the User. */
 export const artifactAuthorSchema = z.enum(["agent", "user"]);
 

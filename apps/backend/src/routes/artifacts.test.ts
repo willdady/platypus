@@ -366,19 +366,7 @@ describe("Artifact Routes", () => {
   describe("hand edit", () => {
     const handEditWorld = (owner = "user-1") =>
       seedDb({
-        organization_member: [
-          {
-            id: "m1",
-            userId: "user-1",
-            organizationId: orgId,
-            role: "member",
-          },
-        ],
-        workspace: [
-          { id: workspaceId, organizationId: orgId, ownerId: owner },
-          { id: "ws-2", organizationId: orgId, ownerId: "other-user" },
-        ],
-        user: [{ id: "user-1", name: "Ada", image: null }],
+        ...baseWorld(owner),
         artifact: [
           {
             id: artifactId,
