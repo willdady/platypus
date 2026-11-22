@@ -7,6 +7,7 @@ import { Header } from "@/components/header";
 import { HeaderHomeButton } from "@/components/header-home-button";
 import { MAIN_CONTENT_ID } from "@/components/skip-link";
 import { WorkspaceBackButton } from "@/components/workspace-back-button";
+import { WorkspaceMenu } from "@/components/workspace-menu";
 import { WorkspaceRail } from "@/components/workspace-rail";
 import { WorkspaceScrollContainer } from "@/components/workspace-scroll-container";
 import { WorkspaceSwitcher } from "@/components/workspace-switcher";
@@ -68,7 +69,13 @@ export function WorkspaceShell({
               {sidebar ? (
                 <SidebarTrigger />
               ) : workspaceId ? (
-                <WorkspaceBackButton orgId={orgId} workspaceId={workspaceId} />
+                <>
+                  <WorkspaceMenu orgId={orgId} workspaceId={workspaceId} />
+                  <WorkspaceBackButton
+                    orgId={orgId}
+                    workspaceId={workspaceId}
+                  />
+                </>
               ) : (
                 <BackButton variant="header" fallbackHref={home.href} />
               )}

@@ -33,6 +33,7 @@ import {
   SidebarMenuItem,
   SidebarMenuSkeleton,
   SidebarSeparator,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LoadingRegion } from "@/components/list-skeletons";
@@ -81,7 +82,7 @@ import {
   type WatchedChat,
 } from "@/lib/chat-list-poll";
 import { workspaceRoutes } from "@/lib/routes";
-import { WorkspaceSwitcher } from "@/components/workspace-switcher";
+import { WorkspaceSheetNavigation } from "@/components/workspace-sheet-navigation";
 
 export function AppSidebar() {
   const { orgId, workspaceId } = useParams<{
@@ -94,6 +95,9 @@ export function AppSidebar() {
   // row menu offers nobody else an action the backend would refuse.
   const canChange = canChangeChat(ownsWorkspace);
   const isMobile = useIsMobile();
+  const { setOpenMobile } = useSidebar();
+  /** Navigation inside the phone sheet dismisses it. */
+  const closeSheet = () => setOpenMobile(false);
 
   const routes = workspaceRoutes(orgId, workspaceId);
   const scope = { orgId, workspaceId };
@@ -267,20 +271,16 @@ export function AppSidebar() {
       {/* The Workspace rail holds the window's left edge; the open sidebar
           starts to its right. Collapsed, it slides away as before. */}
       <Sidebar className="group-data-[state=expanded]:left-12">
-        <nav aria-label="Workspace" className="flex min-h-0 flex-1 flex-col">
+        {isMobile && (
+          <WorkspaceSheetNavigation
+            orgId={orgId}
+            workspaceId={workspaceId}
+            onNavigate={closeSheet}
+          />
+        )}
+        <nav aria-label="Chats" className="flex min-h-0 flex-1 flex-col">
           <SidebarHeader>
             <SidebarMenu>
-              {/* The desktop sidebar holds no switcher; the top bar does. On a
-                  phone this is the sheet, so the switcher stays here. */}
-              {isMobile && (
-                <SidebarMenuItem>
-                  <WorkspaceSwitcher
-                    orgId={orgId}
-                    workspaceId={workspaceId}
-                    presentation="sheet"
-                  />
-                </SidebarMenuItem>
-              )}
               <SidebarMenuItem>
                 {hasNoProviders ? (
                   <Tooltip>
@@ -301,7 +301,7 @@ export function AppSidebar() {
                   </Tooltip>
                 ) : (
                   <Button asChild className="w-full">
-                    <Link href={routes.chat.root}>
+                    <Link href={routes.chat.root} onClick={closeSheet}>
                       <BotMessageSquare /> New chat
                     </Link>
                   </Button>
@@ -348,7 +348,10 @@ export function AppSidebar() {
                                 routes.chat.detail(chat.id),
                               )}
                             >
-                              <Link href={routes.chat.detail(chat.id)}>
+                              <Link
+                                href={routes.chat.detail(chat.id)}
+                                onClick={closeSheet}
+                              >
                                 {chat.status === "running" && (
                                   <Loader2
                                     className="size-3 shrink-0 animate-spin text-muted-foreground"

@@ -139,6 +139,96 @@ describe("WorkspaceShell rail", () => {
   });
 });
 
+describe("WorkspaceShell menu", () => {
+  /** Opens the phone sheet from the top bar's menu button. */
+  const openMenu = () => {
+    fireEvent.click(screen.getByRole("button", { name: "Open menu" }));
+    return screen.getByRole("dialog");
+  };
+
+  it("draws a menu button on a Workspace screen", () => {
+    renderWorkspace();
+
+    expect(
+      screen.getByRole("button", { name: "Open menu" }),
+    ).toBeInTheDocument();
+  });
+
+  it("draws no menu button on a shell with no Workspace", () => {
+    render(<WorkspaceShell orgId="org1">content</WorkspaceShell>);
+
+    expect(
+      screen.queryByRole("button", { name: "Open menu" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("puts the switcher above Home, Boards and Artifacts in the sheet", () => {
+    seedSwitcher();
+    renderWorkspace();
+
+    const sheet = openMenu();
+    const switcher = within(sheet).getByRole("button", { name: /Acme/ });
+    const nav = within(sheet).getByRole("navigation", { name: "Workspace" });
+
+    expect(
+      switcher.compareDocumentPosition(nav) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      within(nav)
+        .getAllByRole("link")
+        .map((link) => link.textContent?.trim()),
+    ).toEqual(["Home", "Boards", "Artifacts"]);
+    expect(within(nav).getByRole("link", { name: "Home" })).toHaveAttribute(
+      "href",
+      "/org1/workspace/ws1",
+    );
+    expect(within(nav).getByRole("link", { name: "Boards" })).toHaveAttribute(
+      "href",
+      "/org1/workspace/ws1/boards",
+    );
+    expect(
+      within(nav).getByRole("link", { name: "Artifacts" }),
+    ).toHaveAttribute("href", "/org1/workspace/ws1/artifacts");
+    // Chat navigation stays on the Workspace home and Chat.
+    expect(
+      within(sheet).queryByRole("link", { name: "New chat" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(sheet).queryByRole("searchbox", { name: "Search chats" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["the Workspace home", "/org1/workspace/ws1", "Home"],
+    ["a Board", "/org1/workspace/ws1/boards/b1", "Boards"],
+    ["an Artifact", "/org1/workspace/ws1/artifacts/a1", "Artifacts"],
+    ["an Agent", "/org1/workspace/ws1/agents/a1", "Home"],
+    ["a Chat", "/org1/workspace/ws1/chat/c1", null],
+    ["settings", "/org1/workspace/ws1/settings", null],
+  ])("marks the sheet row for %s", (_, pathname, current) => {
+    path.current = pathname;
+    renderWorkspace();
+
+    const nav = within(openMenu()).getByRole("navigation", {
+      name: "Workspace",
+    });
+    const lit = within(nav)
+      .getAllByRole("link")
+      .filter((link) => link.getAttribute("aria-current") === "page")
+      .map((link) => link.textContent?.trim());
+    expect(lit).toEqual(current ? [current] : []);
+  });
+
+  it("closes the sheet when a destination is picked", () => {
+    renderWorkspace();
+
+    const sheet = openMenu();
+    fireEvent.click(within(sheet).getByRole("link", { name: "Boards" }));
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+});
+
 describe("WorkspaceShell header", () => {
   it("puts the switcher where Home was on a Workspace screen", () => {
     seedSwitcher();

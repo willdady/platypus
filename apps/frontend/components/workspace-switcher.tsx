@@ -41,6 +41,8 @@ type WorkspaceSwitcherProps = {
    * form at the top of the mobile sheet.
    */
   presentation: SwitcherPresentation;
+  /** Called when a menu item is picked, so a sheet holding the switcher can close. */
+  onNavigate?: () => void;
 };
 
 /**
@@ -53,6 +55,7 @@ export function WorkspaceSwitcher({
   orgId,
   workspaceId,
   presentation,
+  onNavigate,
 }: WorkspaceSwitcherProps) {
   const pathname = usePathname();
   const isMobile = useIsMobile();
@@ -148,7 +151,7 @@ export function WorkspaceSwitcher({
             ).root;
             return (
               <DropdownMenuItem key={workspace.id} asChild>
-                <Link href={href}>
+                <Link href={href} onClick={onNavigate}>
                   {pathname.startsWith(href) ? (
                     <FolderOpen />
                   ) : (
@@ -165,19 +168,19 @@ export function WorkspaceSwitcher({
           {/* ADR-0008: Workspace creation is org-admin-only. */}
           {canCreateWorkspace(actor) && (
             <DropdownMenuItem asChild>
-              <Link href={org.createWorkspace}>
+              <Link href={org.createWorkspace} onClick={onNavigate}>
                 <Plus /> Add workspace
               </Link>
             </DropdownMenuItem>
           )}
           <DropdownMenuItem asChild>
-            <Link href={org.root}>
+            <Link href={org.root} onClick={onNavigate}>
               <ArrowLeftRight /> Switch org
             </Link>
           </DropdownMenuItem>
           {canOpenOrgSettings(actor) && (
             <DropdownMenuItem asChild>
-              <Link href={org.settings.root}>
+              <Link href={org.settings.root} onClick={onNavigate}>
                 <Settings /> Organization settings
               </Link>
             </DropdownMenuItem>

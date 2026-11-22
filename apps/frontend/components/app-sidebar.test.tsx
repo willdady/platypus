@@ -303,6 +303,90 @@ describe("AppSidebar workspace switcher", () => {
   });
 });
 
+describe("AppSidebar mobile sheet", () => {
+  beforeEach(() => {
+    // Radix opens the sheet on real timers.
+    vi.useRealTimers();
+    setViewport(true);
+    seedHeader();
+  });
+
+  async function openSheet() {
+    fireEvent.click(screen.getByRole("button", { name: "Toggle sidebar" }));
+    return screen.findByRole("dialog");
+  }
+
+  it("labels its navigation distinctly from the Workspace rail", () => {
+    setViewport(false);
+    renderSidebar();
+
+    expect(
+      screen.getByRole("navigation", { name: "Chats" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("navigation", { name: "Workspace" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("puts the switcher and Workspace rows above New chat and the Chat list", async () => {
+    setRead("ws1", "providers", { results: [{ id: "p1" }] });
+    setRead("ws1", CHAT_LIST, { results: [chat("c1", "First chat")] });
+    renderSidebar();
+
+    const sheet = await openSheet();
+    const switcher = within(sheet).getByRole("button", { name: /Acme/ });
+    const workspaceNav = within(sheet).getByRole("navigation", {
+      name: "Workspace",
+    });
+    const rows = within(workspaceNav)
+      .getAllByRole("link")
+      .map((link) => link.textContent?.trim());
+    const newChat = within(sheet).getByRole("link", { name: "New chat" });
+
+    expect(rows).toEqual(["Home", "Boards", "Artifacts"]);
+    expect(
+      within(workspaceNav).getByRole("link", { name: "Home" }),
+    ).toHaveAttribute("href", "/org1/workspace/ws1");
+    expect(
+      within(workspaceNav).getByRole("link", { name: "Boards" }),
+    ).toHaveAttribute("href", "/org1/workspace/ws1/boards");
+    expect(
+      within(workspaceNav).getByRole("link", { name: "Artifacts" }),
+    ).toHaveAttribute("href", "/org1/workspace/ws1/artifacts");
+    expect(
+      within(workspaceNav).getByRole("link", { name: "Home" }),
+    ).toHaveAttribute("aria-current", "page");
+    expect(
+      switcher.compareDocumentPosition(workspaceNav) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      workspaceNav.compareDocumentPosition(newChat) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      within(sheet).getByRole("searchbox", { name: "Search chats" }),
+    ).toBeInTheDocument();
+    expect(
+      within(sheet).getByRole("link", { name: "First chat" }),
+    ).toBeInTheDocument();
+  });
+
+  it.each([
+    ["a Workspace row", "Boards"],
+    ["a Chat", "First chat"],
+  ])("closes the sheet when %s is picked", async (_, name) => {
+    setRead("ws1", "providers", { results: [{ id: "p1" }] });
+    setRead("ws1", CHAT_LIST, { results: [chat("c1", "First chat")] });
+    renderSidebar();
+
+    const sheet = await openSheet();
+    fireEvent.click(within(sheet).getByRole("link", { name }));
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+});
+
 describe("AppSidebar chat actions", () => {
   beforeEach(() => {
     // The writes resolve on real promises; nothing here needs the debounce.
