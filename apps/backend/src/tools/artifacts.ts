@@ -8,8 +8,25 @@ import {
 } from "@platypus/schemas";
 import { z } from "zod";
 import { db } from "../index.ts";
+import { env } from "../env.ts";
 import { createArtifact } from "../services/artifact.ts";
 import { asToolResult } from "./tool-result.ts";
+
+/**
+ * What the model is told about external content: the deployment's approved
+ * library origins, or that an HTML or SVG Artifact must be self-contained.
+ * Stated in the description so a page works the first time instead of having
+ * its libraries blocked at view time.
+ */
+function approvedOriginsSentence(scriptOrigins: readonly string[]): string {
+  if (scriptOrigins.length === 0) {
+    return "No external origins are approved here: an HTML or SVG Artifact's scripts, styles and fonts must be inline.";
+  }
+  return (
+    "An HTML or SVG Artifact may load scripts, styles and fonts only from " +
+    `these approved origins: ${scriptOrigins.join(", ")}. Nothing else loads.`
+  );
+}
 
 /**
  * The Agent-facing Artifact surface. This slice implements creation only:
@@ -28,6 +45,7 @@ export function createCreateArtifactTool(
       "worth keeping apart from the conversation. The title is 1 to " +
       `${ARTIFACT_TITLE_MAX_LENGTH} characters; the content is at most ` +
       `${ARTIFACT_CONTENT_MAX_BYTES / 1024} KB. Set language only for code. ` +
+      `${approvedOriginsSentence(env().ARTIFACT_SCRIPT_ORIGINS)} ` +
       "Returns the Artifact's id, title and version number, never its content.",
     inputSchema: z.object({
       title: z

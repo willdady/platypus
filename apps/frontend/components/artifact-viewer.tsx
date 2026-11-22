@@ -12,6 +12,8 @@ import { downloadArtifactContent } from "@/lib/artifact-download";
 import { cn } from "@/lib/utils";
 import { isArtifactDeleted, useArtifact } from "@/hooks/use-artifact";
 import { ArtifactMarkdown, fencedCode } from "./artifact-markdown";
+import { ArtifactPreviewFrame } from "./artifact-preview-frame";
+import { isFramedArtifactType } from "@/lib/artifact-frame";
 import { ListError, ListState } from "./list-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LoadingRegion } from "./list-skeletons";
@@ -72,10 +74,10 @@ function codeTabLanguage(
 /**
  * The one Artifact viewer: the Chat's side panel and the full-page view. It
  * owns the Preview and Code tabs, copy and download for every type, while the
- * frame and the version picker are later additions. HTML and SVG are
- * source-only here — their frame is a separate slice — so Preview is offered
- * disabled rather than faking one. While a `createArtifact` call streams it
- * takes the partial content as `live`; a stored version always wins once read.
+ * version picker is a later addition. Markdown, code and Mermaid render in the
+ * app's own DOM; HTML and SVG run only inside the Artifact frame. While a
+ * `createArtifact` call streams it takes the partial content as `live`; a
+ * stored version always wins once read.
  */
 export function ArtifactViewer({
   orgId,
@@ -114,8 +116,6 @@ export function ArtifactViewer({
 
   if (data) {
     const { artifact, version: current } = data;
-    const previewAvailable =
-      artifact.type !== "html" && artifact.type !== "svg";
 
     return (
       <ArtifactFrame
@@ -159,7 +159,7 @@ export function ArtifactViewer({
           type={artifact.type}
           language={artifact.language}
           content={current.content}
-          previewAvailable={previewAvailable}
+          scriptOrigins={data.scriptOrigins}
         />
       </ArtifactFrame>
     );
@@ -204,8 +204,6 @@ export function ArtifactViewer({
 
   if (live) {
     const title = live.title?.trim() || "Creating Artifact…";
-    const previewAvailable =
-      live.type !== undefined && live.type !== "html" && live.type !== "svg";
 
     return (
       <ArtifactFrame
@@ -232,7 +230,7 @@ export function ArtifactViewer({
             type={live.type}
             language={live.language}
             content={live.content}
-            previewAvailable={previewAvailable}
+            streaming
           />
         )}
       </ArtifactFrame>
@@ -268,21 +266,29 @@ export function ArtifactViewer({
 }
 
 /**
- * The Preview and Code tabs for one piece of content. Preview is available for
- * every type except HTML and SVG, so a streaming call whose type is still
- * unknown opens on source rather than guessing.
+ * The Preview and Code tabs for one piece of content. Markdown, code and
+ * Mermaid preview from the first byte. A stored HTML or SVG Artifact runs in
+ * the Artifact frame; while a call is still streaming, partial HTML or SVG
+ * stays on source — there is no complete document to run, and its approved
+ * origins are only known once the saved version is read.
  */
 function ArtifactTabs({
   type,
   language,
   content,
-  previewAvailable,
+  scriptOrigins = [],
+  streaming = false,
 }: {
   type: ArtifactType | undefined;
   language?: string | null;
   content: string;
-  previewAvailable: boolean;
+  scriptOrigins?: readonly string[];
+  /** True for a call that has not been saved yet. */
+  streaming?: boolean;
 }) {
+  const framed = !streaming && type !== undefined && isFramedArtifactType(type);
+  const previewAvailable =
+    type !== undefined && !(streaming && isFramedArtifactType(type));
   return (
     <Tabs
       defaultValue={previewAvailable ? "preview" : "code"}
@@ -295,7 +301,9 @@ function ArtifactTabs({
           title={
             previewAvailable
               ? undefined
-              : "Preview is unavailable for HTML and SVG Artifacts"
+              : streaming
+                ? "Preview is unavailable until the Agent finishes writing this Artifact"
+                : "Preview is unavailable until the Artifact's type is known"
           }
           className="px-2 py-0.5 text-xs"
         >
@@ -307,9 +315,19 @@ function ArtifactTabs({
       </TabsList>
       <TabsContent
         value="preview"
-        className="mt-0 min-h-0 flex-1 overflow-auto p-4"
+        className={
+          framed
+            ? "mt-0 min-h-0 flex-1 overflow-hidden p-4"
+            : "mt-0 min-h-0 flex-1 overflow-auto p-4"
+        }
       >
-        {type === "markdown" ? (
+        {type !== undefined && isFramedArtifactType(type) ? (
+          <ArtifactPreviewFrame
+            type={type}
+            content={content}
+            scriptOrigins={scriptOrigins}
+          />
+        ) : type === "markdown" ? (
           <ArtifactMarkdown content={content} />
         ) : (
           <ArtifactMarkdown

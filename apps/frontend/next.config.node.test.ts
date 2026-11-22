@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import rootPackage from "../../package.json";
 import nextConfig from "./next.config";
+import { ARTIFACT_FRAME_HOST_CSP } from "./lib/artifact-frame";
 
 async function headerFor(name: string) {
   const rules = (await nextConfig.headers?.()) ?? [];
@@ -15,9 +16,15 @@ describe("next.config", () => {
 
   it("refuses to be framed by another site", async () => {
     expect(await headerFor("Content-Security-Policy")).toBe(
-      "frame-ancestors 'self'",
+      `frame-ancestors 'self'; ${ARTIFACT_FRAME_HOST_CSP}`,
     );
     expect(await headerFor("X-Frame-Options")).toBe("SAMEORIGIN");
+  });
+
+  it("forbids its own frames from navigating anywhere", async () => {
+    expect(await headerFor("Content-Security-Policy")).toContain(
+      "frame-src 'none'",
+    );
   });
 
   it("stops MIME sniffing and keeps paths out of cross-origin referrers", async () => {
