@@ -21,6 +21,10 @@ _Avoid_: chat request, chat invocation, chat run.
 A standalone, versioned piece of content in a Workspace — markdown, code, a Mermaid diagram, an HTML page or an SVG image — created and changed by an Agent's Artifacts Tool set and kept apart from the Chat that made it. Its versions are append-only and each stores the whole content, so the latest version is its current content and any older one is readable on its own; each version records whether an Agent or the User wrote it. The source Chat is optional: deleting that Chat keeps the Artifact. Deleting the Workspace deletes its Artifacts. Not the A2A protocol's "artifact", which is a part of a Task's output and never a stored, versioned resource in a Workspace.
 _Avoid_: document (that names one type), output (that names a turn's by-product), A2A artifact.
 
+**Artifact frame**:
+The sandboxed `iframe` in which an HTML or SVG Artifact runs, fed by `srcDoc` under `sandbox="allow-scripts"` with an injected Content-Security-Policy that allows only the library origins the Operator approved. It has an opaque origin, so it cannot read the User's session or reach the Platypus page, and it cannot send data anywhere. The frame is a boundary, not a place content is stored: no Artifact is ever served from a URL on the app or API origin.
+_Avoid_: preview (that names the tab, not the boundary), embed.
+
 **File part**:
 A file a User attached to a message in a Chat, carried alongside the message's text and persisted as a storage reference. On every Chat turn each File part is resolved to bytes and routed by the target model's declared capability.
 _Avoid_: attachment (an **Attachment** is the Shared-resource reference), upload (a file placed in the Sandbox is a **Sandbox upload**).

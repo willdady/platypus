@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   mockSession,
   mockNoSession,
@@ -16,6 +16,10 @@ describe("Artifact Routes", () => {
   beforeEach(() => {
     resetMockDb();
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   const world = (owner = "user-1") =>
@@ -136,6 +140,24 @@ describe("Artifact Routes", () => {
       version: { version: number; content: string };
     };
     expect(body.version).toMatchObject({ version: 1, content: "First" });
+  });
+
+  it("sends the approved script origins the viewer's frame needs", async () => {
+    world();
+    mockSession();
+    vi.stubEnv(
+      "ARTIFACT_SCRIPT_ORIGINS",
+      "https://cdnjs.cloudflare.com https://cdn.jsdelivr.net",
+    );
+
+    const res = await app.request(`${baseUrl}/${artifactId}`);
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { scriptOrigins: string[] };
+    expect(body.scriptOrigins).toEqual([
+      "https://cdnjs.cloudflare.com",
+      "https://cdn.jsdelivr.net",
+    ]);
   });
 
   it("does not find an Artifact from another Workspace", async () => {

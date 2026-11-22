@@ -53,6 +53,7 @@ const markdown = {
     author: "agent",
     createdAt: "2026-01-02T00:00:00.000Z",
   },
+  scriptOrigins: ["https://cdnjs.cloudflare.com"],
 };
 
 const firstVersion = {
@@ -245,7 +246,32 @@ describe("ArtifactViewer", () => {
     expect(screen.queryByText(/```mermaid/)).not.toBeInTheDocument();
   });
 
-  it("offers no Preview for HTML and starts on Code", () => {
+  it("runs an HTML Artifact in a frame fed by srcDoc, with exactly allow-scripts", () => {
+    artifactHook.mockReturnValue({
+      data: {
+        ...markdown,
+        artifact: { ...markdown.artifact, type: "html" },
+        version: { ...markdown.version, content: "<h1>Quarterly sales</h1>" },
+      },
+      isLoading: false,
+    });
+    renderViewer();
+
+    const frame = screen.getByTitle("Artifact preview");
+    expect(frame.tagName).toBe("IFRAME");
+    expect(frame).toHaveAttribute("sandbox", "allow-scripts");
+    // No URL on the app or API origin: content travels in `srcdoc` only.
+    expect(frame).not.toHaveAttribute("src");
+    const doc = frame.getAttribute("srcdoc") ?? "";
+    expect(doc).toContain("<h1>Quarterly sales</h1>");
+    expect(doc).not.toContain("/files/");
+    expect(screen.getByRole("tab", { name: "Preview" })).toHaveAttribute(
+      "data-state",
+      "active",
+    );
+  });
+
+  it("keeps the Code tab available beside an HTML Artifact's preview", () => {
     artifactHook.mockReturnValue({
       data: {
         ...markdown,
@@ -256,11 +282,88 @@ describe("ArtifactViewer", () => {
     });
     renderViewer();
 
-    expect(screen.getByRole("tab", { name: "Preview" })).toBeDisabled();
-    expect(screen.getByRole("tab", { name: "Code" })).toHaveAttribute(
-      "data-state",
-      "active",
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Code" }), {
+      button: 0,
+    });
+
+    expect(screen.getByText(/```html/)).toBeInTheDocument();
+  });
+
+  it("lets an approved library origin into the frame's policy", () => {
+    artifactHook.mockReturnValue({
+      data: {
+        ...markdown,
+        artifact: { ...markdown.artifact, type: "html" },
+        version: {
+          ...markdown.version,
+          content:
+            '<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>',
+        },
+      },
+      isLoading: false,
+    });
+    renderViewer();
+
+    const doc = screen.getByTitle("Artifact preview").getAttribute("srcdoc");
+    expect(doc).toContain(
+      "script-src 'unsafe-inline' https://cdnjs.cloudflare.com",
     );
+  });
+
+  it("shows a notice naming the site when its own frame reports a block", () => {
+    artifactHook.mockReturnValue({
+      data: {
+        ...markdown,
+        artifact: { ...markdown.artifact, type: "html" },
+        version: { ...markdown.version, content: "<p>Hi</p>" },
+        scriptOrigins: [],
+      },
+      isLoading: false,
+    });
+    renderViewer();
+    const frame = screen.getByTitle("Artifact preview") as HTMLIFrameElement;
+
+    fireEvent(
+      window,
+      new MessageEvent("message", {
+        data: {
+          type: "artifact-frame-blocked",
+          origin: "https://cdnjs.cloudflare.com",
+        },
+        source: frame.contentWindow,
+      }),
+    );
+
+    expect(screen.getByText(/Blocked content/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/https:\/\/cdnjs\.cloudflare\.com/),
+    ).toBeInTheDocument();
+  });
+
+  it("ignores a block report that does not come from its own frame", () => {
+    artifactHook.mockReturnValue({
+      data: {
+        ...markdown,
+        artifact: { ...markdown.artifact, type: "html" },
+        version: { ...markdown.version, content: "<p>Hi</p>" },
+        scriptOrigins: [],
+      },
+      isLoading: false,
+    });
+    renderViewer();
+
+    fireEvent(
+      window,
+      new MessageEvent("message", {
+        data: {
+          type: "artifact-frame-blocked",
+          origin: "https://cdnjs.cloudflare.com",
+        },
+        source: window,
+      }),
+    );
+
+    expect(screen.queryByText(/Blocked content/)).not.toBeInTheDocument();
   });
 
   it("says an Artifact is deleted rather than showing an error", () => {
@@ -294,6 +397,43 @@ describe("ArtifactViewer", () => {
     expect(createObjectURL).toHaveBeenCalledOnce();
     expect(click).toHaveBeenCalledOnce();
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:artifact");
+  });
+
+  it("previews an older HTML version in the frame when the picker changes it", async () => {
+    artifactHook.mockImplementation(
+      (_scope: unknown, _id: string, version?: number) => ({
+        data: {
+          ...markdown,
+          artifact: { ...markdown.artifact, type: "html" },
+          version:
+            version === 1
+              ? {
+                  ...markdown.version,
+                  id: "v1",
+                  version: 1,
+                  content: "<h1>Old page</h1>",
+                }
+              : { ...markdown.version, content: "<h1>New page</h1>" },
+          scriptOrigins: [],
+        },
+        isLoading: false,
+      }),
+    );
+    renderViewer();
+
+    const frame = screen.getByTitle("Artifact preview") as HTMLIFrameElement;
+    expect(frame.srcdoc).toContain("<h1>New page</h1>");
+
+    await selectOption(
+      "Version 2",
+      `Version 1 · You · ${formatDateTime("2026-01-01T00:00:00.000Z")}`,
+    );
+
+    const doc = (screen.getByTitle("Artifact preview") as HTMLIFrameElement)
+      .srcdoc;
+    expect(doc).toContain("<h1>Old page</h1>");
+    expect(doc).not.toContain("New page");
+    expect(screen.getByText("Read-only")).toBeInTheDocument();
   });
 
   it("closes from the header", () => {
@@ -357,6 +497,20 @@ describe("ArtifactViewer while the Agent is still writing", () => {
       "active",
     );
     expect(screen.getByText(/```html/)).toBeInTheDocument();
+  });
+
+  it("renders no frame for a streaming HTML Artifact", () => {
+    renderViewer({
+      artifactId: undefined,
+      live: {
+        status: "streaming",
+        title: "Chart",
+        type: "html",
+        content: "<p>Half a page",
+      },
+    });
+
+    expect(screen.queryByTitle("Artifact preview")).not.toBeInTheDocument();
   });
 
   it("keeps showing the streamed content while the saved version loads", () => {
