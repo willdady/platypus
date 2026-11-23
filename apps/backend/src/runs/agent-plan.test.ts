@@ -66,8 +66,6 @@ describe("resolveGenerationPlan", () => {
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 
-  // Tenant isolation: a Provider id is only resolvable inside the Workspace
-  // (and Organization) the turn runs in.
   it.each([
     ["another Workspace", { workspaceId: "ws-2" }],
     ["another Organization", { organizationId: "org-2" }],
@@ -103,10 +101,6 @@ describe("resolveGenerationPlan", () => {
     },
   );
 
-  // A direct (no-Agent) selection has no Agent row to declare a ceiling, so it
-  // falls back to DEFAULT_DIRECT_MAX_STEPS rather than 1 — a Direct turn can
-  // be served a locally-executed search tool (issue #167 / ADR-0014) whose
-  // result the model must still get a step to answer from (issue #463).
   it("resolves a direct Provider+model selection to the Direct step ceiling", async () => {
     const { plan, resolvedModelId, modelReference } =
       await resolveGenerationPlan(
@@ -120,8 +114,6 @@ describe("resolveGenerationPlan", () => {
     expect(modelReference).toBe("gpt-4");
   });
 
-  // Issue #539: the per-chat Max steps setting rides the turn request on the
-  // direct source and overrides the shared Direct ceiling when set.
   it("forwards a direct selection's own step ceiling over the Direct default", async () => {
     const { plan } = await resolveGenerationPlan(
       { providerId: "p1", modelId: "gpt-4", maxSteps: 25 },
@@ -132,8 +124,6 @@ describe("resolveGenerationPlan", () => {
     expect(plan.maxSteps).toBe(25);
   });
 
-  // A client may clear by sending an explicit null (the Agent form's way);
-  // null must mean "unset" here exactly as it does on the Agent branch (#263).
   it("resolves a direct selection's null step ceiling to the Direct default", async () => {
     const { plan } = await resolveGenerationPlan(
       { providerId: "p1", modelId: "gpt-4", maxSteps: null },
@@ -155,8 +145,6 @@ describe("resolveGenerationPlan", () => {
     expect(plan).not.toHaveProperty("topP");
   });
 
-  // Issue #459: an Agent's own ceiling, not the parent's and not a bare
-  // fallback baked into the caller.
   it("falls back to the default step ceiling when an Agent declares none", async () => {
     const { plan } = await resolveGenerationPlan(
       { agent: { providerId: "p1", modelId: "gpt-4", maxSteps: null } },
@@ -177,8 +165,6 @@ describe("resolveGenerationPlan", () => {
     expect(plan.maxSteps).toBe(3);
   });
 
-  // Issue #263: cleared in the UI writes null, which must mean "use the
-  // Provider default" rather than being sent as an explicit value.
   it("forwards an Agent's stored sampling parameters, treating null as unset", async () => {
     const { plan } = await resolveGenerationPlan(
       {
@@ -199,9 +185,6 @@ describe("resolveGenerationPlan", () => {
     expect(plan).not.toHaveProperty("topP");
   });
 
-  // Issue #454: the ceiling belongs to the (Provider, model) pair, not the
-  // Agent row — declared per model entry, absent when the Provider declares
-  // none.
   it("carries the resolved model's declared output ceiling", async () => {
     const provider = {
       ...baseProvider,
@@ -229,9 +212,6 @@ describe("resolveGenerationPlan", () => {
     expect(plan).not.toHaveProperty("maxOutputTokens");
   });
 
-  // ADR-0018 / issue #524: `contextWindow` is Tool-result clearing's sole
-  // gate, so it must reach the plan the same way the output ceiling does —
-  // present when declared, absent (never a guessed default) when not.
   it("carries the resolved model's declared Context window", async () => {
     const provider = {
       ...baseProvider,
@@ -276,9 +256,7 @@ describe("resolveGenerationPlan", () => {
       );
 
     expect(resolvedModelId).toBe("gpt-4");
-    // Token usage is broken down by the model billed, not the alias (#1634).
     expect(plan.usageModel).toEqual({ providerId: "p1", model: "gpt-4" });
-    // The reference, not the resolution — a repoint must reach every caller.
     expect(modelReference).toBe("alias:flagship");
   });
 
@@ -308,9 +286,6 @@ describe("resolveGenerationPlan", () => {
   });
 });
 
-// Issue #1521: a Sub-Agent resolves through `{ agent }`, the same as the
-// Agent-backed Chat turn and Trigger run, so its stored Reasoning controls
-// reach the run's provider options.
 describe("resolveGenerationPlan Reasoning controls", () => {
   const provider = makeProviderRow({
     ...baseProvider,
