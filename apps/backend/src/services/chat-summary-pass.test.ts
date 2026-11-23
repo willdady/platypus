@@ -665,15 +665,22 @@ describe("takeTranscriptSummary", () => {
       );
     });
 
-    it("drops a fully answered carried-in request but keeps an open one word for word", async () => {
+    it("states the drop-when-answered and keep-when-open rule for carried-in requests", async () => {
       const { system } = await sentCall();
-      expect(system).toContain("Standing instructions");
-      expect(system).toContain("supersedes or contradicts");
-      expect(system).toContain(
-        "A request fully answered by a newer message is dropped",
+      const userRequests = system.slice(
+        system.indexOf("## User requests"),
+        system.indexOf("## Key facts and decisions"),
       );
-      expect(system).toContain(
-        "a request carried in from the earlier summary that is not fully answered stays word for word",
+      expect(userRequests).toContain("**Standing instructions.**");
+      expect(userRequests).toContain("supersedes or contradicts");
+      expect(userRequests).toContain("not fully answered stays word for word");
+      expect(userRequests).toContain(
+        "whether the earlier summary records it as answered or the newer messages answer it",
+      );
+      expect(userRequests).toContain("is dropped");
+      expect(userRequests).toContain("next pass, not this one");
+      expect(userRequests).not.toContain(
+        "may be shortened to the instructions",
       );
     });
 
