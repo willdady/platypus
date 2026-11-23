@@ -12,15 +12,14 @@ const { hook } = vi.hoisted(() => ({
 function buildResult(over: Record<string, unknown> = {}) {
   return {
     data: undefined,
-    error: undefined,
-    isLoading: false,
+    deleted: false,
     ...over,
   };
 }
 
 vi.mock("@/hooks/use-artifact", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/hooks/use-artifact")>();
-  return { ...actual, useArtifact: () => hook.result };
+  return { ...actual, useStoredArtifact: () => hook.result };
 });
 
 import { ArtifactToolCard, ARTIFACT_DELETED_LABEL } from "./artifact-tool-card";
@@ -217,7 +216,7 @@ describe("ArtifactToolCard", () => {
   });
 
   it("shows a deleted state, not an error, when the Artifact is gone", () => {
-    hook.result = buildResult({ error: { status: 404 } });
+    hook.result = buildResult({ deleted: true });
     render(
       <ArtifactToolCard
         toolPart={completed()}

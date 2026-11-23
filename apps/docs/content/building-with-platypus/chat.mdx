@@ -274,7 +274,11 @@ of the Tools that ran, with **Error** if any of them failed. Click the group to
 see each call as its own row, which opens the same way. Text, the model's
 thinking and a Sub-Agent each end a group, so the calls on either side of
 them stay in separate groups. A file the Agent offers as a download isn't a
-row at all; it appears in a tray under the finished reply.
+row at all; it appears in a tray under the finished reply. An Artifact the reply
+created or changed is the same: it has a Card where the call happened while the
+reply is still writing, and joins that tray once the reply finishes. A call that
+failed, was denied or was rejected stays a row, with its reason — see
+[Artifacts](/building-with-platypus/artifacts#letting-an-agent-work-with-artifacts).
 
 The time is the Tool's own work, measured on the server, so it appears the
 moment the Tool finishes rather than counting up while it runs. It is stored
