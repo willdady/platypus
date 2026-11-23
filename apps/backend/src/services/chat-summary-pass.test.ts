@@ -682,13 +682,38 @@ describe("takeTranscriptSummary", () => {
       );
       expect(userRequests).toContain("is dropped");
       expect(userRequests).toContain(
-        "The verbatim bullet is dropped on the next pass once the instructions it set are listed under Standing instructions",
+        "A request answered in this pass is dropped on the next pass, once the instructions it set are listed under Standing instructions",
       );
-      expect(userRequests).not.toContain(
+      expect(userRequests).toContain(
+        "a request that is not fully answered moves to Open requests and stays word for word",
+      );
+      expect(system).not.toContain(
         "folded into the standing instructions on the next pass",
       );
-      expect(userRequests).not.toContain(
-        "may be shortened to the instructions",
+      expect(system).not.toContain("may be shortened to the instructions");
+      expect(system).not.toContain(
+        "quoted verbatim once before it is compacted",
+      );
+    });
+
+    it("keeps the this-pass rule: one verbatim bullet per counted message, closing with its answered status", async () => {
+      const { system } = await sentCall();
+      const userRequests = system.slice(
+        system.indexOf("## User requests"),
+        system.indexOf("## Key facts and decisions"),
+      );
+      expect(userRequests).toContain(
+        "Count the user messages in the conversation itself",
+      );
+      expect(userRequests).toContain("Copy each of them verbatim");
+      expect(userRequests).toContain(
+        "There must be exactly one bullet per message you counted",
+      );
+      expect(userRequests).toContain(
+        "each of those bullets ends with whether it was fully answered",
+      );
+      expect(userRequests).toContain(
+        "Shorten only a message longer than about 300 characters",
       );
     });
 
