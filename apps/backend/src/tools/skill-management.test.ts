@@ -2,9 +2,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { z } from "zod";
 import { callTool, resetMockDb, seedDb } from "../test-utils.ts";
 
-// The write rules (conflict target, reference check, visibility re-check) are
-// unit-tested in services/skill.test.ts; here the write model is a seam and
-// the reads run against a seeded fake, so the Workspace scoping is real.
 vi.mock("../services/skill.ts", () => ({
   upsertSkill: vi.fn(),
   deleteSkill: vi.fn(),
@@ -183,7 +180,6 @@ describe("createSkillManagementTools", () => {
       new ConflictError(
         'Cannot delete: this skill is enabled for 1 agent ("Helper"). Turn it off for that agent first.',
       ),
-      // Visibility changed between the name lookup and the write.
       new NotFoundError("Skill not found"),
       new LockedError("This skill is managed at the organization level"),
     ])("reports the write model's $name as an error result", async (error) => {

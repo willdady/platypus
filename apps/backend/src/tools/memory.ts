@@ -12,11 +12,6 @@ import { pointerSettingModelId } from "../services/model-capability.ts";
 import { logger } from "../logger.ts";
 import { errorMessage } from "../utils/error-message.ts";
 
-/**
- * The Workspace's embedding Provider with its embedding model, or null when
- * there is none to search with: nothing configured, a Shared Provider not
- * attached here, or a Provider with no embedding model.
- */
 const loadEmbeddingConfig = async (workspaceId: string) => {
   const [ws] = await db
     .select({
@@ -29,7 +24,6 @@ const loadEmbeddingConfig = async (workspaceId: string) => {
 
   if (!ws?.memoryEmbeddingProviderId) return null;
 
-  // A Shared Provider serves this Workspace only where attached (ADR-0007).
   const found = await resolveScoped(
     db,
     "provider",
@@ -47,9 +41,6 @@ export const createMemoryTools = async (
   userId: string,
   sessionId: string,
 ): Promise<Record<string, Tool>> => {
-  // Resolved once per turn. Without an embedding Provider memorySearch could
-  // only return an error, so it is left out rather than offered (#1059), and
-  // the system prompt, which reads the turn's tool map, stops naming it.
   const embedding = await loadEmbeddingConfig(workspaceId);
 
   const memoryGet = tool({
@@ -107,7 +98,6 @@ export const createMemoryTools = async (
     }),
     execute: async ({ query, limit }, { abortSignal }) => {
       try {
-        // Generate query embedding
         const queryEmbedding = await generateEmbedding(
           embedding.provider,
           pointerSettingModelId(embedding.modelId),
@@ -116,7 +106,6 @@ export const createMemoryTools = async (
           abortSignal,
         );
 
-        // Cosine similarity search using pgvector <=> operator
         const results = await db.execute(sql`
           SELECT
             id,

@@ -8,10 +8,6 @@ import {
   seedDb,
 } from "../test-utils.ts";
 
-// The embedding call is the tool's one outbound dependency; mocking it keeps
-// these tests off a real provider. Its own behaviour is the embedding
-// service's to cover — what matters here is which provider and model id
-// memorySearch hands it, and what it does when the call rejects.
 vi.mock("../services/embedding.ts", () => ({
   generateEmbedding: vi.fn(),
 }));
@@ -33,12 +29,6 @@ const EMBEDDING_PROVIDER = {
   embeddingModelId: "text-embedding-3-small",
 };
 
-/**
- * Stubs the lookups the factory makes — the Workspace's configured embedding
- * provider id, then the Provider row itself (a Shared one is then checked for
- * an Attachment, queued by the test). Passing `null` leaves the Workspace
- * unconfigured, which short-circuits before the second query.
- */
 const mockEmbeddingConfig = (
   provider: Record<string, unknown> | null = EMBEDDING_PROVIDER,
 ) => {
@@ -71,8 +61,6 @@ describe("createMemoryTools", () => {
     ]);
   });
 
-  // Issue #1059: without an embedding provider memorySearch could only return
-  // an error, so the model is not offered it.
   describe("without a usable embedding provider, offers only memoryGet", () => {
     it("when none is configured", async () => {
       mockEmbeddingConfig(null);
@@ -98,7 +86,7 @@ describe("createMemoryTools", () => {
         organizationId: "org-1",
         workspaceId: null,
       });
-      mockDb.limit.mockResolvedValueOnce([]); // no Attachment
+      mockDb.limit.mockResolvedValueOnce([]);
 
       expect(Object.keys(await createTools())).toEqual(["memoryGet"]);
     });
@@ -162,7 +150,6 @@ describe("createMemoryTools", () => {
         "text-embedding-3-small",
         "meeting notes",
         "chat-1",
-        // The turn's signal, so a cancelled turn stops the embedding call.
         signal,
       );
     });
@@ -172,8 +159,6 @@ describe("createMemoryTools", () => {
 
       await callTool(tools.memorySearch, { query: "x", limit: 7 });
 
-      // The raw SQL reaches `execute` as the test-utils `sql` marker: the
-      // template's literal strings, and the values bound between them.
       const { strings, values } = mockDb.execute.mock.calls[0][0] as {
         strings: string[];
         values: unknown[];
@@ -219,8 +204,6 @@ describe("createMemoryTools", () => {
       });
     });
 
-    // pgvector arithmetic comes back from node-postgres as a string; the tool
-    // coerces before rounding, so a string relevance must not become NaN.
     it("coerces a string relevance from the driver", async () => {
       mockDb.execute.mockResolvedValueOnce({
         rows: [
@@ -245,7 +228,6 @@ describe("createMemoryTools", () => {
       await callTool(tools.memorySearch, { query: "first", limit: 5 });
       await callTool(tools.memorySearch, { query: "second", limit: 5 });
 
-      // Two selects total — the workspace and the provider — not four.
       expect(mockDb.select).toHaveBeenCalledTimes(2);
       expect(mockGenerateEmbedding).toHaveBeenCalledTimes(2);
     });

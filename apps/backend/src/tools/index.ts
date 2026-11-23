@@ -25,8 +25,6 @@ import {
 } from "@platypus/schemas";
 import { RESERVED_TURN_TOOL_NAMES } from "./turn-tool-names.ts";
 
-// The Extension-point surface lives in the published SDK; re-export the context
-// type so core's internal callers keep importing it from here.
 export type { ToolSetContext } from "@platypuschat/plugin-sdk";
 import type {
   PluginConfigContext,
@@ -41,99 +39,30 @@ import {
 } from "../utils/abort-race.ts";
 import { isRecord } from "../utils/is-record.ts";
 
-/**
- * How long one Tool set's factory, or one MCP server's connect-and-list, may
- * take before a turn stops waiting for it and goes on without its tools (issue
- * #1135).
- *
- * 20s: long enough for a cold remote MCP server to accept a connection, refresh
- * an OAuth token and answer `tools/list`, and for a factory that reads the
- * database or builds a Sandbox adapter on the way; short enough that a turn
- * whose server has hung still reaches the model well inside the run's 2-minute
- * step timer, rather than being killed by it with a timeout that names neither.
- * A session's ids resolve concurrently, so this bounds its whole resolve phase
- * rather than adding up per id; a Sub-Agent's session, opened on its first
- * delegation, gets a window of its own. Not configurable: nothing has asked
- * for it.
- */
+// why: well inside the run's 2-minute step timer, so a hung MCP server can't time the step out
 export const TOOL_SET_RESOLVE_TIMEOUT_MS = 20_000;
 
-/**
- * The context core builds for a Tool set factory: the published shape, but
- * carrying core's own registrar, which takes the attribution a log line needs
- * (see `./closers.ts`). Assignable to `ToolSetContext`, so what a Contribution is
- * handed is still the published shape.
- */
 export type CoreToolSetContext = WithCoreRegistrar<ToolSetContext>;
 
-/**
- * Who put a tool name into a turn's tool map. Carried alongside the map so a
- * collision can name the Tool set that lost the name *and* the plugin that owns
- * it — an Operator debugging a shadowed tool has neither otherwise.
- */
 export type ToolOwner = {
-  /** The Tool set the tool came from, or the MCP id on the MCP branch. */
   toolSetId: string;
-  /**
-   * The contributing plugin's manifest name (or {@link CORE_BUILTIN_OWNER} for a
-   * core registration), and `null` for tools that came from an MCP server, which
-   * belongs to no plugin.
-   */
   plugin: string | null;
-  /**
-   * The owning MCP's tool-namespace slug (issue #467), so a collision or
-   * exclusion log names an MCP an Operator recognises rather than only its
-   * internal id. `undefined` for anything that is not an MCP.
-   */
   mcpSlug?: string;
 };
 
-/**
- * What the Tool-set registry stores: identity for the catalogs, plus core's
- * *composed* per-turn builder — never the contribution's raw `tools`. The same
- * shape the Web-search-backend registry holds (ADR-0014), for the same reason:
- * everything between a plugin's factory and the model is core's, so there is one
- * place that owns it rather than one per caller.
- */
 export type ToolSetRegistration = {
   id: string;
   name: string;
   category: string;
-  /** A sentence the Agent form shows for this set — required as of API v4. */
   description: string;
-  /**
-   * This Tool set's model-facing Tools for one Chat turn — resolved, guarded,
-   * and result-normalized. Never rejects: a Tool set that cannot serve this turn
-   * contributes no tools instead of failing it.
-   *
-   * Reads no turn state and mutates none of it, so a turn can resolve all of an
-   * Agent's Tool sets at once. Reporting a name this Tool set takes from an
-   * earlier one belongs to whoever merges the results in assignment order —
-   * `openToolSession` — because only there is the answer deterministic.
-   */
   buildTurnTools: (
     context: CoreToolSetContext,
-    /** The run's own abort, so a cancelled turn stops waiting on the factory. */
     signal: AbortSignal | undefined,
-    /**
-     * Told when the factory threw, timed out or returned no tool map — the
-     * faults behind an empty result — so the run can record this Tool set as
-     * unloaded (#1184). Not called for a factory that served no tools on
-     * purpose, nor for one abandoned because the run was cancelled.
-     */
     onFactoryFailed: () => void,
   ) => Promise<Record<string, Tool>>;
-  /**
-   * The contribution's tools when it declared them as a static map, for the
-   * catalogs that name individual tools ahead of any turn. Undefined for a
-   * factory: what it serves depends on the Workspace, so only a turn can say.
-   */
   staticTools?: Record<string, Tool>;
 };
 
-// The Tool-set instance of the shared Extension-point registry — same store,
-// same miss semantics, and same duplicate-id error as the Sandbox and Web-search
-// backend registries.
 const TOOL_SETS = createContributionRegistry<ToolSetRegistration>({
   noun: "Tool set",
 });
@@ -144,32 +73,21 @@ export const registerToolSet = (
 ): ToolSetRegistration =>
   TOOL_SETS.register(toolSetId, { ...registration, id: toolSetId });
 
-/** The Tool set registered under `toolSetId`, or `undefined` if none is. */
 export const getToolSet = (
   toolSetId: string,
 ): ToolSetRegistration | undefined => TOOL_SETS.get(toolSetId);
 
-/** Whether `toolSetId` names a statically-registered Tool set. */
 export const hasToolSet = (toolSetId: string): boolean =>
   TOOL_SETS.has(toolSetId);
 
-/** Every registered Tool set, in registration order. Each carries its own id. */
 export const getToolSets = (): readonly ToolSetRegistration[] =>
   TOOL_SETS.list();
 
-/** Keys a tool {@link shareTool} marked, by what it was shared as. */
 const SHARED_TOOL = Symbol("platypus.sharedTool");
 
-/**
- * Marks `tool` as one implementation several Tool sets contribute under the
- * same name, so a turn granting more than one of them keeps the first claim
- * and reports no collision. A symbol-keyed property rather than a lookup on
- * the object, because result normalization spreads every tool into a new one.
- */
 export const shareTool = <T extends Tool>(key: string, tool: T): T =>
   Object.assign(tool, { [SHARED_TOOL]: key });
 
-/** Whether `held` and `incoming` are the same {@link shareTool} tool. */
 export const isSameSharedTool = (
   held: Tool | undefined,
   incoming: Tool,
@@ -181,16 +99,6 @@ export const isSameSharedTool = (
   );
 };
 
-/**
- * Warn for every name `incoming` takes from a Tool set that already claimed it
- * this turn.
- *
- * The later contributor wins, as it always has — assignment order is the
- * precedence order a Chat turn is built on. What changes is that the swap is
- * now on the record: an Agent granted two Tool sets that both define `search`
- * used to serve one of them with no trace of the other, and which one depended
- * on the order the ids happen to sit in on the Agent row.
- */
 export const reportToolNameCollisions = (
   incoming: Record<string, Tool>,
   claimed: ReadonlyMap<string, ToolOwner> | undefined,
@@ -205,8 +113,6 @@ export const reportToolNameCollisions = (
         tool,
         toolSet: owner.toolSetId,
         plugin: owner.plugin,
-        // Only ever set on the MCP branch — an Operator debugging a shadowed
-        // tool then sees the MCP by the name they gave it, not just its id.
         mcpSlug: owner.mcpSlug,
         shadowedToolSet: incumbent.toolSetId,
         shadowedPlugin: incumbent.plugin,
@@ -218,87 +124,19 @@ export const reportToolNameCollisions = (
 };
 
 export interface ComposeToolSetOptions {
-  /**
-   * The contribution exactly as its author wrote it. Its `tools` factory is
-   * called on this object — never on a copy — so a class-instance contribution
-   * keeps its prototype and its `this`. The namespaced id rides {@link id}.
-   */
   contribution: Omit<ToolSetContribution, "id">;
-  /** The id this Tool set registers under (namespaced, for a third-party plugin). */
   id: string;
-  /**
-   * The plugin's boot-resolved deploy-time config/credentials (ADR-0013).
-   * Required, as the contribution-facing argument it is forwarded to has been
-   * since API v2. A core registration that is not a plugin contribution — there
-   * is one, the `sandbox` Tool set below — builds {@link CORE_PLUGIN_CONTEXT}
-   * rather than passing nothing, so "core always supplies it" is true in the
-   * code and not only in the SDK's prose.
-   */
   plugin: PluginConfigContext;
-  /**
-   * Owning plugin's manifest name, for attribution in every log line — and, for
-   * a third-party plugin, the namespace its tool names enter a turn under.
-   */
   pluginName: string;
-  /**
-   * Whether the owning plugin is a core built-in. Decides the tool-name rule
-   * below the same way it already decides the contribution-id rule: core bare,
-   * third-party prefixed.
-   *
-   * Carried from the loader, which is the sole authority on origin (membership of
-   * the built-in map), rather than inferred here by comparing {@link pluginName}
-   * against a core sentinel — a plugin that borrowed the sentinel string would
-   * then buy itself bare tool names.
-   */
   isCore: boolean;
 }
 
-/**
- * Wrap one Tool-set contribution into the registration core stores.
- *
- * This is where core takes ownership of everything between a plugin's factory
- * and the model: the deploy-time config binding, catch-and-degrade on the
- * factory, per-tool result normalization, and collision reporting against the
- * turn's tool map.
- *
- * Boot stays fail-loud and runtime resolution stays graceful (ADR-0013): a
- * factory that throws costs the turn this Tool set's tools, not the turn — the
- * posture the Web-search point already takes, and the one the MCP branch of a
- * Tool session has always taken for an unreachable server.
- *
- * The factory runs under {@link TOOL_SET_RESOLVE_TIMEOUT_MS} and the run's
- * abort, and one that outruns either is skipped exactly like one that throws
- * (issue #1135). `ToolSetContribution` declares no budget of its own, so the
- * ceiling is core's — a generous one, since the factories in the field
- * legitimately reach the database and a Sandbox backend on the way. It is a
- * race, not a signal: the factory is not handed one and may never settle, so a
- * factory that finishes late still runs to completion, and a closer it
- * registers then is still closed with the session like every other.
- */
 export const composeToolSet = (
   options: ComposeToolSetOptions,
 ): ToolSetRegistration => {
   const { contribution, id, plugin, pluginName, isCore } = options;
   const { name, category, description, tools } = contribution;
 
-  /**
-   * Why `toolName` cannot enter a turn under this plugin's namespace, or `null`
-   * if it can. Third-party only — a core Tool set is not namespaced, so neither
-   * bound applies to it.
-   *
-   * `reason` is phrased for an author and never quotes the regex: the rule an
-   * author has to satisfy is a sentence, not a pattern. `bindings` are the
-   * structured fields for the log line, and they differ per fault on purpose —
-   * reporting `cap` and `length` on a charset fault would tell an Operator the
-   * wrong reason while the message said the right one.
-   *
-   * Two bounds, because they say different things: the cap is the documented
-   * limit an author is held to, and the pattern is the model-provider ceiling
-   * that catches a character the cap says nothing about. Neither is a
-   * total-length check — the manifest-name cap the loader enforces and the cap
-   * here bound the composed name by arithmetic, so the pattern's own `{1,64}` is
-   * unreachable and only its character set can fire.
-   */
   const toolNameFault = (
     toolName: string,
   ): { reason: string; bindings: Record<string, string | number> } | null => {
@@ -321,18 +159,6 @@ export const composeToolSet = (
     return null;
   };
 
-  /**
-   * Every tool a third-party Tool set contributes enters the turn as
-   * `<manifest-name>__<toolName>` (issue #664) — unconditionally, not only on
-   * collision, so a name never depends on load order. Core Tool sets keep their
-   * bare names, exactly as core contribution ids do.
-   *
-   * A name over the cap is excluded and reported, never truncated to fit: two
-   * long names from one Tool set could truncate onto each other and reintroduce
-   * the very collision this removes, invisibly. A static map's names are known at
-   * boot and fail there instead (see {@link namespaceStaticToolsOrThrow} below),
-   * so the exclusion is only reachable for a factory.
-   */
   const namespaceToolNames = (
     turnTools: Record<string, Tool>,
   ): Record<string, Tool> => {
@@ -357,20 +183,6 @@ export const composeToolSet = (
     return namespaced;
   };
 
-  /**
-   * The static map as the catalogs should list it — namespaced — or a throw.
-   *
-   * A static map's names are known at boot, so a name core cannot serve fails
-   * there rather than going missing from a turn: fail-loud per ADR-0013, naming
-   * the plugin the way every other Tool-set boot error does. One pass, so the
-   * names are checked exactly where they are rewritten.
-   *
-   * The two origins fail on opposite rules. A third-party name is held to the
-   * cap and the ceiling, because it is about to be namespaced. A core name is
-   * held to neither and is instead refused if it takes one of the four names core
-   * assigns to a turn after the Tool session — the residual case namespacing
-   * leaves behind, since a core set's names stay bare.
-   */
   const namespaceStaticToolsOrThrow = (
     declared: Record<string, Tool>,
   ): Record<string, Tool> => {
@@ -397,9 +209,6 @@ export const composeToolSet = (
   };
 
   const staticTools = typeof tools === "function" ? undefined : tools;
-  // Boot-time: throws here, inside `composeToolSet`, because the loader calls it
-  // at boot and a throw from a `prepare` is how every other Tool-set fault
-  // aborts startup.
   const namespacedStaticTools = staticTools
     ? namespaceStaticToolsOrThrow(staticTools)
     : undefined;
@@ -411,9 +220,6 @@ export const composeToolSet = (
   ): Promise<Record<string, Tool>> => {
     let resolved: unknown = tools;
     if (typeof tools === "function") {
-      // The *context* is derived so a closer this factory registers is logged
-      // against the plugin and Tool set that registered it. The **contribution**
-      // is still called untouched — that invariant is about `this`, not `ctx`.
       const ctx: ToolSetContext = withAttributedRegistrar(context, {
         plugin: pluginName,
         toolSet: id,
@@ -445,9 +251,6 @@ export const composeToolSet = (
       }
     }
 
-    // The TS type makes `tools` a map or a factory returning one; a third-party
-    // *JS* plugin can return anything, and `Object.assign(turn, "oops")` spreads
-    // a string's indices into the turn's tool map rather than failing.
     if (!isRecord(resolved)) {
       logger.warn(
         { plugin: pluginName, toolSet: id },
@@ -457,10 +260,6 @@ export const composeToolSet = (
       return {};
     }
 
-    // Namespaced after per-tool result normalization, so the name that leaves
-    // here is the final one — the only name the model, the Transcript, and a
-    // second Tool set can contest, and so the one the merge phase keys
-    // ownership and collision reporting on.
     return namespaceToolNames(
       normalizeToolResults(resolved as Record<string, Tool>),
     );
@@ -472,65 +271,22 @@ export const composeToolSet = (
     category,
     description,
     buildTurnTools,
-    // Namespaced: `staticTools` backs the Tool-set listing endpoints, and a
-    // listing has to show the names the model will actually call.
     ...(namespacedStaticTools ? { staticTools: namespacedStaticTools } : {}),
   };
 };
 
-/**
- * The deploy-time block for a core registration that no plugin contributes.
- *
- * Every Tool set factory is handed a {@link PluginConfigContext} (required as of
- * API v2), and the loader builds one per plugin. The `sandbox` Tool set below is
- * the lone Tool set that does not come from a manifest, so it has no Operator-
- * supplied config or credentials to resolve — both are `undefined`, exactly as
- * they are for a plugin whose manifest declares no schema. The logger is bound
- * the same way the loader binds a plugin's, so a line this factory writes is
- * attributed like every other Tool set's.
- */
 const CORE_PLUGIN_CONTEXT: PluginConfigContext = {
   config: undefined,
   credentials: undefined,
-  // A getter, so the child is derived on read rather than at module load.
-  // `logger` is a module singleton that tests replace wholesale, and calling
-  // `child()` while this module is still being imported would make importing it
-  // at all depend on the shape of whatever replaced it.
   get logger() {
     return logger.child({ plugin: CORE_BUILTIN_OWNER });
   },
 };
 
-// Tool set ID constants for referencing registered tool sets by name
 export const MEMORY_TOOLSET_ID = "memory";
 
-// REGISTER TOOL SETS HERE!
-// Note: the native Tool sets now ship as core plugins loaded via the plugin
-// loader from `PLATYPUS_PLUGINS` (see ADR-0013) — `math-conversions`/`time` as
-// `@platypus/tools-basic`, `web-fetch` as `@platypus/web-fetch`, and the
-// Platypus-domain sets (kanban, triggers, agent-discovery,
-// skill-management, agent-management, notifications, memory) as
-// `@platypus/tools-platform`. Their factories live in `./*.ts`; the manifests
-// live under `apps/backend/src/plugins/`.
-//
-// The `sandbox` Tool set below is the lone exception: it is the consumer side of
-// the Sandbox-backend extension point (ADR-0002) rather than a native Tool set,
-// so it stays a core-internal static registration here. It resolves at chat-turn
-// time: load the Workspace's sandbox row, look up the registered adapter,
-// validate config/credentials, then build the Sandbox Tools. Missing-row,
-// unregistered-backend, and
-// validation failures all degrade gracefully to "no tools this turn" (with a
-// warning log). See ADR-0001 / ADR-0002.
 export const SANDBOX_TOOLSET_ID = "sandbox";
 
-/**
- * How the Agent this session serves reads files, for `fsView`. Read from the
- * Agent row on the Tool's first call rather than handed in: a Tool-set factory
- * sees only the published context, and `agentId` on it is already the right
- * Agent — the delegate's own on a Sub-Agent's session. Resolved the way a
- * generation plan resolves the model, so the two cannot disagree. A row that no
- * longer resolves cannot be running this turn; it reads as no native types.
- */
 const modelFileReading = async (
   agentId: string,
   scope: { orgId: string; workspaceId: string },
@@ -557,9 +313,6 @@ const modelFileReading = async (
   };
 };
 
-// Registered through `composeToolSet` like every plugin contribution — a core
-// built-in is a Tool set on the same terms, and its factory reads a row and
-// builds an adapter's tools, so it earns the same guard.
 registerToolSet(
   SANDBOX_TOOLSET_ID,
   composeToolSet({
@@ -586,12 +339,6 @@ registerToolSet(
           .limit(1);
         if (!row) return {};
 
-        // Every line below is core's, but the subject of all three is a *plugin's*
-        // adapter, so each binds the owning plugin under the same `plugin` key the
-        // plugin's own lines carry. Otherwise an Operator filtering on one plugin
-        // gets the adapter's own lines and none of core's about it. `null` rather
-        // than absent when the backend belongs to no loaded plugin — the first case
-        // below is exactly that, and "no owner" is the answer, not "unasked".
         const plugin = getSandboxBackendPlugin(row.backend) ?? null;
         const registration = getSandboxBackend(row.backend);
         if (!registration) {
@@ -636,14 +383,7 @@ registerToolSet(
           configResult.data,
           credentialsResult.data,
         );
-        // Built per turn, so it closes with the turn: an adapter holding a
-        // connection open (SSH) must not leave one behind on the host for every
-        // turn that touched the Sandbox.
         if (backend.close) registerCloser(() => backend.close?.());
-        // Two-tier env (ADR-0004 amendment, ADR-0006): adminEnv wins over userEnv.
-        // The combined map is then merged over the model-provided input.env inside
-        // createSandboxTools (workspace wins), giving the full precedence order
-        // adminEnv ▸ userEnv ▸ input.env.
         const workspaceEnv = {
           ...row.userEnv,
           ...row.adminEnv,

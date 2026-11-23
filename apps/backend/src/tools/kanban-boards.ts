@@ -27,11 +27,6 @@ import { buildResourceUrl } from "../utils/resource-url.ts";
 import { createBoardReadTools } from "./kanban.ts";
 import { asToolResult } from "./tool-result.ts";
 
-/**
- * The Agent-facing surface over board and column structure — the Kanban Boards
- * Tool set. As with `./kanban.ts`, the rules live in the modules the HTTP
- * routes share; the field limits come from the routes' own schemas.
- */
 export function createKanbanBoardTools(
   workspaceId: string,
   orgId: string,
@@ -39,7 +34,6 @@ export function createKanbanBoardTools(
 ): Record<string, Tool> {
   const scope: KanbanScope = { orgId, workspaceId };
 
-  /** A written board as a Tool returns it: the row, plus a link to it. */
   const withBoardUrl = (board: BoardRow) => {
     const url = buildResourceUrl(
       frontendUrl,
@@ -55,7 +49,6 @@ export function createKanbanBoardTools(
     frontendUrl,
   );
 
-  /** The board fields a write may set, without the create-only `name`. */
   const boardFields = {
     description: kanbanBoardSchema.shape.description.describe(
       "The board description, or null to clear it",
@@ -79,7 +72,6 @@ export function createKanbanBoardTools(
 
   type BoardLabels = NonNullable<z.infer<typeof boardFields.labels>>;
 
-  /** Board labels as the module stores them: an omitted id becomes a new one. */
   const withLabelIds = (labels: BoardLabels | undefined) =>
     labels?.map(({ id = nanoid(), ...l }) => ({ id, ...l }));
 
@@ -138,7 +130,6 @@ export function createKanbanBoardTools(
     }),
     execute: async ({ boardId, confirmName }) =>
       asToolResult(async () => {
-        // A misread id must not take a board full of cards with it.
         const board = await requireBoard(db, scope, boardId);
         if (board.name !== confirmName) {
           return {
