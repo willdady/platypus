@@ -422,9 +422,7 @@ export async function deleteArtifact(
 
     if (!artifact) throw new NotFoundError("Artifact not found");
 
-    await tx
-      .delete(artifactVersionTable)
-      .where(eq(artifactVersionTable.artifactId, artifactId));
+    // why: artifact_version cascades from artifact in db/schema.ts
     await tx.delete(artifactTable).where(scopedArtifact(artifactId, scope));
   });
 }
