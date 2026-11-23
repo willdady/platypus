@@ -101,9 +101,6 @@ describe("slashCommandOf", () => {
     expect(SLASH_COMMAND_PATTERN.exec("/Blog_Post")).toBe(null);
   });
 
-  // The pattern is built from the shape `@platypus/schemas` enforces on save,
-  // so a name it accepts is a name a Skill can have — a stray hyphen resolves
-  // to the valid name beside it rather than to something unsaveable.
   it("accepts only a name a Skill could actually carry", () => {
     expect(slashCommandOf([userMessage("/-nope")])).toBe(null);
     expect(slashCommandOf([userMessage("/blog-post-")])).toBe("blog-post");
@@ -116,8 +113,6 @@ describe("seedUserInvokedSkill", () => {
     const seeded = await seed(messages, queriesFor([blogPost]));
 
     expect(seeded).toHaveLength(2);
-    // The user's own message is untouched: the token stays in the text, which
-    // is what the transcript renders and what a later edit round-trips.
     expect(seeded[0]).toBe(messages[0]);
 
     const trailing: PlatypusUIMessage = seeded[1];
@@ -207,9 +202,6 @@ describe("seedUserInvokedSkill", () => {
 
     const seeded = await seed([...earlier, followUp], queriesFor([blogPost]));
 
-    // Nothing new is seeded, and the persisted pair from the earlier turn still
-    // carries its Skill body — the replayed conversation is the conversation
-    // that happened.
     expect(seeded).toHaveLength(3);
     expect(seeded[1]).toBe(earlier[1]);
   });
@@ -219,8 +211,6 @@ describe("seedUserInvokedSkill", () => {
     const first = await seed([userMessage("/blog-post")], queries);
     const second = await seed([userMessage("/blog-post")], queries);
 
-    // Distinct message ids, so a re-run never collides with the persisted pair
-    // it is replacing.
     expect(first.at(-1)!.id).not.toBe(second.at(-1)!.id);
   });
 });

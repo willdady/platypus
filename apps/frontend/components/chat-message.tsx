@@ -70,6 +70,13 @@ import { TurnStatus } from "./turn-status";
 import { MessagePartBoundary } from "./message-part-boundary";
 import { LoadSkillTool, ReadSkillFileTool } from "./load-skill-tool";
 import { SubAgentTool } from "./sub-agent-tool";
+import {
+  ArtifactToolCard,
+  isArtifactToolPart,
+  replyArtifacts,
+  storedArtifactOf,
+  type ArtifactOpenTarget,
+} from "./artifact-tool-card";
 import { ToolApprovalCard } from "./tool-approval-card";
 import { OfferedFiles, offeredFiles } from "./offered-files";
 import {
@@ -192,6 +199,15 @@ function isWebToolPart(part: MessagePart): part is MessageToolPart {
 }
 
 /**
+ * A stored Artifact write: the kind that moves to the tray once the reply is
+ * finished. A write still streaming, or one that failed, was denied or was
+ * rejected, stored nothing and stays in the reply body as a card.
+ */
+function isStoredArtifactPart(part: MessagePart): boolean {
+  return isArtifactToolPart(part) && storedArtifactOf(part) !== undefined;
+}
+
+/**
  * Every tool-shaped part that has its own specialised renderer below. Kept as
  * one list so the generic renderer's exclusion (`isGenericToolPart`) can be
  * built from it directly, rather than restated by hand — a part can render
@@ -206,6 +222,7 @@ const specializedToolMatchers: Array<(part: MessagePart) => boolean> = [
   isReadSkillFilePart,
   isWebToolPart,
   isSubAgentToolPart,
+  isArtifactToolPart,
   isOfferedFilePart,
 ];
 
@@ -228,8 +245,9 @@ export function isGenericToolPart(part: MessagePart): part is MessageToolPart {
 
 /**
  * Tool calls that sit in a Tool call group. A Sub-Agent delegation has
- * interactive UI of its own, and a call waiting on the User's approval must
- * be seen, so each stands alone and ends the group around it.
+ * interactive UI of its own, an Artifact Card has its own click target, and a
+ * call waiting on the User's approval must be seen, so each stands alone and
+ * ends the group around it.
  */
 function isGroupableToolPart(
   part: MessagePart,
@@ -237,6 +255,7 @@ function isGroupableToolPart(
   return (
     isToolUIPart(part) &&
     !isSubAgentToolPart(part) &&
+    !isArtifactToolPart(part) &&
     part.state !== "approval-requested"
   );
 }
@@ -391,8 +410,12 @@ type ChatMessageProps = {
   onSwitchAlternative: (fromId: string, toId: string) => void;
   /** Callback when user copies message content */
   onCopyMessage: (content: string, messageId: string) => void;
-  /** ID of the message that was recently copied, or null */
-  copiedMessageId: string | null;
+  /**
+   * Whether this message is the one recently copied. Per message rather than
+   * the copied id, so copying one message leaves every other one's props
+   * unchanged and its memo intact.
+   */
+  copied: boolean;
   /**
    * `toolCallId`s whose result Tool-result clearing (ADR-0018 Notes, issue
    * #524), or whose input Tool-input clearing (issue #1722), would leave out
@@ -406,6 +429,10 @@ type ChatMessageProps = {
    * while no turn is running, the one place an answer can resume the reply.
    */
   onApprovalResponse?: (approvalId: string, approved: boolean) => void;
+  /** The Workspace an Artifact Card reads its Artifact back from. */
+  artifactScope?: { orgId: string; workspaceId: string };
+  /** Opens an Artifact in the Chat's side panel beside this transcript. */
+  onOpenArtifact?: (target: ArtifactOpenTarget) => void;
 };
 
 export const ChatMessage = memo(function ChatMessage({
@@ -421,9 +448,11 @@ export const ChatMessage = memo(function ChatMessage({
   alternatives,
   onSwitchAlternative,
   onCopyMessage,
-  copiedMessageId,
+  copied,
   staleToolCallIds,
   onApprovalResponse,
+  artifactScope,
+  onOpenArtifact,
 }: ChatMessageProps) {
   // An edit takes the message's place rather than sitting inside it: the
   // surface holds the text, the attachments and its own Save/Cancel, so
@@ -573,6 +602,14 @@ export const ChatMessage = memo(function ChatMessage({
         cleared={staleToolCallIds?.has(part.toolCallId)}
       />
     )),
+    partRenderer(isArtifactToolPart, (part, i) => (
+      <ArtifactToolCard
+        key={`${message.id}-${i}`}
+        toolPart={part}
+        scope={artifactScope}
+        onOpen={(target) => onOpenArtifact?.(target)}
+      />
+    )),
     partRenderer(isSubAgentToolPart, (part, i) => (
       <SubAgentTool
         key={`${message.id}-${i}`}
@@ -651,12 +688,18 @@ export const ChatMessage = memo(function ChatMessage({
       />
     ) : null;
   };
+  // A stored Artifact write moves to the tray only once the reply is finished,
+  // which is the same gate the offered files use: while the reply is still
+  // being written, its Card stays where the call happened.
+  const hiddenFromBody = (part: MessagePart) =>
+    isOfferedFilePart(part) || (!isAwaitedReply && isStoredArtifactPart(part));
   const segments = partitionParts(
     (message.parts ?? []).map(shownAsDenied),
     isGroupableToolPart,
-    isOfferedFilePart,
+    hiddenFromBody,
   );
   const files = offeredFiles(message.parts ?? []);
+  const artifacts = replyArtifacts(message.parts ?? []);
   // Named for what it sits under, never "version" or "branch" (ADR-0026).
   const alternativeNoun = message.role === "user" ? "Message" : "Response";
   const alternativeLabel =
@@ -748,7 +791,14 @@ export const ChatMessage = memo(function ChatMessage({
           )}
         </>
       )}
-      {!isAwaitedReply && files.length > 0 && <OfferedFiles files={files} />}
+      {!isAwaitedReply && (files.length > 0 || artifacts.length > 0) && (
+        <OfferedFiles
+          files={files}
+          artifacts={artifacts}
+          scope={artifactScope}
+          onOpen={onOpenArtifact}
+        />
+      )}
       {/* The wait covers the whole turn, not only the chunks: between send and
       the first chunk the reply exists with nothing to show, and its controls
       would sit alone where the answer is about to appear. It is the REPLY that
@@ -819,7 +869,7 @@ export const ChatMessage = memo(function ChatMessage({
           <MessageAction
             className="text-muted-foreground"
             onClick={() => onCopyMessage(textContent, message.id)}
-            variant={copiedMessageId === message.id ? "secondary" : "ghost"}
+            variant={copied ? "secondary" : "ghost"}
             size="icon"
             label="Copy"
           >

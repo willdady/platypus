@@ -2,14 +2,8 @@
 
 import Link from "next/link";
 import { type OrgMemberListItem } from "@platypus/schemas";
-import { Field, FieldError, FieldLabel } from "@/components/ui/field";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SelectItem } from "@/components/ui/select";
+import { FormSelectField } from "@/components/form-select-field";
 import { FormSwitchField } from "@/components/form-switch-field";
 import { orgRoutes } from "@/lib/routes";
 import type { Serialized } from "@/lib/api-write";
@@ -69,26 +63,21 @@ export function TransferFields({
 }: TransferFieldsProps) {
   return (
     <>
-      <Field data-invalid={!!error}>
-        <FieldLabel htmlFor={`${idPrefix}-newOwnerId`}>New owner</FieldLabel>
-        <Select
-          value={newOwnerId}
-          onValueChange={(value) => onChange({ newOwnerId: value })}
-          disabled={disabled}
-        >
-          <SelectTrigger id={`${idPrefix}-newOwnerId`}>
-            <SelectValue placeholder="Select a member" />
-          </SelectTrigger>
-          <SelectContent>
-            {recipients.map((m) => (
-              <SelectItem key={m.userId} value={m.userId}>
-                {m.user.name} ({m.user.email})
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {error && <FieldError>{error}</FieldError>}
-      </Field>
+      <FormSelectField
+        label="New owner"
+        name={`${idPrefix}-newOwnerId`}
+        value={newOwnerId}
+        onValueChange={(value) => onChange({ newOwnerId: value })}
+        placeholder="Select a member"
+        error={error}
+        disabled={disabled}
+      >
+        {recipients.map((m) => (
+          <SelectItem key={m.userId} value={m.userId}>
+            {m.user.name} ({m.user.email})
+          </SelectItem>
+        ))}
+      </FormSelectField>
       <FormSwitchField
         align="end"
         name={`${idPrefix}-keepHistory`}

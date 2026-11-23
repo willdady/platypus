@@ -363,7 +363,7 @@ export function SkillsList({
   // Workspace home only: the Organization surface fetches no agent data, so
   // the agent filter would have nothing to offer there. Nothing to filter, no
   // controls.
-  const controls = !isLoading && !error && workspaceId && skills.length > 0 && (
+  const controls = workspaceId && skills.length > 0 && (
     <ListToolbar>
       <SearchInput
         placeholder="Search skills..."
@@ -400,8 +400,7 @@ export function SkillsList({
   // An EmptyCard screen shows its footer once there are rows; a ListState
   // section (the workspace home) shows it under every state, loading and
   // failed included.
-  const showFooter =
-    Boolean(workspaceId) || (!isLoading && !error && !showEmptyCard);
+  const showFooter = Boolean(workspaceId) || !showEmptyCard;
 
   const actions = (
     <>

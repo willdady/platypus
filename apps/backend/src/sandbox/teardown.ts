@@ -12,27 +12,15 @@ import { errorMessage } from "../utils/error-message.ts";
 
 type SandboxRow = typeof sandboxTable.$inferSelect;
 
-// Resolves the adapter for a sandbox row and invokes its destroy() with the
-// row's workspace context. Throws on any failure (see openSandboxRow), or when
-// the adapter's destroy() rejects. The user-initiated DELETE path uses this;
-// the row should remain in place on failure so the user can retry (or
-// force-delete).
 export const destroySandboxRow = async (row: SandboxRow): Promise<void> => {
   const { backend, ctx } = await openSandboxRow(row, "destroy");
   await backend.destroy(ctx);
 };
 
-// Best-effort teardown for every sandbox row in the given workspace. Used by
-// the Workspace cascade path — must never throw and must never block Workspace
-// deletion. Failures are recorded in sandbox_teardown_failure so an operator
-// can reconcile leaked external resources out-of-band.
 export const destroyWorkspaceSandboxes = async (
   workspaceId: string,
 ): Promise<void> => (await prepareWorkspaceSandboxTeardown(workspaceId))();
 
-// The same teardown, with everything it reads from the database read now, so
-// it can run once the Workspace's rows are deleted — after the delete commits,
-// and only if it does. Never throws, now or when run.
 export const prepareWorkspaceSandboxTeardown = async (
   workspaceId: string,
 ): Promise<() => Promise<void>> => {
@@ -40,7 +28,6 @@ export const prepareWorkspaceSandboxTeardown = async (
     .select()
     .from(sandboxTable)
     .where(eq(sandboxTable.workspaceId, workspaceId));
-  // A row that fails to open fails its teardown, as it would have unprepared.
   const opened = await Promise.all(
     rows.map((row) =>
       openSandboxRow(row, "destroy").then(
@@ -68,11 +55,6 @@ const destroyOpened = async (
         await entry.open.backend.destroy(entry.open.ctx);
       } catch (err) {
         const message = errorMessage(err);
-        // Core's line about a plugin's adapter, so it binds the owning plugin
-        // under the same `plugin` key the adapter's own lines carry — an
-        // Operator filtering on one plugin should get both halves of the story.
-        // `null` when the backend belongs to no loaded plugin, which is one way
-        // a cascade teardown fails in the first place.
         const plugin = getSandboxBackendPlugin(row.backend) ?? null;
         logger.warn(
           { workspaceId, sandboxId: row.id, backend: row.backend, plugin, err },
@@ -87,9 +69,6 @@ const destroyOpened = async (
             error: message,
           });
         } catch (ledgerErr) {
-          // The ledger row is what an Operator reconciles a leaked resource
-          // from, so when the insert itself fails this line is all they get —
-          // it carries the backend and plugin the lost row would have named.
           logger.error(
             {
               workspaceId,

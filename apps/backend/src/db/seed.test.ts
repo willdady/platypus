@@ -10,19 +10,6 @@ import {
 } from "./seed.ts";
 import { logger } from "../logger.ts";
 
-/**
- * The one fake executor the suite shares (`seedDb()` in `test-utils.ts`),
- * seeded with the tables the seed touches (plus `workspace`, to pin that it
- * writes none) and told about the one constraint these tests turn on: `user.email` is unique in the real schema, so
- * a leftover User makes a second sign-up fail the way Postgres would.
- *
- * The executor's `transaction` really rolls back — the callback gets a handle
- * bound to a staging copy merged back only on success — which is the assertion
- * issue #369 turns on: after a failed boot the database is back where it
- * started. Code that used `db` where it meant `tx` fails these tests rather
- * than passing quietly. `onInsert` is the seam these tests inject a mid-write
- * failure through.
- */
 const createFakeDb = (
   options: { onInsert?: (table: string) => void } = {},
 ): { handle: unknown; tables: Store } =>
@@ -36,12 +23,6 @@ const createFakeDb = (
 
 const asSeedDb = (fake: { handle: unknown }) => fake.handle as SeedDatabase;
 
-/**
- * Stands in for the better-auth admin plugin's `createUser`: it writes the User
- * row through its own database access, outside any transaction the seed opens
- * — which is the whole reason the seed has to compensate rather than rely on
- * rollback.
- */
 const createUserApi = (
   tables: Store,
   behaviour: { fail?: Error } = {},
@@ -146,9 +127,6 @@ describe("seedFirstBoot", () => {
     );
   });
 
-  // The administrative create-user API the seed goes through hashes whatever
-  // it is given; public sign-up would have refused a short password, so the
-  // seed keeps that refusal itself.
   it("refuses an ADMIN_PASSWORD shorter than 8 characters before writing anything", async () => {
     const fake = createFakeDb();
     const createUser = createUserApi(fake.tables);
@@ -166,8 +144,6 @@ describe("seedFirstBoot", () => {
     expect(fake.tables.organization).toHaveLength(0);
   });
 
-  // The pair every deployment guide used to ship. A production deployment that
-  // never changed it is the one an attacker tries first, so it must not boot.
   it("refuses the well-known admin credentials in production", async () => {
     const fake = createFakeDb();
     const createUser = createUserApi(fake.tables);
@@ -220,8 +196,6 @@ describe("seedFirstBoot", () => {
     expect(fake.tables.organization).toHaveLength(0);
     expect(fake.tables.organization_member).toHaveLength(0);
     expect(fake.tables.workspace).toHaveLength(0);
-    // The User is written by better-auth outside the transaction, so rollback
-    // cannot remove it — the seed compensates explicitly.
     expect(fake.tables.user).toHaveLength(0);
   });
 
@@ -287,9 +261,6 @@ describe("seedFirstBoot", () => {
 
   it("refuses to promote a User that already holds ADMIN_EMAIL", async () => {
     const fake = createFakeDb();
-    // Compensation can itself fail — the database is the thing that broke — so
-    // a leftover User is reachable. Promoting whoever holds the address would
-    // be an escalation; the seed stops and says which row to delete.
     fake.tables.user.push({
       id: "leftover-user",
       email: VALID_ENV.ADMIN_EMAIL,

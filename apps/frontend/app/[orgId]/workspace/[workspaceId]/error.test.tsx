@@ -12,17 +12,13 @@ vi.mock("@/components/app-sidebar", () => ({
   AppSidebar: () => <nav data-testid="app-sidebar" />,
 }));
 
+vi.mock("@/components/workspace-switcher", () => ({
+  WorkspaceSwitcher: () => <div data-testid="workspace-switcher" />,
+}));
+
 vi.mock("@/components/header", () => ({
-  Header: ({
-    leftContent,
-    bordered = true,
-  }: {
-    leftContent?: React.ReactNode;
-    bordered?: boolean;
-  }) => (
-    <header data-testid="header" data-bordered={bordered}>
-      {leftContent}
-    </header>
+  Header: ({ leftContent }: { leftContent?: React.ReactNode }) => (
+    <header data-testid="header">{leftContent}</header>
   ),
 }));
 
@@ -44,16 +40,14 @@ afterEach(() => {
 
 describe("WorkspacePageError", () => {
   it.each(["/org1/workspace/ws1", "/org1/workspace/ws1/chat/chat1"])(
-    "draws the app sidebar and the Workspace home on %s",
+    "draws the app sidebar and the switcher on %s",
     (pathname) => {
       nav.pathname = pathname;
 
       renderError();
 
       expect(screen.getByTestId("app-sidebar")).toBeInTheDocument();
-      expect(
-        screen.getByRole("link", { name: "Workspace home" }),
-      ).toHaveAttribute("href", "/org1/workspace/ws1");
+      expect(screen.getByTestId("workspace-switcher")).toBeInTheDocument();
     },
   );
 
@@ -63,8 +57,6 @@ describe("WorkspacePageError", () => {
     renderError();
 
     expect(screen.queryByTestId("app-sidebar")).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("link", { name: "Workspace home" }),
-    ).toHaveAttribute("href", "/org1/workspace/ws1");
+    expect(screen.getByTestId("workspace-switcher")).toBeInTheDocument();
   });
 });

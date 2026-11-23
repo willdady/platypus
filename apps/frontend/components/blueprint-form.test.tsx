@@ -19,11 +19,13 @@ import {
   setupUser,
   stubAcceptedSave,
   stubRejectedSave,
+  stubSaveSequence,
   toastError,
   toastSuccess,
 } from "@/test/form-test-harness";
 import { selectOption } from "@/test/test-utils";
 import { scopedPath } from "@/lib/api-write";
+import { FIX_FORM_ERRORS_MESSAGE } from "@/lib/apply-write-outcome";
 
 vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("swr", () => swrMock);
@@ -159,6 +161,44 @@ describe("BlueprintForm save feedback", () => {
     await waitFor(() =>
       expect(toastError).toHaveBeenCalledWith("Provider is unavailable"),
     );
+    expect(
+      screen.queryByText("Provider is unavailable"),
+    ).not.toBeInTheDocument();
+  });
+
+  // #1958: the form once kept its last save failure in local state, so it
+  // stayed put through later edits and sat beside the next save's field
+  // errors. It now toasts, like its sibling forms.
+  it("doesn't carry a failed save's message into later edits or a later save", async () => {
+    stubSaveSequence(
+      { status: 500, body: { error: "Provider is unavailable" } },
+      {
+        status: 400,
+        body: { error: [{ path: ["name"], message: "Name is taken" }] },
+      },
+    );
+
+    render(<BlueprintForm orgId="org1" />);
+    const name = screen.getByLabelText("Name");
+    fireEvent.change(name, { target: { value: "Starter" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(toastError).toHaveBeenCalledWith("Provider is unavailable"),
+    );
+    expect(
+      screen.queryByText("Provider is unavailable"),
+    ).not.toBeInTheDocument();
+
+    fireEvent.change(name, { target: { value: "Starter kit" } });
+    expect(
+      screen.queryByText("Provider is unavailable"),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByText("Name is taken")).toBeInTheDocument();
+    expect(toastError).toHaveBeenCalledWith(FIX_FORM_ERRORS_MESSAGE);
     expect(
       screen.queryByText("Provider is unavailable"),
     ).not.toBeInTheDocument();

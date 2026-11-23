@@ -17,7 +17,6 @@ const createFields = (): McpCreateFields => ({
 
 const updateFields = (): McpUpdateFields => createFields();
 
-/** The dead id is scrubbed from referencing Agents' toolSetIds (#689). */
 const expectToolSetScrub = (mcpId: string) => {
   expect(mockDb.update).toHaveBeenCalledWith(agentTable);
   expect(mockDb.where).toHaveBeenLastCalledWith(
@@ -36,7 +35,7 @@ describe("mcp write model", () => {
 
   describe("createMcp", () => {
     it("inserts a workspace-scoped MCP with a generated id and derived slug", async () => {
-      mockDb.limit.mockResolvedValueOnce([]); // assertMcpSlugAvailable — no conflict
+      mockDb.limit.mockResolvedValueOnce([]);
       const inserted = { id: "mcp-1", workspaceId: "ws-1" };
       mockDb.returning.mockResolvedValueOnce([inserted]);
 
@@ -54,7 +53,7 @@ describe("mcp write model", () => {
     });
 
     it("inserts an organization-scoped MCP with no workspace", async () => {
-      mockDb.limit.mockResolvedValueOnce([]); // assertMcpSlugAvailable — no conflict
+      mockDb.limit.mockResolvedValueOnce([]);
       mockDb.returning.mockResolvedValueOnce([{ id: "mcp-1" }]);
 
       await createMcp({ kind: "organization", orgId: "org-1" }, createFields());
@@ -64,8 +63,24 @@ describe("mcp write model", () => {
       expect(values.workspaceId).toBeNull();
     });
 
+    it("takes the scope from the scope, never from scope fields in the body", async () => {
+      mockDb.limit.mockResolvedValueOnce([]);
+      mockDb.returning.mockResolvedValueOnce([{ id: "mcp-1" }]);
+
+      await createMcp({ kind: "workspace", ctx: workspaceCtx }, {
+        ...createFields(),
+        organizationId: "org-evil",
+        workspaceId: "ws-evil",
+      } as McpCreateFields);
+
+      expect(mockDb.values.mock.calls[0][0]).toMatchObject({
+        workspaceId: "ws-1",
+        organizationId: null,
+      });
+    });
+
     it("throws ConflictError when the derived slug collides, before the insert", async () => {
-      mockDb.limit.mockResolvedValueOnce([{ id: "other-mcp", name: "My MCP" }]); // assertMcpSlugAvailable — conflict
+      mockDb.limit.mockResolvedValueOnce([{ id: "other-mcp", name: "My MCP" }]);
 
       await expect(
         createMcp({ kind: "workspace", ctx: workspaceCtx }, createFields()),
@@ -84,8 +99,8 @@ describe("mcp write model", () => {
             url: "http://mcp.example.com",
             authType: "None",
           },
-        ]) // requireWorkspaceMutable
-        .mockResolvedValueOnce([]); // assertMcpSlugAvailable — no conflict
+        ])
+        .mockResolvedValueOnce([]);
       const updated = { id: "mcp-1", workspaceId: "ws-1", name: "Renamed" };
       mockDb.returning.mockResolvedValueOnce([updated]);
 
@@ -115,8 +130,8 @@ describe("mcp write model", () => {
             workspaceId: "ws-1",
             url: "http://old.example.com",
           },
-        ]) // requireWorkspaceMutable
-        .mockResolvedValueOnce([]); // assertMcpSlugAvailable
+        ])
+        .mockResolvedValueOnce([]);
       mockDb.returning.mockResolvedValueOnce([{ id: "mcp-1" }]);
 
       await updateMcp({ kind: "workspace", ctx: workspaceCtx }, "mcp-1", {
@@ -145,8 +160,8 @@ describe("mcp write model", () => {
             url: "http://old.example.com",
             oauthClientId: "old-client",
           },
-        ]) // requireWorkspaceMutable
-        .mockResolvedValueOnce([]); // assertMcpSlugAvailable
+        ])
+        .mockResolvedValueOnce([]);
       mockDb.returning.mockResolvedValueOnce([{ id: "mcp-1" }]);
 
       await updateMcp({ kind: "workspace", ctx: workspaceCtx }, "mcp-1", {
@@ -187,6 +202,24 @@ describe("mcp write model", () => {
       expect(set).not.toHaveProperty("oauthClientId");
     });
 
+    it("renames an MCP whose stored URL predates the egress guard, checking only a new URL", async () => {
+      const legacyUrl = "http://169.254.169.254/mcp";
+      mockDb.limit
+        .mockResolvedValueOnce([
+          { id: "mcp-1", workspaceId: "ws-1", url: legacyUrl },
+        ])
+        .mockResolvedValueOnce([]);
+      mockDb.returning.mockResolvedValueOnce([{ id: "mcp-1" }]);
+
+      await expect(
+        updateMcp({ kind: "workspace", ctx: workspaceCtx }, "mcp-1", {
+          ...updateFields(),
+          name: "Renamed",
+          url: legacyUrl,
+        }),
+      ).resolves.toEqual({ id: "mcp-1" });
+    });
+
     it.each([
       ["a new client ID", "old-client", "new-client", true],
       ["the same client ID", "old-client", "old-client", false],
@@ -219,7 +252,6 @@ describe("mcp write model", () => {
             oauthRefreshToken: null,
             oauthAuthorizationServer: null,
             oauthClientId: sent,
-            // No secret sent: the stored one belonged to the old client.
             oauthClientSecret: null,
             oauthClientDynamicallyRegistered: false,
           });
@@ -309,7 +341,7 @@ describe("mcp write model", () => {
     });
 
     it("throws NotFoundError for a workspace MCP not visible here, before the write", async () => {
-      mockDb.limit.mockResolvedValueOnce([]); // resolveScoped: no row
+      mockDb.limit.mockResolvedValueOnce([]);
 
       await expect(
         updateMcp(
@@ -326,7 +358,7 @@ describe("mcp write model", () => {
         .mockResolvedValueOnce([
           { id: "mcp-1", organizationId: "org-1", workspaceId: null },
         ])
-        .mockResolvedValueOnce([{ id: "att-1" }]); // attached
+        .mockResolvedValueOnce([{ id: "att-1" }]);
 
       await expect(
         updateMcp(
@@ -347,8 +379,8 @@ describe("mcp write model", () => {
             workspaceId: null,
             url: "http://mcp.example.com",
           },
-        ]) // requireOrgScoped
-        .mockResolvedValueOnce([]); // assertMcpSlugAvailable
+        ])
+        .mockResolvedValueOnce([]);
       const updated = { id: "mcp-1", organizationId: "org-1" };
       mockDb.returning.mockResolvedValueOnce([updated]);
 
@@ -365,7 +397,7 @@ describe("mcp write model", () => {
     });
 
     it("throws NotFoundError for an org MCP that is not Shared here, before the write", async () => {
-      mockDb.limit.mockResolvedValueOnce([]); // requireOrgScoped: not found
+      mockDb.limit.mockResolvedValueOnce([]);
 
       await expect(
         updateMcp(
@@ -386,9 +418,9 @@ describe("mcp write model", () => {
             workspaceId: null,
             url: "http://mcp.example.com",
           },
-        ]) // requireOrgScoped
-        .mockResolvedValueOnce([]); // assertMcpSlugAvailable
-      mockDb.returning.mockResolvedValueOnce([]); // UPDATE matched nothing
+        ])
+        .mockResolvedValueOnce([]);
+      mockDb.returning.mockResolvedValueOnce([]);
 
       await expect(
         updateMcp(
@@ -404,8 +436,8 @@ describe("mcp write model", () => {
     it("deletes a workspace-scoped MCP and scrubs its id from referencing Agents' toolSetIds (#689)", async () => {
       mockDb.limit.mockResolvedValueOnce([
         { id: "mcp-1", workspaceId: "ws-1" },
-      ]); // requireWorkspaceMutable
-      mockDb.returning.mockResolvedValueOnce([{ id: "mcp-1" }]); // delete
+      ]);
+      mockDb.returning.mockResolvedValueOnce([{ id: "mcp-1" }]);
 
       await deleteMcp({ kind: "workspace", ctx: workspaceCtx }, "mcp-1");
 
@@ -413,7 +445,6 @@ describe("mcp write model", () => {
       expect(mockDb.where).toHaveBeenCalledWith(
         workspaceScopedWhere("mcp", "mcp-1", "ws-1"),
       );
-      // Workspace-scope delete never scrubbed before #689.
       expectToolSetScrub("mcp-1");
     });
 
@@ -421,7 +452,7 @@ describe("mcp write model", () => {
       mockDb.limit.mockResolvedValueOnce([
         { id: "mcp-1", workspaceId: "ws-1" },
       ]);
-      mockDb.returning.mockResolvedValueOnce([]); // delete matched nothing
+      mockDb.returning.mockResolvedValueOnce([]);
 
       await deleteMcp({ kind: "workspace", ctx: workspaceCtx }, "mcp-1");
 
@@ -433,7 +464,7 @@ describe("mcp write model", () => {
         .mockResolvedValueOnce([
           { id: "mcp-1", organizationId: "org-1", workspaceId: null },
         ])
-        .mockResolvedValueOnce([{ id: "att-1" }]); // attached
+        .mockResolvedValueOnce([{ id: "att-1" }]);
 
       await expect(
         deleteMcp({ kind: "workspace", ctx: workspaceCtx }, "mcp-1"),
@@ -443,9 +474,7 @@ describe("mcp write model", () => {
     });
 
     it("deletes an org MCP once it is confirmed deletable, scrubbing dead references in the same transaction", async () => {
-      mockDb.limit
-        .mockResolvedValueOnce([]) // requireSharedDeletable: no attachment
-        .mockResolvedValueOnce([]); // requireSharedDeletable: no blueprint
+      mockDb.limit.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
       mockDb.returning.mockResolvedValueOnce([{ id: "mcp-1" }]);
 
       await deleteMcp({ kind: "organization", orgId: "org-1" }, "mcp-1");
@@ -458,7 +487,7 @@ describe("mcp write model", () => {
     });
 
     it("throws ConflictError while an Attachment still references the org MCP", async () => {
-      mockDb.limit.mockResolvedValueOnce([{ id: "att-1" }]); // attached
+      mockDb.limit.mockResolvedValueOnce([{ id: "att-1" }]);
 
       await expect(
         deleteMcp({ kind: "organization", orgId: "org-1" }, "mcp-1"),
@@ -468,8 +497,8 @@ describe("mcp write model", () => {
 
     it("throws ConflictError while a Blueprint still references the org MCP", async () => {
       mockDb.limit
-        .mockResolvedValueOnce([]) // no attachment
-        .mockResolvedValueOnce([{ id: "bpi-1" }]); // listed in a blueprint
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([{ id: "bpi-1" }]);
 
       await expect(
         deleteMcp({ kind: "organization", orgId: "org-1" }, "mcp-1"),
@@ -478,10 +507,8 @@ describe("mcp write model", () => {
     });
 
     it("throws NotFoundError when the org delete matches no row", async () => {
-      mockDb.limit
-        .mockResolvedValueOnce([]) // requireSharedDeletable: no attachment
-        .mockResolvedValueOnce([]); // requireSharedDeletable: no blueprint
-      mockDb.returning.mockResolvedValueOnce([]); // delete matched nothing
+      mockDb.limit.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+      mockDb.returning.mockResolvedValueOnce([]);
 
       await expect(
         deleteMcp({ kind: "organization", orgId: "org-1" }, "missing"),

@@ -35,7 +35,7 @@ describe("Authorization Middleware", () => {
     });
 
     it("should return 403 if user is not a member of the organization", async () => {
-      mockDb.limit.mockResolvedValueOnce([]); // No membership found
+      mockDb.limit.mockResolvedValueOnce([]);
 
       const app = new Hono<{ Variables: Variables }>();
       app.use("*", async (c, next) => {
@@ -77,8 +77,6 @@ describe("Authorization Middleware", () => {
   });
 
   describe("requireWorkspaceAccess", () => {
-    // Routes are mounted under :orgId so the cross-org guard can compare the
-    // resolved workspace's organizationId against the path orgId.
     const buildApp = (
       user: unknown,
       orgMembership: unknown,
@@ -86,8 +84,6 @@ describe("Authorization Middleware", () => {
       const app = new Hono<{ Variables: Variables }>();
       app.use("*", async (c, next) => {
         c.set("user", user as never);
-        // Both of these are what requireOrgAccess leaves behind; this stub
-        // stands in for it, so requireWorkspaceAccess sees its prerequisite.
         c.set("orgMembership", orgMembership as never);
         c.set("orgScope", {
           orgId: "org-1",
@@ -106,7 +102,6 @@ describe("Authorization Middleware", () => {
     };
 
     it("should allow super admin to bypass workspace checks", async () => {
-      // Mock workspace lookup for super admin
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "other-user", organizationId: "org-1" },
       ]);
@@ -124,7 +119,6 @@ describe("Authorization Middleware", () => {
     });
 
     it("should allow org admin to bypass workspace checks", async () => {
-      // Workspace lookup
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "other-user", organizationId: "org-1" },
       ]);
@@ -139,7 +133,6 @@ describe("Authorization Middleware", () => {
     });
 
     it("should allow workspace owner access", async () => {
-      // Workspace lookup - user is owner
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "u1", organizationId: "org-1" },
       ]);
@@ -154,7 +147,6 @@ describe("Authorization Middleware", () => {
     });
 
     it("should return 403 if user is not workspace owner", async () => {
-      // Workspace lookup - user is not owner
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "other-user", organizationId: "org-1" },
       ]);
@@ -168,7 +160,6 @@ describe("Authorization Middleware", () => {
     });
 
     it("should return 404 if workspace not found", async () => {
-      // Workspace lookup - not found
       mockDb.limit.mockResolvedValueOnce([]);
 
       const app = buildApp({ id: "u1", role: "user" }, { role: "member" });
@@ -179,8 +170,7 @@ describe("Authorization Middleware", () => {
       expect(res.status).toBe(404);
     });
 
-    it("should return 404 when workspace belongs to a different org (member)", async () => {
-      // Workspace exists but lives in org-2 while the path names org-1.
+    it("hides a workspace in another org behind the not-found 404 (member)", async () => {
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "u1", organizationId: "org-2" },
       ]);
@@ -194,7 +184,7 @@ describe("Authorization Middleware", () => {
       expect(await res.json()).toEqual({ error: "Workspace not found" });
     });
 
-    it("should return 404 when workspace belongs to a different org (org admin)", async () => {
+    it("hides a workspace in another org behind the not-found 404 (org admin)", async () => {
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "other-user", organizationId: "org-2" },
       ]);
@@ -208,7 +198,7 @@ describe("Authorization Middleware", () => {
       expect(await res.json()).toEqual({ error: "Workspace not found" });
     });
 
-    it("should return 404 when workspace belongs to a different org (super admin)", async () => {
+    it("hides a workspace in another org behind the not-found 404 (super admin)", async () => {
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "other-user", organizationId: "org-2" },
       ]);
@@ -227,10 +217,6 @@ describe("Authorization Middleware", () => {
   });
 
   describe("scope accessors", () => {
-    /**
-     * A route under the real middleware chain, so the accessors are read
-     * exactly where a handler reads them.
-     */
     const buildApp = (user: {
       id: string;
       role: string;
@@ -238,8 +224,6 @@ describe("Authorization Middleware", () => {
     }): Hono<{ Variables: Variables }> => {
       const app = new Hono<{ Variables: Variables }>();
       app.use("*", async (c, next) => {
-        // requireAuth would set this; stand in for it. `userScope` is derived
-        // from it, never stored.
         c.set("user", user as never);
         await next();
       });
@@ -258,8 +242,6 @@ describe("Authorization Middleware", () => {
         c.json({ user: userOf(c).id, membership: orgMembershipOf(c) }),
       );
       app.get("/unguarded-membership", (c) => c.json(orgMembershipOf(c)));
-      // Hono turns a handler throw into a 500; surface the message so the
-      // wiring mistake is assertable.
       app.onError((err, c) => c.text(err.message, 500));
       return app;
     };

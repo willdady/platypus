@@ -3,7 +3,7 @@ import { mockDb, resetMockDb } from "../test-utils.ts";
 import { logger } from "../logger.ts";
 import { and, eq } from "drizzle-orm";
 import { chat as chatTable, provider as providerTable } from "../db/schema.ts";
-import { UNTITLED_CHAT_TITLE } from "@platypus/schemas";
+import { UNTITLED_CHAT_TITLE, type ConcreteModelId } from "@platypus/schemas";
 
 const { mockGenerateText, mockLanguageModel, mockLoadActivePath } = vi.hoisted(
   () => ({
@@ -26,7 +26,11 @@ vi.mock("./provider.ts", () => ({
   }),
 }));
 
-import { generateChatMetadata, MAX_TITLE_FAILURES } from "./chat-metadata.ts";
+import {
+  generateChatMetadata,
+  MAX_TITLE_FAILURES,
+  startEarlyChatTitle,
+} from "./chat-metadata.ts";
 import { openProvider } from "./provider.ts";
 import type { PlatypusUIMessage } from "../types.ts";
 
@@ -36,10 +40,6 @@ const userMessage: PlatypusUIMessage = {
   parts: [{ type: "text", text: "How do I center a div?" }],
 };
 
-/**
- * Stubs the reads generateChatMetadata makes before the model call. A Chat's
- * `messages` are its Active path, read from the Chat's leaf.
- */
 const stubReads = (opts: {
   chat:
     (Record<string, unknown> & { messages?: PlatypusUIMessage[] }) | undefined;
@@ -49,13 +49,13 @@ const stubReads = (opts: {
   const { messages = [], ...chat } = opts.chat ?? {};
   mockDb.limit.mockResolvedValueOnce(
     opts.chat ? [{ ...chat, activeLeafId: "leaf-1" }] : [],
-  ); // chat
+  );
   mockLoadActivePath.mockResolvedValue({ messages, tree: [] });
   if (opts.workspace !== undefined) {
-    mockDb.limit.mockResolvedValueOnce(opts.workspace ? [opts.workspace] : []); // workspace
+    mockDb.limit.mockResolvedValueOnce(opts.workspace ? [opts.workspace] : []);
   }
   if (opts.provider !== undefined) {
-    mockDb.limit.mockResolvedValueOnce(opts.provider ? [opts.provider] : []); // provider
+    mockDb.limit.mockResolvedValueOnce(opts.provider ? [opts.provider] : []);
   }
 };
 
@@ -68,7 +68,6 @@ const provider = {
   organizationId: null,
 };
 
-/** The same Provider as a Shared (org-scoped) row. */
 const sharedProvider = {
   ...provider,
   workspaceId: null,
@@ -104,22 +103,17 @@ describe("generateChatMetadata", () => {
     const result = await generateChatMetadata(params);
 
     expect(result).toEqual(updated);
-    // Titling is a Provider call inside the Chat, so its Header placeholder
-    // resolves to the Chat's id.
     expect(openProvider).toHaveBeenCalledWith(provider, {
       sessionId: "chat-1",
     });
-    // Not the Chat's memory snapshot, which titling never reads.
     expect(Object.keys(mockDb.select.mock.calls[0][0] as object)).not.toContain(
       "memorySnapshot",
     );
-    // The Active path, not the Chat's Alternatives.
+    expect(mockLoadActivePath).toHaveBeenCalledTimes(1);
     expect(mockLoadActivePath).toHaveBeenCalledWith("chat-1", "leaf-1");
     const setArg = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
     expect(setArg.title).toBe("Centering a div");
     expect(setArg).not.toHaveProperty("tags");
-    // Read and written only within this Workspace; the write only while the
-    // Chat is still Untitled.
     expect(mockDb.where).toHaveBeenCalledWith(
       and(eq(chatTable.id, "chat-1"), eq(chatTable.workspaceId, "ws-1")),
     );
@@ -130,6 +124,28 @@ describe("generateChatMetadata", () => {
         eq(chatTable.title, UNTITLED_CHAT_TITLE),
       ),
     );
+  });
+
+  it("sends the task model's Job settings, and none without them", async () => {
+    const title = async (taskModelSettings: unknown) => {
+      stubReads({
+        chat: { id: "chat-1", title: "Untitled", messages: [userMessage] },
+        workspace: { id: "ws-1", taskModelProviderId: null },
+        provider: { ...provider, taskModelSettings },
+      });
+      mockGenerateText.mockResolvedValueOnce({ output: { title: "A title" } });
+      mockDb.returning.mockResolvedValueOnce([{ id: "chat-1" }]);
+      await generateChatMetadata(params);
+      return mockGenerateText.mock.lastCall?.[0] as Record<string, unknown>;
+    };
+
+    expect(await title({ temperature: 0.1, seed: 7 })).toMatchObject({
+      temperature: 0.1,
+      seed: 7,
+    });
+    const plain = await title(null);
+    expect(plain).not.toHaveProperty("temperature");
+    expect(plain).not.toHaveProperty("seed");
   });
 
   it("asks for a title alone and sends only the text of each message", async () => {
@@ -164,7 +180,6 @@ describe("generateChatMetadata", () => {
     expect(prompt).not.toContain("Existing tags");
     expect(prompt).toContain("Conversation:\nuser:\nWhat is this?");
     expect(prompt).not.toContain("data:,");
-    // No existing-tags lookup is made any more.
     expect(mockDb.execute).not.toHaveBeenCalled();
   });
 
@@ -212,7 +227,6 @@ describe("generateChatMetadata", () => {
       mockDb.returning.mockResolvedValueOnce([{ titleFailures: 1 }]);
 
       expect(await generateChatMetadata(params)).toBeNull();
-      // Only the failure count is written, never a title.
       expect(mockDb.set).toHaveBeenCalledTimes(1);
       expect(mockDb.set.mock.calls[0]?.[0]).not.toHaveProperty("title");
     },
@@ -304,6 +318,33 @@ describe("generateChatMetadata", () => {
     expect(call.abortSignal).toBeInstanceOf(AbortSignal);
   });
 
+  it("asks for no more than the task model's declared Max output tokens", async () => {
+    stubReads({
+      chat: { id: "chat-1", title: "Untitled", messages: [userMessage] },
+      workspace: { id: "ws-1", taskModelProviderId: null },
+      provider: {
+        ...provider,
+        modelIds: [
+          {
+            id: "task-model",
+            passthroughFileTypes: [],
+            maxOutputTokens: 1_024,
+          },
+        ],
+      },
+    });
+    mockGenerateText.mockResolvedValueOnce({
+      output: { title: "Titled" },
+    });
+    mockDb.returning.mockResolvedValueOnce([{ id: "chat-1" }]);
+
+    await generateChatMetadata(params);
+
+    expect(mockGenerateText.mock.calls[0]?.[0]).toMatchObject({
+      maxOutputTokens: 1_024,
+    });
+  });
+
   it("prefers the workspace task-model provider override", async () => {
     stubReads({
       chat: { id: "chat-1", title: "Untitled", messages: [userMessage] },
@@ -348,6 +389,29 @@ describe("generateChatMetadata", () => {
     expect(mockGenerateText).not.toHaveBeenCalled();
   });
 
+  it("decides there is nothing to title before resolving the provider", async () => {
+    const warn = vi.spyOn(logger, "warn");
+    stubReads({
+      chat: {
+        id: "chat-1",
+        title: "Untitled",
+        messages: [{ id: "m-1", role: "user", parts: [] }],
+      },
+      workspace: { id: "ws-1", taskModelProviderId: "unattached-provider" },
+      provider: null,
+    });
+
+    const result = await generateChatMetadata(params);
+
+    expect(result).toBeNull();
+    expect(mockDb.limit).toHaveBeenCalledTimes(1);
+    expect(warn).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.stringContaining("not visible in this workspace"),
+    );
+    warn.mockRestore();
+  });
+
   it("returns null when the chat does not exist", async () => {
     stubReads({ chat: undefined });
 
@@ -365,8 +429,6 @@ describe("generateChatMetadata", () => {
     mockGenerateText.mockResolvedValueOnce({
       output: { title: "Titled" },
     });
-    // A concurrent run already flipped the title away from "Untitled", so the
-    // guarded UPDATE matches no rows.
     mockDb.returning.mockResolvedValueOnce([]);
 
     const result = await generateChatMetadata(params);
@@ -374,15 +436,12 @@ describe("generateChatMetadata", () => {
   });
 
   it("refuses a Shared provider that is not attached to this workspace", async () => {
-    // Titling resolves its Provider through the Scoped-resource authority, so a
-    // Shared Provider reaches this Workspace only where an Attachment does
-    // (ADR-0007) — matching every other resource a Chat turn resolves.
     stubReads({
       chat: { id: "chat-1", title: "Untitled", messages: [userMessage] },
       workspace: { id: "ws-1", taskModelProviderId: null },
       provider: sharedProvider,
     });
-    mockDb.limit.mockResolvedValueOnce([]); // attachment check → not attached
+    mockDb.limit.mockResolvedValueOnce([]);
 
     const result = await generateChatMetadata(params);
     expect(result).toBeNull();
@@ -395,7 +454,7 @@ describe("generateChatMetadata", () => {
       workspace: { id: "ws-1", taskModelProviderId: null },
       provider: sharedProvider,
     });
-    mockDb.limit.mockResolvedValueOnce([{ id: "att-1" }]); // attached here
+    mockDb.limit.mockResolvedValueOnce([{ id: "att-1" }]);
     mockGenerateText.mockResolvedValueOnce({
       output: { title: "Titled" },
     });
@@ -409,7 +468,7 @@ describe("generateChatMetadata", () => {
     stubReads({
       chat: { id: "chat-1", title: "Untitled", messages: [userMessage] },
       workspace: { id: "ws-1", taskModelProviderId: null },
-      provider: undefined,
+      provider: null,
     });
 
     const result = await generateChatMetadata(params);
@@ -417,14 +476,12 @@ describe("generateChatMetadata", () => {
     expect(mockGenerateText).not.toHaveBeenCalled();
   });
 
-  // Titling is fire-and-forget: the caller swallows the outcome, so without a
-  // log an unresolvable provider is indistinguishable from "titling is broken".
   it("warns, naming the provider, when the provider cannot be resolved", async () => {
     const warn = vi.spyOn(logger, "warn").mockImplementation(() => logger);
     stubReads({
       chat: { id: "chat-1", title: "Untitled", messages: [userMessage] },
       workspace: { id: "ws-1", taskModelProviderId: "prov-override" },
-      provider: undefined,
+      provider: null,
     });
 
     await generateChatMetadata(params);
@@ -439,5 +496,150 @@ describe("generateChatMetadata", () => {
       expect.stringContaining("not visible in this workspace"),
     );
     warn.mockRestore();
+  });
+});
+
+describe("startEarlyChatTitle", () => {
+  beforeEach(() => {
+    resetMockDb();
+    vi.clearAllMocks();
+    mockLanguageModel.mockReturnValue({});
+  });
+
+  const params = {
+    chatId: "chat-1",
+    workspaceId: "ws-1",
+    orgId: "org-1",
+    providerId: "p1",
+    modelId: "chat-model" as ConcreteModelId,
+  };
+
+  const untitledChat = {
+    id: "chat-1",
+    title: "Untitled",
+    messages: [userMessage],
+  };
+
+  const expectTitled = () => {
+    expect(mockGenerateText).toHaveBeenCalledTimes(1);
+    expect(mockDb.set.mock.calls[0]?.[0]).toMatchObject({ title: "Titled" });
+  };
+
+  const titleSuccessfully = () => {
+    mockGenerateText.mockResolvedValueOnce({ output: { title: "Titled" } });
+    mockDb.returning.mockResolvedValueOnce([{ id: "chat-1", title: "Titled" }]);
+  };
+
+  it("titles early when the task model is a different model on the turn's provider", async () => {
+    stubReads({
+      chat: untitledChat,
+      workspace: { id: "ws-1", taskModelProviderId: null },
+      provider: { ...provider, id: "p1", taskModelId: "task-model" },
+    });
+    titleSuccessfully();
+
+    await startEarlyChatTitle(params);
+
+    expectTitled();
+  });
+
+  it("titles early when the task model lives on a different provider", async () => {
+    stubReads({
+      chat: untitledChat,
+      workspace: { id: "ws-1", taskModelProviderId: "override-provider" },
+      provider: {
+        ...provider,
+        id: "override-provider",
+        taskModelId: "chat-model",
+      },
+    });
+    titleSuccessfully();
+
+    await startEarlyChatTitle(params);
+
+    expectTitled();
+  });
+
+  it("leaves titling to the run's end when the task model is the Chat's own model", async () => {
+    stubReads({
+      chat: untitledChat,
+      workspace: { id: "ws-1", taskModelProviderId: null },
+      provider: { ...provider, id: "p1", taskModelId: "chat-model" },
+    });
+
+    await startEarlyChatTitle(params);
+
+    expect(mockGenerateText).not.toHaveBeenCalled();
+    expect(mockDb.set).not.toHaveBeenCalled();
+  });
+
+  it("makes no early attempt on an already titled chat", async () => {
+    stubReads({
+      chat: { ...untitledChat, title: "My renamed chat" },
+    });
+
+    await startEarlyChatTitle(params);
+
+    expect(mockGenerateText).not.toHaveBeenCalled();
+  });
+
+  it("makes no early attempt once titling has given up", async () => {
+    stubReads({
+      chat: { ...untitledChat, titleFailures: MAX_TITLE_FAILURES },
+    });
+
+    await startEarlyChatTitle(params);
+
+    expect(mockGenerateText).not.toHaveBeenCalled();
+  });
+
+  it("leaves the last permitted attempt to the run's end", async () => {
+    stubReads({
+      chat: { ...untitledChat, titleFailures: MAX_TITLE_FAILURES - 1 },
+      workspace: { id: "ws-1", taskModelProviderId: null },
+      provider,
+    });
+
+    await startEarlyChatTitle(params);
+
+    expect(mockGenerateText).not.toHaveBeenCalled();
+  });
+
+  it("makes no early attempt when the provider has no task model configured", async () => {
+    stubReads({
+      chat: untitledChat,
+      workspace: { id: "ws-1", taskModelProviderId: null },
+      provider: { ...provider, id: "p1", taskModelId: "" },
+    });
+
+    await startEarlyChatTitle(params);
+
+    expect(mockGenerateText).not.toHaveBeenCalled();
+  });
+
+  it("makes no early attempt when the title provider cannot be resolved", async () => {
+    stubReads({
+      chat: untitledChat,
+      workspace: { id: "ws-1", taskModelProviderId: null },
+      provider: null,
+    });
+
+    await startEarlyChatTitle(params);
+
+    expect(mockGenerateText).not.toHaveBeenCalled();
+  });
+
+  it("counts a failed attempt and rethrows it, as any other title call does", async () => {
+    stubReads({
+      chat: untitledChat,
+      workspace: { id: "ws-1", taskModelProviderId: null },
+      provider,
+    });
+    mockGenerateText.mockRejectedValueOnce(new Error("provider down"));
+    mockDb.returning.mockResolvedValueOnce([{ titleFailures: 1 }]);
+
+    await expect(startEarlyChatTitle(params)).rejects.toThrow("provider down");
+    expect(mockDb.set).toHaveBeenCalledTimes(1);
+    expect(mockDb.set.mock.calls[0]?.[0]).not.toHaveProperty("title");
   });
 });

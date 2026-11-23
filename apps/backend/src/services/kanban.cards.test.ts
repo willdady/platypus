@@ -13,13 +13,6 @@ import { requireCard, type KanbanContext } from "./kanban-shared.ts";
 
 type Database = typeof db;
 
-/**
- * Batch Card writes over the seeded fake, which evaluates each query's joins
- * and `WHERE`: `kanban.test.ts` stubs `requireCard` positionally, so it cannot
- * show which Workspace's Card a batch actually reached. Two Workspaces each hold
- * a Board, a Column and Cards; every batch names at least one of the other's.
- */
-
 const ctx: KanbanContext = {
   orgId: "org-1",
   workspaceId: "ws-1",
@@ -181,7 +174,6 @@ describe("kanban module — batch Card writes", () => {
         columnId: "col-a2",
       });
 
-      // After the column's current last position (5), in batch order.
       expect(cardIn(fake, "card-2")).toMatchObject({
         columnId: "col-a2",
         position: 6,
@@ -199,7 +191,6 @@ describe("kanban module — batch Card writes", () => {
       });
 
       expect(cardIn(fake, "card-1")?.labelIds).toEqual(["lbl-2"]);
-      // The stale id the card already carried is healed away too.
       expect(cardIn(fake, "card-2")?.labelIds).toEqual(["lbl-2"]);
     });
 

@@ -21,6 +21,8 @@
 
 :root {
   --radius: 0.5rem;
+  /* The Workspace rail's fixed column; the inset and sidebar start to its right. */
+  --workspace-rail-width: 3rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.141 0.005 220);
   --card: oklch(0.98 0 0);
@@ -46,6 +48,7 @@
   --chart-4: oklch(0.6 0.22 15);
   --chart-5: oklch(0.65 0.18 50);
   --sidebar: oklch(0.98 0 0);
+  --rail: oklch(0.94 0.001 220);
   /* A panel opening over the sidebar, a shade darker so its edges read. */
   --sidebar-panel: oklch(0.95 0 0);
   --sidebar-foreground: oklch(0.141 0.005 220);
@@ -87,6 +90,7 @@
   --chart-4: oklch(0.7 0.2 15);
   --chart-5: oklch(0.72 0.18 50);
   --sidebar: oklch(0.25 0.004 220);
+  --rail: oklch(0.16 0.004 220);
   --sidebar-panel: oklch(0.21 0.004 220);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.623 0.214 180);
@@ -147,6 +151,7 @@
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
   --color-sidebar: var(--sidebar);
+  --color-rail: var(--rail);
   --color-sidebar-panel: var(--sidebar-panel);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);

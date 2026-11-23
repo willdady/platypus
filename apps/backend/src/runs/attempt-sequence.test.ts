@@ -23,7 +23,6 @@ const apiError = (statusCode: number, message = "provider failed") =>
     isRetryable: statusCode === 429 || statusCode >= 500,
   });
 
-/** A loop's outcome: clean by default, failed with `error` when given one. */
 const outcomeOf = (
   opts: { error?: unknown; steps?: number } = {},
 ): ModelLoopOutcome => {

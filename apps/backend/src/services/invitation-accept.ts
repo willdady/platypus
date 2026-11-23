@@ -11,19 +11,9 @@ import { WORKSPACE_NAME_MAX_LENGTH } from "@platypus/schemas";
 import { applyBlueprintsToWorkspace } from "./blueprint-apply.ts";
 import { ConflictError, NotFoundError } from "../errors.ts";
 
-/**
- * Possessive form of a name for the default Workspace name (ADR-0008).
- * Names ending in "s" take a bare apostrophe ("James'"), others take "'s"
- * ("Jane's").
- */
 const possessive = (name: string): string =>
   /s$/i.test(name) ? `${name}'` : `${name}'s`;
 
-/**
- * Default Workspace name for an unnamed invite: "<member name>'s Workspace",
- * clamped to the schema's max length so the provisioned workspace stays
- * editable (a long member name could otherwise overflow the 30-char limit).
- */
 const defaultWorkspaceName = (name: string): string => {
   const suffix = " Workspace";
   const room = WORKSPACE_NAME_MAX_LENGTH - suffix.length;
@@ -34,28 +24,11 @@ export type AcceptInvitationResult =
   | { outcome: "accepted"; organizationId: string; workspaceId: string }
   | { outcome: "expired" };
 
-/**
- * The single accept path (#549, ADR-0019): provisions org membership, a
- * Workspace, and the invitation's Blueprints, then marks it accepted.
- *
- * Called both by the authenticated `/users/me/invitations/:id/accept` route
- * (an already-signed-in member accepting by invitation id) and by the
- * invitation-link redemption routes (a token holder, freshly registered or
- * already signed in, accepting by token) — one implementation, so a
- * link-based accept can never drift from the account-based one.
- *
- * Throws `NotFoundError` when no pending invitation matches the id and the
- * user's address, so the central `onError` answers it (ADR-0010). Expiry
- * stays a returned outcome: it has no typed error, and it writes the
- * `expired` status before reporting.
- */
 export async function acceptInvitationForUser(
   invitationId: string,
   user: { id: string; name: string; email: string },
 ): Promise<AcceptInvitationResult> {
   return db.transaction(async (tx): Promise<AcceptInvitationResult> => {
-    // Serialize acceptance with other accepts, declines, and deletion. Postgres
-    // rechecks the pending predicate after a competing row lock is released.
     const invitation = await tx
       .select()
       .from(invitationTable)
@@ -74,8 +47,7 @@ export async function acceptInvitationForUser(
       throw new NotFoundError("Invitation not found or already processed");
     }
 
-    // Read the clock after acquiring the lock: an invitation can expire while
-    // this transaction waits for another writer.
+    // why: read the clock after the lock; the invite can expire while waiting on another writer
     if (new Date(invite.expiresAt) <= new Date()) {
       await tx
         .update(invitationTable)
@@ -84,9 +56,6 @@ export async function acceptInvitationForUser(
       return { outcome: "expired" };
     }
 
-    // Ensure org membership exists. The invitation lock does not serialize two
-    // accepts of different invitations for one user, so a check-then-insert
-    // could race; the unique key settles it instead.
     await tx
       .insert(organizationMember)
       .values({
@@ -98,8 +67,6 @@ export async function acceptInvitationForUser(
       .onConflictDoNothing({
         target: [organizationMember.organizationId, organizationMember.userId],
       });
-    // Held until commit, so removing the member meanwhile waits and must then
-    // decide the Workspace below too (ADR-0035). Gone means a removal won.
     const [member] = await tx
       .select({ id: organizationMember.id })
       .from(organizationMember)
@@ -116,9 +83,6 @@ export async function acceptInvitationForUser(
       );
     }
 
-    // Accepting an invitation always provisions a Workspace owned by the
-    // accepting member (ADR-0008). With no Blueprint it is empty; the invite's
-    // workspaceName defaults to "<member name>'s Workspace".
     const workspaceId = nanoid();
     await tx.insert(workspaceTable).values({
       id: workspaceId,
@@ -127,11 +91,6 @@ export async function acceptInvitationForUser(
       name: invite.workspaceName ?? defaultWorkspaceName(user.name),
     });
 
-    // Apply the invitation's ordered set of Blueprints (ADR-0009) to the fresh
-    // Workspace, in `position` order, so it lands pre-stamped. Tier 1
-    // Attachments union; Tier 2 settings resolve last-write-wins. This shares
-    // the accept transaction — a partial-list failure rolls back the whole
-    // accept rather than stranding a half-stamped Workspace.
     const blueprintRows = await tx
       .select({ blueprintId: invitationBlueprintTable.blueprintId })
       .from(invitationBlueprintTable)
@@ -143,7 +102,6 @@ export async function acceptInvitationForUser(
       blueprintRows.map((r) => r.blueprintId),
     );
 
-    // Update invitation status
     await tx
       .update(invitationTable)
       .set({ status: "accepted" })

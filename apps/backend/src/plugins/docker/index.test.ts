@@ -21,11 +21,7 @@ describe("@platypus/docker plugin manifest", () => {
   });
 
   it("declares a plugin-level configSchema for the operator allowlist", () => {
-    // The network allowlist moved onto plugin config (ADR-0013), so the
-    // manifest now declares a plugin-level configSchema. No credentialsSchema —
-    // Docker has no plugin-level secrets.
     expect(plugin.credentialsSchema).toBeUndefined();
-    // It defaults allowedNetworks to [] (default-deny) and is strict.
     const parsed = plugin.configSchema.parse({});
     expect(parsed).toEqual({ allowedNetworks: [] });
     expect(plugin.configSchema.safeParse({ unknownKey: 1 }).success).toBe(
@@ -34,9 +30,6 @@ describe("@platypus/docker plugin manifest", () => {
   });
 
   it("registers the docker backend into the core registry when loaded", async () => {
-    // The registry is module-global; vitest isolates modules per file, so this
-    // load doesn't leak into other test files. Exercise the real plugin path:
-    // loader → registerSandboxBackend → getSandboxBackend.
     expect(getSandboxBackend("docker")).toBeUndefined();
 
     const { plugins: loaded } = await loadPlugins({
@@ -55,10 +48,6 @@ describe("@platypus/docker plugin manifest", () => {
     expect(registration?.name).toBe("Local Docker");
     expect(typeof registration?.create).toBe("function");
 
-    // The loader resolved the factory-form configSchema into a concrete schema
-    // (safeParse present). With no plugin config supplied, allowedNetworks
-    // defaults to [] so any non-empty networks entry is rejected — default-deny
-    // preserved (ADR-0005).
     expect(typeof registration?.configSchema.safeParse).toBe("function");
     expect(registration?.configSchema.safeParse({ networks: [] }).success).toBe(
       true,
@@ -69,11 +58,6 @@ describe("@platypus/docker plugin manifest", () => {
   });
 
   it("honours a PLATYPUS_PLUGIN_CONFIG_DOCKER allowlist end to end", async () => {
-    // Full chain through the real builtin plugin: PLATYPUS_PLUGIN_CONFIG_DOCKER →
-    // boot-resolved plugin config → per-Workspace configSchema (save-time
-    // validation) and the registry-backed /networks source. Uses a capturing
-    // registerSandbox so this second load doesn't collide with the module-global
-    // registry seeded by the tests above.
     const captured: SandboxBackendContribution[] = [];
     const loaded = await loadPlugins({
       pluginNames: ["@platypus/docker"],
@@ -84,16 +68,12 @@ describe("@platypus/docker plugin manifest", () => {
       },
     });
 
-    // Save-time validation reflects the operator allowlist: in-list passes,
-    // out-of-list is rejected (ADR-0005), all at config-save time.
     const schema = captured[0].configSchema as {
       safeParse: (v: unknown) => { success: boolean };
     };
     expect(schema.safeParse({ networks: ["shared"] }).success).toBe(true);
     expect(schema.safeParse({ networks: ["not-allowed"] }).success).toBe(false);
 
-    // The /networks endpoint source: resolved config flows through the registry
-    // and the docker helper yields the allowlist.
     setLoadedPlugins(loaded);
     expect(getPluginConfig("@platypus/docker")).toEqual({
       allowedNetworks: ["shared"],
@@ -104,7 +84,6 @@ describe("@platypus/docker plugin manifest", () => {
   });
 
   it("reads its allowlist from PLATYPUS_PLUGIN_CONFIG_DOCKER", async () => {
-    // A core name drops its `@platypus/` scope in the per-plugin var name.
     vi.stubEnv(
       "PLATYPUS_PLUGIN_CONFIG_DOCKER",
       '{"config":{"allowedNetworks":["shared"]}}',

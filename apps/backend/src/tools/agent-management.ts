@@ -10,21 +10,11 @@ import type { ScopeContext } from "../scope.ts";
 import { buildResourceUrl } from "../utils/resource-url.ts";
 import { asToolResult } from "./tool-result.ts";
 
-// Field constraints come from the shared schema so the agent-facing tool can
-// never drift from the bounds the HTTP routes and the web form enforce — the
-// six sampling params are nullable so an Agent can clear one back to unset
-// (#263), the same as the routes.
 const agentFields = agentBaseSchema.shape;
 
-// Shared by the create and update tools so the two cannot drift. Tells the
-// model that Instructions are only the first fragment of the composed system
-// prompt, so it does not generate boilerplate Platypus already supplies.
 const INSTRUCTIONS_DESCRIPTION =
   "The agent's own instructions — how it should behave. Platypus composes the full system prompt around this, adding workspace and user context, memories, Skills, sub-agents and the provider's security guardrails, so do not restate those here.";
 
-// Also shared, for the same reason. An 'alias:<name>' value is a Model alias
-// (ADR-0017) and must be stored as-is: rewriting it to the vendor model id it
-// points at pins the agent to today's model and opts it out of future repoints.
 const MODEL_ID_DESCRIPTION =
   "Model ID to use, exactly as listModelProviders returned it — including an 'alias:<name>' value, which must not be replaced with the vendor model id it points at.";
 

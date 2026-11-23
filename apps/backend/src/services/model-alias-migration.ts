@@ -9,28 +9,8 @@ import { MODEL_ALIAS_PREFIX, type AliasRepoint } from "@platypus/schemas";
 import { logger } from "../logger.ts";
 import type { ProviderRow } from "./provider-write.ts";
 
-/**
- * De-migration: rewriting `alias:<name>` references back to a concrete id when
- * the alias they name stops existing (issue #386, ADR-0017).
- *
- * A Model alias has no identity apart from its name, so "renaming" one is
- * indistinguishable from deleting it and creating another. Left alone, that
- * would hard-fail every Agent and Chat pointing at the old name — across every
- * attached Workspace for a Shared Provider — and the Org Admin who renamed it
- * would find out only when turns start failing. Rewriting the references to the
- * concrete id the alias pointed at keeps each one running against the exact
- * model it was already using.
- *
- * This is the one place a Provider edit bulk-rewrites Agents and Chats. It is
- * justified here and NOT for alias creation, where doing nothing is harmless:
- * adding an alias changes no entry's `id`, so every existing reference keeps
- * resolving and a rewrite would be cosmetic. Here, doing nothing breaks turns.
- */
-
-/** An orphaned alias and the concrete id its references fall back to. */
 type OrphanedAlias = Pick<AliasRepoint, "alias" | "modelId">;
 
-/** A Provider's models as stored. */
 type StoredModels = ProviderRow["modelIds"];
 
 const aliasEntries = (
@@ -40,20 +20,6 @@ const aliasEntries = (
     !entry.alias || !entry.id ? [] : [{ alias: entry.alias, id: entry.id }],
   );
 
-/**
- * The aliases that existed before this save and no longer exist after it,
- * paired with the concrete id each one pointed at.
- *
- * Covers rename, clearing the field, and deleting a model entry that carried an
- * alias as one case, because all three are "this name is gone". Names compare
- * case-insensitively, matching how a reference resolves — so re-casing an alias
- * orphans nothing, and neither does moving the same name to a different entry
- * (that is a repoint, which is the whole point of aliases).
- *
- * An alias whose model entry disappeared in the SAME save is skipped: there is
- * no concrete id left to fall back to, so its references stay dangling, exactly
- * as a deleted model's concrete references always have.
- */
 export const orphanedAliasRepoints = (
   previous: StoredModels,
   next: StoredModels,
@@ -70,10 +36,6 @@ export const orphanedAliasRepoints = (
   );
 };
 
-/**
- * The Provider's models as currently stored, for diffing against an incoming
- * save. Read BEFORE the update; `null` when the Provider does not exist.
- */
 export const currentProviderModels = async (
   providerId: string,
   exec: Executor = db,
@@ -86,17 +48,6 @@ export const currentProviderModels = async (
   return row ? row.modelIds : null;
 };
 
-/**
- * Rewrite every `agent.modelId` / `chat.modelId` on this Provider that names an
- * orphaned alias back to the concrete id, and report how many of each moved.
- *
- * Matches references case-insensitively because resolution is case-insensitive:
- * a stored `alias:FLAGSHIP` resolves to the alias `flagship`, so it has to
- * de-migrate with it or it would be left dangling.
- *
- * Call AFTER the provider row is written — a failed provider update must not
- * leave Agents rewritten for an alias that still exists.
- */
 export const deMigrateOrphanedAliases = async (
   providerId: string,
   previous: StoredModels,
@@ -131,8 +82,6 @@ export const deMigrateOrphanedAliases = async (
       )
       .returning({ id: chatTable.id });
 
-    // A Fallback model naming the same Provider's alias (ADR-0043) is the same
-    // reference in a second column, and orphans the same way.
     const fallbackAgents = await exec
       .update(agentTable)
       .set({ fallbackModelId: modelId, updatedAt: new Date() })

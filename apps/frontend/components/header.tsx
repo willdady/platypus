@@ -1,18 +1,7 @@
 import { UserMenu } from "@/components/user-menu";
 import { ModeToggle } from "@/components/mode-toggle";
 import { NotificationsDropdown } from "@/components/notifications-dropdown";
-import { cn } from "@/lib/utils";
 import { type Scope } from "@/lib/api-write";
-import { workspaceSettingsLinks } from "@/lib/settings-links";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Settings } from "lucide-react";
-import Link from "next/link";
 
 type HeaderProps = {
   leftContent?: React.ReactNode;
@@ -20,71 +9,21 @@ type HeaderProps = {
   rightContent?: React.ReactNode;
   /** The Organization/Workspace the header's controls act on, when there is one. */
   scope?: Scope;
-  /**
-   * Draw the bottom border. Dropped only beside the app sidebar (the
-   * Workspace home and Chat); every other shell keeps it.
-   */
-  bordered?: boolean;
 };
 
-export function Header({
-  leftContent,
-  rightContent,
-  scope,
-  bordered = true,
-}: HeaderProps) {
+export function Header({ leftContent, rightContent, scope }: HeaderProps) {
   return (
-    <header
-      className={cn(
-        "flex shrink-0 justify-between p-2",
-        bordered && "border-b",
-      )}
-    >
-      <div className="flex items-center gap-2">{leftContent}</div>
-      <div className="flex items-center gap-2">
+    <header className="flex shrink-0 justify-between p-2">
+      <div className="flex min-w-0 items-center gap-2">{leftContent}</div>
+      <div className="flex shrink-0 items-center gap-2">
         {rightContent}
         <NotificationsDropdown
           orgId={scope?.orgId}
           workspaceId={scope?.workspaceId}
         />
         <ModeToggle />
-        {scope?.workspaceId && (
-          <WorkspaceSettingsDropdown
-            orgId={scope.orgId}
-            workspaceId={scope.workspaceId}
-          />
-        )}
         <UserMenu />
       </div>
     </header>
-  );
-}
-
-function WorkspaceSettingsDropdown({
-  orgId,
-  workspaceId,
-}: {
-  orgId: string;
-  workspaceId: string;
-}) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon-xs" aria-label="Workspace settings">
-          <Settings />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        {workspaceSettingsLinks(orgId, workspaceId).map(
-          ({ href, icon: Icon, label }) => (
-            <DropdownMenuItem key={href} asChild>
-              <Link href={href}>
-                <Icon className="size-4" /> {label}
-              </Link>
-            </DropdownMenuItem>
-          ),
-        )}
-      </DropdownMenuContent>
-    </DropdownMenu>
   );
 }

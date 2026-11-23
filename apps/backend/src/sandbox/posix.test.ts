@@ -14,20 +14,13 @@ import {
 } from "./index.ts";
 import { buildFindArgs, createPosixSandbox, parseFindOutput } from "./posix.ts";
 import {
+  SandboxCancelledError,
   SandboxPathExistsError,
   type SandboxExecOptions,
   type SandboxExecResult,
   type SandboxTransport,
 } from "./transport.ts";
 import type { SandboxContext } from "./types.ts";
-
-// The Sandbox contract, proved once against an in-memory transport. This is the
-// suite that used to exist twice — against a dockerode fake and an ssh2 fake —
-// re-proving the same rules through two sets of plumbing. Every adapter that
-// goes through `createPosixSandbox` inherits what is asserted here, so an
-// adapter's own suite is free to test only that it drives its client correctly.
-//
-// No Docker daemon and no SSH host: the transport is five functions.
 
 const ctx: SandboxContext = {
   orgId: "org-1",
@@ -40,8 +33,6 @@ const ROOT = "/workspace";
 
 type ExecCall = { argv: string[]; opts: SandboxExecOptions };
 
-// A transport whose every primitive is steerable, recording what it was asked
-// to do. Files live in a plain map keyed by absolute path.
 const makeTransport = (
   overrides: Partial<{
     rootDir: string;
@@ -83,8 +74,6 @@ const makeTransport = (
       if (!found) {
         return Promise.reject(new Error(`No such file: ${absPath}`));
       }
-      // Bytes only — the cap is applied, but whether that counts as truncated
-      // is core's to decide, which is exactly what these tests check.
       return Promise.resolve(found.subarray(0, cap));
     },
     writeFile: (_c, absPath, bytes, mode) => {
@@ -212,8 +201,6 @@ describe("createPosixSandbox — shell.exec", () => {
   });
 
   it("clamps a caller timeout above the maximum", async () => {
-    // The bound is core's, so no adapter can be talked into waiting longer —
-    // this is the clamp both adapters used to hold a private copy of.
     const { transport, execCalls } = makeTransport();
     await createPosixSandbox(transport).shellExec(
       ctx,
@@ -336,9 +323,6 @@ describe("createPosixSandbox — fs.read", () => {
   });
 
   it("flags truncated when the read came back filling the cap", async () => {
-    // Core owns this verdict, from the one `>= cap` rule it applies to every
-    // adapter. Leaving it to the transport is how the two adapters used to
-    // disagree about a file sitting exactly on the cap.
     const { transport } = makeTransport({
       files: new Map([
         [`${ROOT}/big.txt`, Buffer.alloc(MAX_READ_BYTES + 100, 0x61)],
@@ -354,6 +338,22 @@ describe("createPosixSandbox — fs.read", () => {
     );
     expect(res.content).toHaveLength(MAX_READ_BYTES);
     expect(res.truncated).toBe(true);
+  });
+
+  it("flags a line window truncated when the file ran past the cap", async () => {
+    const { transport } = makeTransport({
+      files: new Map([
+        [`${ROOT}/big.txt`, Buffer.from("a\n".repeat(MAX_READ_BYTES))],
+      ]),
+    });
+
+    await expect(
+      createPosixSandbox(transport).fsRead(
+        ctx,
+        { path: "big.txt", lineRange: [1, 1] },
+        callOptions,
+      ),
+    ).resolves.toMatchObject({ lineCount: 1, truncated: true });
   });
 
   it("does not flag a short read as truncated", async () => {
@@ -472,8 +472,6 @@ describe("createPosixSandbox — fs.write", () => {
   });
 
   it("restates a create-collision in terms of the path the model asked for", async () => {
-    // The transport only ever sees the absolute path; the model asked about a
-    // relative one, and that is what the message has to name.
     const { transport } = makeTransport({
       files: new Map([[`${ROOT}/taken.txt`, Buffer.from("old")]]),
     });
@@ -529,8 +527,6 @@ describe("createPosixSandbox — fs.write", () => {
   });
 });
 
-// NULs and bytes that are not valid UTF-8 up front, so a decode anywhere on the
-// path would mangle the payload rather than merely risk it.
 const binaryPayload = () =>
   Buffer.concat([
     Buffer.from([0x00, 0xff, 0xfe, 0xc3, 0x28]),
@@ -901,9 +897,6 @@ describe("parseFindOutput", () => {
   });
 
   it("does not flag truncated when the only dropped rows were unmodelled types", () => {
-    // The bug both adapters shipped: `truncated` was derived from the row count
-    // rather than the entry count, so a listing that filled exactly to the cap
-    // and skipped one symlink claimed to have been cut when nothing was.
     const rows: Array<[string, number, string]> = [
       ...Array.from(
         { length: MAX_LIST_ENTRIES },
@@ -983,8 +976,6 @@ describe("createPosixSandbox — fs.list", () => {
   });
 
   it("returns the partial rows find printed before it failed", async () => {
-    // find exits non-zero on an unreadable subdirectory while still printing
-    // what it reached — those rows are more useful than an error.
     const { transport } = listing(
       [["f", 1, "reachable.txt"]],
       1,
@@ -1060,5 +1051,46 @@ describe("createPosixSandbox — lifecycle", () => {
 
     expect(rootDirCalls).toHaveLength(5);
     expect(rootDirCalls.every((c) => c === ctx)).toBe(true);
+  });
+
+  it("stops waiting on a root that never resolves once the turn aborts", async () => {
+    const { transport, execCalls } = makeTransport();
+    transport.rootDir = () => new Promise<never>(() => {});
+    const controller = new AbortController();
+    const inflight = createPosixSandbox(transport).shellExec(
+      ctx,
+      { command: "x" },
+      { signal: controller.signal },
+    );
+
+    controller.abort();
+
+    await expect(inflight).rejects.toBeInstanceOf(SandboxCancelledError);
+    expect(execCalls).toHaveLength(0);
+  });
+
+  it("hands the turn's signal to the transport's exec", async () => {
+    const { transport, execCalls } = makeTransport();
+    await createPosixSandbox(transport).shellExec(
+      ctx,
+      { command: "x" },
+      callOptions,
+    );
+
+    expect(execCalls[0].opts.signal).toBe(callOptions.signal);
+  });
+
+  it("resolves a path with a leading slash inside the root", async () => {
+    const { transport } = makeTransport({
+      files: new Map([[`${ROOT}/a.txt`, Buffer.from("x")]]),
+    });
+
+    await expect(
+      createPosixSandbox(transport).fsRead(
+        ctx,
+        { path: "/a.txt" },
+        callOptions,
+      ),
+    ).resolves.toMatchObject({ content: "x" });
   });
 });

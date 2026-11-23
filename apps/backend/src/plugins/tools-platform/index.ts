@@ -9,17 +9,8 @@ import { createAgentManagementTools } from "../../tools/agent-management.ts";
 import { createNotificationTools } from "../../tools/notification.ts";
 import { createMemoryTools } from "../../tools/memory.ts";
 import { createChatTools } from "../../tools/chats.ts";
+import { createArtifactTools } from "../../tools/artifacts.ts";
 
-// Core plugin: the Platypus-domain Tool sets — the ones that touch Platypus's
-// own data (kanban boards, triggers, memory, notifications, agent
-// discovery/management, skill management). Grouped by cohesion per ADR-0013: no
-// single one of these is a capability an Operator would deny in isolation (that
-// carve-out is reserved for @platypus/web-fetch's egress and @platypus/docker's
-// infra). Every id stays unprefixed (core), so persisted `agent.toolSetIds`
-// references keep resolving unchanged.
-//
-// Each Tool set uses the factory form — its tools resolve at Chat-turn time from
-// the ToolSetContext (Workspace/Agent/Org scope) core supplies.
 export const plugin: PlatypusPlugin = {
   name: "@platypus/tools-platform",
   version: "0.1.0",
@@ -27,8 +18,6 @@ export const plugin: PlatypusPlugin = {
   contributes: {
     toolSets: [
       {
-        // Named "Kanban Cards" since "Kanban Boards" joined it; the id stays
-        // "kanban" because Agents persist it.
         id: "kanban",
         name: "Kanban Cards",
         category: "Kanban",
@@ -52,7 +41,6 @@ export const plugin: PlatypusPlugin = {
         category: "Automation",
         description:
           "Manage triggers (cron schedules, one-off runs and event-based) including listing agents, creating, editing, and viewing triggers, and getting the current time",
-        // Core always fills `timezone` (required as of API v4)
         tools: ({ workspaceId, orgId, frontendUrl, timezone }) =>
           createTriggerTools(workspaceId, orgId, frontendUrl, timezone),
       },
@@ -101,11 +89,19 @@ export const plugin: PlatypusPlugin = {
           createChatTools(orgId, workspaceId, sessionId),
       },
       {
+        id: "artifacts",
+        name: "Artifacts",
+        category: "Productivity",
+        description:
+          "Create, change, read and list standalone, versioned content — documents, code, Mermaid diagrams, HTML pages and SVG images — in this workspace",
+        tools: ({ workspaceId, sessionId }) =>
+          createArtifactTools(workspaceId, sessionId),
+      },
+      {
         id: "memory",
         name: "Memory",
         category: "Memory",
         description: "Look up memories from past conversations",
-        // `sessionId` is required as of API v4, and every turn has one.
         tools: ({ workspaceId, userId, sessionId }) =>
           createMemoryTools(workspaceId, userId, sessionId),
       },

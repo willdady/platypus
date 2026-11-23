@@ -20,24 +20,12 @@ import {
   type WorkspaceScope,
 } from "../scope.ts";
 
-/** Hono environment for these middleware: carries the request-scoped Variables. */
 type Env = { Variables: Variables };
 
 export type Database = typeof db;
 
-/** The subset of the session user these decisions actually read. */
 type AuthUser = { id: string; role?: string | null };
 
-/**
- * The Organization scope {@link requireOrgAccess} resolved for this request —
- * who is asking, and which Organization they were cleared for.
- *
- * Throws when that middleware did not run, which is a wiring mistake in the
- * route table rather than anything the caller did: the alternative is every
- * handler re-reading `c.req.param("orgId")!`, asserting an invariant it cannot
- * see. `app.onError` maps the throw to a 500 (ADR-0010), which is the honest
- * answer — the route is misconfigured.
- */
 export const orgScopeOf = (c: Context<Env>): OrgScope => {
   const scope = c.get("orgScope");
   if (!scope) {
@@ -48,14 +36,6 @@ export const orgScopeOf = (c: Context<Env>): OrgScope => {
   return scope;
 };
 
-/**
- * The Workspace scope {@link requireWorkspaceAccess} resolved for this request:
- * the Organization scope plus the Workspace and whether the caller owns it.
- *
- * This is the currency handlers pass down — `listScoped(db, "agent", scope)`,
- * `requireBoard(db, scope, id)` — so route bodies never parse the URL. Throws
- * on the same wiring mistake {@link orgScopeOf} does.
- */
 export const workspaceScopeOf = (c: Context<Env>): WorkspaceScope => {
   const scope = c.get("workspaceScope");
   if (!scope) {
@@ -66,11 +46,6 @@ export const workspaceScopeOf = (c: Context<Env>): WorkspaceScope => {
   return scope;
 };
 
-/**
- * The session user `requireAuth` authenticated for this request. Throws on the
- * same wiring mistake {@link orgScopeOf} does — a handler reading the user
- * without `requireAuth` in front of it — rather than answering 401.
- */
 export const userOf = (c: Context<Env>): NonNullable<Variables["user"]> => {
   const user = c.get("user");
   if (!user) {
@@ -81,11 +56,6 @@ export const userOf = (c: Context<Env>): NonNullable<Variables["user"]> => {
   return user;
 };
 
-/**
- * The Organization membership {@link requireOrgAccess} resolved for this
- * request: a member row, or the synthetic admin membership of a super admin.
- * Throws on the same wiring mistake {@link orgScopeOf} does.
- */
 export const orgMembershipOf = (
   c: Context<Env>,
 ): NonNullable<Variables["orgMembership"]> => {
@@ -98,57 +68,13 @@ export const orgMembershipOf = (
   return membership;
 };
 
-/**
- * Checks if a user is a super admin based on their role field.
- * Super admins have full platform-level access.
- *
- * @param user - The user object with role field
- * @returns True if the user is a super admin, false otherwise
- *
- * @example
- * ```typescript
- * if (isSuperAdmin(user)) {
- *   // Grant full platform access
- * }
- * ```
- */
 const isSuperAdmin = (user: AuthUser | undefined): boolean => {
   return user?.role === "admin";
 };
 
-/**
- * Middleware that validates user access to an organization.
- *
- * **Access Control:**
- * - Super admins bypass all checks and are granted admin access
- * - Regular users must be members of the organization
- * - Optional role restrictions can be enforced (e.g., admin-only operations)
- *
- * **Behavior:**
- * - Extracts orgId using smart detection (URL params → query → body)
- * - Returns 400 if organization ID not found in request
- * - Returns 403 if user is not a member of the organization
- * - Returns 403 if user's role doesn't meet the required roles
- * - Sets `orgMembership` in context with user's membership details
- *
- * @param requiredRoles - Optional array of roles required to access the resource.
- *                        If provided, user must have one of these roles.
- *                        Valid roles: "admin", "member"
- *
- * @example
- * ```typescript
- * // Allow any org member
- * app.get("/organizations/:id", requireAuth, requireOrgAccess(), handler);
- *
- * // Require admin role
- * app.delete("/organizations/:id", requireAuth, requireOrgAccess(["admin"]), handler);
- * ```
- */
 export const requireOrgAccess = (requiredRoles?: OrgRole[]) =>
   createMiddleware<Env>(async (c, next) => {
     const user = userOf(c);
-    // Derived, never stored: the session user is the one authority for who is
-    // asking, and a second copy on the context could only disagree with it.
     const parentScope = userScope(user);
     const orgId = c.req.param("orgId");
 
@@ -160,8 +86,7 @@ export const requireOrgAccess = (requiredRoles?: OrgRole[]) =>
     }
 
     c.set("orgMembership", access.membership);
-    // Super admins may reach this route with no orgId in the path (e.g.
-    // platform-level endpoints); there is then no Organization to scope to.
+    // why: a super admin passes with no orgId in the path; there's then no Organization to scope
     if (orgId) {
       c.set("orgScope", orgScope(parentScope, orgId));
     }
@@ -169,14 +94,7 @@ export const requireOrgAccess = (requiredRoles?: OrgRole[]) =>
     return;
   });
 
-/** Why {@link resolveOrgMembership} refused a caller. */
-type OrgAccessDenial =
-  /** No `orgId` in the request for a non-super-admin caller to be checked against. */
-  | "org-id-required"
-  /** Not a member of the organization. */
-  | "not-a-member"
-  /** A member, but not one of the roles the route requires. */
-  | "insufficient-role";
+type OrgAccessDenial = "org-id-required" | "not-a-member" | "insufficient-role";
 
 export type OrgAccess =
   | {
@@ -200,22 +118,12 @@ const ORG_ACCESS_DENIED: Record<
   },
 };
 
-/**
- * The single authority on {@link requireOrgAccess}'s question: is this caller
- * a member of this Organization — optionally restricted to specific roles?
- *
- * Returned rather than enforced here, mirroring {@link workspaceConfigAccess}:
- * a pure decision is unit-testable against a fake executor without a Hono
- * request, and the one place that maps a denial to a response is the
- * middleware above.
- */
 export const resolveOrgMembership = async (
   db: Database,
   user: AuthUser,
   orgId: string | undefined,
   requiredRoles?: OrgRole[],
 ): Promise<OrgAccess> => {
-  // Super admins bypass all checks, including needing an orgId at all.
   if (isSuperAdmin(user)) {
     return {
       allowed: true,
@@ -249,35 +157,10 @@ export const resolveOrgMembership = async (
   return { allowed: true, membership };
 };
 
-/**
- * Middleware that validates user access to a workspace.
- *
- * **Prerequisites:**
- * - Must be used AFTER `requireOrgAccess` middleware (requires orgMembership in context)
- *
- * **Access Control:**
- * - Super admins bypass all checks
- * - Org admins have access to all workspaces in their organization
- * - Regular org members can only access workspaces they own
- *
- * **Behavior:**
- * - Extracts workspaceId from URL params
- * - Returns 400 if workspace ID not found in request
- * - Returns 404 if workspace not found
- * - Returns 403 if user doesn't have access
- * - Sets `workspaceScope` in context, ownership included
- *
- * @example
- * ```typescript
- * app.get("/chats", requireAuth, requireOrgAccess(), requireWorkspaceAccess, handler);
- * ```
- */
 export const requireWorkspaceAccess = createMiddleware<Env>(async (c, next) => {
   const user = userOf(c);
   const orgMembership = orgMembershipOf(c);
 
-  // The Organization half is already resolved and proved; only the Workspace id
-  // is still unread, and this middleware is the one place that reads it.
   const parent = orgScopeOf(c);
   const workspaceId = c.req.param("workspaceId");
 
@@ -306,15 +189,7 @@ export const requireWorkspaceAccess = createMiddleware<Env>(async (c, next) => {
   return;
 });
 
-/** Why {@link resolveWorkspaceAccess} refused a caller. */
-type WorkspaceAccessDenial =
-  /** No workspace exists with this id. */
-  | "not-found"
-  /** The workspace exists, but in a different Organization than the caller
-   * was cleared for. */
-  | "cross-org"
-  /** A member of the right Organization, but neither an admin nor the owner. */
-  | "no-access";
+type WorkspaceAccessDenial = "not-found" | "cross-org" | "no-access";
 
 export type WorkspaceAccess =
   | { allowed: true; isWorkspaceOwner: boolean }
@@ -324,32 +199,16 @@ const WORKSPACE_ACCESS_DENIED: Record<
   WorkspaceAccessDenial,
   { status: 403 | 404; message: string }
 > = {
-  // Cross-org replies with the same 404 as not-found so we don't leak the
-  // existence of other orgs' workspaces.
   "not-found": { status: 404, message: "Workspace not found" },
   "cross-org": { status: 404, message: "Workspace not found" },
   "no-access": { status: 403, message: "No access to this workspace" },
 };
 
-/**
- * The single authority on {@link requireWorkspaceAccess}'s question: is this
- * caller cleared to reach this Workspace? Super admins and Org admins reach
- * any workspace in the Organization; a regular member reaches only one they
- * own.
- *
- * Returned rather than enforced here, mirroring {@link workspaceConfigAccess}:
- * unit-testable against a fake executor without a Hono request, with the one
- * denial-to-response mapping living in the middleware above.
- *
- * @param orgId - The Organization the caller was cleared for by
- *                {@link resolveOrgMembership}, i.e. `OrgScope.orgId` — never the
- *                workspace's own `organizationId`, which is what this checks
- *                the caller's `orgId` against (the cross-org guard).
- */
 export const resolveWorkspaceAccess = async (
   db: Database,
   user: AuthUser,
   membership: OrganizationMembership | SuperAdminOrgMembership,
+  // why: the org the caller was cleared for, never the row's own, or the cross-org guard is void
   orgId: string,
   workspaceId: string,
 ): Promise<WorkspaceAccess> => {
@@ -363,21 +222,12 @@ export const resolveWorkspaceAccess = async (
     return { allowed: false, reason: "not-found" };
   }
 
-  // Cross-org guard: the workspace must belong to the organization the caller
-  // was cleared for. Without this, an admin (or super admin) of org A who knows
-  // a workspace id in org B could operate on it via
-  // /organizations/A/workspaces/B. Applies uniformly to the member, org-admin,
-  // and super-admin cases below.
   if (ws.organizationId !== orgId) {
     return { allowed: false, reason: "cross-org" };
   }
 
   const isOwner = ws.ownerId === user.id;
 
-  // Super admins and org admins reach any workspace in the organization; a
-  // regular member reaches only their own. Ownership is recorded either way —
-  // an admin operating on someone else's workspace is not its owner, and the
-  // routes that gate on ownership (ADR-0006) need to know.
   const mayAccess =
     isSuperAdmin(user) || membership.role === "admin" || isOwner;
   if (!mayAccess) {
@@ -387,25 +237,7 @@ export const resolveWorkspaceAccess = async (
   return { allowed: true, isWorkspaceOwner: isOwner };
 };
 
-/**
- * Whether this caller may name `workspaceId` on a route that carries no
- * Organization in its path — the User surface (`/users/me/…`), where nothing
- * upstream has run {@link requireOrgAccess} or {@link requireWorkspaceAccess}
- * to prove it for them and the id arrives in a request body.
- *
- * Asks the same two authorities the scoped routes ask, in the same order, but
- * takes the Organization from the Workspace row rather than from the caller:
- * there is no path `orgId` here to check against, so "which Organization?" is
- * a question about the Workspace, and "may you?" is the question about the
- * caller. Membership resolves first so a non-member never reaches the
- * Workspace decision at all.
- *
- * Collapses absence and refusal into one `false`. The caller supplied the id,
- * so distinguishing "no such Workspace" from "not yours" would answer, for a
- * stranger's Workspace, exactly the question this check exists to refuse —
- * which is the disclosure, not merely a step toward it. Callers should report
- * a miss as not-found for the same reason.
- */
+// why: absent and refused are one false (callers answer 404), or a stranger learns it exists
 export const userMayUseWorkspace = async (
   db: Database,
   user: AuthUser,
@@ -431,32 +263,6 @@ export const userMayUseWorkspace = async (
   return access.allowed;
 };
 
-/**
- * Middleware that gates configuration of credential- and reach-bearing
- * resources (Providers, Sandboxes, MCPs) per ADR-0006.
- *
- * **Prerequisites:**
- * - Must run AFTER `requireOrgAccess` and `requireWorkspaceAccess` (relies on
- *   `orgMembership` and the Workspace scope in context).
- *
- * **Access Control:**
- * - Super admins and org admins always pass.
- * - A non-admin Workspace Owner passes only when a `delegationFlag` names a
- *   boolean column that is `true` on the workspace row. With `null`, the
- *   resource is admin-only and never delegatable (e.g. Sandboxes).
- *
- * @param delegationFlag - The workspace column that, when true, lets the owner
- *                         self-manage this resource, or `null` for admin-only.
- *
- * @example
- * ```typescript
- * // Sandbox: admin-only, never delegatable
- * sandbox.post("/", requireAuth, requireOrgAccess(), requireWorkspaceAccess, requireWorkspaceConfigAccess(null), handler);
- *
- * // MCP: admin by default, owner if the workspace flag is set
- * mcp.post("/", requireAuth, requireOrgAccess(), requireWorkspaceAccess, requireWorkspaceConfigAccess("mcpSelfManagement"), handler);
- * ```
- */
 export const requireWorkspaceConfigAccess = (
   delegationFlag: DelegationFlag | null,
 ) =>
@@ -471,21 +277,9 @@ export const requireWorkspaceConfigAccess = (
     return;
   });
 
-/** The workspace columns that let an Org Admin delegate a resource to its Owner. */
 export type DelegationFlag = "providerSelfManagement" | "mcpSelfManagement";
 
-/**
- * Why a caller may not configure a credential- and reach-bearing resource.
- * Carried rather than thrown so read paths can redact on the same rule the
- * write paths reject on.
- */
-type ConfigAccessDenial =
-  /** Not an admin, and not even the Workspace Owner. */
-  | "not-owner"
-  /** Owner, but the resource is admin-only and never delegatable. */
-  | "not-delegatable"
-  /** Owner of a workspace where this resource's delegation flag is off. */
-  | "not-delegated";
+type ConfigAccessDenial = "not-owner" | "not-delegatable" | "not-delegated";
 
 export type WorkspaceConfigAccess =
   { allowed: true } | { allowed: false; reason: ConfigAccessDenial };
@@ -497,24 +291,6 @@ const CONFIG_ACCESS_DENIED: Record<ConfigAccessDenial, string> = {
     "Self-management of this resource is not enabled for this workspace",
 };
 
-/**
- * The single authority on ADR-0006's question: may this caller configure a
- * credential- and reach-bearing resource in this Workspace?
- *
- * Two callers, two shapes of the same rule — which is why the decision is
- * returned rather than enforced here:
- * - {@link requireWorkspaceConfigAccess} maps a denial to a 403 on write routes.
- * - the Provider and MCP read routes map it to *redaction*, revealing stored
- *   credentials only to a caller who is allowed to manage them. Gating the reads
- *   outright is not an option: a Workspace Owner has to see which Providers and
- *   MCPs exist in order to select one on an Agent or Chat, delegated or not.
- *
- * **Prerequisites:** must run after `requireOrgAccess` and
- * `requireWorkspaceAccess` (reads `orgMembership` and the Workspace scope).
- *
- * @param delegationFlag - `null` for admin-only resources that are never
- *   delegatable.
- */
 const workspaceConfigAccess = async (
   c: Context<Env>,
   delegationFlag: DelegationFlag | null,
@@ -522,12 +298,10 @@ const workspaceConfigAccess = async (
   const user = c.get("user");
   const orgMembership = c.get("orgMembership");
 
-  // Super admins and org admins always manage credential-bearing config.
   if (isSuperAdmin(user) || orgMembership?.role === "admin") {
     return { allowed: true };
   }
 
-  // Past requireWorkspaceAccess, a non-admin can only be the workspace owner.
   if (!workspaceScopeOf(c).isWorkspaceOwner) {
     return { allowed: false, reason: "not-owner" };
   }
@@ -550,14 +324,8 @@ const workspaceConfigAccess = async (
   return { allowed: true };
 };
 
-/** The Scoped resource types that store Operator-entered credentials. */
 export type CredentialResourceType = "mcp" | "provider";
 
-/**
- * ADR-0006's delegation flag for each credential-bearing Scoped resource —
- * written down once, so a read path cannot redact on one rule while its write
- * path rejects on another.
- */
 const CREDENTIAL_DELEGATION_FLAG: Record<
   CredentialResourceType,
   DelegationFlag
@@ -566,52 +334,15 @@ const CREDENTIAL_DELEGATION_FLAG: Record<
   provider: "providerSelfManagement",
 };
 
-/**
- * The Workspace surface's answer to "may this caller see this resource's stored
- * credentials?" — {@link workspaceConfigAccess} read as a yes/no, since a read
- * path redacts rather than reporting *why* it refused.
- */
 export const workspaceCredentialsVisible = async (
   c: Context<Env>,
   type: CredentialResourceType,
 ): Promise<boolean> =>
   (await workspaceConfigAccess(c, CREDENTIAL_DELEGATION_FLAG[type])).allowed;
 
-/**
- * The Organization surface's twin. A Shared resource is configured only by an
- * Org Admin (ADR-0006, ADR-0007) — there is no per-workspace delegation at org
- * scope — so admin *is* the whole rule. Super admins arrive here as admins,
- * because `requireOrgAccess` grants them an admin membership.
- */
 export const orgCredentialsVisible = (c: Context<Env>): boolean =>
   c.get("orgMembership")?.role === "admin";
 
-/**
- * Middleware that restricts access to super admins only.
- *
- * **Purpose:**
- * Used for platform-level administrative operations that should only be
- * accessible to users with role="admin".
- *
- * **Behavior:**
- * - Checks if authenticated user's role is "admin"
- * - Returns 403 if user is not a super admin
- * - Allows request to proceed if user is a super admin
- *
- * **Use Cases:**
- * - Creating new organizations
- * - Platform-wide configuration changes
- * - System administration tasks
- *
- * @example
- * ```typescript
- * // Restrict organization creation to super admins only
- * app.post("/organizations", requireAuth, requireSuperAdmin, handler);
- *
- * // Platform settings (super admin only)
- * app.put("/system/settings", requireAuth, requireSuperAdmin, handler);
- * ```
- */
 export const requireSuperAdmin = createMiddleware<Env>(async (c, next) => {
   const user = c.get("user");
 
@@ -623,35 +354,6 @@ export const requireSuperAdmin = createMiddleware<Env>(async (c, next) => {
   return;
 });
 
-/**
- * Middleware that validates the user is the workspace owner.
- *
- * **Prerequisites:**
- * - Must be used AFTER `requireOrgAccess` and `requireWorkspaceAccess` middleware
- *
- * **Access Control:**
- * - Only the workspace owner can access the resource
- * - Super admins and org admins are NOT allowed (they only have read access)
- *
- * **Behavior:**
- * - Checks if authenticated user is the workspace owner
- * - Returns 403 if user is not the owner
- * - Allows request to proceed if user is the owner
- *
- * **Use Cases:**
- * - Creating new chats
- * - Submitting chat messages
- * - Updating or deleting chats
- *
- * @example
- * ```typescript
- * // Only workspace owner can create chats
- * app.post("/chats", requireAuth, requireOrgAccess(), requireWorkspaceAccess, requireWorkspaceOwner, handler);
- *
- * // Only workspace owner can submit messages
- * app.post("/chats/:id/messages", requireAuth, requireOrgAccess(), requireWorkspaceAccess, requireWorkspaceOwner, handler);
- * ```
- */
 export const requireWorkspaceOwner = createMiddleware<Env>(async (c, next) => {
   if (!workspaceScopeOf(c).isWorkspaceOwner) {
     return c.json(

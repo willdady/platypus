@@ -5,10 +5,6 @@ import { getStorage } from "../storage/index.ts";
 
 vi.mock("../storage/index.ts", () => ({ getStorage: vi.fn() }));
 
-/**
- * The HTTP edges of Skill bundles (ADR-0036): the zip upload limit, how a
- * bundled file is sent, and that `/files/*` never serves one.
- */
 const storageGet = vi.fn();
 const storagePut = vi.fn();
 
@@ -99,7 +95,6 @@ describe("GET /files/*", () => {
     expect(storageGet).not.toHaveBeenCalled();
   });
 
-  // The disk backend can be case-insensitive, so `SKILLS` reaches the same file.
   it("refuses a Skill key whatever its case", async () => {
     mockSession({ id: "user-1", email: "a@example.com", role: "admin" });
     const res = await app.request(

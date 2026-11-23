@@ -5,7 +5,6 @@ import app from "../server.ts";
 
 const accessUrl = "/organizations/org-1/a2a/access";
 
-/** `user-1` is the caller, with `role` in `org-1`. */
 const seed = (role: "admin" | "member" = "admin") => {
   mockSession();
   return seedDb({
@@ -110,7 +109,6 @@ describe("Org A2A gate routes", () => {
     expect(fake.tables.organization[0].a2aGate).toBe("off");
   });
 
-  // #1239 story 4: the gate shuts the door on clients and deletes nothing.
   it("shuts every endpoint's JSON-RPC while off, deleting nothing, and reopens it", async () => {
     const fake = seed();
     const TOKEN = "pa2a_hermes";

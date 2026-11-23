@@ -2,11 +2,6 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import type { PGlite } from "@electric-sql/pglite";
 import { migratedPglite } from "./migrated-pglite.test-fixtures.ts";
 
-/**
- * A Pinned Agent's row goes with its Agent and with its Workspace, by the
- * foreign keys the shipped migrations create, so neither delete leaves an
- * orphaned pin.
- */
 let pg: PGlite;
 beforeEach(async () => {
   pg = await migratedPglite();

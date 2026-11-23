@@ -5,12 +5,6 @@ export type FakeLockClient = LockClient & {
   release: Mock<(err?: Error) => void>;
 };
 
-/**
- * A stand-in for a node-postgres Pool modelling what `withAdvisoryLock` turns
- * on: `pg_advisory_lock` blocks until no other connection holds the lock,
- * `pg_try_advisory_lock` reports instead of blocking, and only the connection
- * holding a lock can release it.
- */
 export const fakeLockPool = () => {
   const held = new Map<number, number>();
   const waiters = new Map<number, (() => void)[]>();

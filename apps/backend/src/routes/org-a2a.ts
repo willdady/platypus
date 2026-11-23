@@ -17,17 +17,10 @@ import {
 import { validate } from "../validate.ts";
 import type { Variables } from "../server.ts";
 
-/**
- * Org Admin oversight of A2A (ADR-0032): the gate deciding which Workspaces
- * may have endpoints, separate from the Inbound Trigger gate, and every
- * endpoint and token in the Organization, each of which an Admin can revoke.
- * Nothing else — no create or edit; the Workspace Owner does that.
- */
 const orgA2a = new Hono<{ Variables: Variables }>();
 
 mountGateAccess(orgA2a, getA2aAccess, setA2aAccess);
 
-/** Every endpoint in the Organization with its tokens. Never a token. */
 orgA2a.get(
   "/endpoints",
   requireAuth,
@@ -38,7 +31,6 @@ orgA2a.get(
   },
 );
 
-/** Revoke an endpoint, deleting it with its tokens. The Owner is notified. */
 orgA2a.delete(
   "/endpoints/:endpointId",
   requireAuth,
@@ -52,11 +44,6 @@ orgA2a.delete(
   },
 );
 
-/**
- * Revoke one token on an endpoint. The Owner is notified. `tokenCreatedAt`
- * names the value the Admin saw, as the list reported it; `409` when the
- * token was regenerated since.
- */
 orgA2a.delete(
   "/endpoints/:endpointId/tokens/:tokenId",
   requireAuth,

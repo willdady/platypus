@@ -1,5 +1,22 @@
 # Changelog
 
+## [4.6.0](https://github.com/willdady/platypus/compare/v4.5.0...v4.6.0) (2026-11-21)
+
+
+### Features
+
+* Job settings for the Provider's task and memory extraction models ([#2014](https://github.com/willdady/platypus/issues/2014)) ([c1acf6c](https://github.com/willdady/platypus/commit/c1acf6c5e326d91fb215bb71af5563fc829d9259))
+
+
+### Bug Fixes
+
+* **backend:** log the error behind a failed web backend or tool set call ([#2018](https://github.com/willdady/platypus/issues/2018)) ([70e7614](https://github.com/willdady/platypus/commit/70e7614380b4d867f10a58668576f2a5a2c5f311))
+* **backend:** persist Chat and Run event content holding NUL or lone surrogates ([#2020](https://github.com/willdady/platypus/issues/2020)) ([d343988](https://github.com/willdady/platypus/commit/d34398881db66ce0edfba5f485c7df4db2084862))
+* **frontend:** fall back to Bot icon when agent avatar fails to load in Chat ([#1988](https://github.com/willdady/platypus/issues/1988)) ([712d5b1](https://github.com/willdady/platypus/commit/712d5b15437f53e8f48563132bfb0ee3cd8daa34))
+* **frontend:** keep list footers and toolbars when a background refresh fails ([#2001](https://github.com/willdady/platypus/issues/2001)) ([9c0c05c](https://github.com/willdady/platypus/commit/9c0c05cb0fec046164550c7407a64eb69da613a7))
+* **frontend:** re-render only the message whose Copy was clicked ([#2002](https://github.com/willdady/platypus/issues/2002)) ([664b466](https://github.com/willdady/platypus/commit/664b46682ce34936a48d9b618e79619e3c953aa2))
+* **frontend:** reject duplicate header names in the webhook and MCP forms ([#1996](https://github.com/willdady/platypus/issues/1996)) ([363ad19](https://github.com/willdady/platypus/commit/363ad19994c3d170cf6551b6c40f1ac20a9c9a31))
+
 ## [4.5.0](https://github.com/willdady/platypus/compare/v4.4.0...v4.5.0) (2026-11-15)
 
 

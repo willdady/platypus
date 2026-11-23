@@ -3,17 +3,6 @@ import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-/**
- * SQL introspection for the attachment spine (#154 / ADR-0007). The repo has no
- * real-Postgres test infra, so we assert the migrations are shaped correctly:
- *   - 0039 creates the attachment table (schema DDL).
- *   - 0040 is the custom data migration that backfills attachments for every
- *     existing org-scoped Provider and MCP, idempotently.
- * Schema and data migrations are kept separate (drizzle custom migration). Both
- * run in production via scripts/migrate.ts; `drizzle-kit push` runs neither, so
- * in dev org-scoped resources are attached manually via the UI. If you change
- * the SQL, update these expectations.
- */
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const readMigration = (name: string) =>
   readFileSync(join(__dirname, "../../drizzle", name), "utf8");

@@ -18,44 +18,17 @@ import {
 import { NotFoundError } from "../errors.ts";
 import type { Variables } from "../server.ts";
 
-/**
- * Trigger runs at Workspace scope: one listing across every Trigger in the
- * Workspace, which is the only shape that can order and page correctly over a
- * mixed set. It replaces the per-Trigger `/triggers/:triggerId/runs` listing —
- * the `triggerId` filter below covers that ground.
- */
 const triggerRun = new Hono<{ Variables: Variables }>();
 
-/**
- * The listing's query parameters. A value the schema rejects — a status the
- * domain does not have, an unreadable or out-of-range page — fails the request
- * rather than falling back to a default or dropping the filter, either of which
- * would render a list that lies about what it is filtered to.
- */
 const listQuerySchema = paginationQuerySchema(50).extend({
   triggerId: z.string().min(1).optional(),
   status: triggerRunStatusSchema.optional(),
 });
 
-/**
- * The detail read's one parameter: return only Run events past this sequence
- * number, for the detail page's incremental poll. Absent means the whole
- * timeline.
- */
 const detailQuerySchema = z.strictObject({
   sinceSeq: z.coerce.number().int().min(0).optional(),
 });
 
-/**
- * The run as its list row reads it, joined to its Trigger for the name.
- *
- * Explicit columns, deliberately, and two are left out on purpose: the list
- * must never select a run's `finalText` (an answer per row is a page of prose
- * nobody asked for) and must never touch `trigger_run_event` — a run's
- * timeline can hold thousands of rows, and the list is polled every ten
- * seconds by every open tab. The run detail extends this projection with the
- * final text and reads the events in its own query (#647).
- */
 const runRowColumns = {
   id: triggerRunTable.id,
   triggerId: triggerRunTable.triggerId,
@@ -72,7 +45,6 @@ const runRowColumns = {
   createdAt: triggerRunTable.createdAt,
 };
 
-/** List runs across the workspace, newest first. */
 triggerRun.get(
   "/",
   requireAuth,
@@ -83,11 +55,6 @@ triggerRun.get(
     const { workspaceId } = workspaceScopeOf(c);
     const { triggerId, status, limit, offset } = c.req.valid("query");
 
-    // Joining each run to its Trigger is what scopes the listing: a run whose
-    // Trigger lives in another Workspace is unreachable here regardless of the
-    // `triggerId` asked for. The join also carries the Trigger's name, which
-    // every row needs now the list mixes Triggers. The projection is the
-    // shared one above — read its note before adding a column.
     const results = await db
       .select(runRowColumns)
       .from(triggerRunTable)
@@ -107,14 +74,6 @@ triggerRun.get(
   },
 );
 
-/**
- * One run in full: the list row's shape plus the final assistant text and
- * whether the timeline was cut short, and the run's **Run timeline** — its Run
- * events in sequence order. Pass `sinceSeq` to read only events past a
- * sequence number; the detail page polls that way at the flush interval, and
- * since an event is written open and patched when it ends, the page asks from
- * just below its oldest still-running event so the patches reach it too.
- */
 triggerRun.get(
   "/:runId",
   requireAuth,
@@ -126,8 +85,6 @@ triggerRun.get(
     const runId = c.req.param("runId");
     const { sinceSeq } = c.req.valid("query");
 
-    // The same join scopes this read: a run id from another Workspace is a
-    // run that does not exist here.
     const [run] = await db
       .select({
         ...runRowColumns,

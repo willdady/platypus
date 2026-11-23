@@ -6,9 +6,13 @@ import {
 } from "@platypus/schemas";
 import {
   applyCardMove,
+  columnOfCard,
+  dropZoneId,
   moveCard,
+  parseDropZoneId,
   placeCard,
   reorderColumns,
+  resolveOverColumn,
   type ColumnWithCards,
 } from "./board-moves";
 import {
@@ -38,6 +42,62 @@ function rect(centreY: number) {
   return { top: centreY - 5, height: 10 };
 }
 
+describe("dropZoneId", () => {
+  it.each(["col-1", "a column id with spaces"])(
+    "round-trips %s through parseDropZoneId",
+    (columnId) => {
+      expect(parseDropZoneId(dropZoneId(columnId))).toBe(columnId);
+    },
+  );
+
+  it("is distinguishable from a bare column id", () => {
+    // So the round-trip above proves the prefix is stripped, not echoed.
+    expect(parseDropZoneId("col-1")).toBeNull();
+  });
+});
+
+describe("columnOfCard", () => {
+  const columns = [column("col-1", ["a"]), column("col-2", ["b", "c"])];
+
+  it("returns the column the card sits in", () => {
+    expect(columnOfCard(columns, "a")?.id).toBe("col-1");
+    expect(columnOfCard(columns, "c")?.id).toBe("col-2");
+  });
+
+  it("returns undefined when no column holds the card", () => {
+    expect(columnOfCard(columns, "zzz")).toBeUndefined();
+  });
+});
+
+describe("resolveOverColumn", () => {
+  const columns = [column("col-1", ["a"]), column("col-2", ["b"])];
+
+  it.each([
+    ["a column's drop zone", dropZoneId("col-2"), "col-2"],
+    ["a column id", "col-2", "col-2"],
+    ["a card's id", "a", "col-1"],
+  ])("resolves %s to its column", (_label, overId, columnId) => {
+    expect(resolveOverColumn(columns, overId)?.id).toBe(columnId);
+  });
+
+  it("prefers a column's drop zone over a card id of the same text", () => {
+    const collision = [
+      column("col-1", []),
+      column("col-2", [dropZoneId("col-1")]),
+    ];
+    expect(resolveOverColumn(collision, dropZoneId("col-1"))?.id).toBe("col-1");
+  });
+
+  it("prefers a column id over a card id of the same text", () => {
+    const collision = [column("col-1", []), column("col-2", ["col-1"])];
+    expect(resolveOverColumn(collision, "col-1")?.id).toBe("col-1");
+  });
+
+  it("returns undefined when nothing matches", () => {
+    expect(resolveOverColumn(columns, "zzz")).toBeUndefined();
+  });
+});
+
 describe("placeCard", () => {
   const columns = [column("col-1", ["a", "b", "c"]), column("col-2", ["d"])];
 
@@ -45,7 +105,7 @@ describe("placeCard", () => {
     expect(
       placeCard(columns, {
         activeId: "a",
-        overId: "column-drop-col-2",
+        overId: dropZoneId("col-2"),
         activeRect: rect(0),
         overRect: rect(0),
       }),
@@ -145,6 +205,21 @@ describe("placeCard", () => {
         overRect: rect(0),
       }),
     ).toBeNull();
+  });
+
+  it("falls back to the source column when the over id matches nothing", () => {
+    expect(
+      placeCard(columns, {
+        activeId: "a",
+        overId: "zzz",
+        activeRect: null,
+        overRect: rect(0),
+      }),
+    ).toEqual({
+      fromColumnId: "col-1",
+      toColumnId: "col-1",
+      afterCardId: null,
+    });
   });
 });
 

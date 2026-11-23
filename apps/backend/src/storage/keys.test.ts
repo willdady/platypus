@@ -6,6 +6,7 @@ import {
   chatStorageKeyPrefix,
   workspaceStorageKeyPrefix,
   organizationStorageKeyPrefix,
+  isSkillStorageKey,
 } from "./keys.ts";
 import { ValidationError } from "../errors.ts";
 
@@ -64,6 +65,16 @@ describe("storage keys", () => {
     });
   });
 
+  describe("isSkillStorageKey", () => {
+    it.each(["o/skills/s/u/f", "o/SKILLS/s/u/f"])("matches %s", (key) => {
+      expect(isSkillStorageKey(key)).toBe(true);
+    });
+
+    it("does not match a File part key", () => {
+      expect(isSkillStorageKey("o/ws-1/c/m/0-a.png")).toBe(false);
+    });
+  });
+
   describe("scope prefixes", () => {
     const scope = { orgId: "org-1", workspaceId: "ws-1", chatId: "chat-1" };
 
@@ -79,7 +90,6 @@ describe("storage keys", () => {
       expect(() => assertValidStoragePrefix(prefix)).not.toThrow();
     });
 
-    // The trailing `/` is what stops `org1/` matching `org10/…` on S3.
     it.each([
       ["empty", ""],
       ["root", "/"],

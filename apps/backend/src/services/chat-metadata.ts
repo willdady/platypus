@@ -8,22 +8,23 @@ import {
 } from "../db/schema.ts";
 import { openProvider } from "./provider.ts";
 import { pointerSettingModelId } from "./model-capability.ts";
+import { jobCallSettings, jobMaxOutputTokens } from "./reasoning.ts";
 import {
   drizzleTaskModelQueries,
+  isChatsOwnModel,
   resolveTaskModelProvider,
 } from "./task-model.ts";
-import { UNTITLED_CHAT_TITLE, chatSchema } from "@platypus/schemas";
+import {
+  UNTITLED_CHAT_TITLE,
+  chatSchema,
+  type ConcreteModelId,
+} from "@platypus/schemas";
 import type { PlatypusUIMessage } from "../types.ts";
+import type { ProviderRow } from "./provider-write.ts";
 import { logger } from "../logger.ts";
 import { loadActivePath } from "./chat-messages.ts";
 import { withDeadline } from "../utils/abort-race.ts";
 
-/**
- * Bounds on titling (issue #1618). A title needs the start of a conversation,
- * not all of it. The deadline covers the call's retries. After
- * `MAX_TITLE_FAILURES` failed attempts a Chat stays Untitled until the User
- * names it.
- */
 const MAX_CONVERSATION_CHARS = 8_000;
 const TITLE_TIMEOUT_MS = 30_000;
 const TITLE_MAX_OUTPUT_TOKENS = 2_048;
@@ -34,16 +35,14 @@ export type GenerateChatMetadataParams = {
   chatId: string;
   workspaceId: string;
   orgId: string;
-  /**
-   * Provider to title with when the workspace has no task-model override.
-   * For run-lifecycle callers this is the run's resolved provider id, which is
-   * always present for both direct-provider and agent runs (the chat row nulls
-   * the provider column for agent runs, so read it from the resolved plan).
-   */
+  // why: the run's resolved provider; the chat row nulls its provider for agent runs
   providerId: string;
 };
 
-/** Whether the messages contain at least one user message carrying text. */
+export type StartEarlyChatTitleParams = GenerateChatMetadataParams & {
+  modelId: ConcreteModelId;
+};
+
 const hasUserText = (messages: PlatypusUIMessage[]): boolean =>
   messages.some(
     (m) =>
@@ -51,30 +50,18 @@ const hasUserText = (messages: PlatypusUIMessage[]): boolean =>
       m.parts.some((p) => p.type === "text" && p.text.trim().length > 0),
   );
 
-/**
- * Generates and persists a chat's title with the task model, then returns the
- * updated row (or `null` when nothing was written).
- *
- * This is the single, authoritative titling path. It is safe to call from the
- * run lifecycle for any terminal status and safe under concurrency:
- *
- * - It only ever titles a chat still named "Untitled" — a fast short-circuit
- *   avoids the model call for already-titled or user-renamed chats, and the
- *   final write is guarded `WHERE title = 'Untitled'` so the first generation
- *   wins and overlapping runs cannot double-write or clobber a rename.
- * - It requires at least one user message with text, so an empty/failed-before-
- *   input chat is left untitled rather than fed an empty prompt.
- *
- * Provider resolution honors the workspace task-model override, falling back to
- * the supplied `providerId`.
- */
-export const generateChatMetadata = async (
-  params: GenerateChatMetadataParams,
-): Promise<{ id: string; title: string } | null> => {
-  const { chatId, workspaceId, orgId, providerId } = params;
+type TitleChat = {
+  id: string;
+  title: string;
+  activeLeafId: string | null;
+  titleFailures: number;
+};
 
-  // Fetch chat record: only what titling reads, not its memory snapshot.
-  const chatRows = await db
+const readTitleChat = async (
+  chatId: string,
+  workspaceId: string,
+): Promise<TitleChat | undefined> => {
+  const rows = await db
     .select({
       id: chatTable.id,
       title: chatTable.title,
@@ -86,31 +73,27 @@ export const generateChatMetadata = async (
       and(eq(chatTable.id, chatId), eq(chatTable.workspaceId, workspaceId)),
     )
     .limit(1);
-  const chat = chatRows[0];
-  if (!chat) return null;
+  return rows[0];
+};
 
-  // Idempotency short-circuit: never re-title, never clobber a rename. The
-  // conditional write below is the real concurrency backstop; this just avoids
-  // a pointless model call in the common already-titled case.
-  if (chat.title !== UNTITLED_CHAT_TITLE) return null;
-  if (chat.titleFailures >= MAX_TITLE_FAILURES) return null;
+type TitleProvider =
+  | { status: "resolved"; provider: ProviderRow }
+  | { status: "no-workspace" }
+  | { status: "invisible"; providerId: string; fromOverride: boolean };
 
-  const { messages } = await loadActivePath(chat.id, chat.activeLeafId);
-  if (!hasUserText(messages)) return null;
+const readTitleProvider = async (
+  params: GenerateChatMetadataParams,
+): Promise<TitleProvider> => {
+  const { workspaceId, orgId, providerId } = params;
 
-  // Fetch the workspace to check for a task-model provider override.
   const workspaceRows = await db
     .select()
     .from(workspaceTable)
     .where(eq(workspaceTable.id, workspaceId))
     .limit(1);
   const workspace = workspaceRows[0];
-  if (!workspace) return null;
+  if (!workspace) return { status: "no-workspace" };
 
-  // The Workspace's task-model Provider if it sets one, otherwise the Chat's
-  // own Provider. Resolved through the Scoped-resource authority, as every
-  // other resource a Chat turn reaches is: a Shared Provider titles here only
-  // where an Attachment makes it visible to this Workspace (ADR-0007).
   const taskProvider = await resolveTaskModelProvider(
     {
       workspace,
@@ -121,26 +104,27 @@ export const generateChatMetadata = async (
     drizzleTaskModelQueries,
   );
   if (!taskProvider.provider) {
-    // Titling is fire-and-forget, so an unresolvable provider leaves chats
-    // named "Untitled" with nothing else to show for it. Say so: the usual
-    // cause is a task-model override naming an Organization-scoped Provider
-    // that is not attached to this Workspace, which reads as "titling just
-    // stopped" from the outside.
-    logger.warn(
-      {
-        chatId,
-        workspaceId,
-        providerId: taskProvider.providerId,
-        fromTaskModelOverride: taskProvider.fromOverride,
-      },
-      "Chat titling skipped: provider is not visible in this workspace",
-    );
-    return null;
+    return {
+      status: "invisible",
+      providerId: taskProvider.providerId,
+      fromOverride: taskProvider.fromOverride,
+    };
   }
-  const provider = taskProvider.provider;
+  return { status: "resolved", provider: taskProvider.provider };
+};
 
+const titleChat = async (args: {
+  chat: TitleChat;
+  messages: PlatypusUIMessage[];
+  provider: ProviderRow;
+  workspaceId: string;
+}): Promise<{ id: string; title: string } | null> => {
+  const { chat, messages, provider, workspaceId } = args;
+  const chatId = chat.id;
+
+  const taskModelId = pointerSettingModelId(provider.taskModelId);
   const model = openProvider(provider, { sessionId: chatId }).languageModel(
-    pointerSettingModelId(provider.taskModelId),
+    taskModelId,
   );
 
   const conversationText = messages
@@ -160,8 +144,6 @@ export const generateChatMetadata = async (
 
   promptParts.push(`Conversation:\n${conversationText}`);
 
-  // Counted where a model call was made and produced nothing usable, so the
-  // warning that titling gave up is logged once, by the attempt that hit it.
   const recordFailure = async () => {
     const [counted] = await db
       .update(chatTable)
@@ -190,7 +172,13 @@ export const generateChatMetadata = async (
             }),
           }),
           prompt: promptParts.join("\n"),
-          maxOutputTokens: TITLE_MAX_OUTPUT_TOKENS,
+          ...jobCallSettings(provider, taskModelId, provider.taskModelSettings),
+          maxOutputTokens: jobMaxOutputTokens(
+            provider,
+            taskModelId,
+            provider.taskModelSettings,
+            TITLE_MAX_OUTPUT_TOKENS,
+          ),
           maxRetries: TITLE_MAX_RETRIES,
           abortSignal,
         }),
@@ -202,23 +190,16 @@ export const generateChatMetadata = async (
   }
 
   let newTitle = output.title;
-  // Truncate the title if it exceeds 30 characters. This is needed as some
-  // models don't respect the limit mentioned in the above prompt :\
   if (newTitle.length > 30) {
     newTitle = newTitle.slice(0, 29) + "…";
   }
-  // This write skips zod, so check the title here. A too-short one is not
-  // padded: the chat stays Untitled and a later turn tries again, up to
-  // `MAX_TITLE_FAILURES`.
+  // why: this write skips zod; a too-short title is not padded, a later turn retries
   if (!chatSchema.shape.title.safeParse(newTitle).success) {
     logger.warn({ chatId, title: newTitle }, "Generated chat title rejected");
     await recordFailure();
     return null;
   }
 
-  // Conditional write: only apply while the row is still "Untitled". This is
-  // the atomic concurrency backstop — the first writer wins, later writers
-  // (a second overlapping run, or the client fast-path) match zero rows.
   const updateResult = await db
     .update(chatTable)
     .set({ title: newTitle, updatedAt: new Date() })
@@ -235,4 +216,105 @@ export const generateChatMetadata = async (
     });
 
   return updateResult[0] ?? null;
+};
+
+type ReadyTitle = {
+  status: "ready";
+  chat: TitleChat;
+  messages: PlatypusUIMessage[];
+  provider: ProviderRow;
+};
+
+type TitleReadiness =
+  | ReadyTitle
+  | { status: "skip" }
+  | { status: "invisible"; providerId: string; fromOverride: boolean };
+
+const prepareTitle = async (
+  params: GenerateChatMetadataParams,
+): Promise<TitleReadiness> => {
+  const { chatId, workspaceId } = params;
+
+  const chat = await readTitleChat(chatId, workspaceId);
+  if (!chat) return { status: "skip" };
+
+  if (chat.title !== UNTITLED_CHAT_TITLE) return { status: "skip" };
+  if (chat.titleFailures >= MAX_TITLE_FAILURES) return { status: "skip" };
+
+  const { messages } = await loadActivePath(chat.id, chat.activeLeafId);
+  if (!hasUserText(messages)) return { status: "skip" };
+
+  const titleProvider = await readTitleProvider(params);
+  if (titleProvider.status === "no-workspace") return { status: "skip" };
+  if (titleProvider.status === "invisible") {
+    return {
+      status: "invisible",
+      providerId: titleProvider.providerId,
+      fromOverride: titleProvider.fromOverride,
+    };
+  }
+  return {
+    status: "ready",
+    chat,
+    messages,
+    provider: titleProvider.provider,
+  };
+};
+
+export const generateChatMetadata = async (
+  params: GenerateChatMetadataParams,
+): Promise<{ id: string; title: string } | null> => {
+  const readiness = await prepareTitle(params);
+  if (readiness.status === "invisible") {
+    logger.warn(
+      {
+        chatId: params.chatId,
+        workspaceId: params.workspaceId,
+        providerId: readiness.providerId,
+        fromTaskModelOverride: readiness.fromOverride,
+      },
+      "Chat titling skipped: provider is not visible in this workspace",
+    );
+    return null;
+  }
+  if (readiness.status !== "ready") return null;
+
+  return titleChat({
+    chat: readiness.chat,
+    messages: readiness.messages,
+    provider: readiness.provider,
+    workspaceId: params.workspaceId,
+  });
+};
+
+export const startEarlyChatTitle = async (
+  params: StartEarlyChatTitleParams,
+): Promise<void> => {
+  const { workspaceId, providerId, modelId } = params;
+
+  const readiness = await prepareTitle(params);
+  if (readiness.status !== "ready") return;
+  const { provider } = readiness;
+
+  if (readiness.chat.titleFailures >= MAX_TITLE_FAILURES - 1) return;
+
+  if (provider.taskModelId.trim() === "") return;
+
+  if (
+    isChatsOwnModel({
+      taskProviderId: provider.id,
+      taskModelId: provider.taskModelId,
+      chatProviderId: providerId,
+      chatModelId: modelId,
+    })
+  ) {
+    return;
+  }
+
+  await titleChat({
+    chat: readiness.chat,
+    messages: readiness.messages,
+    provider,
+    workspaceId,
+  });
 };

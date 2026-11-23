@@ -39,10 +39,6 @@ const makeRegistration = (
   create: () => stubBackend,
 });
 
-// The store's own contract — miss semantics, duplicate rejection, prototype-key
-// safety, listing, reset — is covered once in
-// `registry/contribution-registry.test.ts`. What is left here is what this
-// instance adds: keying on the registration's own `backend` discriminator.
 describe("sandbox backend registry", () => {
   beforeEach(() => {
     clearSandboxBackends();

@@ -52,27 +52,8 @@ import {
 } from "./bearer-token.ts";
 import { isRecord } from "../utils/is-record.ts";
 
-/**
- * Inbound Triggers (ADR-0030): the backend's one ingress that is not a
- * browser session. An external caller fires one Trigger with that Trigger's
- * bearer token, and the call becomes a Trigger run through the ordinary firing
- * path.
- *
- * This module owns everything between the HTTP route and `fireTrigger`: which
- * calls are let in (token, expiry, enabled, the Organization gate, the
- * Owner's standing), what a body may carry, the per-record dedup and the
- * breaker verdict, the pending run row whose id the caller gets back, the
- * server-wide cap on active inbound runs, and the one log line every call
- * writes. The route only maps these
- * verdicts onto status codes.
- */
-
-// ----------------------------------------------------------------- settings
-
 export type InboundTriggerSettings = {
-  /** Inbound runs this backend instance will have active at once. */
   maxConcurrentRuns: number;
-  /** The largest request body the fire endpoint reads, in bytes. */
   maxBodyBytes: number;
 };
 
@@ -94,27 +75,17 @@ export const inboundTriggerSettings = (
   ),
 });
 
-/**
- * Validates the settings and reports them at boot, so a malformed value fails
- * the deployment instead of being replaced by a default nobody chose — the
- * rule the breaker settings follow.
- */
 export const validateInboundTriggerSettings = (): InboundTriggerSettings => {
   const settings = inboundTriggerSettings();
   logger.info(settings, "Inbound triggers configured");
   return settings;
 };
 
-/** Seconds a caller over the concurrency cap is told to wait. */
 export const INBOUND_RETRY_AFTER_SECONDS = 30;
 
-// ----------------------------------------------------------------- call log
-
-/** What happened to one call to the fire endpoint. */
 export type InboundCallOutcome =
   "accepted" | "deduplicated" | "suppressed" | "rejected" | "rate_limited";
 
-/** Why a call was rejected. Only the log says; the caller sees the status. */
 export type InboundRejectReason =
   | "unknown_trigger"
   | "not_inbound"
@@ -123,12 +94,10 @@ export type InboundRejectReason =
   | "expired_token"
   | "disabled"
   | "gate"
-  /** The Workspace Owner has left the Organization or is banned. */
   | "owner_left"
   | "misconfigured"
   | "invalid_inputs"
   | "body_too_large"
-  /** The backend failed while handling the call; it answers `500`. */
   | "internal_error";
 
 export type InboundCallLogEntry = {
@@ -139,20 +108,11 @@ export type InboundCallLogEntry = {
   reason?: InboundRejectReason;
   runId?: string;
   deduplicated?: boolean;
-  /** The record key's value. Never any other input. */
   recordKey?: string;
 };
 
-/** The call log line's message. Documented, and so not to be changed. */
 export const INBOUND_CALL_LOG_MESSAGE = "Inbound trigger call";
 
-/**
- * The one line every call to the fire endpoint writes, whatever its outcome
- * (ADR-0030). Its message, fields and values are a documented format an
- * Operator's log tooling relies on: every field is present on every line,
- * `null` where it does not apply, so a missing key never has to be told apart
- * from an absent value. No input value other than the record key's.
- */
 export const logInboundCall = (entry: InboundCallLogEntry): void => {
   logger.info(
     {
@@ -169,23 +129,15 @@ export const logInboundCall = (entry: InboundCallLogEntry): void => {
   );
 };
 
-// ----------------------------------------------------------------- lookup
-
-/** An Inbound Trigger call's target, with what the gate and the log need. */
 export type InboundTarget = {
   trigger: TriggerRow;
   organizationId: string;
   workspaceId: string;
   gate: OrgGate;
   workspaceAllowed: boolean;
-  /** Whether the Workspace Owner may still act in it (`ownerMayAct`). */
   ownerMayAct: boolean;
 };
 
-/**
- * The Trigger a call names, joined to its Workspace, Organization and the
- * Workspace Owner's standing.
- */
 export const loadInboundTarget = async (
   triggerId: string,
 ): Promise<InboundTarget | null> => {
@@ -221,16 +173,6 @@ export type InboundAuthResult =
   | { ok: true; target: InboundTarget; config: InboundTriggerConfig }
   | { ok: false; reason: InboundRejectReason; target: InboundTarget | null };
 
-/**
- * Whether a call may fire `triggerId`. Every failure is reported with its
- * reason for the log, and the route answers all of them with the same `404`:
- * only a caller holding a valid token learns anything more specific.
- *
- * Checked in an order that keeps it so. The token comes before `enabled` and
- * the gate, so a caller without it cannot tell a disabled Trigger from a
- * missing one even by timing a different code path; the gate is read on every
- * call, not when the Trigger was made.
- */
 export const authenticateInboundCall = async (
   triggerId: string,
   authorization: string | undefined,
@@ -276,18 +218,9 @@ export const authenticateInboundCall = async (
   }
 };
 
-// ----------------------------------------------------------------- inputs
-
 export type InputValidation =
   { ok: true; inputs: Record<string, string> } | { ok: false; message: string };
 
-/**
- * Validates a call's body — `{ "inputs": { "<name>": "<string>" } }` — against
- * the Trigger's declared inputs. A missing required input, an undeclared one,
- * or a value that is not a string is refused, naming the problem; nothing is
- * truncated or coerced, so what the Agent sees is exactly what was sent. An
- * empty body, or one without `inputs`, is a call with no inputs.
- */
 export const validateInboundBody = (
   body: unknown,
   declared: InboundTriggerInput[],
@@ -303,8 +236,6 @@ export const validateInboundBody = (
       message: `Unexpected field '${unexpected[0]}'. The body is { "inputs": { ... } }.`,
     };
   }
-  // Absent is a call with no inputs; present is taken as sent, so an explicit
-  // `null` is refused like any other non-object rather than read as `{}`.
   const raw = Object.hasOwn(body, "inputs") ? body.inputs : {};
   if (!isRecord(raw)) {
     return { ok: false, message: "'inputs' must be a JSON object." };
@@ -320,8 +251,6 @@ export const validateInboundBody = (
     }
   }
   for (const input of declared) {
-    // `Object.hasOwn`, not `in`: an input named `constructor` or `toString`
-    // would otherwise be found on `Object.prototype` and pass unsent.
     if (input.required && !Object.hasOwn(raw, input.name)) {
       return {
         ok: false,
@@ -332,17 +261,6 @@ export const validateInboundBody = (
   return { ok: true, inputs: raw as Record<string, string> };
 };
 
-// ----------------------------------------------------------------- acceptance
-
-/**
- * The server-wide cap on active inbound runs, held in this process: an
- * inbound run executes in the process that accepted its call, so this is the
- * count that bounds this process's load. A slot is taken only by a call that
- * is about to write a `pending` row — a deduplicated or suppressed call starts
- * no run, so the cap never turns it away — and handed back when the call does
- * not start a run after all or its run ends. Taking it is synchronous, so
- * concurrent calls cannot all pass a check that none has yet acted on.
- */
 let activeInboundRuns = 0;
 
 const tryAcquireRunSlot = (max: number): boolean => {
@@ -355,22 +273,12 @@ const releaseRunSlot = (): void => {
   activeInboundRuns -= 1;
 };
 
-/** Test seam: the count of slots currently held. */
 export const activeInboundRunCount = (): number => activeInboundRuns;
 
-/** Test seam: forget every held slot. */
 export const resetInboundRunSlots = (): void => {
   activeInboundRuns = 0;
 };
 
-/**
- * Calls waiting for their record's turn in this process, by lock key. The
- * advisory lock is what serialises a record across instances, but a call
- * waiting on it holds a pooled connection the whole time — so a burst at one
- * Trigger with no record key could hold every connection in the pool while
- * all but one of them wait. Queuing here first means a process has at most
- * one connection waiting per record; the rest wait in memory.
- */
 const localTurns = new Map<string, Promise<void>>();
 
 const inLocalTurn = async <T>(key: string, work: () => Promise<T>) => {
@@ -384,23 +292,16 @@ const inLocalTurn = async <T>(key: string, work: () => Promise<T>) => {
   try {
     return await turn;
   } finally {
-    // The last call in the queue clears it, so an idle record holds nothing.
     if (localTurns.get(key) === settled) localTurns.delete(key);
   }
 };
 
-/**
- * The entity an inbound run is counted and deduplicated under: the record
- * key's value, or — with no key marked — the Trigger's own id, so the breaker
- * caps the whole Trigger and no inbound run is exempt from it.
- */
 export const inboundEntityId = (
   trigger: Pick<TriggerRow, "id">,
   config: InboundTriggerConfig,
   inputs: Record<string, string>,
 ): string => {
   if (config.recordKey === undefined) return trigger.id;
-  // The record key names a required input, so validation already demanded it.
   const entityId = inputs[config.recordKey];
   if (entityId === undefined) {
     throw new Error(`Inbound call has no '${config.recordKey}' input`);
@@ -414,28 +315,13 @@ export type InboundAcceptance =
   | { outcome: "suppressed"; runId: string }
   | { outcome: "rate_limited" };
 
-/**
- * The decision the call's transaction makes. A suppressed call also carries the
- * row it recorded, which is settled once the transaction commits — never from
- * inside it, which could still roll back.
- */
+// why: suppressed row is settled after commit, never inside the tx, which could still roll back
 type AcceptanceDecision =
   | { outcome: "accepted"; runId: string }
   | { outcome: "deduplicated"; runId: string }
   | { outcome: "suppressed"; runId: string; suppressed: EndedTriggerRun }
   | { outcome: "rate_limited" };
 
-/**
- * Turns an authenticated, validated call into a run id: the active run for
- * this record when there is one, a `suppressed` row when the breaker trips,
- * or a new `pending` row whose run then starts in the background.
- *
- * Dedup, the breaker count and the row it writes are one decision per
- * record: a transaction-scoped advisory lock on (Trigger, entity) makes two
- * simultaneous calls for the same record take turns, so the second sees the
- * first's `pending` row instead of starting a second Agent on it. Calls for
- * different records do not wait for each other.
- */
 export const acceptInboundCall = async (
   target: InboundTarget,
   config: InboundTriggerConfig,
@@ -445,8 +331,6 @@ export const acceptInboundCall = async (
   const { trigger } = target;
   const entityId = inboundEntityId(trigger, config, inputs);
   const lockKey = `inbound:${trigger.id}:${entityId}`;
-  // Whether this call holds a run slot, so every path that does not end in a
-  // started run gives it back exactly once.
   let holdsSlot = false;
   let decision: AcceptanceDecision;
   try {
@@ -479,8 +363,6 @@ export const acceptInboundCall = async (
           tx,
         );
         if (!suppress) {
-          // The cap bounds runs, so it is asked only by a call that would start
-          // one. Past it, nothing is written: the transaction ends empty.
           if (!tryAcquireRunSlot(settings.maxConcurrentRuns)) {
             return { outcome: "rate_limited" as const };
           }
@@ -518,15 +400,9 @@ export const acceptInboundCall = async (
   if (decision.outcome === "accepted") {
     startAcceptedRun(trigger, config, inputs, entityId, decision.runId);
   }
-  // The suppressed row is the lifecycle's business, not the caller's.
   return { outcome: decision.outcome, runId: decision.runId };
 };
 
-/**
- * Fires an accepted call's run in the background and gives its slot back when
- * the firing ends. `fireTrigger` never rejects; the `finally` is what keeps a
- * slot from leaking if that ever changes.
- */
 const startAcceptedRun = (
   trigger: TriggerRow,
   config: InboundTriggerConfig,
@@ -543,16 +419,11 @@ const startAcceptedRun = (
   }).finally(releaseRunSlot);
 };
 
-// ----------------------------------------------------------------- last used
-
-/** Stamps last used or last rejected; see {@link touchToken}. */
 export const touchInboundTrigger = (
   triggerId: string,
   column: "lastUsedAt" | "lastRejectedAt",
   now: Date = new Date(),
 ): Promise<void> => touchToken(triggerTable, triggerId, column, now);
-
-// ----------------------------------------------------------------- run status
 
 export type InboundRunStatus = {
   runId: string;
@@ -564,13 +435,6 @@ export type InboundRunStatus = {
   failedToolCalls: number;
 };
 
-/**
- * One of this Trigger's runs, for a caller polling the id it was given:
- * status, timestamps and error, and the Tool sets that loaded no tools and
- * the count of failed tool calls (#1184) — never output, never stats.
- * `null` for a run that belongs to another Trigger or that retention has
- * pruned.
- */
 export const getInboundRunStatus = async (
   triggerId: string,
   runId: string,
@@ -596,13 +460,6 @@ export const getInboundRunStatus = async (
   return run ?? null;
 };
 
-// ----------------------------------------------------------------- notices
-
-/**
- * The first call with an expired token tells the Owner, once per token: the
- * caller only sees the uniform `404`, and many callers do not retry, so
- * nothing else would say a live integration has stopped.
- */
 const noticeExpiredTokenUse = async (target: InboundTarget): Promise<void> => {
   const { trigger } = target;
   const { tokenHash } = trigger;
@@ -621,12 +478,6 @@ const noticeExpiredTokenUse = async (target: InboundTarget): Promise<void> => {
   );
 };
 
-/**
- * Sends each Inbound Trigger token's expiry reminders as they fall due. Run
- * from the scheduler, under its lock; see {@link sendTokenNotice}. Each
- * Trigger is handled on its own, so one that fails does not hold back the
- * rest.
- */
 export const sendInboundTokenReminders = async (
   now: Date = new Date(),
 ): Promise<void> => {
@@ -664,8 +515,6 @@ export const sendInboundTokenReminders = async (
   }
 };
 
-// ----------------------------------------------------------------- org admin
-
 export type OrgInboundTrigger = {
   id: string;
   name: string;
@@ -682,10 +531,6 @@ export type OrgInboundTrigger = {
   lastRejectedAt: Date | null;
 };
 
-/**
- * Every Inbound Trigger in the Organization, for its Org Admins: where it is,
- * whose it is, and how its token stands. Never the token or its hash.
- */
 export const listOrgInboundTriggers = async (
   orgId: string,
   now: Date = new Date(),
@@ -720,17 +565,6 @@ export const listOrgInboundTriggers = async (
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 };
 
-/**
- * Revokes an Inbound Trigger's token on an Org Admin's behalf — the one thing
- * an Admin does inside another person's Workspace. The token stops working at
- * once and the Owner is told; regenerating stays theirs. `false` when no
- * Inbound Trigger by that id is in the Organization. Revoking a Trigger with
- * no token is a no-op that notifies nobody.
- *
- * `seenTokenCreatedAt` is when the token the Admin was looking at was issued.
- * A token issued at any other time is one they never judged, so the revoke is
- * refused rather than wiping it.
- */
 export const revokeInboundTriggerToken = async (
   orgId: string,
   triggerId: string,
@@ -752,14 +586,9 @@ export const revokeInboundTriggerToken = async (
   const { tokenHash, tokenCreatedAt } = row.trigger;
   if (!tokenHash) return true;
 
-  // Revokes the token the Admin was looking at, not whichever is current: an
-  // Owner who regenerated since the list loaded issued a token nobody has
-  // judged, and wiping it would hand them one that is dead on arrival.
   if (tokenCreatedAt?.getTime() !== seenTokenCreatedAt.getTime()) {
     throw new ConflictError(TOKEN_REPLACED_MESSAGE);
   }
-  // The same holds for a regenerate landing between the read above and this
-  // write, so the write is conditional on the hash just read.
   const revoked = await db
     .update(triggerTable)
     .set({ ...revokedTokenFields(), updatedAt: new Date() })
@@ -808,16 +637,10 @@ const INBOUND_GATE = {
   changedMessage: "Inbound trigger access changed by an Org Admin",
 } as const;
 
-/**
- * Who may take Inbound Trigger calls, for the Org Admin's Inbound Triggers
- * screen: the Organization gate, and every Workspace with its own switch and
- * how many Inbound Triggers it holds.
- */
 export const getInboundTriggerAccess = (
   orgId: string,
 ): Promise<OrgGateAccess> => getGateAccess(INBOUND_GATE, orgId);
 
-/** Saves the Inbound Trigger gate; see {@link setGateAccess}. */
 export const setInboundTriggerAccess = (
   orgId: string,
   update: OrgGateAccessUpdate,

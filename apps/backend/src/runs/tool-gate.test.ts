@@ -31,12 +31,6 @@ import {
 } from "../tools/sub-agent.ts";
 import { DELEGATE_TOOL_NAME } from "../tools/turn-tool-names.ts";
 
-/**
- * The Tool gate (ADR-0033) at the seam all three Drives share: a real AI SDK
- * pipeline, a mock model that calls one tool and then answers, and gates
- * registered the way the plugin loader registers them.
- */
-
 const USAGE = {
   inputTokens: {
     total: 10,
@@ -75,7 +69,6 @@ const answerStep = step([
   { type: "text-end", id: "t1" },
 ]);
 
-/** Calls `wipe` once, then answers. Keeps every prompt it was sent. */
 const callThenAnswer = () => {
   const prompts: unknown[] = [];
   let index = 0;
@@ -92,7 +85,6 @@ const callThenAnswer = () => {
   return { model, prompts };
 };
 
-/** Calls one named tool once, then answers. Keeps every prompt it was sent. */
 const callToolThenAnswer = (toolName: string, input: object) => {
   const prompts: unknown[] = [];
   let index = 0;
@@ -122,7 +114,6 @@ const callToolThenAnswer = (toolName: string, input: object) => {
   return { model, prompts };
 };
 
-/** Calls `wipe` with the same arguments on every step, forever. */
 const callForever = () => {
   let index = 0;
   return new MockLanguageModelV3({
@@ -175,7 +166,6 @@ const startRecordedRun = () => {
   return { run, outcome };
 };
 
-/** Registers a gate that records every call (and result) it was asked about. */
 const gate = (
   id: string,
   answer: (call: ToolGateCall) => ToolGateVerdict | Promise<ToolGateVerdict>,
@@ -212,7 +202,6 @@ const gate = (
   return { seen, results };
 };
 
-/** The tool-result part the model was sent for `tc1` on its second call. */
 const toolResultSentBack = (prompts: unknown[]) =>
   (prompts[1] as Array<{ role: string; content: unknown[] }>)
     .filter((m) => m.role === "tool")
@@ -221,7 +210,6 @@ const toolResultSentBack = (prompts: unknown[]) =>
     output: { type: string; reason?: string; value?: unknown };
   };
 
-/** Registers a gate with an allow-by-default call stage and a result stage. */
 const resultGate = (
   id: string,
   answer: (
@@ -336,7 +324,6 @@ describe("a Tool gate's deny", () => {
 });
 
 describe("an MCP tool", () => {
-  // MCP tools enter a run as dynamic tools, under their namespaced name.
   it("is gated like any other", async () => {
     gate("no-wipe", () => ({ verdict: "deny" }));
     let executed = false;
@@ -450,7 +437,6 @@ describe("failing closed", () => {
   });
 });
 
-/** Drains a Chat drive and returns its folded messages and outcome. */
 const drain = async (drive: ReturnType<typeof driveChat>) => {
   void (async () => {
     for await (const _ of drive.response);
@@ -477,7 +463,6 @@ const toolParts = (messages: PlatypusUIMessage[] | undefined) =>
     .flatMap((m) => m.parts)
     .filter((p) => (p.type as string) === "tool-wipe") as unknown as ToolPart[];
 
-/** Calls `wipe` three times in one step (`tc1`–`tc3` on /a–/c), then answers. */
 const threeCallsThenAnswer = () => {
   const prompts: unknown[] = [];
   let index = 0;
@@ -541,8 +526,6 @@ describe("a Tool gate's ask in an attended Chat turn", () => {
       }),
     );
 
-    // The step's allowed call ran and its denied one did not; the model was
-    // not called again.
     expect(executed).toEqual(["/b"]);
     expect(prompts).toHaveLength(1);
     expect(outcome[0]?.status).toBe("succeeded");
@@ -553,7 +536,6 @@ describe("a Tool gate's ask in an attended Chat turn", () => {
     expect(denied.state).toBe("output-denied");
   });
 
-  /** Asks once, then answers `approved` for the call and resumes. */
   const askThenResume = async (approved: boolean, reason?: string) => {
     let gateCalls = 0;
     gate("cautious", () => {
@@ -573,8 +555,6 @@ describe("a Tool gate's ask in an attended Chat turn", () => {
     const reply = stopped.messages?.at(-1) as PlatypusUIMessage;
     const answered = {
       ...reply,
-      // As if the ask fell on the step ceiling: how the first request ended
-      // says nothing about how the resumed reply does.
       metadata: { ...reply.metadata, stoppedAtStepLimit: true as const },
       parts: reply.parts.map((p) => {
         const part = p as unknown as ToolPart;
@@ -663,6 +643,19 @@ describe("combining gates", () => {
     );
   });
 
+  it("gives the first denying gate's reason when several deny", async () => {
+    gate("first", () => ({ verdict: "deny", reason: "First says no." }));
+    gate("second", () => ({ verdict: "deny", reason: "Second says no." }));
+    const { model, prompts } = callThenAnswer();
+    const { run } = startRecordedRun();
+
+    await driveOnce({ plan: planWith(model, []), prompt: "go", run });
+
+    const { reason } = toolResultSentBack(prompts).output;
+    expect(reason).toContain("First says no.");
+    expect(reason).not.toContain("Second says no.");
+  });
+
   it("runs the call when every gate allows, and records nothing extra", async () => {
     gate("open", () => ({ verdict: "allow" }));
     gate("also-open", () => ({ verdict: "allow" }));
@@ -727,7 +720,6 @@ describe("a Tool gate's result stage", () => {
 
     await driveOnce({ plan: planWith(model, executed), prompt: "go", run });
 
-    // The tool ran; only its result was withheld.
     expect(executed).toEqual(["/data"]);
     expect(outcome[0]?.status).toBe("succeeded");
     expect(seen).toHaveLength(1);
@@ -744,7 +736,6 @@ describe("a Tool gate's result stage", () => {
     });
     expect(seen[0]?.result).toBe("wiped");
 
-    // The original result reached neither the model nor anywhere it is kept.
     expect(JSON.stringify(prompts)).not.toContain("wiped");
     const result = toolResultSentBack(prompts);
     expect(result.output.type).toBe("error-text");
@@ -954,8 +945,6 @@ describe("a Tool gate's result stage", () => {
     const { messages } = await drive.done;
 
     expect(ran).toBe(true);
-    // The final answer — the value the model receives — reached neither the
-    // model nor the Chat, though the tool ran and streamed its activity.
     expect(JSON.stringify(prompts)).not.toContain("SECRET-FINDING");
     expect(streamed).not.toContain("SECRET-FINDING");
     expect(JSON.stringify(messages)).not.toContain("SECRET-FINDING");
@@ -1047,7 +1036,6 @@ describe("a Tool gate's result stage", () => {
     expect(JSON.stringify(prompts)).not.toContain("PARTIAL-SECRET");
     expect(streamed).not.toContain("PARTIAL-SECRET");
     expect(JSON.stringify(messages)).not.toContain("PARTIAL-SECRET");
-    // The activity yielded before the throw is released, not swallowed.
     expect(streamed).toContain('"type":"failed"');
     expect(toolResultSentBack(prompts).output.value).toContain(
       "Inside the partial output.",

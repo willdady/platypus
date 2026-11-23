@@ -51,7 +51,6 @@ describe("promoteScoped module", () => {
       workspaceId: null,
       updatedAt: expect.any(Date) as unknown,
     });
-    // Both the lookup and the re-scope only match the origin Workspace's row.
     expect(mockDb.where).toHaveBeenCalledTimes(2);
     for (const [condition] of mockDb.where.mock.calls) {
       expect(condition).toEqual(workspaceScopedWhere("skill", "s1", "ws-1"));
@@ -68,8 +67,6 @@ describe("promoteScoped module", () => {
 
   it("turns a lost promote race into NotFoundError without attaching", async () => {
     mockDb.limit.mockResolvedValueOnce([{ id: "s1", workspaceId: "ws-1" }]);
-    // The in-transaction re-scope matches no row (already re-scoped elsewhere),
-    // so the module must abort before it inserts the auto-attach.
     mockDb.returning.mockResolvedValueOnce([]);
 
     await expect(
@@ -81,8 +78,6 @@ describe("promoteScoped module", () => {
       }),
     ).rejects.toThrow(NotFoundError);
 
-    // The rollback invariant, asserted once through the module: no orphan
-    // Attachment is ever inserted when the re-scope loses the race.
     expect(mockDb.onConflictDoNothing).not.toHaveBeenCalled();
   });
 

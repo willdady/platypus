@@ -7,7 +7,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { SidebarProvider } from "@/components/ui/sidebar";
+import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { chatUpdateSchema } from "@platypus/schemas";
 import { expectSentBodyToMatchSchema, jsonResponse } from "@/test/test-utils";
 import type { Actor } from "@/lib/authorization";
@@ -82,9 +82,24 @@ function seedHeader() {
 function renderSidebar() {
   return render(
     <SidebarProvider>
+      <SidebarTrigger />
       <AppSidebar />
     </SidebarProvider>,
   );
+}
+
+/** `useIsMobile` and the sidebar both read the 768px breakpoint from here. */
+function setViewport(mobile: boolean) {
+  window.matchMedia = vi.fn((query: string) => ({
+    matches: mobile && query === "(max-width: 767px)",
+    media: query,
+    onchange: null,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    addListener: () => {},
+    removeListener: () => {},
+    dispatchEvent: () => false,
+  })) as unknown as typeof window.matchMedia;
 }
 
 function search(value: string) {
@@ -100,6 +115,7 @@ function search(value: string) {
 
 beforeEach(() => {
   vi.useFakeTimers();
+  setViewport(false);
   reads.clear();
   params.workspaceId = "ws1";
   auth.actor = "org-admin";
@@ -263,101 +279,111 @@ describe("AppSidebar chat history", () => {
 });
 
 describe("AppSidebar workspace switcher", () => {
-  it("shows name placeholders while the Organization and Workspaces load", () => {
-    renderSidebar();
-
-    expect(screen.getByTestId("org-name-skeleton")).toBeInTheDocument();
-    expect(screen.getByTestId("workspace-name-skeleton")).toBeInTheDocument();
-  });
-
-  it("swaps the placeholders for the names once loaded", () => {
+  it("keeps the switcher off the desktop sidebar", () => {
     seedHeader();
     renderSidebar();
 
-    expect(screen.queryByTestId("org-name-skeleton")).not.toBeInTheDocument();
+    expect(screen.queryByText("Alpha")).not.toBeInTheDocument();
+    expect(screen.queryByText("Acme")).not.toBeInTheDocument();
     expect(
       screen.queryByTestId("workspace-name-skeleton"),
     ).not.toBeInTheDocument();
-    expect(screen.getByText("Acme")).toBeInTheDocument();
-    expect(screen.getByText("Alpha")).toBeInTheDocument();
   });
 
-  /** Opens the workspace switcher's menu. */
-  const openSwitcher = () => {
-    const trigger = screen.getByText("Alpha").closest("button")!;
-    fireEvent.pointerDown(trigger, { button: 0, pointerId: 1 });
-    fireEvent.pointerUp(trigger, { button: 0, pointerId: 1 });
-    fireEvent.click(trigger, { button: 0 });
-    return screen.getByRole("menu");
-  };
-
-  it("lists Workspaces by name without reordering the cached results", () => {
-    const workspaces = {
-      results: [
-        { id: "ws2", name: "Beta", organizationId: "org1" },
-        { id: "ws1", name: "Alpha", organizationId: "org1" },
-      ],
-    };
-    setRead("", "organizations/org1", { id: "org1", name: "Acme" });
-    setRead("", "workspaces", workspaces);
-    renderSidebar();
-
-    const names = within(openSwitcher())
-      .getAllByRole("menuitem")
-      .map((item) => item.textContent?.trim())
-      .filter((name) => name === "Alpha" || name === "Beta");
-    expect(names).toEqual(["Alpha", "Beta"]);
-    expect(workspaces.results.map((w) => w.name)).toEqual(["Beta", "Alpha"]);
-  });
-
-  it.each([
-    ["the Operator", "operator", true],
-    ["an Org Admin", "org-admin", true],
-    ["a member who owns the Workspace", "workspace-owner", false],
-  ] as const)("offers Add workspace to %s (%s): %s", (_who, actor, shown) => {
-    auth.actor = actor;
+  it("keeps it at the top of the mobile sheet", async () => {
+    vi.useRealTimers();
+    setViewport(true);
     seedHeader();
     renderSidebar();
 
-    const item = within(openSwitcher()).queryByRole("menuitem", {
-      name: /Add workspace/,
-    });
-    expect(item !== null).toBe(shown);
+    fireEvent.click(screen.getByRole("button", { name: "Toggle sidebar" }));
+
+    expect(await screen.findByText("Acme")).toBeInTheDocument();
+    expect(screen.getByText("Alpha")).toBeInTheDocument();
+  });
+});
+
+describe("AppSidebar mobile sheet", () => {
+  beforeEach(() => {
+    // Radix opens the sheet on real timers.
+    vi.useRealTimers();
+    setViewport(true);
+    seedHeader();
   });
 
-  describe("Organization settings item", () => {
-    beforeEach(() => {
-      vi.useRealTimers();
+  async function openSheet() {
+    fireEvent.click(screen.getByRole("button", { name: "Toggle sidebar" }));
+    return screen.findByRole("dialog");
+  }
+
+  it("labels its navigation distinctly from the Workspace rail", () => {
+    setViewport(false);
+    renderSidebar();
+
+    expect(
+      screen.getByRole("navigation", { name: "Chats" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("navigation", { name: "Workspace" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("puts the switcher and Workspace rows above New chat and the Chat list", async () => {
+    setRead("ws1", "providers", { results: [{ id: "p1" }] });
+    setRead("ws1", CHAT_LIST, { results: [chat("c1", "First chat")] });
+    renderSidebar();
+
+    const sheet = await openSheet();
+    const switcher = within(sheet).getByRole("button", { name: /Acme/ });
+    const workspaceNav = within(sheet).getByRole("navigation", {
+      name: "Workspace",
     });
+    const rows = within(workspaceNav)
+      .getAllByRole("link")
+      .map((link) => link.textContent?.trim());
+    const newChat = within(sheet).getByRole("link", { name: "New chat" });
 
-    it.each<Actor>(["operator", "org-admin"])(
-      "links the %s to the Organization's settings",
-      (actor) => {
-        auth.actor = actor;
-        seedHeader();
-        renderSidebar();
+    expect(rows).toEqual(["Home", "Boards", "Artifacts", "Workspace settings"]);
+    expect(
+      within(workspaceNav).getByRole("link", { name: "Home" }),
+    ).toHaveAttribute("href", "/org1/workspace/ws1");
+    expect(
+      within(workspaceNav).getByRole("link", { name: "Boards" }),
+    ).toHaveAttribute("href", "/org1/workspace/ws1/boards");
+    expect(
+      within(workspaceNav).getByRole("link", { name: "Artifacts" }),
+    ).toHaveAttribute("href", "/org1/workspace/ws1/artifacts");
+    expect(
+      within(workspaceNav).getByRole("link", { name: "Home" }),
+    ).toHaveAttribute("aria-current", "page");
+    expect(
+      switcher.compareDocumentPosition(workspaceNav) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      workspaceNav.compareDocumentPosition(newChat) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      within(sheet).getByRole("searchbox", { name: "Search chats" }),
+    ).toBeInTheDocument();
+    expect(
+      within(sheet).getByRole("link", { name: "First chat" }),
+    ).toBeInTheDocument();
+  });
 
-        const item = within(openSwitcher()).getByRole("menuitem", {
-          name: "Organization settings",
-        });
-        expect(item).toHaveAttribute("href", "/org1/settings");
-      },
-    );
+  it.each([
+    ["a Workspace row", "Boards"],
+    ["a Chat", "First chat"],
+  ])("closes the sheet when %s is picked", async (_, name) => {
+    setRead("ws1", "providers", { results: [{ id: "p1" }] });
+    setRead("ws1", CHAT_LIST, { results: [chat("c1", "First chat")] });
+    renderSidebar();
 
-    it.each<Actor>(["workspace-owner", "org-member"])(
-      "hides it from the %s",
-      (actor) => {
-        auth.actor = actor;
-        seedHeader();
-        renderSidebar();
+    const sheet = await openSheet();
+    fireEvent.click(within(sheet).getByRole("link", { name }));
 
-        expect(
-          within(openSwitcher()).queryByRole("menuitem", {
-            name: "Organization settings",
-          }),
-        ).not.toBeInTheDocument();
-      },
-    );
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 });
 
@@ -511,5 +537,23 @@ describe("AppSidebar chat actions", () => {
         }),
       ).not.toBeInTheDocument();
     }
+  });
+
+  it("keeps New chat and the Chat list, with no Artifacts button", () => {
+    setRead("ws1", "providers", { results: [{ id: "p1" }] });
+    seedHeader();
+    setRead("ws1", CHAT_LIST, { results: [chat("c1", "First chat")] });
+    renderSidebar();
+
+    expect(
+      screen.queryByRole("link", { name: "Artifacts" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "New chat" })).toHaveAttribute(
+      "href",
+      "/org1/workspace/ws1/chat",
+    );
+    expect(
+      screen.getByRole("link", { name: "First chat" }),
+    ).toBeInTheDocument();
   });
 });

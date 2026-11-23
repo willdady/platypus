@@ -1,0 +1,233 @@
+---
+title: Artifacts
+description: Standalone, versioned content an Agent or you create — documents, code, diagrams, pages and images — and where you read it.
+---
+
+import { Callout } from "nextra/components";
+
+# Artifacts
+
+An **Artifact** is a standalone piece of content an Agent or you create in your
+Workspace. It is separate from the Chat that made it: the Chat can be deleted
+and the Artifact stays, ready to open, download, or point another Agent at.
+
+Use one when the result is worth keeping apart from the conversation around it
+— a document, a script, a diagram, a whole web page — rather than a paragraph
+in a reply.
+
+## Types
+
+| Type         | What it holds                                                                                                                 |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| **Markdown** | Formatted text — headings, lists, tables, links and code blocks. Rendered the same way a Chat reply is.                       |
+| **Code**     | Source in any language the model names. Highlighted as that language in the Preview, and downloaded with its usual extension. |
+| **Mermaid**  | A diagram written as Mermaid notation. Drawn as the picture, not the notation.                                                |
+| **HTML**     | A complete HTML page. Runs in a sandboxed frame in the Preview, scripts included.                                             |
+| **SVG**      | A complete SVG image. Shown in Preview, and script inside it runs under the same rules as an HTML page.                       |
+
+## Limits
+
+The title is **1-200 characters**. Each version holds at most **512 KB** of
+content. A title or a body over its limit is refused whole — nothing is cut
+short to fit.
+
+## Letting an Agent work with Artifacts
+
+Grant the Agent the **Artifacts** Tool set on its **Tools** card. It brings four
+tools:
+
+| Tool             | What it does                                                                       |
+| ---------------- | ---------------------------------------------------------------------------------- |
+| `createArtifact` | Creates a new Artifact, or rewrites an existing one whole when it is given its id. |
+| `updateArtifact` | Applies small, targeted replacements to an existing Artifact.                      |
+| `readArtifact`   | Reads an Artifact's current content, or a named older version.                     |
+| `listArtifacts`  | Lists the Workspace's Artifacts with their id, title, type and last-changed time.  |
+
+Ask for the piece in the Chat:
+
+```text
+Write the migration guide as a Markdown Artifact called "Migrating to 2.0".
+```
+
+When the Agent calls a write tool, the Artifact appears in the reply. While the
+Agent is still writing it, that is a Card where the call happened, carrying the
+title, the type and, once the call has finished, the version it wrote. Click the
+Card to open the Artifact in a panel beside the Chat. The panel has two tabs:
+
+- **Preview** shows the rendered Artifact for Markdown, Code and Mermaid, and
+  runs HTML and SVG inside a frame.
+- **Code** shows the source for every type, highlighted for its language.
+
+Once the reply finishes, the Card leaves the reply body and the Artifact appears
+as one row in the tray under it, beside any files the Agent offered for download.
+The row carries the type and the version that reply wrote, and offers:
+
+- **Open** shows that version in the panel beside the Chat.
+- **Download** saves it as a file.
+
+Changing one Artifact several times in one reply makes one row, at the last
+version that reply wrote. Once the Artifact has been deleted, its row says so and
+offers neither button.
+
+On a wide screen, **View full screen** in the panel's header expands it to
+fill the whole window, and **Exit full screen** puts it back beside it. On a
+narrow screen the panel already covers the Chat.
+
+The Chat and the panel share the window on a wide screen, and you decide how
+much each gets. Drag the divider between them, or focus it and use the arrow
+keys. Neither side can be squeezed past its minimum. Double-click the divider
+to go back to the default split. Platypus remembers the width in this browser,
+so it is still there after a reload.
+
+You do not have to wait for the Agent to finish. The Card appears as soon as
+the tool call starts, and clicking it opens the panel with the content growing
+as it is written. The title and type appear as soon as the Agent has written
+them. HTML and SVG are shown as source while the Agent is still writing them.
+When the call completes, the panel shows the saved version, and a call that
+fails or is not approved leaves nothing saved — the panel says so rather than
+presenting the half-written content as an Artifact. Such a call stays in the
+reply as a Tool call row, with the reason it wrote nothing.
+
+**Copy** puts the source on your clipboard. **Download** saves it as a file
+named after the title, with an extension taken from the type — `.md`, `.html`,
+`.svg` or `.mmd`, and for Code the language's own extension where Platypus
+knows it, `.txt` otherwise.
+
+## The Artifacts page
+
+The rail down the left edge of every Workspace screen holds **Artifacts**,
+which lists everything Agents and you have made in this Workspace, whatever
+Chat it came from. On a phone the rail is not drawn: open the top bar's menu
+button and pick **Artifacts** in the sheet. The list is newest change first. Use
+the search box to find one by title, or the type filter to see only Markdown,
+Code, Mermaid, HTML or SVG.
+
+Each card shows the Artifact's title, its type and when it last changed. Click
+a card to open it full page at its own address, which you can bookmark or
+share with someone who can open the Workspace. The page uses the same viewer
+as the Chat panel, with **Preview**, **Code**, **Copy** and **Download**.
+
+The card's ⋮ menu offers:
+
+- **Rename** changes the title. It obeys the same limit as creating one.
+- **Download** saves the current version as a file.
+- **Open source Chat** jumps to the Chat that made it.
+- **Delete** removes the Artifact after you confirm. Every version goes with
+  it, and any Chat card for it then reads as deleted.
+
+**Rename** and **Delete** are the Workspace Owner's. A member with access to
+the Workspace sees **Download** and **Open source Chat** only.
+
+## Upload a file
+
+If you already have the content, **Upload** on the Artifacts page creates an
+Artifact from a file on your disk. The title is the file's name and the type
+comes from its extension — rename it afterwards if you want a different one.
+
+| Extension     | Type                                                          |
+| ------------- | ------------------------------------------------------------- |
+| `.md`         | Markdown                                                      |
+| `.html`       | HTML                                                          |
+| `.svg`        | SVG                                                           |
+| `.mmd`        | Mermaid                                                       |
+| anything else | Code, its language taken from the extension when there is one |
+
+A file over **512 KB**, or one that is not plain text — an image, a zip,
+another binary — is refused with the reason and nothing is saved. Files are not
+truncated to fit, and only one file is uploaded at a time.
+
+**Upload** is the Workspace Owner's, like **Rename** and **Delete**. After an
+upload you land on the new Artifact's own page, where you can read, download or
+rename it. An uploaded HTML or SVG file is contained by the same frame as one
+an Agent wrote — see
+[How HTML and SVG are contained](/building-with-platypus/artifacts#how-html-and-svg-are-contained).
+
+<Callout type="info">
+  An Artifact records the Chat it came from. If you delete that Chat, the
+  Artifact is kept and simply has no source Chat to point back to. Deleting the
+  Workspace deletes its Artifacts.
+</Callout>
+
+## Asking for a change
+
+Asking for one line to change does not mean writing the piece out again. The
+Agent uses `updateArtifact` with a list of small replacements, each an exact
+piece of the old text and its replacement:
+
+```text
+In "Migrating to 2.0", change the install command and update the date.
+```
+
+Each piece of old text must appear exactly once in the current content. The
+replacements are applied in order and the whole call becomes one version. If a
+piece is missing, or appears more than once, the call fails and nothing is
+written: the Agent is told which replacement failed, and it adds surrounding
+context or reads the Artifact again before retrying. That way a stale edit from
+an earlier draft can never land in the wrong place.
+
+For a restructure, the Agent can rewrite the whole Artifact with
+`createArtifact` and its id. The type is fixed when the Artifact is created, so
+a rewrite cannot turn a document into a page; such an attempt is refused rather
+than quietly converting it.
+
+`readArtifact` gives the Agent the current content when the copy in the
+conversation may be out of date — after a change from another Chat. The
+`listArtifacts` tool lets it find an Artifact by title or type in a new Chat,
+so work carries across conversations.
+
+## How HTML and SVG are contained
+
+An HTML or SVG Artifact is a page an Agent wrote, so Platypus treats it as one
+it cannot trust. The Preview runs it in a frame that has no access to your
+session, your cookies, your saved browser data or the Platypus page around it.
+The frame cannot open windows, submit forms, change the address bar or send data
+anywhere. It keeps its own styles and scripts, so an interactive chart or a
+small app still works.
+
+The one exception is the library sites your Operator approves. A page can load
+scripts, styles and fonts from those sites — a chart library or a UI toolkit —
+and nothing else. A page that references any other site still loads, but that
+request is blocked. Platypus then shows a notice at the top of the Preview
+naming the site it stopped, so a page that looks broken does not leave you
+guessing why.
+
+Approving a site is a deployment decision: it applies to every Workspace in the
+deployment, not to one Artifact. Ask your Operator if a page needs a library
+that is blocked. The default approves [cdnjs](https://cdnjs.cloudflare.com), a
+well-known library mirror; an Operator can approve more, or none at all, with
+`ARTIFACT_SCRIPT_ORIGINS` in the
+[backend configuration](/reference/backend-configuration#artifacts).
+
+<Callout type="warning">
+  A library site is only as safe as everything it serves. A CDN that carries
+  user-published packages — jsDelivr and unpkg both do — lets anyone publish the
+  script an Artifact loads. The frame still cannot read your session or send
+  data out, but a deployment that needs tighter control should approve no sites
+  at all and keep Artifacts self-contained.
+</Callout>
+
+## Images inside a Markdown Artifact
+
+A Markdown Artifact renders images only when they are inline `data:` URIs or
+files from Platypus's own storage — the `/files` route, or the public storage
+address when the deployment serves files from a bucket or CDN. Any other image
+source is not fetched at all: the viewer shows a blocked placeholder with the
+address as a link, so you can decide whether to open it. Viewing a document
+never contacts a third-party host on its own.
+
+## Versions
+
+Every change to an Artifact is a new version, and nothing an Agent or you wrote
+is lost. Creating one writes the first version — attributed to the Agent when
+its Tool made it and to you when you uploaded it. A targeted update adds one
+version for the whole call, however many replacements it carried; a rewrite
+adds one version with the whole content.
+
+The version picker in the viewer lists each version with its number, whether an
+Agent or you wrote it, and when. Pick an earlier one to see what the Artifact
+used to say. Older versions are read-only; an Agent's next change always starts
+from the latest version, so it works from whatever came before it.
+
+Each Card and tray row in a Chat remembers the version its own tool call
+produced, so opening it shows that version even after the Artifact has moved
+on. The version picker then lets you move to the latest or any other.

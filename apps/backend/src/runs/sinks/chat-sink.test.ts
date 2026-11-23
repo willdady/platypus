@@ -1,9 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { resetMockDb, seedDb, type Row } from "../../test-utils.ts";
 
-// extractFiles is exercised by storage/utils tests. Here it stands in for the
-// real one closely enough to show it ran before a write: every file part comes
-// out carrying a storage reference.
 vi.mock("../../storage/utils.ts", () => ({
   extractFiles: vi.fn((messages: PlatypusUIMessage[]) =>
     Promise.resolve(
@@ -17,19 +14,17 @@ vi.mock("../../storage/utils.ts", () => ({
   ),
 }));
 
-// Titling is exercised by chat-metadata tests; stub it here so onFinish's
-// fire-and-forget call doesn't touch the model or add stray db calls, and so
-// we can assert when (and with what provider) the sink triggers it.
-const { mockGenerateChatMetadata } = vi.hoisted(() => ({
-  mockGenerateChatMetadata: vi.fn(),
-}));
+const { mockGenerateChatMetadata, mockStartEarlyChatTitle } = vi.hoisted(
+  () => ({
+    mockGenerateChatMetadata: vi.fn(),
+    mockStartEarlyChatTitle: vi.fn(),
+  }),
+);
 vi.mock("../../services/chat-metadata.ts", () => ({
   generateChatMetadata: mockGenerateChatMetadata,
+  startEarlyChatTitle: mockStartEarlyChatTitle,
 }));
 
-// The after-turn Transcript-summary pass (ADR-0041). The sink's part is to
-// hand the finished turn to `afterTurn`; the pass's due-ness decision and take
-// are exercised at their own seam in `chat-summary.test.ts`.
 const { mockAfterTurn } = vi.hoisted(() => ({ mockAfterTurn: vi.fn() }));
 vi.mock("../../services/chat-summary.ts", async (importOriginal) => {
   const actual =
@@ -50,13 +45,13 @@ import { extractFiles } from "../../storage/utils.ts";
 import { ConflictError } from "../../errors.ts";
 import type { ResolvedRunPlan } from "../types.ts";
 import type { PlatypusUIMessage } from "../../types.ts";
+import type { ConcreteModelId } from "@platypus/schemas";
 
 const planWithAgent: ResolvedRunPlan = {
   resolved: {
     agentId: "a1",
     providerId: "p1",
     modelId: "m1",
-    // prepareChatTurn already nulls these for agent runs
     instructions: undefined,
     temperature: undefined,
     topP: undefined,
@@ -65,6 +60,7 @@ const planWithAgent: ResolvedRunPlan = {
     presencePenalty: undefined,
     frequencyPenalty: undefined,
   },
+  resolvedModelId: "m1" as ConcreteModelId,
 };
 
 const planAdhoc: ResolvedRunPlan = {
@@ -81,6 +77,7 @@ const planAdhoc: ResolvedRunPlan = {
     frequencyPenalty: 0.2,
     maxSteps: 25,
   },
+  resolvedModelId: "m1" as ConcreteModelId,
 };
 
 const chatRow = (overrides: Row = {}): Row => ({
@@ -108,13 +105,10 @@ const storedRow = (
   ...overrides,
 });
 
-/** The Workspace the turns run in, owned by the Owner they act as. */
 const workspace = [{ id: "ws-1", ownerId: "owner-1" }];
 
-/** The Chat's primary key, which a turn's claim on a new Chat leans on. */
 const chatPkey = { unique: { chat: [{ name: "chat_pkey", columns: ["id"] }] } };
 
-/** A Chat holding one exchange, u0 → a0. */
 const seedChat = (rows: Row[] = []) =>
   seedDb(
     {
@@ -167,7 +161,6 @@ const rowOf = (fake: ReturnType<typeof seedDb>, table: string, id: string) =>
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- a table no test seeded or wrote is absent
   fake.tables[table]?.find((row) => row.id === id);
 
-/** Runs a submit turn to its end: start, resolve, finish with `final`. */
 const runTurn = async (
   sink: ChatSink,
   start: PlatypusUIMessage[],
@@ -189,6 +182,8 @@ describe("ChatSink", () => {
     resetMockDb();
     mockGenerateChatMetadata.mockReset();
     mockGenerateChatMetadata.mockResolvedValue(null);
+    mockStartEarlyChatTitle.mockReset();
+    mockStartEarlyChatTitle.mockResolvedValue(undefined);
   });
 
   describe("onStart", () => {
@@ -205,7 +200,6 @@ describe("ChatSink", () => {
         chatId: "chat-1",
         parentId: "a0",
         role: "user",
-        // Files are stored before the row is written, never inline in it.
         parts: [
           { type: "file", mediaType: "image/png", url: "storage://stored" },
           { type: "text", text: "u1" },
@@ -231,8 +225,6 @@ describe("ChatSink", () => {
       expect(rowOf(fake, "chat_message", "u1")?.parentId).toBeNull();
     });
 
-    // So a reader arriving mid-run sees the message being answered, not the
-    // reply being replaced — the same shape a submit shows before its reply.
     it("writes no message and moves the leaf to the reply's message on a regenerate", async () => {
       const fake = seedChat();
 
@@ -264,8 +256,6 @@ describe("ChatSink", () => {
       expect(fake.tables.chat_message ?? []).toHaveLength(0);
     });
 
-    // ADR-0035: a turn started as the old Owner must not land after a
-    // transfer has listed the Chats it cancels, nor bring back a cleared Chat.
     it("refuses, writing nothing, once the Workspace has a new Owner", async () => {
       const fake = seedDb(
         { workspace: [{ id: "ws-1", ownerId: "owner-2" }], chat: [] },
@@ -283,8 +273,6 @@ describe("ChatSink", () => {
       expect(fake.tables.chat_message ?? []).toHaveLength(0);
     });
 
-    // The one-run-per-Chat lock, held in the row so it holds across backend
-    // instances (#1237): the turn running here may be another process's.
     it.each([
       ["an existing Chat", () => seedChat()],
       [
@@ -308,7 +296,6 @@ describe("ChatSink", () => {
         await expect(
           loser.onStart({ runId: "chat-1", messages: [u1] }),
         ).rejects.toThrow(ConflictError);
-        // What the runner does with a start hook that threw.
         await loser.onFinish({
           runId: "chat-1",
           status: "failed",
@@ -322,10 +309,6 @@ describe("ChatSink", () => {
     );
   });
 
-  // Issue #1297: a peer tells a live run from one lost with its instance by
-  // the Chat's heartbeat.
-  // Issue #1256: answers are checked again under the claim, so two answers
-  // racing for one reply never both run it.
   describe("answered tool approvals", () => {
     const call = (state: string, approval: Record<string, unknown>) => ({
       type: "tool-wipe",
@@ -487,7 +470,6 @@ describe("ChatSink", () => {
       });
     });
 
-    // #1337: a Task reads `working` from the reply's first write.
     it("writes the reply at once on the run's first output", async () => {
       const fake = seedChat();
       const sink = submitSink({ flushIntervalMs: 5_000 });
@@ -564,6 +546,48 @@ describe("ChatSink", () => {
   });
 
   describe("the rows a turn writes", () => {
+    it("stores the message and reply without NUL, lone surrogates as U+FFFD", async () => {
+      const fake = seedChat();
+      const message: PlatypusUIMessage = {
+        id: "u1",
+        role: "user",
+        parts: [{ type: "text", text: "lo\u0000gs" }],
+      };
+      const tool = (output: string) =>
+        ({
+          type: "tool-readLogs",
+          toolCallId: "call-1",
+          state: "output-available",
+          input: {},
+          output,
+        }) as unknown as PlatypusUIMessage["parts"][number];
+      const final: PlatypusUIMessage = {
+        id: "r1",
+        role: "assistant",
+        parts: [
+          tool("line\u0000one"),
+          { type: "text", text: "cut \uD83D" },
+          { type: "text", text: "\uDE00 cut" },
+        ],
+      };
+
+      await runTurn(
+        submitSink({ message }),
+        [u0, a0, message],
+        [u0, a0, message, final],
+      );
+
+      expect(rowOf(fake, "chat_message", "u1")?.parts).toEqual([
+        { type: "text", text: "logs" },
+      ]);
+      expect(rowOf(fake, "chat_message", "r1")?.parts).toEqual([
+        tool("lineone"),
+        { type: "text", text: "cut �" },
+        { type: "text", text: "� cut" },
+      ]);
+      expect(rowOf(fake, "chat", "chat-1")?.status).toBe("succeeded");
+    });
+
     it("never rewrites a row from history", async () => {
       const fake = seedChat();
       const rewritten = {
@@ -582,8 +606,6 @@ describe("ChatSink", () => {
       ]);
     });
 
-    // The SDK continues a trailing assistant message under its id, so the
-    // seeded `loadSkill` message and the reply are one row (issue #649).
     it("writes a /skill turn as two rows: the message and the seeded reply", async () => {
       vi.useFakeTimers();
       try {
@@ -604,7 +626,6 @@ describe("ChatSink", () => {
         await sink.onStart({ runId: "chat-1", messages: [u0, a0, u1, seeded] });
         await sink.onResolved({ runId: "chat-1", plan: planWithAgent });
 
-        // Before the first step, the seeded message is all the reply there is.
         await sink.onProgress({
           runId: "chat-1",
           messages: [u0, a0, u1, seeded],
@@ -674,9 +695,6 @@ describe("ChatSink", () => {
       expect(rowOf(fake, "chat", "chat-1")?.activeLeafId).toBe("u1");
     });
 
-    // The leaf sat on the reply's message for the run; with no new reply to
-    // move on to, the old one goes back on the path rather than being left
-    // off it with no arrows leading back.
     it("puts the leaf back on a regenerate that ended before a reply began", async () => {
       const fake = seedChat();
 
@@ -698,7 +716,6 @@ describe("ChatSink", () => {
       ]);
       const sink = submitSink({ message: undefined, parentId: "u1" });
       await sink.onResolved({ runId: "chat-1", plan: planWithAgent });
-      // A sink resumed mid-run: only its id matters here.
       await sink.onStart({ runId: "chat-1", messages: [u0, a0, u1] });
 
       await sink.onFinish({
@@ -753,12 +770,6 @@ describe("ChatSink", () => {
       });
     });
 
-    // Issue #522's "the notice is present after a page reload" criterion. The
-    // notice renders off `metadata.searchUnavailable`, so reload survival is
-    // exactly whether the flag reaches the reply's row — what the Chat is
-    // rebuilt from. Pinned here rather than inferred from the stream tests:
-    // `onFinish` writes the reply through `extractFiles`, which rebuilds parts,
-    // and nothing else asserts that it leaves metadata alone.
     it("persists per-turn message metadata on the reply's row", async () => {
       const fake = seedChat();
       const answered: PlatypusUIMessage = {
@@ -828,10 +839,6 @@ describe("ChatSink", () => {
       });
     });
 
-    // Issue #539's #263 guard: a Direct turn with no per-chat maxSteps must
-    // write the column null, not leave a previously-set value standing —
-    // clearing only persists because every turn rewrites all generation
-    // columns.
     it("writes maxSteps null when the direct turn carries none", async () => {
       const fake = seedDb({
         workspace,
@@ -843,6 +850,7 @@ describe("ChatSink", () => {
       });
 
       await runTurn(submitSink(), [u0, a0, u1], [u0, a0, u1], {
+        ...planAdhoc,
         resolved: { ...planAdhoc.resolved, maxSteps: undefined },
       });
 
@@ -855,7 +863,6 @@ describe("ChatSink", () => {
       const fake = seedChat();
       const sink = submitSink();
       await sink.onStart({ runId: "chat-1", messages: [u0, a0, u1] });
-      // No onResolved — simulating prepareChatTurn failing
       await sink.onFinish({
         runId: "chat-1",
         status: "failed",
@@ -903,6 +910,90 @@ describe("ChatSink", () => {
     });
   });
 
+  describe("onResolved — early titling", () => {
+    it("starts an early attempt with the turn's provider and concrete model", async () => {
+      seedChat();
+      const sink = submitSink();
+      await sink.onStart({ runId: "chat-1", messages: [u0, a0, u1] });
+      await sink.onResolved({ runId: "chat-1", plan: planWithAgent });
+
+      expect(mockStartEarlyChatTitle).toHaveBeenCalledTimes(1);
+      expect(mockStartEarlyChatTitle).toHaveBeenCalledWith({
+        chatId: "chat-1",
+        workspaceId: "ws-1",
+        orgId: "org-1",
+        providerId: "p1",
+        modelId: "m1",
+      });
+    });
+
+    it("hands over the concrete model even when the Chat names it through an alias", async () => {
+      seedChat();
+      const sink = submitSink();
+      await sink.onStart({ runId: "chat-1", messages: [u0, a0, u1] });
+      await sink.onResolved({
+        runId: "chat-1",
+        plan: {
+          resolved: { ...planWithAgent.resolved, modelId: "alias:fast" },
+          resolvedModelId: "m1" as ConcreteModelId,
+        },
+      });
+
+      expect(mockStartEarlyChatTitle).toHaveBeenCalledWith(
+        expect.objectContaining({ modelId: "m1" }),
+      );
+    });
+
+    it("waits for the early attempt before its own end-of-run attempt", async () => {
+      seedChat();
+      let settle!: () => void;
+      mockStartEarlyChatTitle.mockReturnValueOnce(
+        new Promise<void>((resolve) => {
+          settle = resolve;
+        }),
+      );
+      const sink = submitSink();
+      await sink.onStart({ runId: "chat-1", messages: [u0, a0, u1] });
+      await sink.onResolved({ runId: "chat-1", plan: planWithAgent });
+
+      await sink.onFinish({
+        runId: "chat-1",
+        status: "succeeded",
+        messages: [u0, a0, u1],
+        stats: {},
+      });
+
+      expect(mockGenerateChatMetadata).not.toHaveBeenCalled();
+
+      settle();
+      await vi.waitFor(() =>
+        expect(mockGenerateChatMetadata).toHaveBeenCalledTimes(1),
+      );
+    });
+
+    it("still attempts a title at the end when the early attempt failed", async () => {
+      const fake = seedChat();
+      mockStartEarlyChatTitle.mockRejectedValueOnce(new Error("boom"));
+      const sink = submitSink();
+      await sink.onStart({ runId: "chat-1", messages: [u0, a0, u1] });
+      await sink.onResolved({ runId: "chat-1", plan: planWithAgent });
+
+      await expect(
+        sink.onFinish({
+          runId: "chat-1",
+          status: "succeeded",
+          messages: [u0, a0, u1],
+          stats: {},
+        }),
+      ).resolves.toBeUndefined();
+
+      await vi.waitFor(() =>
+        expect(mockGenerateChatMetadata).toHaveBeenCalledTimes(1),
+      );
+      expect(rowOf(fake, "chat", "chat-1")?.status).toBe("succeeded");
+    });
+  });
+
   describe("onFinish — titling", () => {
     it.each(["succeeded", "failed", "cancelled"] as const)(
       "fires fire-and-forget titling with the plan provider for status=%s",
@@ -923,8 +1014,6 @@ describe("ChatSink", () => {
           chatId: "chat-1",
           workspaceId: "ws-1",
           orgId: "org-1",
-          // Agent runs null the row's provider column, so titling must resolve
-          // the provider from the plan (the agent's own provider).
           providerId: "p1",
         });
       },
@@ -937,7 +1026,6 @@ describe("ChatSink", () => {
       await sink.onStart({ runId: "chat-1", messages: [u0, a0, u1] });
       await sink.onResolved({ runId: "chat-1", plan: planWithAgent });
 
-      // onFinish resolves cleanly even though titling throws asynchronously.
       await expect(
         sink.onFinish({
           runId: "chat-1",
@@ -950,11 +1038,7 @@ describe("ChatSink", () => {
     });
   });
 
-  // A turn's end and the claim of the next can come from two instances. Here
-  // the claim lands after the sink's first commit at its end, which is where
-  // it can land against a sink that writes its end in more than one step.
   describe("a turn's end, against a claim of the next turn", () => {
-    /** The A2A Task of the turn answering `messageId`, as the claim makes it. */
     const insertTask = (id: string, messageId: string) => async (tx: Tx) => {
       await tx.insert(a2aTask).values({
         id,
@@ -969,13 +1053,11 @@ describe("ChatSink", () => {
       });
     };
 
-    /** Records the A2A Task's end for the turn answering `messageId`. */
     const endTask =
       (messageId: string): ChatSinkParams["onEnding"] =>
       (tx, status) =>
         endTurnIn(tx, "chat-1", messageId, status);
 
-    /** Runs `claim` once, right after the next transaction commits. */
     const claimAfterCommit = (
       fake: ReturnType<typeof seedDb>,
       claim: () => Promise<void>,
@@ -1104,13 +1186,7 @@ describe("ChatSink", () => {
     });
   });
 
-  // ADR-0041, issue #1716: the sink's part in the after-turn pass is to hand
-  // the finished turn to the summariser's `afterTurn`, which owns the
-  // due-ness decision and the take. The behaviour behind it (the 0.8 trigger,
-  // the overflow rule, failure handling) is exercised in `chat-summary.test.ts`
-  // and the take itself in `chat-summary-pass.test.ts`.
   describe("onFinish — after-turn Transcript summary", () => {
-    /** A reply carrying a reading of `input` tokens. */
     const withReading = (
       inputTokens: number,
       summaryId?: string,
@@ -1199,15 +1275,46 @@ describe("ChatSink", () => {
 
       expect(mockAfterTurn).not.toHaveBeenCalled();
     });
+
+    it("schedules after a cancelled turn that stored its reply", async () => {
+      seedChat();
+      const sink = submitSink();
+      await sink.onStart({ runId: "chat-1", messages: [u0, a0, u1] });
+      await sink.onResolved({ runId: "chat-1", plan: windowed });
+      await sink.onFinish({
+        runId: "chat-1",
+        status: "cancelled",
+        messages: [u0, a0, u1, withReading(8_100)],
+        stats: {},
+      });
+
+      expect(mockAfterTurn).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not schedule when the reply could not be stored", async () => {
+      seedChat();
+      const sink = submitSink();
+      await sink.onStart({ runId: "chat-1", messages: [u0, a0, u1] });
+      await sink.onResolved({ runId: "chat-1", plan: windowed });
+      vi.mocked(extractFiles).mockRejectedValueOnce(new Error("storage down"));
+      await sink.onFinish({
+        runId: "chat-1",
+        status: "succeeded",
+        messages: [u0, a0, u1, withReading(8_100)],
+        stats: {},
+      });
+
+      expect(mockAfterTurn).not.toHaveBeenCalled();
+    });
   });
 });
 
-// ADR-0044: a Trigger run keeps its Transcript as a Chat bound to the run,
-// titled from the Trigger rather than by a model, and never summarised.
 describe("ChatSink — a Trigger run's Chat", () => {
   beforeEach(() => {
     resetMockDb();
     mockGenerateChatMetadata.mockReset();
+    mockStartEarlyChatTitle.mockReset();
+    mockStartEarlyChatTitle.mockResolvedValue(undefined);
     mockAfterTurn.mockReset();
   });
 
@@ -1251,6 +1358,7 @@ describe("ChatSink — a Trigger run's Chat", () => {
       parentId: "m-user",
     });
     expect(mockGenerateChatMetadata).not.toHaveBeenCalled();
+    expect(mockStartEarlyChatTitle).not.toHaveBeenCalled();
     expect(mockAfterTurn).not.toHaveBeenCalled();
   });
 });

@@ -12,12 +12,6 @@ import {
 } from "../db/schema.ts";
 import { getGateAccess, setGateAccess } from "./org-gate.ts";
 
-/**
- * The Organization gate on importing Skill bundles into a Workspace — zip
- * import, Replace bundle and GitHub install (ADR-0037). It stops third-party
- * bundles, not instructions typed into a Skill. Organization-scope imports,
- * which only an Org Admin makes, are never gated.
- */
 const SKILL_IMPORT_GATE = {
   gate: "skillImportGate",
   allowed: "skillImportAllowed",
@@ -41,7 +35,6 @@ export const setSkillImportAccess = (
 ): Promise<OrgGateAccess> =>
   setGateAccess(SKILL_IMPORT_GATE, orgId, update, actorUserId);
 
-/** Whether the Organization's gate lets this Workspace import Skill bundles. */
 export const skillImportAllowed = async (
   workspaceId: string,
 ): Promise<boolean> => {

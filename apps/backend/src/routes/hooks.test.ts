@@ -98,7 +98,6 @@ const fire = (
     body,
   });
 
-/** The call-log lines written so far, as their field objects. */
 const callLogLines = () =>
   mockLogger.info.mock.calls
     .filter(([, message]) => message === "Inbound trigger call")
@@ -249,7 +248,6 @@ describe("/hooks/triggers", () => {
       async (_case, token, over) => {
         const fake = seed({ triggers: [inbound(over)] });
         await fire("trig-1", { token });
-        // The stamp is not awaited by the route; let it land.
         await new Promise((resolve) => setTimeout(resolve, 0));
         expect(fake.tables.trigger[0].lastRejectedAt).toBeInstanceOf(Date);
         expect(fake.tables.trigger[0].lastUsedAt).toBeNull();
@@ -287,7 +285,6 @@ describe("/hooks/triggers", () => {
           token,
           body: JSON.stringify({ inputs: { issueKey: "x".repeat(100) } }),
         });
-        // The stamp is not awaited by the route; let one land if it was sent.
         await new Promise((resolve) => setTimeout(resolve, 0));
 
         expect(res.status, String(token)).toBe(413);
@@ -318,7 +315,6 @@ describe("/hooks/triggers", () => {
         }),
       ]);
       expect(mockLogger.error).toHaveBeenCalledWith(
-        // A real driver failure reads as Drizzle's wrapper, not the pg message.
         expect.objectContaining({
           error: expect.stringContaining("Failed query") as string,
         }),
@@ -427,7 +423,6 @@ describe("/hooks/triggers", () => {
         outcome: "rate_limited",
         recordKey: "PLAT-7",
       });
-      // The token was good: a full cap says nothing about it.
       expect(fake.tables.trigger[0].lastRejectedAt).toBeNull();
     });
   });

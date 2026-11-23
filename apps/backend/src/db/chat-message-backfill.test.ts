@@ -2,30 +2,22 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { readFileSync } from "node:fs";
 import { PGlite } from "@electric-sql/pglite";
 
-/**
- * The `chat.messages` → `chat_message` backfill (#711), run for real against an
- * in-process Postgres: the DDL that creates the table, then the backfill file
- * itself, over a `chat` table cut down to the columns they touch.
- */
 const migration = (name: string) =>
   readFileSync(new URL(`../../drizzle/${name}`, import.meta.url), "utf8");
 
-/** Runs a migration file the way the migrator does: statement by statement. */
 const apply = async (db: PGlite, name: string) => {
   for (const statement of migration(name).split("--> statement-breakpoint")) {
     await db.exec(statement);
   }
 };
 
-// One Postgres for the file: booting PGlite compiles its WASM, which on a
-// loaded CI runner alone outlasts a test's default timeout.
+// why: one PGlite per file; booting it outlasts a test's timeout on loaded CI
 let db: PGlite;
 beforeAll(async () => {
   db = await PGlite.create();
 }, 60_000);
 afterAll(() => db.close());
 
-/** A fresh schema holding `chat` as it stood before 0071, plus these rows. */
 const setup = async (chats: { id: string; messages: unknown }[]) => {
   await db.exec(`
     DROP SCHEMA public CASCADE;
@@ -53,7 +45,6 @@ type Row = {
   metadata: unknown;
 };
 
-/** The Active path: from the Chat's leaf, up through each parent. */
 const activePath = async (db: PGlite, chatId: string): Promise<Row[]> => {
   const { rows } = await db.query<Row>(
     `WITH RECURSIVE path AS (
@@ -107,8 +98,6 @@ describe("0072 chat_message backfill", () => {
     input: { name: "blog-post" },
     output: { name: "blog-post", body: "Write a blog post." },
   };
-  // #649: a mid-flush write stored the seeded message, then its continuation
-  // under the same id.
   const seeded = { id: "a2", role: "assistant", parts: [loadSkill] };
   const answered = {
     id: "a2",

@@ -14,10 +14,9 @@ describe("Organization Tool Routes", () => {
 
   it("lists static tool sets plus org-scoped MCPs for any member", async () => {
     mockSession();
-    mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-    // org MCP query terminates at .where
+    mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
     mockDb.where
-      .mockReturnValueOnce(mockDb) // requireOrgAccess
+      .mockReturnValueOnce(mockDb)
       .mockResolvedValueOnce([
         { id: "mcp-1", name: "Shared MCP", organizationId: orgId },
       ]);
@@ -27,19 +26,17 @@ describe("Organization Tool Routes", () => {
     const body = (await res.json()) as {
       results: { id: string; name: string; category: string }[];
     };
-    // The org MCP is surfaced as an "MCP" tool set...
     expect(body.results).toContainEqual({
       id: "mcp-1",
       name: "Shared MCP",
       category: "MCP",
     });
-    // ...alongside statically registered tool sets.
     expect(body.results.some((t) => t.category !== "MCP")).toBe(true);
   });
 
   it("returns 403 when not a member of the organization", async () => {
     mockSession();
-    mockDb.limit.mockResolvedValueOnce([]); // requireOrgAccess → not a member
+    mockDb.limit.mockResolvedValueOnce([]);
 
     const res = await app.request(baseUrl);
     expect(res.status).toBe(403);

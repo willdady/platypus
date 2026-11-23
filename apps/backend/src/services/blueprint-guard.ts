@@ -7,11 +7,6 @@ import {
 } from "../db/schema.ts";
 import type { AttachmentResourceType } from "@platypus/schemas";
 
-/**
- * Whether a Shared resource is listed in any Blueprint (ADR-0008). Complements
- * the while-attached guard: a Shared resource cannot be deleted while anything
- * still points at it — an Attachment, or a Blueprint that would re-provision it.
- */
 export const isResourceListedInBlueprint = async (
   resourceType: AttachmentResourceType,
   resourceId: string,
@@ -30,18 +25,6 @@ export const isResourceListedInBlueprint = async (
   return Boolean(row);
 };
 
-/**
- * Whether a Blueprint is referenced by a **live pending** invitation (ADR-0009)
- * — the literal generalization of "nothing still pointed-at is deletable"
- * (chain: Shared resource ← Blueprint ← pending invitation). A Blueprint cannot
- * be deleted while such an invitation exists, or accept-time provisioning would
- * dereference a missing Blueprint.
- *
- * The predicate is `status = 'pending' AND expiresAt > now()`. Invitation expiry
- * is lazy with write-back (a row stays `pending` until read, then flips to
- * `expired`), so `status` alone is not trustworthy — we filter `expiresAt` in
- * app code, mirroring the invitation list endpoint, rather than trust the flag.
- */
 export const isBlueprintReferencedByLiveInvitation = async (
   blueprintId: string,
 ): Promise<boolean> => {

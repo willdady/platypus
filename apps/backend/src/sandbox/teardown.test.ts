@@ -43,11 +43,6 @@ const stubBackend = (): SandboxBackend => ({
   destroy,
 });
 
-/**
- * Registers a backend against the real registry. Schemas default to shapes the
- * fixture row satisfies; a test that exercises adapter validation passes its
- * own.
- */
 const registerBackend = ({
   backend = BACKEND,
   configSchema = z.object({ image: z.string() }),
@@ -86,7 +81,6 @@ beforeEach(() => {
   clearSandboxBackends();
   setLoadedPlugins(loadedPluginsFixture());
   destroy.mockResolvedValue(undefined);
-  // The Workspace lookup destroySandboxRow makes before destroy().
   mockDb.limit.mockResolvedValue([{ orgId, userId }]);
 });
 
@@ -117,9 +111,6 @@ describe("destroySandboxRow", () => {
     expect(create).not.toHaveBeenCalled();
   });
 
-  // An adapter keys its external resource on (orgId, workspaceId), so destroy
-  // must get the same Organization and Workspace owner the tool calls did, or
-  // the idempotent no-op finds nothing and the resource leaks.
   it("builds the adapter from the parsed config and destroys it with the Workspace's context", async () => {
     registerBackend();
     seedDb({
@@ -233,8 +224,6 @@ describe("destroyWorkspaceSandboxes", () => {
     );
   });
 
-  // An unregistered backend is one of the ways a cascade teardown fails, and it
-  // is exactly the case where no plugin owns the id.
   it("logs a null plugin when the backend belongs to no loaded plugin", async () => {
     mockDb.where.mockResolvedValueOnce([makeRow({ backend: "orphaned" })]);
 
@@ -268,8 +257,6 @@ describe("destroyWorkspaceSandboxes", () => {
     expect(mockDb.insert).toHaveBeenCalledTimes(1);
   });
 
-  // The ledger row is what an Operator reconciles from, so when the insert
-  // itself fails the error line is the only remaining record.
   it("logs an error when the ledger insert fails, and still resolves", async () => {
     registerBackend();
     destroy.mockRejectedValueOnce(new Error("boom"));

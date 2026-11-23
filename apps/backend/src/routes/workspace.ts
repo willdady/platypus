@@ -38,7 +38,6 @@ import { oneRow } from "../db/one-row.ts";
 
 const workspace = new Hono<{ Variables: Variables }>();
 
-/** Create a new workspace (org admin only, ADR-0008) */
 workspace.post(
   "/",
   requireAuth,
@@ -49,8 +48,6 @@ workspace.post(
     const { orgId } = orgScopeOf(c);
     const data = c.req.valid("json");
 
-    // ownerId is admin-assignable (ADR-0008); default to the calling admin
-    // when not supplied.
     const ownerId = data.ownerId ?? user.id;
 
     const {
@@ -60,8 +57,6 @@ workspace.post(
       ...workspaceFields
     } = data;
 
-    // Everything that can fail on its own is checked before anything is
-    // written, so the transaction below only fails on the database.
     const found = await listOrgScopedIds(
       db,
       "provider",
@@ -73,20 +68,12 @@ workspace.post(
         "Org-scoped resource not found in this organization",
       );
     }
-    // createSandbox checks again, but only once the Workspace row is written.
     if (sandbox) {
       const sandboxError = sandboxCreateError(sandbox);
       if (sandboxError) return c.json({ error: sandboxError }, 400);
     }
 
-    // The Workspace and the resources it is provisioned with land together or
-    // not at all — a failed Provider must not leave an unusable Workspace.
     const record = await db.transaction(async (tx) => {
-      // The owner must be a member of the organization — governance would be
-      // meaningless if an admin could hand a workspace to a non-member (or a
-      // typo'd / cross-org user id); a super admin needs none for their own.
-      // Held until commit, so removing the owner meanwhile waits and must then
-      // decide this Workspace too (ADR-0035).
       const [member] = await tx
         .select({ userId: organizationMember.userId })
         .from(organizationMember)
@@ -108,9 +95,6 @@ workspace.post(
           .values({
             id: nanoid(),
             ...workspaceFields,
-            // The route's organization has already passed requireOrgAccess.
-            // Never take this tenancy boundary from client input: an admin of one
-            // org must not be able to create a workspace in another org.
             organizationId: orgId,
             ownerId,
           })
@@ -140,13 +124,11 @@ workspace.post(
   },
 );
 
-/** List all workspaces */
 workspace.get("/", requireAuth, requireOrgAccess(), async (c) => {
   const { orgId } = orgScopeOf(c);
   const orgMembership = orgMembershipOf(c);
   const user = userOf(c);
 
-  // If admin, return all workspaces
   if (orgMembership.role === "admin") {
     const results = await db
       .select()
@@ -155,7 +137,6 @@ workspace.get("/", requireAuth, requireOrgAccess(), async (c) => {
     return c.json({ results });
   }
 
-  // If regular member, return only workspaces they own
   const results = await db
     .select()
     .from(workspaceTable)
@@ -168,7 +149,6 @@ workspace.get("/", requireAuth, requireOrgAccess(), async (c) => {
   return c.json({ results });
 });
 
-/** Get a workspace by ID */
 workspace.get(
   "/:workspaceId",
   requireAuth,
@@ -188,7 +168,6 @@ workspace.get(
   },
 );
 
-/** Update a workspace by ID (owner or org admin) */
 workspace.put(
   "/:workspaceId",
   requireAuth,
@@ -200,23 +179,13 @@ workspace.put(
     const { workspaceId } = scope;
     const data = c.req.valid("json");
 
-    // Delegation flags (ADR-0006) are admin-only. A non-admin owner may edit
-    // their workspace's other settings, but must not grant themselves
-    // self-management of credential-bearing resources, so strip these fields
-    // unless the caller is an org admin (super admins carry role "admin" too).
     const isAdmin = c.get("orgMembership")?.role === "admin";
     if (!isAdmin) {
       delete data.providerSelfManagement;
       delete data.mcpSelfManagement;
-      // Same rule for the Inbound Trigger allow flag (ADR-0030): the Org
-      // Admin decides which Workspaces take calls from outside.
       delete data.inboundTriggersAllowed;
     }
 
-    // A memory Provider must be visible in this Workspace (ADR-0007) — a bare
-    // id lookup would let an owner stamp any Organization's Provider onto their
-    // Workspace, which the memory-extraction job and memorySearch then use with
-    // that Provider's credentials — and expose the model its slot needs.
     await requireMemoryProviderCapable(data, scope);
 
     const record = await db
@@ -236,7 +205,6 @@ workspace.put(
   },
 );
 
-/** Delete a workspace by ID (owner or org admin) */
 workspace.delete(
   "/:workspaceId",
   requireAuth,
@@ -251,7 +219,6 @@ workspace.delete(
   },
 );
 
-/** Transfer a workspace to another member (org admin only, ADR-0035) */
 workspace.post(
   "/:workspaceId/transfer",
   requireAuth,

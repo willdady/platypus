@@ -9,15 +9,14 @@ import {
   triggerRunEvent as triggerRunEventTable,
 } from "../../db/schema.ts";
 import type { ResolvedRunPlan } from "../types.ts";
+import type { ConcreteModelId } from "@platypus/schemas";
 
-/** Every `.set()` payload, paired with the table its `.update()` targeted. */
 const updates = () =>
   mockDb.update.mock.calls.map((call, i) => ({
     table: call[0],
     set: mockDb.set.mock.calls[i]?.[0] as Record<string, unknown>,
   }));
 
-/** Every `.values()` payload, paired with the table its `.insert()` targeted. */
 const inserts = () =>
   mockDb.insert.mock.calls.map((call, i) => ({
     table: call[0],
@@ -35,6 +34,7 @@ const plan: ResolvedRunPlan = {
     providerId: "p1",
     modelId: "m1",
   },
+  resolvedModelId: "m1" as ConcreteModelId,
 };
 
 const owner = { workspaceId: "ws-1", ownerId: "user-1" };
@@ -42,7 +42,6 @@ const owner = { workspaceId: "ws-1", ownerId: "user-1" };
 describe("TriggerSink", () => {
   beforeEach(() => {
     resetMockDb();
-    // The Workspace still has the Owner the run was resolved to act as.
     mockDb.for.mockResolvedValue([{ id: "ws-1" }]);
   });
 
@@ -54,7 +53,6 @@ describe("TriggerSink", () => {
       sink.onStart({ runId: "run-1", messages: [] }),
     ).rejects.toThrow("no longer has the Owner");
 
-    // Read under a share lock, which a transfer's update lock waits on.
     expect(mockDb.for).toHaveBeenCalledWith("share");
     expect(mockDb.insert).not.toHaveBeenCalled();
   });
@@ -73,8 +71,6 @@ describe("TriggerSink", () => {
       expect(mockDb.insert).not.toHaveBeenCalled();
     });
 
-    // Written before the model is called, so a run that fails on its first
-    // step still says which tools it never had (#1184).
     it("records the Tool sets that loaded no tools on the run row", async () => {
       const sink = new TriggerSink({ ...owner, triggerId: "trigger-1" });
       const unloadedToolSets = [
@@ -110,7 +106,6 @@ describe("TriggerSink", () => {
       await sink.onStart({ runId: "run-1", messages: [] });
       await sink.onResolved({ runId: "run-1", plan });
 
-      // Multiple bumps within the window — coalesce to one write
       await sink.onProgress({
         runId: "run-1",
         messages: [],
@@ -143,7 +138,6 @@ describe("TriggerSink", () => {
         inputTokens: 20,
         outputTokens: 10,
       });
-      // No status flip on incremental writes — terminal status is for onFinish
       expect(setArg.status).toBeUndefined();
     });
 
@@ -157,24 +151,15 @@ describe("TriggerSink", () => {
       await sink.onProgress({ runId: "run-1", messages: [], stats: {} });
       await vi.advanceTimersByTimeAsync(200);
 
-      // No update call — stats with steps==null are skipped
       expect(mockDb.update).not.toHaveBeenCalled();
     });
   });
 });
 
-/**
- * The Run timeline's durable half (#647). The recorder decides an event's
- * shape; the sink decides when rows land — batched on the flush interval,
- * inserted once and patched after — and that no terminal run leaves an event
- * open.
- */
 describe("TriggerSink run events", () => {
   beforeEach(() => {
     resetMockDb();
     mockDb.for.mockResolvedValue([{ id: "ws-1" }]);
-    // A terminal write the lifecycle made changes nothing, so nothing is
-    // announced — the announcement belongs to the lifecycle's own tests.
     mockDb.returning.mockResolvedValue([]);
     vi.useFakeTimers();
   });
@@ -256,8 +241,6 @@ describe("TriggerSink run events", () => {
       stats: {},
     });
 
-    // The event landed cancelled, in the terminal batch, before the run row
-    // flipped — so no poller sees a terminal run with a running event.
     expect(eventRows()).toHaveLength(1);
     expect(eventRows()[0][0]).toMatchObject({
       status: "cancelled",
@@ -304,8 +287,6 @@ describe("TriggerSink run events", () => {
     expect(row?.set).toEqual({ eventsTruncated: true });
   });
 
-  // #1124: the batch was drained before the write, so a transient DB error on a
-  // periodic flush dropped those events for good.
   it("keeps a batch whose insert failed and writes every event exactly once by the final flush", async () => {
     const failure = new Error("connection reset");
     const written: string[] = [];
@@ -366,7 +347,6 @@ describe("TriggerSink run events", () => {
       .filter((u) => u.table === triggerRunTable)
       .at(-1);
     expect(row?.set).toMatchObject({ status: "failed", failedToolCalls: 2 });
-    // The unloaded Tool sets written at resolution are not overwritten.
     expect(row?.set).not.toHaveProperty("unloadedToolSets");
   });
 

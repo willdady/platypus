@@ -2,11 +2,6 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import type { PGlite } from "@electric-sql/pglite";
 import { migratedPglite } from "./migrated-pglite.test-fixtures.ts";
 
-/**
- * A Trigger run's Chat goes with its run (ADR-0044), by the foreign key the
- * shipped migrations create: pruning a run, deleting its Trigger or deleting
- * its Workspace leaves no orphan Chat.
- */
 let pg: PGlite;
 beforeAll(async () => {
   pg = await migratedPglite();

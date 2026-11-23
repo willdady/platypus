@@ -45,9 +45,8 @@ describe("Plugins Routes", () => {
 
   describe("GET /plugins", () => {
     it("lets an Org Admin view loaded plugins with versions, origin, and contributions", async () => {
-      // A regular platform user (not a super admin) who is an admin of the org.
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess(["admin"])
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
@@ -99,15 +98,13 @@ describe("Plugins Routes", () => {
 
     it("forbids a non-admin org member — the view is Org-Admin only", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess(["admin"])
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(403);
     });
 
     it("exposes no enable/disable mutation — writes are not routed", async () => {
-      // The catalog is read-only (ADR-0013): there is no mutation endpoint, so
-      // any write verb falls through to a 404 rather than toggling a plugin.
       for (const method of ["POST", "PUT", "PATCH", "DELETE"] as const) {
         const res = await app.request(baseUrl, { method });
         expect(res.status).toBe(404);

@@ -2,11 +2,6 @@ import { describe, it, expect, beforeEach, beforeAll, afterAll } from "vitest";
 import type { PGlite } from "@electric-sql/pglite";
 import { migratedPglite } from "./migrated-pglite.test-fixtures.ts";
 
-/**
- * An A2A Task's recorded reply (#1298), by the foreign key the shipped
- * migrations create: a reply removed for good leaves the Task, with no reply,
- * and the Task still goes with its Chat.
- */
 let pg: PGlite;
 beforeAll(async () => {
   pg = await migratedPglite();

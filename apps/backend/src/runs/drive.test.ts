@@ -28,16 +28,6 @@ import {
   type AgentChain,
 } from "../event-causation.ts";
 
-/**
- * The drive is the seam that owns the model drill and the terminal decision.
- * These tests drive it with a *real* AI SDK pipeline and a mock model — no
- * `AgentRunner`, no delegate tool — to lock the unit: how a run ends
- * (succeeded / failed / cancelled), when the output-ceiling cutoff is
- * recorded, which stop conditions each entry point carries, and how a streamed
- * run reports its outcome. The `AgentRunner` and sub-agent suites cover the
- * wiring on top; this is the rule's floor.
- */
-
 const USAGE = {
   inputTokens: {
     total: 10,
@@ -73,11 +63,6 @@ const modelOf = (...steps: LanguageModelV3StreamPart[][]) => {
   });
 };
 
-/**
- * A one-step streaming model whose terminal finish and usage the test picks.
- * The headless drive streams too now (#647), so every drive shape is backed
- * by `doStream` and the mock generate path is gone.
- */
 const finishingModel = (
   overrides: {
     finishReason?: LanguageModelV3FinishReason;
@@ -99,12 +84,6 @@ const finishingModel = (
 
 const STUCK_TOOL = "probe";
 
-/**
- * A model that re-issues the same tool call, with the same arguments, forever
- * — the shape the no-progress detector exists to stop. Each call carries a
- * fresh `toolCallId` (the SDK wants them unique); the detector keys on tool
- * name + arguments + result, so the repeats still collide.
- */
 const stuckStreamingModel = () => {
   let index = 0;
   return new MockLanguageModelV3({
@@ -134,7 +113,6 @@ const stuckStreamingModel = () => {
   });
 };
 
-/** A run observed only by recording how it ended. */
 const startRecordedRun = (timeouts?: {
   perStepTimeoutMs?: number;
   perRunTimeoutMs?: number;
@@ -157,10 +135,6 @@ const planOf = (model: MockLanguageModelV3) => ({
   maxSteps: 3,
 });
 
-/**
- * The stuck plan's ceiling sits well above the detector's threshold (3 repeats)
- * so a trip is unambiguously the detector's doing and not the step ceiling's.
- */
 const stuckPlanOf = (model: MockLanguageModelV3) => ({
   model,
   tools: {
@@ -172,17 +146,11 @@ const stuckPlanOf = (model: MockLanguageModelV3) => ({
   maxSteps: 12,
 });
 
-/**
- * The same tool-calling loop under a ceiling of one, so the step-count stop
- * condition is what halts it — well before the detector's three repeats, which
- * is the confusion the flag has to avoid.
- */
 const oneStepPlanOf = (model: MockLanguageModelV3) => ({
   ...stuckPlanOf(model),
   maxSteps: 1,
 });
 
-/** A plan whose only tool records the ambient causation chain at execute time. */
 const causationProbePlan = (model: MockLanguageModelV3) => {
   const seen: AgentChain[] = [];
   const plan = {
@@ -201,7 +169,6 @@ const causationProbePlan = (model: MockLanguageModelV3) => {
   return { plan, seen };
 };
 
-/** The streamed model: one tool call then a clean stop. */
 const streamingToolThenStopModel = (): MockLanguageModelV3 => {
   let index = 0;
   return new MockLanguageModelV3({
@@ -263,7 +230,6 @@ describe("driveOnce", () => {
     expect(runRegistry.has(run.handle.runId)).toBe(false);
   });
 
-  // The fold is storage only: one that throws must not fail the run.
   it("finishes the run as succeeded when folding the reply throws", async () => {
     const { run, outcome } = startRecordedRun();
     const { plan } = causationProbePlan(streamingToolThenStopModel());
@@ -281,8 +247,6 @@ describe("driveOnce", () => {
     expect(outcome[0].status).toBe("succeeded");
   });
 
-  // ADR-0044: a Trigger run keeps its Transcript, so its reply is folded as a
-  // Chat turn's is — tool calls, their results and the answer, on one message.
   it("hands over the reply as it grows, tool calls and results included", async () => {
     const { run } = startRecordedRun();
     const { plan } = causationProbePlan(streamingToolThenStopModel());
@@ -314,10 +278,6 @@ describe("driveOnce", () => {
     );
   });
 
-  // The Trigger run's stats are what the frontend renders, so the headless
-  // drive's shape is pinned whole — sums, the last step's occupancy and the
-  // tool-call tally, in one object. The streamed drives accumulate the same
-  // figures step by step, and the two must stay byte-identical.
   it("pins the statistics a multi-step run reports", async () => {
     const { run, outcome } = startRecordedRun();
 
@@ -337,9 +297,6 @@ describe("driveOnce", () => {
     expect(outcome[0].stats).toEqual(stats);
   });
 
-  // The streamed drives accumulate the same figures step by step. This pins
-  // that the headless drive's whole stats object agrees with a delegate's for
-  // the same model stream, which is what the Trigger row renders.
   it("reports the same statistics a streamed drive accumulates", async () => {
     const headless = startRecordedRun();
     const { stats } = await driveOnce({
@@ -379,8 +336,6 @@ describe("driveOnce", () => {
     expect(outcome[0].stats).toMatchObject({ truncatedByTokenLimit: true });
   });
 
-  // Issue #1690: a run cut at the output ceiling before it wrote any answer
-  // has nothing to show for itself, and nobody is watching to notice.
   it.each([
     ["empty", ""],
     ["whitespace-only", "  \n "],
@@ -408,10 +363,6 @@ describe("driveOnce", () => {
     },
   );
 
-  // Issue #734. The headless path folds usage through `computeStats`, which
-  // must carry the cached-input breakdown the same way the streamed
-  // accumulator does. A write of 0 is a real measurement and is kept, not
-  // treated as absent.
   it("carries cached read and write counts onto the run's stats", async () => {
     const { run, outcome } = startRecordedRun();
 
@@ -490,8 +441,6 @@ describe("driveOnce", () => {
     expect(outcome[0].status).toBe("cancelled");
   });
 
-  // A headless run is unattended, so the stop condition that halts a model
-  // burning its step ceiling on a call that never changes is always on.
   it("finishes as failed with a no-progress error when the model stops progressing", async () => {
     const { run, outcome } = startRecordedRun();
 
@@ -506,15 +455,9 @@ describe("driveOnce", () => {
     expect(outcome[0].error?.message).toMatch(
       new RegExp(`no_progress:.*${STUCK_TOOL}`),
     );
-    // The false positive the step-ceiling flag's two-part condition exists to
-    // prevent: a no-progress abort ends on the same terminal finish reason,
-    // and is never relabelled as a ceiling stop.
     expect(outcome[0].stats).not.toHaveProperty("stoppedAtStepLimit");
   });
 
-  // Issue #540: the run did the work it was allowed to do, so it still
-  // succeeds — the stop is recorded as a fact on the statistics, not as a
-  // failure.
   it("records the step-ceiling stop on the run's stats", async () => {
     const { run, outcome } = startRecordedRun();
 
@@ -524,8 +467,6 @@ describe("driveOnce", () => {
       prompt: "hi",
     });
 
-    // An empty answer at the step ceiling is not an output-ceiling failure:
-    // the Agent may have done its work through tool calls (#1690).
     expect(answer).toBe("");
     expect(stats.stoppedAtStepLimit).toBe(true);
     expect(outcome[0].status).toBe("succeeded");
@@ -545,8 +486,6 @@ describe("driveOnce", () => {
     expect(outcome[0].stats).not.toHaveProperty("stoppedAtStepLimit");
   });
 
-  // The ambient causation chain a headless run establishes reaches its tools:
-  // the chain is what an Event Trigger's loop guard reads (ADR-0022, #668).
   it("establishes its agent's causation chain for the tools it runs", async () => {
     const { run } = startRecordedRun();
     const { plan, seen } = causationProbePlan(streamingToolThenStopModel());
@@ -586,8 +525,6 @@ describe("driveDelegate", () => {
     for await (const message of drive.snapshots) seen.push(message);
     const result = await drive.done;
 
-    // readUIMessageStream re-emits the message as its parts accumulate, so a
-    // single answer lands as several progressive snapshots.
     expect(seen.length).toBeGreaterThan(0);
     const parts = result.latest?.parts ?? [];
     const textOut = parts
@@ -649,6 +586,61 @@ describe("driveDelegate", () => {
     expect(outcome[0].status).toBe("failed");
   });
 
+  it("closes its own events left open by a mid-answer failure, and only those", async () => {
+    const { run } = startRecordedRun();
+    const recorder = new RunEventRecorder({ runId: run.handle.runId });
+    const parentEventId = recorder.open(null, { type: "delegate" });
+    const drive = driveDelegate({
+      plan: planOf(
+        modelOf([
+          { type: "stream-start", warnings: [] },
+          { type: "text-start", id: "t1" },
+          { type: "text-delta", id: "t1", delta: "half an answer" },
+          { type: "error", error: new Error("upstream reset") },
+        ]),
+      ),
+      run,
+      prompt: "hi",
+      agentId: "sub-1",
+      events: { recorder, parentEventId },
+    });
+    for await (const _ of drive.snapshots) void _;
+    await drive.done;
+
+    const text = recorder.events.find((e) => e.type === "text");
+    expect(text).toMatchObject({ parentEventId, status: "error" });
+    expect(recorder.events.find((e) => e.type === "delegate")?.status).toBe(
+      "running",
+    );
+  });
+
+  it("keeps a step that streams for longer than the idle bound alive", async () => {
+    const { run, outcome } = startRecordedRun({
+      perStepTimeoutMs: 40,
+      perRunTimeoutMs: 60_000,
+    });
+    const drive = driveDelegate({
+      plan: planOf(
+        new MockLanguageModelV3({
+          doStream: () =>
+            Promise.resolve({
+              stream: simulateReadableStream({
+                chunks: text("t1", ...Array<string>(10).fill("word ")),
+                chunkDelayInMs: 15,
+              }),
+            }),
+        }),
+      ),
+      run,
+      prompt: "hi",
+      agentId: "sub-1",
+    });
+    for await (const _ of drive.snapshots) void _;
+    await drive.done;
+
+    expect(outcome[0].status).toBe("succeeded");
+  });
+
   it("finishes as cancelled when the run is stopped mid-stream", async () => {
     const { run, outcome } = startRecordedRun();
     const drive = driveDelegate({
@@ -657,22 +649,15 @@ describe("driveDelegate", () => {
       prompt: "hi",
       agentId: "sub-1",
     });
-    // Stopped before it is consumed: the model stream still completes, and the
-    // signal is the only record that the run was cancelled rather than finished.
     runRegistry.cancel(run.handle.runId);
     for await (const _ of drive.snapshots) void _;
 
     const result = await drive.done;
-    // Reported, not re-derived: the delegate tool logs a cancellation
-    // differently from a fault and reads the status from here to tell them
-    // apart.
     expect(result.status).toBe("cancelled");
     expect(result.failure).toMatch(/Stopped before finishing/);
     expect(outcome[0].status).toBe("cancelled");
   });
 
-  // Issue #496: a delegated run is unattended, so it drives under the same
-  // no-progress stop condition a Trigger run has.
   it("finishes as failed with a no-progress error when the model stops progressing", async () => {
     const { run, outcome } = startRecordedRun();
     const drive = driveDelegate({
@@ -687,14 +672,10 @@ describe("driveDelegate", () => {
     expect(result.status).toBe("failed");
     expect(result.failure).toMatch(new RegExp(`no_progress:.*${STUCK_TOOL}`));
     expect(outcome[0].error?.name).toBe("NoProgressError");
-    // Its stop condition trips below the ceiling, and on a low ceiling could
-    // trip on the ceiling step itself, so the teardown defers to it either way.
     expect(result.stoppedAtStepLimit).toBe(false);
     expect(outcome[0].stats).not.toHaveProperty("stoppedAtStepLimit");
   });
 
-  // Issue #540. The delegate's parent has to tell a stopped delegation from a
-  // finished one, so the outcome reports the stop alongside the stats.
   it("reports the step-ceiling stop to its caller and on the run's stats", async () => {
     const { run, outcome } = startRecordedRun();
     const drive = driveDelegate({
@@ -726,9 +707,6 @@ describe("driveDelegate", () => {
     expect(outcome[0].stats).not.toHaveProperty("stoppedAtStepLimit");
   });
 
-  // A run that both timed out and reported a stream error is better explained
-  // by the error: the parent Agent is told what broke, while the run itself
-  // still records the `TimeoutError` naming the bound that was exceeded.
   it("reports the stream error, not the stop reason, when a timed-out run also errored", async () => {
     const { run, outcome } = startRecordedRun({
       perRunTimeoutMs: 20,
@@ -749,8 +727,6 @@ describe("driveDelegate", () => {
     expect(outcome[0].error).toBeInstanceOf(TimeoutError);
   });
 
-  // A delegate chains beneath its parent's ambient causation, so a write it
-  // makes carries every Agent above it too (ADR-0022, #668).
   it("extends the parent's causation chain with the delegate's agent id", async () => {
     const { run } = startRecordedRun();
     const { plan, seen } = causationProbePlan(streamingToolThenStopModel());
@@ -775,8 +751,6 @@ describe("driveDelegate", () => {
 });
 
 describe("failBeforeDrive", () => {
-  // A delegate's tool setup throwing: no drive ever started, but the run
-  // still ends under the rule a drive would have applied.
   it("fails the run with the setup failure as its error", async () => {
     const { run, outcome } = startRecordedRun();
 
@@ -799,10 +773,6 @@ describe("driveChat", () => {
     vi.clearAllMocks();
   });
 
-  // The interactive counterpart of the delegate rule above: a Chat turn renders
-  // a stream error inline (it is already in the folded message the client is
-  // watching), so the run itself is not failed and the caller is told nothing
-  // to throw on.
   it("does not fail the run when its stream hits an error", async () => {
     const { run, outcome } = startRecordedRun();
     const drive = driveChat({
@@ -819,10 +789,6 @@ describe("driveChat", () => {
     expect(outcome[0].status).toBe("succeeded");
   });
 
-  // The regression from issue #552. An abort closes the SDK's stream rather
-  // than failing it, so `onError` never fires and the client's branch used to
-  // end clean: the answer stopped mid-word and the composer simply reset, with
-  // nothing anywhere saying a bound had been hit.
   it("tells the client why a timed-out run stopped", async () => {
     const { run } = startRecordedRun({
       perRunTimeoutMs: 20,
@@ -841,8 +807,6 @@ describe("driveChat", () => {
     const errors = chunks.filter((c) => c.type === "error");
     expect(errors).toHaveLength(1);
     expect(errors[0].errorText).toMatch(/time limit/);
-    // The partial answer is still delivered — the notice is appended to it,
-    // not substituted for it.
     expect(chunks.some((c) => c.type === "text-delta")).toBe(true);
   });
 
@@ -866,8 +830,6 @@ describe("driveChat", () => {
     expect(errors[0].errorText).toMatch(/stopped sending output/);
   });
 
-  // A user who pressed stop knows why it stopped. Telling them again would
-  // dress their own action up as a failure.
   it("stays silent when the run was cancelled rather than timed out", async () => {
     const { run } = startRecordedRun({
       perStepTimeoutMs: 60_000,
@@ -878,8 +840,6 @@ describe("driveChat", () => {
       run,
       modelMessages: [{ role: "user", content: "hi" }],
     });
-    // Stopped once the answer has started streaming, as a user pressing stop
-    // would.
     const chunks: { type: string }[] = [];
     for await (const chunk of drive.response as unknown as AsyncIterable<{
       type: string;
@@ -909,9 +869,6 @@ describe("driveChat", () => {
     expect(chunks.some((c) => c.type === "error")).toBe(false);
   });
 
-  // Issue #540. A Chat turn's record of the stop is the message metadata: Chat
-  // rows persist the message array wholesale, so that is what survives a reload
-  // and what the notice renders from when the Chat is re-opened later.
   it("marks the streamed message when the step ceiling stopped the loop", async () => {
     const { run, outcome } = startRecordedRun();
     const drive = driveChat({
@@ -947,8 +904,6 @@ describe("driveChat", () => {
     );
   });
 
-  // An interactive Chat turn with an Agent establishes that Agent's causation
-  // chain for its tools (ADR-0022, #668).
   it("establishes the agent's causation chain for its tools", async () => {
     const { run } = startRecordedRun();
     const { plan, seen } = causationProbePlan(streamingToolThenStopModel());
@@ -966,15 +921,6 @@ describe("driveChat", () => {
   });
 });
 
-/**
- * The Step ceiling's answer step (issue #1730).
- *
- * A turn used to end wherever the model got to when its loop ran out of steps,
- * often with a Tool row and no answer. On the last permitted step the model is
- * now told it is the last one and asked to answer from what it has — in the
- * request only, with the tool set untouched. Asserted on every Drive shape,
- * because the seam they share is the whole point.
- */
 describe("the Step ceiling's answer step", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -993,8 +939,6 @@ describe("the Step ceiling's answer step", () => {
     maxSteps,
   });
 
-  // Distinct arguments every call: the unattended shapes carry the no-progress
-  // detector, and a genuinely repeated call would trip it before the ceiling.
   const toolStep = (step: number): LanguageModelV3StreamPart[] => [
     { type: "stream-start", warnings: [] },
     { type: "tool-input-start", id: `tc${step}`, toolName: STUCK_TOOL },
@@ -1030,7 +974,6 @@ describe("the Step ceiling's answer step", () => {
 
   type Captured = { prompt: unknown; tools: unknown };
 
-  /** A model whose every call is chosen by step, recording what it was sent. */
   const recordingModel = (
     captured: Captured[],
     chunksFor: (step: number) => LanguageModelV3StreamPart[],
@@ -1053,11 +996,9 @@ describe("the Step ceiling's answer step", () => {
   const sentTool = (captured: Captured): boolean =>
     JSON.stringify(captured.tools).includes(STUCK_TOOL);
 
-  /** A model that ignores the instruction and calls a tool again anyway. */
   const ignoresTheInstruction = (captured: Captured[]) =>
     recordingModel(captured, (step) => toolStep(step));
 
-  /** The same loop, but the last step answers. */
   const obeysOnTheLastStep = (captured: Captured[], steps = 3) =>
     recordingModel(captured, (step) =>
       step < steps - 1 ? toolStep(step) : stopStep("answered"),
@@ -1065,15 +1006,11 @@ describe("the Step ceiling's answer step", () => {
 
   type ShapeOutcome = {
     stoppedAtStepLimit: boolean;
-    /** The stats the run recorded — what a Trigger row renders. */
     stats: RunStats;
-    /** The Chat turn's folded messages — absent for the other shapes. */
     messages?: PlatypusUIMessage[];
-    /** The Trigger run's final answer — absent for the streamed shapes. */
     text?: string;
   };
 
-  /** Drives one shape to completion, so a shared fact is stated once. */
   const runShape = async (
     shape: Shape,
     plan: RunPlan,
@@ -1129,16 +1066,12 @@ describe("the Step ceiling's answer step", () => {
 
       expect(captured).toHaveLength(3);
       expect(captured.map(sentInstruction)).toEqual([false, false, true]);
-      // The tools are sent unchanged on the answer step — removing them would
-      // rewrite the prefix every Provider caches (ADR-0020).
       expect(captured.every(sentTool)).toBe(true);
-      // The model ignored it, so the cutoff is still recorded.
       expect(stoppedAtStepLimit).toBe(true);
       expect(stats).toMatchObject({ stoppedAtStepLimit: true });
     },
   );
 
-  // It exists only in the request: what a Chat persists is untouched.
   it("keeps the instruction out of the Chat's persisted messages", async () => {
     const captured: Captured[] = [];
     const { messages } = await runShape(
@@ -1150,9 +1083,6 @@ describe("the Step ceiling's answer step", () => {
     expect(messages?.at(-1)?.metadata?.stoppedAtStepLimit).toBe(true);
   });
 
-  // A ceiling of one means the only call is the answer step: no extra call, no
-  // special case. Proven end to end through each drive, not just at the
-  // `prepareStep` seam.
   it.each(["chat", "delegate", "trigger"] as const)(
     "puts the instruction on a %s's only call when the ceiling is one",
     async (shape) => {
@@ -1191,7 +1121,6 @@ describe("the Step ceiling's answer step", () => {
   );
 });
 
-/** Drain a UI message stream branch into an array of its chunks. */
 const collect = async <T>(stream: ReadableStream<T>): Promise<T[]> => {
   const out: T[] = [];
   for await (const chunk of stream as unknown as AsyncIterable<T>) {
@@ -1200,11 +1129,6 @@ const collect = async <T>(stream: ReadableStream<T>): Promise<T[]> => {
   return out;
 };
 
-/**
- * A model that streams a partial answer and then goes quiet until the run is
- * aborted — a provider that stalls mid-answer, which is the shape both
- * timeouts exist to catch.
- */
 function textThenEndOnAbort(signal: AbortSignal) {
   return new MockLanguageModelV3({
     doStream: () =>
@@ -1235,7 +1159,6 @@ const errorParts = (message: string): LanguageModelV3StreamPart[] => [
   { type: "error", error: new Error(message) },
 ];
 
-/** A model that emits some text and then an error part mid-stream. */
 function errorAfterText(message: string) {
   return new MockLanguageModelV3({
     doStream: () =>
@@ -1245,13 +1168,6 @@ function errorAfterText(message: string) {
   });
 }
 
-/**
- * The same error, on a stream that stays open until the run is aborted — so
- * the run is still in flight when its per-run timeout fires, and the drive
- * settles with both a stream error and a `TimeoutError` on the table. The race
- * is real but narrow in production; pinning it here makes the precedence
- * between the two explicit rather than incidental.
- */
 function errorThenEndOnAbort(message: string, signal: AbortSignal) {
   return new MockLanguageModelV3({
     doStream: () =>
@@ -1268,12 +1184,6 @@ function errorThenEndOnAbort(message: string, signal: AbortSignal) {
   });
 }
 
-/**
- * Tool-result clearing (ADR-0018 Notes, issue #524) is wired in once at
- * `buildModelInvocation`, which every drive shape shares — this locks that
- * every one of the three actually inherits it, at the level closest to the
- * wire: what the model call itself receives.
- */
 describe("Tool-result clearing inheritance", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -1372,12 +1282,6 @@ describe("Tool-result clearing inheritance", () => {
     );
   });
 });
-/**
- * The headless drive's Run timeline (#647, ADR-0023). Driven with a real SDK
- * pipeline and a mock model, the way the terminal-status tests above are: what
- * the recorder receives is decided by which stream chunks the drive feeds it,
- * and that is the drive's contract.
- */
 describe("driveOnce run events", () => {
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -1400,7 +1304,6 @@ describe("driveOnce run events", () => {
     { type: "finish", finishReason: { unified, raw: unified }, usage: USAGE },
   ];
 
-  /** Reasoning, then one tool call; then a text answer. */
   const reasonToolThenText = () =>
     modelOf(
       step(
@@ -1517,8 +1420,6 @@ describe("driveOnce run events", () => {
     const calls = events.events.filter((e) => e.type === "tool-call");
     expect(calls.map((c) => c.toolName)).toEqual(["lookup", "fetch"]);
     const [a, b] = calls;
-    // Each started before the other ended: the SDK runs a step's tool calls
-    // concurrently, and the timeline has to say so.
     expect(a.startedAt).toBeLessThan(b.startedAt + b.durationMs!);
     expect(b.startedAt).toBeLessThan(a.startedAt + a.durationMs!);
   });
@@ -1544,9 +1445,6 @@ describe("driveOnce run events", () => {
     expect(call.error?.truncated).toBe(false);
   });
 
-  // Under `generateText` a mid-stream provider error rejected the call. Under
-  // `streamText` it arrives as an error part and the stream ends normally, so
-  // the drive has to read it and fail the run itself.
   it("ends the run as failed with an error message when the provider errors mid-stream", async () => {
     const { run, outcome } = startRecordedRun();
     const model = modelOf(step([...toolCall("tc1", "lookup")], "tool-calls"), [

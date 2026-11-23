@@ -26,8 +26,6 @@ import {
 import { TaskNotFoundError } from "@a2a-js/sdk/errors";
 import { resetMockDb, seedDb, type Row } from "../test-utils.ts";
 
-// The model is the only thing mocked. The SDK's own client drives the app, so
-// a wire shape that drifts from what it sends or parses fails here.
 const { model } = vi.hoisted(() => ({
   model: {
     deltas: ["Hello ", "from ", "Helper"],
@@ -90,18 +88,9 @@ import { setA2aFallbackPollMs } from "../services/a2a-events.ts";
 import { runRegistry } from "../runs/run-registry.ts";
 
 const TOKEN = "pa2a_the-right-token";
-/**
- * The endpoint's base URL, as a client is configured with it. The SDK
- * resolves the card path relative to it, so without the trailing slash it
- * would ask for `/a2a/.well-known/agent-card.json`.
- */
 const BASE_URL = "http://localhost:4001/a2a/ep-1/";
 const REPLY = "Hello from Helper";
 
-/**
- * `fetch` for the SDK, answered by the app in-process: no network. It adds
- * the bearer token, as a client configured with one does.
- */
 const appFetch: typeof fetch = (input, init) => {
   const headers = new Headers(init?.headers);
   headers.set("Authorization", `Bearer ${TOKEN}`);
@@ -109,7 +98,6 @@ const appFetch: typeof fetch = (input, init) => {
   return Promise.resolve(app.request(url, { ...init, headers }));
 };
 
-/** A client found from the endpoint's base URL, as a real one would be. */
 const connect = ({ polling = false } = {}): Promise<Client> =>
   new ClientFactory(
     ClientFactoryOptions.createFrom(ClientFactoryOptions.default, {
@@ -210,7 +198,6 @@ const seed = () =>
     },
   );
 
-/** A SendMessage request, built from its wire JSON by the SDK. */
 const message = (messageId: string) =>
   SendMessageRequest.fromJSON({
     message: {
@@ -236,7 +223,6 @@ const collect = async (events: AsyncIterable<StreamResponse>) => {
   return all;
 };
 
-/** A Task left running: its model call waits until `release()`. */
 const startHeld = async (client: Client, messageId = "msg-a") => {
   let release = () => {};
   model.hold = new Promise((resolve) => (release = resolve));
@@ -256,7 +242,6 @@ describe("A2A endpoints through the @a2a-js/sdk client", () => {
     resetTokenTouches();
     resetA2aRunSlots();
     setA2aFallbackPollMs(50);
-    // Push deliveries go to global fetch; the client never does.
     push.mockResolvedValue(new Response(null, { status: 200 }));
     vi.stubGlobal("fetch", push);
     seed();
@@ -275,7 +260,6 @@ describe("A2A endpoints through the @a2a-js/sdk client", () => {
   it("discovers the card from the endpoint's base URL", async () => {
     const client = await connect();
 
-    // The card offers an extended card, so this is GetExtendedAgentCard.
     const card = await client.getAgentCard();
 
     expect(card.name).toBe("Acme helpdesk");

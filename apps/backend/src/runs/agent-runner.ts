@@ -34,11 +34,6 @@ import type {
 export type StreamOptions = {
   origin: string;
   frontendUrl: string;
-  /**
-   * Override per-step / per-run timeouts for this run. The HTTP request
-   * abort signal is intentionally NOT accepted — Chat runs continue to
-   * completion regardless of the client connection (see issue #113).
-   */
   timeouts?: RunTimeouts;
 };
 
@@ -52,11 +47,6 @@ export type GenerateResult = {
   stats: RunStats;
 };
 
-/**
- * Derives the `user` argument expected by `prepareChatTurn` from the run
- * scope. For trigger and sub-agent principals the userId resolves through
- * `actorUserId` to the underlying human owner.
- */
 const userFromScope = (scope: WorkspaceScope): { id: string; name: string } => {
   const p = scope.principal;
   if (p.kind === "user") return { id: p.userId, name: p.name };
@@ -66,35 +56,11 @@ const userFromScope = (scope: WorkspaceScope): { id: string; name: string } => {
   return { id: actorUserId(scope.principal), name: "Sub-agent" };
 };
 
-/** Mutable per-run state shared by `setup`, the timeout handler, and the
- *  consumer-shaped entry point. A background timer (the timeout) and the
- *  foreground model call both read/write it, so it lives in one object both
- *  can reach.
- *
- *  The turn is deliberately NOT here. Disposing it goes through
- *  `run.adoptOrDispose`, which either holds it for a run that can still close
- *  it or closes it on the spot — a `turn?` read by the terminal callback is the
- *  shape that let a turn resolving after a timeout go undisposed (issue #630). */
 type RunState = {
   messages: PlatypusUIMessage[];
-  /** A headless run's final assistant text, once the drive has it (#647). */
   finalText?: string;
 };
 
-/**
- * Folds a mid-run snapshot onto the messages the turn opened with.
- *
- * A snapshot REPLACES a trailing assistant message rather than sitting beside
- * it. The SDK treats a trailing assistant message as a continuation and reuses
- * its id, so the streamed message *is* that message with more parts on it — the
- * terminal `onFinish` reconciles exactly this way. Appending instead wrote two
- * assistant messages carrying one id, and a user reconnecting mid-run saw the
- * seeded `loadSkill` card twice until the final write corrected it (issue #649).
- *
- * Keyed on the id rather than on the role, because the id is what the SDK's own
- * continuation rule turns on: a turn that opened a fresh message appends, as it
- * always did.
- */
 const foldSnapshot = (
   original: PlatypusUIMessage[],
   message: PlatypusUIMessage,
@@ -103,18 +69,6 @@ const foldSnapshot = (
     ? [...original.slice(0, -1), message]
     : [...original, message];
 
-/**
- * Runs `work` on behalf of a registered run that nothing else will finish if
- * `work` throws: the run is finished `failed` with the thrown error, then the
- * error is rethrown to the caller.
- *
- * Every step between claiming the run and a drive taking ownership of it goes
- * through here. A throw that escaped one of them left the Chat `running`, held
- * its claim so every retry was answered 409, and was eventually recorded as the
- * step timer's misleading timeout rather than what actually failed (issue
- * #1122). `finish` is once-only, so a step that has already finished the run
- * itself (a drive that caught its own failure) is unaffected.
- */
 const finishFailedOnThrow = async <T>(
   run: RunLifecycle,
   message: string,
@@ -124,12 +78,9 @@ const finishFailedOnThrow = async <T>(
     return await work();
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error));
-    // A Chat another instance is running is refused, not failed (#1237).
     if (!(err instanceof ConflictError)) {
       logger.error({ error, runId: run.handle.runId }, message);
     }
-    // Work that threw because the run was stopped ends as the stop says —
-    // a cancel is `cancelled`, not a failure of the work it interrupted.
     if (run.handle.signal.aborted) {
       const { status, error: stopped } = run.statusFromSignal();
       await run.finish(status, stopped);
@@ -140,22 +91,6 @@ const finishFailedOnThrow = async <T>(
   }
 };
 
-/**
- * Orchestrates an end-to-end agent run.
- *
- * The runner wraps `prepareChatTurn` with a `RunSink` lifecycle and offers
- * two consumer-shaped entry points: `stream()` for HTTP streaming clients
- * and `generate()` for headless callers (triggers, sub-agents).
- *
- * Run lifetime is decoupled from the HTTP request: the runner registers
- * each run with `RunRegistry`, which owns the `AbortController` and the
- * per-step / per-run timeout timers. Cancellation goes through `cancelRun`
- * (`run-cancel.ts`), which reaches whichever backend instance holds the run.
- *
- * A delegated (sub-agent) run is not driven from here: the delegate tool owns
- * its own turn, already resolved by the parent's `prepareChatTurn`. It shares
- * the lifecycle rather than the entry point — see `runs/run-lifecycle.ts`.
- */
 export class AgentRunner {
   private async prepare(
     scope: WorkspaceScope,
@@ -168,9 +103,6 @@ export class AgentRunner {
     setDelegateUsage: ParentRunContext["setDelegateUsage"],
     fallbackAllowed: boolean,
   ): Promise<ChatTurn> {
-    // The turn rides down whole; the runner adds only what it is the one to
-    // know. `runId` is the run's own identity, not the turn's, so it is the
-    // single field held back (issue #837).
     const { runId, ...turnRequest } = input;
     return prepareChatTurn(
       {
@@ -178,8 +110,6 @@ export class AgentRunner {
         orgId: scope.orgId,
         workspaceId: scope.workspaceId,
         user: userFromScope(scope),
-        // The run's own identity is the Provider Header placeholder's session:
-        // a Chat's run id is the chat id; a Trigger run's is that run's id.
         sessionId: runId,
         origin,
         frontendUrl,
@@ -188,29 +118,13 @@ export class AgentRunner {
         a2aClientName:
           scope.principal.kind === "a2a" ? scope.principal.name : undefined,
         onActivity,
-        // Sub-agent delegate tools built for this turn register their own runs
-        // as children of this one, so they need to know whose child they are and
-        // what bounds this run was started under, and report their Token usage
-        // back into this run's.
         run: { runId, scope, timeouts, setDelegateUsage },
-        // A cancelled run, or one its step timer has already killed, stops
-        // waiting on a Tool set or MCP server that has not answered (#1135).
         signal,
       },
       drizzleChatTurnQueries,
     );
   }
 
-  /**
-   * Shared run scaffolding: the sink lifecycle (`onStart` → `onResolved`) laid
-   * over the run lifecycle (registry, timeouts, statistics, once-only
-   * termination). Both `stream` and `generate` build on this; only the model
-   * invocation and the consumer-shaped return value differ.
-   *
-   * The terminal callback lives here but reads `state`, which the caller keeps
-   * writing (the streamed messages) after `setup` returns — so a timeout firing
-   * mid-stream still persists the partial answer.
-   */
   private async setup(params: {
     scope: WorkspaceScope;
     input: RunInput;
@@ -218,35 +132,18 @@ export class AgentRunner {
     origin?: string;
     frontendUrl: string;
     timeouts?: RunTimeouts;
-    /** The run's Run event recorder, for a headless run that keeps one. */
     events?: RunEventRecorder;
-    /**
-     * Whether this run may consult the Agent's Fallback model (ADR-0043).
-     * Only `generate` — the Trigger path — sets it.
-     */
     fallbackAllowed?: boolean;
   }): Promise<{
     state: RunState;
     run: ReturnType<typeof startRun>;
-    /** The resolved turn. Returned in its own right so a caller reads the plan
-     *  from here rather than re-narrowing `state.turn`, which stays optional
-     *  for the terminal callback that may run before it is assigned. */
     turn: ChatTurn;
     modelMessages: ModelMessage[];
-    /** What this setup decided, in the shape the drive and the metadata
-     *  extractor both take. `prepDurationMs` is how long Turn resolution
-     *  (`GLOSSARY.md`) took, in whole milliseconds — surfaced to Users as
-     *  "Preparation" once stamped onto the streamed message (issue #354). */
     facts: TurnFacts;
   }> {
     const { scope, input, sink } = params;
     const prepStartMs = Date.now();
 
-    // File gate (issue #328): reject a turn carrying a file the target model
-    // can't handle BEFORE the sink persists anything, so a bad attachment can
-    // never brick the chat. Runs only when the turn has file parts; throws
-    // `FileValidationError`, which the central `onError` (ADR-0010) maps to a
-    // 400.
     await validateTurnAttachments(
       {
         request: input.request,
@@ -262,13 +159,6 @@ export class AgentRunner {
       messages: input.messages,
     };
 
-    // Claim the run BEFORE the sink writes anything (issue #648). A second
-    // submission for a Chat that already has a live run reaches here with the
-    // same runId — a Chat run's id is the chat id — and `startRun` rejects it
-    // with a `ConflictError` the central handler answers 409 (ADR-0010). Run
-    // the other way round and the duplicate's start hook overwrites the live
-    // run's persisted messages with its own history first, then fails: the
-    // client gets an error AND the run it interrupted loses its state.
     const run = startRun({
       runId: input.runId,
       timeouts: params.timeouts,
@@ -286,7 +176,6 @@ export class AgentRunner {
           logger.error({ err, runId: input.runId }, "Error in onFinish");
         }
       },
-      // Sink decides write cadence (FlushScheduler in ChatSink).
       onStepProgress: (stats) => {
         void sink
           .onProgress({ runId: input.runId, messages: state.messages, stats })
@@ -296,9 +185,6 @@ export class AgentRunner {
       },
     });
 
-    // Registered now, so a start hook that throws releases the claim rather
-    // than leaving the runId held by a run that never began — which, with the
-    // claim taken first, would lock the Chat out of every later turn.
     await finishFailedOnThrow(run, "Run sink onStart failed", () =>
       sink.onStart({
         runId: input.runId,
@@ -308,9 +194,6 @@ export class AgentRunner {
       }),
     );
 
-    // Nothing to dispose if this throws: a resolution that throws closes its
-    // own Tool session on the way out (`prepareChatTurn`), so there is no
-    // session object at this frame to leak.
     const turn = await finishFailedOnThrow(
       run,
       "Run prepare failed before model invocation",
@@ -328,15 +211,7 @@ export class AgentRunner {
         ),
     );
 
-    // The run's timers were armed at registration, above — a resolution slower
-    // than the per-step bound has already terminated it, and its teardown has
-    // already been and gone. This is where that is settled: either the run takes
-    // the turn and will dispose it, or it disposes it here and says so.
     if (!(await run.adoptOrDispose(turn.dispose))) {
-      // The caller is told what the sink was told, so the rejection and the
-      // run's terminal record name one failure. `statusFromSignal` types the
-      // error as optional because a cancelled run has none; a run that reached
-      // here was stopped by a timer, which always carries one.
       const { error } = run.statusFromSignal();
       const err =
         error ?? new Error(`Run '${input.runId}' ended before it could start`);
@@ -347,39 +222,19 @@ export class AgentRunner {
       throw err;
     }
 
-    // From here the run holds the turn, so a throw finishes the run — which
-    // disposes the turn — rather than escaping with the Chat still `running`.
     const modelMessages = await finishFailedOnThrow(
       run,
       "Run setup failed after adopting its turn",
       async () => {
         const plan: ResolvedRunPlan = {
           resolved: turn.resolved,
+          resolvedModelId: turn.resolvedModelId,
           unloadedToolSets: turn.unloadedToolSets,
-          // The declared window this turn ran under — the denominator the
-          // sink's Transcript-summary trigger divides the turn's reading by
-          // (ADR-0041).
           contextWindow: turn.stream.contextWindow,
-          // What the turn's session resolved as clearable beyond the core
-          // allowlist, for the after-turn summary pass to clear the same way.
           readOnlyToolNames: turn.stream.readOnlyToolNames,
         };
         await sink.onResolved({ runId: input.runId, plan });
 
-        // The conversation is converted once, here, and handed to whichever
-        // drive the caller picks — `stream` for an HTTP client, `generate` for
-        // a headless run. The drives own the model call and the terminal
-        // decision from there.
-        //
-        // `ignoreIncompleteToolCalls` drops a tool call the Transcript holds
-        // with no result beside it. A turn cancelled while a tool was still
-        // running persists exactly that, and a provider handed a tool call it
-        // never sees answered rejects the whole request ("Tool result is
-        // missing for tool call ..."), so every later turn in that Chat fails
-        // until the Chat is deleted. Cancellation is only the common way in —
-        // a crash or a timeout mid-tool strands a call the same way, which is
-        // why the guard sits at the one seam every drive converts through
-        // rather than on the abort path.
         return convertToModelMessages(turn.stream.messages, {
           ignoreIncompleteToolCalls: true,
           convertDataPart,
@@ -396,8 +251,6 @@ export class AgentRunner {
         agentId: turn.resolved.agentId,
         searchUnavailable: turn.searchUnavailable,
         prepDurationMs: Date.now() - prepStartMs,
-        // The summary this turn read its occupancy reading through, stamped
-        // beside the reading on the reply (ADR-0041).
         summaryId: turn.stream.summaryId,
       },
     };
@@ -424,19 +277,8 @@ export class AgentRunner {
       "System prompt for chat",
     );
 
-    // How long each locally-executed tool took, keyed by `toolCallId`. The SDK
-    // has already measured it; the drive holds it long enough to stamp it onto
-    // the finished messages (see `applyToolDurations`). Provider-executed tools
-    // never reach this callback and so carry no duration.
     const toolDurations = new Map<string, number>();
 
-    // The drive runs the model loop, folds the stream and tees off the client
-    // branch; this runner keeps only the server-side drain (which keeps
-    // `state.messages` fresh for the sink's mid-run flush) and the response.
-    // Terminal status, the output-ceiling cutoff and the stop conditions are
-    // all decided inside `runs/drive.ts` — once it is built. Building it starts
-    // the model call synchronously, and a throw there reaches no drive that
-    // could finish the run, so it is finished here instead.
     const drive = await finishFailedOnThrow(
       run,
       "Run failed before its drive took over",
@@ -452,33 +294,21 @@ export class AgentRunner {
           onToolExecutionEnd: ({ toolCall, toolExecutionMs }) => {
             toolDurations.set(toolCall.toolCallId, toolExecutionMs);
           },
-          // The terminal finish (with tool durations applied) is what the
-          // sink's final write must observe.
           onFinal: (messages) => {
             state.messages = messages;
           },
         }),
     );
 
-    // Settles once the sink has saved the reply's first output (#1337), or
-    // once the drain below ends, however it ends. Never rejects: the client
-    // stream's first output waits on it.
+    // why: must settle, never reject; the client stream's first output waits on it
     const { promise: saved, resolve: outputSaved } =
       Promise.withResolvers<void>();
     let outputSeen = false;
 
-    // Consume the snapshot branch server-side. The response body drives one
-    // branch; we drain the other so a disconnected client (cancelling the
-    // response branch) doesn't propagate back to the source — the run keeps
-    // pulling as long as the snapshot branch is being read.
+    // why: drained server-side so a disconnected client can't stop the run (ADR-0049)
     void (async () => {
       try {
         for await (const message of drive.snapshots) {
-          // Keep `state.messages` current so ChatSink's FlushScheduler writes
-          // the in-progress assistant message on each onProgress bump — a user
-          // who reconnects mid-run sees the partial answer. The drive stops
-          // yielding after the final handover, so this never overwrites the
-          // folded final with a duration-less snapshot.
           state.messages = foldSnapshot(input.messages, message);
           if (!outputSeen && hasOutput(message)) {
             outputSeen = true;
@@ -506,18 +336,12 @@ export class AgentRunner {
       logger.error({ err, runId: input.runId }, "Chat drive background error"),
     );
 
-    // A turn whose start engaged the backstop opens its stream with the status
-    // its wait owed the User. Client branch only — see `withSummarisingStatus`.
+    // why: client branch only; the persisted reply must never carry the wait's status row
     const clientStream = turn.summaryBackstop
       ? drive.response.pipeThrough(withSummarisingStatus())
       : drive.response;
 
-    // Wrapped past the tee, so the heartbeat reaches the client and not the
-    // server-side drain above (issue #648). The no-buffering header a reverse
-    // proxy needs is already on the response the SDK builds; `stream-keepalive`
-    // carries it through, and its test pins that it is still there. The first
-    // output is held until it is saved, so a reader of the stream — an A2A
-    // Task's producer — finds the Chat already holding the reply.
+    // why: wrapped past the tee, so the heartbeat reaches the client, not the drain
     return withStreamKeepalive(
       createUIMessageStreamResponse({
         stream: clientStream.pipeThrough(holdFirstOutput(saved)),
@@ -525,10 +349,6 @@ export class AgentRunner {
     );
   }
 
-  /**
-   * Headless run that awaits a final result. Always reaches `sink.onFinish`
-   * and disposes MCP clients in a `finally`.
-   */
   async generate(params: {
     scope: WorkspaceScope;
     input: RunInput;
@@ -537,11 +357,7 @@ export class AgentRunner {
   }): Promise<GenerateResult> {
     const { input } = params;
     const options = params.options;
-    // One Run event recorder per headless run (#647): the sink is handed it at
-    // start and flushes it on its own cadence; the drive fills it, and routes
-    // it down to any Sub-Agent the run delegates to.
     const events = new RunEventRecorder({ runId: input.runId });
-    // No `origin`: headless callers don't have file URLs to inline.
     const { state, run, turn, modelMessages, facts } = await this.setup({
       scope: params.scope,
       input,
@@ -549,15 +365,9 @@ export class AgentRunner {
       frontendUrl: options.frontendUrl,
       timeouts: options.timeouts,
       events,
-      // A Trigger run is the one run type that may switch to the Agent's
-      // Fallback model (ADR-0043).
       fallbackAllowed: true,
     });
 
-    // The drive computes the stats, records the output-ceiling cutoff, decides
-    // the terminal status and finishes the run — this entry point only returns.
-    // The resolved Agent id is passed through as the run's causation chain, so
-    // an Event Trigger's own writes never re-fire it (ADR-0022).
     const { text, stats } = await driveOnce({
       plan: turn.stream,
       modelMessages,
@@ -565,13 +375,9 @@ export class AgentRunner {
       agentId: facts.agentId,
       events,
       ...(turn.fallback ? { fallback: turn.fallback } : {}),
-      // Read by the terminal callback `setup` wired, so the sink's final write
-      // persists what the run concluded.
       onFinal: (finalText) => {
         state.finalText = finalText;
       },
-      // Kept current for the sink's flushes and final write, which keep the
-      // run's Transcript (ADR-0044).
       onSnapshot: (message) => {
         state.messages = foldSnapshot(input.messages, message);
       },
@@ -581,19 +387,8 @@ export class AgentRunner {
   }
 }
 
-/** The status row a backstop-waiting turn opens its stream with. */
 export const TRANSCRIPT_SUMMARY_STATUS_TEXT = "Summarising earlier messages…";
 
-/**
- * Opens a turn's stream with the status its backstop wait owed the User — a
- * streamed, per-turn run-timeline event (ADR-0023, the Chat turn's record), not
- * a one-off UI flag, and the same event family the later `/compact` live trace
- * shows in more places (ADR-0041).
- *
- * Emitted at the head of the client branch only: the server-side drain and the
- * reply the sink persists never carry it, so a reload reads the turn without
- * the row — it is about the wait, not the reply.
- */
 const withSummarisingStatus = (): TransformStream<
   InferUIMessageChunk<PlatypusUIMessage>,
   InferUIMessageChunk<PlatypusUIMessage>
@@ -610,5 +405,4 @@ const withSummarisingStatus = (): TransformStream<
     },
   });
 
-/** Singleton runner — services and routes share one instance. */
 export const agentRunner = new AgentRunner();

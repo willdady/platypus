@@ -29,21 +29,8 @@ import {
 } from "./workspace-resource.ts";
 import { oneRow } from "../db/one-row.ts";
 
-/**
- * The Sandbox write model: create, update and delete for the one Sandbox a
- * Workspace may have. The Sandbox routes and Workspace creation adapt over it,
- * as the Provider and MCP routes do over `provider-write.ts`/`mcp-write.ts`.
- *
- * Deleting a Sandbox, or changing its `backend`, is fail-loud (ADR-0001): the
- * adapter's `destroy()` runs first and the row is left as it was when that
- * fails (`UpstreamError` → 502). `force` skips the destroy and logs that
- * external resources may leak. The Workspace cascade's best-effort teardown is
- * `sandbox/teardown.ts`, not this module.
- */
-
 export type SandboxRow = typeof sandboxTable.$inferSelect;
 
-/** The fields a create carries — every field but the id and its Workspace. */
 export type SandboxCreateFields = Omit<
   z.infer<typeof sandboxCreateSchema>,
   "workspaceId"
@@ -55,16 +42,9 @@ const throwIfInvalid = (error: string | null) => {
   if (error) throw new ValidationError(error);
 };
 
-/**
- * Creates the Workspace's Sandbox. Throws `ValidationError` when the config,
- * credentials or env fail their checks, and `ConflictError` when the Workspace
- * already has one — decided by the unique index, so two concurrent creates
- * cannot both succeed.
- */
 export async function createSandbox(
   workspaceId: string,
   fields: SandboxCreateFields,
-  // A transaction handle, when the create is one step of a larger write.
   exec: Executor = db,
 ): Promise<SandboxRow> {
   throwIfInvalid(sandboxCreateError(fields));
@@ -84,10 +64,6 @@ export async function createSandbox(
   }
 }
 
-/**
- * Runs the adapter's `destroy()` for `row` unless `force` is set, throwing
- * `UpstreamError` when it fails. `action` finishes the `?force=true` hint.
- */
 const destroyFirst = async (
   row: SandboxRow,
   force: boolean,
@@ -101,11 +77,6 @@ const destroyFirst = async (
     plugin: getSandboxBackendPlugin(row.backend) ?? null,
   };
   if (force) {
-    // `backend`/`plugin` name the adapter that was skipped — the one whose
-    // external resources may now be leaked, and so the one an Operator
-    // filtering by plugin is looking for. An incoming backend has leaked
-    // nothing, which is why it is `replacedBy` rather than the `newBackend`
-    // half of an old/new pair.
     logger.warn(
       {
         ...fields,
@@ -127,21 +98,6 @@ const destroyFirst = async (
   }
 };
 
-/**
- * Updates the Workspace's Sandbox. Field-level authorization (ADR-0006):
- *
- *   - An Org admin may change every field. `name`/`backend` are always
- *     overwritten; `config`/`credentials`/`adminEnv`/`userEnv` are kept when
- *     omitted (Drizzle skips undefined columns), since GET strips credentials
- *     and the form cannot re-send them.
- *   - A non-admin Workspace Owner may change only `name` and `userEnv`. Every
- *     reach/execution/credential field is ignored, even if present — the
- *     Owner's client does not show them, and ignoring an echoed-but-unchanged
- *     value avoids a false rejection.
- *
- * `userEnv` may never override an admin-managed key. Changing `backend`
- * destroys the old adapter's resources first (see {@link destroyFirst}).
- */
 export async function updateSandbox(
   workspaceId: string,
   fields: SandboxUpdateFields,
@@ -204,16 +160,11 @@ export async function updateSandbox(
   );
 }
 
-// A concurrent delete can land between the read and the UPDATE.
 const requireWritten = (row: SandboxRow | null): SandboxRow => {
   if (!row) throw new NotFoundError("Sandbox not found");
   return row;
 };
 
-/**
- * Deletes the Workspace's Sandbox, destroying its external resources first;
- * the row is kept when that fails, so the user can retry or force.
- */
 export async function deleteSandbox(
   workspaceId: string,
   options: { force: boolean },

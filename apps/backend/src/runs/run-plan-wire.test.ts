@@ -19,25 +19,10 @@ import { resolveGenerationPlan } from "./agent-plan.ts";
 import { makeProviderRow } from "../services/provider-row.test-fixtures.ts";
 import type { SamplingSource } from "../services/sampling-settings.ts";
 
-/**
- * Wire-shape tests for prompt caching (ADR-0020 Notes, issue #682).
- *
- * These assert the request a vendor actually sends, captured on the `fetch`
- * override of a constructed provider — deliberately NOT the SDK-level
- * `providerOptions`. The whole design is arranged around provider packages
- * silently dropping or misplacing an option, so asserting only that we passed
- * the option through would pass even when the cache directive never reached
- * the request. The negative halves (Bedrock has no top-level `cachePoint`;
- * OpenAI and Google carry no cache key at all) are the halves that fail if
- * someone later "simplifies" the wiring. No real credentials are needed.
- */
-
 type CapturedBody = { url: string; body: Record<string, unknown> };
 
-/** A `fetch`-shaped function (the provider configs accept one as `fetch`). */
 type RecFetch = (input: unknown, init?: RequestInit) => Promise<Response>;
 
-/** A `fetch` that records each JSON request body, then answers with `payload`. */
 const recordingFetch =
   (captured: CapturedBody[], payload: string): RecFetch =>
   (input, init) => {
@@ -152,8 +137,6 @@ describe("prompt cache wire shape", () => {
 
     const body = captured[0].body;
     expect(body.cache_control).toEqual({ type: "ephemeral" });
-    // Only ONE cache_control, at the top: every system block and every message
-    // content block must be free of block-level cache_control.
     expect(JSON.stringify(body).match(/"cache_control"/g)?.length ?? 0).toBe(1);
     for (const entry of body.system as unknown[]) {
       expect(
@@ -195,7 +178,6 @@ describe("prompt cache wire shape", () => {
 
     const body =
       captured.find((c) => c.url.includes("converse")) ?? captured[0];
-    // The trap: a top-level cachePoint is the negative half of this test.
     expect(body.body.cachePoint).toBeUndefined();
     const system = body.body.system as unknown[];
     expect(
@@ -232,8 +214,6 @@ describe("prompt cache wire shape", () => {
       const model = cfg.model(recordingFetch(captured, cfg.response));
       const result = await runOne(model, "hello");
 
-      // The emitted request carries no cache key — the vendor namespaces are
-      // read by their own packages and dropped, not forwarded.
       for (const { body } of captured) {
         expect(JSON.stringify(body)).not.toMatch(
           /cache_control|cachePoint|cacheControl|"head"/i,
@@ -244,14 +224,6 @@ describe("prompt cache wire shape", () => {
   });
 });
 
-/**
- * The answer step's wire shape (issue #1730): on a turn whose ceiling is one, a
- * Chat's opening user message is followed straight away by the instruction, so
- * the request carries two user messages in a row. Both vendor adapters group
- * them into one turn — the assertion here is that the second form does not
- * produce an invalid request — and the tools stay declared, which is the whole
- * reason the instruction is a message rather than a tool override.
- */
 describe("the answer step wire shape", () => {
   const probe = () =>
     tool({
@@ -274,7 +246,6 @@ describe("the answer step wire shape", () => {
 
     const body = captured[0].body;
     expect(JSON.stringify(body.messages)).toContain(ANSWER_STEP_INSTRUCTION);
-    // Two ModelMessages (the user's and the instruction) become one turn.
     expect(
       (body.messages as Array<{ role: string }>).map((m) => m.role),
     ).toEqual(["user"]);
@@ -297,7 +268,6 @@ describe("the answer step wire shape", () => {
       captured.find((c) => c.url.includes("converse")) ?? captured[0];
     const messages = body.body.messages as Array<{ content: unknown[] }>;
     expect(JSON.stringify(body.body)).toContain(ANSWER_STEP_INSTRUCTION);
-    // One Converse message: the user's text, the instruction, then the point.
     expect(messages).toHaveLength(1);
     expect(
       (messages[0].content as Array<{ cachePoint?: unknown }>).at(-1),
@@ -307,10 +277,6 @@ describe("the answer step wire shape", () => {
     );
   });
 
-  // Gemini does not coalesce the two, and does not need to: this provider
-  // already sends one `contents` entry per tool-result message, so a second
-  // user entry in a row is a shape it produces today. Pinned so the adapter's
-  // behaviour is recorded rather than assumed.
   it("Google: the instruction is a second user content, with the tool declared", async () => {
     const captured: CapturedBody[] = [];
     const model = createGoogleGenerativeAI({
@@ -333,12 +299,6 @@ describe("the answer step wire shape", () => {
   });
 });
 
-/**
- * Reasoning map wire shape (ADR-0040, issue #1521): the body an OpenAI
- * chat-mode Provider sends once a Model entry's map is resolved. Driven through
- * `resolveGenerationPlan` with a stubbed global `fetch`, so the namespace the
- * fragment rides under is the one `@ai-sdk/openai-compatible` really reads.
- */
 describe("Reasoning map wire shape", () => {
   const COMPAT_RESPONSE = OPENROUTER_RESPONSE;
 
@@ -381,8 +341,6 @@ describe("Reasoning map wire shape", () => {
     }
   };
 
-  // The request every OpenAI chat-mode turn sent before Reasoning maps
-  // existed. Pinned literally: a map-less model must still send exactly this.
   const BASELINE = {
     model: "m",
     messages: [
@@ -541,12 +499,6 @@ describe("Reasoning map wire shape", () => {
   });
 });
 
-/**
- * Native Reasoning wire shape (#1689): with no Reasoning map, an Agent's or
- * Direct Chat's Thinking/Effort choice reaches a native Provider through the
- * SDK's `reasoning` call option, which each vendor adapter translates itself —
- * except OpenRouter, whose adapter ignores that option and reads its own.
- */
 describe("native Reasoning wire shape", () => {
   const NATIVE = [
     {
@@ -643,8 +595,6 @@ describe("native Reasoning wire shape", () => {
       ).toBeDefined();
     });
 
-    // Bedrock's Claude leaves thinking out when it is off — its default — so
-    // there off and no choice are the same request (pinned below).
     it.skipIf(vendor.providerType === "Bedrock")(
       `${vendor.providerType}: Thinking off reaches the wire`,
       async () => {
@@ -672,8 +622,6 @@ describe("native Reasoning wire shape", () => {
     NATIVE.find((v) => v.providerType === providerType)!;
 
   it("Bedrock: Thinking off disables thinking", async () => {
-    // The Bedrock provider now makes Claude's default explicit, matching
-    // Anthropic (pinned below) rather than leaving the field out.
     expect(
       byType("Bedrock").reasoningOf(
         await send(byType("Bedrock"), {

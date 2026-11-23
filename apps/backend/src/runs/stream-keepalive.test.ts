@@ -8,7 +8,6 @@ import {
 
 const HEARTBEAT_MS = 50;
 
-/** Reads a byte stream to the end and returns it as one decoded string. */
 const readAll = async (stream: ReadableStream<Uint8Array>): Promise<string> => {
   const decoder = new TextDecoder();
   const reader = stream.getReader();
@@ -21,7 +20,6 @@ const readAll = async (stream: ReadableStream<Uint8Array>): Promise<string> => {
   return out + decoder.decode();
 };
 
-/** A byte stream the test pushes to and ends by hand. */
 const controllable = () => {
   const encoder = new TextEncoder();
   let controller!: ReadableStreamDefaultController<Uint8Array>;
@@ -50,9 +48,6 @@ describe("withHeartbeatFrames", () => {
     const kept = withHeartbeatFrames(source.stream, HEARTBEAT_MS);
     const collected = readAll(kept);
 
-    // Nothing from the model for several heartbeat intervals — the case a
-    // proxy's idle timeout would otherwise kill. Advanced asynchronously so the
-    // reader gets a turn to drain each heartbeat before the next fires.
     await vi.advanceTimersByTimeAsync(HEARTBEAT_MS * 3);
     source.end();
 
@@ -76,8 +71,6 @@ describe("withHeartbeatFrames", () => {
     expect(heartbeats(text)).toBe(0);
   });
 
-  // A heartbeat frame inside another frame would corrupt the event the client
-  // is parsing, so they may only ever land on a frame boundary.
   it("never splits a source frame", async () => {
     vi.useFakeTimers();
     const source = controllable();
@@ -97,9 +90,6 @@ describe("withHeartbeatFrames", () => {
     );
   });
 
-  // Wrapping must not turn the run into a buffer on a slow client's behalf. A
-  // wrapper that pumped the source from `start` would drain all 100 chunks into
-  // memory after a single read.
   it("reads from the source only as the consumer asks for more", async () => {
     const encoder = new TextEncoder();
     let produced = 0;
@@ -116,17 +106,12 @@ describe("withHeartbeatFrames", () => {
 
     const reader = withHeartbeatFrames(source, 10_000).getReader();
     await reader.read();
-    // One macrotask: long enough for a pump driven by microtasks to drain all
-    // 100 chunks.
     await new Promise((r) => setTimeout(r, 0));
 
     expect(produced).toBeLessThan(10);
     await reader.cancel();
   });
 
-  // The interval outlives the request otherwise: a client that navigates away
-  // cancels the response body, and a timer still enqueueing into it leaks for
-  // the life of the process.
   it("stops beating when the consumer cancels", async () => {
     vi.useFakeTimers();
     const source = controllable();
@@ -167,7 +152,6 @@ describe("withStreamKeepalive", () => {
     vi.useRealTimers();
   });
 
-  /** The response shape the runner hands over, built the way the SDK builds it. */
   const streamedRunResponse = () =>
     createUIMessageStreamResponse({
       stream: new ReadableStream({
@@ -175,9 +159,6 @@ describe("withStreamKeepalive", () => {
       }),
     });
 
-  // The other half of surviving an intermediary: a proxy that buffers a
-  // streamed response holds every heartbeat back until the run ends, which
-  // defeats the point of sending them.
   it("keeps the no-buffering header a reverse proxy reads", () => {
     const kept = withStreamKeepalive(streamedRunResponse(), HEARTBEAT_MS);
 

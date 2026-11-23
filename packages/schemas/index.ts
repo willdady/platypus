@@ -330,6 +330,24 @@ export type ReasoningChoice = {
 };
 
 /**
+ * The Job settings a Provider applies to one of its own background jobs
+ * (ADR-0045): an Agent's sampling parameters and Reasoning controls, without
+ * Max steps. Nullable for the same reason as those (#263); an empty block
+ * sends nothing.
+ */
+export const jobSettingsSchema = z.object({
+  temperature: samplingFields.temperature.nullable().optional(),
+  topP: samplingFields.topP.nullable().optional(),
+  topK: samplingFields.topK.nullable().optional(),
+  seed: samplingFields.seed.nullable().optional(),
+  presencePenalty: samplingFields.presencePenalty.nullable().optional(),
+  frequencyPenalty: samplingFields.frequencyPenalty.nullable().optional(),
+  ...reasoningFields,
+});
+
+export type JobSettings = z.infer<typeof jobSettingsSchema>;
+
+/**
  * Wide enough for a Trigger-run Chat's derived title: the longest Trigger name
  * plus ` · YYYY-MM-DD HH:MM UTC` (ADR-0044). Model-generated titles stay at 30
  * characters by their prompt.
@@ -1780,6 +1798,7 @@ export const CLEARABLE_TOOL_NAMES: ReadonlySet<string> = new Set([
   "readSkillFile",
   "listChats",
   "readTranscript",
+  "readArtifact",
 ]);
 
 /**
@@ -1958,11 +1977,14 @@ export const TRANSCRIPT_SUMMARY_KEEP_TURNS = 4;
 export const TRANSCRIPT_SUMMARY_KEEP_TURNS_WITH_SUMMARY = 1;
 
 /**
- * The summary-handoff prompt's output ceiling, about a window's worth of what
- * a summary call must fit into a bounded reply. A number with a unit in docs
- * prose is pinned to this by the docs contract test.
+ * The summary-handoff call's output ceiling, the same as memory extraction's.
+ * On a thinking model it counts the reasoning too, and a reply that reaches it
+ * is a failed summary, not a stored one — so it leaves room for a long Chat's
+ * summary after the model's thinking. A fixed constant, not derived from a
+ * Context window; the task model's Job settings add their Thinking budget on
+ * top, and the Chat's own model is held to its declared Max output tokens.
  */
-export const TRANSCRIPT_SUMMARY_MAX_OUTPUT_TOKENS = 4_096;
+export const TRANSCRIPT_SUMMARY_MAX_OUTPUT_TOKENS = 8_192;
 
 /**
  * A Context occupancy reading as it is stored on an assistant message
@@ -2563,6 +2585,9 @@ const providerBaseSchema = z.object({
   // validate with those two, which is exactly where the guard has to bite.
   taskModelId: pointerModelIdSchema,
   memoryExtractionModelId: pointerModelIdSchema,
+  // Job settings for each of the two pointers above (ADR-0045).
+  taskModelSettings: jobSettingsSchema.nullable().optional(),
+  memoryExtractionModelSettings: jobSettingsSchema.nullable().optional(),
   embeddingModelId: pointerModelIdSchema.nullable().optional(),
   embeddingDimensions: embeddingDimensionsSchema.nullable().optional(),
   createdAt: z.date(),
@@ -2613,6 +2638,8 @@ export const providerRecordSchema = providerBaseSchema.extend({
   organization: z.string().nullish(),
   project: z.string().nullish(),
   securityGuardrails: providerSecurityGuardrailsSchema.nullish(),
+  taskModelSettings: jobSettingsSchema.nullish(),
+  memoryExtractionModelSettings: jobSettingsSchema.nullish(),
   embeddingModelId: pointerModelIdSchema.nullish(),
   embeddingDimensions: embeddingDimensionsSchema.nullish(),
 });
@@ -2832,6 +2859,8 @@ export const providerCreateSchema = strictRequest(
     modelIds: true,
     taskModelId: true,
     memoryExtractionModelId: true,
+    taskModelSettings: true,
+    memoryExtractionModelSettings: true,
     embeddingModelId: true,
     embeddingDimensions: true,
   }),
@@ -3123,6 +3152,8 @@ export const providerUpdateSchema = strictRequest(
     modelIds: true,
     taskModelId: true,
     memoryExtractionModelId: true,
+    taskModelSettings: true,
+    memoryExtractionModelSettings: true,
     embeddingModelId: true,
     embeddingDimensions: true,
   }),
@@ -4631,5 +4662,218 @@ export const webhookEventScope = (
       return {};
   }
 };
+// Artifact
+
+/**
+ * The content kinds an Artifact can hold. Fixed when the Artifact is created;
+ * `markdown`, `code` and `mermaid` render in the app's own DOM, while `html`
+ * and `svg` render only inside the sandboxed Artifact frame.
+ */
+export const artifactTypeSchema = z.enum([
+  "markdown",
+  "code",
+  "mermaid",
+  "html",
+  "svg",
+]);
+
+export type ArtifactType = z.infer<typeof artifactTypeSchema>;
+
+/** Who wrote one Artifact version: an Agent's tool call, or the User. */
+export const artifactAuthorSchema = z.enum(["agent", "user"]);
+
+export type ArtifactAuthor = z.infer<typeof artifactAuthorSchema>;
+
+/**
+ * A plain DNS hostname: dot-separated labels of letters, digits and hyphens,
+ * each starting and ending alphanumeric. The URL parser accepts far more than
+ * this — `*`, `;`, quotes, underscores, an empty label — and any of those in a
+ * CSP source list would silently widen or break the policy.
+ */
+const DNS_HOSTNAME =
+  /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*$/;
+
+/**
+ * The canonical `https` origin `value` names, or `undefined` when it is not a
+ * bare origin. A bare origin has a plain DNS host and no path, query,
+ * credentials or hash; host case and an explicit default port normalise away,
+ * so `https://CDNJS.Cloudflare.com:443` becomes `https://cdnjs.cloudflare.com`.
+ */
+export const bareHttpsOrigin = (value: string): string | undefined => {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:") return undefined;
+    if (url.username || url.password || url.search || url.hash)
+      return undefined;
+    if (url.pathname !== "/") return undefined;
+    if (!DNS_HOSTNAME.test(url.hostname)) return undefined;
+    return url.origin;
+  } catch {
+    return undefined;
+  }
+};
+
+/**
+ * One approved library origin: a bare `https` origin, canonicalised on the way
+ * through so the Operator's setting and the frame's policy name the same string.
+ */
+export const artifactScriptOriginSchema = z.string().transform((value, ctx) => {
+  const origin = bareHttpsOrigin(value);
+  if (origin === undefined) {
+    ctx.addIssue({
+      code: "custom",
+      message: `"${value}" is not a bare https origin (for example https://cdnjs.cloudflare.com)`,
+    });
+    return z.NEVER;
+  }
+  return origin;
+});
+
+export const ARTIFACT_TITLE_MIN_LENGTH = 1;
+export const ARTIFACT_TITLE_MAX_LENGTH = 200;
+
+/** The most a single Artifact version may hold, measured in UTF-8 bytes. */
+export const ARTIFACT_CONTENT_MAX_BYTES = 512 * 1024;
+
+/** The exact UTF-8 byte length of Artifact content, which is what the cap bounds. */
+export const artifactContentByteLength = (content: string): number =>
+  new TextEncoder().encode(content).length;
+
+/**
+ * Artifact content within its per-version cap. Bytes rather than characters:
+ * the cap protects storage and the wire, and a multi-byte character is worth
+ * more of both. Nothing truncates — a version over the cap is refused whole.
+ */
+export const artifactContentSchema = z
+  .string()
+  .refine(
+    (content) =>
+      artifactContentByteLength(content) <= ARTIFACT_CONTENT_MAX_BYTES,
+    {
+      message: `Artifact content must be at most ${ARTIFACT_CONTENT_MAX_BYTES / 1024} KB`,
+    },
+  );
+
+export const artifactSchema = z.object({
+  id: z.string(),
+  workspaceId: z.string(),
+  /** The Chat that first produced the Artifact; null once that Chat is gone. */
+  sourceChatId: z.string().nullable().optional(),
+  title: z
+    .string()
+    .min(ARTIFACT_TITLE_MIN_LENGTH)
+    .max(ARTIFACT_TITLE_MAX_LENGTH),
+  type: artifactTypeSchema,
+  /** Set for `code` Artifacts only; null for every other type. */
+  language: z.string().nullable().optional(),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+});
+
+export type Artifact = z.infer<typeof artifactSchema>;
+
+export const artifactVersionSchema = z.object({
+  id: z.string(),
+  artifactId: z.string(),
+  version: z.number().int().positive(),
+  content: z.string(),
+  author: artifactAuthorSchema,
+  createdAt: z.date(),
+});
+
+export type ArtifactVersion = z.infer<typeof artifactVersionSchema>;
+
+/** One Artifact with the single version the reader asked for (or the latest). */
+export const artifactReadSchema = z.object({
+  artifact: artifactSchema,
+  version: artifactVersionSchema,
+  /**
+   * The library origins this deployment's Operator approved for the Artifact
+   * frame. Sent with every read so the viewer can build the frame's policy
+   * without a setting of its own.
+   */
+  scriptOrigins: z.array(artifactScriptOriginSchema),
+  /**
+   * The public base this deployment serves stored files from, when a bucket or
+   * CDN is configured, so a markdown Artifact may load images from there; null
+   * when files come from `/files`. Sent with every read, so the viewer needs no
+   * setting of its own.
+   */
+  storageBaseUrl: z.string().nullable(),
+});
+
+export type ArtifactRead = z.infer<typeof artifactReadSchema>;
+
+/** A server-side page of Artifacts, plus the count the page was cut from. */
+export const artifactListSchema = z.object({
+  results: z.array(artifactSchema),
+  totalCount: z.number().int().nonnegative(),
+});
+
+export type ArtifactList = z.infer<typeof artifactListSchema>;
+
+/** The body that renames an Artifact; the title obeys the same bound as create. */
+export const artifactUpdateSchema = z.strictObject({
+  title: z
+    .string()
+    .min(ARTIFACT_TITLE_MIN_LENGTH)
+    .max(ARTIFACT_TITLE_MAX_LENGTH),
+});
+
+export type ArtifactUpdate = z.infer<typeof artifactUpdateSchema>;
+
+/**
+ * A version to read; omitted means the latest. Named in the query string so a
+ * Chat card can open the version its turn produced.
+ */
+export const artifactVersionQuerySchema = z.strictObject({
+  version: z.coerce.number().int().positive().optional(),
+});
+
+/** The body an Agent's `createArtifact` call writes into version 1. */
+export const artifactCreateSchema = z.strictObject({
+  title: z
+    .string()
+    .min(ARTIFACT_TITLE_MIN_LENGTH)
+    .max(ARTIFACT_TITLE_MAX_LENGTH),
+  type: artifactTypeSchema,
+  language: z.string().optional(),
+  content: artifactContentSchema,
+});
+
+export type ArtifactCreate = z.infer<typeof artifactCreateSchema>;
+
+/**
+ * One targeted replacement in an Agent's `updateArtifact` call. `old` must
+ * occur exactly once in the content it is applied to; an empty needle would
+ * match at every position, so it is refused before the edit runs.
+ */
+export const artifactEditSchema = z.strictObject({
+  old: z.string().min(1),
+  new: z.string(),
+});
+
+export type ArtifactEdit = z.infer<typeof artifactEditSchema>;
+
+/**
+ * A version as a list shows it: its identity and who wrote it, never its
+ * content. The version picker needs one of these per version, and a page of
+ * whole versions would carry the Artifact many times over.
+ */
+export const artifactVersionSummarySchema = artifactVersionSchema.omit({
+  content: true,
+});
+
+export type ArtifactVersionSummary = z.infer<
+  typeof artifactVersionSummarySchema
+>;
+
+/** Every version of one Artifact, newest first. */
+export const artifactVersionListSchema = z.object({
+  results: z.array(artifactVersionSummarySchema),
+});
+
+export type ArtifactVersionList = z.infer<typeof artifactVersionListSchema>;
+
 export * from "./chat-ui-message.ts";
 export * from "./chat-summary.ts";

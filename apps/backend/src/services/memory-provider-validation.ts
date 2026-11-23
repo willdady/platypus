@@ -9,7 +9,6 @@ type MemoryProviderSettings = {
   memoryEmbeddingProviderId?: string | null;
 };
 
-/** A Workspace, or an Organization surface (a Blueprint) with no Workspace. */
 type MemoryProviderScope = ScopeContext | { orgId: string };
 
 type MemoryModels = {
@@ -30,13 +29,6 @@ const SLOTS = [
   },
 ] as const;
 
-/**
- * The Providers among `ids` visible in `scope`, by id. A Workspace scope
- * resolves through the Scoped resource authority (ADR-0007) — its own
- * Providers, or Shared ones Attached to it — so an id from another Workspace or
- * Organization is never accepted. An Organization scope (a Blueprint) sees only
- * that Organization's Shared Providers.
- */
 const providersInScope = async (
   ids: string[],
   scope: MemoryProviderScope,
@@ -60,11 +52,6 @@ const providersInScope = async (
   return new Map(rows.map((r) => [r.id, r]));
 };
 
-/**
- * Throws `ValidationError` naming every memory Provider setting that points at
- * a Provider not visible in `scope`, or at one lacking the model its slot needs
- * — a Workspace stamped with either would have an unusable memory config.
- */
 export const requireMemoryProviderCapable = async (
   data: MemoryProviderSettings,
   scope: MemoryProviderScope,

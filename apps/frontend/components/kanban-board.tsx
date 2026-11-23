@@ -29,7 +29,11 @@ import {
   type Scope,
   type Serialized,
 } from "@/lib/api-write";
-import { moveCard, type ColumnWithCards } from "@/lib/board-moves";
+import {
+  columnOfCard,
+  moveCard,
+  type ColumnWithCards,
+} from "@/lib/board-moves";
 import { useBackendUrl } from "@/components/auth-provider";
 import { useRevalidateOnRestore } from "@/hooks/use-revalidate-on-restore";
 import { FetchErrorNotice } from "@/components/fetch-error-notice";
@@ -266,9 +270,7 @@ export function KanbanBoard({
         priority?: KanbanCardPriority;
       },
     ) => {
-      const column = columns.find((col) =>
-        col.cards.some((c) => c.id === cardId),
-      );
+      const column = columnOfCard(columns, cardId);
       if (!column) return;
       const { columnId: targetColumnId, ...updateData } = cardData;
       // Fields first, so a refused update sends nothing else: moving first would
@@ -325,9 +327,7 @@ export function KanbanBoard({
   // destroyed: clear the `cardId` param and revalidate the board.
   const handleCardDelete = useCallback(
     async (cardId: string) => {
-      const column = columns.find((col) =>
-        col.cards.some((c) => c.id === cardId),
-      );
+      const column = columnOfCard(columns, cardId);
       if (!column) {
         return {
           outcome: "notFound" as const,
@@ -357,8 +357,8 @@ export function KanbanBoard({
         <FetchErrorNotice
           error={error}
           subject="board"
-          backHref={routes.root}
-          backLabel="Back to workspace"
+          backHref={routes.boards.root}
+          backLabel="Back to boards"
           onRetry={() => void mutate()}
         />
       </div>
@@ -595,9 +595,7 @@ export function KanbanBoard({
         columns={columns.map((c) => ({ id: c.id, name: c.name }))}
         columnId={
           selectedCard
-            ? (columns.find((col) =>
-                col.cards.some((c) => c.id === selectedCard.id),
-              )?.id ?? null)
+            ? (columnOfCard(columns, selectedCard.id)?.id ?? null)
             : null
         }
         open={!!selectedCard}

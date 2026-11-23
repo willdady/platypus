@@ -25,22 +25,8 @@ import {
   type ScopedResourceType,
 } from "./scoped-resource.ts";
 
-/**
- * The Blueprint module behind `routes/org-blueprint.ts`. A Blueprint is a
- * named, Organization-scoped macro that, applied to a Workspace, creates the
- * Attachments for a chosen set of Shared resources in one step (ADR-0008). It
- * is a snapshot, not a living binding: applying stamps Attachments at that
- * moment; later edits never disturb already-provisioned Workspaces. A
- * Blueprint may only list org-scoped (Shared) resources. Failures throw the
- * typed errors mapped centrally by `app.onError` (ADR-0010).
- */
-
 export type BlueprintRow = typeof blueprintTable.$inferSelect;
 
-/**
- * The fields a create or update carries — both replace the form wholesale, and
- * `blueprintUpdateSchema` is the same pick as `blueprintCreateSchema`.
- */
 export type BlueprintFields = z.infer<typeof blueprintCreateSchema>;
 
 export type BlueprintWithItems = BlueprintRow & { items: BlueprintItem[] };
@@ -48,7 +34,6 @@ export type BlueprintWithItems = BlueprintRow & { items: BlueprintItem[] };
 const NAME_CONFLICT =
   "A blueprint with this name already exists in this organization";
 
-/** Drop duplicate items (same resourceType + resourceId). */
 const dedupeItems = (items: BlueprintItem[]): BlueprintItem[] => {
   const seen = new Set<string>();
   return items.filter((item) => {
@@ -59,12 +44,6 @@ const dedupeItems = (items: BlueprintItem[]): BlueprintItem[] => {
   });
 };
 
-/**
- * Throws `NotFoundError` naming every item that does NOT resolve to an
- * org-scoped resource in this organization. A Blueprint may only list Shared
- * resources (ADR-0008), so any workspace-private or foreign-org reference is a
- * blocker.
- */
 const requireSharedItems = async (
   items: BlueprintItem[],
   orgId: string,
@@ -90,14 +69,6 @@ const requireSharedItems = async (
   }
 };
 
-/**
- * Throws `ValidationError` naming each Tier 2 provider setting that points at a
- * Provider the Blueprint does NOT also attach. Applying a Blueprint both
- * attaches the provider and points the Workspace at it, so a pointer to an
- * unattached provider would leave the Workspace referencing something it can't
- * see. Because items are already validated org-scoped, "is an attached
- * provider item" also implies org-scoped (ADR-0008).
- */
 const requireTier2ProvidersAttached = (
   fields: BlueprintFields,
   items: BlueprintItem[],
@@ -117,13 +88,6 @@ const requireTier2ProvidersAttached = (
   }
 };
 
-/**
- * The one validation path create and update share: dedupes the items, then
- * throws unless every item is Shared in this Organization, every Tier 2
- * setting points at an attached Provider, and every memory Provider exposes the
- * model its slot needs (so apply never stamps an unusable memory config).
- * Returns the deduped items to persist.
- */
 const validateFields = async (
   fields: BlueprintFields,
   orgId: string,
@@ -135,7 +99,6 @@ const validateFields = async (
   return items;
 };
 
-/** The Blueprint columns a create or update writes. */
 const columnsOf = (fields: BlueprintFields) => ({
   name: fields.name,
   description: fields.description ?? null,
@@ -145,11 +108,6 @@ const columnsOf = (fields: BlueprintFields) => ({
   context: fields.context ?? null,
 });
 
-/**
- * Runs a Blueprint write in a transaction: `writeRow` writes the Blueprint row
- * (and, on update, clears its old items), then `items` is inserted as its item
- * set. A duplicate name maps to `ConflictError`.
- */
 const writeBlueprint = async (
   blueprintId: string,
   items: BlueprintItem[],
@@ -183,7 +141,6 @@ const writeBlueprint = async (
   return { ...record, items };
 };
 
-/** Load the items of one or more blueprints, grouped by blueprint id. */
 const loadItemsByBlueprint = async (
   blueprintIds: string[],
 ): Promise<Map<string, BlueprintItem[]>> => {
@@ -205,7 +162,6 @@ const loadItemsByBlueprint = async (
   return grouped;
 };
 
-/** The Blueprint `blueprintId` in this Organization, or `NotFoundError`. */
 export const requireBlueprint = async (
   blueprintId: string,
   orgId: string,
@@ -224,7 +180,6 @@ export const requireBlueprint = async (
   return record;
 };
 
-/** Every Blueprint in this Organization, each with its items. */
 export const listBlueprints = async (
   orgId: string,
 ): Promise<BlueprintWithItems[]> => {
@@ -241,7 +196,6 @@ export const listBlueprints = async (
   }));
 };
 
-/** One Blueprint with its items, or `NotFoundError`. */
 export const getBlueprint = async (
   blueprintId: string,
   orgId: string,
@@ -251,7 +205,6 @@ export const getBlueprint = async (
   return { ...record, items: itemsByBlueprint.get(blueprintId) ?? [] };
 };
 
-/** Creates a Blueprint and its item set. */
 export const createBlueprint = async (
   orgId: string,
   fields: BlueprintFields,
@@ -265,7 +218,6 @@ export const createBlueprint = async (
   );
 };
 
-/** Updates a Blueprint, replacing its item set. */
 export const updateBlueprint = async (
   blueprintId: string,
   orgId: string,
@@ -278,22 +230,16 @@ export const updateBlueprint = async (
       .update(blueprintTable)
       .set({ ...columnsOf(fields), updatedAt: new Date() })
       .where(eq(blueprintTable.id, blueprintId));
-    // Snapshot semantics: replacing the item set never touches already
-    // provisioned Workspaces — those Attachments stand on their own.
     await tx
       .delete(blueprintItemTable)
       .where(eq(blueprintItemTable.blueprintId, blueprintId));
   });
 };
 
-/** Deletes a Blueprint; its items cascade. */
 export const deleteBlueprint = async (
   blueprintId: string,
   orgId: string,
 ): Promise<void> => {
-  // A Blueprint cannot be deleted while a live pending invitation references
-  // it (ADR-0009) — accept-time provisioning would otherwise dereference a
-  // missing Blueprint. A lazily-expired invite does not block.
   if (await isBlueprintReferencedByLiveInvitation(blueprintId)) {
     throw new ConflictError(
       "Cannot delete: this blueprint is referenced by one or more pending invitations. Delete those invitations first.",
@@ -311,10 +257,6 @@ export const deleteBlueprint = async (
   if (result.length === 0) throw new NotFoundError("Blueprint not found");
 };
 
-/**
- * Applies one Blueprint to a Workspace in this Organization. Tier 1
- * Attachments and Tier 2 settings commit together (ADR-0008).
- */
 export const applyBlueprint = async (
   blueprintId: string,
   orgId: string,

@@ -1,14 +1,5 @@
 import { createHash } from "node:crypto";
 
-/**
- * Raised when an unattended run is halted for making no forward progress —
- * the model re-issued the same tool call and received the identical result
- * `threshold` times, gaining no new information each time.
- *
- * The message is machine-parseable (prefixed `no_progress:`) so a persisted
- * run record's `errorMessage` can be matched without relying on the class
- * name surviving a serialization boundary.
- */
 export class NoProgressError extends Error {
   readonly reason = "no_progress" as const;
   readonly toolName: string;
@@ -24,16 +15,8 @@ export class NoProgressError extends Error {
   }
 }
 
-/** Repeat count that trips the detector. A call must recur (same name, args
- *  AND result) this many times within the run before the run is aborted. */
 export const DEFAULT_NO_PROGRESS_THRESHOLD = 3;
 
-/**
- * Stable JSON serialization with object keys sorted recursively, so two
- * structurally-equal values always serialize to the same string regardless
- * of key insertion order. Array order is preserved (it is significant).
- * `undefined` (e.g. an argument-less tool call) normalizes to `"null"`.
- */
 const stableStringify = (value: unknown): string => {
   if (value === undefined) return "null";
   if (value === null || typeof value !== "object") {
@@ -50,12 +33,6 @@ const stableStringify = (value: unknown): string => {
   return `{${entries.join(",")}}`;
 };
 
-/**
- * Composes the full no-progress signature for one tool result: tool name +
- * normalized arguments + a hash of the result. Two invocations collide only
- * when all three match — a re-read whose result *changed* (e.g. after an
- * intervening write) hashes differently and so is NOT counted as a repeat.
- */
 const signatureFor = (
   toolName: string,
   input: unknown,
@@ -71,11 +48,6 @@ const signatureFor = (
 
 type NoProgressTrip = { toolName: string; count: number };
 
-/**
- * The slice of an AI SDK `StepResult` the detector reads. Typed structurally
- * (rather than via `StopCondition<...>`, whose generic is over the full tool
- * set) so the condition stays assignable to `stopWhen` without an `any`.
- */
 type StopConditionStep = {
   toolResults?: ReadonlyArray<{
     toolName: string;
@@ -90,12 +62,6 @@ type StopConditionStep = {
   }>;
 };
 
-/**
- * Every outcome a step's tool calls came back with: the results, and each call
- * a Tool gate denied (ADR-0033), whose outcome is the denial's reason. A run
- * that retries a denied call gets the same refusal back, which is no progress
- * like any other repeat.
- */
 const outcomesOf = (step: StopConditionStep) => [
   ...(step.toolResults ?? []),
   ...(step.content ?? []).flatMap((part) =>
@@ -112,28 +78,12 @@ const outcomesOf = (step: StopConditionStep) => [
 ];
 
 export type NoProgressDetector = {
-  /** Stop condition to append to `stopWhen` for unattended runs. */
   stopCondition: (options: {
     steps: ReadonlyArray<StopConditionStep>;
   }) => boolean;
-  /** Non-null once the detector has tripped, naming the offending tool. */
   tripped: () => NoProgressTrip | null;
 };
 
-/**
- * Builds a run-scoped no-progress detector for an unattended run.
- *
- * The detector is strictly intra-run and lives only in memory: on each
- * stop-condition evaluation it recomputes signature counts from the steps
- * the AI SDK already accumulates for the run. No state crosses a run or
- * process boundary, so concurrent runs each hold their own detector and
- * cannot collide.
- *
- * Fail-safe direction: if a result legitimately differs every call (volatile
- * fields such as timestamps), signatures never collide, the detector simply
- * never trips, and the step ceiling remains the backstop — we under-count
- * rather than risk a false abort of a productive loop.
- */
 export const createNoProgressDetector = (
   threshold: number = DEFAULT_NO_PROGRESS_THRESHOLD,
 ): NoProgressDetector => {

@@ -4,7 +4,6 @@ import type { ConcreteModelId } from "@platypus/schemas";
 import type { ProviderRow } from "./provider-write.ts";
 import { makeProviderRow } from "./provider-row.test-fixtures.ts";
 
-/** These tests drive the SDK surface directly; the resolver is covered elsewhere. */
 const concrete = (id: string) => id as ConcreteModelId;
 
 type Sentinel = Mock<(arg: unknown) => { sentinel: string; arg: unknown }>;
@@ -42,8 +41,6 @@ const {
       _sentinel: true,
       _mode: "chat",
     }));
-    // Each returns what it was called with, tagged by name, so a test can tell
-    // which SDK entry point a slot reached and with what.
     const sentinel = (name: string): Sentinel =>
       vi.fn((arg: unknown) => ({ sentinel: name, arg }));
     instance.embeddingModel = sentinel("embeddingModel");
@@ -56,7 +53,6 @@ const {
     const creator = vi.fn(() => instance);
     return { creator, instance };
   };
-  // openai-compatible exposes `chatModel(id)`, not a callable instance.
   const compatChatModel = vi.fn((modelId: string) => ({
     modelId,
     _compat: true,
@@ -92,7 +88,7 @@ vi.mock("@ai-sdk/anthropic", () => ({
   createAnthropic: mockCreateAnthropic.creator,
 }));
 
-import { openProvider } from "./provider.ts";
+import { compatProviderOptionsName, openProvider } from "./provider.ts";
 
 const baseProvider = makeProviderRow({
   id: "p1",
@@ -108,7 +104,6 @@ const baseProvider = makeProviderRow({
   memoryExtractionModelId: "gpt-4",
 });
 
-/** Opens a Provider for a request whose session id is not what the test is about. */
 const open = (provider: ProviderRow) =>
   openProvider(provider, { sessionId: "session-1" });
 
@@ -129,8 +124,6 @@ describe("openProvider", () => {
   });
 
   it("routes chat-completions language model through openai-compatible", () => {
-    // apiMode "chat" (self-hosted vLLM/SGLang/etc.) must use the compatible
-    // provider so `reasoning_content` is surfaced as reasoning parts.
     open({
       ...baseProvider,
       apiMode: "chat",
@@ -145,14 +138,10 @@ describe("openProvider", () => {
       includeUsage: true,
     });
     expect(mockCreateOpenAICompatible.chatModel).toHaveBeenCalledWith("qwen3");
-    // OpenAI SDK is still instantiated for embeddings + native search tools.
     expect(mockCreateOpenAI.creator).toHaveBeenCalled();
   });
 
   it("falls back to OpenAI's endpoint for chat mode without a baseUrl", () => {
-    // baseUrl is optional, so a real-OpenAI provider in chat mode arrives with
-    // it empty. The compatible client must still target OpenAI rather than an
-    // empty URL.
     open({
       ...baseProvider,
       apiMode: "chat",
@@ -179,8 +168,6 @@ describe("openProvider", () => {
         providerType: "OpenRouter" as const,
         headers: headers ?? null,
       }).languageModel(concrete("openai/gpt-4"));
-      // The shared mock creator is typed as taking no args, so reach for the
-      // recorded config through `unknown`.
       const [config] = mockCreateOpenRouter.creator.mock
         .calls[0] as unknown as [{ headers: Record<string, string> }];
       return config;
@@ -195,8 +182,6 @@ describe("openProvider", () => {
     });
 
     it("drops every default once a provider sets any attribution header", () => {
-      // The three headers name one app. Keeping the Platypus title next to an
-      // operator's referer would title the operator's app page "Platypus".
       expect(
         openRouter({
           "X-OpenRouter-Title": "Acme Corp",
@@ -209,8 +194,6 @@ describe("openProvider", () => {
     });
 
     it("sends no Platypus referer when a provider sets only a title", () => {
-      // A title alone attributes nothing on OpenRouter, but pairing it with the
-      // Platypus referer would put the operator's name on the project's page.
       expect(openRouter({ "X-OpenRouter-Title": "Acme Corp" }).headers).toEqual(
         {
           "X-OpenRouter-Title": "Acme Corp",
@@ -219,8 +202,6 @@ describe("openProvider", () => {
     });
 
     it("matches overrides case-insensitively, leaving one entry per header", () => {
-      // HTTP header names are case-insensitive, so a differently-cased key must
-      // stand the defaults down rather than sit alongside one as a duplicate.
       const headers = openRouter({
         "http-referer": "https://acme.example",
       }).headers;
@@ -240,7 +221,6 @@ describe("openProvider", () => {
     });
 
     it("treats an empty HTTP-Referer as opting out of attribution entirely", () => {
-      // Title and categories are inert without a referer, so all three go.
       expect(
         openRouter({
           "HTTP-Referer": "",
@@ -255,13 +235,10 @@ describe("openProvider", () => {
     });
 
     it("treats a whitespace-only referer as blank", () => {
-      // A blank referer is unattributable, so it opts out rather than shipping.
       expect(openRouter({ "HTTP-Referer": "   " }).headers).toEqual({});
     });
 
     it("opts out when any casing of the referer is blank", () => {
-      // An operator can write both casings. Resolving to a single key would let
-      // the non-empty one hide the blank and silently keep attribution on.
       expect(
         openRouter({
           "http-referer": "",
@@ -271,14 +248,10 @@ describe("openProvider", () => {
     });
 
     it("passes a non-string header value through without crashing", () => {
-      // `headers` is cast, not parsed, on read from jsonb, so a malformed row
-      // must not take down every model call for the Provider.
       const headers = { "HTTP-Referer": null } as unknown as Record<
         string,
         string
       >;
-      // Not an opt-out — only a blank string is — so the row still counts as
-      // setting a referer and no Platypus default joins it.
       expect(openRouter(headers).headers).toEqual({ "HTTP-Referer": null });
     });
   });
@@ -323,7 +296,6 @@ describe("openProvider", () => {
       sdk: mockCreateAmazonBedrock,
       config: { region: "us-east-1" },
       embedding: sentinelOf("embeddingModel", "embed-1"),
-      // No vendor-native search.
       search: undefined,
     },
     {
@@ -337,7 +309,6 @@ describe("openProvider", () => {
       providerType: "Anthropic",
       sdk: mockCreateAnthropic,
       config: {},
-      // No embedding API.
       embedding: undefined,
       search: {
         web_search: sentinelOf("webSearch_20250305", { maxUses: 5 }),
@@ -373,8 +344,6 @@ describe("openProvider", () => {
           ...config,
         }),
       );
-      // Reached through the SDK's own model; OpenRouter's comes back wrapped
-      // (tool-result files move into a user message), so the call is the proof.
       opened.languageModel(concrete("model-1"));
       expect(sdk.instance).toHaveBeenCalledWith("model-1");
       expect(opened.embeddingModel?.(concrete("embed-1"))).toEqual(embedding);
@@ -464,5 +433,11 @@ describe("openProvider", () => {
         "x-plain": "plain",
       });
     });
+  });
+});
+
+describe("compatProviderOptionsName", () => {
+  it("keeps the name up to its first dot, as openai-compatible keys providerOptions", () => {
+    expect(compatProviderOptionsName({ name: "vLLM .box.local" })).toBe("vLLM");
   });
 });

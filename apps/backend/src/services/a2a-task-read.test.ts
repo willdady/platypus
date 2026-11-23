@@ -14,11 +14,6 @@ import { TaskState } from "@a2a-js/sdk";
 import { migratedPglite } from "../db/migrated-pglite.test-fixtures.ts";
 import { a2aTask as a2aTaskTable } from "../db/schema.ts";
 
-/**
- * The A2A read paths (#1310) against an in-process Postgres built from the
- * shipped migrations: the lateral join for a turn's first reply is real SQL
- * here, and the plans are the planner's.
- */
 const { holder } = vi.hoisted(() => ({
   holder: { db: undefined as ReturnType<typeof drizzle> | undefined },
 }));
@@ -41,7 +36,6 @@ const caller = {
 let pg: PGlite;
 beforeAll(async () => {
   pg = await migratedPglite();
-  // The endpoint, token and Workspace are beside the point; skip the FKs.
   await pg.exec("SET session_replication_role = replica");
   holder.db = drizzle(pg);
 }, 60_000);
@@ -111,7 +105,6 @@ describe("listA2aTasks", () => {
 });
 
 describe("a2a_task indexes", () => {
-  /** The plan Postgres picks for a query, seq scans ruled out. */
   const planOf = async (query: { sql: string; params: unknown[] }) => {
     await pg.exec("SET enable_seqscan = off");
     try {

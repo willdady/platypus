@@ -9,8 +9,6 @@ vi.mock("../index.ts", () => ({
   db: {
     select: vi.fn(() => ({
       from: vi.fn(() => ({
-        // The chat-row lookup chains `.limit(1)`; `loadChatSummaries` chains
-        // `.orderBy(...).limit(50)`. One `where` shape serves both.
         where: vi.fn(() => ({
           limit: mockExistingChat,
           orderBy: vi.fn(() => ({ limit: mockExistingChat })),
@@ -74,12 +72,11 @@ const start = (includeMemories: boolean) =>
 describe("startChatTurn", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Reset, not cleared: a lookup a test queued and never reached goes too.
+    // why: reset, not cleared, so a lookup a test queued and never reached goes too
     mockExistingChat.mockReset().mockResolvedValue([]);
     mockStream.mockResolvedValue(new Response("ok"));
   });
 
-  // #1229: what a Notification posted during the turn records as its source.
   it("runs the turn with its Chat as the ambient run source", async () => {
     let seen: unknown;
     mockStream.mockImplementationOnce(async () => {
@@ -128,8 +125,6 @@ describe("startChatTurn", () => {
     });
   });
 
-  // Issue #1294: an A2A Chat follows its endpoint's Include Memories on every
-  // turn, the Owner's own from the UI included.
   describe("in an A2A Chat", () => {
     const a2aChat = { a2aEndpointId: "ep-1" };
 

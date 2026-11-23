@@ -31,21 +31,11 @@ export async function deliverWebhook(
   });
 }
 
-/**
- * The Webhook transport: POSTs `body` to a user-supplied URL behind the
- * egress guard, retrying a failed attempt with backoff. Also carries A2A push
- * notifications (ADR-0032), which bring their own headers. It never throws.
- */
 export async function postWithRetries(params: {
   url: string;
   body: string;
   headers: Record<string, string>;
-  /** What is delivered, as the log lines name it. */
   label: string;
-  /**
-   * Whether the URL may reach private networks. Defaults to the egress
-   * guard's own setting, `EGRESS_ALLOW_PRIVATE_NETWORKS`.
-   */
   allowPrivateNetworks?: boolean;
 }): Promise<void> {
   const { url, body, headers, label, allowPrivateNetworks } = params;
@@ -60,9 +50,7 @@ export async function postWithRetries(params: {
     const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
     try {
-      // Checked on every attempt: the URL's DNS records can change between
-      // retries, and the URL is user-supplied, so it gets the same egress
-      // policy as a model-chosen one.
+      // why: every attempt, since a user-supplied URL's DNS can change between retries
       const egress = await checkEgress(url, { allowPrivateNetworks });
       if (!egress.allowed) {
         logger.warn(
@@ -76,8 +64,6 @@ export async function postWithRetries(params: {
         method: "POST",
         headers,
         body,
-        // Redirects are not followed: a redirect target would skip the egress
-        // check above. A 3xx is a non-OK response like any other.
         redirect: "manual",
         signal: controller.signal,
       });

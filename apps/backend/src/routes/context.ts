@@ -16,7 +16,6 @@ import { ConflictError, isUniqueViolation } from "../errors.ts";
 
 const context = new Hono<{ Variables: Variables }>();
 
-/** List all contexts for the current user */
 context.get("/", requireAuth, async (c) => {
   const user = userOf(c);
 
@@ -43,7 +42,6 @@ context.get("/", requireAuth, async (c) => {
   return c.json({ results });
 });
 
-/** Get a specific context by ID */
 context.get("/:contextId", requireAuth, async (c) => {
   const user = userOf(c);
   const contextId = c.req.param("contextId");
@@ -77,7 +75,6 @@ context.get("/:contextId", requireAuth, async (c) => {
   return c.json(result[0]);
 });
 
-/** Create a new context */
 context.post(
   "/",
   requireAuth,
@@ -86,12 +83,6 @@ context.post(
     const user = userOf(c);
     const data = c.req.valid("json");
 
-    // This route hangs off `/users/me`, so there is no Organization in its path
-    // and neither `requireOrgAccess` nor `requireWorkspaceAccess` has run — the
-    // Workspace arrives in the body, proved by nothing. A Context is bound to a
-    // Workspace the caller can actually use, and this is the only place that
-    // says so. Reported as absent rather than refused: the caller supplied the
-    // id, so the two answers must not be distinguishable.
     if (
       data.workspaceId !== null &&
       !(await userMayUseWorkspace(db, user, data.workspaceId))
@@ -120,7 +111,6 @@ context.post(
   },
 );
 
-/** Update a context */
 context.put(
   "/:contextId",
   requireAuth,
@@ -149,7 +139,6 @@ context.put(
   },
 );
 
-/** Delete a context */
 context.delete("/:contextId", requireAuth, async (c) => {
   const user = userOf(c);
   const contextId = c.req.param("contextId");

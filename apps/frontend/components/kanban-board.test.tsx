@@ -1311,8 +1311,8 @@ describe("KanbanBoard load states", () => {
     expect(mutateBoard).toHaveBeenCalled();
 
     expect(
-      screen.getByRole("link", { name: "Back to workspace" }),
-    ).toHaveAttribute("href", "/org1/workspace/ws1");
+      screen.getByRole("link", { name: "Back to boards" }),
+    ).toHaveAttribute("href", "/org1/workspace/ws1/boards");
   });
 
   // A deleted board is not a network blip: reading again won't bring it back,

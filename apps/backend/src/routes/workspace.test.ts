@@ -16,20 +16,12 @@ import app from "../server.ts";
 import { transferWorkspace } from "../services/workspace-transfer.ts";
 import { ValidationError } from "../errors.ts";
 
-// The transfer itself runs against a real Postgres in its own tests
-// (`workspace-transfer.test.ts`); here only who may call it, and what it answers.
 vi.mock("../services/workspace-transfer.ts", () => ({
   transferWorkspace: vi.fn(),
 }));
 const transferWorkspaceMock = vi.mocked(transferWorkspace);
 
-/**
- * These tests state fixture rows rather than stubbing queries in call order:
- * `seedDb()` installs the in-memory fake from `fake-db.ts`, which evaluates the
- * `WHERE` each query builds. Every world holds a same-named Workspace, member
- * and Provider in `org-2`, so a lookup that dropped its Organization or
- * Workspace column reads a row it should not and the test fails.
- */
+// why: every world seeds same-named rows in org-2, so a lookup missing its tenant filter fails
 describe("Workspace Routes", () => {
   beforeEach(() => {
     resetMockDb();
@@ -43,7 +35,6 @@ describe("Workspace Routes", () => {
     headers: { "Content-Type": "application/json" },
   });
 
-  /** `ws-1` as seeded: in `org-1`, owned by `user-1`, no delegation. */
   const ws1 = (over: Store[string][number] = {}) => ({
     id: "ws-1",
     name: "WS 1",
@@ -55,11 +46,6 @@ describe("Workspace Routes", () => {
     ...over,
   });
 
-  /**
-   * The baseline world: the caller (`user-1`) is a member of `org-1` at the
-   * given role beside `member-2`; `outsider` is a member of `org-2` only, which
-   * holds a Workspace of its own under the same name.
-   */
   const world = (
     options: {
       role?: "admin" | "member";
@@ -100,7 +86,6 @@ describe("Workspace Routes", () => {
     const post = (body: unknown) =>
       app.request("/organizations/org-1/workspaces", json("POST", body));
 
-    // ADR-0008: Workspace creation is org-admin-only.
     it("should create workspace for an org admin", async () => {
       mockSession({ id: "user-1", role: "user" });
       const fake = world({ role: "admin" });
@@ -110,7 +95,6 @@ describe("Workspace Routes", () => {
       expect(res.status).toBe(201);
       const created = fake.tables.workspace.at(-1);
       expect(await res.json()).toEqual(created);
-      // Owner defaults to the calling admin when no ownerId is supplied.
       expect(created).toMatchObject({
         name: "New Workspace",
         ownerId: "user-1",
@@ -118,7 +102,6 @@ describe("Workspace Routes", () => {
       });
     });
 
-    // ADR-0008: a regular member can no longer self-create Workspaces.
     it("should return 403 for a regular member", async () => {
       mockSession({ id: "user-1", role: "user" });
       const fake = world({ role: "member" });
@@ -129,7 +112,6 @@ describe("Workspace Routes", () => {
       expect(fake.tables.workspace).toHaveLength(2);
     });
 
-    // ADR-0008: ownerId is admin-assignable to another org member.
     it("should let an admin assign a different owner who is a member", async () => {
       mockSession({ id: "user-1", role: "user" });
       const fake = world({ role: "admin" });
@@ -143,9 +125,6 @@ describe("Workspace Routes", () => {
       });
     });
 
-    // Governance: an admin cannot hand a workspace to a non-member. `outsider`
-    // is a member of org-2, so this guards the owner lookup's
-    // `organizationMember.organizationId` filter.
     it("should return 400 when the assigned owner is a member of another org only", async () => {
       mockSession({ id: "user-1", role: "user" });
       const fake = world({ role: "admin" });
@@ -159,8 +138,6 @@ describe("Workspace Routes", () => {
       expect(fake.tables.workspace).toHaveLength(2);
     });
 
-    // Removing the owner meanwhile waits on this lock, then must decide the
-    // new Workspace too (ADR-0035).
     it("locks the owner's membership until the Workspace is created", async () => {
       mockSession({ id: "user-1", role: "user" });
       const fake = world({ role: "admin" });
@@ -194,15 +171,12 @@ describe("Workspace Routes", () => {
       });
     });
 
-    // The organization id is a tenancy boundary. It is derived from the path
-    // after requireOrgAccess, rather than accepted from the request body.
     it("binds a workspace to the authorized organization", async () => {
       mockSession({ id: "user-1", role: "user" });
       const fake = world({ role: "admin" });
 
       const res = await post({
         name: "Bound Workspace",
-        // A stale or malicious client cannot redirect creation into org-2.
         organizationId: "org-2",
       });
 
@@ -228,7 +202,6 @@ describe("Workspace Routes", () => {
       memoryExtractionModelId: "gpt-5",
     };
 
-    // `shared-1` is a Shared Provider of org-1; `elsewhere` one of org-2.
     const sharedProviders = {
       provider: [
         { id: "shared-1", organizationId: "org-1", workspaceId: null },
@@ -252,10 +225,8 @@ describe("Workspace Routes", () => {
       expect(res.status).toBe(201);
       const created = fake.tables.workspace.at(-1)!;
       expect(created).toMatchObject({ name: "Ready", organizationId: "org-1" });
-      // The nested resources are not columns of the Workspace row.
       expect(created).not.toHaveProperty("provider");
       expect(created).not.toHaveProperty("sandbox");
-      // The new Provider is scoped to the new Workspace, never the body.
       expect(fake.tables.provider.at(-1)).toMatchObject({
         name: "OpenAI",
         workspaceId: created.id,
@@ -271,6 +242,28 @@ describe("Workspace Routes", () => {
       expect(fake.tables.sandbox).toEqual([
         expect.objectContaining({ name: "Local", workspaceId: created.id }),
       ]);
+    });
+
+    it("keeps the provisioned Provider's Job settings", async () => {
+      mockSession({ id: "user-1", role: "user" });
+      const fake = world({ role: "admin", rows: sharedProviders });
+      const taskModelSettings = { reasoningThinking: false };
+      const memoryExtractionModelSettings = { temperature: 0.1 };
+
+      const res = await post({
+        name: "Ready",
+        provider: {
+          ...provider,
+          taskModelSettings,
+          memoryExtractionModelSettings,
+        },
+      });
+
+      expect(res.status).toBe(201);
+      expect(fake.tables.provider.at(-1)).toMatchObject({
+        taskModelSettings,
+        memoryExtractionModelSettings,
+      });
     });
 
     it("writes nothing when a later step of the transaction fails", async () => {
@@ -329,8 +322,6 @@ describe("Workspace Routes", () => {
   });
 
   describe("GET /organizations/:orgId/workspaces", () => {
-    // ws-a/ws-b sit in org-1 (the caller owns ws-a); ws-c is the caller's own
-    // Workspace in another org, so a list that dropped its org scope shows it.
     const seedWorkspaces = (role: "admin" | "member") =>
       seedDb({
         organization_member: [
@@ -350,7 +341,6 @@ describe("Workspace Routes", () => {
       return body.results.map((w) => w.id);
     };
 
-    // Guards the admin branch's `workspace.organizationId` filter.
     it("should return all of the org's workspaces for org admin", async () => {
       mockSession({ id: "user-1", role: "user" });
       seedWorkspaces("admin");
@@ -401,7 +391,6 @@ describe("Workspace Routes", () => {
         json("PUT", { name: "My Workspace", ...body }),
       );
 
-    /** A Provider of `ws-1`, with whichever memory models the test gives it. */
     const ownProvider = (over: Store[string][number] = {}) => ({
       id: "provider-1",
       organizationId: null,
@@ -409,11 +398,6 @@ describe("Workspace Routes", () => {
       ...over,
     });
 
-    /**
-     * A Shared Provider of org-2 carrying both memory models: a bare id lookup
-     * would accept it, so only the Scoped resource authority's Workspace/
-     * Organization filter rejects it (GHSA-qg7h-g2rm-37qh).
-     */
     const otherOrgProvider = {
       id: "provider-other-org",
       organizationId: "org-2",
@@ -439,8 +423,6 @@ describe("Workspace Routes", () => {
       ]);
     });
 
-    // ADR-0006: delegation flags are admin-only; a non-admin owner's attempt
-    // to set them is silently stripped before the update.
     it("strips delegation flags from a non-admin owner's update", async () => {
       mockSession({ id: "user-1", role: "user" });
       const fake = world();
@@ -462,7 +444,6 @@ describe("Workspace Routes", () => {
 
     it("lets an org admin set delegation flags", async () => {
       mockSession({ id: "user-1", role: "user" });
-      // An admin, not the owner.
       const fake = world({ role: "admin", workspace: { ownerId: "member-2" } });
 
       const res = await put({
@@ -585,8 +566,6 @@ describe("Workspace Routes", () => {
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ message: "Workspace deleted" });
       expect(fake.tables.workspace.map((w) => w.id)).toEqual(["ws-x"]);
-      // Triggers and Agents before the Workspace, whose cascade takes its
-      // Providers (issue #1610).
       expect(
         fake.queries.filter((q) => q.kind === "delete").map((q) => q.table),
       ).toEqual(["trigger", "agent", "workspace"]);

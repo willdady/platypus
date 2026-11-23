@@ -74,7 +74,6 @@ describe("createNotificationTools", () => {
     });
   });
 
-  // The Agent has no use for its own Chat or run id, so the tools never show it.
   const dispatched = () => vi.mocked(dispatchEvent).mock.calls[0][2].data;
 
   it("createNotification outside a run records no source", async () => {

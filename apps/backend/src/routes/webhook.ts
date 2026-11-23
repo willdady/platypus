@@ -28,12 +28,6 @@ function generateSigningSecret(): string {
   return crypto.randomBytes(32).toString("hex");
 }
 
-/**
- * Rejects a URL the delivery-time egress check would block, so the user hears
- * about it on save rather than through deliveries that silently never arrive.
- * Delivery re-checks regardless, since DNS can change after this. The message
- * is uniform for the same reason as the guard's own: the reason goes to the log.
- */
 async function assertDeliverable(url: string): Promise<void> {
   const egress = await checkEgress(url);
   if (!egress.allowed) {
@@ -47,7 +41,6 @@ async function assertDeliverable(url: string): Promise<void> {
   }
 }
 
-/** GET / — List all webhooks for workspace */
 webhook.get(
   "/",
   requireAuth,
@@ -62,7 +55,6 @@ webhook.get(
   },
 );
 
-/** POST / — Create a new webhook */
 webhook.post(
   "/",
   requireAuth,
@@ -94,7 +86,6 @@ webhook.post(
   },
 );
 
-/** GET /:webhookId — Get single webhook */
 webhook.get(
   "/:webhookId",
   requireAuth,
@@ -113,7 +104,6 @@ webhook.get(
   },
 );
 
-/** PATCH /:webhookId — Update webhook */
 webhook.patch(
   "/:webhookId",
   requireAuth,
@@ -142,7 +132,6 @@ webhook.patch(
   },
 );
 
-/** DELETE /:webhookId — Delete webhook */
 webhook.delete(
   "/:webhookId",
   requireAuth,
@@ -165,7 +154,6 @@ webhook.delete(
   },
 );
 
-/** POST /:webhookId/regenerate-secret — Regenerate signing secret */
 webhook.post(
   "/:webhookId/regenerate-secret",
   requireAuth,

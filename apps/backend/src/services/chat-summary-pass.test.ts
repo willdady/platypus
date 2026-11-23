@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-// First, so its `vi.mock` of the database module is installed before the
-// module under test imports the real handle.
 import { resetMockDb, seedDb } from "../test-utils.ts";
 import { APICallError } from "ai";
 import { MockLanguageModelV3 } from "ai/test";
-import { CLEARED_TOOL_RESULT_MARKER } from "@platypus/schemas";
+import {
+  CLEARED_TOOL_RESULT_MARKER,
+  TRANSCRIPT_SUMMARY_MAX_OUTPUT_TOKENS,
+} from "@platypus/schemas";
 import { logger } from "../logger.ts";
 import type { PlatypusUIMessage } from "../types.ts";
 import {
@@ -13,12 +14,6 @@ import {
   TRANSCRIPT_SUMMARY_REQUEST,
   type ChatSummaryRow,
 } from "./chat-summary.ts";
-
-/**
- * The IO half of Transcript summarising (ADR-0041, issue #1716): what one pass
- * writes, what it hands the model, and how it fails. The pure read-time rules
- * are pinned in `chat-summary.test.ts`.
- */
 
 const USAGE = {
   inputTokens: {
@@ -46,7 +41,6 @@ const assistant = (
   ...(metadata ? { metadata } : {}),
 });
 
-/** A Chat of six turns; the last 4 stay verbatim, so the anchor is a1. */
 const sixTurns = (): PlatypusUIMessage[] => [
   user("u1"),
   assistant("a1"),
@@ -68,27 +62,28 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** A model answering with one summary, recording every prompt it was sent. */
-const summaryModel = (prompts: PromptMessage[][] = [], text = "The summary.") =>
+const summaryModel = (
+  prompts: PromptMessage[][] = [],
+  text = "The summary.",
+  finishReason: "stop" | "length" = "stop",
+) =>
   new MockLanguageModelV3({
     doGenerate: (options) => {
       prompts.push(options.prompt as unknown as PromptMessage[]);
       return Promise.resolve({
         content: [{ type: "text" as const, text }],
-        finishReason: { unified: "stop" as const, raw: "stop" },
+        finishReason: { unified: finishReason, raw: finishReason },
         usage: USAGE,
         warnings: [],
       });
     },
   });
 
-/** The parts of a prompt this test reads: roles and text. */
 type PromptMessage = {
   role: string;
   content: ReadonlyArray<{ type: string; text?: string }>;
 };
 
-/** The text a prompt carries, from its user messages. */
 const promptText = (prompt: readonly PromptMessage[]) =>
   prompt
     .flatMap((message) =>
@@ -121,7 +116,6 @@ describe("takeTranscriptSummary", () => {
     expect(row).toMatchObject({
       id: "sum-1",
       chatId: "chat-1",
-      // The last 4 turns (u3..a6) stay verbatim: the anchor is a2.
       anchorId: "a2",
       coveredIds: ["u1", "a1", "u2", "a2"],
       text: "The summary.",
@@ -133,7 +127,6 @@ describe("takeTranscriptSummary", () => {
       },
     });
     expect(fake.tables.chat_summary).toHaveLength(1);
-    // No message is ever written or changed by this feature (ADR-0026).
     expect(
       fake.queries.filter(
         (query) =>
@@ -173,6 +166,36 @@ describe("takeTranscriptSummary", () => {
     expect(chatPrompts).toHaveLength(0);
   });
 
+  it("skips a task model whose window leaves no room for input after its reply", async () => {
+    seedSummaryTable();
+    const taskPrompts: PromptMessage[][] = [];
+    const chatPrompts: PromptMessage[][] = [];
+    const row = await takeTranscriptSummary({
+      chatId: "chat-1",
+      models: {
+        task: {
+          model: summaryModel(taskPrompts, "The task summary."),
+          modelId: "task-model",
+          // why: under TRANSCRIPT_SUMMARY_MAX_OUTPUT_TOKENS, so the reply leaves no input budget
+          contextWindow: 8_000,
+        },
+        chat: {
+          model: summaryModel(chatPrompts, "The chat summary."),
+          modelId: "chat-model",
+        },
+      },
+      path: sixTurns(),
+      triggeredFromOccupancy: 8_200,
+      previousSummary: undefined,
+      readingSummaryId: undefined,
+    });
+
+    expect(row?.text).toBe("The chat summary.");
+    expect(row?.stats?.modelId).toBe("chat-model");
+    expect(taskPrompts).toHaveLength(0);
+    expect(chatPrompts).toHaveLength(1);
+  });
+
   it("falls back to the Chat's model over the same range when the task model overflows", async () => {
     seedSummaryTable();
     const taskPrompts: PromptMessage[][] = [];
@@ -209,8 +232,6 @@ describe("takeTranscriptSummary", () => {
 
     expect(row?.text).toBe("The chat summary.");
     expect(row?.stats?.modelId).toBe("chat-model");
-    // The task model is not retried with an earlier anchor: the Chat's model
-    // gets the same range, and the anchor stays at a2.
     expect(row?.anchorId).toBe("a2");
     expect(taskPrompts).toHaveLength(1);
     expect(chatPrompts).toHaveLength(1);
@@ -253,7 +274,6 @@ describe("takeTranscriptSummary", () => {
 
     expect(row?.stats?.modelId).toBe("chat-model");
     expect(chatPrompts).toHaveLength(1);
-    // The fallback names the failed task model and the one that replaced it.
     expect(warn).toHaveBeenCalledWith(
       expect.objectContaining({
         modelId: "retired-task-model",
@@ -325,7 +345,6 @@ describe("takeTranscriptSummary", () => {
 
     expect(row).toBeUndefined();
     expect(fake.tables.chat_summary).toHaveLength(0);
-    // One task attempt, then the Chat model's existing two-attempt ladder.
     expect(taskCalls).toBe(1);
     expect(chatCalls).toBe(2);
   });
@@ -340,7 +359,6 @@ describe("takeTranscriptSummary", () => {
       previousSummary: undefined,
       readingSummaryId: "sum-old",
     });
-    // The last turn only (u6..a6) stays verbatim: the anchor is a5.
     expect(row?.anchorId).toBe("a5");
     expect(row?.coveredIds).toEqual([
       "u1",
@@ -357,9 +375,6 @@ describe("takeTranscriptSummary", () => {
   });
 
   it("clears every clearable tool result in its input, however small", async () => {
-    // The gated turn rule leaves a result no larger than its marker alone; the
-    // summary pass must not, because its input has no window of its own to
-    // protect and every clearable result in the range is surplus.
     seedSummaryTable();
     const prompts: PromptMessage[][] = [];
     const path = sixTurns();
@@ -411,7 +426,6 @@ describe("takeTranscriptSummary", () => {
     });
     const sent = promptText(prompts[0] ?? []);
     expect(sent).toContain("The earlier summary.");
-    // u2 onwards: u1 is already condensed into the previous summary.
     expect(sent).toContain("u2");
     expect(sent).not.toContain("u1");
   });
@@ -451,7 +465,6 @@ describe("takeTranscriptSummary", () => {
       readingSummaryId: undefined,
     });
     expect(prompts).toHaveLength(2);
-    // The retry ends one turn earlier: the anchor moves from a2 to a1.
     expect(row?.anchorId).toBe("a1");
     expect(row?.coveredIds).toEqual(["u1", "a1"]);
   });
@@ -531,6 +544,206 @@ describe("takeTranscriptSummary", () => {
     expect(fake.tables.chat_summary).toHaveLength(0);
   });
 
+  it("falls back to the Chat's model when the task model's reply is cut off at the output cap", async () => {
+    const fake = seedSummaryTable();
+    const warn = vi.spyOn(logger, "warn").mockImplementation(() => logger);
+    const row = await takeTranscriptSummary({
+      chatId: "chat-1",
+      models: {
+        task: {
+          model: summaryModel([], "## Intent\nThe user wants to", "length"),
+          modelId: "task-model",
+        },
+        chat: {
+          model: summaryModel([], "The chat summary."),
+          modelId: "chat-model",
+        },
+      },
+      path: sixTurns(),
+      triggeredFromOccupancy: 8_200,
+      previousSummary: undefined,
+      readingSummaryId: undefined,
+    });
+
+    expect(row?.text).toBe("The chat summary.");
+    expect(row?.stats?.modelId).toBe("chat-model");
+    expect(fake.tables.chat_summary).toHaveLength(1);
+    expect(warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        modelId: "task-model",
+        finishReason: "length",
+      }),
+      expect.stringContaining("cut off"),
+    );
+  });
+
+  it("a Chat-model reply cut off at the output cap is a failed summary: no row, no throw", async () => {
+    const fake = seedSummaryTable();
+    const warn = vi.spyOn(logger, "warn").mockImplementation(() => logger);
+    await expect(
+      takeTranscriptSummary({
+        chatId: "chat-1",
+        models: {
+          chat: {
+            model: summaryModel([], "## Intent\nThe user wants to", "length"),
+            modelId: "openai:gpt",
+          },
+        },
+        path: sixTurns(),
+        triggeredFromOccupancy: 8_200,
+        previousSummary: undefined,
+        readingSummaryId: undefined,
+      }),
+    ).resolves.toBeUndefined();
+    expect(fake.tables.chat_summary).toHaveLength(0);
+    expect(warn).toHaveBeenCalledWith(
+      expect.objectContaining({ finishReason: "length" }),
+      expect.stringContaining("cut off"),
+    );
+  });
+
+  describe("the summary prompt", () => {
+    const sentCall = async (instruction?: string, outputCeiling?: number) => {
+      seedSummaryTable();
+      const calls: { system: string; maxOutputTokens?: number }[] = [];
+      await takeTranscriptSummary({
+        chatId: "chat-1",
+        models: {
+          chat: {
+            model: new MockLanguageModelV3({
+              doGenerate: (options) => {
+                const system = options.prompt.find(
+                  (message) => message.role === "system",
+                );
+                calls.push({
+                  system:
+                    typeof system?.content === "string" ? system.content : "",
+                  maxOutputTokens: options.maxOutputTokens,
+                });
+                return Promise.resolve({
+                  content: [{ type: "text" as const, text: "The summary." }],
+                  finishReason: { unified: "stop" as const, raw: "stop" },
+                  usage: USAGE,
+                  warnings: [],
+                });
+              },
+            }),
+            modelId: "openai:gpt",
+            ...(outputCeiling !== undefined ? { outputCeiling } : {}),
+          },
+        },
+        path: sixTurns(),
+        triggeredFromOccupancy: 8_200,
+        previousSummary: undefined,
+        readingSummaryId: undefined,
+        ...(instruction !== undefined ? { instruction } : {}),
+      });
+      expect(calls).toHaveLength(1);
+      return calls[0];
+    };
+
+    it("asks for the eight required sections, in order, under fixed English headings", async () => {
+      const { system } = await sentCall();
+      const headings = system
+        .split("\n")
+        .filter((line) => line.startsWith("## "));
+      expect(headings).toEqual([
+        "## Intent",
+        "## User requests",
+        "## Key facts and decisions",
+        "## Deliverables",
+        "## Sources and tool findings",
+        "## Corrections and dead ends",
+        "## Open questions and things left to solve",
+        "## Current state",
+      ]);
+      expect(system).not.toMatch(/next step/i);
+      expect(system).not.toContain("600 words");
+    });
+
+    it("explains the pass's own input: the earlier summary, cleared results and the closing request", async () => {
+      const { system } = await sentCall();
+      expect(system).toContain('"[Summary so far]"');
+      expect(system).toContain("cleared placeholders");
+      expect(system).toContain(
+        "The final message, which asks you to write the summary, is the instruction for this task",
+      );
+    });
+
+    it("states the drop-when-answered and keep-when-open rule for carried-in requests", async () => {
+      const { system } = await sentCall();
+      const userRequests = system.slice(
+        system.indexOf("## User requests"),
+        system.indexOf("## Key facts and decisions"),
+      );
+      expect(userRequests).toContain("**Standing instructions.**");
+      expect(userRequests).toContain("supersedes or contradicts");
+      expect(userRequests).toContain(
+        "whether they came from the earlier summary or from this conversation",
+      );
+      expect(userRequests).toContain("not fully answered stays word for word");
+      expect(userRequests).toContain(
+        "whether the earlier summary records it as answered or the newer messages answer it",
+      );
+      expect(userRequests).toContain("is dropped");
+      expect(userRequests).toContain(
+        "A request answered in this pass is dropped on the next pass, once the instructions it set are listed under Standing instructions",
+      );
+      expect(userRequests).toContain(
+        "a request that is not fully answered moves to Open requests and stays word for word",
+      );
+      expect(system).not.toContain(
+        "folded into the standing instructions on the next pass",
+      );
+      expect(system).not.toContain("may be shortened to the instructions");
+      expect(system).not.toContain(
+        "quoted verbatim once before it is compacted",
+      );
+    });
+
+    it("keeps the this-pass rule: one verbatim bullet per counted message, closing with its answered status", async () => {
+      const { system } = await sentCall();
+      const userRequests = system.slice(
+        system.indexOf("## User requests"),
+        system.indexOf("## Key facts and decisions"),
+      );
+      expect(userRequests).toContain(
+        "Count the user messages in the conversation itself",
+      );
+      expect(userRequests).toContain("Copy each of them verbatim");
+      expect(userRequests).toContain(
+        "There must be exactly one bullet per message you counted",
+      );
+      expect(userRequests).toContain(
+        "each of those bullets ends with whether it was fully answered",
+      );
+      expect(userRequests).toContain(
+        "Shorten only a message longer than about 300 characters",
+      );
+    });
+
+    it("puts a steering instruction above the length guidance, and has no steering line without one", async () => {
+      const steered = await sentCall("keep the API decisions");
+      expect(steered.system).toContain(
+        "The requester's instruction for this summary, which takes precedence over the length guidance above: keep the API decisions",
+      );
+      resetMockDb();
+      const plain = await sentCall();
+      expect(plain.system).not.toContain("requester's instruction");
+    });
+
+    it("sends the pass's own output cap when no Job settings raise it", async () => {
+      const { maxOutputTokens } = await sentCall();
+      expect(maxOutputTokens).toBe(TRANSCRIPT_SUMMARY_MAX_OUTPUT_TOKENS);
+      expect(TRANSCRIPT_SUMMARY_MAX_OUTPUT_TOKENS).toBe(8_192);
+    });
+
+    it("never asks for more than the model's declared output ceiling", async () => {
+      const { maxOutputTokens } = await sentCall(undefined, 4_096);
+      expect(maxOutputTokens).toBe(4_096);
+    });
+  });
+
   it("writes no summary when the path has no full tail to keep", async () => {
     const fake = seedSummaryTable();
     const row = await takeTranscriptSummary({
@@ -560,7 +773,6 @@ describe("the in-flight registry", () => {
     expect(a).toBe(b);
     first.resolve(undefined);
     await a;
-    // A finished pass is forgotten, so the next one starts fresh.
     const later = registerTranscriptSummary("chat-1", () =>
       Promise.resolve(undefined),
     );

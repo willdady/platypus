@@ -99,8 +99,6 @@ import type { RunPlan } from "../runs/run-plan.ts";
 import { NotFoundError, ValidationError } from "../errors.ts";
 import { env } from "../env.ts";
 
-// --- Types ---
-
 type AgentRow = typeof agentTable.$inferSelect;
 type WorkspaceRow = typeof workspaceTable.$inferSelect;
 type OrganizationRow = typeof organizationTable.$inferSelect;
@@ -108,162 +106,46 @@ type OrganizationRow = typeof organizationTable.$inferSelect;
 type ChatContext = {
   provider: ProviderRow;
   agent?: AgentRow;
-  /**
-   * What the Agent or request actually stores — a concrete id or `alias:<name>`.
-   * Kept alongside the resolved id because it, not the resolution, is what gets
-   * persisted back to `chat.modelId`: writing the resolved id would pin the Chat
-   * to today's model and repointing the alias would never reach it (ADR-0017).
-   */
   modelReference: string;
   resolvedModelId: ConcreteModelId;
   resolvedProviderId: string;
   resolvedAgentId?: string;
-  /**
-   * Everything `resolveGenerationPlan` decided this turn generates under —
-   * model, step ceiling, output ceiling, sampling — assembled once so a Chat
-   * turn and a delegated sub-Agent can never resolve it differently (issues
-   * #417, #456, #459).
-   */
   plan: Omit<RunPlan, "system" | "tools">;
-  /** The resolved Provider's free-text security directives, or null. */
   guardrails: string | null;
-  /**
-   * The Agent's optional Fallback model, resolved (ADR-0043). Present only for
-   * a run type that may consult it — a Trigger run and its Sub-Agents — and
-   * only when it resolved; a broken fallback never fails the primary path.
-   */
   fallback?: GenerationPlan;
 };
 
 export type ChatTurn = {
   stream: RunPlan & { messages: PlatypusUIMessage[] };
   resolved: ResolvedGeneration;
-  /** The Fallback model a Trigger run may switch to (ADR-0043). */
+  resolvedModelId: ConcreteModelId;
   fallback?: FallbackTurn;
-  /**
-   * This turn's start engaged the pre-turn **backstop** (ADR-0041): it waited
-   * for a Transcript summary before the model was called, and the turn's
-   * stream should open with the "Summarising earlier messages…" status.
-   */
   summaryBackstop?: true;
-  /**
-   * Search was requested and resolution served no search tools, so the turn
-   * runs without it — an **Unavailable capability** (`GLOSSARY.md`), issue #522.
-   *
-   * A sibling of `stream` and not a field on `resolved`, which describes the
-   * turn's plan and is mirrored into run records: this is an outcome of
-   * building that plan, not part of it.
-   *
-   * The runner forwards it to the drive, which stamps it onto the streamed
-   * message's metadata for the Chat to render. The model is never told.
-   */
   searchUnavailable?: boolean;
-  /**
-   * The Agent's granted Tool sets and MCPs that loaded no tools, and why
-   * (#1184) — the Tool session's own list, never a delegate's. Another outcome
-   * of building the plan, beside {@link searchUnavailable}. Only a Trigger run
-   * records it; the model is never told.
-   */
   unloadedToolSets?: readonly UnloadedToolSet[];
   dispose: () => Promise<void>;
 };
 
-/**
- * The Context occupancy a new Chat turn starts at, before its own first step
- * has reported any usage (ADR-0018 Notes, issue #524).
- *
- * Read from the last assistant message that carries a `contextOccupancy`
- * reading — mirroring the context-meter derivation in `chat.tsx` — and summed
- * by the shared `nextTurnOccupancy`, which both sides call so the meter and
- * this gate cannot read the same turn differently. `null` (an erased,
- * mid-turn-stale reading) counts as unknown, same as absent.
- *
- * Undefined for a Chat's first turn, and for a delegated Sub-Agent or headless
- * Trigger run, which never pass a prior Chat's messages here at all — Tool-result
- * clearing simply does not engage on their first model call.
- */
 const initialOccupancyFrom = (
   readings: readonly (ContextOccupancyReading | null)[],
 ): number | undefined => nextTurnOccupancy(readings.at(-1));
 
-/**
- * What `prepareChatTurn` needs on top of the turn itself: the tenant and User
- * the turn runs as, and the ambient facts only the runner knows.
- *
- * The turn half is `TurnRequest` whole, carried down from the route unchanged
- * — this module adds to it rather than re-listing it, so a new turn-level fact
- * costs no edit here (issue #837).
- */
 export type PrepareChatTurnInput = TurnRequest & {
   orgId: string;
   workspaceId: string;
   user: { id: string; name: string };
-  /**
-   * The Chat's id, or the Trigger run's id for a headless run — the value a
-   * Provider Header's `${SESSION_ID}` placeholder resolves to for every call
-   * this turn makes, including its delegates and background work.
-   */
   sessionId: string;
-  /**
-   * The Chat's Transcript summaries (ADR-0041, issue #1716), newest first —
-   * loaded by the caller that owns the chat's id (`startChatTurn`), the same
-   * way the pinned Memories block rides down through `RunInput` so turn
-   * preparation stays a pure function of its inputs. Absent for a headless
-   * run (a Trigger, a Sub-Agent), which has no Transcript to summarise; the
-   * summarifier then never engages.
-   */
   chatSummaries?: TranscriptSummaryRow[];
-  /**
-   * Used to rewrite `storage://` URLs in messages to absolute HTTP URLs so
-   * the model can fetch them. Optional for headless callers (triggers,
-   * sub-agents) whose messages contain no file references.
-   */
   origin?: string;
-  /** `FRONTEND_URL` (`frontendBaseUrl()`), for resource links in tool output. */
   frontendUrl: string;
-  /**
-   * Headless callers (triggers, sub-agents) pass "headless" so the system
-   * prompt reframes the user line and surfaces the agent's own identity.
-   */
   runMode: "interactive" | "headless";
-  /** The A2A token's name, when an A2A client started the turn (ADR-0032). */
   a2aClientName?: string;
-  /**
-   * Called when a tool call begins and again when it settles. The run
-   * lifecycle logs both and holds its per-step stall timer down in between, so
-   * a long tool call (MCP web search, a delegated sub-agent run) is never read
-   * as a stalled step.
-   */
   onActivity?: (event: ToolActivityEvent) => void;
-  /**
-   * The run this turn belongs to. Sub-agent delegate tools built here register
-   * their own runs as children of it, so a delegated run is cancellable and
-   * subject to the same timeouts in its own right. Absent for callers that
-   * prepare a turn outside the run lifecycle (tests, the pre-persist file gate).
-   */
   run?: ParentRunContext;
-  /**
-   * The run's abort. Resolving the Agent's Tool sets and MCP servers stops
-   * waiting the moment it fires (issue #1135). Absent for the same callers
-   * `run` is absent for.
-   */
   signal?: AbortSignal;
-  /**
-   * Whether this turn may consult the Agent's Fallback model (ADR-0043). Only
-   * a Trigger run — and a Sub-Agent run inside one, which this flag reaches
-   * through delegation — passes true. A Chat turn and an A2A run never do.
-   */
   fallbackAllowed?: boolean;
 };
 
-// --- Queries seam ---
-
-/**
- * The data-access surface `prepareChatTurn` depends on. Production passes
- * {@link drizzleChatTurnQueries}; tests pass an in-memory implementation from
- * `chat-execution.test-fixtures.ts`. Methods are named after domain lookups, not
- * query shapes — callers don't compose `where`/`limit` chains.
- */
 export type ChatTurnQueries = ToolSessionQueries & {
   getWorkspace(id: string): Promise<WorkspaceRow | null>;
   getOrganization(id: string): Promise<OrganizationRow | null>;
@@ -285,48 +167,24 @@ export type ChatTurnQueries = ToolSessionQueries & {
     skills: Array<Pick<Skill, "name" | "description">>;
     permittedSkillIds: string[];
   }>;
-  /**
-   * The sub-Agents among `ids` that are visible in the invoking Workspace, in
-   * the order they were assigned. Ids that do not resolve are simply absent —
-   * the caller reports them as unavailable.
-   */
   getSubAgentsByIds(
     ids: string[],
     orgId: string,
     workspaceId: string,
   ): Promise<AgentRow[]>;
-  /** The User timezone from the user's profile, or null when unset. */
   getUserTimezone(userId: string): Promise<string | null>;
   getUserContexts(
     userId: string,
     workspaceId: string,
   ): Promise<{ global?: string; workspace?: string }>;
-  /**
-   * The recent daily memory summaries, anchored to `referenceDate` for the
-   * retrieval window (ADR-0020) — the caller, never the renderer, bounds
-   * freshness.
-   */
   getRecentMemories(
     userId: string,
     workspaceId: string,
     referenceDate: Date,
   ): Promise<MemorySummary[]>;
-  /**
-   * Returns the *keys* of the workspace's sandbox env vars (values omitted —
-   * see ADR-0004). Empty array if no sandbox is configured or env is empty.
-   */
   getSandboxEnvKeys(workspaceId: string): Promise<string[]>;
 };
 
-/**
- * Every resource a Chat turn resolves goes through the Scoped-resource read
- * module: Workspace-scoped rows, plus the Organization-scoped (Shared) rows
- * attached to the invoking Workspace (ADR-0007). Each lookup below used to carry
- * its own copy of that rule, and the copies drifted — the sub-Agent one had no
- * scope filter at all, and each treated "has an organizationId, has no
- * workspaceId" as the definition of Shared, which lets a row carrying both
- * columns resolve in a Workspace that neither owns nor attached it.
- */
 export const drizzleChatTurnQueries: ChatTurnQueries = {
   async getWorkspace(id) {
     const rows = await db
@@ -347,8 +205,6 @@ export const drizzleChatTurnQueries: ChatTurnQueries = {
   },
 
   async getAgent(id, orgId, workspaceId) {
-    // A Shared Agent runs only in a Workspace it is attached to (ADR-0007); its
-    // Sandbox/MCP tools still rebind to that invoking Workspace via loadTools.
     const found = await resolveScoped(db, "agent", id, {
       orgId,
       workspaceId,
@@ -372,10 +228,6 @@ export const drizzleChatTurnQueries: ChatTurnQueries = {
 
     const permittedSkillIds = visible.map(({ row }) => row.id);
 
-    // A workspace-scoped Skill wins a name collision with an attached org-scoped
-    // one, matching loadSkill's workspace-first resolution — so the advertised
-    // list and the tool agree on which body the model loads, with no duplicate
-    // entry in the system prompt.
     const workspaceSkills = visible.filter((s) => s.scope === "workspace");
     const seen = new Set(workspaceSkills.map(({ row }) => row.name));
     const skills = [
@@ -416,18 +268,11 @@ export const drizzleChatTurnQueries: ChatTurnQueries = {
   },
 
   async getSubAgentsByIds(ids, orgId, workspaceId) {
-    // A sub-Agent resolves at the parent's Workspace scope, or at Organization
-    // scope where attached (ADR-0007) — the same rule `getAgent` applies, and the
-    // same authority the save-time check uses. Looked up by id alone, an Agent
-    // from another Workspace resolved here: its name and description reached this
-    // prompt, and its Provider then failed to resolve.
     const visible = await listScopedByIds(db, "agent", ids, {
       orgId,
       workspaceId,
     });
 
-    // Returned in assignment order so the prompt lists sub-agents the way the
-    // Operator configured them, not in whichever order the scope queries ran.
     const byId = new Map(visible.map(({ row }) => [row.id, row]));
     return ids
       .map((id) => byId.get(id))
@@ -475,52 +320,10 @@ export const drizzleChatTurnQueries: ChatTurnQueries = {
       .where(eq(sandboxTable.workspaceId, workspaceId))
       .limit(1);
     if (!row) return [];
-    // Union of both tiers; the orientation block lists keys only (ADR-0004).
     return Object.keys({ ...row.userEnv, ...row.adminEnv });
   },
 };
 
-/**
- * How this turn's web-search slot is filled: by a plugin Web-search backend, by
- * the provider's native tool, or not at all.
- *
- * Three-valued rather than a boolean because the decision and the *reason* for it
- * are one thing (ADR-0014's explicit-plugin-first resolution). A boolean gate plus
- * a re-derived branch at the injection site meant a reader had to prove that a
- * passing gate with no backend selected implied native capability; carrying the
- * backend id in the result removes that step and the unreachable branch with it.
- *
- * This is the single authority over the chat search toggle: it covers the
- * raw-model and agent paths alike, and ignores a stale client that still sends
- * `search: true` for a provider that cannot serve it (#167).
- *
- * Precedence, in order:
- * 1. the request did not opt in → `none`;
- * 2. `provider.searchSource` is `"none"` (or a legacy row with no value at
- *    all) → `none`;
- * 3. `provider.searchSource` names a Web-search backend → `backend`, *ahead
- *    of* native search — explicit Operator selection beats implicit provider
- *    capability, and a native-first `??` would never reach the backend on
- *    exactly the providers this feature targets;
- * 4. `provider.searchSource` is `"native"` and the provider has a native tool
- *    → `native`;
- * 5. otherwise `none` — covers `"native"` on a provider with no native tool
- *    (a stale value, e.g. a Bedrock row backfilled from the pre-collapse
- *    columns) so a stored value that can no longer resolve degrades exactly
- *    like an unregistered backend id does, rather than being trusted blind.
- *
- * Step 4's capability check is backend-side gating that did not exist before
- * ADR-0014: the gate used to be the toggle alone, with the provider-capability
- * check living only in the frontend. It is the stale-client case the ADR calls
- * out, not a regression — a client asking Bedrock for search got an empty tool
- * set anyway.
- *
- * `searchSource` collapses what used to be two fields fighting over one slot
- * (`nativeSearchEnabled` + `webBackend`, ADR-0014): a switch that gated
- * *both* paths under a name that only mentioned one, and a select that
- * fought it for the same decision. One field, one precedence list, no
- * unreachable branch.
- */
 export type SearchResolution =
   { kind: "none" } | { kind: "native" } | { kind: "backend"; backend: string };
 
@@ -538,23 +341,12 @@ export const resolveSearchMode = (
   return { kind: "none" };
 };
 
-/**
- * Build the search tools this turn serves, per {@link resolveSearchMode}.
- *
- * Awaited alongside `loadTools` and the sub-agent load rather than after them: a
- * backend's `createExecutors` may open a network connection or warm a pool, and
- * its `timeoutMs` budget (30s by default, 120s ceiling) would otherwise land on
- * first-token latency *on top of* the other network waits instead of beside them.
- */
 const resolveSearchTools = async (
   resolution: SearchResolution,
   opened: Pick<OpenedProvider, "searchTools">,
   provider: Pick<ProviderRow, "id">,
   ctx: WithCoreRegistrar<WebBackendContext>,
 ): Promise<Record<string, Tool>> => {
-  // Core's own context for the seam: `providerId` is the actionable field on
-  // every warn below, and a backend never sees it — `composeWebBackend` strips
-  // it before the plugin-facing `createExecutors` call.
   const turnCtx = { ...ctx, providerId: provider.id };
 
   if (resolution.kind === "none") return {};
@@ -562,15 +354,6 @@ const resolveSearchTools = async (
 
   const registration = getWebBackend(resolution.backend);
   if (!registration) {
-    // The column holds free text and the plugin that contributed this id may
-    // since have been removed from PLATYPUS_PLUGINS. Degrade to no search tools
-    // rather than falling back to native, which would silently serve a different
-    // search than the Operator selected.
-    //
-    // `providerId` is the actionable field: an org-scoped Shared Provider
-    // (ADR-0007) is one row serving many Workspaces, so `workspaceId` alone names
-    // a symptom while the fix is an edit to the Provider this warn cannot
-    // otherwise identify.
     logger.warn(
       {
         orgId: ctx.orgId,
@@ -585,20 +368,6 @@ const resolveSearchTools = async (
   return registration.buildTurnTools(turnCtx);
 };
 
-// --- Public Module: prepare a Chat turn ---
-
-/**
- * Prepares everything required to run a Chat turn: resolves the Agent and
- * Provider, builds the model, loads Tools / Skills / sub-Agents / Memories,
- * renders the system prompt, inlines file URLs, and returns a stream-ready
- * config plus a `dispose` to release MCP clients.
- *
- * Caller passes the result to `streamText` and calls `dispose` on abort and
- * on `onFinish`. Persistence reads from `resolved`.
- *
- * Production passes {@link drizzleChatTurnQueries}; tests pass an in-memory
- * implementation.
- */
 export const prepareChatTurn = async (
   input: PrepareChatTurnInput,
   queries: ChatTurnQueries,
@@ -625,9 +394,7 @@ export const prepareChatTurn = async (
     throw new NotFoundError(`Workspace '${workspaceId}' not found`);
   }
 
-  // Org identity is framing, not a hard dependency — a missing org row must not
-  // fail the turn, so this is a soft lookup rather than a NotFoundError.
-  // `user` is the Owner on Trigger and A2A runs, so its timezone is theirs.
+  // why: org identity is framing only; a missing org row must not fail the turn
   const [organization, profileTimezone] = await Promise.all([
     queries.getOrganization(orgId),
     queries.getUserTimezone(user.id),
@@ -643,58 +410,31 @@ export const prepareChatTurn = async (
   );
   const { provider, agent, resolvedModelId } = context;
 
-  // Opened again here (resolveGenerationPlan already opened it once, to build
-  // `context.plan.model`) only for its native search tools — a concern the
-  // generation plan itself has no reason to know about.
   const opened = openProvider(provider, { sessionId: input.sessionId });
 
-  // Where this turn runs, shared by the Agent and every delegate it may reach.
   const scope: ToolSessionScope = {
     orgId,
     workspaceId,
     userId: user.id,
     frontendUrl,
-    // The memory tool's embedding call sends the same placeholder value as
-    // every other call this turn makes.
     sessionId: input.sessionId,
-    // Tools always need a zone to work in; the prompt states only the profile's.
+    // why: Tools need a zone; the prompt states only the profile's
     timezone: profileTimezone ?? env().TIMEZONE,
   };
-  // Started before the `Promise.all` rather than inside it because the delegates
-  // built alongside it nest their own sessions into this one — they take the
-  // promise, not the session, and await it only if they are ever invoked.
-  //
-  // A Trigger keeps its Agent's Memory tools whatever its own Include Memories
-  // says; only a Chat turn withholds them (ADR-0032). Withheld from the session
-  // rather than dropped from its tools, so a delegate's session, which inherits
-  // the option, is withheld them too.
+  // why: withheld at the session, so a nested delegate session is withheld them too
+  // why: opened here, before Promise.all; delegates built in it take the promise, not the session
   const memoryTools = input.memoryTools;
   const sessionPromise = openToolSession(scope, agent, queries, {
     signal,
     withheldToolSetIds: memoryTools ? [] : [MEMORY_TOOLSET_ID],
     interactive: runMode === "interactive",
   });
-  // From here down this function OWNS the session: `dispose` is the only
-  // handle on it and it reaches the caller only on the successful return
-  // below, so a throw in between leaves the session — its MCP clients, and
-  // every closer a Contribution registered — with nothing that will ever
-  // close it (issue #630). The window opens here rather than at the
-  // `Promise.all`: a rejection there settles the group while the session goes
-  // on resolving beside it, unowned.
+  // why: try starts here; a Promise.all rejection would leave the session resolving unowned
   try {
-    // The search path is awaited *beside* the session below, not after it, so it
-    // cannot be handed the session itself — it gets a registrar that defers onto
-    // the promise. See `deferCloserRegistrar`.
     const registerCloser = deferCloserRegistrar(sessionPromise);
 
-    // Hoisted out of the `Promise.all` argument list so the resolution and the
-    // tools it produced are both in scope below — the pair is what says whether
-    // search was promised and not delivered. Pure and synchronous, so nothing
-    // about the awaited work moves.
     const searchResolution = resolveSearchMode(request.search, provider);
 
-    // Resolved once, here, so the retrieval below and the block composed further
-    // down read the same decision rather than each re-deriving it (#645).
     const includeMemories = input.includeMemories;
 
     const [
@@ -734,36 +474,18 @@ export const prepareChatTurn = async (
       }),
     ]);
 
-    // Search was asked for, resolution had somewhere to send it, and nothing came
-    // back (issue #522). Outcome-based rather than a branch per cause, so an
-    // unregistered backend, a factory that threw or timed out and a missing
-    // `web_search` executor are all one condition — as is whatever cause is added
-    // next. An empty native tool set would land here too, though nothing can
-    // produce one today. The three server-side warns still name the specific
-    // fault for the Operator; this is what the person reading the reply is told.
     const searchUnavailable =
       searchResolution.kind !== "none" && Object.keys(searchTools).length === 0;
 
-    // Assignment order is the precedence order, and it is deliberate: search lands
-    // after the session's tools so it wins over an agent/MCP tool that happens to
-    // share a name (exactly as native search already did), and before
-    // `subAgentTools` so a sub-agent's tools still win over search.
+    // why: order is precedence: search beats session tools, sub-agent tools beat search
     const tools: Record<string, Tool> = { ...session.tools };
     Object.assign(tools, searchTools);
     Object.assign(tools, subAgentTools);
 
-    // The turn half carries what this turn resolved — the live retrieval when no
-    // pin was supplied (headless). The renderer receives only the stable half,
-    // with the memories folded into a byte-stable `memoriesBlock`: for a pinned
-    // interactive turn that is the snapshot verbatim, for a headless turn it is
-    // the live retrieval's formatted text. Nothing per-turn reaches composition
-    // directly (ADR-0020).
     const turn: SystemPromptTurnContext = { memories };
 
     const stable: SystemPromptStableContext = {
       workspace: { id: workspaceId, context: workspace.context ?? undefined },
-      // The Agent as this turn serves it: with its Memory tools withheld, the
-      // prompt does not offer them.
       agent:
         agent && !memoryTools
           ? {
@@ -780,11 +502,6 @@ export const prepareChatTurn = async (
         workspaceContext: userContexts.workspace,
         timezone: profileTimezone ?? undefined,
       },
-      // The flag gates the block; the pin and the live retrieval are only sources
-      // for it. Gating here rather than trusting the sources to be empty is what
-      // makes "off means no `<memories>`" true by construction: `turn.memories` is
-      // already empty when off, but a pin would otherwise slip past the gate and
-      // make the flag's name a lie for a caller that supplied both.
       memoriesBlock: includeMemories
         ? (input.memorySnapshot ??
           formatSummariesForSystemPrompt(turn.memories))
@@ -803,9 +520,6 @@ export const prepareChatTurn = async (
     };
 
     const systemPrompt = renderSystemPrompt(stable);
-    // The same prompt composed with the fallback Provider's guardrails, kept
-    // ready for a Trigger run that switches (ADR-0043): the security fragment
-    // is the resolved Provider's, so a switch changes it with the model.
     const fallbackSystem = context.fallback
       ? renderSystemPrompt({
           ...stable,
@@ -827,30 +541,11 @@ export const prepareChatTurn = async (
       );
     }
 
-    // Activity events only. Result normalization (#321) is no longer bolted on
-    // here: it happens for every tool the Tool session loads, whether or not this
-    // turn is being observed. The tools core adds itself above — search, the
-    // sub-agent delegates, `loadSkill` — return core-owned JSON shapes.
     const wrappedTools = onActivity
       ? wrapToolsWithActivity(tools, onActivity)
       : tools;
 
-    // Inline file URLs to `data:` bytes when we have an origin, then ALWAYS
-    // normalize (issues #328, #342): text-like files become annotated text,
-    // PDF/DOCX are extracted to capped annotated text, native files pass through
-    // untouched, and any part that couldn't be inlined — a storage miss, or a
-    // headless turn with no origin — is announced as unavailable rather than
-    // forwarded raw. Normalizing even without an origin keeps a stray file part on
-    // a headless turn from hard-failing conversion. The pre-persist gate
-    // (`validateTurnAttachments`) has already rejected files nothing can convert,
-    // so the normalizer here never throws.
-    // **Transcript summary read** (ADR-0041, issue #1716): the deepest usable
-    // summary is applied to the STORED messages here, before file URLs are
-    // inlined or file parts normalised — so files attached inside the
-    // summarised prefix are no longer fetched, and the summary text rides the
-    // first kept message into the conversion below exactly as the brief's
-    // shape requires. When the pre-turn backstop is due and this is a Chat
-    // turn, `beforeTurn` also waits for (or joins) a take and re-applies.
+    // why: summary applied before file inlining, so files it covers are not fetched
     const summaryRead = await beforeTurn({
       chatId: run?.runId,
       path: messages,
@@ -858,8 +553,7 @@ export const prepareChatTurn = async (
       contextWindow: context.plan.contextWindow,
       model: context.plan.model,
       modelId: context.resolvedModelId,
-      // The backstop tries the Workspace's task model first, falling back to
-      // the model this turn already opened.
+      outputCeiling: context.plan.maxOutputTokens,
       taskModel: {
         scope: { orgId, workspaceId },
         providerId: context.resolvedProviderId,
@@ -878,8 +572,7 @@ export const prepareChatTurn = async (
         ? await inlineFileUrls(messagesToSend, origin, {
             orgId,
             workspaceId,
-            // A Chat run's id is its Chat's id — the key prefix `ChatSink`
-            // stored this Chat's files under.
+            // why: a Chat run's id is its Chat's id, the prefix ChatSink stored files under
             chatId: run.runId,
           })
         : messagesToSend,
@@ -892,9 +585,7 @@ export const prepareChatTurn = async (
       },
     );
 
-    // Read from the INCOMING history, before this turn appends anything — Tool-
-    // result clearing's starting reading and the sticky readings that keep it
-    // engaged across turns (ADR-0018 Notes, issue #524; ADR-0041).
+    // why: the full path, not messagesToSend; covered readings keep clearing engaged
     const priorOccupancyReadings = occupancyReadingsOf(messages);
     const initialOccupancy = initialOccupancyFrom(priorOccupancyReadings);
 
@@ -904,16 +595,8 @@ export const prepareChatTurn = async (
         tools: wrappedTools,
         system: systemPrompt,
         messages: inlinedMessages,
-        // The summary this turn's reading will be taken with, carried to the
-        // reply's metadata (ADR-0041).
         ...(summaryRead.summaryId ? { summaryId: summaryRead.summaryId } : {}),
-        // Tool-result clearing's other input beyond the core allowlist
-        // (ADR-0021, issue #626): only the session's OWN MCP resolutions, never
-        // a delegate's — a Sub-Agent's plan carries its own nested session's
-        // hints (`createSubAgentDelegate`), resolved under its own rule.
         readOnlyToolNames: session.readOnlyToolNames,
-        // The Tool gate's view of this turn (ADR-0033). Like the hints above,
-        // the session's own: a delegate's run carries its nested session's.
         gateScope: session.gateScope,
         ...(initialOccupancy !== undefined ? { initialOccupancy } : {}),
         ...(priorOccupancyReadings.length > 0
@@ -923,18 +606,8 @@ export const prepareChatTurn = async (
       resolved: {
         agentId: context.resolvedAgentId,
         providerId: context.resolvedProviderId,
-        // The reference, not the resolution — see `ChatContext.modelReference`.
         modelId: context.modelReference,
-        // Only Direct (no-Agent) turns persist generation params on the row;
-        // Agent-driven turns read them back from the Agent record.
-        //
-        // What is persisted here is the user's OWN instructions, never the
-        // composed system prompt above: this column backs the editable
-        // Instructions box in Chat settings, so writing the composite made the
-        // workspace context, the user's identity, memories and the provider's
-        // guardrails reappear as editable text — and compound on every turn
-        // (issue #365). What the model receives is unaffected; `stream.system`
-        // still carries the composite.
+        // why: the user's own instructions, never the composite; it backs an editable box
         instructions: agent ? undefined : request.instructions,
         temperature: agent ? undefined : context.plan.temperature,
         topP: agent ? undefined : context.plan.topP,
@@ -951,11 +624,10 @@ export const prepareChatTurn = async (
         thinkingBudget: agent
           ? undefined
           : (request.thinkingBudget ?? undefined),
-        // The REQUESTED value, not the plan's resolved ceiling — see
-        // `ResolvedGeneration.maxSteps`. Normalised to undefined so a cleared
-        // null writes null to the column like every other unset field here.
+        // why: the requested value, not the plan's resolved ceiling
         maxSteps: agent ? undefined : (request.maxSteps ?? undefined),
       },
+      resolvedModelId: context.resolvedModelId,
       searchUnavailable,
       ...(context.fallback && fallbackSystem !== undefined
         ? {
@@ -966,45 +638,21 @@ export const prepareChatTurn = async (
           }
         : {}),
       unloadedToolSets: session.unloadedToolSets,
-      // The stream opens with the visible "Summarising earlier messages…"
-      // status the backstop's wait owes the User (ADR-0041).
       ...(summaryRead.backstopEngaged
         ? { summaryBackstop: true as const }
         : {}),
-      // The session closes what it opened, delegates' nested sessions included —
-      // the caller no longer reconciles two lists of clients to get there.
       dispose: session.dispose,
     };
   } catch (error) {
-    // Awaited, so what the session opened is closed before the failure
-    // reaches the caller. `.catch` swallows only the case where the session
-    // is what failed — there is then nothing to dispose, and the rejection
-    // the caller is about to see is that failure itself.
     await sessionPromise.then((session) => session.dispose()).catch(() => {});
     throw error;
   }
 };
 
-/**
- * Pre-persist file gate (issue #328). Resolves the target model's declared
- * `passthroughFileTypes` and rejects the turn — before anything is persisted —
- * if any attached file (fresh upload or history) is neither natively accepted,
- * text-like, nor a document extraction can convert to text (#342 — a freshly
- * uploaded document is extracted here to prove it, so a scanned PDF is refused
- * before it can enter history). Throws `FileValidationError`, which the
- * central `onError` (ADR-0010) maps to a 400 naming the offending file(s).
- *
- * A no-op when the turn carries no file parts (the common case, including all
- * headless runs), so it adds no lookups there. If model resolution itself fails
- * (unknown agent/provider/model), it silently returns and lets the normal
- * `prepareChatTurn` path surface that error unchanged — this gate only adds the
- * file-rejection behavior, it never preempts existing error handling.
- */
 export const validateTurnAttachments = async (
   args: Pick<TurnRequest, "request" | "messages"> & {
     orgId: string;
     workspaceId: string;
-    /** The run's session id — see `PrepareChatTurnInput.sessionId`. */
     sessionId: string;
   },
   queries: ChatTurnQueries,
@@ -1019,8 +667,6 @@ export const validateTurnAttachments = async (
       args.orgId,
       args.workspaceId,
       args.sessionId,
-      // The file gate runs on every turn shape, before a run exists, and only
-      // ever reads the primary's capabilities.
       false,
     );
     passthroughFileTypes = passthroughFileTypesForModel(
@@ -1034,27 +680,6 @@ export const validateTurnAttachments = async (
   await assertFilePartsSupported(args.messages, passthroughFileTypes);
 };
 
-// --- Private helpers ---
-
-/**
- * Resolves the memories this turn reaches the prompt with. An interactive Chat
- * passes a pinned `memorySnapshot` (ADR-0020): nothing is retrieved, because
- * the renderer must consume the snapshot verbatim. A headless run passes no
- * pin and so resolves the live retrieval — each is a fresh conversation with no
- * transcript to protect, so the "use the current block" behaviour is right. The
- * window is anchored to `referenceDate`, which the caller supplies: turn
- * preparation reads no clock of its own, so two headless runs given the same
- * reference date render a byte-identical prefix (ADR-0020). Returns the raw
- * summaries (the **turn** half); the caller folds them into the stable
- * `memoriesBlock` text.
- *
- * `includeMemories` is the second way to reach "no memories": the run opted out
- * (a Trigger, #645), so the retrieval is skipped rather than performed and
- * discarded. It arrives here already resolved — the caller collapses "absent"
- * to true, so this reads a plain boolean rather than a third state. Both routes
- * to "no memories" are about the *retrieval*; whether a block is composed at all
- * is decided once by the caller, which gates the pin on the same flag.
- */
 const resolveMemories = async (
   queries: ChatTurnQueries,
   userId: string,
@@ -1068,20 +693,9 @@ const resolveMemories = async (
   return queries.getRecentMemories(userId, workspaceId, referenceDate);
 };
 
-/**
- * Re-exported so callers and tests that reach these through this module keep
- * working. They live in their own modules because the sub-agent tool builder
- * needs them too, and this module imports that one.
- */
 export { normalizeToolResult };
 export { wrapToolsWithActivity, type ToolActivityEvent };
 
-/**
- * Resolves an Agent's Fallback model for a run that may consult one, treating
- * a resolution failure as an absent fallback (resolution failure never
- * switches, ADR-0017/0043). A dangling fallback is a configuration fault in
- * its own right; failing the run over it would break a healthy primary path.
- */
 const resolveFallbackOrLog = async (
   agent: FallbackAgentSource & { id: string },
   scope: { orgId: string; workspaceId: string; sessionId: string },
@@ -1104,13 +718,6 @@ const resolveFallbackOrLog = async (
   }
 };
 
-/**
- * Resolves the Agent-or-direct selection down to a `GenerationSource`
- * (`resolveGenerationPlan`'s input), fetching the Agent row when `agentId` is
- * given. The one place that decides whether THIS turn's fields — not an
- * Agent's — feed the plan; the plan resolution itself is shared with every
- * sub-Agent delegation (`loadSubAgents` below).
- */
 const resolveChatContext = async (
   queries: ChatTurnQueries,
   data: ChatTurnRequest,
@@ -1159,8 +766,6 @@ const resolveChatContext = async (
       queries,
     );
 
-  // Only a run type that may consult it gets a fallback, and only when it
-  // resolves.
   let fallback: GenerationPlan | undefined;
   if (fallbackAllowed && agent) {
     fallback = await resolveFallbackOrLog(
@@ -1176,8 +781,6 @@ const resolveChatContext = async (
     agent,
     modelReference,
     resolvedModelId,
-    // The Provider `resolveGenerationPlan` resolved IS the one named by the
-    // Agent or the direct selection above — its own id is simplest to read.
     resolvedProviderId: provider.id,
     resolvedAgentId,
     plan,
@@ -1201,11 +804,6 @@ const loadSkills = async (
   return queries.getSkillsByIds(agent.skillIds, orgId, workspaceId);
 };
 
-/**
- * Reason reported for an assigned sub-agent id that does not resolve in the
- * invoking Workspace — deleted, or a Shared Agent detached from (or never
- * attached to) this Workspace. Deliberately says nothing about the row itself.
- */
 const UNRESOLVED_SUB_AGENT_REASON =
   "not available in this workspace — it may have been deleted, or it is a shared agent that is not attached here";
 
@@ -1237,9 +835,7 @@ const loadSubAgents = async (
     workspaceId,
   );
 
-  // An assigned id that does not resolve in this Workspace is reported by id
-  // alone: it is either gone, or a Shared Agent that is not attached here, and
-  // reading a name off the row is exactly the boundary crossing being avoided.
+  // why: by id alone; reading a name off an unattached Agent's row crosses the boundary
   const resolvedIds = new Set(subAgentRecords.map((sa) => sa.id));
   const unresolved: SubAgentFailure[] = assignedIds
     .filter((id) => !resolvedIds.has(id))
@@ -1251,17 +847,9 @@ const loadSubAgents = async (
     failures,
   } = await createDelegateTools(
     subAgentRecords,
-    // A sub-Agent's plan is resolved the same way the parent turn's is —
-    // through `resolveGenerationPlan`, not a second copy of model/ceiling/
-    // sampling resolution (this path used to say, in so many words, that it
-    // never went through `resolveChatContext`). Its fallback is its OWN
-    // (ADR-0043), and only where the parent run may consult one — a Sub-Agent
-    // under a Chat inherits no fallback, and never the parent's switched state.
     async (subAgent) => {
       const resolved = await resolveGenerationPlan(
         { agent: subAgent },
-        // A delegate carries its parent's session id, so a Chat keeps one
-        // upstream session and a Trigger run keeps its own.
         { orgId, workspaceId, sessionId },
         queries,
       );
@@ -1274,16 +862,6 @@ const loadSubAgents = async (
       );
       return fallback ? { ...resolved, fallback } : resolved;
     },
-    // Called on a delegate's FIRST invocation, not now: a parent with three
-    // MCP-backed delegates used to open — and warn about — every one of their
-    // servers on every Chat turn, whether or not it delegated. The nested
-    // session closes with the parent's, so a delegate never hands its
-    // connections back to be remembered.
-    //
-    // The delegate runs under its parent's Workspace and user (its scope is
-    // chained from theirs, and `actorUserId` walks back up to the same human), so
-    // its Tool sets resolve against the same identity. They used to be handed an
-    // empty `userId`, which silently blanked the user a delegate's tools ran as.
     async (subAgentId: string, toolSetIds: string[]) => {
       const parent = await session;
       const nested = await parent.nest({ id: subAgentId, toolSetIds });
@@ -1294,15 +872,9 @@ const loadSubAgents = async (
       };
     },
     run,
-    // Handed over rather than concatenated onto the result below: the tool
-    // refuses these by the id the prompt lists them under, with this reason,
-    // instead of telling the model it named something unknown.
     unresolved,
   );
 
-  // The catalogue comes back from the factory rather than being re-derived
-  // here: it lists exactly the sub-agents the `delegate` tool will accept as a
-  // target, which is what stops the prompt advertising one the tool refuses.
   return {
     subAgents: catalogue,
     unavailableSubAgents: failures,

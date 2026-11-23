@@ -1,26 +1,17 @@
 import { NotFoundError, ValidationError } from "../errors.ts";
-import {
-  compatProviderOptionsName,
-  openProvider,
-} from "../services/provider.ts";
+import { openProvider } from "../services/provider.ts";
 import {
   contextWindowForModel,
   maxOutputTokensForModel,
-  reasoningMapForModel,
   resolveModelId,
 } from "../services/model-capability.ts";
 import {
   resolveSamplingSettings,
-  type SamplingSettings,
   type SamplingSource,
 } from "../services/sampling-settings.ts";
-import {
-  resolveReasoning,
-  resolveSdkReasoning,
-} from "../services/reasoning.ts";
+import { reasoningCallSettings } from "../services/reasoning.ts";
 import {
   aliasNameFromReference,
-  providerHonoursReasoningMap,
   DEFAULT_AGENT_MAX_STEPS,
   DEFAULT_DIRECT_MAX_STEPS,
 } from "@platypus/schemas";
@@ -29,54 +20,24 @@ import type { ProviderRow } from "../services/provider-write.ts";
 import type { RunPlan } from "./run-plan.ts";
 import type { ScopeContext } from "../scope.ts";
 
-/**
- * The Agent-row fields a generation plan reads. Deliberately a structural
- * subset rather than the full `agent` table row: an Agent row satisfies it,
- * and so does a sub-Agent fixture in a test — both callers of
- * `resolveGenerationPlan` only ever have this much in hand.
- */
 type GenerationAgentSource = {
   providerId: string;
   modelId: string;
   maxSteps?: number | null;
 } & SamplingSource;
 
-/**
- * What an Agent generates under, resolved from either of its two sources: an
- * Agent row (Chat's Agent path, and every sub-Agent) or a direct Provider +
- * model selection (Chat's Direct path, which has no row and falls back to
- * `DEFAULT_DIRECT_MAX_STEPS`, issue #463). One module decides this so the
- * parent turn and a delegated sub-Agent can never resolve it differently
- * (issues #417, #456, #459 each had to patch this logic in two places, in the
- * same commit).
- */
 export type GenerationSource =
   | { agent: GenerationAgentSource }
-  // `maxSteps` is the per-chat Max steps setting riding the turn request
-  // (#539); null/absent means unset and falls back to the shared Direct
-  // ceiling, exactly as an Agent's null does to the Agent default.
   | ({
       providerId: string;
       modelId: string;
       maxSteps?: number | null;
     } & SamplingSource);
 
-/**
- * Where a generation plan resolves — the half of a `WorkspaceScope` a
- * data-access lookup actually reads (the currency `WorkspaceScope`-derived
- * types share since commit b8c3a3f), plus the request-scoped session id a
- * Provider Header placeholder resolves from.
- */
 export type GenerationPlanScope = ScopeContext & {
-  /** The Chat's id, or the Trigger run's id for a headless run. */
   sessionId: string;
 };
 
-/**
- * The data-access surface `resolveGenerationPlan` depends on — a single
- * lookup, unlike the Chat turn's whole query surface, because resolving a
- * generation plan only ever needs one Provider row.
- */
 export type GenerationPlanQueries = {
   getProvider(
     id: string,
@@ -86,22 +47,13 @@ export type GenerationPlanQueries = {
 };
 
 export type GenerationPlan = {
-  /** Everything `buildModelInvocation` needs except `system` and `tools` —
-   * those are composed differently by each caller (the full system prompt for
-   * a Chat turn, Instructions + guardrails alone for a sub-Agent, ADR-0016). */
   plan: Omit<RunPlan, "system" | "tools">;
   provider: ProviderRow;
   resolvedModelId: ConcreteModelId;
-  /** The reference AS STORED — a concrete id, or `alias:<name>` (ADR-0017). */
   modelReference: string;
-  /** The resolved Provider's free-text security directives, or null. */
   guardrails: string | null;
 };
 
-/**
- * Why a model reference resolved to nothing, said in the caller's terms: a
- * dangling alias and a dangling concrete id are different mistakes to fix.
- */
 const unresolvedModelMessage = (
   reference: string,
   providerId: string,
@@ -112,51 +64,6 @@ const unresolvedModelMessage = (
     : `Model alias '${aliasName}' is not defined on provider '${providerId}'`;
 };
 
-/**
- * Where a turn's Reasoning controls reach the wire, absent when there is
- * nothing to send. An OpenAI chat-mode Provider sends the Model entry's
- * Reasoning map as a body fragment (ADR-0040); every other Provider is native
- * and takes the SDK's `reasoning` level (#1689) — except OpenRouter, whose
- * adapter ignores that option and reads its own, which has no `max` step.
- */
-const reasoningSettings = (
-  provider: ProviderRow,
-  modelId: ConcreteModelId,
-  choice: SamplingSource,
-  sampling: SamplingSettings,
-): Pick<RunPlan, "reasoning" | "providerOptions"> => {
-  if (providerHonoursReasoningMap(provider)) {
-    const fragment = resolveReasoning(
-      reasoningMapForModel(provider, modelId),
-      choice,
-      sampling,
-    );
-    return fragment
-      ? { providerOptions: { [compatProviderOptionsName(provider)]: fragment } }
-      : {};
-  }
-  const reasoning = resolveSdkReasoning(choice);
-  if (!reasoning) return {};
-  if (provider.providerType === "OpenRouter") {
-    const effort = reasoning === "max" ? "xhigh" : reasoning;
-    return { providerOptions: { openrouter: { reasoning: { effort } } } };
-  }
-  return { reasoning };
-};
-
-/**
- * Resolves an Agent row or a direct Provider+model selection to everything its
- * generation needs: the opened model, its step ceiling, its output ceiling,
- * its sampling parameters, and its Provider's guardrails text.
- *
- * Aliases re-resolve on EVERY call — no pinning — so repointing an alias moves
- * every Agent and Chat using it on their next turn or delegation. A reference
- * that matches nothing is a hard error, never a silent substitution for some
- * other model: resolution failure is a configuration fault. Whether a run may
- * switch to its Fallback model because a Provider is *unavailable* is a
- * separate decision, made by the headless Drive (ADR-0043) — this module only
- * resolves the pair it is asked for.
- */
 export const resolveGenerationPlan = async (
   source: GenerationSource,
   scope: GenerationPlanScope,
@@ -201,17 +108,15 @@ export const resolveGenerationPlan = async (
       model,
       usageModel: { providerId: provider.id, model: resolvedModelId },
       maxSteps,
-      // Left off entirely rather than sent as `undefined` when the Provider
-      // declares no ceiling for this model (issue #454) — so a reader can
-      // assert "the key is absent" instead of guarding against `undefined`
-      // sneaking in as though it were unset.
       ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
-      // Absent when the Provider declares no Context window (ADR-0018) — the
-      // sole gate on Tool-result clearing, so an undeclared window must reach
-      // `buildModelInvocation` as a true absence, not a guessed default.
       ...(contextWindow !== undefined ? { contextWindow } : {}),
       ...sampling,
-      ...reasoningSettings(provider, resolvedModelId, samplingSource, sampling),
+      ...reasoningCallSettings(
+        provider,
+        resolvedModelId,
+        samplingSource,
+        sampling,
+      ),
     },
     provider,
     resolvedModelId,
@@ -220,22 +125,11 @@ export const resolveGenerationPlan = async (
   };
 };
 
-/** An Agent row that may carry the optional Fallback pair (ADR-0043). */
 export type FallbackAgentSource = GenerationAgentSource & {
   fallbackProviderId?: string | null;
   fallbackModelId?: string | null;
 };
 
-/**
- * Resolves the Agent's optional Fallback model, when it has one — the same
- * Agent settings (sampling, step ceiling) through the same
- * `resolveGenerationPlan`, with the fallback Provider's model, ceilings,
- * Reasoning map and guardrails. Absent when the Agent carries no fallback.
- *
- * Resolution failure here is a configuration fault like any other (ADR-0017);
- * callers that offer the fallback only when it resolved keep a broken fallback
- * from breaking runs that never needed it.
- */
 export const resolveFallbackGeneration = async (
   agent: FallbackAgentSource,
   scope: GenerationPlanScope,

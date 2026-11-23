@@ -21,7 +21,6 @@ import type { Variables } from "../server.ts";
 
 const member = new Hono<{ Variables: Variables }>();
 
-/** The members matching `where`, in the shape both GETs return. */
 const selectMembers = (where: SQL | undefined) =>
   db
     .select({
@@ -57,7 +56,6 @@ const toMemberResponse = ({
   isBanned: isBanned({ banned, banExpires }),
 });
 
-/** List all organization members */
 member.get("/", requireAuth, requireOrgAccess(["admin"]), async (c) => {
   const { orgId } = orgScopeOf(c);
 
@@ -68,7 +66,6 @@ member.get("/", requireAuth, requireOrgAccess(["admin"]), async (c) => {
   return c.json({ results: members.map(toMemberResponse) });
 });
 
-/** Get a single organization member with details */
 member.get(
   "/:memberId",
   requireAuth,
@@ -92,7 +89,6 @@ member.get(
   },
 );
 
-/** Update organization member role */
 member.patch(
   "/:memberId",
   requireAuth,
@@ -110,7 +106,6 @@ member.patch(
   },
 );
 
-/** Remove member from organization */
 member.delete(
   "/:memberId",
   requireAuth,

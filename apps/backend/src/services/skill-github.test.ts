@@ -20,11 +20,6 @@ import { mockNanoid } from "../test-setup.ts";
 import { ValidationError } from "../errors.ts";
 import type { SkillScope } from "./skill.ts";
 
-/**
- * Installing Skills from GitHub (ADR-0037) end to end against an in-process
- * Postgres and a disk StorageBackend, with GitHub played by a fake `fetch`:
- * what each request asks GitHub for, and what an install leaves behind.
- */
 const { holder } = vi.hoisted(() => ({
   holder: { db: undefined as ReturnType<typeof drizzle> | undefined },
 }));
@@ -65,7 +60,6 @@ const skillMd = (name: string, extra = "") =>
     `---\nname: ${name}\ndescription: The ${name} skill.${extra}\n---\nUse ${name}.\n`,
   );
 
-/** A repo as codeload zips it: everything under `<repo>-<sha>/`. */
 const archive = (sha: string, files: Zippable): Uint8Array =>
   zipSync(
     Object.fromEntries(
@@ -95,7 +89,6 @@ const REPO: Zippable = {
 
 type Call = { url: string; headers: Headers };
 let calls: Call[];
-/** What each GitHub URL answers; the default branch is at `SHA`. */
 let routes: Map<string, () => Response>;
 
 const repoAt = (sha: string, files: Zippable) =>
@@ -355,7 +348,6 @@ describe("previewGithubSkills", () => {
 
 describe("installGithubSkills", () => {
   it("installs each Skill on its own, at the previewed commit", async () => {
-    // The ref moved after the preview: the install still takes `SHA`.
     refAt("HEAD", MOVED_SHA);
     repoAt(MOVED_SHA, { "skills/pdf/SKILL.md": skillMd("pdf-moved") });
     await installGithubSkills(wsScope, {
@@ -598,7 +590,6 @@ describe("checking and updating a GitHub-installed Skill", () => {
       { path: "forms.md" },
       { path: "reference.md" },
     ]);
-    // Two files out, two in: the removed script's bytes are gone too.
     expect(await storedFiles()).toBe(before);
   });
 

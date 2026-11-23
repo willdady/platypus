@@ -5,16 +5,6 @@ import {
   withAnswerStepInstruction,
 } from "./answer-step.ts";
 
-/**
- * The Step ceiling's answer step (issue #1730).
- *
- * A turn stopped at its ceiling used to end wherever the model got to, often
- * with a Tool row and no answer. The last permitted step is now told, in the
- * request only, that it is the last one and must answer from what it has —
- * rather than having its tools taken away, which would drop the tool
- * definitions every Provider caches ahead of the conversation (ADR-0020).
- */
-
 const conversation: ModelMessage[] = [
   { role: "user", content: "Find out what the service said." },
   {
@@ -59,9 +49,6 @@ describe("withAnswerStepInstruction", () => {
     expect(out).toBe(conversation);
   });
 
-  // The answer step counts inside the ceiling: with a ceiling of one, the
-  // instruction lands on the first (and only) call rather than a special case
-  // adding a step.
   it("appends the instruction on a ceiling of one", () => {
     const out = withAnswerStepInstruction(conversation, {
       stepNumber: 0,
@@ -80,9 +67,6 @@ describe("withAnswerStepInstruction", () => {
     expect(conversation).toEqual(snapshot);
   });
 
-  // What the model is told is the whole point: it must be honest about this
-  // being the last step and must not invite the model to claim the work is
-  // done.
   it("tells the model it is the last step and to answer what it has", () => {
     expect(ANSWER_STEP_INSTRUCTION).toMatch(/final step/i);
     expect(ANSWER_STEP_INSTRUCTION).toMatch(/answer/i);

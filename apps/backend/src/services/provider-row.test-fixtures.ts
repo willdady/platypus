@@ -1,9 +1,5 @@
 import type { ProviderRow } from "./provider-write.ts";
 
-/**
- * A Provider row as the database returns it, every optional column null.
- * Override only what the test is about.
- */
 export const makeProviderRow = (
   over: Partial<ProviderRow> = {},
 ): ProviderRow => ({
@@ -18,6 +14,8 @@ export const makeProviderRow = (
   modelIds: [{ id: "gpt-4", passthroughFileTypes: [] }],
   taskModelId: "gpt-4",
   memoryExtractionModelId: "gpt-4",
+  taskModelSettings: null,
+  memoryExtractionModelSettings: null,
   region: null,
   baseUrl: null,
   headers: null,

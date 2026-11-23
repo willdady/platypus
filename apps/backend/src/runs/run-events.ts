@@ -9,82 +9,44 @@ import {
   type RunEventType,
 } from "@platypus/schemas";
 import type { PlatypusUIMessage } from "../types.ts";
+import { storable } from "../utils/storable.ts";
 import type { RunStatus } from "./types.ts";
 import { DELEGATE_TOOL_NAME } from "../tools/turn-tool-names.ts";
 
-/**
- * A **Run timeline**'s in-memory half: the ordered **Run events** of one
- * headless run, recorded as they happen and drained by the sink in batches
- * (`GLOSSARY.md`; ADR-0023).
- *
- * Everything about an event's shape is decided here — what is captured, which
- * clock each field reads, how an error is capped, when the ceiling cuts the
- * timeline short — so the drive that observes the stream and the sink that
- * writes the rows both stay thin. Three things are deliberately absent: tool
- * inputs, tool outputs, and message or reasoning content. A Run event says
- * what kind of thing happened, when, for how long, and how it ended; the error
- * string on a failed event is the one exception, and it is capped.
- */
-
-/** The most events one run records. A runaway guard, not a performance bound. */
 const RUN_EVENT_CEILING = 10_000;
 
-/**
- * Where a drive's events go: the recorder of the root run, and the event they
- * hang beneath — `null` for the root run's own events, the `delegate` event's
- * id for a Sub-Agent's. Nesting is carried by this pointer alone; a delegate
- * gets no run record of its own.
- */
 export type RunEventScope = {
   recorder: RunEventRecorder;
   parentEventId: string | null;
 };
 
-/**
- * The two clocks an event reads, kept apart on purpose. `now` is the wall
- * clock (epoch ms) a start is stamped with, so it lines up with backend and
- * upstream logs. `monotonic` is what a duration is measured on: subtracting
- * two wall-clock reads across an NTP adjustment yields a negative duration and
- * a bar that renders backwards.
- */
 export type RunEventClocks = {
   now: () => number;
   monotonic: () => number;
 };
 
-/** What a later flush writes back onto an already-inserted event. */
 export type RunEventPatch = Pick<
   RunEvent,
   "id" | "status" | "durationMs" | "error" | "childrenTruncated"
 >;
 
-/** What one flush writes: events never written, and patches for those that were. */
 export type RunEventBatch = { inserts: RunEvent[]; updates: RunEventPatch[] };
 
 type OpenSpec = {
   type: RunEventType;
   toolName?: string;
-  /** The two pairs a `model-switch` names (ADR-0043); absent otherwise. */
   modelSwitch?: ModelSwitch;
 };
 type CloseSpec = { status: Exclude<RunEventStatus, "running">; error?: string };
 
-/**
- * Caps an error string at {@link RUN_EVENT_ERROR_MAX_BYTES}, cutting on a
- * character boundary so a multi-byte codepoint is never split — a lone
- * surrogate breaks serialization. A cut is explicit: the preview is marked
- * truncated and the original byte length kept, so a reader can tell a short
- * error from a clipped one.
- */
-export const capRunEventError = (message: string): RunEventError => {
+export const capRunEventError = (error: string): RunEventError => {
+  const message = storable(error);
   const originalBytes = Buffer.byteLength(message, "utf8");
   if (originalBytes <= RUN_EVENT_ERROR_MAX_BYTES) {
     return { message, truncated: false, originalBytes };
   }
   let bytes = 0;
   let preview = "";
-  // Iterating the string yields whole codepoints, so the cut can only land
-  // between characters.
   for (const char of message) {
     const size = Buffer.byteLength(char, "utf8");
     if (bytes + size > RUN_EVENT_ERROR_MAX_BYTES) break;
@@ -94,7 +56,6 @@ export const capRunEventError = (message: string): RunEventError => {
   return { message: preview, truncated: true, originalBytes };
 };
 
-/** An event plus the monotonic instant it opened at, which never leaves here. */
 type Recorded = { event: RunEvent; monoStart: number };
 
 export class RunEventRecorder {
@@ -105,14 +66,8 @@ export class RunEventRecorder {
   private readonly records: Recorded[] = [];
   private readonly byId = new Map<string, Recorded>();
   private readonly byKey = new Map<string, string>();
-  /** Ids not yet handed to a flush. */
   private pendingInsert = new Set<string>();
-  /** Ids already inserted whose state changed since. */
   private pendingUpdate = new Set<string>();
-  /**
-   * Tool approval id → the key of the tool call it was raised for. A denial
-   * (ADR-0033) names only its approval, and its reason belongs on the call.
-   */
   private readonly approvalToolKeys = new Map<string, string>();
   private truncated = false;
   private failedCalls = 0;
@@ -133,36 +88,22 @@ export class RunEventRecorder {
     this.generateId = params.generateId ?? (() => `rev_${randomUUID()}`);
   }
 
-  /** Every event recorded so far, in sequence order. Read-only snapshot. */
   get events(): readonly RunEvent[] {
     return this.records.map((r) => r.event);
   }
 
-  /** The run hit its event ceiling, so this timeline is incomplete. */
   get eventsTruncated(): boolean {
     return this.truncated;
   }
 
-  /**
-   * How many tool calls — delegations included — ended in error, rejected
-   * inputs among them (#1184). Counts what this recorder recorded, so calls
-   * dropped past the ceiling are not in it.
-   */
   get failedToolCalls(): number {
     return this.failedCalls;
   }
 
-  /** The one observer — a sink that bumps its flush on every change. */
   subscribe(listener: () => void): void {
     this.listener = listener;
   }
 
-  /**
-   * Opens an event under `parentEventId`. Returns its id, or `null` once the
-   * ceiling is reached — in which case the run is marked truncated and so is
-   * the open parent, so a delegate whose children were dropped does not read
-   * as a delegate that did nothing.
-   */
   open(parentEventId: string | null, spec: OpenSpec): string | null {
     if (this.records.length >= this.ceiling) {
       this.truncated = true;
@@ -182,7 +123,7 @@ export class RunEventRecorder {
       parentEventId,
       seq: this.records.length,
       type: spec.type,
-      toolName: spec.toolName ?? null,
+      toolName: spec.toolName === undefined ? null : storable(spec.toolName),
       startedAt: this.clocks.now(),
       durationMs: null,
       status: "running",
@@ -198,15 +139,10 @@ export class RunEventRecorder {
     return id;
   }
 
-  /** Notes which tool call an approval was raised for. */
   noteApproval(approvalId: string, key: string): void {
     this.approvalToolKeys.set(approvalId, key);
   }
 
-  /**
-   * Closes the tool call a denied approval was raised for, carrying the
-   * denial's reason. An unknown approval is ignored.
-   */
   closeDenied(approvalId: string, reason: string | undefined): void {
     const key = this.approvalToolKeys.get(approvalId);
     if (key) {
@@ -217,7 +153,6 @@ export class RunEventRecorder {
     }
   }
 
-  /** Closes an open event. A second close, or a close of an unknown id, is a no-op. */
   close(id: string, spec: CloseSpec): void {
     const recorded = this.byId.get(id);
     if (!recorded || recorded.event.status !== "running") return;
@@ -225,11 +160,6 @@ export class RunEventRecorder {
     this.listener?.();
   }
 
-  /**
-   * {@link open}, idempotent on `key`: two observers of one tool call — the
-   * stream's chunks and the tool's own wrapper — each ask, and the first to
-   * arrive opens the event while the second gets its id.
-   */
   openKeyed(
     key: string,
     parentEventId: string | null,
@@ -242,18 +172,11 @@ export class RunEventRecorder {
     return id;
   }
 
-  /** {@link close} by key. Unknown keys, and keys already closed, are ignored. */
   closeKeyed(key: string, spec: CloseSpec): void {
     const id = this.byKey.get(key);
     if (id) this.close(id, spec);
   }
 
-  /**
-   * Closes every still-running event — or, given a parent, only that parent's
-   * direct children — with `status`. Called on a run's every terminal path so
-   * no terminal run leaves an open event; a delegate's drive calls it scoped
-   * to its own event for the same reason one level down.
-   */
   closeOpen(
     status: Exclude<RunEventStatus, "running">,
     parentEventId?: string | null,
@@ -273,12 +196,6 @@ export class RunEventRecorder {
     if (changed) this.listener?.();
   }
 
-  /**
-   * Hands the sink what changed since the last drain: events never written
-   * (inserted in their *current* state, so one opened and closed inside a
-   * flush window is never inserted running and then patched) and the patches
-   * for events that were.
-   */
   drain(): RunEventBatch {
     const inserts: RunEvent[] = [];
     for (const id of this.pendingInsert) {
@@ -287,8 +204,6 @@ export class RunEventRecorder {
     }
     const updates: RunEventPatch[] = [];
     for (const id of this.pendingUpdate) {
-      // An event that is still waiting to be inserted carries its change in
-      // the insert itself.
       if (this.pendingInsert.has(id)) continue;
       const recorded = this.byId.get(id);
       if (!recorded) continue;
@@ -300,16 +215,9 @@ export class RunEventRecorder {
     return { inserts, updates };
   }
 
-  /**
-   * Hands back the part of a {@link drain} a flush failed to write, so the
-   * next drain carries it again (#1124). Ids are what is requeued, not the
-   * drained copies: the next drain reads each event's state as it is then, so
-   * a change recorded since the failed flush is not lost to a stale snapshot.
-   */
   requeue(batch: RunEventBatch): void {
     for (const { id } of batch.inserts) {
       this.pendingInsert.add(id);
-      // The insert carries the event's current state, so a patch is moot.
       this.pendingUpdate.delete(id);
     }
     for (const { id } of batch.updates) this.markChanged(id);
@@ -338,10 +246,6 @@ export class RunEventRecorder {
   }
 }
 
-/**
- * The key one tool call's two observers share. Scoped to the parent so a
- * delegate's tool-call ids can never collide with its parent's.
- */
 const toolKey = (scope: RunEventScope, toolCallId: string): string =>
   `${scope.parentEventId ?? "root"}:tool:${toolCallId}`;
 
@@ -351,12 +255,6 @@ const stretchKey = (
   id: string,
 ): string => `${scope.parentEventId ?? "root"}:${kind}:${id}`;
 
-/**
- * What a tool call is recorded as. The one delegation tool is a `delegate`
- * event named for its target — the Sub-Agent's name is the identity of what
- * was called, exactly as a tool name is, and is the only thing read off the
- * input. Every other tool is a `tool-call` under its own name.
- */
 const toolSpec = (toolName: string, input: unknown): OpenSpec => {
   if (toolName !== DELEGATE_TOOL_NAME) return { type: "tool-call", toolName };
   const target =
@@ -369,18 +267,6 @@ const toolSpec = (toolName: string, input: unknown): OpenSpec => {
   };
 };
 
-/**
- * Projects one UI message stream chunk onto the recorder.
- *
- * The UI stream is the instrumentation surface all three drives already fold,
- * so one switch serves the headless drive and a delegate's alike. A text or
- * reasoning stretch opens at its start chunk and closes at its end. The model
- * streaming a tool call's arguments is a `tool-input` stretch of its own, from
- * input start to input complete (#1561); the tool call opens only once its
- * input is complete, so its duration stays pure tool time, and closes on its
- * output or error. A provider that sends the input whole records no argument
- * stretch. Deltas, inputs and outputs are read for their ids and nothing else.
- */
 export const recordUiChunk = (
   scope: RunEventScope,
   chunk: InferUIMessageChunk<PlatypusUIMessage>,
@@ -427,8 +313,6 @@ export const recordUiChunk = (
       );
       return;
     case "tool-input-error":
-      // The model produced an input the tool could not take: the call never
-      // ran, and that is the failure the event records.
       recorder.closeKeyed(stretchKey(scope, "tool-input", chunk.toolCallId), {
         status: "error",
         error: chunk.errorText,
@@ -444,8 +328,6 @@ export const recordUiChunk = (
       });
       return;
     case "tool-output-available":
-      // A preliminary output is an in-progress yield (the delegate tool's
-      // activity log); the call is still running.
       if (chunk.preliminary) return;
       recorder.closeKeyed(toolKey(scope, chunk.toolCallId), {
         status: "completed",
@@ -461,8 +343,6 @@ export const recordUiChunk = (
       recorder.noteApproval(chunk.approvalId, toolKey(scope, chunk.toolCallId));
       return;
     case "tool-approval-response":
-      // A Tool gate's deny, recorded with its reason. An allow never reaches
-      // here: core lets an allowed call through with no approval at all.
       if (!chunk.approved) recorder.closeDenied(chunk.approvalId, chunk.reason);
       return;
     case "tool-output-denied":
@@ -475,11 +355,6 @@ export const recordUiChunk = (
   }
 };
 
-/**
- * A pass-through transform that records every chunk it sees. Piped onto a
- * drive's UI stream before that stream is split or consumed, so recording
- * costs the consumer nothing and misses nothing.
- */
 export const recordRunEvents = (
   scope: RunEventScope,
 ): TransformStream<
@@ -493,18 +368,10 @@ export const recordRunEvents = (
     },
   });
 
-/**
- * How a tool learns which event it is running under. Carried on the execute
- * options the wrapper below hands the tool, under a symbol so it can never
- * collide with — or be mistaken for — anything the SDK puts there. The
- * delegation tool reads it to nest its Sub-Agent's events; every other tool
- * ignores it.
- */
 const RUN_EVENT_SCOPE: unique symbol = Symbol("platypus.runEventScope");
 
 type ScopedOptions = { [RUN_EVENT_SCOPE]?: RunEventScope };
 
-/** A tool's execute options as a plain record, or nothing if they are not one. */
 const optionsRecord = (
   options: unknown,
 ): (Record<string, unknown> & ScopedOptions) | undefined =>
@@ -512,20 +379,9 @@ const optionsRecord = (
     ? (options as Record<string, unknown> & ScopedOptions)
     : undefined;
 
-/** The scope a wrapper attached to a tool's execute options, if any. */
 export const runEventScopeOf = (options: unknown): RunEventScope | undefined =>
   optionsRecord(options)?.[RUN_EVENT_SCOPE];
 
-/**
- * Wraps each locally-executed tool so its event is open before it runs and its
- * own scope — the recorder plus that event — travels with it. Opening here as
- * well as from the stream's `tool-input-available` chunk is deliberate: the
- * two race, and `openKeyed` lets whichever arrives first win while the other
- * reads the same id. Closing is left to the stream, which sees the output.
- *
- * Provider-executed tools have no `execute` and are left as they are; their
- * events come from the stream alone.
- */
 export const wrapToolsWithRunEvents = (
   tools: Record<string, Tool>,
   scope: RunEventScope,
@@ -553,9 +409,6 @@ export const wrapToolsWithRunEvents = (
             : null;
         const scoped: ScopedOptions & Record<string, unknown> = {
           ...given,
-          // With no event of its own (the ceiling was hit), a tool's children
-          // hang off whatever this scope hangs off — still recorded, still
-          // marked truncated on the run.
           [RUN_EVENT_SCOPE]: {
             recorder: scope.recorder,
             parentEventId: eventId ?? scope.parentEventId,
@@ -568,7 +421,6 @@ export const wrapToolsWithRunEvents = (
   return wrapped;
 };
 
-/** The run's terminal status, as its still-open events are closed with it. */
 export const eventStatusForRun = (
   status: RunStatus,
 ): Exclude<RunEventStatus, "running"> => {

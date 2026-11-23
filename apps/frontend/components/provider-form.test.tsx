@@ -155,12 +155,11 @@ describe("ProviderForm form submission", () => {
     const dialog = openAddDialog();
     type(dialog, "Model ID", "gpt-4o");
     fireEvent.click(within(dialog).getByRole("button", { name: "Add" }));
-    fireEvent.change(screen.getByLabelText("Task Model ID"), {
-      target: { value: "gpt-4o" },
-    });
-    fireEvent.change(screen.getByLabelText("Memory Extraction Model ID"), {
-      target: { value: "gpt-4o" },
-    });
+    await selectOption(screen.getByLabelText("Task Model"), "gpt-4o");
+    await selectOption(
+      screen.getByLabelText("Memory Extraction Model"),
+      "gpt-4o",
+    );
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
@@ -172,7 +171,158 @@ describe("ProviderForm form submission", () => {
       modelIds: [{ id: "gpt-4o" }],
       taskModelId: "gpt-4o",
       memoryExtractionModelId: "gpt-4o",
+      taskModelSettings: null,
+      memoryExtractionModelSettings: null,
     });
+  });
+});
+
+describe("ProviderForm Job settings (ADR-0045)", () => {
+  const models = [
+    { id: "gpt-4o", passthroughFileTypes: [] },
+    { id: "gpt-4o-mini", passthroughFileTypes: [] },
+  ];
+
+  function openSettings(label: string) {
+    fireEvent.click(screen.getByRole("button", { name: `${label} settings` }));
+    return screen.getByRole("dialog", { name: `${label} settings` });
+  }
+
+  it("offers the Provider's models and flags a stored id that is not one", async () => {
+    renderEditForm(models, { memoryExtractionModelId: "retired-model" });
+
+    const memory = await screen.findByLabelText("Memory Extraction Model");
+    expect(memory).toHaveTextContent("retired-model (not in the model list)");
+    expect(
+      screen.getByText(/retired-model is not in this provider's model list/),
+    ).toBeInTheDocument();
+
+    await selectOption(screen.getByLabelText("Task Model"), "gpt-4o-mini");
+    expect(screen.getByLabelText("Task Model")).toHaveTextContent(
+      "gpt-4o-mini",
+    );
+  });
+
+  it("keeps a stale id on a save that touched something else", async () => {
+    const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
+    renderEditForm(models, { memoryExtractionModelId: "retired-model" });
+
+    fireEvent.change(await screen.findByLabelText("Name"), {
+      target: { value: "Renamed" },
+    });
+    save();
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(savedProviderBody(fetchMock)).toMatchObject({
+      memoryExtractionModelId: "retired-model",
+    });
+  });
+
+  it("clears a chosen model back to None, saving an empty id", async () => {
+    const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
+    renderEditForm(models, { taskModelId: "gpt-4o" });
+
+    await selectOption(await screen.findByLabelText("Task Model"), "None");
+    expect(
+      screen.getByRole("button", { name: "Task Model settings" }),
+    ).toBeDisabled();
+    save();
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(savedProviderBody(fetchMock)).toMatchObject({ taskModelId: "" });
+  });
+
+  it("disables Settings until a model is chosen", () => {
+    render(<ProviderForm orgId="org1" />);
+    expect(
+      screen.getByRole("button", { name: "Task Model settings" }),
+    ).toBeDisabled();
+  });
+
+  it("saves the dialog's fields as the block, and loads them back", async () => {
+    const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
+    renderEditForm(models, {
+      taskModelSettings: { temperature: 0.2 },
+    });
+    await screen.findByLabelText("Task Model");
+
+    const dialog = openSettings("Task Model");
+    expect(
+      screen.getByText(
+        "Leave a field empty to send nothing and use the model's own default.",
+      ),
+    ).toBeInTheDocument();
+    expect(within(dialog).getByLabelText("Temperature")).toHaveValue(0.2);
+    type(dialog, "Seed", "7");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+    save();
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(savedProviderBody(fetchMock)).toMatchObject({
+      taskModelSettings: { temperature: 0.2, seed: 7 },
+      memoryExtractionModelSettings: null,
+    });
+  });
+
+  it("stores a block emptied in the dialog as no block", async () => {
+    const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
+    renderEditForm(models, { taskModelSettings: { temperature: 0.2 } });
+    await screen.findByLabelText("Task Model");
+
+    const dialog = openSettings("Task Model");
+    type(dialog, "Temperature", "");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+    save();
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(savedProviderBody(fetchMock)).toMatchObject({
+      taskModelSettings: null,
+    });
+  });
+
+  it("shows a validation error inline and keeps the dialog open", async () => {
+    renderEditForm(models);
+    await screen.findByLabelText("Task Model");
+
+    const dialog = openSettings("Task Model");
+    type(dialog, "Top-p", "2");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+
+    expect(within(dialog).getByLabelText("Top-p")).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
+    expect(screen.getByRole("dialog")).toBe(dialog);
+  });
+
+  it("shows Thinking only where the model's Reasoning map declares it", async () => {
+    renderEditForm(
+      [
+        {
+          id: "qwen",
+          passthroughFileTypes: [],
+          reasoning: {
+            thinking: { on: { think: true }, off: { think: false } },
+          },
+        },
+        { id: "plain", passthroughFileTypes: [] },
+      ],
+      {
+        apiMode: "chat",
+        taskModelId: "qwen",
+        memoryExtractionModelId: "plain",
+      },
+    );
+    await screen.findByLabelText("Task Model");
+
+    const task = openSettings("Task Model");
+    expect(within(task).getByLabelText("Thinking")).toBeInTheDocument();
+    expect(within(task).queryByLabelText("Effort")).not.toBeInTheDocument();
+    fireEvent.click(within(task).getByRole("button", { name: "Cancel" }));
+
+    const memory = openSettings("Memory Extraction Model");
+    expect(within(memory).queryByLabelText("Thinking")).not.toBeInTheDocument();
+    expect(within(memory).getByLabelText("Temperature")).toBeInTheDocument();
   });
 });
 
@@ -190,10 +340,10 @@ describe("ProviderForm save feedback", () => {
     const dialog = openAddDialog();
     type(dialog, "Model ID", "gpt-4o");
     fireEvent.click(within(dialog).getByRole("button", { name: "Add" }));
-    fireEvent.change(screen.getByLabelText("Task Model ID"), {
+    fireEvent.change(screen.getByLabelText("Task Model"), {
       target: { value: "gpt-4o" },
     });
-    fireEvent.change(screen.getByLabelText("Memory Extraction Model ID"), {
+    fireEvent.change(screen.getByLabelText("Memory Extraction Model"), {
       target: { value: "gpt-4o" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -490,6 +640,28 @@ describe("ProviderForm model dialog", () => {
       "gpt-5",
       "o3",
     ]);
+  });
+
+  it("carries the task and memory pointers along when their model is renamed", async () => {
+    const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
+    renderEditForm(
+      [
+        { id: "gpt-4o", passthroughFileTypes: [] },
+        { id: "o3", passthroughFileTypes: [] },
+      ],
+      { taskModelId: "gpt-4o", memoryExtractionModelId: "o3" },
+    );
+
+    const dialog = openEditDialog("gpt-4o");
+    type(dialog, "Model ID", "gpt-5");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+    save();
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(savedProviderBody(fetchMock)).toMatchObject({
+      taskModelId: "gpt-5",
+      memoryExtractionModelId: "o3",
+    });
   });
 
   // The dialog is portalled out of the DOM tree but not the React tree, so its

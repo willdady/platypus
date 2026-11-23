@@ -17,6 +17,14 @@ A persisted conversation in a Workspace. Composed of its messages, which may hol
 A single round of running the model: given the prior messages and a Workspace + Agent (or Provider + model) selection, produce the assistant's next streamed response. Distinct from one-shot Provider executions like metadata generation.
 _Avoid_: chat request, chat invocation, chat run.
 
+**Artifact**:
+A standalone, versioned piece of content in a Workspace — markdown, code, a Mermaid diagram, an HTML page or an SVG image — created and changed by an Agent's Artifacts Tool set and kept apart from the Chat that made it. Its versions are append-only and each stores the whole content, so the latest version is its current content and any older one is readable on its own; each version records whether an Agent or the User wrote it. The source Chat is optional: deleting that Chat keeps the Artifact. Deleting the Workspace deletes its Artifacts. Not the A2A protocol's "artifact", which is a part of a Task's output and never a stored, versioned resource in a Workspace.
+_Avoid_: document (that names one type), output (that names a turn's by-product), A2A artifact.
+
+**Artifact frame**:
+The sandboxed `iframe` in which an HTML or SVG Artifact runs, fed by `srcDoc` under `sandbox="allow-scripts"` with an injected Content-Security-Policy that allows only the library origins the Operator approved. It has an opaque origin, so it cannot read the User's session or reach the Platypus page, and it cannot send data anywhere. The frame is a boundary, not a place content is stored: no Artifact is ever served from a URL on the app or API origin.
+_Avoid_: preview (that names the tab, not the boundary), embed.
+
 **File part**:
 A file a User attached to a message in a Chat, carried alongside the message's text and persisted as a storage reference. On every Chat turn each File part is resolved to bytes and routed by the target model's declared capability.
 _Avoid_: attachment (an **Attachment** is the Shared-resource reference), upload (a file placed in the Sandbox is a **Sandbox upload**).
@@ -130,7 +138,7 @@ The tokens a **Chat turn** or run was billed for — the vendor's reported input
 _Avoid_: tokens used (ambiguous between this and **Context occupancy** — name which one), cost, spend, context usage.
 
 **Output ceiling**:
-The most a `(Provider, model)` pair may produce in a single reply, declared by an Org Admin on the Provider's **Model entry** and surfaced as **Max output tokens**. Unlike the **Context window** it is enforced: it is sent as the output limit on every **Chat turn** and delegated **Sub-Agent** run against that model. The Provider's own one-shot executions — Chat metadata and memory extraction, which run against its pointer-settings — do not carry it. Optional; a model without one is sent no limit at all, leaving the vendor's own default in force, which on Bedrock is far below the model's real capability. Bounds a reply, never the conversation. A cutoff is recorded and told to the reader, not treated as a failure — except on a **Trigger run** cut before it wrote any answer, which ends _failed_ since nobody is watching to notice the empty reply.
+The most a `(Provider, model)` pair may produce in a single reply, declared by an Org Admin on the Provider's **Model entry** and surfaced as **Max output tokens**. Unlike the **Context window** it is enforced: it is sent as the output limit on every **Chat turn** and delegated **Sub-Agent** run against that model. The Provider's own one-shot executions — Chat metadata and memory extraction, which run against its pointer-settings — do not carry it. A **Transcript summary** written by the Chat's own model is held to that model's ceiling; any **Job settings** Thinking budget is added on top. Optional; a model without one is sent no limit at all, leaving the vendor's own default in force, which on Bedrock is far below the model's real capability. Bounds a reply, never the conversation. A cutoff is recorded and told to the reader, not treated as a failure — except on a **Trigger run** cut before it wrote any answer, which ends _failed_ since nobody is watching to notice the empty reply.
 _Avoid_: max tokens, token limit, context window (that names the total capacity), output budget.
 
 **Reasoning controls**:
@@ -169,7 +177,7 @@ The one presentation a reader sees for a native Provider search, a Web-search ba
 _Avoid_: web search card, search result block (both name only the search case; the block also covers a page read).
 
 **Tool call group**:
-Adjacent tool calls in one Chat message, shown as a single collapsible row that expands to each call in its own right. Any other part between two calls — text, reasoning, or a Sub-Agent delegation, which has interactive UI of its own — ends the group. A file the Agent offers for download is not a call row at all; it shows in a tray under the finished reply. A failed or denied offer stays a call row. Display only; the **Transcript** keeps every call as it was.
+Adjacent tool calls in one Chat message, shown as a single collapsible row that expands to each call in its own right. Any other part between two calls — text, reasoning, or a Sub-Agent delegation, which has interactive UI of its own — ends the group. A file the Agent offers for download is not a call row at all; it shows in a tray under the finished reply. A stored Artifact in a finished reply is not a call row either: while the reply is still being written the card shows where the call happened, and once the reply finishes the Artifact joins that tray. A failed, denied or rejected offer or Artifact write stays a call row. Display only; the **Transcript** keeps every call as it was.
 _Avoid_: tool group (reads as a **Tool set**), tool run (a run is something else), batch, roll-up.
 
 **MCP**:
@@ -343,7 +351,7 @@ _Avoid_: registration, self-registration.
 ## Relationships
 
 - An **Organization** has many **Workspaces**.
-- A **Workspace** has many **Chats**, **Agents**, **MCPs**, **Skills**, **Boards**, **Triggers**, **Webhooks**, and **Notifications**, and zero-or-one **Sandbox**.
+- A **Workspace** has many **Chats**, **Agents**, **MCPs**, **Skills**, **Boards**, **Artifacts**, **Triggers**, **Webhooks**, and **Notifications**, and zero-or-one **Sandbox**.
 - A **Chat** is produced by a sequence of **Chat turns**.
 - A **Chat**'s messages form a tree: each message follows exactly one parent, or opens the Chat, and messages following the same parent — or all opening it — are **Alternatives**. Exactly one path through it is the **Active path**, and that path is the **Transcript**.
 - A **Chat turn** runs in two sequential phases: **Turn resolution** assembles what the turn needs, then the **Drive** runs the model loop. A slow turn is slow in one phase or the other, and they are attributed separately.

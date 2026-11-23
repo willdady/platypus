@@ -25,6 +25,8 @@ import {
 import { logger } from "../logger.ts";
 import type { PlatypusUIMessage } from "../types.ts";
 import { openProvider } from "./provider.ts";
+import { jobCallSettings, jobMaxOutputTokens } from "./reasoning.ts";
+import { CHARS_PER_TOKEN, jobInputBudgetChars } from "./job-input-budget.ts";
 import {
   contextWindowForModel,
   pointerSettingModelId,
@@ -35,42 +37,24 @@ import { loadActivePath } from "./chat-messages.ts";
 import { errorMessage } from "../utils/error-message.ts";
 import { withDeadline } from "../utils/abort-race.ts";
 
-/**
- * How much one pass may send, in tokens estimated as characters ÷ 4: half the
- * extraction model's context window, or 32k when it declares none. The context
- * gets at most a quarter of it, and only what the new messages leave.
- */
-const BUDGET_SHARE = 0.5;
 const DEFAULT_BUDGET_TOKENS = 32_000;
 const CONTEXT_SHARE = 0.25;
-const CHARS_PER_TOKEN = 4;
 
-/**
- * Bounds on the summary call (issue #1618). The batch holds the cluster-wide
- * extraction lock, so a hung provider must cost one Chat a bounded wait rather
- * than stall extraction everywhere. The deadline covers the call's retries.
- */
 export const SUMMARY_TIMEOUT_MS = 120_000;
 const SUMMARY_MAX_OUTPUT_TOKENS = 8_192;
 const SUMMARY_MAX_RETRIES = 1;
 
-/**
- * How long one batch may keep starting Chats. Checked before each, like the
- * shutdown signal: the Chat in flight still finishes, under its own deadline.
- */
 export const BATCH_DEADLINE_MS = 10 * 60_000;
 
 const SEPARATOR = "\n\n";
 const TRUNCATED = " [truncated]";
 
-/** One message as the summary prompt shows it: its text parts only. */
 const formatMessage = (m: PlatypusUIMessage): string =>
   `${m.role}: ${m.parts
     .filter((p) => p.type === "text")
     .map((p) => p.text)
     .join("")}`;
 
-/** How many of `lines`, from the first, fit in `room` characters once joined. */
 const countFitting = (lines: string[], room: number): number => {
   let used = 0;
   let count = 0;
@@ -82,10 +66,6 @@ const countFitting = (lines: string[], room: number): number => {
   return count;
 };
 
-/**
- * Builds the summary prompt for the LLM: the new messages to extract from, and
- * the earlier ones a previous pass already read, as context for them.
- */
 const buildSummaryPrompt = (
   existingSummary: string | null,
   contextText: string,
@@ -121,12 +101,6 @@ ${newText}
 </instructions>`;
 };
 
-/**
- * Updates the chat's memory extraction status. `readAt` is when the job read
- * the Chat, not when the pass finished; the failed-pass backoff counts from it.
- * The cursor stays where it was, so a failed pass's retry covers the same
- * messages.
- */
 const updateChatExtractionStatus = async (
   chatId: string,
   status: "processing" | "failed",
@@ -142,7 +116,6 @@ const updateChatExtractionStatus = async (
     .where(eq(chatTable.id, chatId));
 };
 
-/** Records a pass that succeeded, moving the cursor to the last message it read. */
 const completeChatExtraction = async (
   chatId: string,
   readAt: Date,
@@ -159,16 +132,10 @@ const completeChatExtraction = async (
     .where(eq(chatTable.id, chatId));
 };
 
-/**
- * Gets today's date string in YYYY-MM-DD format.
- */
 const getTodayDateString = (): string => {
   return new Date().toISOString().slice(0, 10);
 };
 
-/**
- * Processes a single chat for memory extraction into daily summaries.
- */
 const processChat = async (
   chat: ChatToProcess["chat"],
   workspace: typeof workspaceTable.$inferSelect,
@@ -176,18 +143,15 @@ const processChat = async (
   embeddingProvider: typeof providerTable.$inferSelect | null,
   readAt: Date,
 ): Promise<void> => {
-  // The Active path only: an Alternative the User has moved away from is not
-  // something they said.
+  const failPass = (): Promise<void> =>
+    updateChatExtractionStatus(chat.id, "failed", readAt);
+
   const { messages } = await loadActivePath(chat.id, chat.activeLeafId);
 
-  // Everything after the cursor is new; what a pass already read is context.
   let readCount = 0;
   if (chat.memoryCursorId) {
     readCount = messages.findIndex((m) => m.id === chat.memoryCursorId) + 1;
     if (readCount === 0) {
-      // The cursor is off the Active path: the User moved to another
-      // Alternative, or deleted it. The messages the two paths share were
-      // read; everything after the deepest of them is new.
       const cursorPath = await loadActivePath(chat.id, chat.memoryCursorId);
       const readIds = new Set(cursorPath.messages.map((m) => m.id));
       readCount = messages.findLastIndex((m) => readIds.has(m.id)) + 1;
@@ -203,7 +167,6 @@ const processChat = async (
   const userId = workspace.ownerId;
   const todayDate = getTodayDateString();
 
-  // Load today's existing summary for this user+workspace
   const [existingSummaryRow] = await db
     .select()
     .from(memoryDailySummaryTable)
@@ -222,19 +185,39 @@ const processChat = async (
   const modelId = pointerSettingModelId(
     extractionProvider.memoryExtractionModelId,
   );
+  const maxOutputTokens = jobMaxOutputTokens(
+    extractionProvider,
+    modelId,
+    extractionProvider.memoryExtractionModelSettings,
+    SUMMARY_MAX_OUTPUT_TOKENS,
+  );
   const contextWindow = contextWindowForModel(extractionProvider, modelId);
   const budgetChars =
-    (contextWindow ? contextWindow * BUDGET_SHARE : DEFAULT_BUDGET_TOKENS) *
-    CHARS_PER_TOKEN;
-  const room = budgetChars - buildSummaryPrompt(existingSummary, "", "").length;
+    contextWindow !== undefined
+      ? jobInputBudgetChars(contextWindow, maxOutputTokens)
+      : DEFAULT_BUDGET_TOKENS * CHARS_PER_TOKEN;
+  const fixedPromptChars = buildSummaryPrompt(existingSummary, "", "").length;
+  const room = budgetChars - fixedPromptChars;
 
-  // The new messages first, oldest first, as many as fit.
+  if (contextWindow !== undefined && room <= 0) {
+    logger.warn(
+      {
+        chatId: chat.id,
+        modelId,
+        contextWindow,
+        maxOutputTokens,
+        promptLength: fixedPromptChars,
+      },
+      "Memory extraction skipped: the model's context window leaves no room for input after its reply",
+    );
+    await failPass();
+    return;
+  }
+
   const freshLines = fresh.map(formatMessage);
   let included = countFitting(freshLines, room);
   let newText = freshLines.slice(0, included).join(SEPARATOR);
   if (included === 0) {
-    // One message larger than the whole budget: cut to fit, marked as cut, and
-    // moved past like any other.
     included = 1;
     const line = formatMessage(oldestFresh);
     newText = line.slice(0, Math.max(0, room - TRUNCATED.length)) + TRUNCATED;
@@ -252,7 +235,6 @@ const processChat = async (
   if (!lastIncluded) throw new Error("Memory extraction included no message");
   const cursor = lastIncluded.id;
 
-  // Then the most recent of what came before, in what is left.
   const contextLines = messages
     .slice(0, readCount)
     .map(formatMessage)
@@ -285,12 +267,10 @@ const processChat = async (
     "Running memory summary extraction",
   );
 
-  // Create the model
   const model = openProvider(extractionProvider, {
     sessionId: chat.id,
   }).languageModel(modelId);
 
-  // Call the LLM for summary generation
   let result;
   try {
     result = await withDeadline(
@@ -298,8 +278,13 @@ const processChat = async (
         generateText({
           model,
           prompt: summaryPrompt,
-          temperature: 0.3,
-          maxOutputTokens: SUMMARY_MAX_OUTPUT_TOKENS,
+          ...jobCallSettings(
+            extractionProvider,
+            modelId,
+            extractionProvider.memoryExtractionModelSettings,
+            { temperature: 0.3 },
+          ),
+          maxOutputTokens,
           maxRetries: SUMMARY_MAX_RETRIES,
           abortSignal,
         }),
@@ -315,21 +300,18 @@ const processChat = async (
       },
       `Memory summary extraction LLM call failed: ${message}`,
     );
-    await updateChatExtractionStatus(chat.id, "failed", readAt);
+    await failPass();
     return;
   }
 
   const updatedSummary = result.text.trim();
 
-  // Not a pass that succeeded: a reply cut off before any text (a reasoning
-  // model out of output tokens) would otherwise skip these messages for good.
   if (!updatedSummary) {
     logger.warn(`Empty summary returned for chat ${chat.id}`);
-    await updateChatExtractionStatus(chat.id, "failed", readAt);
+    await failPass();
     return;
   }
 
-  // Generate embedding if embedding provider is configured
   let embedding: number[] | null = null;
   if (embeddingProvider && embeddingProvider.embeddingModelId) {
     try {
@@ -348,7 +330,6 @@ const processChat = async (
     }
   }
 
-  // Upsert the daily summary
   const now = new Date();
   if (existingSummaryRow) {
     await db
@@ -380,7 +361,6 @@ const processChat = async (
     );
   }
 
-  // Prune old summaries exceeding maxDailySummaries
   const maxSummaries = workspace.maxDailySummaries;
   const pruneResult = await db.execute(sql`
     DELETE FROM memory_daily_summary
@@ -398,7 +378,6 @@ const processChat = async (
     );
   }
 
-  // Mark chat as processed
   await completeChatExtraction(chat.id, readAt, cursor);
 
   logger.info(`Memory summary extraction completed for chat ${chat.id}`);
@@ -414,30 +393,12 @@ type ChatToProcess = {
   embeddingProvider: typeof providerTable.$inferSelect | null;
 };
 
-/**
- * Finds chats that need memory extraction processing.
- *
- * A Chat is due when it is not mid-turn and its Active path ends somewhere its
- * cursor does not: a turn, an edit, a move to another Alternative or a
- * Delete. A Chat whose last pass failed waits an hour before its retry. A
- * Chat an A2A endpoint started is read only while that endpoint extracts
- * memories (ADR-0032), whoever added its turns; one whose endpoint is gone
- * never is.
- */
 const findChatsToProcess = async (): Promise<ChatToProcess[]> => {
-  // Find workspaces with memory extraction enabled
   const workspacesWithExtraction = await db
     .select()
     .from(workspaceTable)
     .where(isNotNull(workspaceTable.memoryExtractionProviderId));
 
-  // Resolved through the Scoped-resource authority, as every other resource a
-  // Chat turn reaches is: a Shared Provider serves a Workspace's memory only
-  // where an Attachment makes it visible there (ADR-0007). Resolved before the
-  // Chat read, so a Workspace that cannot see its extraction Provider never
-  // takes a slot in the batch.
-  // ponytail: up to two lookups per memory-enabled Workspace each run; batch
-  // the Provider and Attachment reads if that count grows large.
   const workspaceMap = new Map<string, Omit<ChatToProcess, "chat">>();
   for (const workspace of workspacesWithExtraction) {
     const providerId = workspace.memoryExtractionProviderId;
@@ -478,10 +439,8 @@ const findChatsToProcess = async (): Promise<ChatToProcess[]> => {
 
   const workspaceIds = [...workspaceMap.keys()];
 
-  // Find chats in those workspaces that need processing
   const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
 
-  // Not the messages: those are read per Chat as it is processed.
   const chatsToProcess = await db
     .select({
       id: chatTable.id,
@@ -499,8 +458,6 @@ const findChatsToProcess = async (): Promise<ChatToProcess[]> => {
     .where(
       and(
         inArray(chatTable.workspaceId, workspaceIds),
-        // An A2A Chat or a Trigger run's Chat (ADR-0044) is read only while
-        // its endpoint or Trigger opts in.
         or(
           and(isNull(chatTable.a2aEndpointId), isNull(chatTable.triggerRunId)),
           eq(a2aEndpointTable.extractMemories, true),
@@ -526,17 +483,6 @@ const findChatsToProcess = async (): Promise<ChatToProcess[]> => {
   return result;
 };
 
-/**
- * Processes a batch of chats for memory extraction.
- * This is the main entry point called by the memory scheduler.
- *
- * `signal` is the scheduler's stop handle's signal: when it aborts (a graceful
- * shutdown), the batch stops before its next Chat. The Chat being processed
- * when the signal fires still finishes — aborting mid-write would leave its
- * `memoryExtractionStatus` half-way between `processing` and a terminal state.
- * {@link BATCH_DEADLINE_MS} stops it the same way, so one batch cannot hold the
- * extraction lock for longer than that plus one Chat.
- */
 export const processMemoryExtractionBatch = async (
   signal?: AbortSignal,
 ): Promise<void> => {
@@ -553,16 +499,12 @@ export const processMemoryExtractionBatch = async (
 
     logger.info(`Found ${chatsToProcess.length} chats to process`);
 
-    // Process chats sequentially to avoid rate limits and race conditions
     for (const {
       chat,
       workspace,
       extractionProvider,
       embeddingProvider,
     } of chatsToProcess) {
-      // The drain wants the pool and the process gone; a batch already running
-      // is the one thing that does not need to finish. Leave the chats it
-      // never reached to the next worker, and the one in flight to itself.
       if (signal?.aborted) {
         logger.info(
           "Memory extraction batch stopped for shutdown, before the next chat",
@@ -575,15 +517,10 @@ export const processMemoryExtractionBatch = async (
         );
         return;
       }
-      // Taken per Chat, just before its Active path is read: the pass is a
-      // snapshot of that moment, not of the scan, which may be minutes earlier
-      // by the time a Chat late in the batch is reached.
       const readAt = new Date();
       try {
-        // Mark as processing
         await updateChatExtractionStatus(chat.id, "processing", readAt);
 
-        // Process the chat
         await processChat(
           chat,
           workspace,

@@ -11,11 +11,6 @@ import { createLoadSkillTool } from "../tools/skill.ts";
 import { DELEGATE_TOOL_NAME } from "../tools/turn-tool-names.ts";
 import type { SandboxBackend, SandboxContext } from "../sandbox/types.ts";
 
-// Every core plugin the domain Tool sets transitively import the db and a few
-// services; mock them the same way `tools-platform/index.test.ts` does, so
-// loading the real plugins here needs no live Postgres. Factories return AI
-// SDK tool maps without touching the db until a tool's `execute` runs — except
-// memory, whose embedding-Provider lookup this empty stub leaves unconfigured.
 vi.mock("../index.ts", () => {
   const query = {
     from: () => query,
@@ -33,46 +28,6 @@ vi.mock("../storage/index.ts", () => ({ getStorage: vi.fn() }));
 import { loadPlugins } from "../plugins/loader.ts";
 import { ALWAYS_ON_PLUGINS } from "../plugins/builtin.ts";
 import { getToolSets, SANDBOX_TOOLSET_ID } from "../tools/index.ts";
-
-/**
- * Tool-result clearing is deny-by-default (`CLEARABLE_TOOL_NAMES`, deliberately
- * a short allowlist). This test is the other half of that: it enumerates every
- * name the core plugins actually produce and asserts each has an intended
- * classification, so a newly added tool — in an existing core Tool set, or a
- * wholly new one — fails loudly here rather than silently defaulting to "not
- * clearable" (safe) or, worse, someone widening the allowlist without
- * thinking it through.
- *
- * Structurally exhaustive over the plugin registry: this loads the real core
- * plugins (`ALWAYS_ON_PLUGINS` — currently `@platypus/tools-basic` and
- * `@platypus/tools-platform` — plus the gated `@platypus/web-fetch`) through
- * the real loader, then reads every registered Tool set's ACTUAL
- * `buildTurnTools` output via `getToolSets()`, rather than hand-calling each
- * factory. A brand-new core Tool set that registers itself is picked up
- * automatically; the only thing this list must be kept in sync with by hand
- * is which plugin NAMES are core (mirroring `BUILTIN_PLUGINS` in
- * `plugins/builtin.ts`) — a new *gated* (non-always-on) core plugin needs its
- * name added to `CORE_PLUGIN_NAMES` below, the same way it would need adding
- * to an Operator's `PLATYPUS_PLUGINS` to run at all.
- *
- * Two exceptions, both documented at their `names.add(...)` call below:
- * `sandbox` resolves through a real Sandbox row at Chat-turn time, so its
- * registry-driven `buildTurnTools` degrades to `{}` under these DB mocks
- * (`composeToolSet`'s own try/catch) — its real tool names are read instead
- * by calling `createSandboxTools` directly with a stub backend, which needs
- * no database. `web_search` / `read_url` are built from a live Web-search
- * backend's executors inside `web-backends/index.ts` and can't be
- * materialized without one, so they are asserted by their known, grep-stable
- * literal names.
- *
- * Scope: core plugins only, matching the allowlist's own scope — an MCP or
- * third-party plugin tool is deny-by-default here too, unless its MCP
- * declared `readOnlyHint` (ADR-0021, issue #626), which this inventory does
- * not exercise: that resolver lives on the Tool session, not in
- * `isClearableToolName`'s own default. Sub-Agent delegation is one fixed tool
- * name, `delegate`, assigned ad hoc in `chat-execution.ts` like `loadSkill` —
- * the `delegateTo*` names it replaced live on only in stored Chat history.
- */
 
 const CORE_PLUGIN_NAMES = ["@platypus/web-fetch"];
 
@@ -98,8 +53,6 @@ beforeAll(async () => {
   const names = new Set<string>();
 
   for (const registration of getToolSets()) {
-    // `sandbox` needs a live Sandbox row to resolve; see the doc comment
-    // above. Its real names are added separately below.
     if (registration.id === SANDBOX_TOOLSET_ID) continue;
     const tools = await registration.buildTurnTools(
       STUB_CONTEXT,
@@ -109,9 +62,6 @@ beforeAll(async () => {
     Object.keys(tools).forEach((n) => names.add(n));
   }
 
-  // `sandbox`: the five tools are static per backend, not data-dependent, so a
-  // stub backend/ctx (no DB) still yields the real names.
-  // With `fsReadBytes`, so the two tools gated on it are enumerated too.
   const stubBackend = { fsReadBytes: () => {} } as unknown as SandboxBackend;
   const stubCtx = {} as unknown as SandboxContext;
   Object.keys(
@@ -123,60 +73,38 @@ beforeAll(async () => {
     ),
   ).forEach((n) => names.add(n));
 
-  // `@platypus/web-fetch` also registers through `getToolSets()` above (it's
-  // in `CORE_PLUGIN_NAMES`), so no separate call is needed here — kept as
-  // documentation of where `fetchUrl` actually comes from.
   void createWebFetchTools;
 
-  // Ad hoc: skill loading is assigned directly in `chat-execution.ts`, never
-  // through the Tool-set registry.
   void createLoadSkillTool;
   names.add("loadSkill");
   names.add("readSkillFile");
 
-  // Ad hoc for the same reason: the one delegation tool is assigned directly
-  // in `chat-execution.ts` when at least one sub-agent resolved.
   names.add(DELEGATE_TOOL_NAME);
 
-  // Web-search backend (see doc comment above: can't be materialized here).
   names.add("web_search");
   names.add("read_url");
 
-  // Memory offers `memorySearch` only where the Workspace has an embedding
-  // Provider, which the db stub above doesn't configure.
   names.add("memorySearch");
 
   materializedNames = [...names];
 });
 
-/**
- * Every enumerated name mapped to whether it SHOULD be clearable. Kept next to
- * the allowlist rather than inline in the assertions, so an unclassified name
- * fails with "not in this map" rather than a confusing boolean mismatch.
- */
 const EXPECTED_CLEARABLE: Record<string, boolean> = {
-  // Clearable: large, disposable, read-only.
   web_search: true,
   read_url: true,
   fetchUrl: true,
   fsRead: true,
   fsList: true,
-  // The model can view the file again; the saved result is metadata anyway.
   fsView: true,
-  // Paged reads of a long Transcript are large and disposable; the model can
-  // read the next page again.
   listChats: true,
   readTranscript: true,
 
-  // Not clearable: a download button's result is tiny, and is the User's.
   fsDownload: false,
 
-  // Not clearable: mutating.
   fsWrite: false,
   fsEdit: false,
   shellExec: false,
 
-  // Not clearable: pure utilities, results are tiny.
   convertTemperature: false,
   convertDistance: false,
   convertWeight: false,
@@ -186,8 +114,6 @@ const EXPECTED_CLEARABLE: Record<string, boolean> = {
   generateUuid: false,
   generateNanoId: false,
 
-  // Not clearable: Platypus-domain tools — mutating, or small/metadata-shaped
-  // reads whose value is in staying visible, not in being large.
   listBoards: false,
   getBoardState: false,
   moveCard: false,
@@ -230,14 +156,14 @@ const EXPECTED_CLEARABLE: Record<string, boolean> = {
   deleteNotification: false,
   memorySearch: false,
   memoryGet: false,
+  createArtifact: false,
+  updateArtifact: false,
+  readArtifact: true,
+  listArtifacts: false,
 
-  // Not clearable: instructions the model is meant to keep following.
   loadSkill: false,
-  // Clearable: a bundled file, which the model can read again.
   readSkillFile: true,
 
-  // Not clearable: a delegation result is the whole of a sub-agent's work, and
-  // re-delegating to get it back would re-run the run.
   delegate: false,
 };
 
@@ -262,16 +188,12 @@ describe("Tool-result clearing — core tool inventory", () => {
     }
   });
 
-  // Tool-input clearing (issue #1722): a renamed tool would silently stop
-  // having its input cleared, so every allowlisted name must still exist.
   it("names only real core tools in the Tool-input clearing allowlist", () => {
     for (const name of CLEARABLE_TOOL_INPUT_FIELDS.keys()) {
       expect(materializedNames, name).toContain(name);
     }
   });
 
-  // Stored Chat history keeps the pre-dispatcher names for ever, and a
-  // Transcript rebuilt from it is what clearing runs over.
   it("denies the pre-dispatcher sub-Agent tool names still held in stored history", () => {
     expect(isClearableToolName("delegateToResearchAgent")).toBe(false);
     expect(isClearableToolName("delegateToBillingHelper")).toBe(false);

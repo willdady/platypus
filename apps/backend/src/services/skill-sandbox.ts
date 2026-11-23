@@ -18,20 +18,12 @@ import type { Database } from "./scoped-resource.ts";
 import type { SkillRow } from "./skill.ts";
 import { resolveOwned } from "./workspace-resource.ts";
 
-/**
- * Copies a bundled Skill into the Workspace's Sandbox when it is loaded
- * (ADR-0036). The copy is a cache of the stored bundle: a hash manifest says
- * which bundle it holds, and anything else is rewritten from scratch.
- */
-
-/** Where a Skill's copy sits, relative to the Sandbox root. */
 export const skillSandboxDirectory = (name: string) =>
   `.platypus/skills/${name}`;
 
-// Skill names never start with `.`, so no Skill's directory is ever this one.
+// why: Skill names never start with '.', so no Skill's directory is this one
 const manifestPath = (name: string) => `.platypus/skills/.hashes/${name}`;
 
-/** What a load needs to copy a Skill into the Sandbox, if it may. */
 export type SkillSandboxAccess = {
   workspaceId: string;
   hasSandboxToolSet: boolean;
@@ -58,12 +50,6 @@ const exec = async (
   }
 };
 
-/**
- * Brings the Sandbox's copy up to date and returns the files it had to leave
- * out. One read when the manifest matches; otherwise the directory is removed
- * and rewritten, and the manifest written last so a copy that fails part way
- * is retried on the next load.
- */
 const syncSkill = async (
   database: Database,
   backend: SandboxBackend,
@@ -76,18 +62,15 @@ const syncSkill = async (
   const skipped = writeBytes
     ? []
     : files.filter((file) => !file.isText).map((file) => file.path);
-  // A text-only copy is a different copy: the same bundle copied later to a
-  // backend that can take bytes must be rewritten with its binaries.
+  // why: a text-only copy is redone with its binaries once a backend can take bytes
   const hash = row.bundleHash ?? (await hashSkillRow(database, row));
   const stamp = writeBytes ? hash : `${hash} text-only`;
   const manifest = manifestPath(row.name);
 
-  try {
-    const current = await backend.fsRead(ctx, { path: manifest }, options);
-    if (current.content === stamp) return skipped;
-  } catch {
-    // No manifest yet: nothing has been copied.
-  }
+  const current = await backend
+    .fsRead(ctx, { path: manifest }, options)
+    .catch(() => null);
+  if (current?.content === stamp) return skipped;
 
   const directory = skillSandboxDirectory(row.name);
   await exec(backend, ctx, `rm -rf -- ${shQuote(directory)}`, options);
@@ -105,7 +88,6 @@ const syncSkill = async (
   );
 
   const executable: string[] = [];
-  // ponytail: one write at a time; a bundle holds at most 500 files.
   for (const file of files) {
     if (!file.isText && !writeBytes) continue;
     const data = await readStoredSkillFile(file);
@@ -131,6 +113,7 @@ const syncSkill = async (
     );
   }
 
+  // why: written last, so a copy that fails part way is redone on the next load
   await backend.fsWrite(
     ctx,
     { path: manifest, content: stamp, mode: "overwrite" },
@@ -139,11 +122,6 @@ const syncSkill = async (
   return skipped;
 };
 
-/**
- * Copies a bundled Skill into the Workspace's Sandbox, where the Agent has the
- * `sandbox` Tool set and the Workspace has a Sandbox. Never throws: a Sandbox
- * that is stopped or errors is a `failed` outcome, and the load goes on.
- */
 const copySkillToSandbox = async (
   database: Database,
   row: SkillRow,
@@ -206,12 +184,6 @@ const loadNote = (copy: SkillCopyOutcome, needsSandbox: boolean): string => {
   return `${NOT_COPIED_REASONS[copy.reason]} ${READ_SKILL_FILE_NOTE}${warning}`;
 };
 
-/**
- * The one builder of a loaded Skill's result, called by both `loadSkill` and
- * slash-command seeding so the two cannot drift — including the copy into the
- * Sandbox, which happens here and only here. A Skill with no bundled files
- * keeps exactly the `{ name, body }` it always had, and copies nothing.
- */
 export const skillLoadResult = async (
   database: Database,
   row: SkillRow,

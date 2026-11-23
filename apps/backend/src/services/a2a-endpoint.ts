@@ -56,34 +56,16 @@ import type { A2aRejectReason } from "./a2a-call.ts";
 import { stopRevokedA2aWork } from "./a2a-cancel.ts";
 import { oneRow } from "../db/one-row.ts";
 
-/**
- * A2A endpoints (ADR-0032): one Agent made reachable over A2A from one
- * Workspace, under its own unguessable URL, with one bearer token per client.
- * Only the Workspace Owner manages them, and only through the session routes —
- * no Agent tool reaches this module, so a live token never enters a model's
- * context.
- */
-
 export type A2aEndpointRow = typeof a2aEndpointTable.$inferSelect;
 type A2aTokenRow = typeof a2aTokenTable.$inferSelect;
 
-/** Makes a leaked A2A token recognisable, beside Inbound Triggers' `pit_`. */
 export const A2A_TOKEN_PREFIX = "pa2a_";
 
-/**
- * A token as the Owner sees it listed: how it stands, never its value, hash
- * or reminder bookkeeping.
- */
 export const toPublicToken = (row: A2aTokenRow) => {
   const { tokenHash: _tokenHash, tokenNotice: _tokenNotice, ...rest } = row;
   return { ...rest, tokenStatus: bearerTokenStatus(row) };
 };
 
-/**
- * The Workspace's endpoints, each with its Agent's name and how many of its
- * tokens have not expired — as `bearerTokenStatus` reads expiry — so one no
- * client can call stands out.
- */
 export const listA2aEndpoints = async (
   workspaceId: string,
 ): Promise<A2aEndpointListItem[]> => {
@@ -110,7 +92,6 @@ export const listA2aEndpoints = async (
     .orderBy(asc(a2aEndpointTable.createdAt));
 };
 
-/** The endpoint with its tokens. Throws `NotFoundError` outside the Workspace. */
 export const getA2aEndpoint = async (workspaceId: string, id: string) => {
   const endpoint = await requireOwned(db, "a2aEndpoint", { id, workspaceId });
   const tokens = await db
@@ -121,11 +102,6 @@ export const getA2aEndpoint = async (workspaceId: string, id: string) => {
   return { ...endpoint, tokens: tokens.map(toPublicToken) };
 };
 
-/**
- * Creates an endpoint for an Agent usable in this Workspace — its own, or an
- * attached Shared Agent. An omitted name or description is copied from the
- * Agent; the Owner edits it for outside callers later.
- */
 export const createA2aEndpoint = async (
   ctx: ScopeContext,
   fields: A2aEndpointCreate,
@@ -138,7 +114,6 @@ export const createA2aEndpoint = async (
     await db
       .insert(a2aEndpointTable)
       .values({
-        // The public, unguessable part of the URL — never the Agent's id.
         id: nanoid(),
         workspaceId: ctx.workspaceId,
         agentId: fields.agentId,
@@ -167,15 +142,10 @@ export const updateA2aEndpoint = async (
     { ...fields, updatedAt: new Date() },
   );
   if (!row) throw new NotFoundError("A2A endpoint not found");
-  // Disabling it stops its running Tasks too.
   if (!row.enabled) await stopRevokedA2aWork([id]);
   return row;
 };
 
-/**
- * Deletes the endpoint; its tokens go with it by the foreign key, and its
- * running Tasks are canceled.
- */
 export const deleteA2aEndpoint = async (
   workspaceId: string,
   id: string,
@@ -186,10 +156,6 @@ export const deleteA2aEndpoint = async (
   await stopRevokedA2aWork([id]);
 };
 
-/**
- * Issues a named token on the endpoint, expiring after `expiryDays`. The plaintext is in this return value
- * and nowhere else: only its hash is stored.
- */
 export const createA2aToken = async (
   workspaceId: string,
   endpointId: string,
@@ -229,19 +195,14 @@ export const deleteA2aToken = async (
     )
     .returning();
   if (deleted.length === 0) throw new NotFoundError("A2A token not found");
-  // Only this token's running Tasks: the endpoint's others are still live.
   await stopRevokedA2aWork([endpointId]);
 };
 
-// ------------------------------------------------------------ public side
-
-/** A live endpoint, with what a turn needs to act as its Owner. */
 export type LiveA2aEndpoint = A2aEndpointRow & {
   organizationId: string;
   ownerId: string;
 };
 
-/** Why an endpoint a public call names isn't live. */
 type A2aEndpointNotLive = Extract<
   A2aRejectReason,
   "unknown_endpoint" | "disabled" | "gate" | "owner_left"
@@ -251,22 +212,13 @@ export type A2aEndpointLookup = (
   | { live: true; endpoint: LiveA2aEndpoint }
   | { live: false; reason: A2aEndpointNotLive }
 ) & {
-  /** Known unless the endpoint is unknown; for the call log. */
   organizationId?: string;
   workspaceId?: string;
 };
 
-/**
- * The endpoint a public call names, if it is live: it exists and is enabled,
- * the Organization's A2A gate admits its Workspace, and its Workspace Owner
- * may still act (`ownerMayAct`: a member or super admin, and not banned).
- * Anything else says why, for the call log only: every public route answers
- * it with the same `404`, so a caller can't tell which endpoints exist.
- */
 export const lookupA2aEndpoint = async (
   endpointId: string,
 ): Promise<A2aEndpointLookup> => {
-  // Every call starts here, so it reads only the columns it decides on.
   const [row] = await db
     .select({
       endpoint: getTableColumns(a2aEndpointTable),
@@ -313,18 +265,11 @@ export const lookupA2aEndpoint = async (
   };
 };
 
-/** The A2A protocol version, as `Major.Minor`, every card's interface serves. */
 export const A2A_PROTOCOL_VERSION = "1.0";
 
-/** The JSON-RPC interface URL an endpoint's card names. */
 export const a2aInterfaceUrl = (endpointId: string) =>
   interfaceUrl(backendBaseUrl(), endpointId);
 
-/**
- * The endpoint's one skill, built from its public name and description, so it
- * reveals nothing the card does not. A2A 1.0 §5.7: a required array holds at
- * least one element, so it has a tag and the card has the skill.
- */
 const endpointSkill = (endpoint: A2aEndpointRow) => ({
   id: endpoint.id,
   name: endpoint.name,
@@ -332,12 +277,6 @@ const endpointSkill = (endpoint: A2aEndpointRow) => ({
   tags: ["chat"],
 });
 
-/**
- * The public Agent Card (A2A 1.0): the endpoint's public name and description,
- * the bearer scheme, the interface URL and the endpoint's one skill. Never the
- * Agent's own description, Tool sets or Skills. Capabilities say only what
- * this server answers today.
- */
 export const publicAgentCard = (endpoint: A2aEndpointRow) => ({
   name: endpoint.name,
   description: endpoint.description,
@@ -363,13 +302,6 @@ export const publicAgentCard = (endpoint: A2aEndpointRow) => ({
   skills: [endpointSkill(endpoint)],
 });
 
-// ------------------------------------------------------------ Org Admin oversight
-
-/**
- * Every A2A endpoint in the Organization with its tokens, for its Org Admins:
- * where it is, whose it is and which Agent it reaches. Never a token's value
- * or hash.
- */
 export const listOrgA2aEndpoints = async (
   orgId: string,
 ): Promise<OrgA2aEndpoint[]> => {
@@ -423,7 +355,6 @@ export const listOrgA2aEndpoints = async (
   }));
 };
 
-/** The endpoint, if it is in the Organization, with its Workspace. */
 const findOrgEndpoint = async (orgId: string, endpointId: string) => {
   const [row] = await db
     .select()
@@ -442,12 +373,6 @@ const findOrgEndpoint = async (orgId: string, endpointId: string) => {
   return row?.a2a_endpoint ?? null;
 };
 
-/**
- * Revokes an endpoint on an Org Admin's behalf by deleting it: its URL and
- * every token stop working at once, its running Tasks are canceled, and its
- * Chats stay. The Owner is told.
- * `false` when no endpoint by that id is in the Organization.
- */
 export const revokeOrgA2aEndpoint = async (
   orgId: string,
   endpointId: string,
@@ -458,11 +383,9 @@ export const revokeOrgA2aEndpoint = async (
     .delete(a2aEndpointTable)
     .where(eq(a2aEndpointTable.id, endpointId))
     .returning({ id: a2aEndpointTable.id });
-  // The Owner deleted it in the meantime: nothing left to tell them about.
   if (deleted.length === 0) return false;
   await stopRevokedA2aWork([endpointId]);
 
-  // A failure is logged, not thrown: the revoke has already happened.
   await notifyTokenOwner(
     orgId,
     endpoint,
@@ -476,16 +399,6 @@ export const revokeOrgA2aEndpoint = async (
   return true;
 };
 
-/**
- * Revokes one token on an Org Admin's behalf by deleting it, canceling its
- * running Tasks; the endpoint's other tokens keep working. The Owner is told. `false` when the token is not
- * on that endpoint, or the endpoint is not in the Organization.
- *
- * `seenTokenCreatedAt` is when the value the Admin was looking at was issued.
- * Regenerating keeps the token's id but issues a new value, which the Admin
- * never judged, so a revoke naming any other time is refused rather than
- * deleting it.
- */
 export const revokeOrgA2aToken = async (
   orgId: string,
   endpointId: string,
@@ -508,8 +421,7 @@ export const revokeOrgA2aToken = async (
   if (token.tokenCreatedAt.getTime() !== seenTokenCreatedAt.getTime()) {
     throw new ConflictError(TOKEN_REPLACED_MESSAGE);
   }
-  // A regenerate landing between the read above and this delete is refused
-  // the same way, so the delete is conditional on the hash just read.
+  // why: on the hash just read, so a regenerate since is refused, not revoked unseen
   const deleted = await db
     .delete(a2aTokenTable)
     .where(
@@ -522,7 +434,6 @@ export const revokeOrgA2aToken = async (
   if (deleted.length === 0) throw new ConflictError(TOKEN_REPLACED_MESSAGE);
   await stopRevokedA2aWork([endpointId]);
 
-  // A failure is logged, not thrown: the revoke has already happened.
   await notifyTokenOwner(
     orgId,
     endpoint,
@@ -540,8 +451,6 @@ export const revokeOrgA2aToken = async (
   );
   return true;
 };
-
-// ------------------------------------------------------------ the gate
 
 const A2A_GATE = {
   gate: "a2aGate",
@@ -562,10 +471,6 @@ const A2A_GATE = {
 export const getA2aAccess = (orgId: string): Promise<OrgGateAccess> =>
   getGateAccess(A2A_GATE, orgId);
 
-/**
- * Saves the gate and the Workspaces' switches. A Workspace it shuts out has
- * its endpoints' running Tasks canceled.
- */
 export const setA2aAccess = async (
   orgId: string,
   update: OrgGateAccessUpdate,

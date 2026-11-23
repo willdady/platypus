@@ -1,21 +1,6 @@
 import { z } from "zod";
-import { timezoneSchema } from "@platypus/schemas";
+import { artifactScriptOriginSchema, timezoneSchema } from "@platypus/schemas";
 
-/**
- * The backend's environment variables, typed and validated (#1617).
- *
- * A malformed value stops the backend at boot, naming the variable, instead of
- * misbehaving later: a non-numeric interval used to become `NaN`, which
- * hot-loops the scheduler, and a `NaN` cap silently stops Cron Triggers.
- * `boot-env.ts` parses this before any other module loads.
- *
- * Not here: `LOG_LEVEL` and `NODE_ENV` (the logger reads them, and reports
- * this parse), the `PLATYPUS_PLUGIN*` and `ADMIN_*` variables (the plugin
- * loader and the seed validate their own), and the breaker, inbound and A2A
- * caps (validated at boot by their modules).
- */
-
-// Named so the docs contract can pin the documented defaults.
 const DEFAULT_PORT = 4001;
 const DEFAULT_DATABASE_POOL_MAX = 10;
 const DEFAULT_INVITATION_EXPIRY_DAYS = 7;
@@ -26,11 +11,11 @@ const DEFAULT_CHAT_PER_STEP_TIMEOUT_MS = 2 * 60 * 1000;
 const DEFAULT_CHAT_PER_RUN_TIMEOUT_MS = 30 * 60 * 1000;
 const DEFAULT_TRIGGER_PER_STEP_TIMEOUT_MS = 10 * 60 * 1000;
 const DEFAULT_TRIGGER_PER_RUN_TIMEOUT_MS = 60 * 60 * 1000;
+const DEFAULT_ARTIFACT_SCRIPT_ORIGINS = "https://cdnjs.cloudflare.com";
 
 const positiveInt = (fallback: number) =>
   z.coerce.number().int().positive().default(fallback);
 
-/** `true`/`false`/`1`/`0`, any case; anything else is refused, not guessed. */
 const boolean = (fallback: boolean) =>
   z
     .string()
@@ -44,35 +29,29 @@ const commaList = z
   .transform((v) => v.split(",").map((entry) => entry.trim()))
   .pipe(z.array(z.string().min(1, "must not contain an empty entry")));
 
-/** A deployment setting with no safe default: absent stops boot. */
 const requiredUrl = (protocol?: RegExp) =>
   z
     .string({ error: "is required" })
     .pipe(protocol ? z.url({ protocol }) : z.url());
 
-/**
- * The database connection string: required, and a Postgres URL rather than
- * whatever scheme a typo produced. Shared with `databaseUrl()` so the
- * migration runner checks the same thing the server does.
- */
+const artifactScriptOrigins = z
+  .string()
+  .default(DEFAULT_ARTIFACT_SCRIPT_ORIGINS)
+  .transform((value) => value.split(/\s+/).filter((entry) => entry.length > 0))
+  .pipe(z.array(artifactScriptOriginSchema));
+
 const databaseUrlSchema = requiredUrl(/^postgres(ql)?$/);
 
 const envSchema = z
   .object({
     PORT: z.coerce.number().int().min(1).max(65535).default(DEFAULT_PORT),
     ALLOWED_ORIGINS: z.string({ error: "is required" }).pipe(commaList),
-    // No fallback to the standard `PG*` variables: a deployment that forgets
-    // this must not silently connect to whatever the environment points at.
     DATABASE_URL: databaseUrlSchema,
-    // Connection pool size; the pool is built explicitly in `src/index.ts`.
     DATABASE_POOL_MAX: positiveInt(DEFAULT_DATABASE_POOL_MAX),
-    // The browser-facing origins. Every link the backend builds and every
-    // redirect it issues is derived from these, so there is no safe default.
     BETTER_AUTH_URL: requiredUrl(),
     FRONTEND_URL: requiredUrl(),
     AUTH_COOKIE_DOMAIN: z.string().optional(),
     INVITATION_EXPIRY_DAYS: positiveInt(DEFAULT_INVITATION_EXPIRY_DAYS),
-    // Invitation-only admission unless the Operator opens sign-up.
     REQUIRE_INVITATION_TO_SIGN_UP: boolean(true),
     TIMEZONE: timezoneSchema.default("UTC"),
     MEMORY_EXTRACTION_INTERVAL_MS: positiveInt(
@@ -81,7 +60,6 @@ const envSchema = z
     SCHEDULE_SCHEDULER_INTERVAL_MS: positiveInt(
       DEFAULT_SCHEDULE_SCHEDULER_INTERVAL_MS,
     ),
-    // `0` is allowed: it pauses Cron Triggers.
     SCHEDULE_MAX_CONCURRENT: z.coerce
       .number()
       .int()
@@ -107,8 +85,8 @@ const envSchema = z
     STORAGE_S3_ENDPOINT: z.url().optional(),
     STORAGE_S3_ACCESS_KEY_ID: z.string().optional(),
     STORAGE_S3_SECRET_ACCESS_KEY: z.string().optional(),
-    // Sent to api.github.com only, when installing Skills (ADR-0037).
     GITHUB_TOKEN: z.string().optional(),
+    ARTIFACT_SCRIPT_ORIGINS: artifactScriptOrigins,
   })
   .superRefine((env, ctx) => {
     if (env.STORAGE_BACKEND !== "s3") return;
@@ -119,8 +97,6 @@ const envSchema = z
         message: "is required when STORAGE_BACKEND=s3",
       });
     }
-    // Both unset leaves the AWS SDK's default credential chain (#1686); one
-    // alone is almost certainly a typo, not a choice.
     for (const [key, partner] of [
       ["STORAGE_S3_ACCESS_KEY_ID", "STORAGE_S3_SECRET_ACCESS_KEY"],
       ["STORAGE_S3_SECRET_ACCESS_KEY", "STORAGE_S3_ACCESS_KEY_ID"],
@@ -137,15 +113,15 @@ const envSchema = z
 
 export type Env = z.infer<typeof envSchema>;
 
-/**
- * Parse `source`, throwing one error that names every invalid variable. Values
- * are trimmed, and an empty one counts as unset, as `VAR=` in a `.env` means.
- */
+const EMPTY_VALUE_IS_MEANINGFUL = new Set(["ARTIFACT_SCRIPT_ORIGINS"]);
+
 export const parseEnv = (source: NodeJS.ProcessEnv = process.env): Env => {
   const present = Object.fromEntries(
     Object.entries(source)
       .map(([key, value]): [string, string | undefined] => [key, value?.trim()])
-      .filter(([, value]) => value),
+      .filter(
+        ([key, value]) => EMPTY_VALUE_IS_MEANINGFUL.has(key) || Boolean(value),
+      ),
   );
   const result = envSchema.safeParse(present);
   if (result.success) return result.data;
@@ -155,11 +131,6 @@ export const parseEnv = (source: NodeJS.ProcessEnv = process.env): Env => {
   throw new Error(`Invalid environment variables: ${problems.join("; ")}`);
 };
 
-/**
- * The validated `DATABASE_URL` on its own, for a caller that needs no other
- * setting — the migration runner, which otherwise runs before the server's own
- * environment check. An unset or malformed value throws the way `parseEnv` does.
- */
 export const databaseUrl = (
   source: NodeJS.ProcessEnv = process.env,
 ): string => {
@@ -171,9 +142,4 @@ export const databaseUrl = (
   return result.data;
 };
 
-/**
- * The validated environment. Re-read on every call, so a test that sets a
- * variable sees it.
- */
-// ponytail: re-parses per call (microseconds); cache it if a hot path shows it.
 export const env = (): Env => parseEnv();

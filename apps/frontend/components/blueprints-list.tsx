@@ -104,7 +104,7 @@ export function BlueprintsList({ orgId }: { orgId: string }) {
         )}
       />
 
-      {!isLoading && !error && blueprints.length > 0 && (
+      {blueprints.length > 0 && (
         <ListFooter className="mt-4">{actions}</ListFooter>
       )}
 

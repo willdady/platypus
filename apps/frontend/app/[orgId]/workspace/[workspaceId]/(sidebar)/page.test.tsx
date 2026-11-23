@@ -161,6 +161,48 @@ describe("Workspace home", () => {
     expect(within(triggersCard).getByText("1")).toBeInTheDocument();
   });
 
+  it("keeps the Boards count on its stat card but no Boards section", async () => {
+    mockScopedSWR({
+      "/boards": [
+        { id: "b1", name: "Sprint planning" },
+        { id: "b2", name: "Backlog" },
+      ],
+      "/providers": [{ id: "p1", name: "OpenAI" }],
+      ...workspaceRead,
+    });
+    await renderList(<Workspace />);
+
+    const boardsCard = screen
+      .getByText("Visual work management")
+      .closest("[data-slot='card']") as HTMLElement;
+    expect(within(boardsCard).getByText("2")).toBeInTheDocument();
+
+    expect(
+      screen.queryByRole("heading", { name: "Boards" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Create board" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("searchbox", { name: "Search boards" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("leaves the Boards section out of the loading skeleton", async () => {
+    // The section used to be drawn, body and all, when it was last left open.
+    localStorage.setItem("section:boards:open", "true");
+    mockScopedSWR({
+      "/providers": { isLoading: true },
+      ...workspaceRead,
+    });
+    await renderList(<Workspace />);
+
+    const region = screen.getByRole("status", { name: "Loading workspace" });
+    // Agents, Skills and Triggers remain: two dividers, one per section after
+    // Agents. The Boards section's divider is gone with it.
+    expect(region.querySelectorAll("[data-slot='separator']")).toHaveLength(2);
+  });
+
   it("shows a failed count as an error, not as 0", async () => {
     mockScopedSWR({
       "/skills": { error: { status: 500, message: "Server error" } },

@@ -17,15 +17,8 @@ import {
   updateBlueprint,
 } from "../services/blueprint.ts";
 
-/**
- * The Organization surface over the Blueprint module (`services/blueprint.ts`,
- * ADR-0008). All management — and applying — is Org-Admin-only; each handler
- * authorizes, calls the module and returns its result, and the module's typed
- * failures are mapped to a status by `app.onError` (ADR-0010).
- */
 const orgBlueprint = new Hono<{ Variables: Variables }>();
 
-/** Create a Blueprint (admin only) */
 orgBlueprint.post(
   "/",
   requireAuth,
@@ -37,13 +30,11 @@ orgBlueprint.post(
   },
 );
 
-/** List Blueprints, each with its items (admin only) */
 orgBlueprint.get("/", requireAuth, requireOrgAccess(["admin"]), async (c) => {
   const { orgId } = orgScopeOf(c);
   return c.json({ results: await listBlueprints(orgId) });
 });
 
-/** Get a Blueprint by ID, with its items (admin only) */
 orgBlueprint.get(
   "/:blueprintId",
   requireAuth,
@@ -54,7 +45,6 @@ orgBlueprint.get(
   },
 );
 
-/** Update a Blueprint by ID (admin only) — replaces its item set */
 orgBlueprint.put(
   "/:blueprintId",
   requireAuth,
@@ -71,7 +61,6 @@ orgBlueprint.put(
   },
 );
 
-/** Delete a Blueprint by ID (admin only) — items cascade */
 orgBlueprint.delete(
   "/:blueprintId",
   requireAuth,
@@ -83,14 +72,6 @@ orgBlueprint.delete(
   },
 );
 
-/**
- * Apply a Blueprint to an existing Workspace (admin only). The macro creates the
- * Tier 1 Attachments for the Blueprint's current items and stamps its Tier 2
- * pointer-settings onto the Workspace. It is additive and idempotent on Tier 1
- * (re-applying, or applying a resource already attached, is a no-op) and
- * last-write-wins on Tier 2 (ADR-0008). Ad-hoc apply stays single-Blueprint;
- * the ordered set lives only on invitations (ADR-0009).
- */
 orgBlueprint.post(
   "/:blueprintId/apply",
   requireAuth,

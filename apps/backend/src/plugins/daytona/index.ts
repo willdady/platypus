@@ -15,10 +15,6 @@ import {
   type DaytonaSandboxCredentials,
 } from "./backend.ts";
 
-// Core plugin: the Daytona hosted Sandbox backend. Gate-able — it sends
-// Workspace commands and files to a third-party service (ADR-0013). Enable it
-// by listing "@platypus/daytona" in PLATYPUS_PLUGINS and supplying the API key
-// in PLATYPUS_PLUGIN_CONFIG_DAYTONA.
 const daytonaBackend: SandboxBackendContribution<
   DaytonaSandboxConfig,
   DaytonaSandboxCredentials,
@@ -29,8 +25,6 @@ const daytonaBackend: SandboxBackendContribution<
   name: "Daytona",
   configSchema: daytonaSandboxConfigSchema,
   credentialsSchema: daytonaSandboxCredentialsSchema,
-  // Per-Workspace config/credentials are empty; the adapter authenticates with
-  // the deploy-time block, shared by every Workspace.
   create: (_config, _credentials, plugin) =>
     createDaytonaSandboxBackend(plugin),
 };

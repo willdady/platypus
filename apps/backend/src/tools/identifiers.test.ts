@@ -12,12 +12,6 @@ type NanoIdInput = InferToolInput<typeof generateNanoId>;
 const uuidSchema = generateUuid.inputSchema as z.ZodType<UuidInput>;
 const nanoIdSchema = generateNanoId.inputSchema as z.ZodType<NanoIdInput>;
 
-/**
- * `callTool` invokes `execute` directly, bypassing the AI SDK's schema-driven
- * defaulting that happens before `execute` runs in production. These helpers
- * resolve defaults through the schema first, so a test can omit an optional
- * field the same way a model call omitting it would behave for real.
- */
 const callUuidTool = (input: Partial<UuidInput>) =>
   callTool(generateUuid, uuidSchema.parse(input));
 const callNanoIdTool = (input: Partial<NanoIdInput>) =>
@@ -57,7 +51,6 @@ describe("generateUuid", () => {
   it.each([
     { version: "v1" },
     { format: "uppercase" },
-    // Out-of-range counts are rejected, not clamped.
     { count: 0 },
     { count: 101 },
   ])("rejects %o", (input) => {
@@ -66,8 +59,6 @@ describe("generateUuid", () => {
 });
 
 describe("generateNanoId", () => {
-  // test-setup stubs `nanoid()` suite-wide; the url-safe path calls it, so
-  // restore the real one here.
   beforeEach(async () => {
     const actual = await vi.importActual<typeof import("nanoid")>("nanoid");
     mockNanoid.mockImplementation(actual.nanoid);

@@ -362,43 +362,42 @@ export function TriggerList({
   );
 
   // Shown even with nothing listed: fired One-offs may be all there is.
-  const controls =
-    !error && allTriggers.length ? (
-      <ListToolbar>
-        <Select
-          value={typeFilter}
-          onValueChange={(value) =>
-            set("triggerType", value === ALL ? null : value)
+  const controls = allTriggers.length ? (
+    <ListToolbar>
+      <Select
+        value={typeFilter}
+        onValueChange={(value) =>
+          set("triggerType", value === ALL ? null : value)
+        }
+      >
+        <SelectTrigger className="w-36" aria-label="Filter by type">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={ALL}>All types</SelectItem>
+          {triggerTypeSchema.options.map((type) => (
+            <SelectItem key={type} value={type}>
+              {TRIGGER_TYPE_LABELS[type]}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <div className="flex items-center gap-2">
+        <Switch
+          id="show-fired-triggers"
+          checked={showFired}
+          onCheckedChange={(checked) =>
+            set("triggerShowFired", checked ? "true" : null)
           }
-        >
-          <SelectTrigger className="w-36" aria-label="Filter by type">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL}>All types</SelectItem>
-            {triggerTypeSchema.options.map((type) => (
-              <SelectItem key={type} value={type}>
-                {TRIGGER_TYPE_LABELS[type]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <div className="flex items-center gap-2">
-          <Switch
-            id="show-fired-triggers"
-            checked={showFired}
-            onCheckedChange={(checked) =>
-              set("triggerShowFired", checked ? "true" : null)
-            }
-            // Only a One-off fires, and a One-off is always Cron.
-            disabled={typeFilter === "event" || typeFilter === "inbound"}
-          />
-          <Label htmlFor="show-fired-triggers" className="text-sm font-normal">
-            Show fired
-          </Label>
-        </div>
-      </ListToolbar>
-    ) : null;
+          // Only a One-off fires, and a One-off is always Cron.
+          disabled={typeFilter === "event" || typeFilter === "inbound"}
+        />
+        <Label htmlFor="show-fired-triggers" className="text-sm font-normal">
+          Show fired
+        </Label>
+      </div>
+    </ListToolbar>
+  ) : null;
 
   const shown =
     typeFilter === ALL

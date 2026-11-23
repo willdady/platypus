@@ -35,7 +35,6 @@ import {
   type ToolSetRegistration,
 } from "../tools/index.ts";
 
-// A capturing `register` and the builtin/import module shapes the loader expects.
 const makeRegister = () => {
   const calls: Array<{ id: string; registration: ToolSetRegistration }> = [];
   const register = (id: string, registration: ToolSetRegistration) => {
@@ -44,10 +43,6 @@ const makeRegister = () => {
   return { register, calls };
 };
 
-// A capturing `registerSandbox` for the Sandbox-backend extension point. It
-// captures the *composed registration* — factory-form `configSchema` resolved
-// away, `create` already bound to the plugin's block — which is what the loader
-// hands this seam, not the raw contribution.
 const makeSandboxRegister = () => {
   const calls: SandboxBackendRegistration[] = [];
   const registerSandbox = (registration: SandboxBackendRegistration) => {
@@ -85,17 +80,8 @@ const toolSet = (id: string): ToolSetContribution => ({
   tools: {},
 });
 
-// Every deploy-time block the loader builds now carries a plugin-bound logger.
-// The assertions below still spell the block out in full — `expect.anything()`
-// widened once here, because it is typed `any` and would be an unsafe
-// assignment at each site. What the logger IS is asserted on its own, further
-// down.
 const A_LOGGER_MATCHER = expect.anything() as unknown;
 
-// Core's own logger, at whatever level an Operator's LOG_LEVEL would have set,
-// writing its parsed JSON into `lines` instead of stdout. Same library and same
-// `child()` seam the loader uses by default, only with somewhere to read the
-// output back from — so what these tests assert is what an Operator would see.
 const captureLogger = (level: string) => {
   const lines: Array<Record<string, unknown>> = [];
   const logger = pino(
@@ -108,8 +94,6 @@ const captureLogger = (level: string) => {
   return { logger, lines };
 };
 
-// A capturing `registerWeb` for the Web-search-backend extension point. It takes
-// core's composed registration, not the raw contribution.
 const makeWebRegister = () => {
   const calls: WebBackendRegistration[] = [];
   const registerWeb = (registration: WebBackendRegistration) => {
@@ -141,14 +125,12 @@ const sandboxBackend = (backend: string): SandboxBackendContribution => ({
   name: backend,
   configSchema: z.object({}),
   credentialsSchema: z.object({}),
-  // The loader never invokes create(); a stub suffices.
   create: () => ({}) as unknown as SandboxBackend,
 });
 
 describe("parsePluginList", () => {
   it("splits, trims, and drops blank entries", () => {
     expect(parsePluginList("a, b ,, c")).toEqual(["a", "b", "c"]);
-    // The Docker Sandbox overlay appends to a possibly-unset .env list.
     expect(parsePluginList(",@platypus/docker")).toEqual(["@platypus/docker"]);
   });
 
@@ -171,8 +153,6 @@ describe("loadPlugins — apiVersion compatibility window (N and N−1)", () => 
         }),
       register,
     });
-    // Third-party ids are namespaced by the manifest name (a slug), not the
-    // list specifier.
     expect(calls.map((c) => c.id)).toEqual(["exactpkg.exact"]);
     expect(loaded[0].name).toBe("exactpkg");
   });
@@ -293,9 +273,6 @@ describe("loadPlugins", () => {
   });
 
   it("returns the id → plugin owner map it built while registering", async () => {
-    // The registry serves catalog annotations from these maps rather than
-    // re-deriving them from each plugin's id arrays (ADR-0013 observability).
-    // One map per Extension point: a Tool set and a backend may share a bare id.
     const { register } = makeRegister();
     const { registerSandbox } = makeSandboxRegister();
     const { registerWeb } = makeWebRegister();
@@ -344,8 +321,6 @@ describe("loadPlugins", () => {
     });
 
     expect(importPlugin).toHaveBeenCalledWith("@third/party");
-    // Third-party ids are auto-prefixed with the manifest name at load; authors
-    // write the bare `custom`.
     expect(calls.map((c) => c.id)).toEqual(["thirdparty.custom"]);
     expect(loaded[0].origin).toBe("third-party");
     expect(loaded[0].toolSetIds).toEqual(["thirdparty.custom"]);
@@ -374,7 +349,6 @@ describe("loadPlugins", () => {
 
     expect(importPlugin).toHaveBeenCalledTimes(1);
     expect(importPlugin).toHaveBeenCalledWith("@third/party");
-    // Core keeps its bare id; third-party is prefixed with its manifest name.
     expect(calls.map((c) => c.id)).toEqual(["time", "thirdparty.custom"]);
     expect(loaded.map((p) => p.origin)).toEqual(["core", "third-party"]);
   });
@@ -426,9 +400,6 @@ describe("loadPlugins", () => {
     ).rejects.toThrow(/@empty\/plugin.*manifest/s);
   });
 
-  // Contribution shape, id, and name are the shared pipeline's checks, covered
-  // once in `contribution-pipeline.test.ts`. What is left here is what the
-  // Tool-set point itself demands of a contribution.
   it.each([
     [
       "a missing category",
@@ -509,7 +480,6 @@ describe("loadPlugins", () => {
 
   it("aborts (fail-loud) on a duplicate id, naming both owning plugins", async () => {
     const { register } = makeRegister();
-    // Two core plugins keep bare ids, so a shared `time` id collides directly.
     const builtinPlugins = {
       "@a/plugin": () =>
         Promise.resolve({ plugin: manifest("@a/plugin", [toolSet("time")]) }),
@@ -528,9 +498,6 @@ describe("loadPlugins", () => {
 
   it("aborts (fail-loud) when one third-party plugin contributes an id twice", async () => {
     const { register } = makeRegister();
-    // Namespacing means a third-party id can only collide with another from the
-    // same manifest — two plugins can no longer share the prefix, since a
-    // duplicate manifest name is refused before either registers.
     const importPlugin = vi.fn(() =>
       Promise.resolve({
         plugin: manifest("dup", [toolSet("custom"), toolSet("custom")]),
@@ -548,10 +515,6 @@ describe("loadPlugins", () => {
   });
 
   it("re-throws a legacy-registry collision with plugin attribution", async () => {
-    // A `register` that rejects the id (as the real registry does for an
-    // already-registered legacy tool set) surfaces with plugin attribution. This
-    // is a core plugin, so its `kanban` id stays bare and collides with the
-    // legacy static registration.
     const register = () => {
       throw new Error("Tool set with id 'kanban' has already been registered.");
     };
@@ -604,6 +567,34 @@ describe("loadPlugins — sandbox backends", () => {
     ]);
   });
 
+  it("calls a class-instance backend's create on the backend itself", async () => {
+    const created = {} as SandboxBackend;
+    class OwnStateBackend {
+      backend = "own";
+      name = "Own";
+      configSchema = z.object({});
+      credentialsSchema = z.object({});
+      instance = created;
+      create() {
+        return this.instance;
+      }
+    }
+    const { registerSandbox, calls } = makeSandboxRegister();
+    await loadPlugins({
+      pluginNames: ["@platypus/own"],
+      builtinPlugins: {
+        "@platypus/own": () =>
+          Promise.resolve({
+            plugin: sandboxManifest("@platypus/own", [new OwnStateBackend()]),
+          }),
+      },
+      register: () => {},
+      registerSandbox,
+    });
+
+    expect(calls[0].create({}, {})).toBe(created);
+  });
+
   it("aborts (fail-loud) when sandboxBackends is not an array", async () => {
     const { register } = makeRegister();
     await expect(
@@ -625,12 +616,6 @@ describe("loadPlugins — sandbox backends", () => {
     ).rejects.toThrow(/@bad\/plugin.*sandboxBackends.*array/s);
   });
 
-  // `sandboxBackends` being an array is checked above, and contribution shape,
-  // id, and name are the shared pipeline's checks (covered once in
-  // `contribution-pipeline.test.ts`). What is left here is what the
-  // Sandbox-backend point itself demands — each case previously surfaced far
-  // from its cause: an unattributed TypeError at boot, or a 500 on an Operator's
-  // sandbox form.
   it.each([
     [
       "a missing create",
@@ -662,11 +647,6 @@ describe("loadPlugins — sandbox backends", () => {
       },
       /@platypus\/bad.*must provide a Zod "credentialsSchema"/s,
     ],
-    // A factory-form configSchema is third-party code narrowing a config block
-    // it owns, so it can throw before it ever returns a schema — the shape check
-    // downstream only sees a non-schema *return*. Without attribution here, a
-    // plugin assuming an Operator supplied `config.region` aborts boot with a
-    // bare `Cannot read properties of undefined` naming nothing.
     [
       "a throwing configSchema factory",
       {
@@ -684,8 +664,6 @@ describe("loadPlugins — sandbox backends", () => {
     "aborts (fail-loud, plugin-named) on %s",
     async (_label, contribution, expected) => {
       const { register } = makeRegister();
-      // A core plugin name: a third-party one is slug-checked before the loop
-      // these cases exercise, which would mask the error under test.
       await expect(
         loadPlugins({
           pluginNames: ["@platypus/bad"],
@@ -715,11 +693,6 @@ describe("loadPlugins — sandbox backends", () => {
     const { register } = makeRegister();
     const { registerSandbox, calls } = makeSandboxRegister();
 
-    // A backend whose per-Workspace configSchema is a FACTORY of the plugin's
-    // resolved deploy-time config: it closes over an operator allowlist and
-    // rejects out-of-allowlist values (mirrors @platypus/docker). The loader
-    // must resolve it to a concrete schema before registering — the registry and
-    // core's static safeParse consumers only ever see plain schemas.
     const factoryBackend: SandboxBackendContribution = {
       backend: "fenced",
       name: "Fenced",
@@ -756,10 +729,6 @@ describe("loadPlugins — sandbox backends", () => {
     });
 
     const [registered] = calls;
-    // Registered as a CONCRETE schema (the factory is resolved away), reflecting
-    // the resolved plugin config. The registration type says so — `configSchema`
-    // on it is a plain `z.ZodType`, with no factory arm left to narrow — so the
-    // runtime check below is the one that earns its keep.
     expect(typeof registered.configSchema).not.toBe("function");
     const schema = registered.configSchema;
     expect(schema.safeParse({ net: "ok" }).success).toBe(true);
@@ -789,7 +758,6 @@ describe("loadPlugins — sandbox backends", () => {
       registerSandbox,
     });
 
-    // A plain schema passes through by identity — append-only compatibility.
     expect(calls[0].configSchema).toBe(plain);
   });
 });
@@ -811,8 +779,6 @@ describe("loadPlugins — web-search backends", () => {
     });
 
     expect(calls.map((c) => c.backend)).toEqual(["searx"]);
-    // What lands in the registry is core's composed builder, not the raw
-    // contribution: the model-facing surface is core-owned (ADR-0014).
     expect(typeof calls[0].buildTurnTools).toBe("function");
     expect(loaded[0]).toMatchObject({
       name: "@platypus/searx",
@@ -860,13 +826,8 @@ describe("loadPlugins — web-search backends", () => {
     ).rejects.toThrow(/@bad\/plugin.*webBackends.*array/s);
   });
 
-  // Contribution shape, id, and name are the shared pipeline's checks, covered
-  // once in `contribution-pipeline.test.ts`. What is left here is what the
-  // Web-backend point itself demands of a contribution.
   it("aborts (fail-loud) when a contribution has no createExecutors function", async () => {
     const { register } = makeRegister();
-    // The TS type requires it; a third-party JS plugin can still omit it, and
-    // boot — not a live turn — is where that is caught.
     const broken = {
       backend: "searx",
       name: "SearXNG",
@@ -1018,8 +979,6 @@ describe("loadPlugins — web-search backends", () => {
       },
     });
 
-    // Core's own context; `providerId` is stripped before the plugin-facing
-    // call, so the factory sees only the ADR-0014 shape.
     const pluginCtx = { orgId: "org-1", workspaceId: "ws-1", userId: "user-1" };
     await calls[0].buildTurnTools({
       ...pluginCtx,
@@ -1202,6 +1161,42 @@ describe("loadPlugins — tool gates", () => {
     );
   });
 
+  it("calls a class-instance gate's methods on the gate itself", async () => {
+    class OwnVerdictGate implements ToolGateContribution {
+      id = "g";
+      name = "G";
+      verdict = { verdict: "deny" as const, reason: "Own state." };
+      evaluate() {
+        return this.verdict;
+      }
+      evaluateResult() {
+        return this.verdict;
+      }
+    }
+    const { result, calls } = loadGates({
+      acme: gateManifest("acme", [new OwnVerdictGate()]),
+    });
+    await result;
+    const call = {
+      toolName: "t",
+      args: {},
+      orgId: "o",
+      workspaceId: "w",
+      attended: false,
+      readOnlyHint: "undeclared" as const,
+    };
+    const options = { signal: new AbortController().signal };
+
+    expect(await calls[0].evaluate(call, options)).toEqual({
+      verdict: "deny",
+      reason: "Own state.",
+    });
+    expect(await calls[0].evaluateResult?.(call, "r", options)).toEqual({
+      verdict: "deny",
+      reason: "Own state.",
+    });
+  });
+
   it("aborts (fail-loud) when evaluateResult is declared but is not a function", async () => {
     const { result } = loadGates({
       acme: gateManifest("acme", [
@@ -1216,8 +1211,6 @@ describe("loadPlugins — tool gates", () => {
 });
 
 describe("loadPlugins — deploy-time plugin config injection", () => {
-  // A plugin declaring plugin-level schemas plus one factory tool set and one
-  // sandbox backend, both of which record the injected PluginConfigContext.
   const configuredManifest = (
     name: string,
     seen: { toolSet?: PluginConfigContext; sandbox?: PluginConfigContext },
@@ -1284,8 +1277,6 @@ describe("loadPlugins — deploy-time plugin config injection", () => {
       },
     });
 
-    // Tool-set factory: invoked as core would at Chat-turn time, with ctx only.
-    // Third-party ids are namespaced, so the registry key is prefixed.
     await registered["acmecloud.managed"].buildTurnTools(
       {
         workspaceId: "w",
@@ -1301,7 +1292,6 @@ describe("loadPlugins — deploy-time plugin config injection", () => {
       () => {},
     );
 
-    // Sandbox create(): invoked as core would, with the per-Workspace values.
     sandboxCalls[0].create({}, {});
 
     expect(seen.toolSet).toEqual({
@@ -1358,8 +1348,6 @@ describe("loadPlugins — deploy-time plugin config injection", () => {
     );
     sandboxCalls[0].create({}, {});
 
-    // The two contributions must be handed the *same* resolved block — one
-    // credential block per plugin, shared deployment-wide (ADR-0013).
     expect(seen.toolSet).toBe(seen.sandbox);
   });
 
@@ -1375,7 +1363,6 @@ describe("loadPlugins — deploy-time plugin config injection", () => {
         env: {
           PLATYPUS_PLUGIN_CONFIG_ACMECLOUD: JSON.stringify({
             config: { region: "eu" },
-            // apiToken missing → credentialsSchema rejects.
             credentials: {},
           }),
         },
@@ -1394,7 +1381,6 @@ describe("loadPlugins — deploy-time plugin config injection", () => {
         registerSandbox: () => {},
         env: {
           PLATYPUS_PLUGIN_CONFIG_ACMECLOUD: JSON.stringify({
-            // region missing → configSchema rejects.
             config: {},
             credentials: { apiToken: "tok_123" },
           }),
@@ -1461,8 +1447,6 @@ describe("loadPlugins — deploy-time plugin config injection", () => {
 });
 
 describe("loadPlugins — plugin logger injection", () => {
-  // A plugin contributing to all three Extension points, each factory recording
-  // the block it was handed and writing one line through it.
   const loggingManifest = (
     name: string,
     seen: Record<string, PluginConfigContext | undefined>,
@@ -1511,8 +1495,6 @@ describe("loadPlugins — plugin logger injection", () => {
     },
   });
 
-  // Drive every factory the way core does at turn time, so what is asserted is
-  // what a plugin author's own code would actually receive.
   const invokeAllFactories = async (opts: {
     pluginName: string;
     baseLogger: PluginLoggerParent;
@@ -1571,13 +1553,10 @@ describe("loadPlugins — plugin logger injection", () => {
       seen,
     });
 
-    // One child per plugin, shared by object identity with the rest of the
-    // deploy-time block — no per-Extension-point plumbing.
     expect(seen.toolSet?.logger).toBeDefined();
     expect(seen.sandbox?.logger).toBe(seen.toolSet?.logger);
     expect(seen.web?.logger).toBe(seen.toolSet?.logger);
 
-    // Every line landed in core's stream, attributed to the manifest name.
     expect(lines).toHaveLength(3);
     expect(lines.map((l) => l.point)).toEqual(["toolSet", "sandbox", "web"]);
     for (const line of lines) {
@@ -1587,8 +1566,6 @@ describe("loadPlugins — plugin logger injection", () => {
   });
 
   it("suppresses a plugin line the Operator's LOG_LEVEL excludes", async () => {
-    // The plugin logs at `info`; the deployment is set to `warn`. Nothing is
-    // written — the plugin's lines obey LOG_LEVEL like core's own.
     const { logger, lines } = captureLogger("warn");
 
     await invokeAllFactories({
@@ -1622,8 +1599,6 @@ describe("loadPlugins — plugin logger injection", () => {
 });
 
 describe("loadPlugins — example third-party plugin", () => {
-  // Proves the documented example plugin wires one shared credential block into
-  // BOTH its Sandbox backend and its management Tool set (ADR-0013).
   it("shares one credential block across its two contributions", async () => {
     const registered: Record<string, ToolSetRegistration> = {};
     const sandboxCalls: SandboxBackendRegistration[] = [];
@@ -1647,13 +1622,10 @@ describe("loadPlugins — example third-party plugin", () => {
     expect(loaded[0]).toMatchObject({
       name: "example-cloud-sandbox",
       origin: "third-party",
-      // Third-party contribution ids are namespaced by the manifest name.
       toolSetIds: ["example-cloud-sandbox.management"],
       sandboxBackendIds: ["example-cloud-sandbox.sandbox"],
     });
 
-    // Sandbox backend: create() with per-Workspace values; the adapter reads
-    // the deploy-time token/region injected as the third argument.
     const backend = sandboxCalls[0].create({}, {}) as unknown as {
       apiToken: string;
       region: string;
@@ -1661,7 +1633,6 @@ describe("loadPlugins — example third-party plugin", () => {
     expect(backend.apiToken).toBe("dtn_shared_token");
     expect(backend.region).toBe("ap");
 
-    // Management tool set: its tool description reflects the SAME token/region.
     const tools = (await registered[
       "example-cloud-sandbox.management"
     ].buildTurnTools(
@@ -1681,8 +1652,6 @@ describe("loadPlugins — example third-party plugin", () => {
       string,
       { execute: (i: unknown) => Promise<string> }
     >;
-    // Namespaced under the manifest name (issue #664), because the plugin is
-    // third-party — the same rule its contribution id already followed.
     const msg = await tools["example-cloud-sandbox__listSandboxes"].execute({});
     expect(msg).toContain("ap");
     expect(msg).toContain("dtn");
@@ -1705,34 +1674,22 @@ describe("loadPlugins — example third-party plugin", () => {
   });
 });
 
-// `apps/docs/content/extending/your-first-plugin.mdx` walks a reader through
-// listing `@platypus-examples/tool-set` in PLATYPUS_PLUGINS and then tells them
-// exactly what to look for on two screens. Every string it names is asserted
-// here, against the real package resolved by the real dynamic `import()` — so a
-// rename breaks a test rather than sending a first-time plugin author hunting a
-// row that no longer exists.
-describe("loadPlugins — the documented quickstart package", () => {
+describe("loadPlugins — the strings your-first-plugin.mdx tells a reader to look for", () => {
   it("resolves @platypus-examples/tool-set and registers example.greeting", async () => {
     const { register, calls } = makeRegister();
 
-    // No `importPlugin` override: this exercises the default dynamic import, the
-    // same path a deployment takes for any installed third-party package.
     const { plugins: loaded } = await loadPlugins({
       pluginNames: ["@platypus-examples/tool-set"],
       builtinPlugins: {},
       register,
     });
 
-    // Checkpoint 1 — the row in Organization settings → Plugins is labelled with
-    // the manifest `name`, NOT the package specifier the Operator installed.
     expect(loaded).toHaveLength(1);
     expect(loaded[0].name).toBe("example");
     expect(loaded[0].version).toBe("0.1.0");
     expect(loaded[0].origin).toBe("third-party");
     expect(loaded[0].toolSetIds).toEqual(["example.greeting"]);
 
-    // Checkpoint 2 — the Agent form's Tools card groups by `category` and labels
-    // the switch with `name`, so those are the two strings the reader hunts for.
     expect(calls).toHaveLength(1);
     expect(calls[0].id).toBe("example.greeting");
     expect(calls[0].registration.name).toBe("Greeting");
@@ -1761,8 +1718,6 @@ describe("loadPlugins — always-on core set (ADR-0013 amendment)", () => {
       register,
     });
 
-    // Both always-on core plugins load and register their (bare, core) ids,
-    // despite an empty gate-able list.
     expect(calls.map((c) => c.id)).toEqual(["time", "kanban"]);
     expect(loaded.map((p) => p.name)).toEqual([
       "@platypus/tools-basic",
@@ -1791,7 +1746,6 @@ describe("loadPlugins — always-on core set (ADR-0013 amendment)", () => {
       register,
     });
 
-    // Always-on first, then the listed gate-able plugin.
     expect(calls.map((c) => c.id)).toEqual(["time", "webFetch"]);
   });
 
@@ -1819,7 +1773,6 @@ describe("loadPlugins — always-on core set (ADR-0013 amendment)", () => {
 
 describe("loadPlugins — deploy-time config targeting (ADR-0013)", () => {
   it("accepts a config entry keyed by the manifest name (not the list specifier)", async () => {
-    // The list entry is the import specifier; config is keyed by manifest name.
     await expect(
       loadPlugins({
         pluginNames: ["@acme/platypus-widgets"],
@@ -1846,8 +1799,6 @@ describe("loadPlugins — per-plugin config vars (PLATYPUS_PLUGIN_CONFIG_<NAME>)
     vi.unstubAllEnvs();
   });
 
-  // Spread, not re-annotated: a manifest typed with its own config is not
-  // assignable to one left at the SDK's default `unknown`.
   const cloudSandbox = {
     ...examplePlugin,
     name: "cloud-sandbox",
@@ -1873,7 +1824,6 @@ describe("loadPlugins — per-plugin config vars (PLATYPUS_PLUGIN_CONFIG_<NAME>)
     const { result, sandboxCalls } = loadCloudSandbox();
     await result;
 
-    // The manifest's schemas ran: `region` took its schema default.
     const backend = sandboxCalls[0].create({}, {}) as unknown as {
       apiToken: string;
       region: string;
@@ -1918,8 +1868,6 @@ describe("loadPlugins — per-plugin config vars (PLATYPUS_PLUGIN_CONFIG_<NAME>)
   });
 
   it("aborts (fail-loud) when two loaded plugins map to the same var", async () => {
-    // A core name drops its `@platypus/` scope, so core `@platypus/widgets` and a
-    // third-party `widgets` both land on PLATYPUS_PLUGIN_CONFIG_WIDGETS.
     await expect(
       loadPlugins({
         pluginNames: ["@platypus/widgets", "@acme/widgets"],
@@ -1940,7 +1888,6 @@ describe("loadPlugins — per-plugin config vars (PLATYPUS_PLUGIN_CONFIG_<NAME>)
   });
 
   it("aborts (fail-loud) while the removed combined PLATYPUS_PLUGIN_CONFIG is set", async () => {
-    // Set alongside a valid per-plugin var: the bare name is not read as one.
     vi.stubEnv(
       "PLATYPUS_PLUGIN_CONFIG",
       '{"cloud-sandbox":{"credentials":{"apiToken":"x"}}}',
@@ -1997,8 +1944,6 @@ describe("loadPlugins — third-party name slug validation (ADR-0013)", () => {
         builtinPlugins: {},
         importPlugin: () =>
           Promise.resolve({
-            // A scoped, slash-bearing name would produce an ugly, fragile
-            // `@acme/thing.custom` contribution id.
             plugin: manifest("@acme/thing", [toolSet("custom")]),
           }),
         register: () => {},
@@ -2006,10 +1951,6 @@ describe("loadPlugins — third-party name slug validation (ADR-0013)", () => {
     ).rejects.toThrow(/@acme\/pkg.*"@acme\/thing".*url-safe slug/s);
   });
 
-  // Issue #664: the manifest name is also the namespace every one of the
-  // plugin's tool names enters a turn under, so it is capped — with the tool-name
-  // cap, that bounds the composed `<name>__<tool>` below the model-provider
-  // ceiling by arithmetic rather than by a runtime discovery.
   it("rejects a third-party manifest name over the cap, naming the field, the cap and the length", async () => {
     const tooLong = "a".repeat(MAX_PLUGIN_NAME_LENGTH + 1);
     let thrown = "";
@@ -2081,10 +2022,6 @@ describe("loadPlugins — third-party name slug validation (ADR-0013)", () => {
 });
 
 describe("loadPlugins — manifest name uniqueness (ADR-0013)", () => {
-  // A manifest name is the key for a plugin's deploy-time config and
-  // credentials, so two plugins declaring the same one are handed the same
-  // block. Contribution ids do not catch it — `acme.foo` and `acme.bar`
-  // namespace apart and collide on nothing — so both used to load cleanly.
   it("refuses two plugins sharing a manifest name, naming both package specifiers", async () => {
     const { register } = makeRegister();
     const modules: Record<string, PlatypusPlugin> = {
@@ -2099,8 +2036,6 @@ describe("loadPlugins — manifest name uniqueness (ADR-0013)", () => {
         importPlugin: (name) => Promise.resolve({ plugin: modules[name] }),
         register,
       }),
-      // Both specifiers, because the shared manifest name alone does not tell
-      // an Operator which two PLATYPUS_PLUGINS entries to look at.
     ).rejects.toThrow(/"acme".*"@acme\/pkg".*"@fork\/acme-pkg"/s);
   });
 
@@ -2117,10 +2052,6 @@ describe("loadPlugins — manifest name uniqueness (ADR-0013)", () => {
       },
     };
 
-    // The Operator supplied one block, for the plugin they meant. The fork
-    // would be handed it too — and reject it, since its schema differs. The
-    // failure an Operator reads must be the shared name, not the downstream
-    // validation error it causes.
     await expect(
       loadPlugins({
         pluginNames: ["@acme/pkg", "@fork/acme-pkg"],
@@ -2137,9 +2068,6 @@ describe("loadPlugins — manifest name uniqueness (ADR-0013)", () => {
   it("covers core plugins too", async () => {
     const { register } = makeRegister();
 
-    // Core and third-party names are character-disjoint (`@platypus/*` cannot
-    // match the third-party slug rule), so the uniform check can only ever fire
-    // on a core-vs-core pair — a repo bug, caught in the same place.
     await expect(
       loadPlugins({
         pluginNames: ["@platypus/tools-basic", "@platypus/tools-platform"],
@@ -2171,8 +2099,6 @@ describe("loadPlugins — manifest name uniqueness (ADR-0013)", () => {
           Promise.resolve({ plugin: manifest("acme", [toolSet("foo")]) }),
         register,
       }),
-      // One package, listed twice — "rename one of them in its manifest" is
-      // advice that cannot be followed.
     ).rejects.toThrow(/"@acme\/pkg".*more than once.*PLATYPUS_PLUGINS/s);
   });
 });
@@ -2197,7 +2123,6 @@ describe("loadPlugins — third-party namespacing (ADR-0013)", () => {
       register,
     });
 
-    // Core keeps its bare id; third-party is `${manifest.name}.${id}`.
     expect(calls.map((c) => c.id)).toEqual(["time", "example.greeting"]);
     expect(loaded[0].toolSetIds).toEqual(["time"]);
     expect(loaded[1].toolSetIds).toEqual(["example.greeting"]);
@@ -2218,16 +2143,12 @@ describe("loadPlugins — third-party namespacing (ADR-0013)", () => {
       registerSandbox,
     });
 
-    // The discriminator registered (and stored in `sandbox.backend`) is prefixed.
     expect(calls.map((c) => c.backend)).toEqual(["acme.cloud"]);
     expect(loaded[0].sandboxBackendIds).toEqual(["acme.cloud"]);
   });
 
   it("treats a package borrowing an @platypus/* name as third-party (prefixed)", async () => {
     const { register, calls } = makeRegister();
-    // The static built-in map is the SOLE authority for core. This package is
-    // absent from it, so even though its manifest borrows the `@platypus/*`
-    // scope it is third-party — prefixed, not smuggled in as core.
     const importPlugin = vi.fn(() =>
       Promise.resolve({
         plugin: manifest("impostor", [toolSet("kanban")]),
@@ -2242,19 +2163,12 @@ describe("loadPlugins — third-party namespacing (ADR-0013)", () => {
     });
 
     expect(importPlugin).toHaveBeenCalledWith("@platypus/impostor");
-    // Prefixed by the manifest slug — it cannot claim the bare `kanban` core
-    // namespace even though its list specifier borrows the `@platypus/*` scope.
     expect(calls.map((c) => c.id)).toEqual(["impostor.kanban"]);
     expect(loaded[0].origin).toBe("third-party");
   });
 });
 
 describe("loadPlugins — example third-party npm package (end to end)", () => {
-  // These exercise the real path for the installed `@platypus-examples/tool-set`
-  // package: resolve it via the loader's default dynamic `import()`, prove its
-  // bare `greeting` id namespaces to `example.greeting`, and prove the Chat-turn
-  // lookup resolves it under that prefixed id.
-
   it("loads the installed package via dynamic import and namespaces its id", async () => {
     const { register, calls } = makeRegister();
 
@@ -2272,8 +2186,6 @@ describe("loadPlugins — example third-party npm package (end to end)", () => {
   });
 
   it("registers into the real registry so a Chat turn resolves it by the prefixed id", async () => {
-    // The package logs at `debug`, so the stream is set to admit it — the same
-    // thing an Operator does with LOG_LEVEL when they want a plugin's detail.
     const { logger: baseLogger, lines } = captureLogger("debug");
 
     await loadPlugins({
@@ -2283,8 +2195,6 @@ describe("loadPlugins — example third-party npm package (end to end)", () => {
       baseLogger,
     });
 
-    // Chat-turn resolution walks the tool-set registry by id (ADR-0013): the
-    // example plugin is reachable only under its namespaced id.
     const set = getToolSet("example.greeting")!;
     expect(set.category).toBe("Examples");
     expect(getToolSet("greeting")).toBeUndefined();
@@ -2303,9 +2213,6 @@ describe("loadPlugins — example third-party npm package (end to end)", () => {
       undefined,
       () => {},
     );
-    // The author writes `greet`; the model is offered `example__greet`
-    // (issue #664). The bare name is gone, so core's own turn tools have nothing
-    // of this plugin's left to overwrite.
     expect(Object.keys(tools)).toEqual(["example__greet"]);
     const result = (await tools.example__greet.execute!(
       { name: "Ada" },
@@ -2313,15 +2220,12 @@ describe("loadPlugins — example third-party npm package (end to end)", () => {
     )) as string;
     expect(result).toContain("Ada");
 
-    // The whole third-party logging path, through the real published package:
-    // the line the plugin wrote is in core's stream, attributed to its manifest
-    // name, with the fields it supplied intact.
     expect(lines).toContainEqual(
       expect.objectContaining({
         plugin: "example",
         workspaceId: "ws-1",
         agentId: "agent-1",
-        level: 20, // debug
+        level: 20,
       }),
     );
   });

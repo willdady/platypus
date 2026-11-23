@@ -1,43 +1,9 @@
 import { ValidationError } from "../errors.ts";
 
-/**
- * A storage key names one stored object relative to the backend's root. Three
- * shapes are generated, and nothing else is: a File part's
- * `{orgId}/{workspaceId}/{chatId}/{messageId}/{partIndex}-{hash8}.{ext}`
- * (`generateStorageKey`), an Agent avatar's
- * `agents/{agentId}/avatar-{nanoid}.webp` (`storeAvatar`), and a bundled Skill
- * file's `{orgId}/skills/{skillId}/{uploadId}/{fileId}` (`skillStorageKeyPrefix`).
- * A Skill key's second segment is the literal `skills`, never a Workspace id, so
- * `/files/*` refuses it: Skill files are served only through their Skill's own
- * download route (ADR-0036).
- *
- * Keys are not held only by Platypus. A File part's key round-trips through the
- * client: the read path rewrites `storage://<key>` to an HTTP URL, the Chat
- * resubmits its full history every turn, and `inlineFileUrls` reads the key back
- * out of the URL the client returned. So a key arriving from a message part is
- * untrusted input, and is validated here — at the boundary where it enters —
- * rather than inside one backend, which would leave `S3Storage` uncovered.
- */
-
-/**
- * Every character a generated key can contain. Both generated shapes use only
- * ids, hex hashes, `nanoid`'s alphabet (which adds `-` and `_`), and a file
- * extension, so this admits every real key while excluding the separators a
- * traversal needs: `/` is handled per segment, and `\`, `%` and NUL cannot
- * appear at all. Rejecting `%` also refuses a percent-encoded separator
- * (`..%2f`), which the `/files/*` route would otherwise pass through verbatim —
- * `c.req.path` is not decoded.
- */
 const SEGMENT_PATTERN = /^[A-Za-z0-9._-]+$/;
 
-/** Generated keys are far shorter than this; the cap bounds a hostile one. */
 const MAX_KEY_LENGTH = 1024;
 
-/**
- * Whether a key is one Platypus could have stored — a relative POSIX path whose
- * every segment is safe. Rejects absolute keys, empty or `.`/`..` segments, and
- * any character outside {@link SEGMENT_PATTERN}.
- */
 export function isValidStorageKey(key: string): boolean {
   if (!key || key.length > MAX_KEY_LENGTH) {
     return false;
@@ -51,49 +17,30 @@ export function isValidStorageKey(key: string): boolean {
     );
 }
 
-/**
- * Assert a key is safe before it reaches a storage backend. Throws
- * `ValidationError` so the `onError` seam answers 400 (ADR-0010) — a malformed
- * key is a bad request, not a server fault.
- */
 export function assertValidStorageKey(key: string): void {
   if (!isValidStorageKey(key)) {
     throw new ValidationError("Invalid file key");
   }
 }
 
-/**
- * Assert a prefix is safe to delete everything under. It must end in `/` —
- * without it `org1` would match `org10/…` on S3 — and what precedes the `/`
- * must be a valid key, so an empty or `/` prefix never reaches a backend.
- */
 export function assertValidStoragePrefix(prefix: string): void {
   if (!prefix.endsWith("/") || !isValidStorageKey(prefix.slice(0, -1))) {
     throw new ValidationError("Invalid storage prefix");
   }
 }
 
-/** The Organization a File part's key belongs to — the key's first segment. */
 export interface OrganizationKeyScope {
   orgId: string;
 }
 
-/** The Workspace a File part's key belongs to — the key's first two segments. */
 export interface WorkspaceKeyScope extends OrganizationKeyScope {
   workspaceId: string;
 }
 
-/** The Chat a File part's key belongs to — the key's first three segments. */
 export interface ChatKeyScope extends WorkspaceKeyScope {
   chatId: string;
 }
 
-/**
- * The prefixes every File part key under one Organization, Workspace or Chat
- * shares. `generateStorageKey` builds keys from these and deleting the scope
- * removes everything under its prefix, so the writer and the deleters cannot
- * drift apart. Always built from server-side ids, never from message content.
- */
 export function organizationStorageKeyPrefix(
   scope: OrganizationKeyScope,
 ): string {
@@ -108,27 +55,16 @@ export function chatStorageKeyPrefix(scope: ChatKeyScope): string {
   return `${workspaceStorageKeyPrefix(scope)}${scope.chatId}/`;
 }
 
-/** The Skill a bundled file's key belongs to. */
 export interface SkillKeyScope extends OrganizationKeyScope {
   skillId: string;
 }
 
-/** The literal second segment of every Skill key, where a File part has its Workspace id. */
 export const SKILL_KEY_SEGMENT = "skills";
 
-/**
- * Whether a key names a bundled Skill file. Case-insensitive: the disk backend
- * can be, so `org/SKILLS/…` reaches the same file as `org/skills/…`.
- */
 export function isSkillStorageKey(key: string): boolean {
   return key.split("/")[1]?.toLowerCase() === SKILL_KEY_SEGMENT;
 }
 
-/**
- * The prefix every file of one Skill shares, across all its uploads. It sits
- * under the Organization even for a Workspace-scoped Skill, so promoting the
- * Skill to a Shared one moves no bytes, and deleting the Organization removes it.
- */
 export function skillStorageKeyPrefix(scope: SkillKeyScope): string {
   return `${organizationStorageKeyPrefix(scope)}${SKILL_KEY_SEGMENT}/${scope.skillId}/`;
 }

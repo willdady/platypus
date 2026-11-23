@@ -14,17 +14,10 @@ import { migratedPglite } from "../db/migrated-pglite.test-fixtures.ts";
 import { a2aPushConfig as a2aPushConfigTable } from "../db/schema.ts";
 import type { TaskRow } from "./a2a-task-state.ts";
 
-/**
- * Push config registration against an in-process Postgres built from the
- * shipped migrations, so the primary key is the one production has. PGlite
- * runs one transaction at a time, so each registration's statements commit
- * as they go here: two registrations then interleave the way two
- * transactions on separate connections do, both checking before either
- * inserts.
- */
 const { holder } = vi.hoisted(() => ({
   holder: { db: undefined as ReturnType<typeof drizzle> | undefined },
 }));
+// why: PGlite runs one tx at a time; inline, two registrations interleave like two connections
 vi.mock("../index.ts", () => ({
   get db() {
     const db = holder.db!;
@@ -54,7 +47,6 @@ const TASK: TaskRow = {
 let pg: PGlite;
 beforeAll(async () => {
   pg = await migratedPglite();
-  // The Task's Chat, endpoint and token are beside the point; skip the FKs.
   await pg.exec("SET session_replication_role = replica");
   holder.db = drizzle(pg);
 }, 60_000);
@@ -97,8 +89,7 @@ describe("storePushConfig", () => {
       authentication: null,
     };
     await storePushConfig(TASK, config);
-    // The UPDATE then finds no row, as it would after a concurrent delete.
-    // `ENABLE ALWAYS`: the replica role set above skips ordinary triggers.
+    // why: ENABLE ALWAYS, as the replica role set above skips ordinary triggers
     await pg.exec(`
       CREATE FUNCTION skip_update() RETURNS trigger LANGUAGE plpgsql
         AS $$ BEGIN RETURN NULL; END $$;

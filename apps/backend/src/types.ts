@@ -6,17 +6,11 @@ import type {
 } from "./tools/skill.ts";
 import type { DelegateTool } from "./tools/sub-agent.ts";
 import type { createFsDownloadTool } from "./sandbox/tools.ts";
+import type {
+  createCreateArtifactTool,
+  createUpdateArtifactTool,
+} from "./tools/artifacts.ts";
 
-// The Chat UI message contract lives in `@platypus/schemas`, hand-written, so
-// the frontend can type its messages without compiling backend source. The
-// assertions below keep it honest: each custom-UI tool's inferred type must
-// equal its contract entry exactly, so changing a tool's input or output fails
-// `pnpm typecheck` here until the contract is updated to match.
-//
-// `loadSkill` is the one partial guard: its execute is annotated with the
-// contract's own `SkillLoadResult`, because inference subtype-reduces that
-// union to its first member and the assertion could never pass. Its input,
-// and its `{ error }` branch, are still checked.
 export type {
   ChatMessageMetadata,
   CustomUITools,
@@ -30,7 +24,7 @@ type Equal<A, B> =
     : false;
 type Expect<T extends true> = T;
 
-// Exported only so the unused-type lint leaves them be; nothing imports them.
+// why: exported only so the unused-type lint keeps it; the assertions fail typecheck on drift
 export type CustomUIToolsMatchBackend = [
   Expect<
     Equal<
@@ -49,6 +43,18 @@ export type CustomUIToolsMatchBackend = [
     Equal<
       InferUITool<ReturnType<typeof createFsDownloadTool>>,
       CustomUITools["fsDownload"]
+    >
+  >,
+  Expect<
+    Equal<
+      InferUITool<ReturnType<typeof createCreateArtifactTool>>,
+      CustomUITools["createArtifact"]
+    >
+  >,
+  Expect<
+    Equal<
+      InferUITool<ReturnType<typeof createUpdateArtifactTool>>,
+      CustomUITools["updateArtifact"]
     >
   >,
 ];

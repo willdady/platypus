@@ -1,10 +1,8 @@
 import { tool } from "ai";
 import { z } from "zod";
 
-/** A trailing `Z`/`±HH:MM`/`±HHMM`, or a `GMT`/`UTC` marker. */
 const EXPLICIT_OFFSET = /(?:Z|[+-]\d{2}:?\d{2})$|\b(?:GMT|UTC)\b/i;
 
-/** `timeZone`'s offset from UTC at `instant`, in ms. */
 function zoneOffsetMs(instant: number, timeZone: string): number {
   const parts = Object.fromEntries(
     new Intl.DateTimeFormat("en-US", {
@@ -35,16 +33,10 @@ function zoneOffsetMs(instant: number, timeZone: string): number {
   return wall - Math.floor(instant / 1000) * 1000;
 }
 
-/**
- * Parses `dateTime`, reading a zone-less value as a wall clock in `timeZone`.
- * A value carrying its own offset keeps it.
- */
 function parseInZone(dateTime: string, timeZone: string): Date {
   const trimmed = dateTime.trim();
   if (EXPLICIT_OFFSET.test(trimmed)) return new Date(trimmed);
 
-  // Date parses a zone-less value as server-local (a bare ISO date as UTC, so
-  // give it a time); read it back as a wall clock and re-anchor it in timeZone
   const local = new Date(
     /^\d{4}-\d{2}-\d{2}$/.test(trimmed) ? `${trimmed}T00:00` : trimmed,
   );
@@ -58,12 +50,10 @@ function parseInZone(dateTime: string, timeZone: string): Date {
     local.getSeconds(),
     local.getMilliseconds(),
   );
-  // Second pass corrects for an offset that differs either side of a DST change
   const guess = wall - zoneOffsetMs(wall, timeZone);
   return new Date(wall - zoneOffsetMs(guess, timeZone));
 }
 
-/** `getCurrentTime`, reporting in `timezone` — the acting User's effective zone. */
 export const createGetCurrentTime = (timezone: string) =>
   tool({
     description:
@@ -113,8 +103,6 @@ export const convertTimezone = tool({
       throw new Error(`Invalid date format: ${dateTime}`);
     }
 
-    // sv-SE renders dates in near-ISO shape; assemble the parts manually to
-    // get a T separator and an explicit offset like -05:00 (Z for UTC)
     const formatter = new Intl.DateTimeFormat("sv-SE", {
       timeZone: toTimezone,
       year: "numeric",
@@ -129,9 +117,6 @@ export const convertTimezone = tool({
     const parts = Object.fromEntries(
       formatter.formatToParts(date).map((p) => [p.type, p.value]),
     );
-    // ICU renders the longOffset sign as U+2212; normalise to ASCII so the
-    // output stays valid ISO. UTC is "GMT" or "GMT+00:00" depending on the
-    // ICU version; both become Z
     const { timeZoneName } = parts;
     if (timeZoneName === undefined) {
       throw new Error(`No offset for ${toTimezone}`);
@@ -149,7 +134,6 @@ export const convertTimezone = tool({
   },
 });
 
-/** The `time` Tool set, reporting in the acting User's effective `timezone`. */
 export const createTimeTools = (timezone: string) => ({
   getCurrentTime: createGetCurrentTime(timezone),
   convertTimezone,

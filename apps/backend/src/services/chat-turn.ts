@@ -26,29 +26,14 @@ import { chatRunIsLive } from "../runs/chat-run-heartbeat.ts";
 import { withRunSource } from "../event-causation.ts";
 import { refuseTriggerRunChat } from "./chat-write-guard.ts";
 
-/**
- * Starts one Chat turn and returns its streaming response — the one path every
- * caller that runs a turn in a Chat goes through (ADR-0032), whoever the
- * `scope`'s Principal is.
- *
- * `includeMemories` off skips the Memories pin and its retrieval altogether,
- * as a Trigger does (#645), rather than retrieving a block and throwing it
- * away, and withholds the Agent's Memory tools. The Chat then carries no pin,
- * so a later turn with Memories re-takes. An A2A Chat turns it off whatever
- * the caller asked when its endpoint has (see {@link chatAllowsMemories}).
- */
 export const startChatTurn = async (params: {
   scope: WorkspaceScope;
-  /** The Chat the turn runs in — addressed in the path, never the body. */
   chatId: string;
   request: ChatSubmitData;
   includeMemories: boolean;
   origin: string;
-  /** Columns an A2A Chat this turn creates starts with (see `ChatSinkParams`). */
   newChat?: Extract<ChatSinkParams["newChat"], { a2aEndpointId: string }>;
-  /** Called once the run's terminal status is written (see `ChatSinkParams`). */
   onEnded?: () => void;
-  /** Writes the turn's own rows with its claim (see `ChatSinkParams`). */
   onClaimed?: ChatSinkParams["onClaimed"];
 }): Promise<Response> => {
   const {
@@ -62,16 +47,7 @@ export const startChatTurn = async (params: {
     onClaimed,
   } = params;
 
-  // ADR-0020: resolve the pinned Memories block OUTSIDE composition. This
-  // service owns the chat row, so it does the arithmetic — compare the gap
-  // since the previous turn against the re-pin horizon and re-take or reuse —
-  // and the resolved block rides down through `RunInput` into
-  // `prepareChatTurn`'s input. The renderer never learns about clocks.
-  //
-  // Idleness is measured against `lastTurnAt` — stamped only by the run sink
-  // at turn boundaries — never `updatedAt`, which the memory-extraction job
-  // and auto-titling bump at their own cadence and so cannot stand in for a
-  // recent turn.
+  // why: idleness is lastTurnAt; extraction and auto-titling bump updatedAt off-turn
   const existingChat = await db
     .select({
       memorySnapshot: chatTable.memorySnapshot,
@@ -87,15 +63,8 @@ export const startChatTurn = async (params: {
     .where(ownedWhere("chat", { id: chatId, workspaceId: scope.workspaceId }))
     .limit(1);
 
-  // A Trigger run's Chat is the run's record: no turn, regenerate or approval
-  // answer may add to or change it (ADR-0046). A Chat not written yet has no
-  // run to belong to, so a first turn still creates it.
   refuseTriggerRunChat(existingChat[0]);
 
-  // What the turn continues, from the server's own rows (ADR-0026). Refuses a
-  // turn that cannot run — an unknown parent, a duplicate id, a reply that
-  // cannot regenerate or have its approvals answered — before anything is
-  // retrieved or written. A Chat still running refuses at the claim.
   const turn = await resolveTurn({
     chatId,
     owned: existingChat.length > 0,
@@ -112,12 +81,6 @@ export const startChatTurn = async (params: {
 
   const now = new Date();
 
-  // Reuse carries its own block, so there is no snapshot to assert about: the
-  // Chat has not idled past the horizon and the prefix stays byte-identical
-  // across its turns. Otherwise re-take — a fresh Chat, a row written before
-  // this feature, or a Chat that has idled past the horizon (by which point
-  // the cached prefix is provably expired, so the re-take is free). The
-  // retrieval window is anchored to `now`, not a render-time clock read.
   const resolveMemorySnapshot = async () => {
     const pin = resolveMemoryPin({
       existingSnapshot: existingChat[0]?.memorySnapshot,
@@ -138,17 +101,7 @@ export const startChatTurn = async (params: {
     ? await resolveMemorySnapshot()
     : undefined;
 
-  // A user-invoked Skill (issue #649). The token stays in the text the user
-  // sent; what is appended here is a trailing assistant message carrying the
-  // `loadSkill` call and its result, so the body reaches the model as tool
-  // content with correct provenance and never as words the user said.
-  //
-  // Seeded onto the messages that go into `RunInput` — the array that reaches
-  // `originalMessages`, whose trailing assistant message the reply continues
-  // and the sink persists. Seeding into the converted model messages instead
-  // would reach the model and persist nothing, quietly turning "persist the
-  // pair" into "re-seed every turn". A regenerate ends at the same user
-  // message, so it is seeded again exactly as its submit was.
+  // why: seeded into RunInput so the pair persists; model messages would re-seed every turn
   const messages = await seedUserInvokedSkill({
     messages: turn.messages,
     orgId: scope.orgId,
@@ -156,12 +109,6 @@ export const startChatTurn = async (params: {
     agentId: request.agentId,
   });
 
-  // The Chat's Transcript summaries (ADR-0041), newest first — loaded here,
-  // at the one caller that owns the chat id, and carried down through
-  // `RunInput` exactly like the pinned Memories block, so turn preparation
-  // never re-resolves an id it was not asked about. Only a Chat turn has any:
-  // a headless run's `RunInput` carries none, and the summariser then never
-  // engages.
   const chatSummaries = await loadChatSummaries(chatId);
 
   const input: RunInput = {
@@ -170,16 +117,12 @@ export const startChatTurn = async (params: {
     messages,
     chatSummaries,
     memorySnapshot,
-    // The same moment the pin was resolved against, so a re-take and its
-    // retrieval window agree on "now" rather than reading the clock twice.
     memoriesReferenceDate: now,
     includeMemories,
     memoryTools: includeMemories,
   };
 
-  /** The user message this turn answers, naming its A2A Task. */
   const turnId = turn.message?.id ?? turn.parentId;
-  /** Only an A2A Chat's turns can have a Task to record and push. */
   const a2a = isA2aChat(existingChat[0] ?? newChat);
   const sink = new ChatSink({
     orgId: scope.orgId,
@@ -190,10 +133,6 @@ export const startChatTurn = async (params: {
     answered: turn.answered,
     newChat,
     onClaimed,
-    // Any turn in a Chat may be an A2A Task's, the Owner's own included: one
-    // a client was refused for as busy and is following (ADR-0032). Its end
-    // is recorded with the Chat's terminal status, and pushed once that has
-    // committed; one the terminal write missed is recorded then.
     onEnding: a2a
       ? async (tx, status) => {
           if (turnId) await endTurnIn(tx, chatId, turnId, status);
@@ -207,21 +146,12 @@ export const startChatTurn = async (params: {
     },
   });
 
-  // A rejected attachment (issue #328), an unresolved Agent/Provider/model,
-  // or a missing Workspace throws before the sink persists anything, so the
-  // chat is never bricked — the central `onError` (ADR-0010) maps the typed
-  // error to its HTTP status.
-  //
-  // Everything this turn does, at any delegation depth, is from this Chat —
-  // the source a Notification it posts records (#1229).
   return await withRunSource({ kind: "chat", chatId }, () =>
     agentRunner.stream({
       scope,
       input,
       sink,
       options: {
-        // No request signal is taken: chat runs continue server-side
-        // regardless of the client connection, and are cancelled by run id.
         origin,
         frontendUrl: frontendBaseUrl(),
         timeouts: chatTimeouts(),
@@ -230,12 +160,6 @@ export const startChatTurn = async (params: {
   );
 };
 
-/**
- * Whether a Chat lets its turns read the Owner's Memories. An A2A Chat follows
- * its endpoint's Include Memories, whoever's turn it is: the Owner's reply sits
- * in the history the client reads next (ADR-0032). One whose endpoint is gone
- * reads as off. Any other Chat, and one not written yet, allows them.
- */
 const chatAllowsMemories = async (
   chat: { a2aEndpointId: string | null } | undefined,
 ): Promise<boolean> => {
@@ -248,13 +172,6 @@ const chatAllowsMemories = async (
   return endpoint?.includeMemories ?? false;
 };
 
-/**
- * Ends the turn a dead run left a Chat `running` on (#1297), as the recovery
- * sweep would have, had it reached the Chat first: this turn's claim is about
- * to take the Chat from it, and nothing else will record its end. Its turn is
- * read now, before the claim moves the leaf onto this turn's message; the end
- * is recorded and pushed in the background.
- */
 const endDeadRun = async (
   chatId: string,
   chat: Parameters<typeof chatRunIsLive>[0] | undefined,

@@ -15,10 +15,6 @@ vi.mock("../services/skill-github.ts", () => ({
   updateGithubSkill: vi.fn(),
 }));
 
-/**
- * The Skill import gate (ADR-0037) and the GitHub install routes: who may
- * import a bundle into a Workspace, and what reaches the install service.
- */
 const orgId = "org-1";
 const workspaceId = "ws-1";
 const skillsUrl = `/organizations/${orgId}/workspaces/${workspaceId}/skills`;
@@ -71,7 +67,6 @@ const post = (url: string, body: unknown, json = true) =>
     },
   });
 
-/** Every Workspace-scope import, sent as a Workspace Owner would. */
 const imports = {
   "zip import": () => post(`${skillsUrl}/import`, new Uint8Array([1]), false),
   "Replace bundle": () =>
@@ -106,7 +101,6 @@ beforeEach(() => {
 });
 
 describe("the Skill import gate", () => {
-  // A bad zip is a 400 past the gate; a GitHub route is a 200.
   const passed = (status: number) => expect([200, 400]).toContain(status);
 
   it.each(Object.entries(imports))(

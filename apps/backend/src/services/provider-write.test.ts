@@ -46,8 +46,7 @@ const baseFields = (): ProviderCreateFields => ({
 
 const updateFields = (): ProviderUpdateFields => baseFields();
 
-// The handle `db.transaction` hands its callback: forwards to the chainable
-// mock but is not `db` itself, so a helper handed `db` instead fails the match.
+// why: distinct from mockDb, so a helper handed db instead of tx fails the match
 const tx = new Proxy(mockDb, {});
 const exec = asDb<Parameters<typeof createProvider>[2]>(mockDb);
 
@@ -118,7 +117,7 @@ describe("provider-write module", () => {
 
   describe("updateProvider", () => {
     it("updates a workspace-scoped provider, checking it exists before touching embeddings", async () => {
-      mockDb.limit.mockResolvedValueOnce([{ id: "p1", workspaceId: "ws-1" }]); // requireWorkspaceMutable
+      mockDb.limit.mockResolvedValueOnce([{ id: "p1", workspaceId: "ws-1" }]);
       const updated = { id: "p1", workspaceId: "ws-1", name: "Renamed" };
       mockDb.returning.mockResolvedValueOnce([updated]);
 
@@ -141,8 +140,8 @@ describe("provider-write module", () => {
     });
 
     it("throws NotFoundError when the provider is deleted before the write", async () => {
-      mockDb.limit.mockResolvedValueOnce([{ id: "p1", workspaceId: "ws-1" }]); // requireWorkspaceMutable
-      mockDb.returning.mockResolvedValueOnce([]); // UPDATE matched nothing
+      mockDb.limit.mockResolvedValueOnce([{ id: "p1", workspaceId: "ws-1" }]);
+      mockDb.returning.mockResolvedValueOnce([]);
 
       await expect(
         updateProvider(
@@ -154,7 +153,7 @@ describe("provider-write module", () => {
     });
 
     it("throws NotFoundError for a workspace-scoped provider not visible here, before touching embeddings", async () => {
-      mockDb.limit.mockResolvedValueOnce([]); // resolveScoped: no row
+      mockDb.limit.mockResolvedValueOnce([]);
 
       await expect(
         updateProvider(
@@ -172,7 +171,7 @@ describe("provider-write module", () => {
         .mockResolvedValueOnce([
           { id: "p1", organizationId: "org-1", workspaceId: null },
         ])
-        .mockResolvedValueOnce([{ id: "att-1" }]); // attached
+        .mockResolvedValueOnce([{ id: "att-1" }]);
 
       await expect(
         updateProvider(
@@ -188,7 +187,7 @@ describe("provider-write module", () => {
     it("updates an organization-scoped provider after checking it is a Shared resource here (#605)", async () => {
       mockDb.limit.mockResolvedValueOnce([
         { id: "p1", organizationId: "org-1", workspaceId: null },
-      ]); // requireOrgScoped
+      ]);
       const updated = { id: "p1", organizationId: "org-1" };
       mockDb.returning.mockResolvedValueOnce([updated]);
 
@@ -210,9 +209,7 @@ describe("provider-write module", () => {
     });
 
     it("throws NotFoundError for an organization-scoped provider that is not Shared here, before touching embeddings (#605)", async () => {
-      // The existence check the Organization surface used to skip entirely —
-      // it now runs, and refuses, before the write ever reaches the db.
-      mockDb.limit.mockResolvedValueOnce([]); // requireOrgScoped: not found
+      mockDb.limit.mockResolvedValueOnce([]);
 
       await expect(
         updateProvider(
@@ -350,9 +347,7 @@ describe("provider-write module", () => {
     });
 
     it("deletes an organization-scoped provider once it is confirmed deletable", async () => {
-      mockDb.limit
-        .mockResolvedValueOnce([]) // requireSharedDeletable: no attachment
-        .mockResolvedValueOnce([]); // requireSharedDeletable: no blueprint
+      mockDb.limit.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
       mockDb.returning.mockResolvedValueOnce([{ id: "p1" }]);
 
       await deleteProvider({ kind: "organization", orgId: "org-1" }, "p1");
@@ -364,7 +359,7 @@ describe("provider-write module", () => {
     });
 
     it("throws ConflictError while an Attachment still references the organization-scoped provider", async () => {
-      mockDb.limit.mockResolvedValueOnce([{ id: "att-1" }]); // attached
+      mockDb.limit.mockResolvedValueOnce([{ id: "att-1" }]);
 
       await expect(
         deleteProvider({ kind: "organization", orgId: "org-1" }, "p1"),
@@ -373,10 +368,8 @@ describe("provider-write module", () => {
     });
 
     it("throws NotFoundError when the organization-scoped delete matches no row", async () => {
-      mockDb.limit
-        .mockResolvedValueOnce([]) // requireSharedDeletable: no attachment
-        .mockResolvedValueOnce([]); // requireSharedDeletable: no blueprint
-      mockDb.returning.mockResolvedValueOnce([]); // delete matched nothing
+      mockDb.limit.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+      mockDb.returning.mockResolvedValueOnce([]);
 
       await expect(
         deleteProvider({ kind: "organization", orgId: "org-1" }, "missing"),

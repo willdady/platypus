@@ -423,6 +423,31 @@ The Exa Web-search backend's API key is Plugin credentials, not a variable: set
 `credentials.apiKey` in `PLATYPUS_PLUGIN_CONFIG_EXA`
 (see [Configuration → Web search](/self-hosting/configuration#web-search)).
 
+## Artifacts
+
+HTML and SVG Artifacts run in a locked-down frame that cannot reach the network.
+This setting is the only way out: the library sites an Artifact may load scripts,
+styles and fonts from.
+
+| Variable                  | Purpose                                                                                                                                                                                                                                                                                                                                                                         | Default                        | Required |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ | -------- |
+| `ARTIFACT_SCRIPT_ORIGINS` | Space-separated, bare `https` origins an HTML or SVG Artifact may load scripts, styles and fonts from. An empty value approves none, so an Artifact must be fully self-contained. An entry that is not a bare origin — a wildcard, a path, a query, another scheme, credentials — stops the backend at boot. Host case, a trailing slash and an explicit `:443` are normalised. | `https://cdnjs.cloudflare.com` | No       |
+
+```bash
+ARTIFACT_SCRIPT_ORIGINS="https://cdnjs.cloudflare.com https://cdn.jsdelivr.net"
+```
+
+Approving a site does not let an Artifact send data to it: background requests,
+form submissions and `base` URIs stay forbidden whatever the list says.
+
+<Callout type="warning">
+  Approve a site only if you trust everything it serves. A CDN that hosts
+  user-published content — jsDelivr and unpkg both do — lets anyone run a script
+  inside your Artifacts by publishing a package. The frame still cannot read a
+  User's session or send data out, but the page can act as itself. For a
+  restricted deployment, set this empty and keep Artifacts self-contained.
+</Callout>
+
 ## Skills
 
 | Variable       | Purpose                                                                                                                                                                                                                                                     | Default   | Required |
@@ -456,6 +481,10 @@ SDK does: the standard `AWS_*` variables, a shared config file, or the role
 attached to its container or instance (IRSA, an ECS task role, an EC2 instance
 profile). Setting only one of the two stops the backend at boot, as does
 `STORAGE_BACKEND=s3` without a bucket.
+
+With `STORAGE_PUBLIC_URL` set, Markdown Artifacts load their stored images from
+that address too, so a deployment serving files from a bucket or CDN shows its
+own images inside a document.
 
 <Callout type="warning">
   With `STORAGE_PUBLIC_URL` set, the browser fetches files from the bucket or

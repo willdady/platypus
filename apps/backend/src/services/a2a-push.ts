@@ -26,52 +26,17 @@ import { taskIsLive } from "./a2a-liveness.ts";
 import { env } from "../env.ts";
 import { oneRow } from "../db/one-row.ts";
 
-/**
- * A2A push notifications (ADR-0032): when a Task ends — `completed`, `failed`
- * or `canceled` — it is POSTed to every URL its client registered, with the
- * credentials the client supplied, over the Webhook transport (its egress
- * guard and retries). Nothing is pushed for an intermediate state.
- *
- * This is delivery alone. Only an end already recorded is pushed: recording
- * an end, and deciding a push is owed, are the Task lifecycle's
- * (`a2a-task-lifecycle.ts`, ADR-0034), which calls here.
- *
- * Each config is delivered once. Its `notifiedAt` is claimed before sending,
- * so the run's end and a registration landing just after it can't both push,
- * and a Task sends at most `MAX_PUSHES_PER_TASK` however its configs churn.
- *
- * The URL and credentials come from an outside caller, so a push reaches
- * private networks only when the Operator opts in with
- * `A2A_PUSH_ALLOW_PRIVATE_NETWORKS`, whatever `EGRESS_ALLOW_PRIVATE_NETWORKS`
- * allows Webhooks. The URL is checked when it is delivered, not when it is
- * registered: a refusal goes to the log, so a caller can't tell a host that
- * doesn't resolve from one that resolves somewhere internal.
- *
- * A Task whose token or endpoint was cut off before its push pushes nothing:
- * its configs are marked delivered, so nothing retries them.
- *
- * ponytail: at most once. A process that dies between the claim and a landed
- * delivery loses that push; the client can still poll `GetTask`. Claim after
- * delivering, with a lease, if clients need it guaranteed.
- */
-
 type PushConfigRow = typeof a2aPushConfigTable.$inferSelect;
 
-/** One config of one Task. */
 const configKey = (taskId: string, id: string) =>
   and(eq(a2aPushConfigTable.taskId, taskId), eq(a2aPushConfigTable.id, id));
 
-/** A Task's configs not yet delivered. */
 const pending = (taskId: string) =>
   and(
     eq(a2aPushConfigTable.taskId, taskId),
     isNull(a2aPushConfigTable.notifiedAt),
   );
 
-/**
- * The headers carrying the client's own credentials back to it. A scheme
- * registered without credentials sends no `Authorization` header.
- */
 const credentialHeaders = (config: PushConfigRow): Record<string, string> => ({
   ...(config.authentication?.credentials
     ? {
@@ -81,25 +46,18 @@ const credentialHeaders = (config: PushConfigRow): Record<string, string> => ({
   ...(config.token ? { "X-A2A-Notification-Token": config.token } : {}),
 });
 
-/** Whether the Operator lets A2A pushes reach private networks. */
 const privateNetworksAllowed = () => env().A2A_PUSH_ALLOW_PRIVATE_NETWORKS;
 
-/**
- * How many pushes this instance sends at once, retries included. More wait
- * their turn, so a burst of ended Tasks can't fan out unbounded requests.
- */
 export const MAX_CONCURRENT_PUSHES = 8;
 let pushesInFlight = 0;
 const waitingForSlot: (() => void)[] = [];
 
-/** Runs `send` once one of the instance's push slots is free. */
 const withPushSlot = async (send: () => Promise<void>): Promise<void> => {
   if (pushesInFlight < MAX_CONCURRENT_PUSHES) pushesInFlight++;
   else await new Promise<void>((resolve) => waitingForSlot.push(resolve));
   try {
     await send();
   } finally {
-    // The slot passes straight to the next in line, if any.
     const next = waitingForSlot.shift();
     if (next) next();
     else pushesInFlight--;
@@ -122,20 +80,13 @@ const deliver = (config: PushConfigRow, task: Task) =>
     }),
   );
 
-/** How many pushes one Task sends, over every config it has had. */
 const MAX_PUSHES_PER_TASK = 5;
 
-/**
- * Takes up to `wanted` of the Task's remaining pushes and returns how many it
- * got. A compare-and-set on the Task's count, so two instances pushing the
- * same Task can't both take the last one.
- */
 const reservePushes = async (
   taskId: string,
   wanted: number,
 ): Promise<number> => {
-  // A lost compare-and-set means another caller took at least one push, so
-  // this many attempts always reach an answer.
+  // why: each lost compare-and-set means another caller took a push, so this bound ends
   for (let attempt = 0; attempt <= MAX_PUSHES_PER_TASK; attempt++) {
     const [task] = await db
       .select({ pushCount: a2aTaskTable.pushCount })
@@ -162,7 +113,6 @@ const reservePushes = async (
   return 0;
 };
 
-/** The Task's row as it is now, if it is still there. */
 const taskRowNow = async (taskId: string): Promise<TaskRow | undefined> => {
   const [row] = await db
     .select()
@@ -172,11 +122,6 @@ const taskRowNow = async (taskId: string): Promise<TaskRow | undefined> => {
   return row;
 };
 
-/**
- * Pushes `row` to its configs not yet notified, if its end is recorded: on
- * `row`, or since it was read. Never throws: a push is fire-and-forget beside
- * the run or call that noticed the end.
- */
 export const pushRecordedEnd = async (row: TaskRow): Promise<void> => {
   try {
     const recorded = row.state ? row : await taskRowNow(row.id);
@@ -188,7 +133,6 @@ export const pushRecordedEnd = async (row: TaskRow): Promise<void> => {
       .where(pending(row.id))
       .returning();
     if (claimed.length === 0) return;
-    // Read afresh: a token or endpoint deleted since leaves the row's null.
     const current = await taskRowNow(row.id);
     if (!current || !(await taskIsLive(current))) {
       logger.info(
@@ -213,18 +157,12 @@ export const pushRecordedEnd = async (row: TaskRow): Promise<void> => {
   }
 };
 
-// ------------------------------------------------------------ Client config
-
-/** How many push configs one Task takes. Each is a delivery when it ends. */
 const MAX_PUSH_CONFIGS_PER_TASK = 5;
 
-/** An HTTP auth scheme name (RFC 9110 `token`). */
 const AUTH_SCHEME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
-/** Whether `value` holds a control character, which would break a header. */
 const hasControlChar = (value: string) =>
   [...value].some((c) => c.charCodeAt(0) < 0x20 || c.charCodeAt(0) === 0x7f);
 
-/** A client's push config, checked and ready to store. */
 type CheckedPushConfig = {
   id: string;
   url: string;
@@ -232,7 +170,6 @@ type CheckedPushConfig = {
   authentication: A2aPushAuthentication | null;
 };
 
-/** Whether `value` parses as an http(s) URL with a host. */
 const isHttpUrl = (value: string) => {
   try {
     const url = new URL(value);
@@ -244,14 +181,6 @@ const isHttpUrl = (value: string) => {
   }
 };
 
-/**
- * Refuses a push config that could never be delivered: a URL that is not
- * http(s), credentials with no scheme, or credentials that are not a valid
- * header. A scheme with no credentials is accepted, as the spec makes
- * credentials optional; it sends no `Authorization` header. Where the URL leads is
- * not looked at here: delivery checks it against the egress guard and logs a
- * refusal, so every host the caller names gets the same answer.
- */
 export const checkPushConfig = (
   config: TaskPushNotificationConfig,
 ): CheckedPushConfig => {
@@ -288,16 +217,6 @@ export const checkPushConfig = (
   };
 };
 
-/**
- * Stores a checked config on `task`, replacing one with the same id. A config
- * without an id replaces one with the same URL, so a `SendMessage` retried
- * with its config registers it once. A replacement keeps its delivery, so
- * re-registering never pushes a config twice; one that would move a config's
- * URL once its Task has ended is refused, so it can't be aimed somewhere new.
- * If the Task has already ended and the config is new, it is pushed now: a run
- * can end before its client registers. Its caller reads `task` through the
- * lifecycle first, so an end it has reached is recorded, and pushed here.
- */
 export const storePushConfig = async (
   task: TaskRow,
   config: CheckedPushConfig,
@@ -340,8 +259,6 @@ export const storePushConfig = async (
       return updated;
     }
 
-    // ponytail: a soft cap. Two registrations racing can each see room for
-    // one more; lock the Task row if that matters.
     const { n } = oneRow(
       await tx
         .select({ n: count() })
@@ -353,9 +270,6 @@ export const storePushConfig = async (
         `A Task takes at most ${MAX_PUSH_CONFIGS_PER_TASK} push notification configs`,
       );
     }
-    // An upsert: a registration of the same id that raced this one in since
-    // the check above is replaced, as it would have been had it landed first —
-    // unless it has been delivered and this moves its URL, refused as above.
     const [inserted] = await tx
       .insert(a2aPushConfigTable)
       .values({ id: config.id || randomUUID(), taskId: task.id, ...values })
@@ -375,10 +289,6 @@ export const storePushConfig = async (
   return row;
 };
 
-/**
- * A stored config as the client reads it back. The secrets it registered —
- * the token and the credentials — are never returned: only the scheme.
- */
 const toWire = (row: PushConfigRow): TaskPushNotificationConfig => ({
   tenant: "",
   id: row.id,
@@ -390,7 +300,6 @@ const toWire = (row: PushConfigRow): TaskPushNotificationConfig => ({
     : undefined,
 });
 
-/** Refuses a missing config id as invalid params, not an unknown config. */
 const requireConfigId = (id: string) => {
   if (!id) {
     throw new RequestMalformedError(
@@ -399,7 +308,6 @@ const requireConfigId = (id: string) => {
   }
 };
 
-/** `CreateTaskPushNotificationConfig`. */
 export const createA2aPushConfig = async (
   caller: A2aCaller,
   params: TaskPushNotificationConfig,
@@ -408,7 +316,6 @@ export const createA2aPushConfig = async (
   return toWire(await storePushConfig(task, checkPushConfig(params)));
 };
 
-/** `GetTaskPushNotificationConfig`. */
 export const getA2aPushConfig = async (
   caller: A2aCaller,
   params: { taskId: string; id: string },
@@ -420,13 +327,11 @@ export const getA2aPushConfig = async (
     .from(a2aPushConfigTable)
     .where(configKey(task.id, params.id))
     .limit(1);
-  // A2A has no error of its own for a missing config; the SDK's handler
-  // answers this one too.
+  // why: A2A has no missing-config error; the SDK's own handler answers this one too
   if (!row) throw new TaskNotFoundError("Push notification config not found");
   return toWire(row);
 };
 
-/** `ListTaskPushNotificationConfigs`: all of them, in one page. */
 export const listA2aPushConfigs = async (
   caller: A2aCaller,
   params: { taskId: string },
@@ -440,7 +345,6 @@ export const listA2aPushConfigs = async (
   return { configs: rows.map(toWire), nextPageToken: "" };
 };
 
-/** `DeleteTaskPushNotificationConfig`. */
 export const deleteA2aPushConfig = async (
   caller: A2aCaller,
   params: { taskId: string; id: string },

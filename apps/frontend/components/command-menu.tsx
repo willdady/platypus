@@ -13,6 +13,7 @@ import {
   Bot,
   Sparkles,
   KanbanSquare,
+  FileText,
   Zap,
   Radio,
   BookOpen,
@@ -131,7 +132,9 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
       <CommandInput placeholder="Type a command or search..." />
       <CommandList>
         <CommandEmpty>No results found.</CommandEmpty>
-        <CommandGroup heading="Actions">
+        {/* The Workspace's top-level destinations, so each is one step from
+            anywhere, whatever screen the menu was opened on. */}
+        <CommandGroup heading="Go to">
           <CommandItem
             onSelect={() => {
               runCommand(() => router.push(routes.root));
@@ -140,6 +143,24 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
             <Home />
             <span>Home</span>
           </CommandItem>
+          <CommandItem
+            onSelect={() => {
+              runCommand(() => router.push(routes.boards.root));
+            }}
+          >
+            <KanbanSquare />
+            <span>Boards</span>
+          </CommandItem>
+          <CommandItem
+            onSelect={() => {
+              runCommand(() => router.push(routes.artifacts.root));
+            }}
+          >
+            <FileText />
+            <span>Artifacts</span>
+          </CommandItem>
+        </CommandGroup>
+        <CommandGroup heading="Actions">
           <CommandItem
             onSelect={() => {
               runCommand(() => router.push(appRoutes.home));

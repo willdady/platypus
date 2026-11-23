@@ -7,8 +7,6 @@ import {
 
 type ToolResult = { name: string; input?: unknown; output?: unknown };
 
-/** Builds a single AI SDK step carrying the given tool results. Only the
- *  fields the detector reads (`toolName`, `input`, `output`) are populated. */
 const step = (...results: ToolResult[]) => ({
   toolResults: results.map((r, i) => ({
     type: "tool-result" as const,
@@ -28,8 +26,6 @@ describe("createNoProgressDetector", () => {
   it("aborts when the same call returns the same result K times, even with unrelated calls interleaved", () => {
     const detector = createNoProgressDetector(3);
     const board = { cards: [] };
-    // Three identical reads of an unchanged board, interleaved with two
-    // distinct writes that must NOT contribute to the read's signature count.
     const steps = [
       step({ name: "getBoardState", input: { boardId: "b1" }, output: board }),
       step({
@@ -72,8 +68,6 @@ describe("createNoProgressDetector", () => {
 
   it("does NOT count a repeated call whose result differs each time (productive read-after-write)", () => {
     const detector = createNoProgressDetector(3);
-    // Same tool + same args, but the board changes between reads — legitimate
-    // progress that must never trip the detector.
     const steps = [
       step({
         name: "getBoardState",
@@ -112,7 +106,6 @@ describe("createNoProgressDetector", () => {
     const steps = [
       step({ name: "getBoardState", input: { boardId: "b1" }, output: same }),
       step({ name: "getBoardState", input: { boardId: "b1" }, output: same }),
-      // Result differs on this one → breaks the run of identical signatures.
       step({
         name: "getBoardState",
         input: { boardId: "b1" },
@@ -167,7 +160,6 @@ describe("createNoProgressDetector", () => {
       step({ name: "read", input: {}, output: board }),
     ];
     expect(evaluate(detector, steps)).toBe(true);
-    // A later evaluation with no repeats still reports tripped.
     expect(
       evaluate(detector, [step({ name: "other", output: { a: 1 } })]),
     ).toBe(true);

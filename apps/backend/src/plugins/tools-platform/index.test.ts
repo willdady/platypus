@@ -2,11 +2,6 @@ import { beforeAll, describe, it, expect, vi } from "vitest";
 import type { ToolSetContext } from "@platypuschat/plugin-sdk";
 import { PLUGIN_API_VERSION } from "@platypuschat/plugin-sdk";
 
-// The domain tool sets transitively import the db and a few services; mock them
-// so importing the manifest (and resolving its factories) needs no live
-// Postgres. Factories return AI SDK tool maps without touching the db until a
-// tool's `execute` runs — except memory, which looks up the Workspace's
-// embedding Provider; an empty lookup leaves it unconfigured (memoryGet only).
 vi.mock("../../index.ts", () => {
   const query = {
     from: () => query,
@@ -38,6 +33,7 @@ const EXPECTED_IDS = [
   "agent-management",
   "notifications",
   "chats",
+  "artifacts",
   "memory",
 ];
 
@@ -67,8 +63,6 @@ describe("@platypus/tools-platform plugin manifest", () => {
 });
 
 describe("@platypus/tools-platform — loaded into the core registry", () => {
-  // Module-global registry; vitest isolates modules per file so this doesn't
-  // leak. Exercise the real path: loader → registerToolSet → getToolSet.
   const registeredIds = () => getToolSets().map((s) => s.id);
   let before: string[];
   let loaded: LoadedPlugin[];
@@ -80,7 +74,7 @@ describe("@platypus/tools-platform — loaded into the core registry", () => {
     }));
   });
 
-  it("registers all nine domain tool sets with bare ids", () => {
+  it("registers all ten domain tool sets with bare ids", () => {
     expect(before.filter((id) => EXPECTED_IDS.includes(id))).toEqual([]);
     expect(loaded).toEqual([
       expect.objectContaining({
@@ -127,7 +121,6 @@ describe("@platypus/tools-platform — loaded into the core registry", () => {
     );
     const shared = Object.keys(cards).filter((name) => name in boards);
     expect(shared.sort()).toEqual(["getBoardState", "listBoards"]);
-    // Marked shared, so a turn granting both claims each once, unreported.
     for (const name of shared) {
       expect(isSameSharedTool(cards[name], boards[name])).toBe(true);
     }

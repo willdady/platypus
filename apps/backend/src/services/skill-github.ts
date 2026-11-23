@@ -39,35 +39,18 @@ import {
 } from "./skill-bundle.ts";
 import type { SkillScope } from "./skill.ts";
 
-/**
- * Installing Skills from GitHub (ADR-0037): the ref resolves to a commit SHA
- * through the REST API, then that commit's zip archive is downloaded from
- * codeload and only the entries under the Skill paths are decompressed, in
- * memory. One REST request and one download per preview or update check; an
- * install or update, which already has its SHA, makes only the download. Only the two allowlisted hosts
- * are ever requested, and users supply names, never a URL.
- */
-
 const MiB = 1024 * 1024;
 
-/** The largest repository archive a preview or install downloads. */
 export const GITHUB_ARCHIVE_MAX_BYTES = 100 * 1024 * 1024;
 
 const API_HOST = "api.github.com";
 const ALLOWED_HOSTS = new Set([API_HOST, "codeload.github.com"]);
 const MAX_REDIRECTS = 5;
 
-// Annotated, not inferred, so a bare `fail(...)` call narrows like a `throw`.
 const fail: (message: string) => never = (message) => {
   throw new ValidationError(message);
 };
 
-/**
- * Reads a GitHub URL (`https://github.com/<o>/<r>`, or `…/tree/<ref>/<path>`)
- * or the shorthand `<o>/<r>[/<path>][@<ref>]` into its parts, validated
- * against GitHub's name rules before anything is requested. In a tree URL the
- * ref is the first segment after `tree`, as GitHub can't tell either.
- */
 export const parseGithubSource = (input: string): GithubSkillSource => {
   const text = input.trim();
   if (text.split(/[/@]/).includes(".."))
@@ -76,12 +59,7 @@ export const parseGithubSource = (input: string): GithubSkillSource => {
   let segments: string[];
   let ref: string | null = null;
   if (/^[a-z][a-z0-9+.-]*:/i.test(text)) {
-    let url: URL | undefined;
-    try {
-      url = new URL(text);
-    } catch {
-      // Refused below.
-    }
+    const url = URL.parse(text);
     if (
       !url ||
       url.protocol !== "https:" ||
@@ -141,12 +119,6 @@ const resetMessage = (response: Response): string => {
   return at ? `until ${at.toISOString()}` : "for now";
 };
 
-/**
- * Requests a URL on the allowlist, following redirects only while they stay
- * on it. `GITHUB_TOKEN` goes to `api.github.com` and nowhere else. A rate
- * limit becomes a `RateLimitError` (→429) naming when it resets; nothing is
- * retried.
- */
 const githubFetch = async (
   url: string,
   headers: Record<string, string> = {},
@@ -195,7 +167,6 @@ const githubFetch = async (
 const upstream = (response: Response) =>
   new UpstreamError(`GitHub answered ${response.status}`);
 
-/** The commit a ref (or the default branch) points at now. */
 const resolveCommit = async (source: GithubSkillSource): Promise<string> => {
   const repo = `${source.owner}/${source.repo}`;
   const ref = (source.ref ?? "HEAD")
@@ -220,14 +191,6 @@ const resolveCommit = async (source: GithubSkillSource): Promise<string> => {
   return sha;
 };
 
-/**
- * Downloads a commit's zip archive, refusing it once the bytes received pass
- * the cap.
- *
- * ponytail: the archive is held whole in memory (at most 100 MiB), because a
- * zip records which entries are symlinks only in its central directory, at
- * the end. Spill to a temp file if concurrent installs ever strain memory.
- */
 const fetchArchive = async (
   owner: string,
   repo: string,
@@ -259,10 +222,8 @@ const fetchArchive = async (
   return Buffer.concat(chunks);
 };
 
-/** An archive entry at its repo-relative path. */
 type ArchiveEntry = { path: string; record: ZipRecord };
 
-/** The archive's entries with its single top-level `<repo>-<sha>/` stripped. */
 const archiveEntries = (zip: Uint8Array): ArchiveEntry[] =>
   listZipRecords(zip).flatMap((record) => {
     const path = record.name.slice(record.name.indexOf("/") + 1);
@@ -275,7 +236,6 @@ const isUnder = (path: string, dir: string) =>
 const skillMdPath = (skillPath: string) =>
   skillPath === "" ? "SKILL.md" : `${skillPath}/SKILL.md`;
 
-/** Every directory under `dir` that holds a `SKILL.md`. */
 const skillPathsUnder = (entries: ArchiveEntry[], dir: string): string[] =>
   entries
     .filter(
@@ -287,11 +247,6 @@ const skillPathsUnder = (entries: ArchiveEntry[], dir: string): string[] =>
     .filter((skillPath) => isUnder(skillPath, dir))
     .sort();
 
-/**
- * One Skill's directory, decompressed and validated as an import would be.
- * The file cap is checked before anything is inflated, and the unpacked cap
- * as bytes come out, so a bomb in one Skill costs at most its own budget.
- */
 const readSkill = (
   entries: ArchiveEntry[],
   skillPath: string,
@@ -315,7 +270,6 @@ const readSkill = (
   );
 };
 
-/** The names of the Skills already in a scope. */
 const takenNames = async (scope: SkillScope): Promise<Set<string>> => {
   const rows = await db
     .select({ name: skillTable.name })
@@ -328,11 +282,6 @@ const takenNames = async (scope: SkillScope): Promise<Set<string>> => {
   return new Set(rows.map((row) => row.name));
 };
 
-/**
- * What installing from `input` would give: every Skill under its path at the
- * commit its ref resolves to now, each with what it holds, any rule it
- * breaks, and whether its name is taken in `scope`. Writes nothing.
- */
 export const previewGithubSkills = async (
   scope: SkillScope,
   input: string,
@@ -380,11 +329,6 @@ export const previewGithubSkills = async (
   return { ...source, commitSha, skills };
 };
 
-/**
- * Installs the named Skills at the commit the preview resolved, never the
- * ref, so each is exactly what was reviewed. Each installs on its own,
- * all-or-nothing, and reports how it went; one failing undoes no other.
- */
 export const installGithubSkills = async (
   scope: SkillScope,
   request: SkillGithubInstallRequest,
@@ -426,7 +370,6 @@ export const installGithubSkills = async (
   return { results };
 };
 
-/** A Skill writable in `scope` that was installed from GitHub, and its source. */
 const requireGithubSkill = async (scope: SkillScope, skillId: string) => {
   const [row] = await db
     .select()
@@ -455,7 +398,6 @@ const requireGithubSkill = async (scope: SkillScope, skillId: string) => {
   };
 };
 
-/** The Skill at `skillPath` in a commit, validated as an install would be. */
 const fetchSkill = async (
   owner: string,
   repo: string,
@@ -471,12 +413,6 @@ const fetchSkill = async (
   return readSkill(entries, skillPath);
 };
 
-/**
- * Whether a GitHub-installed Skill's ref has moved, and if so what updating
- * would change, compared with the Skill as it stands now (local edits
- * included). An unmoved ref costs one REST request and no download; a ref
- * that is itself a commit SHA never moves, so costs nothing. Writes nothing.
- */
 export const checkGithubSkillUpdate = async (
   scope: SkillScope,
   skillId: string,
@@ -485,7 +421,6 @@ export const checkGithubSkillUpdate = async (
     scope,
     skillId,
   );
-  // A commit SHA never moves.
   if (commitShaSchema.safeParse(row.ref).success) return { upToDate: true };
   const toSha = await resolveCommit({
     owner,
@@ -532,11 +467,6 @@ export const checkGithubSkillUpdate = async (
   };
 };
 
-/**
- * Updates a GitHub-installed Skill to the commit its check resolved, never
- * the ref, so it applies exactly what was reviewed. Local edits are
- * overwritten; the source record moves to `commitSha`.
- */
 export const updateGithubSkill = async (
   scope: SkillScope,
   skillId: string,

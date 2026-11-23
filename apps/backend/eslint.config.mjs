@@ -1,11 +1,38 @@
+import path from "node:path";
 import { defineConfig, globalIgnores } from "eslint/config";
 import { baseConfig } from "../../eslint.config.base.mjs";
+import commentBaseline from "./comment-baseline.json" with { type: "json" };
 
-/**
- * Route tests still on the chainable `mockDb`, which ignores every `WHERE` and
- * answers queries in call order (#1621). Migrate a file to `seedDb()` and
- * delete it here; never add one.
- */
+const DIRECTIVE = /^\s*(eslint-|@ts-|prettier-ignore|global\s)|^\/\s*</;
+
+const noComments = {
+  meta: { type: "suggestion", schema: [] },
+  create(context) {
+    return {
+      Program(node) {
+        const file = path.relative(import.meta.dirname, context.filename);
+        const count = context.sourceCode
+          .getAllComments()
+          .filter(
+            (c) =>
+              !DIRECTIVE.test(c.value) &&
+              !(c.type === "Line" && /^ why: \S/.test(c.value)),
+          ).length;
+        const allowed = commentBaseline[file] ?? 0;
+        if (count === allowed) return;
+        context.report({
+          node,
+          loc: { line: 1, column: 0 },
+          message:
+            count > allowed
+              ? `${count} comments, baseline allows ${allowed}. Comments are banned in apps/backend except a one-line "// why: …"; run /delete-comment.`
+              : `${count} comments, below the baseline of ${allowed}. Set "${file}" to ${count} in comment-baseline.json (delete the entry at 0).`,
+        });
+      },
+    };
+  },
+};
+
 const POSITIONAL_DB_ROUTE_TESTS = [
   "src/routes/a2a.test.ts",
   "src/routes/attachment.test.ts",
@@ -36,15 +63,19 @@ const POSITIONAL_DB_ROUTE_TESTS = [
 ];
 
 const eslintConfig = defineConfig([
-  // Generated migration artifacts and build/cache output are not source.
   globalIgnores(["drizzle/**", ".turbo/**", "dist/**"]),
 
   ...baseConfig(import.meta.dirname),
 
   {
-    // A route test seeds rows with `seedDb()`, so a query that dropped its
-    // filter reads the wrong row and fails, rather than stubbing results in
-    // the order the route happens to query.
+    plugins: { local: { rules: { "no-comments": noComments } } },
+    rules: {
+      "local/no-comments": "error",
+      "no-empty": ["error", { allowEmptyCatch: true }],
+    },
+  },
+
+  {
     files: ["src/routes/**/*.test.ts"],
     ignores: POSITIONAL_DB_ROUTE_TESTS,
     rules: {
@@ -65,9 +96,6 @@ const eslintConfig = defineConfig([
   },
 
   {
-    // The production tsconfig excludes these (they type-check without
-    // `noUncheckedIndexedAccess`), so the project service would find no
-    // project for them. Point them at the test tsconfig instead.
     files: [
       "**/*.test.ts",
       "**/*.test-fixtures.ts",

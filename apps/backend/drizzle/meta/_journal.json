@@ -736,6 +736,20 @@
       "when": 1794120265952,
       "tag": "0104_drop_chat_tags",
       "breakpoints": true
+    },
+    {
+      "idx": 105,
+      "version": "7",
+      "when": 1795122348625,
+      "tag": "0105_provider_job_settings",
+      "breakpoints": true
+    },
+    {
+      "idx": 106,
+      "version": "7",
+      "when": 1795315176783,
+      "tag": "0106_artifacts",
+      "breakpoints": true
     }
   ]
 }

@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { RowActionsMenu } from "@/components/row-actions-menu";
 import { cn } from "@/lib/utils";
+import { dropZoneId } from "@/lib/board-moves";
 import type { Serialized } from "@/lib/api-write";
 
 type KanbanColumnProps = {
@@ -180,7 +181,7 @@ function SortableKanbanColumn({
   });
 
   const { setNodeRef: setDroppableRef } = useDroppable({
-    id: `column-drop-${column.id}`,
+    id: dropZoneId(column.id),
     data: { type: "column", column },
     disabled: isDraggingColumn,
   });
@@ -196,7 +197,7 @@ function SortableKanbanColumn({
   const isOver =
     !!active &&
     overId !== null &&
-    (overId === `column-drop-${column.id}` ||
+    (overId === dropZoneId(column.id) ||
       overId === column.id ||
       column.cards.some((c) => c.id === overId));
 

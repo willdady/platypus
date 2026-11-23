@@ -1,97 +1,29 @@
 import { raceAbort } from "../utils/abort-race.ts";
 import type { SandboxContext } from "./types.ts";
 
-// The seam beneath a Sandbox adapter (ADR-0002/0003/0012).
-//
-// A `SandboxBackend` is the five model-facing tools plus every Platypus-defined
-// bound they must honour. Almost none of that is adapter business: the find(1)
-// output parser, the unique-`oldString` rule, strict UTF-8 decoding, line
-// counting, the truncation convention and the timeout clamp are the *contract*,
-// and two adapters implementing them separately means two chances to drift and
-// two places to fix a bug. What genuinely differs between Docker and SSH is the
-// transport — dockerode `exec`/`putArchive` versus ssh2 `exec`/SFTP.
-//
-// So the seam sits here instead, one level below the backend. An adapter
-// supplies these five primitives; {@link createPosixSandbox} implements the five
-// tools on top of them once, and owns the bounds for every adapter rather than
-// trusting each to honour them. A backend that cannot be expressed as a POSIX
-// transport is free to implement `SandboxBackend` directly — this is a shortcut
-// for the common case, not a new requirement.
-//
-// Every method takes the {@link SandboxContext} the tool call arrived with, for
-// the same reason `SandboxBackend` does: an adapter may serve more than one
-// Workspace from one instance, and `ctx.workspaceId` is the identity key it
-// finds or provisions its resource by.
-
-/** What a transport is asked to run one command under. */
 export interface SandboxExecOptions {
-  /**
-   * Absolute working directory inside the sandbox. Resolved by core against the
-   * transport's own {@link SandboxTransport.rootDir}, so it is already a real
-   * path on the far side rather than anything the model wrote.
-   */
   cwd?: string;
-  /** Environment for this command, already merged by the layers above. */
   env?: Record<string, string>;
-  /** Wall-clock budget. Core has already clamped it to the Platypus maximum. */
   timeoutMs: number;
-  /** Stop accumulating stdout past this budget (keep draining). */
   stdoutCap: StreamCap;
-  /** Stop accumulating stderr past this budget (keep draining). */
   stderrCap: StreamCap;
-  /**
-   * Fires when core has stopped waiting for this command — the turn was
-   * cancelled, or the run hit a timeout.
-   *
-   * Core passes it on every tool call. Honour it where the command actually
-   * runs, and honour it from the *first* await: the per-command timer is armed
-   * only after the unbounded daemon or connection calls that precede it, so
-   * those are exactly where an abort has nothing else to recover it (issue
-   * #921).
-   *
-   * Reject when it fires, rather than resolving with an exit code — the command
-   * did not finish, core stopped listening. Honouring it is still the
-   * transport's choice: core races the whole tool call against the same signal,
-   * so a transport that ignores this cannot hold the turn open; ignoring it only
-   * means the command runs on as an orphan until its own timeout.
-   */
   signal: AbortSignal;
 }
 
-/**
- * One finished command. Buffers rather than strings: decoding is the contract's
- * business — `shell.exec` is lenient about invalid UTF-8 where `fs.read` is
- * strict — and a transport that decoded early would take that choice away.
- */
 export interface SandboxExecResult {
   stdout: Buffer;
   stderr: Buffer;
-  /**
-   * The command's exit status, and `124` when it was killed for outrunning
-   * `timeoutMs` — the code a shell reports for exactly that, which is why a
-   * timeout needs no flag of its own alongside it.
-   */
   exitCode: number;
   durationMs: number;
 }
 
-/**
- * How much of one captured stream to keep. A stream that outgrows the budget
- * keeps `head` bytes from its start and, when `tail` is set, `tail` bytes from
- * its end; what lies between is dropped and counted in a marker line.
- * Omit `tail` for a head-only cut — the right shape for a file read or a
- * listing, where the beginning is the only part that means anything.
- */
 export interface StreamCap {
-  /** Bytes kept from the start of the stream. */
   head: number;
-  /** Bytes kept from the end of the stream. Omitted for a head-only cut. */
   tail?: number;
 }
 
 const isContinuationByte = (byte: number): boolean => (byte & 0xc0) === 0x80;
 
-/** Length of the UTF-8 sequence `byte` leads, or 0 when it leads none. */
 const utf8SequenceLength = (byte: number): number => {
   if (byte < 0x80) return 1;
   if ((byte & 0xe0) === 0xc0) return 2;
@@ -100,35 +32,18 @@ const utf8SequenceLength = (byte: number): number => {
   return 0;
 };
 
-/**
- * How much of `bytes` ends on a UTF-8 character boundary. A sequence straddling
- * the cut is dropped whole: half a character decodes to U+FFFD, which is a
- * byte the command never produced.
- */
 const utf8HeadEnd = (bytes: Buffer): number => {
-  // A sequence is at most 4 bytes, so only the last 4 can start one that the
-  // cut splits.
   for (let back = 1; back <= 4 && back <= bytes.length; back++) {
     const start = bytes.length - back;
     const byte = bytes.readUInt8(start);
     if (isContinuationByte(byte)) continue;
     const length = utf8SequenceLength(byte);
-    if (length === 0) return bytes.length; // not UTF-8: nothing to protect
+    if (length === 0) return bytes.length;
     return start + length <= bytes.length ? bytes.length : start;
   }
   return bytes.length;
 };
 
-/**
- * How much of `bytes` to skip so what remains starts on a UTF-8 character
- * boundary. A tail cut lands mid-sequence, so its leading continuation bytes
- * belong to a character the head already dropped (or omits).
- *
- * A UTF-8 sequence has at most 3 continuation bytes, so the skip is bounded at
- * 3. Unbounded, a binary tail — arbitrary bytes, often a long 0x80–0xBF run —
- * could be swallowed whole, leaving the stitched output under the budget; core
- * reads that as `truncated: false` and a cut goes unreported.
- */
 const utf8TailStart = (bytes: Buffer): number => {
   let start = 0;
   while (
@@ -140,10 +55,6 @@ const utf8TailStart = (bytes: Buffer): number => {
   return start;
 };
 
-/**
- * A bounded ring that keeps the last `capacity` bytes written to it. Chunks
- * are copied in, so nothing outside the ring is kept alive by a view.
- */
 const createTailBuffer = (capacity: number) => {
   const buffer = Buffer.allocUnsafe(capacity);
   let write = 0;
@@ -152,7 +63,6 @@ const createTailBuffer = (capacity: number) => {
   return {
     push(chunk: Buffer): void {
       if (buffer.length === 0 || chunk.length === 0) return;
-      // A chunk larger than the whole ring can only contribute its own tail.
       const bytes =
         chunk.length > buffer.length
           ? chunk.subarray(chunk.length - buffer.length)
@@ -170,31 +80,9 @@ const createTailBuffer = (capacity: number) => {
   };
 };
 
-/**
- * The one line that stands in for output a sink dropped. Counted in bytes, not
- * characters, and formatted for a model to read at a glance. It is deliberately
- * outside the budget: the marker is how a cut stays visible.
- */
 const omittedMarker = (bytes: number): string =>
   `\n[… ${bytes.toLocaleString("en-US")} bytes omitted …]\n`;
 
-/**
- * A byte-capped output accumulator, for the `stdoutCap` / `stderrCap` half of
- * {@link SandboxExecOptions}.
- *
- * Here rather than in each transport because the cap is a Platypus-defined
- * bound like any other, and because getting it wrong is quiet: the sink keeps
- * *accepting* chunks past the cap and merely stops storing them, so the
- * underlying stream still drains. A transport that instead unsubscribed at the
- * cap would leave the command blocked on a full pipe, and the failure would look
- * like a hang rather than a truncation.
- *
- * With a `tail`, memory stays bounded at `head + tail` however large the
- * output: the head is clipped as it arrives and the tail rolls through a fixed
- * ring. What comes back is the head, a marker naming the omitted byte count, and
- * the tail — the end of a build log, a test summary or a stack trace is usually
- * the part worth keeping.
- */
 export const createCappedSink = (cap: StreamCap) => {
   const headChunks: Buffer[] = [];
   let headBytes = 0;
@@ -209,8 +97,7 @@ export const createCappedSink = (cap: StreamCap) => {
       if (headBytes < cap.head) {
         const room = cap.head - headBytes;
         const taken = chunk.length <= room ? chunk : chunk.subarray(0, room);
-        // A clipped chunk is copied so the sink never pins the caller's larger
-        // buffer; a whole one is owned outright.
+        // why: a subarray view would pin the caller's whole chunk in memory
         headChunks.push(taken === chunk ? taken : Buffer.from(taken));
         headBytes += taken.length;
       }
@@ -223,8 +110,6 @@ export const createCappedSink = (cap: StreamCap) => {
       const tailBytes = tail.toBuffer();
       const budget = cap.head + tailCapacity;
       if (totalBytes <= budget) {
-        // Under the budget, the two windows together cover the whole stream —
-        // overlapping in the middle — so reconstruct it rather than cut.
         if (totalBytes <= headBytes) return head;
         const tailStart = totalBytes - tailBytes.length;
         return Buffer.concat([
@@ -246,29 +131,11 @@ export const createCappedSink = (cap: StreamCap) => {
   };
 };
 
-/**
- * Single-quote a value for safe interpolation into a `/bin/sh` command line,
- * escaping embedded single quotes with the classic `'\''` idiom.
- */
 export const shQuote = (value: string): string =>
   `'${value.replace(/'/g, `'\\''`)}'`;
 
-// A valid POSIX environment-variable name. `adminEnv`/`userEnv` are already held
-// to this by the schema, but the model-supplied `input.env` keys are not — so we
-// guard here before interpolating a key into the shell string. A key that isn't
-// a valid identifier can't be a usable env var anyway (`export 1FOO=…` errors),
-// so dropping it is both safe and correct.
 const ENV_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
-/**
- * Flatten an argv and its {@link SandboxExecOptions} into one `/bin/sh` line,
- * for a transport with a shell in the way (SSH, Daytona). The merged env
- * (ADR-0004) goes in as `export KEY=val;` statements — an SSH server's
- * `AcceptEnv` rejects arbitrary variables (ADR-0012) — and every value and argv
- * element is single-quoted. Exports go first and the `cd` is chained straight
- * onto the command, so a failed `cd` skips the command (non-zero exit) instead
- * of the `;` after an export letting it run elsewhere.
- */
 export const toShellCommand = (
   argv: string[],
   opts: Pick<SandboxExecOptions, "cwd" | "env">,
@@ -281,12 +148,6 @@ export const toShellCommand = (
   return `${envPrefix}${cdPrefix}${argv.map(shQuote).join(" ")}`;
 };
 
-/**
- * Thrown by {@link SandboxTransport.writeFile} when `mode: "create"` finds the
- * path already taken. A distinct type rather than a message because the message
- * an Operator sees names the *workspace-relative* path the model asked for, and
- * a transport only ever sees the resolved absolute one — core translates.
- */
 export class SandboxPathExistsError extends Error {
   constructor(absPath: string, options?: { cause?: unknown }) {
     super(`path already exists: ${absPath}`, options);
@@ -294,12 +155,6 @@ export class SandboxPathExistsError extends Error {
   }
 }
 
-/**
- * Thrown by a transport when {@link SandboxExecOptions.signal} fired before the
- * command finished. A distinct type rather than a message because it is not a
- * failure of the command — nothing ran badly, core stopped listening — and the
- * layers above must not report it as one.
- */
 export class SandboxCancelledError extends Error {
   constructor(options?: { cause?: unknown }) {
     super("sandbox: turn cancelled", options);
@@ -307,19 +162,6 @@ export class SandboxCancelledError extends Error {
   }
 }
 
-/**
- * Run `work` under `signal`, and stop waiting the moment it fires.
- *
- * The one way anything on the Sandbox path honours an abort, so all of them
- * report it identically: the race is {@link raceAbort}'s, shared with the
- * Web-search backend, and what is added here is the verdict — an abort that
- * fired becomes a {@link SandboxCancelledError}, and anything else the work
- * threw passes through untouched.
- *
- * An absent signal is a plain call. Nothing in core drives a turn without one;
- * a transport primitive invoked outside a tool call (provisioning, teardown) has
- * no turn to be cancelled with.
- */
 export const raceCancellation = <T>(
   signal: AbortSignal | undefined,
   work: () => Promise<T>,
@@ -331,54 +173,15 @@ export const raceCancellation = <T>(
   });
 };
 
-/**
- * The five primitives an adapter supplies. Everything the model sees is built
- * from these by {@link createPosixSandbox}.
- *
- * This is the *whole* adapter surface: an implementation that finds itself
- * parsing find(1) output, counting lines, or deciding what `truncated` means has
- * taken on work the contract already owns.
- */
 export interface SandboxTransport {
-  /**
-   * The absolute workspace root every relative path resolves against, and the
-   * lazy-initialisation hook: core calls it first in every tool, so this is
-   * where an adapter provisions its container or opens its connection. Called
-   * once per tool call, so it must be cheap on the warm path and safe under
-   * concurrent callers.
-   */
   rootDir(ctx: SandboxContext): Promise<string>;
 
-  /**
-   * Run one command. `argv` is a command and its arguments already split, never
-   * a shell line — quoting is the transport's business, because only it knows
-   * whether one is needed (Docker passes argv straight to the daemon; SSH has a
-   * login shell in the way and must quote every element).
-   *
-   * Resolves for a command that failed or timed out — a non-zero `exitCode` is
-   * data, not an error. Reject only when the command could not be run at all.
-   */
   exec(
     ctx: SandboxContext,
     argv: string[],
     opts: SandboxExecOptions,
   ): Promise<SandboxExecResult>;
 
-  /**
-   * Read at most `cap` bytes of an absolute path. Rejects when the file cannot
-   * be read; core prefixes the message with the tool that asked, so the reason
-   * (and only the reason) belongs in it.
-   *
-   * Bytes only — whether that counts as *truncated* is core's call, from the
-   * one `>= cap` rule it applies to every adapter. A transport reporting its
-   * own verdict is how the two adapters used to disagree about a file sitting
-   * exactly on the cap, and reading the size first (SFTP can, `cat` cannot) is
-   * not worth reopening that.
-   *
-   * `signal` is the turn's: core already stops waiting when it fires, so it is
-   * for a transport that can end the read itself rather than leave it running.
-   * Core passes it on every read; honouring it is the transport's choice.
-   */
   readFile(
     ctx: SandboxContext,
     absPath: string,
@@ -386,11 +189,6 @@ export interface SandboxTransport {
     signal: AbortSignal,
   ): Promise<Buffer>;
 
-  /**
-   * Write bytes to an absolute path, creating any missing parent directories.
-   * `mode: "create"` must reject an existing path with a {@link
-   * SandboxPathExistsError}; `mode: "overwrite"` replaces whatever is there.
-   */
   writeFile(
     ctx: SandboxContext,
     absPath: string,
@@ -398,18 +196,7 @@ export interface SandboxTransport {
     mode: "create" | "overwrite",
   ): Promise<void>;
 
-  /**
-   * Release whatever this adapter owns for the Sandbox. MUST be idempotent —
-   * safe to call on a resource that is already gone (ADR-0001). An adapter
-   * attached to a machine it does not own tears down its own connection and
-   * nothing else.
-   */
   destroy(ctx: SandboxContext): Promise<void>;
 
-  /**
-   * Drop whatever this transport holds open between calls — the backend's
-   * `close()`, which core calls when the Chat turn ends. Optional: a transport
-   * that holds nothing open leaves it out.
-   */
   close?(): Promise<void>;
 }

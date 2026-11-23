@@ -323,12 +323,9 @@ describe("renderSystemPrompt — memory tools prose", () => {
       "You also have access to memorySearch and memoryGet tools",
     );
     expect(out).toContain("beyond what is shown above");
-    // Standalone prose must NOT be present when supplemental is.
     expect(out).not.toContain("look up memories from past conversations.");
   });
 
-  // Issue #1059: with no embedding Provider the Memory Tool set offers only
-  // memoryGet, so the prose must not send the model to memorySearch.
   it("names only memoryGet when memorySearch is not offered", () => {
     const ctx = baseCtx();
     ctx.agent = agentRecord({ toolSetIds: ["memory"] });
@@ -351,9 +348,6 @@ describe("renderSystemPrompt — stability (ADR-0020)", () => {
   it("renders the pinned Memories block verbatim, never re-deriving it", () => {
     const ctx = baseCtx();
     ctx.agent = agentRecord({ toolSetIds: ["memory"] });
-    // A distinctive block with formatting the renderer must not touch: it
-    // proves the renderer consumes the pinned text rather than a live
-    // retrieval it can no longer reach.
     ctx.memoriesBlock =
       "Recent memory summaries from previous conversations:\n\n### 2026-04-29\nAsked about pricing.";
     const out = renderSystemPrompt(ctx);
@@ -403,8 +397,6 @@ describe("renderSystemPrompt — sub-agents", () => {
     expect(renderSystemPrompt(baseCtx())).not.toContain("Available Sub-Agents");
   });
 
-  // The catalogue is the model's only route to a valid target: the `delegate`
-  // tool resolves what it is given against exactly these names.
   it("lists each sub-agent by the name the delegate tool expects, with its description", () => {
     const ctx = baseCtx();
     ctx.subAgents = [
@@ -417,7 +409,6 @@ describe("renderSystemPrompt — sub-agents", () => {
     );
     expect(out).toContain("- **Research Agent**: Looks things up.");
     expect(out).toContain("- **Coder**: Writes code.");
-    // One tool for all of them — no per-sub-agent slug is promised any more.
     expect(out).not.toContain("delegateTo");
   });
 
@@ -441,14 +432,11 @@ describe("renderSystemPrompt — sub-agents", () => {
     const out = renderSystemPrompt(ctx);
 
     expect(out).toContain("## Unavailable Sub-Agents");
-    // The tool always exists now, so the prompt describes the refusal rather
-    // than promising a missing tool.
     expect(out).toContain("Delegating to them will be refused:");
     expect(out).toContain(
       "- **Dashboard Agent**: Provider 'p1' not found for sub-agent",
     );
     expect(out).not.toContain("no `delegateToDashboardAgent` tool");
-    // The working one is still advertised normally.
     expect(out).toContain("- **Obsidian Agent**: Notes.");
   });
 
@@ -461,8 +449,6 @@ describe("renderSystemPrompt — sub-agents", () => {
     expect(out).not.toContain("## Available Sub-Agents");
     expect(out).toContain("## Unavailable Sub-Agents");
     expect(out).toContain("- **Kanban Agent**: failed to load");
-    // Nothing resolved means no delegation tool was declared either, so the
-    // section must not promise a refusal from a tool the model does not have.
     expect(out).toContain("you have no delegation tool this turn");
     expect(out).not.toContain("Delegating to them will be refused");
   });
@@ -479,7 +465,6 @@ describe("renderSystemPrompt — sub-agents", () => {
     expect(out).toContain(
       "- Sub-agent `sub-1`: not available in this workspace",
     );
-    // No name means no target the model could have asked for either way.
     expect(out).not.toContain("delegateTo");
   });
 });
@@ -644,8 +629,6 @@ describe("renderSystemPrompt — sandbox fragment", () => {
     expect(out).toMatch(/grep/);
   });
 
-  // Issue #1060: only the Docker backend is rooted at /workspace. SSH and
-  // plugin backends resolve their own root, so the prompt names none.
   it("names no fixed root path and steers the model to relative paths", () => {
     const out = renderSystemPrompt({
       ...baseCtx(),

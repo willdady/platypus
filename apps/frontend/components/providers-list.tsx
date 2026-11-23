@@ -7,7 +7,6 @@ const providersConfig: ResourceListConfig = {
   entity: "providers",
   resourceType: "provider",
   settingsKey: "providers",
-  delegationFlag: "providerSelfManagement",
   labels: {
     add: "Add provider",
     attach: "Attach shared provider",

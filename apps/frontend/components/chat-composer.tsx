@@ -3,7 +3,7 @@
 import { useRef, useState, type ReactNode } from "react";
 import type { ChatStatus } from "ai";
 import type { PromptInputMessage } from "./ai-elements/prompt-input";
-import { Composer, type ModelSelection } from "./composer";
+import { Composer, type ModelPickerConfig } from "./composer";
 import { SlashCommandPicker } from "./slash-command-picker";
 import { useSlashCommands } from "@/hooks/use-slash-commands";
 import type { SlashCommand } from "@/lib/slash-commands";
@@ -25,7 +25,7 @@ type ChatComposerProps = {
   disabled: boolean;
   className?: string;
   passthroughFileTypes: string[];
-  modelSelection: ModelSelection;
+  modelSelection: ModelPickerConfig;
   /** Extra tools, rendered after the model picker (search toggle, dialogs). */
   tools?: ReactNode;
   /** Rendered between the tools and the submit control (the context meter). */

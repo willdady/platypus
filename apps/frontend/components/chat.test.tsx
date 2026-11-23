@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import { memo } from "react";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import {
   DefaultChatTransport,
@@ -14,6 +15,7 @@ import {
   stubRejectedSave,
 } from "@/test/test-utils";
 import type { AlternativePosition } from "@/lib/chat-alternatives";
+import type { ArtifactOpenTarget } from "./artifact-tool-card";
 
 /**
  * What the Chat component wires, not what the transcript read decides.
@@ -57,13 +59,6 @@ const { harness } = vi.hoisted(() => ({
     sandboxFiles: [] as File[],
     chatMutate: vi.fn(),
     agentsMutate: vi.fn(),
-    chatMessageRenders: 0,
-    lastChatMessageProps: null as null | {
-      onMessageDelete: (messageId: string) => void;
-      onRegenerate?: (messageId: string) => void;
-      onSwitchAlternative: (fromId: string, toId: string) => void;
-      staleToolCallIds?: ReadonlySet<string>;
-    },
     /** What the Chat configured the chat hook with. */
     chatOptions: undefined as
       | undefined
@@ -74,6 +69,29 @@ const { harness } = vi.hoisted(() => ({
         },
   },
 }));
+
+// The render counters live outside `harness` so the stub below calls a plain
+// function instead of writing through the hoisted object — the immutability
+// rule has no way to tell that write apart from a render-time mutation.
+let chatMessageRenders = 0;
+let chatMessageRendersById: Record<string, number> = {};
+function countChatMessageRender(messageId: string) {
+  chatMessageRenders += 1;
+  chatMessageRendersById[messageId] =
+    (chatMessageRendersById[messageId] ?? 0) + 1;
+}
+
+let lastChatMessageProps: null | {
+  onMessageDelete: (messageId: string) => void;
+  onRegenerate?: (messageId: string) => void;
+  onSwitchAlternative: (fromId: string, toId: string) => void;
+  staleToolCallIds?: ReadonlySet<string>;
+} = null;
+function recordChatMessageProps(
+  props: NonNullable<typeof lastChatMessageProps>,
+) {
+  lastChatMessageProps = props;
+}
 
 vi.mock("swr", () => ({
   __esModule: true,
@@ -132,6 +150,7 @@ vi.mock("@/components/auth-provider", () => ({
 vi.mock("sonner", () => ({
   toast: { error: harness.toastError, info: harness.toastInfo },
 }));
+vi.mock("@/lib/clipboard", () => ({ copyWithToast: async () => true }));
 
 // The presentational tree, stubbed to the props under test. `PromptInputTextarea`
 // and `PromptInputSubmit` keep theirs, because the composer guard is one of the
@@ -248,7 +267,9 @@ vi.mock("@/components/ai-elements/prompt-input", () => ({
 // whatever edit surface the Chat hands down for the one being edited. The
 // transcript itself is `chat-message`'s own test's business.
 vi.mock("./chat-message", () => ({
-  ChatMessage: ({
+  // Memoised like the real one: whether a prop change reaches this stub is
+  // exactly what the transcript-stability tests below are about.
+  ChatMessage: memo(function ChatMessageStub({
     message,
     editor,
     onEditStart,
@@ -256,8 +277,10 @@ vi.mock("./chat-message", () => ({
     onRegenerate,
     alternatives,
     onSwitchAlternative,
+    onCopyMessage,
     staleToolCallIds,
     onApprovalResponse,
+    onOpenArtifact,
   }: {
     message: PlatypusUIMessage;
     editor?: React.ReactNode;
@@ -266,16 +289,18 @@ vi.mock("./chat-message", () => ({
     onRegenerate?: (messageId: string) => void;
     alternatives?: AlternativePosition;
     onSwitchAlternative: (fromId: string, toId: string) => void;
+    onCopyMessage: (content: string, messageId: string) => void;
     staleToolCallIds?: ReadonlySet<string>;
     onApprovalResponse?: (approvalId: string, approved: boolean) => void;
-  }) => {
-    harness.chatMessageRenders += 1;
-    harness.lastChatMessageProps = {
+    onOpenArtifact?: (target: ArtifactOpenTarget) => void;
+  }) {
+    countChatMessageRender(message.id);
+    recordChatMessageProps({
       onMessageDelete,
       onRegenerate,
       onSwitchAlternative,
       staleToolCallIds,
-    };
+    });
     return (
       <div>
         {editor ?? (
@@ -285,6 +310,12 @@ vi.mock("./chat-message", () => ({
             </button>
             <button type="button" onClick={() => onMessageDelete(message.id)}>
               Delete {message.id}
+            </button>
+            <button
+              type="button"
+              onClick={() => onCopyMessage(`text of ${message.id}`, message.id)}
+            >
+              Copy {message.id}
             </button>
             {onRegenerate && (
               <button type="button" onClick={() => onRegenerate(message.id)}>
@@ -298,6 +329,26 @@ vi.mock("./chat-message", () => ({
               >
                 Approve {message.id}
               </button>
+            )}
+            {onOpenArtifact && (
+              <>
+                <button
+                  type="button"
+                  onClick={() =>
+                    onOpenArtifact({ id: "artifact-1", version: 1 })
+                  }
+                >
+                  Open artifact {message.id}
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    onOpenArtifact({ toolCallId: STREAMING_TOOL_CALL_ID })
+                  }
+                >
+                  Open streaming artifact {message.id}
+                </button>
+              </>
             )}
             {alternatives && (
               <span>
@@ -328,7 +379,7 @@ vi.mock("./chat-message", () => ({
         )}
       </div>
     );
-  },
+  }),
 }));
 
 // Stubbed to what the Chat hands the edit surface, and to the one thing the
@@ -361,6 +412,34 @@ vi.mock("./message-editor", () => ({
     </div>
   ),
 }));
+vi.mock("./artifact-viewer", () => ({
+  ArtifactViewer: ({
+    artifactId,
+    version,
+    live,
+    onClose,
+  }: {
+    artifactId?: string;
+    version?: number;
+    live?: { status: string; content: string };
+    onClose?: () => void;
+  }) => (
+    <div>
+      Artifact panel {artifactId ?? "streaming"} v{version}
+      {live && (
+        <div>
+          Live {live.status} {live.content}
+        </div>
+      )}
+      {onClose && (
+        <button type="button" onClick={onClose}>
+          Close artifact panel
+        </button>
+      )}
+    </div>
+  ),
+}));
+
 vi.mock("./context-meter", async (importOriginal) => {
   const contextMeter = await importOriginal<typeof import("./context-meter")>();
   return {
@@ -413,6 +492,7 @@ import { optionalFetcher } from "@/lib/utils";
 import { CHAT_MAX_STEPS_ERROR } from "@/lib/chat-turn";
 
 const CHAT_ID = "chat-1";
+const STREAMING_TOOL_CALL_ID = "call-1";
 const CHAT_KEY = `http://test/organizations/org1/workspaces/ws1/chat/${CHAT_ID}`;
 
 const provider = {
@@ -432,6 +512,174 @@ function message(id: string, text: string): PlatypusUIMessage {
 function renderChat() {
   return render(<Chat orgId="org1" workspaceId="ws1" chatId={CHAT_ID} />);
 }
+
+describe("Chat Artifact panel", () => {
+  function artifactCall(over: Record<string, unknown>): PlatypusUIMessage {
+    return {
+      id: "a2",
+      role: "assistant",
+      parts: [
+        {
+          type: "tool-createArtifact",
+          toolCallId: STREAMING_TOOL_CALL_ID,
+          input: {
+            title: "Release notes",
+            type: "markdown",
+            content: "# Half",
+          },
+          ...over,
+        },
+      ],
+    } as unknown as PlatypusUIMessage;
+  }
+
+  it("keeps the centred Chat column while the panel is closed", () => {
+    harness.turn.messages = [message("a1", "Hello")];
+    renderChat();
+
+    const columns =
+      // eslint-disable-next-line testing-library/no-node-access
+      document.querySelectorAll(".max-w-4xl");
+    expect(columns.length).toBeGreaterThan(0);
+    for (const column of columns) {
+      expect(column).toHaveClass("xl:w-4/5");
+    }
+  });
+
+  it("fills the Chat column while the panel is open", () => {
+    harness.turn.messages = [message("a1", "Hello")];
+    renderChat();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open artifact a1" }));
+
+    expect(
+      screen.getByText("Artifact panel artifact-1 v1"),
+    ).toBeInTheDocument();
+    // eslint-disable-next-line testing-library/no-node-access
+    expect(document.querySelector(".max-w-4xl")).toBeNull();
+  });
+
+  it("opens the viewer beside the transcript and closes it", () => {
+    harness.turn.messages = [message("a1", "Hello")];
+    renderChat();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open artifact a1" }));
+
+    expect(
+      screen.getByText("Artifact panel artifact-1 v1"),
+    ).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Close artifact panel" }),
+    );
+
+    expect(
+      screen.queryByText("Artifact panel artifact-1 v1"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps the composer's draft when the panel opens and closes", () => {
+    harness.turn.messages = [message("a1", "Hello")];
+    renderChat();
+    const currentComposer = () =>
+      screen.getByPlaceholderText<HTMLTextAreaElement>(
+        "What would you like to know?",
+      );
+
+    fireEvent.change(currentComposer(), {
+      target: { value: "half a message" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Open artifact a1" }));
+    expect(currentComposer().value).toBe("half a message");
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Close artifact panel" }),
+    );
+    expect(currentComposer().value).toBe("half a message");
+  });
+
+  it("keeps the open Artifact in the URL, so a refresh reopens it", () => {
+    harness.turn.messages = [message("a1", "Hello")];
+    const first = renderChat();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open artifact a1" }));
+    expect(window.location.search).toBe("?artifact=artifact-1%3A1");
+
+    // A refresh: a fresh mount reading the same URL.
+    first.unmount();
+    renderChat();
+    expect(
+      screen.getByText("Artifact panel artifact-1 v1"),
+    ).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Close artifact panel" }),
+    );
+    expect(window.location.search).toBe("");
+  });
+
+  it("opens a Card whose content is still streaming and follows the call to the stored version", () => {
+    harness.turn.messages = [artifactCall({ state: "input-streaming" })];
+    const view = renderChat();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open streaming artifact a2" }),
+    );
+
+    expect(screen.getByText(/Artifact panel streaming/)).toBeInTheDocument();
+    expect(screen.getByText("Live streaming # Half")).toBeInTheDocument();
+
+    harness.turn.messages = [
+      artifactCall({
+        state: "output-available",
+        output: { id: "artifact-1", title: "Release notes", version: 1 },
+      }),
+    ];
+    view.rerender(<Chat orgId="org1" workspaceId="ws1" chatId={CHAT_ID} />);
+
+    expect(
+      screen.getByText("Artifact panel artifact-1 v1"),
+    ).toBeInTheDocument();
+    // The streamed content stays under the saved read until it lands.
+    expect(screen.getByText("Live streaming # Half")).toBeInTheDocument();
+  });
+
+  it("opens a failed call with its content marked as failed, not stored", () => {
+    harness.turn.messages = [
+      artifactCall({ state: "output-error", errorText: "Too big" }),
+    ];
+    renderChat();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open streaming artifact a2" }),
+    );
+
+    expect(screen.getByText("Live failed # Half")).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Artifact panel artifact-1/),
+    ).not.toBeInTheDocument();
+  });
+
+  it("opens a rejected call with its content marked as failed, not stored", () => {
+    harness.turn.messages = [
+      artifactCall({
+        state: "approval-responded",
+        approval: { id: "approval-1", approved: false },
+      }),
+    ];
+    renderChat();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open streaming artifact a2" }),
+    );
+
+    expect(screen.getByText("Live failed # Half")).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Artifact panel artifact-1/),
+    ).not.toBeInTheDocument();
+  });
+});
 
 /** Two Providers differing only in whether they can search. */
 const searchProvider = {
@@ -797,6 +1045,7 @@ const DROPPED: ChatStatus[] = ["submitted", "streaming", "error"];
 const REFUSED: ChatStatus[] = ["submitted", "error"];
 
 beforeEach(() => {
+  window.history.replaceState(null, "", "/");
   harness.swrCalls = [];
   harness.data = new Map<string, unknown>([
     ["/providers", { results: [provider] }],
@@ -821,8 +1070,9 @@ beforeEach(() => {
   harness.chatMutate.mockResolvedValue(undefined);
   harness.agentsMutate.mockReset();
   harness.agentsMutate.mockResolvedValue(undefined);
-  harness.chatMessageRenders = 0;
-  harness.lastChatMessageProps = null;
+  chatMessageRenders = 0;
+  chatMessageRendersById = {};
+  lastChatMessageProps = null;
 });
 
 describe("Chat detail read", () => {
@@ -1442,33 +1692,50 @@ describe("transcript stability", () => {
   it("keeps the stale tool-call set and the callbacks stable across renders", () => {
     harness.turn.messages = [message("u1", "q"), message("a1", "a")];
     const view = renderChat();
-    const first = harness.lastChatMessageProps!;
+    const first = lastChatMessageProps!;
 
     view.rerender(<Chat orgId="org1" workspaceId="ws1" chatId={CHAT_ID} />);
 
-    expect(harness.lastChatMessageProps!.onMessageDelete).toBe(
-      first.onMessageDelete,
-    );
-    expect(harness.lastChatMessageProps!.onRegenerate).toBe(first.onRegenerate);
-    expect(harness.lastChatMessageProps!.onSwitchAlternative).toBe(
+    expect(lastChatMessageProps!.onMessageDelete).toBe(first.onMessageDelete);
+    expect(lastChatMessageProps!.onRegenerate).toBe(first.onRegenerate);
+    expect(lastChatMessageProps!.onSwitchAlternative).toBe(
       first.onSwitchAlternative,
     );
-    expect(harness.lastChatMessageProps!.staleToolCallIds).toBe(
-      first.staleToolCallIds,
-    );
+    expect(lastChatMessageProps!.staleToolCallIds).toBe(first.staleToolCallIds);
   });
 
   it("does not re-render the transcript while the composer is typed into", () => {
     harness.turn.messages = [message("u1", "q"), message("a1", "a")];
     renderChat();
-    const before = harness.chatMessageRenders;
+    const before = chatMessageRenders;
 
     fireEvent.change(
       screen.getByPlaceholderText("What would you like to know?"),
       { target: { value: "hello" } },
     );
 
-    expect(harness.chatMessageRenders).toBe(before);
+    expect(chatMessageRenders).toBe(before);
+  });
+
+  it("re-renders only the copied message and not the rest of the transcript", async () => {
+    harness.turn.messages = [
+      message("u1", "q"),
+      message("a1", "a"),
+      message("a2", "b"),
+    ];
+    renderChat();
+    chatMessageRendersById = {};
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy a1" }));
+
+    // The copy lands asynchronously, so wait for the message it was for to
+    // render again before reading which of the others did.
+    await waitFor(() => {
+      expect(chatMessageRendersById.a1).toBe(1);
+    });
+
+    expect(chatMessageRendersById.u1).toBeUndefined();
+    expect(chatMessageRendersById.a2).toBeUndefined();
   });
 
   // With clearing ACTIVE the set is non-empty, and the function rebuilds it
@@ -1507,7 +1774,7 @@ describe("transcript stability", () => {
     );
     harness.turn.messages = [...toolResults, message("a-last", "an answer")];
     const view = renderChat();
-    const first = harness.lastChatMessageProps!.staleToolCallIds;
+    const first = lastChatMessageProps!.staleToolCallIds;
     expect(first?.size).toBe(4);
 
     harness.turn.messages = [
@@ -1516,7 +1783,7 @@ describe("transcript stability", () => {
     ];
     view.rerender(<Chat orgId="org1" workspaceId="ws1" chatId={CHAT_ID} />);
 
-    expect(harness.lastChatMessageProps!.staleToolCallIds).toBe(first);
+    expect(lastChatMessageProps!.staleToolCallIds).toBe(first);
   });
 });
 
@@ -1659,6 +1926,24 @@ describe("loading", () => {
 
     expect(loadingSkeleton()).toHaveClass("justify-center");
     expect(composer()).not.toBeInTheDocument();
+  });
+
+  it("keeps the skeleton's centred column while an Artifact is open", () => {
+    // A refresh of a Chat URL carrying an open Artifact: the panel is not drawn
+    // until the Chat is, so the skeleton must keep its reading measure rather
+    // than stretch across the row the panel will take.
+    rowInFlight();
+    window.history.replaceState(null, "", "?artifact=artifact-1%3A1");
+
+    renderChat();
+
+    expect(loadingSkeleton()).toBeInTheDocument();
+    // eslint-disable-next-line testing-library/no-node-access
+    const columns = document.querySelectorAll(".max-w-4xl");
+    expect(columns.length).toBeGreaterThan(0);
+    for (const column of columns) {
+      expect(column).toHaveClass("xl:w-4/5");
+    }
   });
 
   it("shows the failure, not an endless skeleton, when providers fail to load", () => {

@@ -1,20 +1,33 @@
-import { describe, it, expect, vi } from "vitest";
+import { beforeEach, describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { SidebarProvider } from "@/components/ui/sidebar";
 
 // --- Module mocks ------------------------------------------------------------
 
+let pathname = "/org1/settings/members";
+
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/org1/settings/members",
+  usePathname: () => pathname,
 }));
 
 import { OrgSettingsMenu } from "./org-settings-menu";
+
+beforeEach(() => {
+  pathname = "/org1/settings/members";
+});
 
 function renderMenu(organizationName?: string) {
   return render(
     <SidebarProvider>
       <OrgSettingsMenu orgId="org1" organizationName={organizationName} />
     </SidebarProvider>,
+  );
+}
+
+function expectActive(label: string, active: boolean) {
+  expect(screen.getByRole("link", { name: label })).toHaveAttribute(
+    "data-active",
+    String(active),
   );
 }
 
@@ -73,5 +86,67 @@ describe("OrgSettingsMenu organization heading", () => {
     // The settings pages stay fully navigable
     expect(screen.getByRole("link", { name: "Members" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Plugins" })).toBeInTheDocument();
+  });
+});
+
+describe("OrgSettingsMenu links", () => {
+  it("lists the settings pages in order with their labels", () => {
+    renderMenu();
+
+    const links = screen.getAllByRole("link");
+    expect(links.map((link) => link.textContent?.trim())).toEqual([
+      "General",
+      "Members",
+      "Invitations",
+      "Providers",
+      "MCP Servers",
+      "Skills",
+      "Agents",
+      "Blueprints",
+      "Plugins",
+      "Inbound Triggers",
+      "A2A endpoints",
+    ]);
+    for (const link of links) {
+      expect(link).toContainHTML("<svg");
+    }
+  });
+
+  it("links each item to its settings page", () => {
+    renderMenu();
+
+    expect(screen.getByRole("link", { name: "General" })).toHaveAttribute(
+      "href",
+      "/org1/settings",
+    );
+    expect(
+      screen.getByRole("link", { name: "Inbound Triggers" }),
+    ).toHaveAttribute("href", "/org1/settings/inbound-triggers");
+    expect(screen.getByRole("link", { name: "A2A endpoints" })).toHaveAttribute(
+      "href",
+      "/org1/settings/a2a",
+    );
+  });
+
+  it("highlights only General on its own exact path", () => {
+    pathname = "/org1/settings";
+    renderMenu();
+
+    expectActive("General", true);
+  });
+
+  it("does not highlight General on another settings page", () => {
+    renderMenu();
+
+    expectActive("General", false);
+    expectActive("Members", true);
+  });
+
+  it("highlights an item on paths beneath it", () => {
+    pathname = "/org1/settings/mcp/server-1";
+    renderMenu();
+
+    expectActive("MCP Servers", true);
+    expectActive("Members", false);
   });
 });

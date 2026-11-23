@@ -274,7 +274,11 @@ of the Tools that ran, with **Error** if any of them failed. Click the group to
 see each call as its own row, which opens the same way. Text, the model's
 thinking and a Sub-Agent each end a group, so the calls on either side of
 them stay in separate groups. A file the Agent offers as a download isn't a
-row at all; it appears in a tray under the finished reply.
+row at all; it appears in a tray under the finished reply. An Artifact the reply
+created or changed is the same: it has a Card where the call happened while the
+reply is still writing, and joins that tray once the reply finishes. A call that
+failed, was denied or was rejected stays a row, with its reason — see
+[Artifacts](/building-with-platypus/artifacts#letting-an-agent-work-with-artifacts).
 
 The time is the Tool's own work, measured on the server, so it appears the
 moment the Tool finishes rather than counting up while it runs. It is stored
@@ -530,11 +534,13 @@ saying that older messages were summarised for the assistant and stay readable
 above. This happens on its own, usually just
 after a reply finishes, so your next message is not delayed.
 
-The summary is normally written by the **Task Model ID** of the Provider set as
+The summary is normally written by the **Task Model** of the Provider set as
 the Workspace's **Task Model Provider**, or of the Chat's own Provider where the
 Workspace sets none. That is the same fast, inexpensive model that names Chats.
-If it cannot take the conversation — an error, an unknown model, or an empty
-reply — the Chat's own model writes the summary instead, over the same messages.
+If it cannot take the conversation — an error, an unknown model, an empty reply,
+a reply cut off before it finished, or a conversation over half the **Context
+window** declared on its model entry — the Chat's own model writes the summary
+instead, over the same messages.
 Every summary follows that order, including `/compact` and the one taken after
 a reply is refused as too long.
 
@@ -547,13 +553,20 @@ The expanded summary also shows a quiet **Summarised by** line: the model that
 wrote the summary, and the input and output tokens it used. Those tokens are the
 summary's own cost; they are not counted in any reply's **Token usage**.
 
-Two things follow from that, and both are worth knowing:
+Three things follow from that, and all are worth knowing:
 
 - **Details above the line can come back fuzzier.** A summary keeps the intent,
-  the decisions, the facts that later steps depend on, what files and tools were
-  touched, what is still open, and where the work stands — not every word. If
-  something above the line matters to your next question, state it again, or
-  point the model at the message.
+  the instructions, constraints and preferences you set, your requests (quoted
+  in full unless very long), the decisions and facts that later steps depend on,
+  what the assistant produced, what sources and tools were used, what was
+  corrected or dropped, what is still open, and where the work stands — not
+  every word. If something above the line matters to your next question, state
+  it again, or point the model at the message.
+- **A request that was answered stops being quoted.** A request you made is
+  quoted in the first summary that covers it, even after it has been answered;
+  the summary after that drops it and keeps only the instructions, constraints
+  and preferences it set. A request that is still open stays quoted in full,
+  shortened only if it is very long.
 - **The line marks roughly where the Chat started growing.** The newest few
   turns are always sent in full, so the summary sits a few turns back rather
   than at the very top of the last exchange.
@@ -598,6 +611,9 @@ verbatim.
 refused while a reply is still running. Not happy with a summary? Send
 `/compact` again, with a sharper instruction: the newest summary is the one
 used.
+
+If neither model returns a complete summary, an error appears, nothing is
+condensed, and your `/compact` stays in the input to send again.
 
 ## When a Chat says it is too long for the model
 
@@ -732,6 +748,11 @@ The sidebar lists your Chats. **New chat** starts one. It stays unavailable
 until the Workspace has a [Provider](/concepts/providers); if you can't add one,
 ask an Org Admin.
 
+On a phone, the rail and the sidebar give way to a menu button in the top bar.
+Its sheet holds the Organization and Workspace switcher, then **Home**,
+**Boards** and **Artifacts**, then **New chat**, the search box and the Chat
+list. Picking anything closes the sheet.
+
 The sidebar shows your 100 most recent Chats, **Pinned** first. An older Chat
 drops off the list but isn't deleted — find it with search.
 
@@ -751,12 +772,14 @@ Each Chat's menu offers:
 - **Delete** — permanent, and it says so before doing it.
 
 <Callout type="info">
-  A new Chat is called **Untitled** until a reply comes back, then the backend
-  names it from the conversation. If it can't produce a usable title, the Chat
-  stays **Untitled** and the next turn tries again. After a few failed tries it
-  stops, and the Chat stays **Untitled** until you rename it. You don't have to
-  wait — rename it whenever you like and the automatic titling leaves your name
-  alone.
+  A new Chat is called **Untitled** until Platypus names it from the
+  conversation. Naming starts as soon as you send, so the title can appear while
+  the reply is still being written — unless the reply runs on the same model
+  that names the Chat, and then it waits for the reply to finish. If Platypus
+  can't produce a usable title, the Chat stays **Untitled** and the next turn
+  tries again. After a few failed tries it stops, and the Chat stays
+  **Untitled** until you rename it. You don't have to wait — rename it whenever
+  you like and the automatic titling leaves your name alone.
 </Callout>
 
 ## Getting around without the mouse
@@ -764,7 +787,8 @@ Each Chat's menu offers:
 Press **⌘K** (**Ctrl+K** on Windows and Linux) anywhere in a Workspace to open
 the command palette. Type to filter.
 
-It offers **Actions** (creating things and jumping to settings screens), then
+It offers **Go to** — **Home**, **Boards** and **Artifacts** — then
+**Actions** (creating things and jumping to settings screens), then
 your **Pinned agents**, then the rest of your **Agents**, **Boards** and
 **Triggers** by name. Selecting an Agent
 opens a new Chat already set to it. **Docs** opens this documentation site in a

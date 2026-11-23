@@ -6,12 +6,6 @@ import {
   MAX_REDIRECTS,
 } from "../utils/egress-guard.ts";
 
-// ignoreRobotsTxt is a plugin-config value (ADR-0013) passed into the
-// factory, so tests build the tool with the flag they want.
-
-// The real egress guard runs, every redirect hop included, over the shared
-// DNS mock in test-setup.ts: a host starting `internal` resolves to the
-// metadata service, any other to a public address.
 const mockFetch = vi.fn();
 
 beforeEach(() => {
@@ -23,9 +17,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-/** A page response; `contentType: null` sends no content-type header. */
 const page = (body: string, contentType: string | null = "text/plain") =>
-  // Bytes, not a string: a string body gets a default text/plain type.
   new Response(new TextEncoder().encode(body), {
     headers: contentType ? { "content-type": contentType } : {},
   });
@@ -41,7 +33,6 @@ const input = (
 ) => ({ url, max_length: 5000, start_index: 0, raw: false, ...over });
 
 describe("fetchUrl", () => {
-  // robots.txt checks skipped so content tests need no robots round-trip.
   const { fetchUrl } = createWebFetchTools(true);
 
   it.each([
@@ -142,7 +133,7 @@ describe("fetchUrl", () => {
 
   it("stops reading a body at the download cap and says so", async () => {
     let pulled = 0;
-    const chunk = new Uint8Array(1024 * 1024).fill(65); // 1 MiB of "A"
+    const chunk = new Uint8Array(1024 * 1024).fill(65);
     const endless = new ReadableStream<Uint8Array>({
       pull(controller) {
         pulled++;
@@ -216,8 +207,6 @@ describe("robots.txt checking", () => {
 });
 
 describe("egress guarding", () => {
-  // robots.txt checks enabled, to prove the guard runs first: a blocked URL must
-  // not even reach the robots.txt probe, which would itself hit the network.
   const { fetchUrl } = createWebFetchTools(false);
 
   it("refuses a URL the guard blocks, makes no request, and does not leak the reason", async () => {

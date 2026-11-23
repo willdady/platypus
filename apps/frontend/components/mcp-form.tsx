@@ -37,7 +37,10 @@ import { useRouter } from "next/navigation";
 import { type MCP, type McpResponse } from "@platypus/schemas";
 import { joinUrl } from "@/lib/utils";
 import { scopedPath, writeAt, type Serialized } from "@/lib/api-write";
-import { toastGuidanceOrError } from "@/lib/apply-write-outcome";
+import {
+  FIX_FORM_ERRORS_MESSAGE,
+  toastGuidanceOrError,
+} from "@/lib/apply-write-outcome";
 import { toast } from "sonner";
 import { useBackendUrl } from "@/components/auth-provider";
 import {
@@ -293,6 +296,15 @@ function McpForm({
   };
 
   const handleSubmit = async () => {
+    // A duplicate-header refusal is a rejected Save like any other: the
+    // headers can be scrolled out of view, so the toast is what tells the
+    // reader why nothing happened. Test connection stays silent — its error
+    // is already in view — and OAuth authorize stays silent — the
+    // authorization that follows is the feedback.
+    if (rejectDuplicateHeader()) {
+      toast.error(FIX_FORM_ERRORS_MESSAGE);
+      return;
+    }
     const savedId = await saveMcp();
     if (savedId) {
       router.push(listPath);

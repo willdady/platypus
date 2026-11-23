@@ -37,7 +37,6 @@ describe("retrieveRecentSummaries", () => {
     );
 
     expect(result).toBe(rows);
-    // The rendered date and text only, never the embedding vector.
     expect(mockDb.select).toHaveBeenCalledWith({
       summaryDate: memoryDailySummaryTable.summaryDate,
       summary: memoryDailySummaryTable.summary,
@@ -68,8 +67,6 @@ describe("summaryCutoffForReference", () => {
   it("counts a forward reference crossing (the midnight drift that used to roll every Chat)", () => {
     const ref = new Date("2026-05-03T23:59:59Z");
     const nextDay = new Date("2026-05-04T00:00:00Z");
-    // Different references → different cutoffs, but the reference is an INPUT:
-    // two turns anchoring to the same moment resolve identically.
     expect(summaryCutoffForReference(ref, 2)).toBe("2026-05-01");
     expect(summaryCutoffForReference(nextDay, 2)).toBe("2026-05-02");
   });

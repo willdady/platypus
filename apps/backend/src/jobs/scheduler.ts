@@ -47,24 +47,6 @@ import { sweepMissedEnds, turnEnded } from "../services/a2a-task-lifecycle.ts";
 import { env } from "../env.ts";
 import { oneRow } from "../db/one-row.ts";
 
-/**
- * Schedules a function to run at wall-clock-aligned intervals.
- *
- * Unlike setInterval (which starts from the moment the process boots),
- * this aligns execution to absolute clock boundaries. For example, with
- * a 1-minute interval, all instances will attempt to run at :00, :01,
- * :02, etc. regardless of when they started.
- *
- * This is critical for horizontal scaling: all backend instances align
- * to the same schedule, so the advisory lock contention is predictable
- * and only one instance wins each cycle.
- *
- * Returns a stop handle: clears the pending timer and prevents the next
- * alignment, so a shutdown can stop the scheduler without waiting for a
- * tick that may be minutes away. A tick already running when the handle is
- * called still finishes (its work may be mid-write), but it never schedules
- * another.
- */
 export function scheduleAligned(
   name: string,
   intervalMs: number,
@@ -102,14 +84,8 @@ export function scheduleAligned(
   };
 }
 
-/**
- * True while the Trigger has a `running` run of its own. Any `running` row
- * counts: the stale-run sweep runs first in the same tick, so a row abandoned
- * by a crash has already been failed.
- */
 const hasRunningRun = sql`exists (select 1 from ${triggerRunTable} where ${triggerRunTable.triggerId} = ${triggerTable.id} and ${triggerRunTable.status} = 'running')`;
 
-/** The row's narrowed cron config, or `null` — logged — when it has none. */
 const cronConfigOrNull = (job: TriggerRow): CronTriggerConfig | null => {
   try {
     const typed = narrowTriggerConfig(job);
@@ -123,27 +99,6 @@ const cronConfigOrNull = (job: TriggerRow): CronTriggerConfig | null => {
   return null;
 };
 
-/**
- * Starts the due cron Triggers, oldest `nextRunAt` first, while slots remain
- * under the cluster-wide cap, and returns without waiting for their runs.
- *
- * Each Trigger is claimed by its own conditional update, which writes its next
- * schedule (a one-off is disabled instead) and matches only while the Trigger
- * is enabled, due and not already running. `RETURNING` hands the row to the
- * one process whose update matched, so a Trigger is fired once however many
- * ticks race for it, and a crash after the claim can never leave it without a
- * schedule. The count-then-claim relies on the scheduler lock: no peer claims
- * between the two. A run claimed by the previous tick counts only once its
- * run row exists, so a tick landing in that gap can undercount by those runs;
- * it cannot fire them twice, as their claim already moved `nextRunAt` on.
- *
- * A due Trigger still running from its last firing is skipped — its
- * `nextRunAt` moves to the next slot — and takes no slot. One left over for
- * want of a slot stays due, and a later tick claims it.
- *
- * The runs are observed only through `processSingleTrigger`'s logging;
- * `fireTrigger` never rejects, so nothing is left unhandled.
- */
 export async function processDueTriggers(): Promise<void> {
   const now = new Date();
 
@@ -159,8 +114,6 @@ export async function processDueTriggers(): Promise<void> {
         ),
       ),
   );
-  // Maximum Cron Trigger runs in flight at once, across every instance sharing
-  // the database. Event Trigger runs are not counted.
   let slots = env().SCHEDULE_MAX_CONCURRENT - running;
 
   const isDue = and(
@@ -177,7 +130,6 @@ export async function processDueTriggers(): Promise<void> {
   for (const job of due) {
     const config = cronConfigOrNull(job);
     if (!config) continue;
-    // A one-off needs no next slot to be claimed, only to be skipped.
     const nextRunAt = nextCronRunAt(config);
     if (!nextRunAt && !config.isOneOff) {
       logger.error(
@@ -219,11 +171,6 @@ export async function processDueTriggers(): Promise<void> {
   }
 }
 
-/**
- * Fires one claimed cron Trigger. Firing owns the run and every bit of
- * bookkeeping after it, and never rejects, so one Trigger's failure cannot
- * block the others.
- */
 async function processSingleTrigger(job: TriggerRow): Promise<void> {
   logger.info(
     { triggerId: job.id, name: job.name, agentId: job.agentId },
@@ -236,93 +183,27 @@ async function processSingleTrigger(job: TriggerRow): Promise<void> {
   );
 }
 
-/**
- * Buffer added on top of a run's own per-run timeout before we consider a
- * `running` row abandoned — shared by both sweeps below, each of which adds it
- * to the timeout its own kind of run is bounded by: `TRIGGER_PER_RUN_TIMEOUT_MS`
- * for a Trigger run, `CHAT_PER_RUN_TIMEOUT_MS` for a Chat turn. Any live
- * instance would have aborted the run by `started + <its per-run timeout>`, so
- * anything older than that plus this buffer is definitely orphaned. Five extra
- * minutes gives the normal per-run timeout path a chance to write the failure
- * first.
- */
 const RECOVERY_STALE_BUFFER_MS = 5 * 60 * 1000;
 
-/**
- * The moment before which a `running` row of any kind has no live owner:
- * the run's own per-run timeout ago, plus the buffer above. Both sweeps go
- * through here, so the one thing that makes them safe against a peer's live
- * work is stated once.
- */
 function staleCutoff(perRunTimeoutMs: number): Date {
   return new Date(Date.now() - (perRunTimeoutMs + RECOVERY_STALE_BUFFER_MS));
 }
 
-/**
- * The moment before which a `running` Trigger run is considered abandoned.
- *
- * Derived from `TRIGGER_PER_RUN_TIMEOUT_MS` — the ceiling a Trigger run
- * actually runs under (`runs/trigger-timeouts.ts`) — and NOT from the run
- * registry's generic 10-minute fallback, which Trigger runs never use: a
- * cutoff taken from it failed live runs at 15 minutes that were allowed 60.
- *
- * Horizontal scaling: the env var is read per process. Instances sharing a
- * database must be configured with the same value; one given a shorter value
- * computes an earlier cutoff and could fail a peer's live run.
- */
 export function stuckTriggerCutoff(): Date {
   return staleCutoff(triggerPerRunTimeoutMs());
 }
 
-/**
- * The moment before which a `pending` Inbound Trigger run is considered
- * abandoned (ADR-0030): the stale buffer alone. A pending row has not started,
- * so no per-run timeout bounds it — its own process moves it to `running`
- * moments after accepting the call. One still pending past the buffer lost its
- * process in between, and it holds its record's dedup, so waiting the full
- * per-run timeout would answer that record's calls with a run that never
- * starts for an hour.
- */
 export function stuckPendingTriggerCutoff(): Date {
   return staleCutoff(0);
 }
 
-/**
- * Periodic recovery for state left behind by a server crash mid-execution.
- *
- * `TriggerSink.onStart` writes a `trigger_run` row with status `running`. A
- * crash leaves that row dangling, which clutters the UI and gives no
- * indication the run failed. Its Run events (#647) dangle with it: whatever
- * was open when the process died is still `running`, so the sweep closes them
- * with the run's terminal status — as errors, with no duration, since nobody
- * saw them end. The detail page renders that as an unknown duration rather
- * than a bar drawn to "now".
- *
- * Critical horizontal-scaling note: a `running` row may still be a peer
- * instance's live work — a Trigger run executes in the process that started
- * it, outside the scheduler lock. We must NOT touch rows younger than
- * {@link stuckTriggerCutoff} (`TRIGGER_PER_RUN_TIMEOUT_MS` +
- * `RECOVERY_STALE_BUFFER_MS`), because a live instance would have aborted any
- * run older than that via its own per-run timeout. Recovery is gated on that
- * age threshold; the advisory lock only serializes concurrent recoveries, it
- * does not prevent racing live runs.
- */
 export async function recoverStuckTriggers(): Promise<void> {
-  // The age cutoffs are the scheduler's, since they derive from the per-run
-  // timeout it knows the run was bounded by; the write itself, and the events
-  // it closes, belong to the Trigger run lifecycle.
   await failAbandonedTriggerRuns({
     runningCutoff: stuckTriggerCutoff(),
     pendingCutoff: stuckPendingTriggerCutoff(),
   });
 }
 
-/**
- * Deletes the fired One-off Triggers whose run ended more than
- * {@link FIRED_ONE_OFF_TTL_DAYS} ago, whatever its outcome; the run and its
- * timeline go with them by cascade. One whose run is still pending or running
- * is kept. One that never wrote a run is timed from when it fired.
- */
 export async function reapFiredOneOffTriggers(): Promise<void> {
   const cutoff = new Date(Date.now() - FIRED_ONE_OFF_TTL_DAYS * DAY_MS);
   const expired = and(
@@ -331,9 +212,6 @@ export async function reapFiredOneOffTriggers(): Promise<void> {
     sql`coalesce((select max(${triggerRunTable.completedAt}) from ${triggerRunTable} where ${triggerRunTable.triggerId} = ${triggerTable.id}), ${triggerTable.firedAt}) < ${cutoff}`,
   );
 
-  // Read the runs before the delete: they cascade with the Trigger, and their
-  // Chat ids name the storage prefixes to clear afterwards. One transaction
-  // keeps the rows this reads and deletes the same set.
   const reaped = await db.transaction(async (tx) => {
     const expiring = await tx
       .select({
@@ -343,9 +221,6 @@ export async function reapFiredOneOffTriggers(): Promise<void> {
         workspaceId: triggerTable.workspaceId,
       })
       .from(triggerTable)
-      // Left join: a Trigger whose Workspace row is already gone (or, in a
-      // fixture, never seeded) must still be reaped. It simply has no Chat
-      // prefix to clear.
       .leftJoin(workspaceTable, eq(workspaceTable.id, triggerTable.workspaceId))
       .leftJoin(triggerRunTable, eq(triggerRunTable.triggerId, triggerTable.id))
       .where(expired);
@@ -368,8 +243,6 @@ export async function reapFiredOneOffTriggers(): Promise<void> {
 
   if (reaped.length === 0) return;
 
-  // One prefix delete per run Chat, grouped by the Workspace whose keys they
-  // sit under.
   const runsByScope = new Map<
     string,
     { scope: TriggerRunScope; runIds: string[] }
@@ -396,30 +269,6 @@ export async function reapFiredOneOffTriggers(): Promise<void> {
   );
 }
 
-/**
- * Periodic recovery for Chats left `running` by a server crash mid-turn.
- *
- * `ChatSink.onStart` sets the Chat's status to `running`, and the sink is the
- * only writer of a terminal status. The per-run and per-step timeouts that
- * would otherwise end the turn are `setTimeout` handles in the in-memory run
- * registry, so a crash takes them with it and the row stays `running` for
- * ever: a sidebar spinner that never stops, a composer the frontend keeps
- * disabled, and (since #761) a Chat-list poll every 3s for as long as a tab
- * is open. Issue #762.
- *
- * A Chat is orphaned when its run heartbeat has gone stale
- * (`runs/chat-run-heartbeat.ts`, #1297): the instance holding a run stamps it
- * every few seconds, so one not stamped for a minute has no live owner on any
- * instance, whatever the Chat per-run timeout. A row with no stamp yet is
- * judged on `lastTurnAt`, then `updatedAt`.
- *
- * Same horizontal-scaling reasoning as `recoverStuckTriggers`: the age cutoff
- * is what makes this safe against a peer's live work; the advisory lock only
- * serializes concurrent sweeps.
- *
- * The status written is `failed`, not `cancelled` — nobody requested a
- * cancellation, and reporting one would misdescribe the event.
- */
 export async function recoverStuckChats(): Promise<void> {
   const cutoff = runHeartbeatCutoff();
 
@@ -435,10 +284,6 @@ export async function recoverStuckChats(): Promise<void> {
     { count: orphaned.length, cutoff: cutoff.toISOString() },
     "Marked orphaned Chats as failed (their run's heartbeat went stale)",
   );
-  // Their runs died with an instance, so no run's end records or pushes their
-  // A2A Tasks; only a Chat with one has an end to record. Not awaited: this
-  // runs under the scheduler's lock, and a slow client URL must not hold up
-  // due Triggers.
   const tasks = await db
     .select({ chatId: a2aTaskTable.chatId })
     .from(a2aTaskTable)
@@ -453,23 +298,10 @@ export async function recoverStuckChats(): Promise<void> {
   }
 }
 
-/**
- * How often the Inbound Trigger and A2A token reminders are swept. Their
- * thresholds are days, so the scheduler's every-minute tick would only repeat a query
- * that finds nothing new; hourly keeps a reminder at most an hour late.
- */
 const TOKEN_REMINDER_INTERVAL_MS = 60 * 60 * 1000;
 
-/**
- * When this process last finished a reminder sweep. Per process: each claim
- * is conditional, so a peer sweeping too never repeats a reminder.
- */
 let lastTokenReminderSweepAt: number | null = null;
 
-/**
- * The reminder sweep, when it is due. A sweep that throws is not recorded, so
- * the next tick tries again rather than waiting out the interval.
- */
 export async function sweepTokenRemindersIfDue(
   now: number = Date.now(),
 ): Promise<void> {
@@ -484,29 +316,16 @@ export async function sweepTokenRemindersIfDue(
   lastTokenReminderSweepAt = now;
 }
 
-/** Test seam: forget when the reminders were last swept. */
 export function resetTokenReminderSweep(): void {
   lastTokenReminderSweepAt = null;
 }
 
-/**
- * Starts the background scheduler.
- * This should be called after the database is initialized.
- * Returns a stop handle that clears the tick, for a graceful shutdown.
- */
 export function startScheduler(): () => void {
   const intervalMs = env().SCHEDULE_SCHEDULER_INTERVAL_MS;
   logger.info(
     `Starting scheduler (interval: ${intervalMs}ms, wall-clock aligned)`,
   );
 
-  // Schedule at wall-clock-aligned intervals with advisory lock. Both recovery
-  // sweeps and due-trigger processing share the same lock so they don't race
-  // each other or peer instances. Recovery runs every tick (cheap when there's
-  // nothing to do) so a crash self-heals without requiring a restart, and
-  // multiple booting instances can't all sweep concurrently — the first to
-  // grab the lock does it. Each sweep is wrapped independently so one failing
-  // doesn't skip the others.
   return scheduleAligned("trigger-scheduler", intervalMs, async () => {
     await withAdvisoryLock(
       db.$client,
@@ -527,7 +346,6 @@ export function startScheduler(): () => void {
         } catch (error) {
           logger.error({ error }, "Chat recovery sweep failed");
         }
-        // Never throws; after the Chat sweep, so a Task it just failed is seen.
         await sweepMissedEnds();
         try {
           await sweepTokenRemindersIfDue();

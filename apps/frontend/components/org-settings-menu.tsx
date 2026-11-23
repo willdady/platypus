@@ -1,30 +1,8 @@
 "use client";
 
-import {
-  SidebarContent,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarMenu,
-  SidebarSeparator,
-} from "@/components/ui/sidebar";
-import {
-  Blocks,
-  Bot,
-  Layers,
-  Mail,
-  Network,
-  Wrench,
-  Settings,
-  Sparkles,
-  Unplug,
-  Users,
-  Webhook,
-} from "lucide-react";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { orgRoutes } from "@/lib/routes";
+import { SidebarSeparator } from "@/components/ui/sidebar";
+import { SettingsNavMenu } from "@/components/settings-nav-menu";
+import { orgSettingsLinks } from "@/lib/settings-links";
 
 type OrgSettingsMenuProps = {
   orgId: string;
@@ -40,148 +18,20 @@ export function OrgSettingsMenu({
   orgId,
   organizationName,
 }: OrgSettingsMenuProps) {
-  const pathname = usePathname();
-
-  const routes = orgRoutes(orgId);
-  const generalHref = routes.settings.root;
-  const membersHref = routes.settings.members;
-  const invitationsHref = routes.settings.invitations;
-  const providersHref = routes.settings.providers;
-  const mcpHref = routes.settings.mcp;
-  const skillsHref = routes.settings.skills;
-  const agentsHref = routes.settings.agents;
-  const blueprintsHref = routes.settings.blueprints;
-  const pluginsHref = routes.settings.plugins;
-  const inboundTriggersHref = routes.settings.inboundTriggers;
-  const a2aHref = routes.settings.a2a;
-
   return (
-    <SidebarContent>
-      <SidebarGroup>
-        {organizationName && (
-          <>
-            <h2
-              title={organizationName}
-              className="h-8 truncate px-2 text-sm leading-8 font-medium"
-            >
-              {organizationName}
-            </h2>
-            {/* Sets the static heading apart from the links below it */}
-            <SidebarSeparator className="mx-0 my-1" />
-          </>
-        )}
-        <SidebarGroupContent>
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuButton asChild isActive={pathname === generalHref}>
-                <Link href={generalHref}>
-                  <Settings /> General
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                asChild
-                isActive={pathname.startsWith(membersHref)}
-              >
-                <Link href={membersHref}>
-                  <Users /> Members
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                asChild
-                isActive={pathname.startsWith(invitationsHref)}
-              >
-                <Link href={invitationsHref}>
-                  <Mail /> Invitations
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                asChild
-                isActive={pathname.startsWith(providersHref)}
-              >
-                <Link href={providersHref}>
-                  <Unplug /> Providers
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                asChild
-                isActive={pathname.startsWith(mcpHref)}
-              >
-                <Link href={mcpHref}>
-                  <Wrench /> MCP Servers
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                asChild
-                isActive={pathname.startsWith(skillsHref)}
-              >
-                <Link href={skillsHref}>
-                  <Sparkles /> Skills
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                asChild
-                isActive={pathname.startsWith(agentsHref)}
-              >
-                <Link href={agentsHref}>
-                  <Bot /> Agents
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                asChild
-                isActive={pathname.startsWith(blueprintsHref)}
-              >
-                <Link href={blueprintsHref}>
-                  <Layers /> Blueprints
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                asChild
-                isActive={pathname.startsWith(pluginsHref)}
-              >
-                <Link href={pluginsHref}>
-                  <Blocks /> Plugins
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                asChild
-                isActive={pathname.startsWith(inboundTriggersHref)}
-              >
-                <Link href={inboundTriggersHref}>
-                  <Webhook /> Inbound Triggers
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                asChild
-                isActive={pathname.startsWith(a2aHref)}
-              >
-                <Link href={a2aHref}>
-                  <Network /> A2A endpoints
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          </SidebarMenu>
-        </SidebarGroupContent>
-      </SidebarGroup>
-    </SidebarContent>
+    <SettingsNavMenu links={orgSettingsLinks(orgId)}>
+      {organizationName && (
+        <>
+          <h2
+            title={organizationName}
+            className="h-8 truncate px-2 text-sm leading-8 font-medium"
+          >
+            {organizationName}
+          </h2>
+          {/* Sets the static heading apart from the links below it */}
+          <SidebarSeparator className="mx-0 my-1" />
+        </>
+      )}
+    </SettingsNavMenu>
   );
 }
