@@ -24,8 +24,6 @@ const LOADED: LoadedPlugin[] = [
   },
 ];
 
-// The loader hands the registry the owner map it built while registering; this
-// fixture states the one entry the catalog annotation under test reads.
 const LOADED_RESULT = loadedPluginsFixture(LOADED, {
   webBackends: new Map([["acme-search.searx", "acme-search"]]),
 });
@@ -55,7 +53,7 @@ describe("Web backend catalog route", () => {
         buildTurnTools: () => Promise.resolve({}),
       });
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess()
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
@@ -95,10 +93,6 @@ describe("Web backend catalog route", () => {
       expect(await res.json()).toEqual({ results: [] });
     });
 
-    // The read posture is deliberately `requireOrgAccess()` and not
-    // `requireOrgAccess(["admin"])`: a non-admin Workspace Owner may edit a
-    // workspace-scoped Provider when `providerSelfManagement` is set, and would
-    // otherwise see an empty dropdown with no explanation.
     it("is readable by a non-admin org member", async () => {
       registerWebBackend({
         backend: "searx",
@@ -120,14 +114,12 @@ describe("Web backend catalog route", () => {
 
     it("rejects a caller with no membership of the org", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([]); // no organizationMember row
+      mockDb.limit.mockResolvedValueOnce([]);
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(403);
     });
 
-    // The catalog is deployment-wide and Operator-owned: backends arrive through
-    // `PLATYPUS_PLUGINS`, never over the API, so there is no mutation to route.
     it("exposes no mutation", async () => {
       for (const method of ["POST", "PUT", "PATCH", "DELETE"] as const) {
         const res = await app.request(baseUrl, { method });

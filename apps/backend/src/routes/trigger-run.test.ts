@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-// test-utils installs the drizzle-orm mock, so it must be imported before the
-// operators this file asserts on — `eq` is a spy only through that mock.
+// why: before drizzle-orm, whose `eq` is a spy only through the mock test-utils installs
 import {
   mockDb,
   mockNoSession,
@@ -20,7 +19,6 @@ const orgId = "org-1";
 const workspaceId = "ws-1";
 const baseUrl = `/organizations/${orgId}/workspaces/${workspaceId}/trigger-runs`;
 
-/** Stub the two middleware DB lookups (requireOrgAccess + requireWorkspaceAccess). */
 const stubAuthLookups = () => {
   mockSession();
   mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
@@ -70,9 +68,6 @@ describe("Trigger runs routes", () => {
       ]);
     });
 
-    // The join to the trigger table is what makes a run outside this Workspace
-    // unreachable — including when its own trigger's id is handed in as
-    // `triggerId`.
     it("scopes the query to triggers owned by this workspace", async () => {
       stubAuthLookups();
       mockDb.offset.mockResolvedValueOnce([]);
@@ -108,8 +103,6 @@ describe("Trigger runs routes", () => {
         triggerRunTable.status,
         expect.anything(),
       );
-      // The only predicate on `triggerId` is the join to its Trigger; nothing
-      // narrows the list to one.
       expect(eq).toHaveBeenCalledWith(
         triggerRunTable.triggerId,
         triggerTable.id,
@@ -150,8 +143,6 @@ describe("Trigger runs routes", () => {
     });
   });
 
-  // A filter that is silently dropped, or a limit quietly coerced to a default,
-  // renders a list that lies about what it is filtered to.
   describe("GET / query validation", () => {
     const expectRejected = async (query: string) => {
       const [field] = query.split("=");
@@ -178,10 +169,6 @@ describe("Trigger runs routes", () => {
   });
 });
 
-/**
- * The run detail read (#647): the run in full plus its Run timeline. The list
- * above is pinned never to reach the events table; this is the read that does.
- */
 describe("GET /:runId", () => {
   const eventRow = (over: Record<string, unknown> = {}) => ({
     id: "ev-1",
@@ -227,7 +214,6 @@ describe("GET /:runId", () => {
       ["ev-1", "tool-call"],
       ["ev-2", "text"],
     ]);
-    // The events read is scoped to this run alone.
     expect(eq).toHaveBeenCalledWith(triggerRunEventTable.runId, "run-1");
   });
 
@@ -296,10 +282,6 @@ describe("GET /:runId", () => {
   });
 });
 
-// The list is polled every ten seconds by every open tab, and a timeline can
-// hold thousands of rows — so the list read must never reach the events table
-// or the per-run final text (#647). Pinned here because the query selects
-// explicit columns, and the next person to add one will not know why.
 describe("GET / never selects Run events", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -313,8 +295,6 @@ describe("GET / never selects Run events", () => {
     const res = await app.request(baseUrl);
 
     expect(res.status).toBe(200);
-    // The auth middleware makes its own reads; the list's is the one that
-    // projects the trigger's name onto the row.
     const listSelects = mockDb.select.mock.calls
       .map((call) => call[0] as Record<string, unknown> | undefined)
       .filter((cols) => cols !== undefined && "triggerName" in cols);
@@ -326,8 +306,6 @@ describe("GET / never selects Run events", () => {
   });
 });
 
-// The warnings a run carries (#1184) ride both the list row and the detail, so
-// a run that went without its tools says so wherever it is shown.
 describe("unloaded Tool sets and failed tool calls", () => {
   beforeEach(() => {
     vi.clearAllMocks();

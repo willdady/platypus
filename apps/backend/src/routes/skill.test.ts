@@ -7,8 +7,6 @@ import {
 } from "../test-utils.ts";
 import app from "../server.ts";
 
-// The bundle hash and file list are exercised against a real Postgres in
-// `services/skill-bundle.test.ts`; here they pass the row through.
 vi.mock("../services/skill-bundle.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../services/skill-bundle.ts")>()),
   rehashSkill: vi.fn((_db: unknown, row: unknown) => Promise.resolve(row)),
@@ -44,9 +42,7 @@ describe("Skill Routes", () => {
 
     it("should return 403 if user is not workspace owner", async () => {
       mockSession();
-      // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      // requireWorkspaceAccess: workspace owned by someone else
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "other-user", organizationId: "org-1" },
       ]);
@@ -65,9 +61,7 @@ describe("Skill Routes", () => {
 
     it("should create skill if user is editor", async () => {
       mockSession();
-      // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      // requireWorkspaceAccess
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
       ]);
@@ -98,9 +92,7 @@ describe("Skill Routes", () => {
 
     it("should return 400 if name is not kebab-case", async () => {
       mockSession();
-      // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      // requireWorkspaceAccess
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
       ]);
@@ -122,29 +114,23 @@ describe("Skill Routes", () => {
   describe("GET /", () => {
     it("should list workspace and attached org skills tagged with scope", async () => {
       mockSession();
-      // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      // requireWorkspaceAccess
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
       ]);
 
       const workspaceSkills = [{ id: "skill-1", name: "skill-1" }];
-      // The attached org-scoped Skills come back from an inner join, shaped
-      // { skill: {...} }.
       const attachedOrgRows = [
         { skill: { id: "org-skill-1", name: "org-skill-1" } },
       ];
       mockDb.where
-        .mockReturnValueOnce(mockDb) // requireOrgAccess
-        .mockReturnValueOnce(mockDb) // requireWorkspaceAccess
-        .mockResolvedValueOnce(workspaceSkills) // workspace-scoped query
-        .mockResolvedValueOnce(attachedOrgRows); // attached org-scoped query
+        .mockReturnValueOnce(mockDb)
+        .mockReturnValueOnce(mockDb)
+        .mockResolvedValueOnce(workspaceSkills)
+        .mockResolvedValueOnce(attachedOrgRows);
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
-      // listScoped returns Workspace rows first, then attached org rows; the
-      // frontend regroups by scope, so order is not observable behaviour.
       expect(await res.json()).toEqual({
         results: [
           { id: "skill-1", name: "skill-1", scope: "workspace" },
@@ -157,19 +143,18 @@ describe("Skill Routes", () => {
   describe("GET /:skillId", () => {
     it("returns a workspace skill tagged scope workspace with its agentIds", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
-      // resolveScoped row lookup → workspace-scoped skill
+      ]);
       mockDb.limit.mockResolvedValueOnce([
         { id: "skill-1", name: "my-skill", workspaceId },
       ]);
       mockDb.where
-        .mockReturnValueOnce(mockDb) // requireOrgAccess
-        .mockReturnValueOnce(mockDb) // requireWorkspaceAccess
-        .mockReturnValueOnce(mockDb) // resolveScoped row lookup
-        .mockResolvedValueOnce([{ id: "agent-1" }]); // agents referencing the skill
+        .mockReturnValueOnce(mockDb)
+        .mockReturnValueOnce(mockDb)
+        .mockReturnValueOnce(mockDb)
+        .mockResolvedValueOnce([{ id: "agent-1" }]);
 
       const res = await app.request(`${baseUrl}/skill-1`);
       expect(res.status).toBe(200);
@@ -186,15 +171,13 @@ describe("Skill Routes", () => {
 
     it("404s an org skill that is not attached here", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
-      // resolveScoped row lookup → org-scoped skill
+      ]);
       mockDb.limit.mockResolvedValueOnce([
         { id: "org-skill-1", name: "shared", organizationId: orgId },
       ]);
-      // attachment check → not attached
       mockDb.limit.mockResolvedValueOnce([]);
 
       const res = await app.request(`${baseUrl}/org-skill-1`);
@@ -211,11 +194,10 @@ describe("Skill Routes", () => {
 
     it("updates a workspace skill if user is editor", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
-      // requireWorkspaceMutable → resolveScoped row lookup (workspace-scoped)
+      ]);
       mockDb.limit.mockResolvedValueOnce([{ id: "skill-1", workspaceId }]);
 
       const updated = { id: "skill-1", name: "renamed-skill", workspaceId };
@@ -232,15 +214,13 @@ describe("Skill Routes", () => {
 
     it("locks a shared skill in the workspace (edit on org surface)", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
-      // resolveScoped lookup → org-scoped skill
+      ]);
       mockDb.limit.mockResolvedValueOnce([
         { id: "org-skill-1", name: "shared", organizationId: orgId },
       ]);
-      // attachment check → attached here, so it is visible but locked
       mockDb.limit.mockResolvedValueOnce([{ id: "att-1" }]);
 
       const res = await app.request(`${baseUrl}/org-skill-1`, {
@@ -248,7 +228,6 @@ describe("Skill Routes", () => {
         body: JSON.stringify(updateBody),
         headers: { "Content-Type": "application/json" },
       });
-      // Shared skills are edited only on the Organization surface (ADR-0007).
       expect(res.status).toBe(403);
       expect(mockDb.update).not.toHaveBeenCalled();
     });
@@ -259,7 +238,6 @@ describe("Skill Routes", () => {
 
     it("returns 403 if not org admin", async () => {
       mockSession();
-      // requireOrgAccess(["admin"]) → member rejected
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
 
       const res = await app.request(promoteUrl, { method: "POST" });
@@ -268,11 +246,11 @@ describe("Skill Routes", () => {
 
     it("returns 404 if the workspace skill does not exist", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([]); // skill lookup → not found
+      ]);
+      mockDb.limit.mockResolvedValueOnce([]);
 
       const res = await app.request(promoteUrl, { method: "POST" });
       expect(res.status).toBe(404);
@@ -280,14 +258,13 @@ describe("Skill Routes", () => {
 
     it("re-scopes the skill to org and auto-attaches the origin workspace", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
+      ]);
       mockDb.limit.mockResolvedValueOnce([
         { id: "skill-1", workspaceId, name: "my-skill" },
-      ]); // skill lookup
-      // transaction: update ... returning, then insert attachment
+      ]);
       mockDb.returning.mockResolvedValueOnce([
         { id: "skill-1", organizationId: orgId, workspaceId: null },
       ]);
@@ -308,15 +285,11 @@ describe("Skill Routes", () => {
   describe("DELETE /:skillId", () => {
     it("should 409 naming the agents that still use the skill", async () => {
       mockSession();
-      // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      // requireWorkspaceAccess
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
       ]);
-      // requireWorkspaceMutable → resolveScoped row lookup (workspace-scoped)
       mockDb.limit.mockResolvedValueOnce([{ id: "skill-1", workspaceId }]);
-      // check referencing agents
       mockDb.orderBy.mockResolvedValueOnce([
         { id: "agent-1", name: "Digest" },
         { id: "agent-2", name: "Helper" },
@@ -335,15 +308,11 @@ describe("Skill Routes", () => {
 
     it("should delete skill if not referenced", async () => {
       mockSession();
-      // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      // requireWorkspaceAccess
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
       ]);
-      // requireWorkspaceMutable → resolveScoped row lookup (workspace-scoped)
       mockDb.limit.mockResolvedValueOnce([{ id: "skill-1", workspaceId }]);
-      // check referencing agents (none)
       mockDb.orderBy.mockResolvedValueOnce([]);
 
       const res = await app.request(`${baseUrl}/skill-1`, {
@@ -359,7 +328,6 @@ describe("Skill Routes", () => {
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
       ]);
-      // resolveScoped lookup → none visible here → 404
       mockDb.limit.mockResolvedValueOnce([]);
 
       const res = await app.request(`${baseUrl}/org-skill-1`, {
@@ -375,17 +343,14 @@ describe("Skill Routes", () => {
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
       ]);
-      // resolveScoped lookup → org-scoped skill
       mockDb.limit.mockResolvedValueOnce([
         { id: "org-skill-1", name: "shared", organizationId: orgId },
       ]);
-      // attachment check → attached here, so it is visible but locked
       mockDb.limit.mockResolvedValueOnce([{ id: "att-1" }]);
 
       const res = await app.request(`${baseUrl}/org-skill-1`, {
         method: "DELETE",
       });
-      // Shared skills are deleted only on the Organization surface (ADR-0007).
       expect(res.status).toBe(403);
       expect(mockDb.delete).not.toHaveBeenCalled();
     });

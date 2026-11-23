@@ -27,28 +27,14 @@ import { findEntry, TRANSFER_BOUND } from "../sandbox/find-entry.ts";
 import { NotFoundError, UnsupportedError } from "../errors.ts";
 type SandboxRecord = typeof sandboxTable.$inferSelect;
 
-// Sandboxes are admin-only and never delegatable to the workspace owner
-// (ADR-0006). Reused on create/delete; PUT applies field-level gating inline.
 const requireSandboxAdmin = requireWorkspaceConfigAccess(null);
 
 const sandbox = new Hono<{ Variables: Variables }>();
 
-/** The one flag PUT and DELETE accept: skip the outgoing backend's teardown. */
 const forceQuerySchema = z.strictObject({
   force: z.enum(["true", "false"]).optional(),
 });
 
-// Credentials are server-side only, to admins too. In their place
-// `hasCredentials` says whether any are stored, so the settings form can show a
-// stored key instead of a blank field that looks lost — the same
-// value-or-presence rule the Provider and MCP responses follow. `transfer` says
-// which file-transfer directions the backend offers (ADR-0027), so the UI
-// needn't attempt one to find out.
-//
-// adminEnv holds admin-managed secrets. A non-admin owner may see the *keys*
-// (so the UI can show "managed by admin" and the orientation block stays
-// coherent) but never the values (ADR-0006). Admins get the values so the
-// settings form can edit them.
 const sanitizeSandboxResponse = (record: SandboxRecord, isAdmin: boolean) => {
   const { credentials, adminEnv, ...rest } = record;
   const safeAdminEnv = isAdmin
@@ -62,8 +48,6 @@ const sanitizeSandboxResponse = (record: SandboxRecord, isAdmin: boolean) => {
   };
 };
 
-// A backend that can't be built — unregistered, or its stored config no longer
-// validates — can't transfer anything either.
 const transferSupport = (record: SandboxRecord) => {
   try {
     const backend = createSandboxBackend(record, "transfer files");
@@ -77,12 +61,9 @@ const TRANSFER_UNSUPPORTED =
   "This Sandbox backend doesn't support file transfer";
 const TRANSFER_TOO_LARGE = `File is larger than the ${TRANSFER_BOUND} transfer limit`;
 
-// Filenames go out RFC 5987-encoded only, so no quote, backslash or non-ASCII
-// character in a Sandbox-authored name can break the header.
 const attachmentDisposition = (path: string) =>
   `attachment; filename*=UTF-8''${encodeURIComponent(posix.basename(path)).replace(/['()*]/g, (ch) => `%${ch.charCodeAt(0).toString(16).toUpperCase()}`)}`;
 
-/** Get the workspace's sandbox (404 if none configured) */
 sandbox.get(
   "/",
   requireAuth,
@@ -96,7 +77,6 @@ sandbox.get(
   },
 );
 
-/** Create the workspace's sandbox. Admin-only (ADR-0006). 409 if one exists. */
 sandbox.post(
   "/",
   requireAuth,
@@ -106,17 +86,11 @@ sandbox.post(
   validate("json", sandboxCreateSchema),
   async (c) => {
     const { workspaceId } = workspaceScopeOf(c);
-    // The body's workspaceId is overridden by the route's.
     const record = await createSandbox(workspaceId, c.req.valid("json"));
-    // POST is admin-only (requireSandboxAdmin), so always full response.
     return c.json(sanitizeSandboxResponse(record, true), 201);
   },
 );
 
-// Update the workspace's sandbox. Field-level authorization (ADR-0006) lives in
-// updateSandbox. Changing `backend` (admin only) destroys the previous
-// adapter's resources first (ADR-0001); pass ?force=true to skip that and
-// switch anyway.
 sandbox.put(
   "/",
   requireAuth,
@@ -132,14 +106,10 @@ sandbox.put(
       isAdmin,
       force: force === "true",
     });
-    // A non-admin owner gets adminEnv values redacted.
     return c.json(sanitizeSandboxResponse(record, isAdmin));
   },
 );
 
-// Delete the workspace's sandbox. Sync, fail-loud per ADR-0001: the adapter's
-// destroy() runs inline and the row is only removed on success. Pass
-// `?force=true` to skip destroy() and remove the row anyway.
 sandbox.delete(
   "/",
   requireAuth,
@@ -157,16 +127,11 @@ sandbox.delete(
   },
 );
 
-// File transfer (ADR-0027): bytes move between the User and the Sandbox without
-// the model, up to SANDBOX_TRANSFER_MAX_BYTES, held in memory only. Paths use
-// the tool path schema and `..` is deliberately not rejected — anyone past
-// requireWorkspaceAccess can already run arbitrary shell in the Sandbox.
 const openTransfer = async (workspaceId: string) => {
   const record = await requireOwned(db, "sandbox", { workspaceId });
   return openSandboxRow(record, "transfer files");
 };
 
-/** Download a file from the workspace's sandbox. Always an attachment. */
 sandbox.get(
   "/file",
   requireAuth,
@@ -180,8 +145,6 @@ sandbox.get(
     const { backend, ctx } = await openTransfer(workspaceId);
     if (!backend.fsReadBytes) throw new UnsupportedError(TRANSFER_UNSUPPORTED);
 
-    // fsReadBytes' rejections are untyped, so the probe is what tells a missing
-    // file from an oversized one from a failure.
     const entry = await findEntry(backend, ctx, path, signal);
     if (entry?.type !== "file") throw new NotFoundError("File not found");
     if ((entry.size ?? 0) > SANDBOX_TRANSFER_MAX_BYTES) {
@@ -201,10 +164,6 @@ sandbox.get(
   },
 );
 
-/**
- * Upload a raw request body to `path` in the workspace's sandbox. 409 if the
- * path is taken, unless `overwrite=true`.
- */
 sandbox.put(
   "/file",
   requireAuth,
@@ -217,7 +176,6 @@ sandbox.put(
       overwrite: z.enum(["true", "false"]).optional(),
     }),
   ),
-  // Rejects early on Content-Length and enforces the bound while reading.
   bodyLimit({
     maxSize: SANDBOX_TRANSFER_MAX_BYTES,
     onError: (c) => c.json({ error: TRANSFER_TOO_LARGE }, 413),
@@ -229,9 +187,7 @@ sandbox.put(
     const { backend, ctx } = await openTransfer(workspaceId);
     if (!backend.fsWriteBytes) throw new UnsupportedError(TRANSFER_UNSUPPORTED);
 
-    // ponytail: check-then-write race — a file created between the probe and
-    // the write is overwritten. Fine for a single-user Workspace; a
-    // create-only adapter member if it ever isn't.
+    // why: check-then-write race; fine while a Workspace has one user
     if (overwrite !== "true" && (await findEntry(backend, ctx, path, signal))) {
       return c.json({ error: `Path already exists: ${path}` }, 409);
     }

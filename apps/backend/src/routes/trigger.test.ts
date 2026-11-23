@@ -54,7 +54,6 @@ const eventTrigger = {
   config: { events: ["card.created"] },
 };
 
-/** Stub the two middleware DB lookups (requireOrgAccess + requireWorkspaceAccess). */
 const stubAuthLookups = () => {
   mockSession();
   mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
@@ -77,7 +76,7 @@ describe("Trigger Routes", () => {
     it("lists all triggers in the workspace", async () => {
       stubAuthLookups();
       mockDb.orderBy.mockResolvedValueOnce([cronTrigger, eventTrigger]);
-      mockDb.orderBy.mockResolvedValueOnce([]); // their runs
+      mockDb.orderBy.mockResolvedValueOnce([]);
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
@@ -153,7 +152,7 @@ describe("Trigger Routes", () => {
           tokenNotice: "expiring_30",
         },
       ]);
-      mockDb.orderBy.mockResolvedValueOnce([]); // its runs
+      mockDb.orderBy.mockResolvedValueOnce([]);
 
       const res = await app.request(baseUrl);
       const text = await res.text();
@@ -208,7 +207,7 @@ describe("Trigger Routes", () => {
 
     it("creates a cron trigger and returns 201", async () => {
       stubAuthLookups();
-      mockDb.limit.mockResolvedValueOnce([{ id: "agent-1", workspaceId }]); // agent verify
+      mockDb.limit.mockResolvedValueOnce([{ id: "agent-1", workspaceId }]);
       const nextRun = new Date("2026-02-01T09:00:00Z");
       mockValidateCronExpression.mockReturnValueOnce(nextRun);
       mockDb.returning.mockResolvedValueOnce([
@@ -228,7 +227,7 @@ describe("Trigger Routes", () => {
 
     it("creates an Inbound Trigger with no token when the body opts out", async () => {
       stubAuthLookups();
-      mockDb.limit.mockResolvedValueOnce([{ id: "agent-1", workspaceId }]); // agent verify
+      mockDb.limit.mockResolvedValueOnce([{ id: "agent-1", workspaceId }]);
       const inboundBody = {
         ...createBody,
         type: "inbound",
@@ -262,7 +261,7 @@ describe("Trigger Routes", () => {
 
     it("creates an event trigger with a full filters shape (columnId, changedFields) and returns 201", async () => {
       stubAuthLookups();
-      mockDb.limit.mockResolvedValueOnce([{ id: "agent-1", workspaceId }]); // agent verify
+      mockDb.limit.mockResolvedValueOnce([{ id: "agent-1", workspaceId }]);
       const eventBody = {
         ...createBody,
         type: "event",
@@ -343,15 +342,12 @@ describe("Trigger Routes", () => {
     });
 
     it("accepts a Shared agent attached to this workspace", async () => {
-      // A Shared Agent runs here where an Attachment makes it visible
-      // (ADR-0007), so a trigger may point at one — the run resolves the Agent
-      // through the same authority.
       stubAuthLookups();
       mockDb.limit
         .mockResolvedValueOnce([
           { id: "agent-1", organizationId: orgId, workspaceId: null },
         ])
-        .mockResolvedValueOnce([{ id: "att-1" }]); // attached here
+        .mockResolvedValueOnce([{ id: "att-1" }]);
       const nextRun = new Date("2026-02-01T09:00:00Z");
       mockValidateCronExpression.mockReturnValueOnce(nextRun);
       mockDb.returning.mockResolvedValueOnce([
@@ -395,7 +391,7 @@ describe("Trigger Routes", () => {
 
     it("rejects creation when the agent is not in the workspace", async () => {
       stubAuthLookups();
-      mockDb.limit.mockResolvedValueOnce([]); // agent verify: not found
+      mockDb.limit.mockResolvedValueOnce([]);
 
       const res = await app.request(baseUrl, {
         method: "POST",
@@ -412,7 +408,7 @@ describe("Trigger Routes", () => {
   describe("PUT /:triggerId", () => {
     it("updates a trigger and recomputes nextRunAt when the cron config changes", async () => {
       stubAuthLookups();
-      mockDb.limit.mockResolvedValueOnce([cronTrigger]); // existing
+      mockDb.limit.mockResolvedValueOnce([cronTrigger]);
       const nextRun = new Date("2026-02-02T09:00:00Z");
       mockValidateCronExpression.mockReturnValueOnce(nextRun);
       mockDb.returning.mockResolvedValueOnce([
@@ -438,7 +434,7 @@ describe("Trigger Routes", () => {
 
     it("returns 404 when the trigger doesn't exist in this workspace", async () => {
       stubAuthLookups();
-      mockDb.limit.mockResolvedValueOnce([]); // existing not found
+      mockDb.limit.mockResolvedValueOnce([]);
 
       const res = await app.request(`${baseUrl}/trig-missing`, {
         method: "PATCH",
@@ -451,8 +447,8 @@ describe("Trigger Routes", () => {
     it("rejects an agent change when the new agent is not in the workspace", async () => {
       stubAuthLookups();
       mockDb.limit
-        .mockResolvedValueOnce([cronTrigger]) // existing
-        .mockResolvedValueOnce([]); // new agent not found
+        .mockResolvedValueOnce([cronTrigger])
+        .mockResolvedValueOnce([]);
 
       const res = await app.request(`${baseUrl}/trig-1`, {
         method: "PATCH",
@@ -467,9 +463,7 @@ describe("Trigger Routes", () => {
 
     it("returns 404 for a missing trigger before checking the new agent", async () => {
       stubAuthLookups();
-      mockDb.limit
-        .mockResolvedValueOnce([]) // existing not found
-        .mockResolvedValueOnce([]); // new agent not found
+      mockDb.limit.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
 
       const res = await app.request(`${baseUrl}/trig-missing`, {
         method: "PATCH",
@@ -482,7 +476,7 @@ describe("Trigger Routes", () => {
 
     it("round-trips a columnId/changedFields filter through a config update", async () => {
       stubAuthLookups();
-      mockDb.limit.mockResolvedValueOnce([eventTrigger]); // existing
+      mockDb.limit.mockResolvedValueOnce([eventTrigger]);
       const newConfig = {
         events: ["card.updated"],
         filters: {
@@ -509,7 +503,7 @@ describe("Trigger Routes", () => {
 
     it("clears nextRunAt when switching to event type", async () => {
       stubAuthLookups();
-      mockDb.limit.mockResolvedValueOnce([cronTrigger]); // existing
+      mockDb.limit.mockResolvedValueOnce([cronTrigger]);
       mockDb.returning.mockResolvedValueOnce([
         { ...cronTrigger, type: "event", nextRunAt: null },
       ]);
@@ -536,7 +530,7 @@ describe("Trigger Routes", () => {
           search: true,
           includeMemories: true,
         },
-      ]); // existing
+      ]);
       mockDb.returning.mockResolvedValueOnce([
         { ...cronTrigger, enabled: false },
       ]);
@@ -556,7 +550,7 @@ describe("Trigger Routes", () => {
 
     it("round-trips includeMemories through an update", async () => {
       stubAuthLookups();
-      mockDb.limit.mockResolvedValueOnce([cronTrigger]); // existing
+      mockDb.limit.mockResolvedValueOnce([cronTrigger]);
       mockValidateCronExpression.mockReturnValueOnce(
         new Date("2026-02-02T09:00:00Z"),
       );
@@ -578,11 +572,6 @@ describe("Trigger Routes", () => {
   });
 
   describe("DELETE /:triggerId", () => {
-    /**
-     * The delete runs for real against a seeded Workspace: it reads the
-     * Trigger's rows before the cascade, so a chainable mock would have to
-     * stand in for the run lookup as well as the delete.
-     */
     const deleteWorld = (triggers: Row[] = []) => {
       mockSession();
       return seedDb({
@@ -616,8 +605,6 @@ describe("Trigger Routes", () => {
     });
 
     it("deletes an Inbound Trigger: the Owner's surface may", async () => {
-      // Were the route to take the Agent's narrower surface, the type check
-      // would read this row and refuse with 400.
       const fake = deleteWorld([{ ...cronTrigger, type: "inbound" }]);
 
       const res = await app.request(`${baseUrl}/trig-1`, { method: "DELETE" });
