@@ -6,6 +6,38 @@ import testingLibrary from "eslint-plugin-testing-library";
 import jestDom from "eslint-plugin-jest-dom";
 import betterTailwindcss from "eslint-plugin-better-tailwindcss";
 import tseslint from "typescript-eslint";
+import path from "node:path";
+import commentBaseline from "./comment-baseline.json" with { type: "json" };
+
+const DIRECTIVE = /^\s*(eslint-|@ts-|prettier-ignore|global\s)|^\/\s*</;
+
+const noComments = {
+  meta: { type: "suggestion", schema: [] },
+  create(context) {
+    return {
+      Program(node) {
+        const file = path.relative(import.meta.dirname, context.filename);
+        const count = context.sourceCode
+          .getAllComments()
+          .filter(
+            (c) =>
+              !DIRECTIVE.test(c.value) &&
+              !(c.type === "Line" && /^ why: \S/.test(c.value)),
+          ).length;
+        const allowed = commentBaseline[file] ?? 0;
+        if (count === allowed) return;
+        context.report({
+          node,
+          loc: { line: 1, column: 0 },
+          message:
+            count > allowed
+              ? `${count} comments, baseline allows ${allowed}. Comments are banned in apps/frontend except directives and a one-line "// why: …".`
+              : `${count} comments, below the baseline of ${allowed}. Set "${file}" to ${count} in comment-baseline.json (delete the entry at 0).`,
+        });
+      },
+    };
+  },
+};
 
 const TS_FILES = ["**/*.ts", "**/*.tsx"];
 const TEST_FILES = ["**/*.test.ts", "**/*.test.tsx"];
@@ -148,6 +180,10 @@ const eslintConfig = defineConfig([
       ],
       "jsx-a11y/no-autofocus": "warn",
     },
+  },
+  {
+    plugins: { local: { rules: { "no-comments": noComments } } },
+    rules: { "local/no-comments": "error" },
   },
   // Type-aware rules for TypeScript files. `project` lists both tsconfigs
   // rather than using `projectService`: the app tsconfig excludes the tests,
