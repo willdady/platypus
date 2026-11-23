@@ -1,19 +1,5 @@
 import zlib from "node:zlib";
 
-/**
- * Builders for the smallest real PDF / DOCX files the extractors will accept.
- *
- * Generated in-process rather than committed as binary blobs so a reader can see
- * exactly what the extraction tests feed in — and so an "image-only" PDF (the
- * scanned-document case, which must degrade rather than extract) can be produced
- * by simply omitting the text stream.
- */
-
-/**
- * A single-page PDF with an uncompressed content stream. `lines` are drawn as
- * separate text-showing operators; an empty list yields a page with no text at
- * all, standing in for a scanned/image-only PDF.
- */
 export const buildTestPdf = (lines: string[]): Buffer => {
   const escape = (s: string) => s.replace(/([\\()])/g, "\\$1");
   const stream =
@@ -48,12 +34,10 @@ export const buildTestPdf = (lines: string[]): Buffer => {
     `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\n` +
     `startxref\n${xrefOffset}\n%%EOF\n`;
 
-  // latin1 keeps every byte of the structure exactly one char wide, so the
-  // xref offsets computed from string lengths above stay correct.
+  // why: latin1 keeps each byte one char wide, so string-length xref offsets stay correct
   return Buffer.from(pdf, "latin1");
 };
 
-/** A store-only (uncompressed) ZIP container — enough for a valid DOCX. */
 const buildZip = (entries: Array<[name: string, content: string]>): Buffer => {
   const locals: Buffer[] = [];
   const centrals: Buffer[] = [];
@@ -65,19 +49,19 @@ const buildZip = (entries: Array<[name: string, content: string]>): Buffer => {
     const crc = zlib.crc32(data);
 
     const local = Buffer.alloc(30 + nameBuf.length);
-    local.writeUInt32LE(0x04034b50, 0); // local file header signature
-    local.writeUInt16LE(20, 4); // version needed
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(20, 4);
     local.writeUInt32LE(crc, 14);
-    local.writeUInt32LE(data.length, 18); // compressed size (stored)
-    local.writeUInt32LE(data.length, 22); // uncompressed size
+    local.writeUInt32LE(data.length, 18);
+    local.writeUInt32LE(data.length, 22);
     local.writeUInt16LE(nameBuf.length, 26);
     nameBuf.copy(local, 30);
     locals.push(local, data);
 
     const central = Buffer.alloc(46 + nameBuf.length);
-    central.writeUInt32LE(0x02014b50, 0); // central directory signature
-    central.writeUInt16LE(20, 4); // version made by
-    central.writeUInt16LE(20, 6); // version needed
+    central.writeUInt32LE(0x02014b50, 0);
+    central.writeUInt16LE(20, 4);
+    central.writeUInt16LE(20, 6);
     central.writeUInt32LE(crc, 16);
     central.writeUInt32LE(data.length, 20);
     central.writeUInt32LE(data.length, 24);
@@ -91,7 +75,7 @@ const buildZip = (entries: Array<[name: string, content: string]>): Buffer => {
 
   const centralDirectory = Buffer.concat(centrals);
   const eocd = Buffer.alloc(22);
-  eocd.writeUInt32LE(0x06054b50, 0); // end of central directory signature
+  eocd.writeUInt32LE(0x06054b50, 0);
   eocd.writeUInt16LE(entries.length, 8);
   eocd.writeUInt16LE(entries.length, 10);
   eocd.writeUInt32LE(centralDirectory.length, 12);
@@ -100,7 +84,6 @@ const buildZip = (entries: Array<[name: string, content: string]>): Buffer => {
   return Buffer.concat([...locals, centralDirectory, eocd]);
 };
 
-/** A minimal DOCX carrying one `<w:p>` paragraph per entry in `paragraphs`. */
 export const buildTestDocx = (paragraphs: string[]): Buffer =>
   buildZip([
     [

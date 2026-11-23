@@ -88,7 +88,6 @@ describe("classifyFilePart", () => {
   });
 
   it("inlines a text-like file the model can't take natively", () => {
-    // .md mis-tagged as octet-stream by the OS is still text by extension.
     expect(
       classifyFilePart(
         { mediaType: "application/octet-stream", filename: "notes.md" },
@@ -126,7 +125,6 @@ describe("classifyFilePart", () => {
   });
 
   it("does not let byte-sniffing affect the native passthrough decision", () => {
-    // Passthrough wins before any text/binary consideration.
     expect(
       classifyFilePart(
         { mediaType: "image/png", filename: "a.png" },

@@ -6,8 +6,6 @@ const { mockDeletePrefix } = vi.hoisted(() => ({
   mockDeletePrefix: vi.fn<(prefix: string) => Promise<void>>(),
 }));
 
-// Retention deletes the stored files of every run it prunes; the delete is the
-// only part of that mocked.
 vi.mock("../storage/index.ts", () => ({
   getStorage: () => ({ deletePrefix: mockDeletePrefix }),
 }));
@@ -306,7 +304,6 @@ describe("inbound triggers", () => {
       [{ inputs: { issueKey: 42 } }, "Input 'issueKey' must be a string."],
       [{ inputs: { issueKey: null } }, "Input 'issueKey' must be a string."],
       [{ inputs: ["PLAT-42"] }, "'inputs' must be a JSON object."],
-      // Present but `null` is not "no inputs": it is refused, not read as `{}`.
       [{ inputs: null }, "'inputs' must be a JSON object."],
       [["PLAT-42"], "The request body must be a JSON object."],
       [
@@ -398,7 +395,6 @@ describe("inbound triggers", () => {
       );
       await new Promise((resolve) => setImmediate(resolve));
 
-      // The second call has not opened a transaction behind the first.
       expect(fake.execute).toHaveBeenCalledTimes(1);
 
       release();
@@ -490,8 +486,6 @@ describe("inbound triggers", () => {
           id: "run-suppressed",
           status: "suppressed",
         });
-        // The suppressed row is announced once; an accepted call announces
-        // nothing until its run ends.
         expect(announceTriggerRunsEnded).toHaveBeenCalledTimes(1);
         expect(announceTriggerRunsEnded).toHaveBeenCalledWith([
           expect.objectContaining({
@@ -520,9 +514,6 @@ describe("inbound triggers", () => {
     it("prunes the Trigger's history when it records a suppression, as an Event Trigger does", async () => {
       process.env.TRIGGER_BREAKER_MAX_RUNS = "1";
       try {
-        // One run inside the breaker window (which retention always keeps), one
-        // outside it, and a budget of one row: the suppression prunes the out-of-
-        // window row, and the file delete carries the run's Chat prefix.
         const longAgo = new Date(NOW.getTime() - 2 * 60 * 60 * 1000);
         const fake = seed({
           trigger: [inboundTrigger({ maxRunsToKeep: 1 })],
@@ -571,7 +562,6 @@ describe("inbound triggers", () => {
       await acceptInboundCall(target(), unkeyed, { issueKey: "A" }, settings);
       await acceptInboundCall(target(), unkeyed, { issueKey: "A" }, settings);
 
-      // No dedup without a key: both calls ran, counted under the Trigger.
       expect(fireTrigger).toHaveBeenCalledTimes(2);
       expect(fake.tables.trigger_run.map((run) => run.entityId)).toEqual([
         "trig-1",
@@ -720,7 +710,6 @@ describe("inbound triggers", () => {
       );
       expect(tokenTouchCount()).toBe(3);
 
-      // Drops the expired touches, keeps the one still inside the minute.
       await touchInboundTrigger(
         "trig-3",
         "lastUsedAt",
@@ -768,7 +757,6 @@ describe("inbound triggers", () => {
     });
 
     it("skips a reminder that would fall before the token was created", () => {
-      // A 30-day token: its 30-day reminder would be at the moment of issue.
       expect(dueReminder(token(0, 30), NOW)).toBeNull();
       expect(dueReminder(token(1, 29), NOW)).toBeNull();
       expect(dueReminder(token(23, 7), NOW)).toBe("expiring_7");
@@ -807,7 +795,6 @@ describe("inbound triggers", () => {
       vi.mocked(createNotification).mockRejectedValueOnce(new Error("db down"));
 
       await sendInboundTokenReminders(NOW);
-      // Handed back, not recorded as sent.
       expect(fake.tables.trigger[0].tokenNotice).toBeNull();
 
       await sendInboundTokenReminders(NOW);
@@ -916,7 +903,6 @@ describe("inbound triggers", () => {
       ).toBe("active");
     });
 
-    /** When the fixture's token was issued — what the Admin's list showed. */
     const SEEN = new Date(NOW.getTime() - 10 * DAY);
 
     it("revokes a token and tells the Owner", async () => {
@@ -936,14 +922,12 @@ describe("inbound triggers", () => {
         expect.objectContaining({ title: "Inbound trigger token revoked" }),
       );
 
-      // The revoked token now fails like any wrong one.
       const result = await authenticateInboundCall("trig-1", `Bearer ${TOKEN}`);
       expect(result.ok ? "ok" : result.reason).toBe("bad_token");
     });
 
     it("refuses, and keeps the new token, when the Owner regenerated mid-revoke", async () => {
       const fake = seed();
-      // The Owner's regenerate lands between the revoke's read and its write.
       const handle = fake.handle as { update: (...args: unknown[]) => unknown };
       const update = handle.update;
       handle.update = (...args: unknown[]) => {

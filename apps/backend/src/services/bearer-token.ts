@@ -10,38 +10,15 @@ import { logger } from "../logger.ts";
 import { errorMessage } from "../utils/error-message.ts";
 import { createNotification } from "./notification.ts";
 
-/**
- * The bearer token an outside caller presents: an Inbound Trigger's
- * (ADR-0030) and an A2A endpoint's (ADR-0032) are made, stored, expired and
- * reported the same way, and that lives here once.
- *
- * Shown to the Owner once and stored only as a hash. Unlike a Webhook's
- * signing secret, which stays readable because HMAC needs it, nothing in
- * Platypus ever needs the token back. It is 256 random bits, so a fast hash is
- * enough: there is no low-entropy input for a slow one to protect.
- */
-
 export const DAY_MS = 24 * 60 * 60 * 1000;
 
-/** How close to expiry a token is reported, and reminded, as expiring. */
 const EXPIRING_SOON_DAYS = 7;
 
-/** The tables that hold a token, each with the same token columns. */
 type TokenTable = typeof triggerTable | typeof a2aTokenTable;
 
-/**
- * Hashing is also how a presented token is checked: its hash is matched
- * against the stored one. 256 random bits, so a match by hash — in SQL or not
- * — leaks nothing a guess could use, and no constant-time compare is needed.
- */
 export const hashBearerToken = (token: string): string =>
   createHash("sha256").update(token, "utf8").digest("hex");
 
-/**
- * A fresh token, and the hash that is all the database keeps of it. The
- * prefix makes a leaked token recognisable — to a person reading a log, and
- * to a secret scanner — without carrying any meaning the backend relies on.
- */
 export const generateBearerToken = (
   prefix: string,
 ): { token: string; hash: string } => {
@@ -49,20 +26,11 @@ export const generateBearerToken = (
   return { token, hash: hashBearerToken(token) };
 };
 
-/**
- * The token an `Authorization: Bearer <token>` header carries, or `null`.
- * The header is the only place a token is read from — never the query string,
- * which proxies and access logs record.
- */
 export const bearerToken = (header: string | undefined): string | null => {
   const match = header?.match(/^Bearer\s+(\S+)\s*$/i);
   return match?.[1] ?? null;
 };
 
-/**
- * The columns a newly issued token writes. Clears the notice record, because
- * each expiry Notification is owed once per token.
- */
 export const issuedTokenFields = (
   hash: string,
   expiryDays: number,
@@ -74,10 +42,6 @@ export const issuedTokenFields = (
   tokenNotice: null,
 });
 
-/**
- * How a token stands: no token (never issued, or revoked), active, expiring
- * within 7 days, or expired. Every surface that shows it reads this.
- */
 export const bearerTokenStatus = (
   token: { tokenHash: string | null; tokenExpiresAt: Date | null },
   now: Date = new Date(),
@@ -88,7 +52,6 @@ export const bearerTokenStatus = (
   return left <= EXPIRING_SOON_DAYS * DAY_MS ? "expiring" : "active";
 };
 
-/** The columns a revoke writes: no token, and nothing left to notify about. */
 export const revokedTokenFields = () => ({
   tokenHash: null,
   tokenCreatedAt: null,
@@ -96,24 +59,13 @@ export const revokedTokenFields = () => ({
   tokenNotice: null,
 });
 
-// ----------------------------------------------------------------- last used
-
 const TOUCH_INTERVAL_MS = 60_000;
 const lastTouched = new Map<string, number>();
 
-/** Test seam: forget when each token was last touched. */
 export const resetTokenTouches = (): void => lastTouched.clear();
 
-/** Test seam: how many touches are remembered. */
 export const tokenTouchCount = (): number => lastTouched.size;
 
-/**
- * Stamps `lastUsedAt` or `lastRejectedAt` on the row `id` names, at most once
- * a minute per row and column, so a flood of calls cannot become a flood of
- * writes. Checked in memory first, so a flood costs no query either; the
- * conditional `WHERE` holds the same limit across instances. Best-effort: a
- * failure is logged, never surfaced to the caller.
- */
 export const touchToken = async (
   table: TokenTable,
   id: string,
@@ -126,8 +78,6 @@ export const touchToken = async (
   if (previous !== undefined && now.getTime() - previous < TOUCH_INTERVAL_MS) {
     return;
   }
-  // Re-inserted so the map stays oldest first; each write then drops expired
-  // touches from the front, keeping the map bounded.
   lastTouched.delete(key);
   lastTouched.set(key, now.getTime());
   for (const [staleKey, at] of lastTouched) {
@@ -156,30 +106,14 @@ export const touchToken = async (
   }
 };
 
-/**
- * Why an Org Admin's revoke is refused when the token was regenerated since
- * they loaded it.
- */
 export const TOKEN_REPLACED_MESSAGE =
   "The token was replaced since you loaded the list. Refresh it and revoke the new one if it should stop too.";
 
-// ----------------------------------------------------------------- notices
-
-/** A date as a notice body shows it. */
 export const noticeDate = (date: Date): string =>
   date.toISOString().slice(0, 10);
 
-/**
- * The holder of a token — an A2A endpoint or an Inbound Trigger — whose
- * Workspace a notice about it goes to, from its Agent.
- */
 type TokenHolder = { workspaceId: string; agentId: string };
 
-/**
- * Posts a Notification to the token's Workspace, from its Agent. `false` —
- * logged — when it could not be posted, so a notice claimed for it can be
- * handed back and sent again.
- */
 export const notifyTokenOwner = async (
   orgId: string,
   { workspaceId, agentId }: TokenHolder,
@@ -199,11 +133,6 @@ export const notifyTokenOwner = async (
   }
 };
 
-/**
- * The expiry Notifications a token can be owed, in the order they fall due.
- * `tokenNotice` stores the latest one sent, so "has X been sent" is "is the
- * stored notice at or past X".
- */
 const TOKEN_NOTICES = ["expiring_30", "expiring_7", "expired"] as const;
 
 type TokenNotice = (typeof TOKEN_NOTICES)[number];
@@ -212,12 +141,6 @@ const tokenNoticeSent = (stored: string | null, notice: TokenNotice): boolean =>
   stored != null &&
   TOKEN_NOTICES.indexOf(stored as TokenNotice) >= TOKEN_NOTICES.indexOf(notice);
 
-/**
- * The expiry reminder a token is owed at `now`, if any: 7 days before expiry,
- * or 30 days before it until the 7-day one falls due. A reminder whose moment
- * falls at or before the token was issued is skipped, so a 30-day token only
- * ever gets the 7-day one.
- */
 export const dueReminder = (
   token: { tokenCreatedAt: Date | null; tokenExpiresAt: Date },
   now: Date,
@@ -233,11 +156,6 @@ export const dueReminder = (
   return null;
 };
 
-/**
- * Moves the token's notice from `from` to `to`, conditional on both and on
- * the hash, so two instances can't both send it and a regenerated token
- * doesn't inherit it. `true` when this call made the move.
- */
 const moveNotice = async (
   table: TokenTable,
   token: { id: string; tokenHash: string },
@@ -258,13 +176,6 @@ const moveNotice = async (
   return moved.length > 0;
 };
 
-/**
- * Sends `notice` about a token, once: skips one already sent or passed,
- * claims it on the token's row, posts it, and hands the claim back if posting
- * failed, so the next sweep — or the next
- * call with an expired token — sends it after all. Deleting the Notification
- * never brings it back. Never throws.
- */
 export const sendTokenNotice = async (
   table: TokenTable,
   token: { id: string; tokenHash: string; tokenNotice: string | null },

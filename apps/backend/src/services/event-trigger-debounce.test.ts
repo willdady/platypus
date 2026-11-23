@@ -59,11 +59,9 @@ describe("event-trigger-debounce", () => {
     vi.advanceTimersByTime(1_000);
     debounceTriggerExecution("t-1:card-1", trigger, ctx3, executeFn);
 
-    // Not yet fired
     vi.advanceTimersByTime(4_999);
     expect(executeFn).not.toHaveBeenCalled();
 
-    // Now 5s after last event
     vi.advanceTimersByTime(1);
     expect(executeFn).toHaveBeenCalledOnce();
     expect(executeFn).toHaveBeenCalledWith(trigger, ctx3);
@@ -97,8 +95,6 @@ describe("event-trigger-debounce", () => {
     const executeFn = vi.fn().mockResolvedValue(undefined);
     const trigger = makeTrigger("t-1");
 
-    // A `card.moved` carries no changed-fields diff, so there is nothing to
-    // union with the `card.updated` that follows it.
     const ctx1: Parameters<typeof debounceTriggerExecution>[2] = {
       payload: cardEvent("card.moved", { id: "card-1" }),
     };
@@ -141,18 +137,15 @@ describe("event-trigger-debounce", () => {
       executeFn,
     );
 
-    // Advance 4s, then send another event
     vi.advanceTimersByTime(4_000);
     expect(executeFn).not.toHaveBeenCalled();
 
     const latestCtx = makeContext({ id: "card-1", title: "second" });
     debounceTriggerExecution("t-1:card-1", trigger, latestCtx, executeFn);
 
-    // 4s after second event — still not fired
     vi.advanceTimersByTime(4_000);
     expect(executeFn).not.toHaveBeenCalled();
 
-    // 5s after second event — fires
     vi.advanceTimersByTime(1_000);
     expect(executeFn).toHaveBeenCalledOnce();
     expect(executeFn).toHaveBeenCalledWith(trigger, latestCtx);
@@ -229,8 +222,6 @@ describe("event-trigger-debounce", () => {
         );
       }
 
-      // One line per coalesce — the first event opens the window rather than
-      // folding into it.
       expect(mockLogger.info).toHaveBeenCalledTimes(2);
       expect(mockLogger.info).toHaveBeenLastCalledWith(
         { debounceKey: "t-1:card-1", triggerId: "t-1", eventsFolded: 3 },
@@ -261,7 +252,6 @@ describe("event-trigger-debounce", () => {
       vi.advanceTimersByTime(5_000);
       mockLogger.info.mockClear();
 
-      // A fresh window: the next event opens it rather than continuing the count.
       expect(fold("t-1:card-1")).toBe(false);
       fold("t-1:card-1");
       expect(mockLogger.info).toHaveBeenCalledWith(

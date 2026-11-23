@@ -14,13 +14,11 @@ import {
 
 const bytes = (buffer: Buffer) => new Uint8Array(buffer);
 
-/** Narrow to the success case, failing the test with the real status if not. */
 const ok = (result: ExtractionResult): ExtractedText => {
   expect(result.status).toBe("ok");
   return result as ExtractedText;
 };
 
-/** The cap production passes for a model that declares none. */
 const cap = { maxChars: DEFAULT_MAX_EXTRACTED_TEXT_CHARS };
 
 describe("extractDocumentText", () => {

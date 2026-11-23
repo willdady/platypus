@@ -32,7 +32,6 @@ const DOCX_TYPE =
 const msg = (parts: unknown[]): PlatypusUIMessage =>
   ({ id: "m1", role: "user", parts }) as unknown as PlatypusUIMessage;
 
-/** The cap these fixtures declare no model for. */
 const cap = { maxExtractedTextChars: DEFAULT_MAX_EXTRACTED_TEXT_CHARS };
 
 describe("messagesHaveFileParts", () => {
@@ -55,7 +54,6 @@ describe("messagesHaveFileParts", () => {
 describe("assertFilePartsSupported", () => {
   const chatPassthrough = ["image/*"];
 
-  /** Run the gate and return the error it threw, or null. */
   const gateError = async (
     messages: PlatypusUIMessage[],
   ): Promise<FileValidationError | null> => {
@@ -87,8 +85,6 @@ describe("assertFilePartsSupported", () => {
   });
 
   it("lets a document in history through without re-fetching its bytes", async () => {
-    // Storage-backed history parts carry no bytes here; they were verified the
-    // turn they were attached.
     expect(
       await gateError([
         msg([
@@ -264,7 +260,6 @@ describe("normalizeFileParts", () => {
       cap,
     );
     const part = out[0].parts[0] as { type: string; text: string };
-    // The wrapper fence must be longer than the longest run inside it.
     expect(part.text).toContain("````\nintro");
     expect(part.text.trimEnd().endsWith("````")).toBe(true);
   });
