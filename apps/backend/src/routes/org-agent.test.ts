@@ -15,12 +15,6 @@ vi.mock("../services/avatar.ts", async (importOriginal) => ({
   deleteAvatar: vi.fn(),
 }));
 
-/**
- * Fixture rows, not stubbed query results: `seedDb()` evaluates the `WHERE`
- * each query builds, so a lookup or write that dropped the Shared predicate —
- * `organizationId` plus `workspaceId IS NULL` (ADR-0007) — reaches a row it
- * should not and the test fails.
- */
 describe("Organization Agent Routes", () => {
   let fake: FakeDb;
 
@@ -32,7 +26,6 @@ describe("Organization Agent Routes", () => {
   const orgId = "org-1";
   const baseUrl = `/organizations/${orgId}/agents`;
 
-  /** An Agent row; Shared in `org-1` unless overridden. */
   const agentRow = (id: string, over: Store[string][number] = {}) => ({
     id,
     name: id,
@@ -46,12 +39,6 @@ describe("Organization Agent Routes", () => {
     ...over,
   });
 
-  /**
-   * The caller (`user-1`) is a member of `org-1` at `role`. `agent-1` is a
-   * Shared Agent of `org-1`; `ws-agent` belongs to `ws-1` while also carrying
-   * `org-1`; `foreign` is Shared in `org-2`. `p1` is a Shared Provider and
-   * `ws-p` a Workspace-private one.
-   */
   const world = (
     options: { role?: "admin" | "member"; rows?: Store } = {},
   ): FakeDb => {
@@ -93,8 +80,6 @@ describe("Organization Agent Routes", () => {
       const res = await app.request(baseUrl);
 
       expect(res.status).toBe(200);
-      // Guards `sharedWhere`: `ws-agent` carries org-1 but sits in a Workspace,
-      // and `foreign` is another Organization's.
       expect(await res.json()).toEqual({
         results: [
           expect.objectContaining({
@@ -126,7 +111,6 @@ describe("Organization Agent Routes", () => {
     it.each(["missing", "foreign", "ws-agent"])(
       "returns 404 for %s, which is not a Shared agent here",
       async (id) => {
-        // Guards `orgScopedWhere`'s organizationId and workspaceId columns.
         mockSession();
         fake = world({ role: "member" });
 
@@ -172,8 +156,6 @@ describe("Organization Agent Routes", () => {
 
       const res = await put("agent-1", { providerId: "ws-p" });
 
-      // Not Shared reads as not found here (api-conventions), and the message
-      // names what couldn't be used.
       expect(res.status).toBe(404);
       expect(await res.json()).toEqual({
         error:
@@ -185,8 +167,6 @@ describe("Organization Agent Routes", () => {
     it.each(["missing", "foreign", "ws-agent"])(
       "returns 404 and writes nothing for %s, which is not visible here",
       async (id) => {
-        // A row carrying both scope columns belongs to its Workspace and must
-        // not be editable from the Organization surface (ADR-0007).
         mockSession();
         fake = world();
 
@@ -245,9 +225,6 @@ describe("Organization Agent Routes", () => {
     it.each(["foreign", "ws-agent"])(
       "returns 404 and keeps %s, which is not a Shared agent here",
       async (id) => {
-        // Guards `orgScopedWhere` on the DELETE: the attachment/blueprint
-        // guards do not check existence, so the write's own predicate is all
-        // that keeps another scope's row.
         mockSession();
         fake = world();
 

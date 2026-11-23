@@ -11,19 +11,8 @@ import { orgScopeOf, requireOrgAccess } from "../middleware/authorization.ts";
 import { validate } from "../validate.ts";
 import type { Variables } from "../server.ts";
 
-// Org-surface read of where a Shared resource is attached (ADR-0007). Where
-// the per-Workspace `attachment` route answers "what is attached to THIS
-// workspace?", this route answers "which workspaces is THIS resource shared
-// with?". Every write uses the one attachment address — the per-Workspace
-// route, whose path names the Workspace so the body never has to. All routes
-// are admin-only.
 const orgAttachment = new Hono<{ Variables: Variables }>();
 
-/**
- * List the workspaces a Shared resource is attached to (admin only).
- * Requires `resourceType` and `resourceId` query params; returns each
- * attachment with its workspace name so the org surface can show "Shared with".
- */
 orgAttachment.get(
   "/",
   requireAuth,
@@ -33,8 +22,6 @@ orgAttachment.get(
     const { orgId } = orgScopeOf(c);
     const { resourceType, resourceId } = c.req.valid("query");
 
-    // Join through workspace so we only ever surface this org's workspaces (and
-    // their names), never attachments leaked from another org.
     const rows = await db
       .select({
         workspaceId: attachmentTable.workspaceId,

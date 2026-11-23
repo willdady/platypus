@@ -35,10 +35,6 @@ const endpoint = (over: Row = {}): Row => ({
   ...over,
 });
 
-/**
- * The caller is `user-1`. By default they own `ws-1`; `owner: "user-2"` makes
- * them an Org Admin looking at someone else's Workspace.
- */
 const seed = ({
   role = "member",
   owner = "user-1",
@@ -297,8 +293,6 @@ describe("A2A endpoint routes", () => {
       expect((await send("/ep-1", "DELETE")).status).toBe(404);
     });
 
-    // Its tokens go by the foreign key's cascade; `a2a-endpoint-cascade.test.ts`
-    // checks that against real Postgres.
     it("deletes an endpoint", async () => {
       const fake = seed();
 
@@ -324,7 +318,6 @@ describe("A2A endpoint routes", () => {
       expect(stored.tokenHash).toBe(hashBearerToken(body.token));
       expect(Object.values(stored)).not.toContain(body.token);
 
-      // Never readable again.
       const detail = (await (await app.request(`${baseUrl}/ep-1`)).json()) as {
         tokens: Row[];
       };
@@ -398,7 +391,6 @@ describe("A2A endpoint routes", () => {
       const res = await send("/ep-1/tokens/tok-1/regenerate", "POST");
 
       expect(res.status).toBe(200);
-      // One write, with the endpoint's Workspace checked in it.
       expect(
         fake.queries.filter(
           (q) => q.table === "a2a_token" || q.table === "a2a_endpoint",
@@ -412,7 +404,6 @@ describe("A2A endpoint routes", () => {
       expect(stored.tokenHash).toBe(hashBearerToken(body.token));
       expect(stored.tokenHash).not.toBe(hashBearerToken("pa2a_old"));
       expect(stored.tokenNotice).toBeNull();
-      // The same lifetime as before, from now.
       const created = (stored.tokenCreatedAt as Date).getTime();
       expect((stored.tokenExpiresAt as Date).getTime() - created).toBe(
         30 * DAY,
@@ -522,17 +513,11 @@ describe("A2A endpoint routes", () => {
     });
   });
 
-  // #1239 stories 11, 13, 18 and 19: what the Owner does here, as the
-  // endpoint's clients then find it at `/a2a`.
   describe("as the endpoint's clients find it", () => {
     const HERMES = "pa2a_hermes";
     const ROVO = "pa2a_rovo";
     const DESK = "pa2a_desk";
 
-    /**
-     * Two endpoints on `agent-1`: ep-1 with two clients' tokens, ep-2 with
-     * one. Org-1 admits every Workspace, so all three answer.
-     */
     const seedClients = () => {
       const fake = seed({
         endpoints: [endpoint(), endpoint({ id: "ep-2", name: "Front desk" })],
@@ -558,7 +543,6 @@ describe("A2A endpoint routes", () => {
       return fake;
     };
 
-    /** A client's `GetTask` for a Task no one has: a live call's answer is -32001. */
     const call = async (endpointId: string, token: string) => {
       const res = await app.request(`/a2a/${endpointId}`, {
         method: "POST",
@@ -592,7 +576,6 @@ describe("A2A endpoint routes", () => {
       expect(await call("ep-1", HERMES)).toEqual(answered);
       expect(await call("ep-1", ROVO)).toEqual(answered);
       expect(await call("ep-2", DESK)).toEqual(answered);
-      // A token opens only its own endpoint.
       expect(await call("ep-2", HERMES)).toEqual(unauthorized);
     });
 
@@ -642,7 +625,6 @@ describe("A2A endpoint routes", () => {
       expect(fake.tables.chat).toEqual([
         expect.objectContaining({ id: "chat-1", a2aEndpointId: "ep-1" }),
       ]);
-      // The Agent's other endpoint answers on.
       expect(await call("ep-2", DESK)).toEqual(answered);
     });
   });

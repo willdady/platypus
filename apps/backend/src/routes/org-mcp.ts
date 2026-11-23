@@ -32,12 +32,8 @@ import { mcpReadModel } from "../services/credential-redaction.ts";
 import { createMcp, deleteMcp, updateMcp } from "../services/mcp-write.ts";
 import { respond } from "../respond.ts";
 
-// Org-scoped MCPs are Shared resources (ADR-0007). They introduce credentials
-// and external reach, so all mutations are org-admin-only (ADR-0006) — there is
-// no per-workspace delegation at org scope.
 const orgMcp = new Hono<{ Variables: Variables }>();
 
-/** Create an org-scoped MCP (admin only) */
 orgMcp.post(
   "/",
   requireAuth,
@@ -47,8 +43,6 @@ orgMcp.post(
     const { orgId } = orgScopeOf(c);
     const data = c.req.valid("json");
 
-    // A duplicate name surfaces as a Postgres unique violation, mapped to 409
-    // by the central onError (ADR-0010).
     const row = await createMcp({ kind: "organization", orgId }, data);
     return respond(
       c,
@@ -59,12 +53,9 @@ orgMcp.post(
   },
 );
 
-/** List org-scoped MCPs */
 orgMcp.get("/", requireAuth, requireOrgAccess(), async (c) => {
   const { orgId } = orgScopeOf(c);
   const results = await listOrgScoped(db, "mcp", orgId);
-  // This route admits any Organization member — a Shared MCP has to be listable
-  // to be granted. Only an Org Admin sees its request credentials (ADR-0006).
   const reveal = orgCredentialsVisible(c);
   return respond(c, mcpListResponseSchema, {
     results: results.map((row) =>
@@ -73,12 +64,10 @@ orgMcp.get("/", requireAuth, requireOrgAccess(), async (c) => {
   });
 });
 
-/** Get an org-scoped MCP by ID */
 orgMcp.get("/:mcpId", requireAuth, requireOrgAccess(), async (c) => {
   const { orgId } = orgScopeOf(c);
   const mcpId = c.req.param("mcpId");
   const record = await requireOrgScoped(db, "mcp", mcpId, orgId);
-  // See the list route: request credentials are Org-Admin-only (ADR-0006).
   const reveal = orgCredentialsVisible(c);
   return respond(
     c,
@@ -87,7 +76,6 @@ orgMcp.get("/:mcpId", requireAuth, requireOrgAccess(), async (c) => {
   );
 });
 
-/** Update an org-scoped MCP by ID (admin only) */
 orgMcp.put(
   "/:mcpId",
   requireAuth,
@@ -98,8 +86,6 @@ orgMcp.put(
     const mcpId = c.req.param("mcpId");
     const data = c.req.valid("json");
 
-    // A duplicate name surfaces as a Postgres unique violation, mapped to 409
-    // by the central onError (ADR-0010).
     const row = await updateMcp({ kind: "organization", orgId }, mcpId, data);
     return respond(
       c,
@@ -110,7 +96,6 @@ orgMcp.put(
   },
 );
 
-/** Delete an org-scoped MCP by ID (admin only) */
 orgMcp.delete(
   "/:mcpId",
   requireAuth,
@@ -119,15 +104,11 @@ orgMcp.delete(
     const { orgId } = orgScopeOf(c);
     const mcpId = c.req.param("mcpId");
 
-    // Throws ConflictError (→409) while an Attachment or Blueprint still
-    // references the MCP (ADR-0007/0008), and scrubs its (now-dead) id from
-    // any Agent's toolSetIds in the same transaction as the delete.
     await deleteMcp({ kind: "organization", orgId }, mcpId);
     return c.json({ message: "MCP deleted" });
   },
 );
 
-/** Test an unsaved org-scoped MCP connection (admin only) */
 orgMcp.post(
   "/test",
   requireAuth,
@@ -142,7 +123,6 @@ orgMcp.post(
   },
 );
 
-/** Test a stored org-scoped MCP connection, addressed by its id (admin only) */
 orgMcp.post(
   "/:mcpId/test",
   requireAuth,
@@ -169,7 +149,6 @@ const oauthAuthorizeQuerySchema = z.strictObject({
   force: z.enum(["true", "false"]).optional(),
 });
 
-/** Initiate OAuth authorization for an org-scoped MCP (admin only) */
 orgMcp.post(
   "/:mcpId/oauth/authorize",
   requireAuth,
@@ -198,7 +177,6 @@ orgMcp.post(
   },
 );
 
-/** Revoke OAuth tokens for an org-scoped MCP (admin only) */
 orgMcp.post(
   "/:mcpId/oauth/revoke",
   requireAuth,
