@@ -6,12 +6,11 @@ import Link from "next/link";
 import { useScopedList } from "@/hooks/use-scoped-list";
 import { useAuth } from "@/components/auth-provider";
 import {
-  canConfigureWorkspaceResource,
   canManageOrgSharedResource,
   canManageSharedResource,
   type DelegatableResourceType,
-  type WorkspaceDelegationFlags,
 } from "@/lib/authorization";
+import { useCanConfigureWorkspaceResource } from "@/hooks/use-can-configure-workspace-resource";
 import { writeEntity, type Scope } from "@/lib/api-write";
 import { orgRoutes, workspaceRoutes } from "@/lib/routes";
 import {
@@ -78,8 +77,6 @@ export type ResourceListConfig = {
   readonly resourceType: DelegatableResourceType;
   /** Which settings route the resource's own pages live under (`lib/routes`). */
   readonly settingsKey: "providers" | "mcp";
-  /** The Workspace delegation flag granting self-management (ADR-0006). */
-  readonly delegationFlag: keyof WorkspaceDelegationFlags;
   readonly labels: ResourceListLabels;
   /** The row field shown on the card's second line: a Provider's type, an MCP server's URL. */
   readonly secondLine: "providerType" | "url";
@@ -103,7 +100,10 @@ export function ResourceList({
   workspaceId?: string;
   config: ResourceListConfig;
 }) {
-  const { actor, workspaceDelegation } = useAuth();
+  const { actor } = useAuth();
+  const canConfigureInWorkspace = useCanConfigureWorkspaceResource(
+    config.resourceType,
+  );
   const [resourceToManage, setResourceToManage] =
     useState<ScopedResource | null>(null);
 
@@ -152,16 +152,11 @@ export function ResourceList({
     !workspaceId && canManageOrgSharedResource(actor);
 
   // Workspace-scoped config is admin-only unless the workspace delegates it
-  // (ADR-0006), resolved once by the auth module off the Workspace's own
-  // delegation flags — no separate fetch needed. Org-level management lives
-  // behind an admin-only route, so it is always manageable here.
-  const canManage = workspaceId
-    ? canConfigureWorkspaceResource(
-        actor,
-        config.resourceType,
-        workspaceDelegation?.[config.delegationFlag] === true,
-      )
-    : true;
+  // (ADR-0006), resolved once per render from the Workspace's own delegation
+  // flags by `useCanConfigureWorkspaceResource` — no separate fetch needed.
+  // Org-level management lives behind an admin-only route, so it is always
+  // manageable here.
+  const canManage = workspaceId ? canConfigureInWorkspace : true;
 
   // The resource's own settings surface, with any trailing segment: a row's
   // detail page, or its create page.

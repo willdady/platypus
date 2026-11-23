@@ -11,10 +11,8 @@ import {
 } from "@/lib/api-write";
 import type { ChatListItem } from "@platypus/schemas";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
-import {
-  canChangeChat,
-  canConfigureWorkspaceResource,
-} from "@/lib/authorization";
+import { canChangeChat } from "@/lib/authorization";
+import { useCanConfigureWorkspaceResource } from "@/hooks/use-can-configure-workspace-resource";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { useEntityForm } from "@/hooks/use-entity-form";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
@@ -90,7 +88,7 @@ export function AppSidebar() {
     workspaceId: string;
   }>();
   const backendUrl = useBackendUrl();
-  const { actor, ownsWorkspace, workspaceDelegation } = useAuth();
+  const { ownsWorkspace } = useAuth();
   // Chats belong to the Workspace Owner; everyone else reads them, so the
   // row menu offers nobody else an action the backend would refuse.
   const canChange = canChangeChat(ownsWorkspace);
@@ -155,11 +153,7 @@ export function AppSidebar() {
   });
 
   const hasNoProviders = useHasNoProviders(scope);
-  const canAddProvider = canConfigureWorkspaceResource(
-    actor,
-    "provider",
-    workspaceDelegation?.providerSelfManagement === true,
-  );
+  const canAddProvider = useCanConfigureWorkspaceResource("provider");
 
   // Each search is its own SWR key, so the list would blank (and falsely read
   // as "no matches") on every debounced keystroke. Keep showing the last

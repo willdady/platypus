@@ -83,10 +83,8 @@ import { toast } from "sonner";
 import { orgRoutes, workspaceRoutes } from "@/lib/routes";
 import { scopedPath, type Serialized } from "@/lib/api-write";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
-import {
-  canConfigureWorkspaceResource,
-  canManageOrgSharedResource,
-} from "@/lib/authorization";
+import { canManageOrgSharedResource } from "@/lib/authorization";
+import { useCanConfigureWorkspaceResource } from "@/hooks/use-can-configure-workspace-resource";
 import {
   useModelTestResults,
   type ModelTestVerdict,
@@ -461,13 +459,10 @@ function ProviderForm({
   // Owner only where the Workspace delegates Provider management (ADR-0006).
   // A viewer without it sees no Test button, rather than a button whose click
   // comes back as a 403 on the card.
-  const { actor, workspaceDelegation } = useAuth();
+  const { actor } = useAuth();
+  const canConfigureInWorkspace = useCanConfigureWorkspaceResource("provider");
   const canTest = workspaceId
-    ? canConfigureWorkspaceResource(
-        actor,
-        "provider",
-        workspaceDelegation?.providerSelfManagement === true,
-      )
+    ? canConfigureInWorkspace
     : canManageOrgSharedResource(actor);
   const {
     results: testResults,
