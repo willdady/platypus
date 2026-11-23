@@ -52,9 +52,8 @@ dialogs and chat.
 
 `components/empty-card.tsx`: `icon`, `title`, `description`, `action`.
 
-- **Icon**: the bare Lucide icon the sidebar uses for that screen
-  (`lib/settings-links.ts`, `components/org-settings-menu.tsx`), no size
-  class (the frame sizes it). A concept keeps one icon everywhere it appears;
+- **Icon**: the bare Lucide icon the sidebar uses for that screen (the link
+  lists in `lib/settings-links.ts`), no size class (the frame sizes it). A concept keeps one icon everywhere it appears;
   MCP is `Wrench`, even on the Organization surface.
 - **Title**: `No X configured` for things you set up or connect (providers,
   MCP servers, sandbox, webhooks, endpoints); `No X yet` for things users
