@@ -7,6 +7,7 @@ import {
   beforeEach,
   vi,
 } from "vitest";
+vi.unmock("drizzle-orm"); // why: these tests run real Drizzle against PGlite
 import type { PGlite } from "@electric-sql/pglite";
 import { TaskNotFoundError } from "@a2a-js/sdk/errors";
 import { drizzle } from "drizzle-orm/pglite";

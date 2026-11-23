@@ -1,5 +1,4 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-// why: first, since drizzle-orm's operators are spies only through test-utils' mock
 import { resetMockDb, seedDb, type Row } from "../test-utils.ts";
 import { eq, isNull } from "drizzle-orm";
 import { db } from "../index.ts";

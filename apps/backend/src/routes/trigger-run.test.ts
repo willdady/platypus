@@ -1,5 +1,4 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-// why: before drizzle-orm, whose `eq` is a spy only through the mock test-utils installs
 import {
   mockDb,
   mockNoSession,

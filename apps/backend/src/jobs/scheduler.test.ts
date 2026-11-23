@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+vi.unmock("drizzle-orm"); // why: these tests render real Drizzle SQL with PgDialect
 import { PgDialect } from "drizzle-orm/pg-core";
 import { type SQL } from "drizzle-orm";
 

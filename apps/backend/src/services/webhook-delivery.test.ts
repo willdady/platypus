@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
+vi.unmock("drizzle-orm"); // why: these tests compare the real predicate the service builds
 import crypto from "node:crypto";
 
 interface WebhookFetchOptions {

@@ -1,6 +1,4 @@
 import { describe, it, expect, beforeEach } from "vitest";
-// why: first, since drizzle-orm's operators are spies only through test-utils' mock
-import { resetMockDb, seedDb, type Row } from "../test-utils.ts";
 import { desc } from "drizzle-orm";
 import { db } from "../index.ts";
 import { trigger as triggerTable } from "../db/schema.ts";
@@ -13,6 +11,7 @@ import {
   ownedWhere,
 } from "./workspace-resource.ts";
 import { NotFoundError } from "../errors.ts";
+import { resetMockDb, seedDb, type Row } from "../test-utils.ts";
 
 const workspaceId = "ws-1";
 
