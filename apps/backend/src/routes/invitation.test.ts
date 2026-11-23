@@ -27,9 +27,7 @@ describe("Invitation Routes", () => {
   describe("POST /", () => {
     it("should create invitation if org admin", async () => {
       mockSession({ id: "admin-1", email: "admin@example.com", role: "user" });
-      // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      // Membership check: the invitee is not already a member.
       mockDb.limit.mockResolvedValueOnce([]);
 
       const mockInvitation = {
@@ -48,7 +46,6 @@ describe("Invitation Routes", () => {
       });
 
       expect(res.status).toBe(201);
-      // The response echoes the ordered blueprint set (empty here, ADR-0009).
       expect(await res.json()).toEqual({ ...mockInvitation, blueprintIds: [] });
     });
 
@@ -78,22 +75,18 @@ describe("Invitation Routes", () => {
       expect(await res.json()).toMatchObject({ email: "user@example.com" });
     });
 
-    // ADR-0009: an invitation carries an ordered set of Blueprints, stored in
-    // the invitation_blueprint junction with `position`.
     it("persists an ordered set of blueprints", async () => {
       mockSession({ id: "admin-1", email: "admin@example.com", role: "user" });
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
-      // Blueprint validation: both ids resolve to org-scoped blueprints.
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
       mockDb.where
-        .mockReturnValueOnce(mockDb) // requireOrgAccess
-        .mockResolvedValueOnce([{ id: "bp-1" }, { id: "bp-2" }]); // validation
+        .mockReturnValueOnce(mockDb)
+        .mockResolvedValueOnce([{ id: "bp-1" }, { id: "bp-2" }]);
       mockDb.returning.mockResolvedValueOnce([{ id: "inv-1" }]);
 
       const res = await app.request(baseUrl, {
         method: "POST",
         body: JSON.stringify({
           email: "user@example.com",
-          // Duplicate bp-1 — the set dedupes while preserving order.
           blueprintIds: ["bp-1", "bp-2", "bp-1"],
         }),
         headers: { "Content-Type": "application/json" },
@@ -104,7 +97,6 @@ describe("Invitation Routes", () => {
         ((await res.json()) as { blueprintIds: string[] }).blueprintIds,
       ).toEqual(["bp-1", "bp-2"]);
 
-      // The junction insert carries the ordered, deduped set with positions.
       const junctionInsert = mockDb.values.mock.calls
         .map((c) => c[0])
         .find(
@@ -120,11 +112,10 @@ describe("Invitation Routes", () => {
 
     it("404s when a blueprint is not in this organization", async () => {
       mockSession({ id: "admin-1", email: "admin@example.com", role: "user" });
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
-      // Only bp-1 resolves; bp-2 is foreign / missing.
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
       mockDb.where
-        .mockReturnValueOnce(mockDb) // requireOrgAccess
-        .mockResolvedValueOnce([{ id: "bp-1" }]); // validation
+        .mockReturnValueOnce(mockDb)
+        .mockResolvedValueOnce([{ id: "bp-1" }]);
 
       const res = await app.request(baseUrl, {
         method: "POST",
@@ -141,11 +132,9 @@ describe("Invitation Routes", () => {
       });
     });
 
-    // ADR-0008: the invitation carries an optional Workspace name used to
-    // provision the acceptor's workspace.
     it("should persist an optional workspaceName", async () => {
       mockSession({ id: "admin-1", email: "admin@example.com", role: "user" });
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
       mockDb.returning.mockResolvedValueOnce([{ id: "inv-1" }]);
 
       const res = await app.request(baseUrl, {
@@ -167,7 +156,7 @@ describe("Invitation Routes", () => {
 
     it("409s with the central error envelope on a duplicate org+email invitation", async () => {
       mockSession({ id: "admin-1", email: "admin@example.com", role: "user" });
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
       mockDb.returning.mockRejectedValueOnce(
         dbError(
           "23505",
@@ -191,7 +180,7 @@ describe("Invitation Routes", () => {
 
     it("logs an unexpected failure once, as the 500 it answers", async () => {
       mockSession({ id: "admin-1", email: "admin@example.com", role: "user" });
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
       mockDb.returning.mockRejectedValueOnce(
         dbError("08006", "connection reset"),
       );
@@ -207,9 +196,6 @@ describe("Invitation Routes", () => {
       expect(logError).toHaveBeenCalledTimes(1);
     });
 
-    // #1131: only a *pending* invitation blocks another for the same address.
-    // The fake enforces the partial unique index the way Postgres does, so a
-    // route that let a stale row collide would 409 here.
     describe("re-inviting an address with an earlier invitation", () => {
       const seedWithInvitation = (
         prior: { status: string; expiresAt: Date },
@@ -291,8 +277,6 @@ describe("Invitation Routes", () => {
       );
 
       it("expires a lapsed pending invitation and creates a new one", async () => {
-        // Expiry is lazy: a lapsed invitation still reads `pending` until
-        // something touches it, so the create must retire it first.
         mockSession();
         const fake = seedWithInvitation({ status: "pending", expiresAt: past });
 
@@ -306,7 +290,6 @@ describe("Invitation Routes", () => {
       });
 
       it("409s when the address already belongs to a member", async () => {
-        // Accepting again would provision the member a second Workspace.
         mockSession();
         const fake = seedWithInvitation(
           { status: "accepted", expiresAt: past },
@@ -338,10 +321,9 @@ describe("Invitation Routes", () => {
       });
     });
 
-    // #549 / ADR-0019: every invitation mints its own redemption token.
     it("mints a token when creating an invitation", async () => {
       mockSession({ id: "admin-1", email: "admin@example.com", role: "user" });
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
       mockDb.returning.mockResolvedValueOnce([{ id: "inv-1" }]);
 
       const res = await app.request(baseUrl, {
@@ -363,7 +345,6 @@ describe("Invitation Routes", () => {
 
     it("should return 400 if inviting self", async () => {
       mockSession({ id: "admin-1", email: "admin@example.com", role: "user" });
-      // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
 
       const res = await app.request(baseUrl, {
@@ -382,7 +363,7 @@ describe("Invitation Routes", () => {
 
     it("returns 403 for a non-admin member", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
 
       const res = await app.request(baseUrl, {
         method: "POST",
@@ -398,7 +379,6 @@ describe("Invitation Routes", () => {
   describe("GET /", () => {
     it("should list invitations, each with its ordered blueprint set", async () => {
       mockSession();
-      // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
 
       const mockInvitations = [
@@ -406,9 +386,8 @@ describe("Invitation Routes", () => {
         { id: "inv-2", email: "b@example.com", workspaceName: "WS 2" },
       ];
       mockDb.where
-        .mockReturnValueOnce(mockDb) // requireOrgAccess
-        .mockResolvedValueOnce(mockInvitations); // list invitations
-      // Junction rows for the listed invitations (already in position order).
+        .mockReturnValueOnce(mockDb)
+        .mockResolvedValueOnce(mockInvitations);
       mockDb.orderBy.mockResolvedValueOnce([
         { invitationId: "inv-1", blueprintId: "bp-1" },
         { invitationId: "inv-1", blueprintId: "bp-2" },
@@ -420,7 +399,6 @@ describe("Invitation Routes", () => {
         results: { blueprintIds: string[] }[];
       };
       expect(json.results[0].blueprintIds).toEqual(["bp-1", "bp-2"]);
-      // An invite with no blueprints reports an empty set, not undefined.
       expect(json.results[1].blueprintIds).toEqual([]);
     });
   });

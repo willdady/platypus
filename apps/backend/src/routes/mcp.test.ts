@@ -18,12 +18,6 @@ vi.mock("@ai-sdk/mcp", () => ({
   auth: vi.fn(),
 }));
 
-/**
- * Seeded rows rather than stubbed query sequences, as in `provider.test.ts`:
- * `seedDb()` evaluates each query's `WHERE`, so a lookup that dropped its
- * Workspace, Organization or Attachment scope reads a row it should not and
- * the test fails.
- */
 describe("MCP Routes", () => {
   let fake: FakeDb;
 
@@ -36,11 +30,6 @@ describe("MCP Routes", () => {
   const workspaceId = "ws-1";
   const baseUrl = `/organizations/${orgId}/workspaces/${workspaceId}/mcps`;
 
-  /**
-   * The baseline world: the caller (`user-1`) is a member of `org-1` at the
-   * given role and owns `ws-1` and `ws-2`. `mcpSelfManagement` decides whether
-   * a non-admin owner may configure MCPs here (ADR-0006).
-   */
   const world = (
     options: {
       role?: "admin" | "member";
@@ -76,7 +65,6 @@ describe("MCP Routes", () => {
     );
   };
 
-  /** An MCP owned by this Workspace. */
   const workspaceMcp = (over: Store[string][number] = {}) => ({
     id: "mcp-1",
     name: "WS MCP",
@@ -90,7 +78,6 @@ describe("MCP Routes", () => {
     ...over,
   });
 
-  /** A Shared MCP of this Organization — org-scoped, at no Workspace. */
   const sharedMcp = (over: Store[string][number] = {}) => ({
     id: "mcp-org",
     name: "Shared",
@@ -119,8 +106,6 @@ describe("MCP Routes", () => {
   });
 
   describe("POST /", () => {
-    // ADR-0006: MCP config is admin-only unless the workspace's
-    // mcpSelfManagement flag delegates it to the owner.
     const createBody = {
       name: "New MCP",
       url: "http://mcp.com",
@@ -156,11 +141,6 @@ describe("MCP Routes", () => {
       ]);
     });
 
-    // The scope-from-route-not-body rule (a caller cannot name another
-    // Workspace, or set organizationId and mint a Shared MCP here — only an
-    // Org Admin may do that, ADR-0006/0007) is `createMcp`'s job now; see
-    // `services/mcp-write.test.ts`'s createMcp tests.
-
     it("returns 400 for a URL resolving to the metadata service", async () => {
       mockSession();
       fake = world({ rows: { mcp: [] } });
@@ -175,9 +155,6 @@ describe("MCP Routes", () => {
     });
 
     it("409s on a tool-namespace slug clash within this Organization only", async () => {
-      // Guards `assertMcpSlugAvailable`'s Organization filter: `new_mcp` is
-      // taken in another Organization's Workspace, which must not block this
-      // create, and then in a sibling Workspace of this one, which must.
       mockSession();
       const taken = workspaceMcp({
         id: "mcp-other",
@@ -226,10 +203,6 @@ describe("MCP Routes", () => {
 
   describe("GET /", () => {
     it("should list workspace-scoped MCPs and only attached org-scoped MCPs", async () => {
-      // Four MCPs exist and two are visible here. Drop
-      // `eq(mcp.workspaceId, ctx.workspaceId)` from `listScoped` and the other
-      // Workspace's private MCP is listed; drop the Attachment join and the
-      // unattached Shared one is.
       mockSession();
       world({
         role: "member",
@@ -247,8 +220,6 @@ describe("MCP Routes", () => {
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
       const body = (await res.json()) as { results: unknown[] };
-      // listScoped returns Workspace rows first, then attached org rows; the
-      // frontend regroups by scope, so order is not observable behaviour.
       expect(body.results).toEqual([
         expect.objectContaining({ id: "mcp-ws", scope: "workspace" }),
         expect.objectContaining({ id: "mcp-org", scope: "organization" }),
@@ -273,15 +244,12 @@ describe("MCP Routes", () => {
       expect(res.status).toBe(200);
       const body = await res.text();
       expect(body).not.toContain("org-tok");
-      // The delegation still reveals the Workspace's own MCP.
       expect(body).toContain("ws-tok");
     });
   });
 
   describe("GET /:mcpId", () => {
     it("redacts bearerToken when the owner has no mcpSelfManagement", async () => {
-      // ADR-0006: an MCP stays listable and grantable without the delegation,
-      // but its stored request credentials must not be returned.
       mockSession();
       world({
         role: "member",
@@ -349,8 +317,6 @@ describe("MCP Routes", () => {
     });
 
     it("redacts a Shared MCP's bearerToken from an owner delegated mcpSelfManagement", async () => {
-      // The delegation covers this Workspace's own MCPs only; a Shared MCP's
-      // credentials belong to the Org Admins (ADR-0007).
       mockSession();
       world({
         role: "member",
@@ -384,8 +350,6 @@ describe("MCP Routes", () => {
     });
 
     it("returns 404 for another workspace's MCP", async () => {
-      // Guards the lookup's `eq(mcp.workspaceId, ctx.workspaceId)`: an MCP
-      // private to `ws-2` is neither this Workspace's nor Shared.
       mockSession();
       world({
         role: "member",
@@ -448,7 +412,6 @@ describe("MCP Routes", () => {
       });
 
       const res = await put("mcp-org");
-      // Shared MCPs are managed only on the Organization surface (ADR-0007).
       expect(res.status).toBe(403);
       expect(fake.queries).not.toContainEqual(
         expect.objectContaining({ kind: "update" }),
@@ -493,7 +456,6 @@ describe("MCP Routes", () => {
       expect(fake.tables.mcp).toEqual([
         expect.objectContaining({ id: "mcp-2" }),
       ]);
-      // #689: the deleted MCP's id is scrubbed from referencing Agents.
       expect(fake.tables.agent[0].toolSetIds).toEqual(["mcp-2"]);
     });
 
@@ -578,8 +540,6 @@ describe("MCP Routes", () => {
     });
 
     it("probes an attached org-scoped OAuth MCP — the Shared-MCP visibility fix", async () => {
-      // Read-only, so an attached Shared MCP resolves and the probe runs
-      // (mcp-connection.ts's docstring), unlike the bare 404 this used to be.
       mockSession();
       world({
         rows: {
@@ -596,7 +556,6 @@ describe("MCP Routes", () => {
       );
 
       expect(res.status).toBe(200);
-      // Namespaced under the stored row's slug: the probe used the resolved MCP.
       expect(await res.json()).toEqual({
         success: true,
         toolNames: ["shared__tool1"],
@@ -635,8 +594,6 @@ describe("MCP Routes", () => {
 
     it("force=true: clears the four oauth token columns in DB and returns authorizationUrl", async () => {
       mockSession();
-      // Another Workspace's MCP under the same id: the token clear is scoped
-      // to this Workspace's row (`workspaceScopedWhere`), so it keeps its tokens.
       fake = world({
         rows: { mcp: [oauthMcp, { ...oauthMcp, workspaceId: "ws-2" }] },
       });
@@ -659,8 +616,6 @@ describe("MCP Routes", () => {
         authorizationUrl: "https://provider.example.com/authorize?x=1",
       });
 
-      // The token clear leaves the client alone; only a dynamically registered
-      // one is dropped, by its own guarded UPDATE (see mcp-connection.test.ts).
       expect(fake.tables.mcp[0]).toMatchObject({
         oauthAccessToken: null,
         oauthRefreshToken: null,
@@ -691,8 +646,6 @@ describe("MCP Routes", () => {
     });
 
     it("returns 403 (locked) for an attached org-scoped MCP — mutates org-owned credentials", async () => {
-      // Shared-MCP visibility fix: this used to be a bare 404 that denied the
-      // row exists; it is now the same Locked refusal PUT/DELETE give.
       mockSession();
       fake = world({
         rows: {
@@ -764,7 +717,6 @@ describe("MCP Routes", () => {
     });
 
     it("returns 403 (locked) for an attached org-scoped MCP", async () => {
-      // Same refusal semantics as PUT/DELETE and /oauth/authorize above.
       mockSession();
       fake = world({
         rows: {

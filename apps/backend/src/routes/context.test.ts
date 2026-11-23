@@ -117,7 +117,6 @@ describe("Context Routes", () => {
     it("should return 404 if context belongs to another user", async () => {
       mockSession({ id: userId, email: "test@example.com" });
 
-      // Simulate no results when filtering by both contextId and userId
       mockDb.limit.mockResolvedValueOnce([]);
 
       const res = await app.request(`${baseUrl}/ctx-other-user`);
@@ -173,8 +172,6 @@ describe("Context Routes", () => {
       );
     });
 
-    // The three lookups `userMayUseWorkspace` makes, in order: the Workspace's
-    // Organization, the caller's membership of it, then the Workspace itself.
     const mockWorkspaceReachable = () => {
       mockDb.limit.mockResolvedValueOnce([{ organizationId: "org-1" }]);
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
@@ -242,8 +239,6 @@ describe("Context Routes", () => {
       expect(logError).not.toHaveBeenCalled();
     });
 
-    // The database refuses a second global Context (null workspace) the same
-    // way; see unique-context-and-org-member.test.ts.
     it("should return 409 for a second global context", async () => {
       mockSession({ id: userId, email: "test@example.com" });
       mockDb.returning.mockRejectedValueOnce(uniqueViolation());
@@ -275,11 +270,6 @@ describe("Context Routes", () => {
       expect(res.status).toBe(400);
     });
 
-    // This route has no Organization in its path, so the Workspace arrives in
-    // the body with nothing upstream having proved the caller may name it.
-    // Every refusal reads as "not found", whatever the reason — a caller who
-    // named an id they have no claim to learns nothing about it, not even
-    // whether it exists.
     it("refuses a workspaceId in an organization the caller is not a member of", async () => {
       mockSession({ id: userId, email: "test@example.com" });
       mockDb.limit.mockResolvedValueOnce([{ organizationId: "org-2" }]);
@@ -337,8 +327,6 @@ describe("Context Routes", () => {
       expect(mockDb.insert).not.toHaveBeenCalled();
     });
 
-    // A global Context names no Workspace, so there is nothing to check and no
-    // lookup to make — the guard must not turn a null scope into a 404.
     it("makes no workspace check for a global context", async () => {
       mockSession({ id: userId, email: "test@example.com" });
       mockDb.returning.mockResolvedValueOnce([
@@ -425,7 +413,6 @@ describe("Context Routes", () => {
     it("should return 404 if context belongs to another user", async () => {
       mockSession({ id: userId, email: "test@example.com" });
 
-      // Simulate no results when filtering by both contextId and userId
       mockDb.returning.mockResolvedValueOnce([]);
 
       const res = await app.request(`${baseUrl}/ctx-other-user`, {
@@ -507,7 +494,6 @@ describe("Context Routes", () => {
     it("should return 404 if context belongs to another user", async () => {
       mockSession({ id: userId, email: "test@example.com" });
 
-      // Simulate no results when filtering by both contextId and userId
       mockDb.returning.mockResolvedValueOnce([]);
 
       const res = await app.request(`${baseUrl}/ctx-other-user`, {
