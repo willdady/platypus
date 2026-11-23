@@ -6,11 +6,6 @@ import {
 } from "./index.ts";
 import { createCappedSink } from "./transport.ts";
 
-// The byte-capped sink is a contract helper every adapter streams through, so
-// its guarantee is asserted once here rather than per adapter: a stream over
-// its budget keeps both ends, says how much it dropped, and never leaves a
-// half-written UTF-8 character at either cut.
-
 const collect = (
   cap: { head: number; tail?: number },
   ...chunks: (string | Buffer)[]
@@ -54,8 +49,6 @@ describe("createCappedSink", () => {
   });
 
   it("drops a UTF-8 character split by the head cut rather than emit a replacement", () => {
-    // "ab" + "€" (3 bytes) + filler. A head of 4 bytes lands inside the euro
-    // sign, so the whole character is dropped from the head and counted once.
     const out = collect({ head: 4, tail: 10 }, `ab€${"x".repeat(2_000)}`);
     const text = out.toString("utf8");
 
@@ -67,8 +60,6 @@ describe("createCappedSink", () => {
   });
 
   it("drops a UTF-8 character split by the tail cut rather than emit a replacement", () => {
-    // The last four bytes are the tail of the euro sign plus "y"; the tail
-    // starts mid-character and must begin at "y".
     const out = collect({ head: 2, tail: 3 }, `${"x".repeat(1_000)}€y`);
     const text = out.toString("utf8");
 
@@ -78,16 +69,10 @@ describe("createCappedSink", () => {
   });
 
   it("does not shrink a binary cut below its budget", () => {
-    // 0x80–0xBF are UTF-8 continuation bytes, and binary output is full of
-    // them. A cut can land at most 3 bytes into a sequence, so the tail skip
-    // must stop there. Skipping a whole continuation run leaves a cut stream
-    // under its budget, and core's `>=` rule then reports it complete.
     const out = collect(
       { head: SHELL_OUTPUT_HEAD_BYTES, tail: SHELL_OUTPUT_TAIL_BYTES },
       Buffer.concat([
         Buffer.from("a".repeat(SHELL_OUTPUT_HEAD_BYTES)),
-        // One byte over the budget, so this reaches the cut path rather than
-        // the under-budget reconstruction.
         Buffer.alloc(SHELL_OUTPUT_TAIL_BYTES + 1, 0x80),
       ]),
     );

@@ -40,8 +40,6 @@ describe("a Sandbox upload part reaching the model", () => {
   });
 });
 
-// The frontend refuses an oversized file against the schemas copy of the
-// bound; the backend enforces the SDK's. They must be the same number.
 it("the schemas transfer bound matches the plugin SDK's", () => {
   expect(SANDBOX_TRANSFER_MAX_BYTES).toBe(SDK_BOUND);
 });

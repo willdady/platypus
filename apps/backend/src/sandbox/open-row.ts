@@ -7,9 +7,6 @@ import type { SandboxBackend, SandboxContext } from "./types.ts";
 
 type SandboxRow = typeof sandboxTable.$inferSelect;
 
-// Builds the adapter for a sandbox row. Throws when the backend is not
-// registered or the stored config/credentials fail its validation. `action`
-// names what the caller was about to do, for the error message.
 export const createSandboxBackend = (
   row: SandboxRow,
   action: string,
@@ -40,15 +37,11 @@ export const createSandboxBackend = (
   return registration.create(configResult.data, credentialsResult.data);
 };
 
-// The adapter for a sandbox row plus the workspace context its calls take.
-// Throws as createSandboxBackend does, or when the Workspace row is missing.
 export const openSandboxRow = async (
   row: SandboxRow,
   action: string,
 ): Promise<{ backend: SandboxBackend; ctx: SandboxContext }> => {
   const backend = createSandboxBackend(row, action);
-  // The same (orgId, workspaceId, owner) context the tool calls get, so an
-  // adapter keyed on it finds the resource it provisioned.
   const [owner] = await db
     .select({
       orgId: workspaceTable.organizationId,

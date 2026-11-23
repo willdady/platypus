@@ -19,21 +19,6 @@ import {
   type SandboxContext,
 } from "./types.ts";
 
-/**
- * Run one backend call under the run's abort signal (issue #921).
- *
- * The signal is passed on as {@link SandboxCallOptions} so a cooperative
- * adapter can stop the command itself, and the call is **raced** against the
- * same signal so one that ignores it cannot hold the turn open. Without the
- * race, an abort during a `shell.exec` left the executor promise pending
- * forever, the drive's snapshot stream never drained, and the run's terminal
- * write never happened — stranding the chat row on `running` with both run
- * timers already cleared, so nothing was left to recover it.
- *
- * A turn with no signal at all — nothing in core drives one, but the AI SDK
- * declares `abortSignal` optional — hands the adapter a signal that never
- * fires, since the options are required from plugin API v3.
- */
 const underSignal = <T>(
   options: { abortSignal?: AbortSignal },
   call: (callOptions: SandboxCallOptions) => Promise<T>,
@@ -42,11 +27,6 @@ const underSignal = <T>(
   return raceCancellation(signal, () => call({ signal }));
 };
 
-/**
- * The size of the file at `path`, after checking it is a file within the
- * transfer bound; a tool error naming the reason otherwise. `use` names the
- * limit in that error ("download", "viewing").
- */
 const transferableFileSize = async (
   backend: SandboxBackend,
   ctx: SandboxContext,
@@ -67,13 +47,6 @@ const transferableFileSize = async (
   return entry.size;
 };
 
-/**
- * Offers a Sandbox file to the User as a download (ADR-0027). Core-built over
- * `fsList`, not an adapter method: it only checks the file is there and within
- * the transfer bound. The result deliberately carries no URL — the chat
- * renders it as a button that builds the link itself, so the model never has
- * a link to paste or pass on.
- */
 export const createFsDownloadTool = (
   backend: SandboxBackend,
   ctx: SandboxContext,
@@ -98,22 +71,11 @@ export const createFsDownloadTool = (
       }),
   });
 
-/**
- * How the turn's model reads files: the media types it takes natively, and how
- * much extracted document text it may be sent. Resolved by the caller for the
- * turn's (Provider, model) pair — a Sub-Agent's own, on a delegate's session.
- */
 export type ModelFileReading = {
   passthroughFileTypes: string[];
   maxExtractedTextChars: number;
 };
 
-/**
- * Media types by extension, for the files `fsView` sends. The extension is the
- * only signal, the same trust the composer gives an attached file; anything
- * unlisted is `application/octet-stream`, and a text file still reads as text
- * because classification goes by its extension, not this type.
- */
 const MEDIA_TYPES: Record<string, string> = {
   png: "image/png",
   jpg: "image/jpeg",
@@ -140,33 +102,16 @@ const mediaTypeForPath = (path: string): string =>
   MEDIA_TYPES[posix.extname(path).slice(1).toLowerCase()] ??
   "application/octet-stream";
 
-// `ai` does not export the tool-result output type, so it is read off `Tool`.
 type ModelContent = Extract<
   Awaited<ReturnType<NonNullable<Tool["toModelOutput"]>>>,
   { type: "content" }
 >["value"];
 
-/**
- * Sends a Sandbox file to the model as a file, so it can see an image or PDF
- * it made (ADR-0038). The bytes go to the model request only: `execute` holds
- * what the model will receive in memory for the turn, keyed by tool call, and
- * returns metadata alone — that is what is streamed and saved, so the
- * Transcript never holds the file. `toModelOutput` is the one place the bytes
- * enter a model request.
- *
- * A file the model takes natively goes as is; otherwise a text file is
- * inlined and a PDF/DOCX extracted, exactly as for a File part. Anything else
- * is a tool error. The model content always leads with a text part naming the
- * file, so a Provider that drops the file still leaves the model knowing one
- * should have arrived.
- */
 export const createFsViewTool = (
   backend: SandboxBackend,
   ctx: SandboxContext,
   fileReading: () => Promise<ModelFileReading>,
 ) => {
-  // Narrowed to the parts built here: against the full union, which still
-  // carries the deprecated `file-data`-style parts, no-deprecated flags `type`.
   const viewed = new Map<
     string,
     Extract<ModelContent[number], { type: "text" | "file" }>[]
@@ -219,8 +164,6 @@ export const createFsViewTool = (
       }),
     toModelOutput: ({ toolCallId, output }) => {
       const content = viewed.get(toolCallId);
-      // Only reachable for a result this turn did not produce — history is
-      // converted without tools — so the saved metadata is all there is.
       return content
         ? { type: "content", value: content }
         : { type: "json", value: output };
@@ -228,16 +171,6 @@ export const createFsViewTool = (
   });
 };
 
-// Builds the five AI SDK Tool objects from a SandboxBackend instance and the
-// per-turn context, plus `fsDownload` and `fsView` when the backend implements
-// `fsReadBytes`. Descriptions are intentionally terse; the higher-level
-// orientation (workspace root, persistence across turns, stateless shell) is
-// rendered into the system prompt by ./system-prompt-fragment.ts.
-//
-// `workspaceEnv` is the workspace-default env map (see ADR-0004). It is merged
-// on top of `input.env` for every `shell.exec` call (workspace wins), so secret
-// values never need to transit the LLM. Merge happens here, above the adapter,
-// to keep the SandboxBackend contract adapter-agnostic.
 export const createSandboxTools = (
   backend: SandboxBackend,
   ctx: SandboxContext,
