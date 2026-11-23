@@ -14,7 +14,6 @@ import { promises as fs } from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
 
-// Helper to create a test message with a file part
 function createMessageWithFile(
   messageId: string,
   dataUrl: string,
@@ -29,15 +28,12 @@ function createMessageWithFile(
   };
 }
 
-// Helper to create a small PNG data URL (1x1 red pixel)
 function createPngDataUrl(): string {
-  // 1x1 red PNG (base64 encoded)
   const base64 =
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==";
   return `data:image/png;base64,${base64}`;
 }
 
-// Count stored object files (excluding .meta sidecars) under the given root.
 async function countPngFiles(root: string): Promise<number> {
   const files = await fs.readdir(root, { recursive: true });
   const all = files.flat();
@@ -50,17 +46,13 @@ describe("Storage Utils", () => {
   let tempDir: string;
 
   beforeEach(async () => {
-    // Create a temp directory for disk storage
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "storage-test-"));
-    // Set env var for disk storage path
     process.env.STORAGE_DISK_PATH = tempDir;
     process.env.STORAGE_BACKEND = "disk";
-    // Reset the singleton
     resetStorage();
   });
 
   afterEach(async () => {
-    // Clean up temp directory
     await fs.rm(tempDir, { recursive: true, force: true });
     delete process.env.STORAGE_DISK_PATH;
     delete process.env.STORAGE_BACKEND;
@@ -84,16 +76,10 @@ describe("Storage Utils", () => {
       expect(filePart.type).toBe("file");
       expect((filePart as FileUIPart).url).toMatch(/^storage:\/\//);
 
-      // Verify the key format
       const key = canonicalStorageKeyFromUrl((filePart as FileUIPart).url);
       expect(key).toMatch(/^org-1\/ws-1\/chat-1\/msg-1\/1-[a-f0-9]{8}\.png$/);
     });
 
-    /**
-     * The gate and persistence read data URLs with one parser (issue #839).
-     * Each of these shapes was admitted by the gate and refused by the second,
-     * stricter parser, leaving base64 inline in the stored row.
-     */
     it.each([
       [
         "a URL-encoded body",
@@ -156,11 +142,9 @@ describe("Storage Utils", () => {
 
       await extractFiles(messages, CONTEXT);
 
-      // Check that files were created in temp dir
       const files = await fs.readdir(tempDir, { recursive: true });
       expect(files.length).toBeGreaterThan(0);
 
-      // Should have both .png and .meta files
       const allFiles = files.flat();
       const pngFiles = allFiles.filter((f) => String(f).endsWith(".png"));
       const metaFiles = allFiles.filter((f) => String(f).endsWith(".meta"));
@@ -232,7 +216,6 @@ describe("Storage Utils", () => {
     const chat = { orgId: "org-1", workspaceId: "ws-1", chatId: "chat-1" };
 
     it("should inline storage:// URLs as data URLs", async () => {
-      // First store a file
       const dataUrl = createPngDataUrl();
       const messages: PlatypusUIMessage[] = [
         createMessageWithFile("msg-1", dataUrl),
@@ -240,7 +223,6 @@ describe("Storage Utils", () => {
 
       const storedMessages = await extractFiles(messages, CONTEXT);
 
-      // Now inline the storage:// URLs back to data URLs
       const inlined = await inlineFileUrls(storedMessages, backendOrigin, chat);
 
       const filePart = inlined[0].parts[1];
@@ -248,7 +230,6 @@ describe("Storage Utils", () => {
     });
 
     it("should inline /files/ HTTP URLs as data URLs", async () => {
-      // Store a file first
       const dataUrl = createPngDataUrl();
       const storeMessages: PlatypusUIMessage[] = [
         createMessageWithFile("msg-1", dataUrl),
@@ -256,10 +237,8 @@ describe("Storage Utils", () => {
 
       const storedMessages = await extractFiles(storeMessages, CONTEXT);
 
-      // Rewrite to HTTP URLs
       const httpMessages = rewriteStorageUrls(storedMessages, backendOrigin);
 
-      // Now inline them back
       const inlined = await inlineFileUrls(httpMessages, backendOrigin, chat);
 
       const filePart = inlined[0].parts[1];
@@ -328,7 +307,6 @@ describe("Storage Utils", () => {
         },
       ];
 
-      // Grown sparse, so the test never builds a 20 MiB buffer to store it.
       const storeOfSize = async (size: number) => {
         await getStorage().put(key, Buffer.from("x"), "image/png");
         await fs.truncate(path.join(tempDir, key), size);
@@ -359,9 +337,6 @@ describe("Storage Utils", () => {
       });
     });
 
-    // A File part's key round-trips through the client, so a Chat turn can
-    // carry a key Platypus never generated. Before validation, a traversal key
-    // read a host file and inlined its bytes into the System prompt.
     it("should not inline a file reached by traversing out of the storage root", async () => {
       const secretPath = path.join(tempDir, "..", "outside-secret.txt");
       await fs.writeFile(secretPath, "SUPER_SECRET_VALUE");
@@ -408,9 +383,6 @@ describe("Storage Utils", () => {
       expect((inlined[0].parts[0] as FileUIPart).url).toBe(traversalUrl);
     });
 
-    // A client can put any URL on a part, so a `/files/` path under a host this
-    // deployment does not serve names nothing it stored. It stays the external
-    // URL it claims to be rather than becoming a read of our own store.
     it("should not inline a /files/ URL under a foreign host", async () => {
       const messages: PlatypusUIMessage[] = [
         {
@@ -475,10 +447,6 @@ describe("Storage Utils", () => {
   });
 
   describe("extractFiles - untrusted media type", () => {
-    // The media type comes out of the client's data URL and is stored, then
-    // sent straight back by `/files/*`. A type Platypus never expects — HTML
-    // above all — is a page served from the backend's own origin, so the part
-    // is refused at store time rather than filed under a `.bin` key.
     it("should not store a file whose media type is outside the expected set", async () => {
       const htmlDataUrl = `data:text/html;base64,${Buffer.from(
         "<script>alert(1)</script>",
@@ -497,7 +465,6 @@ describe("Storage Utils", () => {
         chatId: "chat-1",
       });
 
-      // The data URL is left in place, exactly as for any other store failure.
       expect((processed[0].parts[0] as FileUIPart).url).toBe(htmlDataUrl);
       const stored = (await fs.readdir(tempDir, { recursive: true })).flat();
       expect(stored.filter((f) => !String(f).endsWith(".meta"))).toHaveLength(
@@ -528,9 +495,6 @@ describe("Storage Utils", () => {
       expect(await countPngFiles(tempDir)).toBe(1);
     });
 
-    // A file pasted from a buffer, or picked on an OS that declines to name a
-    // type, arrives as `application/octet-stream` — the file gate admits those
-    // on the filename, so the allowlist has to as well. The only `.bin` key.
     it("should store an unnamed binary type as .bin", async () => {
       const dataUrl = `data:application/octet-stream;base64,${Buffer.from(
         "binary",
@@ -563,9 +527,6 @@ describe("Storage Utils", () => {
   });
 
   describe("extractFiles - untrusted message id", () => {
-    // `message.id` is the client's, and it lands mid-key. Before validation a
-    // message id of `../../x` filed the file outside its own Chat and
-    // Workspace prefix — the prefix `/files/*` parses back to authorize.
     it("should not store a file under a key escaping its chat prefix", async () => {
       const messages: PlatypusUIMessage[] = [
         {
@@ -583,7 +544,6 @@ describe("Storage Utils", () => {
         chatId: "chat-1",
       });
 
-      // The data URL is left in place, exactly as for any other store failure.
       expect((processed[0].parts[0] as FileUIPart).url).toBe(
         createPngDataUrl(),
       );
