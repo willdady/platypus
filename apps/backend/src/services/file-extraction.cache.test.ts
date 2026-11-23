@@ -1,12 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { DEFAULT_MAX_EXTRACTED_TEXT_CHARS } from "@platypus/schemas";
 
-/**
- * The content-hash cache lives in its own test file because observing it means
- * counting extractor invocations, which means mocking `unpdf` — and the sibling
- * `file-extraction.test.ts` deliberately runs the real extractors against real
- * fixtures.
- */
 const extractText = vi.fn(() =>
   Promise.resolve({ totalPages: 1, text: "hello body" }),
 );
@@ -17,7 +11,6 @@ const { extractDocumentText, resetExtractedTextCache } =
 
 const pdf = { mediaType: "application/pdf", filename: "a.pdf" };
 
-/** The cap production passes for a model that declares none. */
 const cap = { maxChars: DEFAULT_MAX_EXTRACTED_TEXT_CHARS };
 
 describe("extracted-text cache", () => {

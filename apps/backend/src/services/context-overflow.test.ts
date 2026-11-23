@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { APICallError, RetryError } from "ai";
 import { isContextOverflowError } from "./context-overflow.ts";
 
-/** An `APICallError` as a Provider package throws it for a rejected request. */
 const rejection = (statusCode: number, message: string, responseBody: string) =>
   new APICallError({
     message,
@@ -12,10 +11,6 @@ const rejection = (statusCode: number, message: string, responseBody: string) =>
     responseBody,
   });
 
-/**
- * Each phrasing as the vendor sends it — the error body the Provider returns
- * for an over-long request, and the message its SDK package derives from it.
- */
 const OVERFLOWS = {
   openai: rejection(
     400,

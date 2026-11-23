@@ -2,15 +2,6 @@ import { nanoid } from "nanoid";
 import sharp, { type Metadata } from "sharp";
 import { getStorage } from "../storage/index.ts";
 
-/**
- * Agent avatar handling — validation, resizing, and storage — in one place.
- *
- * Persisting the key on the Agent row is `setAgentAvatar`/`clearAgentAvatar`
- * in the Agent service, shared by the Workspace and Organization surfaces.
- * The image rules (allowed types, size/dimension limits, the resize target)
- * and the storage key scheme live here so they cannot drift apart.
- */
-
 const ALLOWED_AVATAR_TYPES = [
   "image/jpeg",
   "image/png",
@@ -22,26 +13,9 @@ export const AVATAR_TOO_LARGE = "File too large (max 5MB)";
 const MIN_AVATAR_DIMENSION = 64;
 const AVATAR_SIZE = 512;
 
-/**
- * Outcome of {@link storeAvatar}. A rejected upload carries a human-readable
- * message, which `setAgentAvatar` throws as a `ValidationError` (400).
- */
 export type StoreAvatarResult =
   { ok: true; key: string } | { ok: false; error: string };
 
-/**
- * Validate, resize, and store an uploaded avatar for an Agent, deleting the
- * previous avatar (if any) once the new one is stored.
- *
- * The returned key is keyed by the Agent's globally-unique id and is
- * independent of scope, so it never goes stale when a Workspace Agent is
- * Promoted to the Organization (ADR-0007). The caller persists the key on the
- * Agent row.
- *
- * @param file - The raw value pulled from `parseBody()` — validated here.
- * @param agentId - The Agent the avatar belongs to (used in the storage key).
- * @param previousKey - The Agent's current avatar key, deleted on success.
- */
 export async function storeAvatar(
   file: unknown,
   agentId: string,
@@ -91,18 +65,11 @@ export async function storeAvatar(
   return { ok: true, key };
 }
 
-/**
- * Delete an avatar from storage if a key is present. Storage errors are
- * swallowed: an avatar that is missing or already gone must not fail the
- * request that is clearing or replacing it.
- */
 export async function deleteAvatar(
   key: string | null | undefined,
 ): Promise<void> {
   if (!key) return;
   try {
     await getStorage().delete(key);
-  } catch {
-    // Ignore deletion errors
-  }
+  } catch {}
 }

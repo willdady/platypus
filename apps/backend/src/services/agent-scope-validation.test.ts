@@ -5,13 +5,6 @@ import { SANDBOX_TOOLSET_ID } from "../tools/index.ts";
 
 const orgId = "org-1";
 
-/**
- * Per table: `shared-*` is Shared in org-1; `ws-*` is Workspace-private;
- * `foreign-*` is Shared in another Organization; `dual-*` carries a Workspace
- * as well as org-1 (the scope columns are mutually exclusive on write, not by a
- * database constraint, and such a row is workspace-private in every other
- * query).
- */
 const rowsFor = (prefix: string): Row[] => [
   {
     id: `shared-${prefix}`,

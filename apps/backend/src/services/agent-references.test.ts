@@ -21,12 +21,10 @@ describe("scrubDeletedAgentReference", () => {
       expect(mockDb.update).toHaveBeenCalledWith(agentTable);
       const patch = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
       expect(Object.keys(patch).sort()).toEqual([field, "updatedAt"].sort());
-      // `<column> - <id>` drops the element from the jsonb array.
       expect(patch[field]).toMatchObject({
         op: "sql",
         values: [agentTable[field], id],
       });
-      // `<column> @> '["<id>"]'` limits the write to rows that hold the id.
       expect(mockDb.where).toHaveBeenCalledWith(
         expect.objectContaining({
           op: "sql",

@@ -27,10 +27,6 @@ const attachmentRow = (
   resourceId,
 });
 
-/**
- * org-1 owns ws-1 and Shares `mcp-1`; `mcp-ws` is ws-1's own; `mcp-foreign` is
- * Shared by org-2, which owns ws-x. `mcp-1` is already attached to ws-2.
- */
 const world = (options: FakeDbOptions = {}) =>
   seedDb(
     {
@@ -69,7 +65,6 @@ describe("attachment module", () => {
     ["attachResource", attachResource],
     ["detachResource", detachResource],
   ])("%s input validation", (_name, fn) => {
-    // Runs on the chainable mock, so "no query ran" is directly observable.
     it("throws ValidationError for an invalid resourceType, before any query", async () => {
       await expect(
         fn(WORKSPACE, "org-1", target({ resourceType: "garbage" })),
@@ -90,8 +85,6 @@ describe("attachment module", () => {
       },
     );
 
-    // The rule order is part of the contract: a request that trips both must
-    // still fail on the type, the way both surfaces answered before the module.
     it("reports an invalid resourceType before an out-of-org workspace", async () => {
       await expect(
         fn(
@@ -117,8 +110,6 @@ describe("attachment module", () => {
     });
 
     it("skips the workspace-in-org check at workspace scope", async () => {
-      // The Workspace surface's own middleware already proved `ws-new` is the
-      // caller's; this module does not look it up again.
       const fake = world();
 
       await attachResource(

@@ -26,7 +26,6 @@ describe("redactProviderSecrets", () => {
   });
 
   it("reports presence whatever the reveal decision", () => {
-    // One type, one set of presence keys: only the value keys differ.
     for (const reveal of [true, false]) {
       const out = redactProviderSecrets(row, { reveal });
       expect(out.apiKeySet).toEqual({ configured: true });
@@ -64,9 +63,6 @@ describe("redactProviderSecrets", () => {
   });
 
   it("treats an empty header object as unconfigured", () => {
-    // `{}` round-trips out of jsonb for a Provider saved with no custom headers;
-    // reporting it as configured would send the form hunting for a value that
-    // isn't there.
     expect(
       redactProviderSecrets({ ...row, headers: {} }, { reveal: false }),
     ).toMatchObject({
@@ -118,9 +114,6 @@ describe("redactMcpSecrets", () => {
 });
 
 describe("read models", () => {
-  // The OAuth strip is unconditional and the credential redaction is not.
-  // Pairing them here is the point of the read model: a route that reached for
-  // redactMcpSecrets alone would answer with the minted tokens still attached.
   const mcp = {
     id: "mcp-1",
     name: "Rovo",
@@ -148,10 +141,8 @@ describe("read models", () => {
     expect(json).not.toContain("oauth-access");
     expect(json).not.toContain("oauth-refresh");
     expect(json).not.toContain("oauth-client");
-    // Operator-entered config still reads back for a caller who may manage it.
     expect(json).toContain("tok-secret");
     expect(out).toMatchObject({ oauthAuthorized: true });
-    // Internal to a Chat turn (ADR-0029), and no part of the MCP a reader edits.
     expect(out).not.toHaveProperty("lastKnownToolListing");
     expect(out).not.toHaveProperty("lastKnownToolListingFetchedAt");
     expect(out).not.toHaveProperty("lastFetchFailedAt");

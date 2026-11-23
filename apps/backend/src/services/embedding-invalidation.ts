@@ -4,11 +4,6 @@ import { provider as providerTable } from "../db/schema.ts";
 import { logger } from "../logger.ts";
 import type { ProviderUpdateData } from "@platypus/schemas";
 
-/**
- * Nullifies all embeddings in workspaces that use the given provider for
- * memory embeddings. Called when a provider's embedding model or dimensions
- * change so that stale/incompatible embeddings are not used for search.
- */
 export async function nullifyEmbeddingsForProvider(
   providerId: string,
   exec: Executor = db,
@@ -30,10 +25,6 @@ export async function nullifyEmbeddingsForProvider(
   }
 }
 
-/**
- * Detects whether an update payload changes the embedding configuration
- * of a provider, and if so, nullifies stale embeddings.
- */
 export async function handleEmbeddingConfigChange(
   providerId: string,
   data: ProviderUpdateData,

@@ -20,17 +20,8 @@ import type {
 import { webhookEventEntity, webhookEventScope } from "@platypus/schemas";
 import { errorMessage } from "../utils/error-message.ts";
 
-/**
- * The debounce bucket an event with no single entity falls back to. Bulk
- * `notification.read` lands here by design — it names a set of notifications,
- * so coalescing two of them into one run is correct.
- */
 const SHARED_BUCKET = "unknown";
 
-/**
- * Sends one event to every enabled Webhook in the Workspace subscribed to it.
- * Each delivery is fire-and-forget; this resolves once they are started.
- */
 const deliverToWebhooks = async (
   orgId: string,
   workspaceId: string,
@@ -60,12 +51,6 @@ const deliverToWebhooks = async (
   }
 };
 
-/**
- * Delivers an event to Webhooks only — the path for Webhook-only events
- * (`trigger_run.*`), which no Event Trigger may fire on. Fire-and-forget, like
- * {@link dispatchEvent}. In-process only: the instance that produced the event
- * delivers it, so it is never fanned out to peers.
- */
 export function dispatchWebhookEvent(
   orgId: string,
   workspaceId: string,
@@ -85,38 +70,15 @@ export function dispatchWebhookEvent(
   );
 }
 
-/**
- * Delivers an event to both consumers of the stream: Webhooks, then the
- * Workspace's Event Triggers.
- */
 export function dispatchEvent(
   orgId: string,
   workspaceId: string,
   payload: EventTriggerEventPayload,
 ): void {
   const { event } = payload;
-  // Causation is ambient run context (ADR-0022): the chain of Agents acting
-  // when the write happened, read once here so the fire-and-forget body below
-  // keeps a stable view of it. A human write establishes no chain, so it reads
-  // empty and no guard engages. Keyed off the ambient actor rather than a
-  // persisted attribution column (e.g. `lastEditedByAgentId`), which is sticky
-  // and would cause false-negatives on later human edits.
   const causingAgents = currentCausingAgents();
-  // The Trigger whose run produced this write, when one did. Recorded, not
-  // acted on: the guard below still compares Agent ids (#669). Read here for
-  // the same reason as the chain — the async body needs a stable view.
   const originatingTriggerId = currentOriginatingTrigger();
 
-  /**
-   * Records what dispatch decided about one candidate Trigger. A coalesced or
-   * self-actor-skipped dispatch leaves no other trace, so a Trigger loop on a
-   * self-hosted install is otherwise undiagnosable (#812). A breaker-dropped
-   * firing also writes a `suppressed` run row, but the decisions beside it —
-   * why this event reached the Trigger at all — have no other record.
-   *
-   * Identifiers only — `data` carries Card titles and bodies, which are the
-   * Operator's users' content. The ids are what diagnosis needs.
-   */
   const logDecision = (
     trigger: { id: string; agentId: string | null },
     decision: "fired" | "skipped_self_actor" | "debounced" | "suppressed",
@@ -135,21 +97,14 @@ export function dispatchEvent(
     );
   };
 
-  // What this event names, read once through the accessor that lives beside
-  // the payload declaration rather than recovered from the data here.
   const entity = webhookEventEntity(payload);
   const scope = webhookEventScope(payload);
-  // What the run-rate breaker counts by. Absent for an event naming a set:
-  // counting those together would trip a Trigger after N unrelated changes.
   const breakerEntityId = entity.kind === "entity" ? entity.id : undefined;
 
-  // Fire-and-forget — never awaited by the caller
   void (async () => {
     try {
-      // 1. Deliver to webhooks
       await deliverToWebhooks(orgId, workspaceId, payload);
 
-      // 2. Dispatch to event triggers
       const eventTriggers = await db
         .select()
         .from(triggerTable)
@@ -162,8 +117,6 @@ export function dispatchEvent(
         );
 
       for (const trigger of eventTriggers) {
-        // A malformed row is skipped on its own, rather than aborting dispatch
-        // for every Trigger after it.
         let typed: ReturnType<typeof narrowTriggerConfig>;
         try {
           typed = narrowTriggerConfig(trigger);
@@ -181,12 +134,6 @@ export function dispatchEvent(
         const triggerConfig = typed.config;
         if (!triggerConfig.events.includes(event)) continue;
 
-        // Apply event filters. Evaluated before the self-actor guard so that a
-        // logged decision always describes a Trigger this event actually
-        // selected: a filtered-out Trigger is not a candidate and reports
-        // nothing, which is what lets a reader tell a filter mismatch from a
-        // suppressed dispatch. Both paths skip the Trigger either way, so the
-        // order is a logging distinction only.
         if (
           triggerConfig.filters?.boardId &&
           scope.boardId !== triggerConfig.filters.boardId
@@ -199,9 +146,6 @@ export function dispatchEvent(
         ) {
           continue;
         }
-        // Only `card.updated` reports a changed-fields diff, so the filter is
-        // scoped to it: a `card.moved`/`card.created`/`card.deleted` selected
-        // alongside it keeps firing rather than being silently suppressed.
         if (
           payload.event === "card.updated" &&
           triggerConfig.filters?.changedFields
@@ -216,21 +160,11 @@ export function dispatchEvent(
           }
         }
 
-        // Self-actor guard: skip when the agent that caused this event is the
-        // very same agent this trigger would run — or a delegate beneath it, at
-        // any depth. This stops an agent's own card writes (through any of its
-        // Sub-Agents) from re-firing the trigger that started it (#267, #668).
-        // Human-originated events carry an empty chain, so they always pass.
         if (trigger.agentId && causingAgents.includes(trigger.agentId)) {
           logDecision(trigger, "skipped_self_actor");
           continue;
         }
 
-        // Debounce per trigger+entity to coalesce rapid events. An event that
-        // names a set rather than one entity — bulk `notification.read` — has
-        // no id to key by and shares one bucket per Trigger, which is correct
-        // for it and was a regression for everything else while the id was
-        // recovered by probing for keys the payload might carry (#811).
         const debounceKey = `${trigger.id}:${
           entity.kind === "entity" ? entity.id : SHARED_BUCKET
         }`;
@@ -239,18 +173,12 @@ export function dispatchEvent(
           debounceKey,
           trigger,
           { payload, entityId: breakerEntityId },
-          // Firing owns the breaker, the run and its bookkeeping, and never
-          // rejects. The breaker is checked there, once the window closes.
           async (t, ctx) => {
             const outcome = await fireTrigger(t, { kind: "event", ...ctx });
             if (outcome === "suppressed") logDecision(t, "suppressed");
           },
         );
 
-        // `fired` means scheduled: the run starts when the debounce window
-        // closes — and a firing the breaker drops at that point reports itself
-        // `suppressed` separately. A later event on the same window reports
-        // itself `debounced`, so the pair reads as one run rather than two.
         logDecision(trigger, coalesced ? "debounced" : "fired");
       }
     } catch (error) {

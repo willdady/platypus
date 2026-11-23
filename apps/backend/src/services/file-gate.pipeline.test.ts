@@ -17,15 +17,6 @@ import {
   buildTestPdf,
 } from "./file-extraction.test-fixtures.ts";
 
-/**
- * The whole production path for one attachment, against real (disk) storage:
- * gate → persist (`extractFiles`, data: URL becomes a storage:// key) →
- * next turn's inline (`inlineFileUrls`) → normalize. The unit tests either side
- * of this stub one half out; this one proves the halves meet — a document
- * uploaded once still extracts on a later turn, when all the message carries is
- * a storage reference.
- */
-
 const PDF_TYPE = "application/pdf";
 const DOCX_TYPE =
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -55,7 +46,6 @@ const attachment = (
 const textOf = (message: PlatypusUIMessage, index: number) =>
   (message.parts[index] as unknown as { type: string; text: string }).text;
 
-/** The cap these fixtures declare no model for. */
 const cap = { maxExtractedTextChars: DEFAULT_MAX_EXTRACTED_TEXT_CHARS };
 
 describe("attachment pipeline (gate → store → inline → normalize)", () => {
@@ -77,14 +67,11 @@ describe("attachment pipeline (gate → store → inline → normalize)", () => 
   });
 
   const roundTrip = async (message: PlatypusUIMessage) => {
-    // 1. The pre-persist gate sees the fresh upload's bytes inline.
     await assertFilePartsSupported([message], ["image/*"]);
-    // 2. Persistence swaps the data: URL for a storage:// key.
     const stored = await extractFiles([message], chat);
     expect((stored[0].parts[1] as unknown as { url: string }).url).toMatch(
       /^storage:\/\//,
     );
-    // 3. A later turn replays history: inline, then normalize for the model.
     const inlined = await inlineFileUrls(stored, origin, chat);
     const [normalized] = await normalizeFileParts(inlined, ["image/*"], cap);
     return normalized;
@@ -106,12 +93,6 @@ describe("attachment pipeline (gate → store → inline → normalize)", () => 
     expect(textOf(normalized, 1)).toContain("Design goals");
   });
 
-  /**
-   * With `STORAGE_PUBLIC_URL` set the read path hands the client
-   * `{publicUrl}/{key}` instead of `{origin}/files/{key}`, and the Chat
-   * resubmits that URL on every later turn (issue #839). The resolve path must
-   * recognise it, or the model is told the file is unavailable from turn 2 on.
-   */
   describe("with STORAGE_PUBLIC_URL set", () => {
     const publicUrl = "https://cdn.example.com";
 
@@ -123,7 +104,6 @@ describe("attachment pipeline (gate → store → inline → normalize)", () => 
       delete process.env.STORAGE_PUBLIC_URL;
     });
 
-    /** Turn 1 persists; every later turn replays what the client sent back. */
     const replay = async (message: PlatypusUIMessage, turns: number) => {
       await assertFilePartsSupported([message], ["image/*"]);
       const stored = await extractFiles([message], chat);
@@ -134,7 +114,6 @@ describe("attachment pipeline (gate → store → inline → normalize)", () => 
 
       const results: PlatypusUIMessage[] = [];
       for (let turn = 0; turn < turns; turn++) {
-        // The client resubmits the history it was served, verbatim.
         const inlined = await inlineFileUrls(served, origin, chat);
         const [normalized] = await normalizeFileParts(
           inlined,
