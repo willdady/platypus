@@ -215,6 +215,12 @@ Chat, there is one model to try and no duplicate call.
   Active path's last assistant message, and the summary rides the next user
   message sent. Like an overflow (above), it needs no declared **Context
   window**. Built-in command names are reserved: a Skill may not take one.
+- **One pass per Chat is enforced per instance only.** Each instance keeps its
+  in-flight passes by Chat id, so a backstop joins a pass already running there
+  rather than starting a second. The one-run claim (#1253) stops two runs, not
+  one instance's after-turn pass racing another's backstop; that race can write
+  a second row at the same anchor, which is legal, and the newest usable row
+  wins when read.
 
 ## References
 

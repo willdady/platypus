@@ -11,10 +11,6 @@ type ProviderInstance = Mock<
   chat: Mock<
     (modelId: string) => { modelId: string; _sentinel: boolean; _mode: string }
   >;
-  // `openProvider`'s `searchTools()` reaches into the SDK's native tool
-  // namespace. Stubbed here so the search-resolution tests can assert whether
-  // native search was reached for at all — a Web-search backend taking
-  // precedence means these are never called.
   tools: {
     webSearch: NativeSearchTool;
     webSearch_20250305: NativeSearchTool;
@@ -85,9 +81,6 @@ vi.mock("@ai-sdk/mcp", () => ({
   auth: vi.fn(),
 }));
 
-// Passed through to the real implementation for every test but one: issue
-// #630's Path A needs a failure AFTER the concurrently-resolved group, and file
-// inlining is the step that reaches a store which can genuinely be unreachable.
 const { mockInlineFileUrls } = vi.hoisted(() => ({
   mockInlineFileUrls: vi.fn(),
 }));
@@ -199,8 +192,6 @@ const baseInput = {
   messages: [],
   origin: "http://localhost:4000",
   frontendUrl: "http://localhost:3000",
-  // Fixed, not `new Date()`: the retrieval window is an input, so a test that
-  // does not care about it must still not vary by when it ran.
   memoriesReferenceDate: new Date("2026-05-03T12:00:00Z"),
   runMode: "interactive" as const,
   includeMemories: true,
@@ -263,22 +254,18 @@ describe("chat-execution", () => {
         queries,
       );
 
-      // resolved is what persistence will write
       expect(turn.resolved.agentId).toBe(agentWithSkill.id);
       expect(turn.resolved.providerId).toBe(baseProvider.id);
       expect(turn.resolved.modelId).toBe("gpt-4");
-      // Agent-driven turn → row stores no copy of generation params
       expect(turn.resolved.instructions).toBeUndefined();
       expect(turn.resolved.temperature).toBeUndefined();
 
-      // stream is what streamText will consume
       expect(turn.stream.maxSteps).toBe(3);
       expect(turn.stream.system).toContain("kanban-flow");
       expect(turn.stream.system).toContain("Manage kanban boards");
       expect(turn.stream.tools).toHaveProperty("loadSkill");
       expect(turn.stream.messages).toEqual([]);
 
-      // dispose is idempotent and does nothing without MCP clients
       await expect(turn.dispose()).resolves.toBeUndefined();
       await expect(turn.dispose()).resolves.toBeUndefined();
     });
@@ -297,9 +284,6 @@ describe("chat-execution", () => {
       };
       const memoryB = { ...memoryA, summary: "Prefers tea." };
 
-      // Two turn resolutions with the SAME pinned snapshot but DIFFERENT live
-      // memory retrievals behind it: the retrieval varies per turn without
-      // anyone doing anything, so the renderer must consume the pin, never it.
       const queriesLiveB = createInMemoryChatTurnQueries({
         workspaces: [baseWorkspace],
         agents: [baseAgent],
@@ -332,8 +316,6 @@ describe("chat-execution", () => {
         queriesLiveA,
       );
 
-      // Identical bytes across turns, and the content is the PIN, not the live
-      // retrieval whichever one preceded the call.
       expect(turnB.stream.system).toBe(turnA.stream.system);
       expect(turnA.stream.system).toContain("Likes coffee.");
       expect(turnA.stream.system).not.toContain("Prefers tea.");
@@ -397,9 +379,6 @@ describe("chat-execution", () => {
         },
       };
 
-      // Two headless runs (no pin) given the SAME reference date. Turn
-      // preparation reads no clock of its own, so the prefix cannot drift
-      // between them — the midnight rollover a Trigger used to suffer.
       const turnA = await prepareChatTurn(
         {
           ...baseInput,
@@ -418,15 +397,11 @@ describe("chat-execution", () => {
       );
 
       expect(turnB.stream.system).toBe(turnA.stream.system);
-      // The window came from the input, verbatim — both times.
       expect(seen).toEqual([referenceDate, referenceDate]);
       await turnA.dispose();
       await turnB.dispose();
     });
 
-    // The memory-injection opt-out (#645) asserts on the query seam as much as
-    // on the rendered prompt, so these three share one summary and one
-    // retrieval-recording wrapper around it.
     const coffeeMemory = () => {
       const day = new Date("2026-04-29T00:00:00Z");
       return {
@@ -441,7 +416,6 @@ describe("chat-execution", () => {
       };
     };
 
-    /** Queries over one memory, plus the userIds `getRecentMemories` was asked for. */
     const recordingMemoryQueries = () => {
       const queries = createInMemoryChatTurnQueries({
         workspaces: [baseWorkspace],
@@ -474,7 +448,6 @@ describe("chat-execution", () => {
         queries,
       );
 
-      // Skipped, not fetched and discarded: the round trip saved is the point.
       expect(retrievedFor).toEqual([]);
       expect(turn.stream.system).not.toContain("<memories>");
       expect(turn.stream.system).not.toContain("Likes coffee.");
@@ -502,10 +475,6 @@ describe("chat-execution", () => {
     it("the flag beats a pin: off composes no block even where a snapshot was supplied", async () => {
       const { queries, retrievedFor } = recordingMemoryQueries();
 
-      // No caller does both today — a Chat never opts out, a Trigger never
-      // pins. Asserted anyway because it is what makes "off means no
-      // `<memories>`" true by construction rather than by convention: the flag
-      // decides whether a block is composed, the pin only what is in it.
       const turn = await prepareChatTurn(
         {
           ...baseInput,
@@ -549,7 +518,6 @@ describe("chat-execution", () => {
         description: "An organization-shared skill",
       };
 
-      // Attached → the Skill surfaces in the system prompt.
       const attached = createInMemoryChatTurnQueries({
         workspaces: [baseWorkspace],
         agents: [agentWithSkill],
@@ -574,7 +542,6 @@ describe("chat-execution", () => {
       expect(attachedTurn.stream.system).toContain("shared-skill");
       expect(attachedTurn.stream.tools).toHaveProperty("loadSkill");
 
-      // Not attached → the Skill is invisible to this workspace.
       const detached = createInMemoryChatTurnQueries({
         workspaces: [baseWorkspace],
         agents: [agentWithSkill],
@@ -637,8 +604,6 @@ describe("chat-execution", () => {
         providerId: "p-org",
       };
 
-      // Attached to the borrowing Workspace → the Shared Agent (and its
-      // org-scoped Provider) resolve against that Workspace (ADR-0007).
       const attached = createInMemoryChatTurnQueries({
         workspaces: [borrowingWorkspace],
         agents: [sharedAgent],
@@ -668,7 +633,6 @@ describe("chat-execution", () => {
       expect(turn.resolved.agentId).toBe("shared-agent");
       expect(turn.resolved.providerId).toBe("p-org");
 
-      // Not attached → the Shared Agent is invisible to this Workspace.
       const detached = createInMemoryChatTurnQueries({
         workspaces: [borrowingWorkspace],
         agents: [sharedAgent],
@@ -720,8 +684,6 @@ describe("chat-execution", () => {
         queries,
       );
 
-      // One delegation tool for both sub-agents; the prompt's catalogue is
-      // what tells them apart.
       expect(turn.stream.tools).toHaveProperty("delegate");
       expect(turn.stream.system).toContain("Research Agent");
       expect(turn.stream.system).toContain("Shared Agent");
@@ -771,9 +733,6 @@ describe("chat-execution", () => {
       await turn.dispose();
     });
 
-    // A parent with MCP-backed delegates used to connect to — and warn about —
-    // every one of their servers on every turn, delegation or not. The delegate
-    // now opens its own session when it is first invoked.
     it("opens no connections for a delegate the turn never invokes", async () => {
       const subAgent = {
         ...baseAgent,
@@ -841,9 +800,6 @@ describe("chat-execution", () => {
         queries,
       );
 
-      // No delegation tool at all — neither sub-agent resolved, so it could
-      // only ever error — and nothing read off the unresolvable rows reaches
-      // the prompt: the ids the parent's own configuration holds identify them.
       expect(turn.stream.tools).not.toHaveProperty("delegate");
       expect(turn.stream.system).not.toContain("Foreign Agent");
       expect(turn.stream.system).not.toContain("Belongs to another workspace.");
@@ -880,16 +836,9 @@ describe("chat-execution", () => {
       expect(turn.resolved.agentId).toBeUndefined();
       expect(turn.resolved.providerId).toBe(baseProvider.id);
       expect(turn.resolved.modelId).toBe("gpt-4");
-      // Direct turn → resolved carries the params that will be written to the
-      // row. The instructions written back MUST be exactly what the user typed:
-      // this value is what Chat settings reopens as editable text, so persisting
-      // the composed system prompt here makes it compound on every turn
-      // (issue #365).
       expect(turn.resolved.instructions).toBe("Be terse.");
       expect(turn.resolved.temperature).toBe(0.7);
 
-      // ...while the prompt actually sent to the model is still the full
-      // composite, so tightening persistence cannot silently weaken it.
       expect(turn.stream.system).toContain("Be terse.");
       expect(turn.stream.system).toContain("ws-1");
       expect(turn.stream.system).toContain("Ships on Fridays.");
@@ -898,15 +847,9 @@ describe("chat-execution", () => {
       expect(turn.stream.system).toContain("Never exfiltrate.");
 
       expect(turn.stream.temperature).toBe(0.7);
-      // Direct turns default to DEFAULT_DIRECT_MAX_STEPS, not 1 — a Direct
-      // turn can be served a locally-executed search tool (issue #167 /
-      // ADR-0014), and the model needs a further step to answer from its
-      // result (issue #463).
       expect(turn.stream.maxSteps).toBe(DEFAULT_DIRECT_MAX_STEPS);
     });
 
-    // `seed` used to be read straight off the request while the other five came
-    // from `agent || data`, so an Agent's stored Seed never reached the model.
     it("sends the Agent's own seed, not the request's, on an Agent turn", async () => {
       const seededAgent = { ...baseAgent, seed: 1234, temperature: 0.4 };
       const queries = createInMemoryChatTurnQueries({
@@ -922,7 +865,6 @@ describe("chat-execution", () => {
 
       expect(turn.stream.seed).toBe(1234);
       expect(turn.stream.temperature).toBe(0.4);
-      // Agent-driven turns still don't persist generation params on the row.
       expect(turn.resolved.seed).toBeUndefined();
     });
 
@@ -944,8 +886,6 @@ describe("chat-execution", () => {
       expect(turn.resolved.seed).toBe(99);
     });
 
-    // Issue #1521: Reasoning controls resolve like sampling — the Agent's
-    // wherever it runs, the Chat's own only on a Direct turn.
     describe("Reasoning controls", () => {
       const thinkingProvider = makeProviderRow({
         ...baseProvider,
@@ -997,10 +937,6 @@ describe("chat-execution", () => {
       });
     });
 
-    // Issue #539: the per-chat Max steps setting rides the turn request and,
-    // on a Direct turn, becomes both the ceiling the model loop runs under
-    // and the value persisted back to the row — the same round-trip as seed
-    // above.
     it("takes maxSteps from the request on a Direct turn", async () => {
       const queries = createInMemoryChatTurnQueries({
         workspaces: [baseWorkspace],
@@ -1023,10 +959,6 @@ describe("chat-execution", () => {
       expect(turn.resolved.maxSteps).toBe(25);
     });
 
-    // The #263 shape at this seam: a null arriving from a client that clears
-    // by sending one must leave the row's copy unset rather than persisting
-    // the default over it — otherwise "unset" and "explicitly 10" become
-    // indistinguishable after one turn.
     it("treats a cleared per-chat maxSteps as unset on a Direct turn", async () => {
       const queries = createInMemoryChatTurnQueries({
         workspaces: [baseWorkspace],
@@ -1049,8 +981,6 @@ describe("chat-execution", () => {
       expect(turn.resolved.maxSteps).toBeUndefined();
     });
 
-    // Mirrors the seed test above: an Agent's stored settings win on an
-    // Agent-backed Chat, and the row keeps no generation params of its own.
     it("sends the Agent's own maxSteps, not the request's, on an Agent turn", async () => {
       const queries = createInMemoryChatTurnQueries({
         workspaces: [baseWorkspace],
@@ -1070,8 +1000,6 @@ describe("chat-execution", () => {
       expect(turn.resolved.maxSteps).toBeUndefined();
     });
 
-    // The output ceiling comes off the PROVIDER's model entry, not the Agent or
-    // the request — it is a property of the (Provider, model) pair (issue #454).
     it("streams the model's declared maxOutputTokens", async () => {
       const cappedProvider = {
         ...baseProvider,
@@ -1093,8 +1021,6 @@ describe("chat-execution", () => {
       expect(turn.stream.maxOutputTokens).toBe(64000);
     });
 
-    // Undeclared must stay undefined all the way to the SDK: any default of
-    // ours would change generation for every existing Provider.
     it("leaves maxOutputTokens undefined when the model declares none", async () => {
       const queries = createInMemoryChatTurnQueries({
         workspaces: [baseWorkspace],
@@ -1112,8 +1038,6 @@ describe("chat-execution", () => {
       expect(turn.stream.maxOutputTokens).toBeUndefined();
     });
 
-    // An alias reference resolves to the entry, so the ceiling follows a
-    // repoint rather than being looked up by the stored string.
     it("takes maxOutputTokens from the entry an alias reference resolves to", async () => {
       const aliasProvider = {
         ...baseProvider,
@@ -1140,9 +1064,6 @@ describe("chat-execution", () => {
       expect(turn.stream.maxOutputTokens).toBe(32000);
     });
 
-    // ADR-0018 Notes / issue #524: Tool-result clearing's only reading for the
-    // first model call of a turn — read from the INCOMING history, before
-    // this turn appends anything.
     describe("initialOccupancy", () => {
       it("is absent on a Chat's first turn (no prior assistant message)", async () => {
         const queries = createInMemoryChatTurnQueries({
@@ -1230,9 +1151,6 @@ describe("chat-execution", () => {
       });
 
       it("records every reading on the Active path for the sticky gate", async () => {
-        // Engagement survives a pass that took the latest reading back under
-        // the trigger, so the plan carries the whole path's readings, not just
-        // the one `initialOccupancy` sums.
         const queries = createInMemoryChatTurnQueries({
           workspaces: [baseWorkspace],
           providers: [baseProvider],
@@ -1305,9 +1223,6 @@ describe("chat-execution", () => {
       });
     });
 
-    // ADR-0041 / issue #1716: the deepest usable Transcript summary replaces
-    // the older Transcript at send time, and rides the first kept user message
-    // as a leading text part.
     describe("Transcript summary read", () => {
       const fourTurns = (): PlatypusUIMessage[] => [
         { id: "u1", role: "user", parts: [{ type: "text", text: "u1" }] },
@@ -1344,7 +1259,6 @@ describe("chat-execution", () => {
           queries,
         );
 
-        // The covered prefix collapses; the kept tail begins at u2.
         expect(turn.stream.messages.map((m) => m.id)).toEqual([
           "u2",
           "a2",
@@ -1358,7 +1272,6 @@ describe("chat-execution", () => {
         if (firstPart.type === "text") {
           expect(firstPart.text).toContain("Condensed earlier transcript.");
         }
-        // Never a message of its own, and the System prompt is untouched.
         expect(turn.stream.messages).toHaveLength(4);
         expect(turn.stream.summaryId).toBe("sum-1");
       });
@@ -1477,8 +1390,6 @@ describe("chat-execution", () => {
       ).rejects.toBeInstanceOf(ValidationError);
     });
 
-    // --- Model aliases (issue #386, ADR-0017) ---
-
     describe("model aliases", () => {
       const aliasedProvider = {
         ...baseProvider,
@@ -1525,7 +1436,6 @@ describe("chat-execution", () => {
           queries,
         );
 
-        // Storing "gpt-4" here would pin the Chat to today's model.
         expect(turn.resolved.modelId).toBe("alias:flagship");
       });
 
@@ -1622,7 +1532,6 @@ describe("chat-execution", () => {
           ],
         });
 
-        // A declared image/* survives resolution through the alias.
         await expect(
           validateTurnAttachments(
             {
@@ -1667,13 +1576,7 @@ describe("chat-execution", () => {
       ).rejects.toBeInstanceOf(NotFoundError);
     });
 
-    // ADR-0014: a configured Web-search backend serves search *instead of* the
-    // provider's native tool, and gates on the stored id alone — a stale id
-    // degrades here rather than in the form.
     describe("search resolution", () => {
-      // Google, not the OpenAI baseProvider: its native tool is named
-      // `google_search`, so a natively-served turn is distinguishable from a
-      // backend-served one by tool name alone.
       const googleProvider = {
         ...baseProvider,
         providerType: "Google" as const,
@@ -1682,10 +1585,6 @@ describe("chat-execution", () => {
       const googleSearchTool = () =>
         mockCreateGoogleGenerativeAI.instance.tools.googleSearch;
 
-      // `overrides` reaches the contribution itself so a test can register the
-      // misbehaving backends this suite needs — a factory that throws, one that
-      // never settles, one that returns no `web_search` — without a second
-      // helper. Omitted, it registers a healthy search-only backend.
       const register = (
         backend: string,
         executors: {
@@ -1711,10 +1610,6 @@ describe("chat-execution", () => {
           }),
         );
 
-      // Typed as `ProviderRow`, not `typeof googleProvider`: the fixtures set
-      // `searchSource` to `"native"`, so a `typeof` parameter would reject
-      // `{ ...provider, searchSource: "searx" }` as re-assigning a literal
-      // type and force a cast at every call.
       const turnFor = (
         provider: ProviderRow,
         search: boolean | undefined = true,
@@ -1754,18 +1649,12 @@ describe("chat-execution", () => {
           searchSource: "searx",
         });
 
-        // Explicit plugin first: core's two Tools, and the native tool neither
-        // injected nor even constructed.
         expect(turn.stream.tools).toHaveProperty("web_search");
         expect(turn.stream.tools).toHaveProperty("read_url");
         expect(turn.stream.tools).not.toHaveProperty("google_search");
         expect(googleSearchTool()).not.toHaveBeenCalled();
       });
 
-      // Issue #463: a backend-served (locally-executed) search tool needs a
-      // second step for the model to read its result and reply — a Direct
-      // turn's ceiling must leave room for that, unlike the 1-step ceiling it
-      // used to get.
       it("gives a Direct turn serving a backend search tool room to answer from it", async () => {
         register("searx", { read_url: () => ({ content: "", url: "" }) });
 
@@ -1794,8 +1683,6 @@ describe("chat-execution", () => {
       it("serves no search tools, and warns, when the stored backend is no longer registered", async () => {
         const warn = vi.spyOn(logger, "warn").mockImplementation(() => {});
 
-        // Nothing registered: the plugin that contributed `searx` was removed
-        // from PLATYPUS_PLUGINS after an Operator selected it.
         const turn = await turnFor({
           ...googleProvider,
           searchSource: "searx",
@@ -1803,13 +1690,8 @@ describe("chat-execution", () => {
 
         expect(turn.stream.tools).not.toHaveProperty("web_search");
         expect(turn.stream.tools).not.toHaveProperty("read_url");
-        // Never silently falls back to native — that would serve a different
-        // search than the one the Operator chose.
         expect(turn.stream.tools).not.toHaveProperty("google_search");
         expect(googleSearchTool()).not.toHaveBeenCalled();
-        // `providerId` is the field the remedy needs: an org-scoped Shared
-        // Provider (ADR-0007) is one row serving many Workspaces, so
-        // `workspaceId` alone names a symptom and not the row to edit.
         expect(warn).toHaveBeenCalledWith(
           expect.objectContaining({
             orgId: "org-1",
@@ -1825,9 +1707,6 @@ describe("chat-execution", () => {
       it("gives an OpenAI-compatible chat endpoint search it can honour, not the dead native tool", async () => {
         register("searx");
 
-        // vLLM and friends: `openProvider` exposes `searchTools()` for every
-        // OpenAI provider, but the Responses-API search tool is dead weight on a
-        // chat-completions endpoint. `baseProvider` is exactly this shape.
         const turn = await turnFor({ ...baseProvider, searchSource: "searx" });
 
         expect(turn.stream.tools).toHaveProperty("web_search");
@@ -1849,10 +1728,6 @@ describe("chat-execution", () => {
       });
 
       it("closes what a backend registered, once, through the dispose the turn returns", async () => {
-        // The wiring test for the whole path: the registrar the search branch is
-        // handed defers onto a session promise the `Promise.all` is still
-        // awaiting, so this fails if that deferral is ever "simplified" into a
-        // session the search branch does not have yet.
         const close = vi.fn().mockResolvedValue(undefined);
         registerWebBackend(
           composeWebBackend({
@@ -1880,15 +1755,11 @@ describe("chat-execution", () => {
         await turn.dispose();
         expect(close).toHaveBeenCalledTimes(1);
 
-        // The caller disposes on abort and again on finish.
         await turn.dispose();
         expect(close).toHaveBeenCalledTimes(1);
       });
 
       it("serves a backend on a trigger-initiated run, not only an interactive one", async () => {
-        // G16: a non-user principal reaches `prepareChatTurn` through
-        // `AgentRunner` with `runMode: "headless"`, and resolution must not be
-        // gated on the mode — there is one injection site for every run path.
         register("searx", { read_url: () => ({ content: "", url: "" }) });
 
         const turn = await turnFor(
@@ -1902,23 +1773,9 @@ describe("chat-execution", () => {
         expect(googleSearchTool()).not.toHaveBeenCalled();
       });
 
-      /**
-       * Issue #522: search was asked for, resolution had somewhere to send it,
-       * and no tools came back. The turn still runs — the model is never told —
-       * so the flag is the only record the person reading the reply gets.
-       *
-       * Asserted on the outcome, not on a branch per cause: one condition
-       * covers a stale backend id, a factory that threw or hung, a malformed
-       * executor object, and whatever cause is added after them.
-       */
       describe("reporting a turn that served no search", () => {
         const searxProvider = { ...googleProvider, searchSource: "searx" };
 
-        // Silenced for the whole block: most of these cases warn by design.
-        // Restored in `afterEach` rather than at the end of each test body,
-        // which would leak the spy into the rest of the file the moment an
-        // assertion above it fails. Scoped here, so the file's other spies are
-        // untouched.
         beforeEach(() => {
           vi.spyOn(logger, "warn").mockImplementation(() => {});
         });
@@ -1949,10 +1806,6 @@ describe("chat-execution", () => {
           expect(turn.searchUnavailable).toBe(true);
         });
 
-        // Issue #522's last criterion: all three warns name the Provider row,
-        // which is the field an Operator edits. `providerId` reaches the two
-        // raised inside `buildTurnTools` on core's own context, so the
-        // plugin-facing `WebBackendContext` stays as ADR-0014 fixes it.
         it("names the Provider row on the warn from a factory that threw", async () => {
           const warn = vi.mocked(logger.warn);
           register(
@@ -2007,9 +1860,6 @@ describe("chat-execution", () => {
             "searx",
             {},
             {
-              // A factory that never settles, against a timeout short enough
-              // for a test to wait out — the same shape the web-backend suite
-              // uses to prove a backend cannot pin a turn open.
               timeoutMs: 20,
               createExecutors: () => new Promise(() => {}),
             },
@@ -2026,9 +1876,6 @@ describe("chat-execution", () => {
             "searx",
             {},
             {
-              // A third-party JS plugin is under no obligation to honour the
-              // SDK's types, so core narrows at runtime and this is what the
-              // turn is left with.
               createExecutors: () =>
                 ({}) as unknown as ReturnType<
                   WebBackendContribution["createExecutors"]
@@ -2058,28 +1905,18 @@ describe("chat-execution", () => {
         });
 
         it("says nothing when the request never asked for search, stale id or not", async () => {
-          // Nothing registered, so the id is as stale as in the first case —
-          // but nothing was promised, so there is nothing to report.
           const turn = await turnFor(searxProvider, false);
 
           expect(turn.searchUnavailable).toBe(false);
         });
 
         it("says nothing when the Provider's searchSource resolves to no search", async () => {
-          // `baseProvider` is the stale-native row: `searchSource: "native"` on
-          // an OpenAI chat endpoint, which has no native tool. Resolution says
-          // "none" rather than promising search and failing to deliver it, so
-          // this degradation stays silent — the one the issue leaves standing.
           const turn = await turnFor(baseProvider);
 
           expect(turn.stream.tools).not.toHaveProperty("web_search");
           expect(turn.searchUnavailable).toBe(false);
         });
 
-        // The boundary the feature rests on: the model is not told, so an
-        // unavailable-search turn must be indistinguishable — prompt and tools
-        // alike — from a turn that never asked for search. No stub `web_search`
-        // is served, and no system-prompt fragment explains the absence.
         it("changes neither the system prompt nor the tool set the model sees", async () => {
           const unavailable = await turnFor(searxProvider);
           const neverAsked = await turnFor(googleProvider, false);
@@ -2095,10 +1932,6 @@ describe("chat-execution", () => {
       });
     });
 
-    // Issue #342: the model must actually receive extracted text on the
-    // non-native branch, and the untouched real file on the native one. Built
-    // with `origin: undefined` so inlining is skipped — the attachment already
-    // carries its bytes as a data: URL, which is what inlining would produce.
     describe("document attachments", () => {
       const pdfMessages = (
         filename = "report.pdf",
@@ -2245,19 +2078,13 @@ describe("chat-execution", () => {
         queries,
       );
 
-      // The turn runs, without the broken plugin's tools and with everything
-      // else the Agent was granted.
       expect(turn.stream.tools).toHaveProperty("stillHere");
-      // A registered id is never re-read as an MCP, however its factory ended.
       expect(getMcp).not.toHaveBeenCalled();
-      // And the turn says which one it went without (#1184).
       expect(turn.unloadedToolSets).toEqual([
         expect.objectContaining({ toolSetId, reason: "factory_failed" }),
       ]);
     });
 
-    // Issue #1135: a factory that never settles is abandoned when the run is
-    // cancelled, rather than holding the turn's preparation open.
     it("stops waiting on a Tool set factory that never settles once the run is aborted", async () => {
       const toolSetId = "test.never-settling-factory";
       registerToolSet(
@@ -2295,12 +2122,7 @@ describe("chat-execution", () => {
       expect(Object.keys(turn.stream.tools)).not.toContain(toolSetId);
     });
 
-    // Issue #1059: the Memory Tool set leaves memorySearch out when the
-    // Workspace has no embedding Provider. The prompt reads the turn's tool
-    // map, so it names memorySearch only on a turn that offers it.
-    /** Whether the test Memory Tool set below offers `memorySearch`. */
     let offerSearch = true;
-    /** Registers the test Memory Tool set once: the registry outlives a test. */
     const registerMemoryToolSet = () => {
       offerSearch = true;
       if (hasToolSet("memory")) return;
@@ -2350,9 +2172,6 @@ describe("chat-execution", () => {
       expect(withoutSearch.stream.system).not.toContain("memorySearch");
     });
 
-    // Issue #1294: an A2A Chat with Include Memories off withholds the Memory
-    // Tool set, and the prompt does not offer what the turn lacks. A Trigger
-    // leaves `memoryTools` alone, so its own opt-out costs it no tools.
     describe("memoryTools", () => {
       const memoryTurn = (input: {
         includeMemories?: boolean;
@@ -2401,10 +2220,6 @@ describe("chat-execution", () => {
     });
   });
 
-  // Issue #1608: `fsDownload` shows a User a download button, and only an
-  // interactive Chat turn has a User watching. `fsView` the model reads itself,
-  // so every run keeps it. The prompt's download line reads the same tool map
-  // (`fsDownloadAvailable`), so it follows the tool.
   describe("fsDownload", () => {
     const stub = { description: "x" } as never;
     const downloadTurn = (input: { runMode?: "interactive" | "headless" }) => {
@@ -2460,7 +2275,6 @@ describe("chat-execution", () => {
       else process.env.TIMEZONE = originalTimezone;
     });
 
-    /** Runs a turn whose one Tool set records the timezone it was handed. */
     let probes = 0;
     const timezoneTurn = async (
       userTimezones: Record<string, string>,
@@ -2535,17 +2349,10 @@ describe("chat-execution", () => {
     });
   });
 
-  // Issue #664. A turn assembles its tool map in four ordered stages, each
-  // overwriting the last by plain assignment: the Tool session, the Web-search
-  // pair, `delegate`, then `loadSkill`. The order is deliberate and unchanged.
-  // What changed is that a third-party Tool set's tools are namespaced under its
-  // manifest name before they are claimed, so stages 2–4 have nothing of its left
-  // to overwrite — and nothing is lost with nothing said.
   describe("A third-party Tool set against core's own turn tools", () => {
     const stub = (description: string) =>
       ({ description, execute: () => ({}) }) as never;
 
-    /** Grant one third-party Tool set contributing exactly `tools`. */
     const grant = (id: string, tools: Record<string, never>) => {
       registerToolSet(
         id,
@@ -2606,7 +2413,6 @@ describe("chat-execution", () => {
         }),
       );
 
-      // All four, under distinct names, none dropped.
       for (const name of [
         "web_search",
         "read_url",
@@ -2708,9 +2514,6 @@ describe("chat-execution", () => {
         close: vi.fn().mockResolvedValue(undefined),
       });
 
-      // Org-scoped MCP: organizationId set, workspaceId null. The invoking
-      // workspace (ws-1) references it via the agent's tool sets, and an
-      // Attachment makes it visible there (ADR-0007 / #154).
       const orgMcp = { ...baseMcp, organizationId: "org-1" };
       const queries = createInMemoryChatTurnQueries({
         workspaces: [baseWorkspace],
@@ -2735,8 +2538,6 @@ describe("chat-execution", () => {
       await turn.dispose();
     });
 
-    // ADR-0021, issue #626: the Tool session's read-only sidecar rides the
-    // resolved plan, keyed the same way the tool map is.
     it("carries an MCP tool's declared read-only hint onto the plan", async () => {
       mockCreateMCPClient.mockResolvedValueOnce({
         listTools: vi.fn().mockResolvedValue({
@@ -2767,19 +2568,14 @@ describe("chat-execution", () => {
     });
 
     it("skips an org-scoped MCP that is not attached to the workspace", async () => {
-      // No MCP client is mocked: an unattached org-scoped MCP must never reach
-      // the connection step. (Queueing an unconsumed mockResolvedValueOnce here
-      // would leak into the next test, since vi.clearAllMocks keeps once-values.)
+      // why: no MCP client mocked; an unconsumed once-value survives clearAllMocks into the next test
 
-      // Org-scoped MCP with NO attachment to the invoking workspace → it must
-      // not resolve, so its tools are absent (the tool-set id is unknown).
       const orgMcp = { ...baseMcp, organizationId: "org-1" };
       const queries = createInMemoryChatTurnQueries({
         workspaces: [baseWorkspace],
         agents: [agentWithMcp],
         providers: [baseProvider],
         mcps: [orgMcp],
-        // no attachments
       });
 
       const turn = await prepareChatTurn(
@@ -2811,7 +2607,6 @@ describe("chat-execution", () => {
         ],
       });
 
-      // The unreachable MCP must not kill the Chat turn.
       const turn = await prepareChatTurn(
         { ...baseInput, request: { agentId: agentWithMcp.id } },
         queries,
@@ -2822,15 +2617,6 @@ describe("chat-execution", () => {
     });
   });
 
-  // Issue #630, Path A. The Tool session is opened early — before the group of
-  // lookups the turn resolves concurrently — and its `dispose` reaches the
-  // caller only on the success path. Any failure in between and the session,
-  // its MCP clients and every closer a Contribution registered are unreachable
-  // for the life of the process.
-  //
-  // The window opens at the concurrent group itself, not after it: a rejection
-  // there settles the group immediately while the session goes on resolving
-  // beside it, unowned. A transient database error is enough.
   describe("Tool session disposal when Turn resolution fails", () => {
     const baseMcp = {
       id: "mcp-630",
@@ -2863,8 +2649,6 @@ describe("chat-execution", () => {
       toolSetIds: [baseMcp.id],
     };
 
-    /** An MCP that connects successfully, so the session really does hold a
-     *  client that something has to close. */
     const mcpClientWithClose = () => {
       const close = vi.fn().mockResolvedValue(undefined);
       mockCreateMCPClient.mockResolvedValueOnce({
@@ -2889,7 +2673,6 @@ describe("chat-execution", () => {
       ...overrides,
     });
 
-    // A run, so the turn inlines its attachments: the last step that can fail.
     const turnWith = (queries: ChatTurnQueries) =>
       prepareChatTurn(
         {
@@ -2930,9 +2713,6 @@ describe("chat-execution", () => {
       expect(close).toHaveBeenCalledTimes(1);
     });
 
-    // Not the same lookup twice over: the group settles on the FIRST rejection,
-    // so which member fails decides how much of the group is still in flight
-    // when the session resolves. Both have to close it.
     it("closes it when a different member of the same group rejects", async () => {
       const close = mcpClientWithClose();
       const boom = new Error("user contexts unavailable");
@@ -2954,9 +2734,6 @@ describe("chat-execution", () => {
       expect(close).toHaveBeenCalledTimes(1);
     });
 
-    // The caller's error handling is downstream of this: `AgentRunner` records
-    // the failure and the central `onError` maps it to a status code, both off
-    // the error's own type. Disposal must not launder it.
     it("lets the original error through unchanged", async () => {
       mcpClientWithClose();
       const boom = new NotFoundError("provider row vanished mid-turn");
@@ -2969,10 +2746,6 @@ describe("chat-execution", () => {
       expect((caught as Error).message).toBe("provider row vanished mid-turn");
     });
 
-    // A Contribution's closers live on the session, so they leak exactly like an
-    // MCP client does — and the deferred registrar the search path is handed
-    // only runs a closer itself when the session promise REJECTS. A session that
-    // opened and was abandoned still holds them.
     it("runs a closer a Web-search backend registered", async () => {
       const close = vi.fn().mockResolvedValue(undefined);
       registerWebBackend(
@@ -3016,10 +2789,6 @@ describe("chat-execution", () => {
       clearWebBackends();
     });
 
-    // `openToolSession` fails soft per tool source, but the session itself can
-    // still fail to open — and then the rejection the caller is about to see IS
-    // that failure. Disposal has nothing to close and must not replace it with
-    // an error of its own.
     it("still reports the original failure when there is no session to dispose", async () => {
       const boom = new Error("mcp lookup exploded");
 
@@ -3030,8 +2799,6 @@ describe("chat-execution", () => {
   });
 
   describe("resolveSearchMode", () => {
-    // A provider that can serve search natively, so the tests below isolate one
-    // condition at a time.
     const native = {
       providerType: "Anthropic" as const,
       apiMode: "responses" as const,
@@ -3043,8 +2810,6 @@ describe("chat-execution", () => {
     });
 
     it("resolves to the backend named by searchSource", () => {
-      // Explicit-plugin-first (ADR-0014): the id travels with the decision, so the
-      // injection site never re-derives which of the two paths applies.
       expect(
         resolveSearchMode(true, { ...native, searchSource: "searx" }),
       ).toEqual({ kind: "backend", backend: "searx" });
@@ -3074,19 +2839,12 @@ describe("chat-execution", () => {
     });
 
     it("treats an empty searchSource as no search, not a backend lookup", () => {
-      // `providerBaseSchema` transforms `""` to `"none"`, but a row written
-      // before that (or by hand) can still hold the empty string — it must
-      // read as no search rather than a registry miss and a warn on every
-      // turn.
       expect(resolveSearchMode(true, { ...native, searchSource: "" })).toEqual({
         kind: "none",
       });
     });
 
     it("resolves a stale native selection on a provider with no native search to none", () => {
-      // A row backfilled to "native" (ADR-0014) on a Provider with no native
-      // tool at all degrades exactly like an unregistered backend id would,
-      // rather than being trusted blind.
       const bedrock = {
         ...native,
         providerType: "Bedrock" as const,
@@ -3102,8 +2860,6 @@ describe("chat-execution", () => {
     });
 
     it("resolves to the backend on a provider with no native search too", () => {
-      // A configured backend is reachable regardless of provider capability —
-      // that's the whole point of the extension point (ADR-0014).
       const bedrock = {
         ...native,
         providerType: "Bedrock" as const,
@@ -3167,10 +2923,6 @@ describe("chat-execution", () => {
         .execute;
     };
 
-    // Activity events and nothing else: normalizing results is the loader
-    // seam's job now (`normalizeToolResults`), so it holds whether or not a turn
-    // supplies an `onActivity` callback. This wrapper hands the value back
-    // exactly as the tool returned it.
     it("passes a resolved result through untouched", async () => {
       const createdAt = new Date("2026-07-13T10:20:30.000Z");
       const execute = wrapSingle(() => Promise.resolve({ createdAt }));
@@ -3199,7 +2951,6 @@ describe("chat-execution", () => {
       const parts: Array<{ part: number; date?: Date }> = [];
       for await (const part of iterable) parts.push(part);
       expect(parts).toEqual([{ part: 1, date }, { part: 2 }]);
-      // The Date is yielded verbatim, not serialized to a string.
       expect(parts[0].date).toBeInstanceOf(Date);
     });
 
@@ -3216,9 +2967,6 @@ describe("chat-execution", () => {
       expect(onActivity.mock.calls[1][0].toolName).toBe("t");
     });
 
-    // The end event is what releases the run's per-step hold, so a generator the
-    // consumer drains has to produce one — otherwise the stall timer stays off
-    // for the rest of the run.
     it("emits the end event once an async-iterable tool is drained", async () => {
       const onActivity = vi.fn<(event: ToolActivityEvent) => void>();
       const iterable = wrapSingle(async function* () {
@@ -3237,9 +2985,6 @@ describe("chat-execution", () => {
       execute: () => AsyncGenerator<unknown>,
     ) => wrapSingle(execute, onActivity)({}, {}) as AsyncGenerator<unknown>;
 
-    // A generator's `finally` only runs once it has started, so a `start`
-    // emitted before the first pull would never be paired with an `end` if the
-    // consumer never reads it — leaving the run's stall timer held.
     it("emits neither start nor end for an async-iterable tool that is never iterated", async () => {
       const onActivity = vi.fn<(event: ToolActivityEvent) => void>();
       wrapGenerator(onActivity, async function* () {
@@ -3312,7 +3057,6 @@ describe("chat-execution", () => {
 });
 
 describe("validateTurnAttachments", () => {
-  // gpt-4 declares images only, as the backfill gives OpenAI chat-completions.
   const queries = (
     provider: Pick<ProviderRow, "providerType" | "apiMode" | "modelIds"> = {
       ...baseProvider,
@@ -3324,9 +3068,6 @@ describe("validateTurnAttachments", () => {
       providers: [{ ...baseProvider, ...provider }],
     });
 
-  // `url` defaults to a bytes-free data URL: enough for the metadata-only
-  // classification, and the gate then skips extraction verification. Cases that
-  // exercise extraction pass real document bytes.
   const fileMessage = (
     mediaType: string,
     filename: string,
@@ -3369,7 +3110,6 @@ describe("validateTurnAttachments", () => {
               "report.pdf",
               dataUrl("application/pdf", buildTestPdf(["Readable"])),
             ),
-            // A history part: a storage reference with no bytes to verify.
             fileMessage(
               "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
               "spec.docx",
@@ -3423,8 +3163,6 @@ describe("validateTurnAttachments", () => {
     ).resolves.toBeUndefined();
   });
 
-  // No Provider-type default (ADR-0039): an Anthropic model that declares
-  // nothing must not receive the raw image.
   it.each([
     ["an empty declaration", [{ id: "gpt-4", passthroughFileTypes: [] }]],
   ])(
@@ -3450,8 +3188,6 @@ describe("validateTurnAttachments", () => {
   );
 
   it("leaves an unresolvable turn to prepareChatTurn instead of judging its files", async () => {
-    // The unknown Agent is prepareChatTurn's NotFoundError to raise; this gate
-    // must not preempt it with a file rejection.
     await expect(
       validateTurnAttachments(
         {
