@@ -10,34 +10,17 @@ import {
 } from "./advisory-lock.ts";
 import { organization, organizationMember, user } from "./schema.ts";
 
-/** The Drizzle handle the seed writes through. */
 export type SeedDatabase = typeof db;
 
-/** Environment variables the seed reads. */
 type SeedEnv = {
   ADMIN_EMAIL?: string;
   ADMIN_PASSWORD?: string;
   NODE_ENV?: string;
 };
 
-/**
- * The credential pair the deployment guides and the shipped example files used
- * to provide. It is public knowledge, so a production deployment still holding
- * it is one an attacker can sign into by trying the first thing they would try.
- * Refused in production only: local development, the smoke test and the
- * Playwright flow all seed with it on purpose.
- */
 const WELL_KNOWN_ADMIN_EMAIL = "admin@example.com";
 const WELL_KNOWN_ADMIN_PASSWORD = "admin123";
 
-/**
- * Creates the admin User and returns its id. In production this is the
- * better-auth admin plugin's `createUser` — the administrative API, not public
- * sign-up, so seeding works whether or not the Operator has closed
- * registration (#550). It owns its own database access and so writes outside
- * any transaction the seed opens — the reason `seedFirstBoot` compensates for
- * the User explicitly instead of relying on rollback.
- */
 export type AdminCreateUser = (input: {
   email: string;
   password: string;
@@ -46,7 +29,6 @@ export type AdminCreateUser = (input: {
 
 export type SeedDeps = {
   createUser: AdminCreateUser;
-  /** Defaults to `process.env`. */
   env?: SeedEnv;
 };
 
@@ -58,11 +40,6 @@ export type SeedResult =
       userId: string;
     };
 
-/**
- * A seed failure no amount of retrying can fix — missing configuration, or
- * input better-auth rejected outright. Startup surfaces this immediately rather
- * than burning the backoff schedule on a deterministic error.
- */
 export class NonRetryableSeedError extends Error {
   constructor(message: string, options?: { cause?: unknown }) {
     super(message, options);
@@ -70,37 +47,13 @@ export class NonRetryableSeedError extends Error {
   }
 }
 
-/**
- * better-auth rejects invalid input (a malformed email, an email already
- * taken) with a 4xx `APIError`. Those are deterministic; 5xx and plain
- * transport errors are not.
- */
 const isDeterministicRejection = (error: unknown): boolean => {
   const status = (error as { statusCode?: unknown } | null)?.statusCode;
   return typeof status === "number" && status >= 400 && status < 500;
 };
 
-/**
- * better-auth's default minimum, which its sign-up and password-change
- * endpoints enforce. The administrative create-user API the seed goes through
- * hashes whatever it is given, so the seed checks this itself — a short
- * ADMIN_PASSWORD fails loudly here rather than being accepted.
- */
 const MIN_ADMIN_PASSWORD_LENGTH = 8;
 
-/**
- * Bootstraps an empty database with the Default Organization, the admin User
- * from `ADMIN_EMAIL` / `ADMIN_PASSWORD` and that User's Organization membership.
- * No Workspace: one without a Provider cannot run a Chat, so the admin creates
- * the first one through the same flow as every other, which asks for a Provider.
- *
- * The invariant is that no partially seeded state survives a failure (#369).
- * Configuration is validated before anything is written; the Organization and
- * membership are written in one transaction; and the User — which
- * better-auth writes outside that transaction — is deleted again if the
- * transaction fails. A database that already has an Organization is left
- * untouched and nothing is logged, so restarts stay a silent no-op.
- */
 export const seedFirstBoot = async (
   database: SeedDatabase,
   deps: SeedDeps,
@@ -116,8 +69,6 @@ export const seedFirstBoot = async (
     return { seeded: false };
   }
 
-  // Validate before writing: a missing variable must cost nothing, so that the
-  // operator's next attempt starts from a clean database.
   const { ADMIN_EMAIL: email, ADMIN_PASSWORD: password } = env;
   if (!email || !password) {
     const missing = (["ADMIN_EMAIL", "ADMIN_PASSWORD"] as const).filter(
@@ -132,9 +83,6 @@ export const seedFirstBoot = async (
       `${names} ${isAre} required to seed the initial admin user. Set ${names} and restart.`,
     );
   }
-  // The published default must not work where anyone can reach it. Outside
-  // production it stays usable: CLAUDE.md, the smoke test and the Playwright
-  // flow all sign in with it.
   if (
     env.NODE_ENV === "production" &&
     email.trim().toLowerCase() === WELL_KNOWN_ADMIN_EMAIL &&
@@ -196,21 +144,11 @@ export const seedFirstBoot = async (
 
     return result;
   } catch (error) {
-    // The transaction rolled back, but better-auth's User row is outside it.
-    // Remove it so the next attempt starts from an empty database.
     await compensateUser(database, adminId);
     throw error;
   }
 };
 
-/**
- * `seedFirstBoot` under the seed's advisory lock, for replicas that boot
- * together. `seedFirstBoot` checks for an Organization and then writes in
- * separate steps, so two unlocked replicas can both find an empty database and
- * the second fail on the admin User the first just created. Under the lock the
- * second waits, then finds the Organization and returns `{ seeded: false }`;
- * if the first failed instead, the second seeds the database it left clean.
- */
 export const seedFirstBootExclusively = (
   database: SeedDatabase,
   lockPool: LockPool,
@@ -223,15 +161,6 @@ export const seedFirstBootExclusively = (
     { wait: true },
   );
 
-/**
- * Creates the admin User through better-auth and returns its id.
- *
- * A User already holding `ADMIN_EMAIL` stops the seed rather than being adopted:
- * compensation runs against the database that just failed, so it can fail too,
- * and the account left behind is not necessarily one the Operator created —
- * promoting whoever holds that address to admin is an escalation, not a
- * recovery. Deleting one row is a cheap fix; the message says so.
- */
 const createAdminUser = async (
   database: SeedDatabase,
   createUser: AdminCreateUser,
@@ -270,7 +199,6 @@ const createAdminUser = async (
   }
 };
 
-/** Best-effort removal of the User created before the failed transaction. */
 const compensateUser = async (database: SeedDatabase, userId: string) => {
   try {
     await database.delete(user).where(eq(user.id, userId));
@@ -286,12 +214,6 @@ const compensateUser = async (database: SeedDatabase, userId: string) => {
   }
 };
 
-/**
- * A database seeded by a release that wrote the Organization outside a
- * transaction can hold an Organization with no members — a stack nobody can
- * sign into, which every restart since has skipped silently. Say so, once, on
- * every boot: it is the only diagnostic such an operator gets.
- */
 const warnIfHalfSeeded = async (database: SeedDatabase) => {
   const [memberCount] = await database
     .select({ value: count() })

@@ -11,7 +11,6 @@ import {
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
-// Import and re-export auth schema
 export * from "./auth-schema.ts";
 import { user } from "./auth-schema.ts";
 import type { z } from "zod";
@@ -51,7 +50,6 @@ import type {
   OAuthAuthorizationServerInformation,
 } from "@ai-sdk/mcp";
 
-// Custom vector type without fixed dimensions — allows variable-dimension vectors per workspace
 const unboundVector = customType<{
   data: number[];
   driverParam: string;
@@ -75,23 +73,13 @@ export const organization = pgTable(
   (t) => ({
     id: t.text("id").primaryKey(),
     name: t.text("name").notNull(),
-    // Free-text org identity / context, rendered early in the system prompt as
-    // framing (not a security control). Nullable — existing orgs are unchanged.
     identityContext: t.text("identity_context"),
-    // Which Workspaces may take Inbound Trigger calls (ADR-0030): "off" |
-    // "all" | "selected". Checked on every call, so changing it takes effect
-    // on the next one. Settable only by an Org Admin.
     inboundTriggerGate: t
       .text("inbound_trigger_gate")
       .$type<OrgGate>()
       .notNull()
       .default("off"),
-    // Which Workspaces may have A2A endpoints (ADR-0032), in the same shape as
-    // the Inbound Trigger gate and separate from it. Checked on every call.
     a2aGate: t.text("a2a_gate").$type<OrgGate>().notNull().default("off"),
-    // Which Workspaces may import Skill bundles — zip import, Replace bundle and
-    // GitHub install (ADR-0037). "all" by default, so zip import keeps working;
-    // Organization-scope imports are never gated.
     skillImportGate: t
       .text("skill_import_gate")
       .$type<OrgGate>()
@@ -116,7 +104,6 @@ export const organization = pgTable(
   ],
 );
 
-// Provider defined before workspace to avoid circular reference with task_model_provider_id.
 export const provider = pgTable(
   "provider",
   (t) => ({
@@ -126,9 +113,6 @@ export const provider = pgTable(
       .references(() => organization.id, {
         onDelete: "cascade",
       }),
-    // Cascades, but `agent.providerId` is RESTRICT and Postgres checks it as
-    // each cascade runs, so delete a Workspace's Agents before the Workspace
-    // (see `deleteWorkspaceRows`).
     workspaceId: t
       .text("workspace_id")
       .references((): AnyPgColumn => workspace.id, {
@@ -151,25 +135,11 @@ export const provider = pgTable(
       .$type<z.infer<typeof providerApiModeSchema>>()
       .notNull()
       .default("responses"),
-    // Which of "no search" / this provider's own tool / a plugin Web-search
-    // backend serves the chat search toggle (ADR-0014). Free text, not an
-    // enum or FK, for the same reason `webBackend` was: the valid backend-id
-    // set is whichever plugins the deployment loaded, which the database
-    // cannot know. A value whose plugin is later removed degrades to no
-    // search tools plus a warn-log, so no backfill or constraint is needed
-    // for that case.
     searchSource: t.text("search_source").notNull().default("native"),
-    // Free-text security directives appended last in the system prompt for
-    // every run on this provider (and sub-agent runs resolved to it). Nullable
-    // — existing providers are unchanged.
     securityGuardrails: t.text("security_guardrails"),
-    // Per-model config (see `modelConfigSchema` in @platypus/schemas). Every
-    // row holds resolved objects; the string backfills (0047, 0091) already
-    // shipped, and a later migration asserts none remain.
     modelIds: t.jsonb().$type<ModelConfig[]>().notNull(),
     taskModelId: t.text("task_model_id").notNull(),
     memoryExtractionModelId: t.text("memory_extraction_model_id").notNull(),
-    // Job settings for the two pointers above (ADR-0045); null sends nothing.
     taskModelSettings: t.jsonb("task_model_settings").$type<JobSettings>(),
     memoryExtractionModelSettings: t
       .jsonb("memory_extraction_model_settings")
@@ -215,20 +185,15 @@ export const workspace = pgTable(
         onDelete: "set null",
       }),
 
-    // Memory extraction configuration (null = disabled, non-null = enabled)
     memoryExtractionProviderId: t
       .text("memory_extraction_provider_id")
       .references(() => provider.id, { onDelete: "set null" }),
 
-    // Memory embedding configuration
     memoryEmbeddingProviderId: t
       .text("memory_embedding_provider_id")
       .references(() => provider.id, { onDelete: "set null" }),
     maxDailySummaries: t.integer("max_daily_summaries").notNull().default(90),
 
-    // Per-workspace delegation flags (ADR-0006). When true, the workspace
-    // owner may self-manage the respective credential/reach-bearing resource
-    // without org-admin. Settable only by an org admin. Default false.
     providerSelfManagement: t
       .boolean("provider_self_management")
       .notNull()
@@ -237,18 +202,11 @@ export const workspace = pgTable(
       .boolean("mcp_self_management")
       .notNull()
       .default(false),
-    // Whether this Workspace's Inbound Triggers are reachable while the
-    // Organization's gate is "selected" (ADR-0030). Org Admin-only, like the
-    // delegation flags above; ignored under "off" and "all".
     inboundTriggersAllowed: t
       .boolean("inbound_triggers_allowed")
       .notNull()
       .default(false),
-    // Whether this Workspace's A2A endpoints are reachable while the
-    // Organization's A2A gate is "selected" (ADR-0032). Org Admin-only.
     a2aAllowed: t.boolean("a2a_allowed").notNull().default(false),
-    // Whether this Workspace may import Skill bundles while the
-    // Organization's Skill import gate is "selected" (ADR-0037). Org Admin-only.
     skillImportAllowed: t
       .boolean("skill_import_allowed")
       .notNull()
@@ -281,28 +239,14 @@ export const chat = pgTable(
         onDelete: "cascade",
       }),
     title: t.text("title").notNull(),
-    // The last message of the Chat's Active path (ADR-0026): the path is read
-    // by walking `parentId` up from here. Null for a Chat with no messages.
     activeLeafId: t.text("active_leaf_id"),
-    // Run lifecycle status. Existing rows backfill to "succeeded" — every
-    // chat row pre-status was the result of a completed run.
     status: t.text("status").$type<ChatStatus>().notNull().default("succeeded"),
     isPinned: t.boolean("is_pinned").notNull().default(false),
-    // How many titling attempts failed while the Chat was still Untitled.
-    // Titling stops once it reaches its bound, so a Chat whose model keeps
-    // producing an unusable title is not re-sent after every turn (#1618).
     titleFailures: t.integer("title_failures").notNull().default(0),
-    // The Agent and Provider the Chat was last run with. No foreign key, by
-    // decision: a dangling id is how the Chat tells the user its Agent or
-    // Provider is gone. `RESTRICT` would make either undeletable once a Chat
-    // used it, and `SET NULL` would erase the id, opening the Chat silently on
-    // another model instead.
+    // why: no FK; a dangling id is how the Chat shows its Agent or Provider is gone
     agentId: t.text("agent_id"),
     providerId: t.text("provider_id"),
     modelId: t.text("model_id"),
-    // The user's own instructions for an agentless chat — the first fragment of
-    // the system prompt Platypus composes, never the composed prompt itself
-    // (issue #365).
     instructions: t.text("instructions"),
     temperature: t.real("temperature"),
     topP: t.real("top_p"),
@@ -310,64 +254,30 @@ export const chat = pgTable(
     seed: t.real("seed"),
     presencePenalty: t.real("presence_penalty"),
     frequencyPenalty: t.real("frequency_penalty"),
-    // Reasoning controls (ADR-0040); null means the model's default.
     reasoningThinking: t.boolean("reasoning_thinking"),
     reasoningEffort: t.text("reasoning_effort").$type<ReasoningEffort>(),
     thinkingBudget: t.integer("thinking_budget"),
-    // The per-chat Max steps setting for Direct (no-Agent) turns (#539),
-    // mirroring the Agent table's column. Nullable: null means "unset" and
-    // the turn falls back to DEFAULT_DIRECT_MAX_STEPS.
     maxSteps: t.integer("max_steps"),
 
-    // Memory processing tracking
     lastMemoryProcessedAt: t.timestamp("last_memory_processed_at"),
     memoryExtractionStatus: t
       .text("memory_extraction_status")
-      .default("pending"), // "pending" | "processing" | "completed" | "failed"
-    // The last Active-path message a successful extraction pass included: the
-    // next pass reads only what follows it, with what came before as context.
-    // Null until a pass succeeds.
+      .default("pending"),
     memoryCursorId: t.text("memory_cursor_id"),
 
-    // The pinned Memories block (ADR-0020): the rendered summaries fragment,
-    // snapshotted here while the Chat is active and re-taken only when the gap
-    // since the previous turn exceeds the re-pin horizon. An internal column —
-    // absent from the Chat response schema, never surfaced in the product and
-    // never editable. One fragment's rendered text, NOT a full system prompt
-    // composite (ADR-0016 / issue #373).
     memorySnapshot: t.text("memory_snapshot"),
 
-    // The wall-clock start of the most recent turn, written ONLY by the run
-    // sink at turn boundaries. ADR-0020 measures the Chat's idle gap against
-    // this, never against `updatedAt` — which the memory-extraction job and
-    // auto-titling bump at their own cadence, so a background write must not
-    // masquerade as a recent turn and defer a legitimate re-pin. A separate,
-    // dedicated signal is the only writer-free answer.
+    // why: the idle gap reads this, never updatedAt, which background jobs also bump
     lastTurnAt: t.timestamp("last_turn_at"),
 
-    // When the instance running this Chat's turn last said it is still alive
-    // (`runs/chat-run-heartbeat.ts`). A `running` Chat whose heartbeat has
-    // gone stale lost its run to a crash or a deploy: the next claim takes it,
-    // and the recovery sweep marks it failed. Defaulted so a Chat that has
-    // never run still carries a stamp.
     runHeartbeatAt: t.timestamp("run_heartbeat_at").notNull().defaultNow(),
 
-    // The A2A token whose client started this Chat (ADR-0032), so a retried
-    // message finds its Chat. Null for a Chat started in the UI.
     a2aTokenId: t
       .text("a2a_token_id")
       .references((): AnyPgColumn => a2aToken.id, { onDelete: "set null" }),
-    // That token's name when the Chat started, the client label the Chat
-    // list shows. Copied rather than joined so it outlives the token.
     a2aClientName: t.text("a2a_client_name"),
-    // The A2A endpoint that started this Chat, whose `extractMemories` decides
-    // whether memory extraction reads it. No foreign key: the id outlives a
-    // deleted endpoint, so its Chats stay out of extraction rather than
-    // falling back to looking like the Owner's own.
+    // why: no FK; the id outlives its endpoint, so those Chats stay out of extraction
     a2aEndpointId: t.text("a2a_endpoint_id"),
-    // The Trigger run whose Transcript this Chat keeps (ADR-0044). Such a
-    // Chat is left out of the Chat list and goes with its run, so pruning
-    // under Max Runs to Keep prunes it too. Null for any other Chat.
     triggerRunId: t
       .text("trigger_run_id")
       .references((): AnyPgColumn => triggerRun.id, { onDelete: "cascade" }),
@@ -380,34 +290,22 @@ export const chat = pgTable(
       "chat_status_allowed",
       sql`${t.status} in ('running', 'succeeded', 'failed', 'cancelled')`,
     ),
-    // The Chat list: one Workspace's Chats, pinned first, newest first, a
-    // page at a time. Its leading column also serves every by-Workspace read.
-    // Nulls first, as a plain `DESC` sorts them, so the order matches.
     index("idx_chat_workspace_pinned_created").on(
       t.workspaceId,
       t.isPinned.desc().nullsFirst(),
       t.createdAt.desc().nullsFirst(),
     ),
-    // Memory extraction's pick of each Workspace's most recently updated Chats.
     index("idx_chat_workspace_updated_at").on(t.workspaceId, t.updatedAt),
-    // The recovery sweep's `running` Chats: a handful at any moment.
     index("idx_chat_running")
       .on(t.id)
       .where(sql`${t.status} = 'running'`),
-    // A Provider model's alias removal rewrites that Provider's Chats.
     index("idx_chat_provider_id").on(t.providerId),
-    // A retried A2A message is found among the Chats its token started.
     index("idx_chat_a2a_token_id").on(t.a2aTokenId),
-    // A run's delete cascades through this.
     index("idx_chat_trigger_run_id").on(t.triggerRunId),
-    // A Chat is started by an A2A client or by a Trigger run, never both.
     check(
       "chat_one_binding",
       sql`${t.a2aEndpointId} is null or ${t.triggerRunId} is null`,
     ),
-    // NO ACTION rather than a cascade or set-null, for the leaf and the memory
-    // cursor alike: a message row is never hard-deleted on its own, only with
-    // its Chat, so neither can dangle.
     foreignKey({
       columns: [t.id, t.activeLeafId],
       foreignColumns: [chatMessage.chatId, chatMessage.id],
@@ -419,14 +317,6 @@ export const chat = pgTable(
   ],
 );
 
-/**
- * One message of a Chat (ADR-0026). The messages form a tree through
- * `parentId`; the Chat's `activeLeafId` picks the Active path through it.
- *
- * Rows are never hard-deleted on their own: Delete sets `deletedAt`, which
- * takes the row off the Active path and leaves the tree's shape alone. Only the
- * Chat's own delete removes them, by cascade.
- */
 export const chatMessage = pgTable(
   "chat_message",
   (t) => ({
@@ -434,9 +324,8 @@ export const chatMessage = pgTable(
       .text("chat_id")
       .notNull()
       .references((): AnyPgColumn => chat.id, { onDelete: "cascade" }),
-    // Client-generated for a user message, so unique only within its Chat.
+    // why: client-generated, so unique only within its Chat
     id: t.text("id").notNull(),
-    // Null for a message that opens the Chat.
     parentId: t.text("parent_id"),
     role: t.text("role").$type<"user" | "assistant">().notNull(),
     parts: t.jsonb("parts").$type<PlatypusUIMessage["parts"]>().notNull(),
@@ -446,8 +335,6 @@ export const chatMessage = pgTable(
   }),
   (t) => [
     primaryKey({ columns: [t.chatId, t.id] }),
-    // The parent check on a message delete; the primary key leads with
-    // `chat_id` alone, which matches every message of the Chat.
     index("idx_chat_message_chat_id_parent_id").on(t.chatId, t.parentId),
     foreignKey({
       columns: [t.chatId, t.parentId],
@@ -456,58 +343,26 @@ export const chatMessage = pgTable(
   ],
 );
 
-/**
- * One durable **Transcript summary** of a Chat's older Transcript (ADR-0041,
- * issue #1716): a row recording that "everything on the path from the root to
- * anchor message X, condensed", so the model receives the `text` in place of
- * the older messages while the stored Transcript never changes.
- *
- * Landed as a table rather than a column on `chat` or on a message, because a
- * Chat's tree has branches: every Alternative can carry its own summary, and
- * switching to an Alternative with a summary on it reuses that one.
- *
- * Rows are NEVER updated — a new summary supersedes rather than revises an
- * older one, and a later change to the tree is caught when the row is read,
- * against `coveredIds`, never by rewriting it. That is what makes the row safe
- * against the tree's two sibling-making edits (ADR-0026): an edit or a
- * regenerate adds a message whose path differs at the split, so the anchor's
- * own path is untouched; only a Delete inside the range changes the live path
- * under an anchor, and that is exactly what the `coveredIds` check catches.
- */
 export const chatSummary = pgTable(
   "chat_summary",
   (t) => ({
-    // The row's own surrogate id. The (chat, anchor) pair is not unique —
-    // several summaries may sit at the same anchor and the newest usable one
-    // wins at read time — so no key can lead with the pair, and no anchor
-    // rewrite (a ``backward-moving watermark``) exists to version against.
     id: t.text("id").primaryKey(),
     chatId: t
       .text("chat_id")
       .notNull()
       .references((): AnyPgColumn => chat.id, { onDelete: "cascade" }),
-    /** The last message the summary covers, always an assistant message. */
     anchorId: t.text("anchor_id").notNull(),
-    /** The live path ids root→anchor when the summary was taken. */
     coveredIds: t.jsonb("covered_ids").$type<string[]>().notNull(),
-    /** The summary text. */
     text: t.text("text").notNull(),
-    /** The model that wrote it and the reading it was taken from (ADR-0041). */
     stats: t.jsonb("stats").$type<TranscriptSummaryStats>(),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
   }),
   (t) => [
-    // A Chat's summaries, newest first, for the divider and the read path.
     index("idx_chat_summary_chat_id_created_at").on(
       t.chatId,
       t.createdAt.desc().nullsFirst(),
     ),
-    // Covers the anchor foreign key below, and the read that picks a row by
-    // its anchor when several summaries sit there.
     index("idx_chat_summary_chat_id_anchor_id").on(t.chatId, t.anchorId),
-    // The anchor is a message the summary covered; the Chat's delete cascades
-    // through the `chatId` reference above, so no row is ever hard-deleted
-    // under a surviving Chat (ADR-0026).
     foreignKey({
       columns: [t.chatId, t.anchorId],
       foreignColumns: [chatMessage.chatId, chatMessage.id],
@@ -515,15 +370,6 @@ export const chatSummary = pgTable(
   ],
 );
 
-// Artifact
-
-/**
- * A standalone, versioned piece of content an Agent creates in a Workspace
- * (issue #2003). It belongs to the Workspace, not the Chat that made it: the
- * source Chat is nullable and cleared when that Chat is deleted, so tidying
- * Chats never destroys finished work. Versions are append-only; the latest is
- * the Artifact's current content.
- */
 export const artifact = pgTable(
   "artifact",
   (t) => ({
@@ -537,7 +383,6 @@ export const artifact = pgTable(
       .references(() => chat.id, { onDelete: "set null" }),
     title: t.text("title").notNull(),
     type: t.text("type").$type<ArtifactType>().notNull(),
-    // Code Artifacts only; null for every other type.
     language: t.text("language"),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
@@ -545,8 +390,6 @@ export const artifact = pgTable(
   (t) => [
     index("idx_artifact_workspace_id").on(t.workspaceId),
     index("idx_artifact_source_chat_id").on(t.sourceChatId),
-    // The list page's default order: a Workspace's Artifacts, most recently
-    // changed first.
     index("idx_artifact_workspace_updated_at").on(
       t.workspaceId,
       t.updatedAt.desc(),
@@ -554,11 +397,6 @@ export const artifact = pgTable(
   ],
 );
 
-/**
- * One version of an Artifact's content. Rows are append-only: no version is
- * ever updated or deleted on its own, and deleting the Artifact removes them
- * all. Each row stores the whole content, so reading any version is one row.
- */
 export const artifactVersion = pgTable(
   "artifact_version",
   (t) => ({
@@ -572,20 +410,13 @@ export const artifactVersion = pgTable(
     author: t.text("author").$type<ArtifactAuthor>().notNull(),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
   }),
-  (t) => [
-    // One row per version number, and the index that covers the artifact FK.
-    unique("unique_artifact_version").on(t.artifactId, t.version),
-  ],
+  (t) => [unique("unique_artifact_version").on(t.artifactId, t.version)],
 );
 
 export const agent = pgTable(
   "agent",
   (t) => ({
     id: t.text("id").primaryKey(),
-    // An Agent is scoped to either an Organization or a Workspace (mutually
-    // exclusive), mirroring the dual-scope shape of `provider`/`mcp`/`skill`.
-    // Org-scoped Agents are Shared resources managed by Org Admins (ADR-0007);
-    // the database enforces the XOR.
     organizationId: t
       .text("organization_id")
       .references(() => organization.id, {
@@ -602,16 +433,8 @@ export const agent = pgTable(
       }),
     name: t.text("name").notNull(),
     description: t.text("description").notNull(),
-    // The agent author's own instructions — the first fragment of the composed
-    // system prompt, not the composite (see ./system-prompt.ts).
     instructions: t.text("instructions"),
     modelId: t.text("model_id").notNull(),
-    // The optional Fallback model (ADR-0043): a second Provider and model a
-    // Trigger run may switch to when the primary Provider cannot serve the
-    // request. Referenced like the primary — `restrict`, so deleting a Provider
-    // an Agent uses as its fallback is refused rather than silently cleared.
-    // Two nullable columns, not one compound value, so an ordered list can
-    // replace them later without a breaking migration.
     fallbackProviderId: t
       .text("fallback_provider_id")
       .references(() => provider.id, {
@@ -625,17 +448,16 @@ export const agent = pgTable(
     seed: t.real("seed"),
     presencePenalty: t.real("presence_penalty"),
     frequencyPenalty: t.real("frequency_penalty"),
-    // Reasoning controls (ADR-0040); null means the model's default.
     reasoningThinking: t.boolean("reasoning_thinking"),
     reasoningEffort: t.text("reasoning_effort").$type<ReasoningEffort>(),
     thinkingBudget: t.integer("thinking_budget"),
-    toolSetIds: t.jsonb("tool_set_ids").$type<string[]>().notNull().default([]), // Array of tool set ids
-    skillIds: t.jsonb("skill_ids").$type<string[]>().notNull().default([]), // Array of skill ids
+    toolSetIds: t.jsonb("tool_set_ids").$type<string[]>().notNull().default([]),
+    skillIds: t.jsonb("skill_ids").$type<string[]>().notNull().default([]),
     subAgentIds: t
       .jsonb("sub_agent_ids")
       .$type<string[]>()
       .notNull()
-      .default([]), // Array of sub-agent ids
+      .default([]),
     inputPlaceholder: t.text("input_placeholder"),
     avatarKey: t.text("avatar_key"),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
@@ -650,8 +472,6 @@ export const agent = pgTable(
     index("idx_agent_organization_id").on(t.organizationId),
     index("idx_agent_provider_id").on(t.providerId),
     index("idx_agent_fallback_provider_id").on(t.fallbackProviderId),
-    // Shared Agents must have unique names within an Organization so Promote
-    // surfaces a clean conflict. Workspace Agent names stay unconstrained.
     unique("unique_agent_name_org").on(t.organizationId, t.name),
   ],
 );
@@ -660,10 +480,6 @@ export const mcp = pgTable(
   "mcp",
   (t) => ({
     id: t.text("id").primaryKey(),
-    // An MCP is scoped to either an Organization or a Workspace (mutually
-    // exclusive), mirroring the dual-scope shape of `provider`. Org-scoped MCPs
-    // are Shared resources managed by Org Admins (ADR-0007); the database
-    // enforces the XOR.
     organizationId: t
       .text("organization_id")
       .references(() => organization.id, {
@@ -673,9 +489,6 @@ export const mcp = pgTable(
       onDelete: "cascade",
     }),
     name: t.text("name").notNull(),
-    // Derived from `name` via `slugifyMcpName` (issue #467): the namespace
-    // prefix an MCP's tools carry into a turn's tool map, so a collision with a
-    // built-in or another MCP's tool cannot arise from raw server-side names.
     slug: t.text("slug").notNull(),
     url: t.text("url"),
     headers: t.jsonb("headers").$type<Record<string, string>>(),
@@ -684,37 +497,23 @@ export const mcp = pgTable(
     oauthAccessToken: t.text("oauth_access_token"),
     oauthRefreshToken: t.text("oauth_refresh_token"),
     oauthTokenExpiresAt: t.timestamp("oauth_token_expires_at"),
-    // Granted scope returned by the token endpoint after authorization.
     oauthScope: t.text("oauth_scope"),
-    // Scope sent to the authorize endpoint; some providers (e.g. Google) reject /authorize without it.
     oauthRequestedScope: t.text("oauth_requested_scope"),
     oauthClientId: t.text("oauth_client_id"),
     oauthClientSecret: t.text("oauth_client_secret"),
-    // Set when @ai-sdk/mcp registered `oauthClientId` itself (dynamic client
-    // registration), so it may drop and re-register it; an Operator-entered
-    // client is never dropped.
     oauthClientDynamicallyRegistered: t
       .boolean("oauth_client_dynamically_registered")
       .notNull()
       .default(false),
-    // The authorization server the stored tokens and client belong to, written
-    // with each token response. @ai-sdk/mcp refuses to refresh without it.
     oauthAuthorizationServer: t
       .jsonb("oauth_authorization_server")
       .$type<OAuthAuthorizationServerInformation>(),
-    // The Last-known tool listing (ADR-0029, issue #635): the raw `tools/list`
-    // result of the most recent successful fetch, served when a turn's fetch
-    // fails. `json`, not `jsonb` — `jsonb` re-sorts object keys, and the served
-    // tools must serialise byte-identical to the live ones.
     lastKnownToolListing: t
       .json("last_known_tool_listing")
       .$type<ListToolsResult>(),
     lastKnownToolListingFetchedAt: t.timestamp(
       "last_known_tool_listing_fetched_at",
     ),
-    // When a turn's fetch, or a stale tool's lazy connect, last failed (issue
-    // #1105). Within a minute of it a turn serves the listing above without
-    // trying the fetch (ADR-0031); null once the server answers again.
     lastFetchFailedAt: t.timestamp("last_fetch_failed_at"),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
@@ -728,11 +527,6 @@ export const mcp = pgTable(
     index("idx_mcp_organization_id").on(t.organizationId),
     unique("unique_mcp_name_org").on(t.organizationId, t.name),
     unique("unique_mcp_name_workspace").on(t.workspaceId, t.name),
-    // Same-scope slug uniqueness (issue #467), mirroring the name constraints
-    // above. Cross-scope collisions (an org-scoped and a workspace-scoped MCP
-    // sharing a slug) are legal — they cannot both be a DB constraint since
-    // they differ in which scope column is set — and are instead checked at
-    // create/update time and backstopped at Chat-turn time.
     unique("unique_mcp_slug_org").on(t.organizationId, t.slug),
     unique("unique_mcp_slug_workspace").on(t.workspaceId, t.slug),
   ],
@@ -746,14 +540,10 @@ export const mcpOauthState = pgTable(
       .text("mcp_id")
       .notNull()
       .references(() => mcp.id, { onDelete: "cascade" }),
-    // The user who started this sign-in; only they may complete it. Null when
-    // the state was minted outside a user request, which no one can complete.
     userId: t
       .text("user_id")
       .references(() => user.id, { onDelete: "cascade" }),
     codeVerifier: t.text("code_verifier").notNull(),
-    // The authorization server this sign-in started against; its callback is
-    // checked against this one, not against a sign-in started later.
     authorizationServer: t
       .jsonb("authorization_server")
       .$type<OAuthAuthorizationServerInformation>(),
@@ -767,13 +557,6 @@ export const mcpOauthState = pgTable(
   ],
 );
 
-// Attachment — the explicit reference that makes an Organization-scoped Shared
-// resource appear inside a specific Workspace (ADR-0007). Polymorphic by design:
-// `resourceType` + `resourceId` point at an org-scoped resource (today an `mcp`
-// or `provider`; extensible to Agents/Skills and Blueprints). `resourceId` has no
-// FK — the relationship is enforced in application code, and deletion of a Shared
-// resource is blocked while any Attachment exists rather than cascaded. The
-// `workspace_id` FK cascades so a deleted Workspace drops its attachments.
 export const attachment = pgTable(
   "attachment",
   (t) => ({
@@ -791,18 +574,11 @@ export const attachment = pgTable(
   }),
   (t) => [
     index("idx_attachment_workspace").on(t.workspaceId, t.resourceType),
-    // Drives the deletion guard ("is this resource attached anywhere?")
     index("idx_attachment_resource").on(t.resourceType, t.resourceId),
     unique("unique_attachment").on(t.workspaceId, t.resourceType, t.resourceId),
   ],
 );
 
-// Blueprint — a named, Organization-scoped macro that, applied to a Workspace,
-// creates the Attachments for a chosen set of Shared resources in one step
-// (ADR-0008). It is a snapshot, not a living binding: applying stamps
-// Attachments at that moment; later edits never disturb already-provisioned
-// Workspaces. Blueprints are always org-scoped (no dual scope) and managed only
-// by Org Admins.
 export const blueprint = pgTable(
   "blueprint",
   (t) => ({
@@ -814,12 +590,6 @@ export const blueprint = pgTable(
     name: t.text("name").notNull(),
     description: t.text("description"),
 
-    // Tier 2 pointer-settings (ADR-0008): the Workspace settings a Blueprint
-    // stamps on apply, mirroring the Workspace's own columns. All three provider
-    // references must be org-scoped (Shared) — enforced in the route. `context`
-    // is the default Workspace context text. Deleting a referenced provider sets
-    // these null (SET NULL), matching the Workspace's pointer-setting behavior;
-    // the blueprint_item deletion guard does not cover Tier 2 references.
     taskModelProviderId: t
       .text("task_model_provider_id")
       .references(() => provider.id, { onDelete: "set null" }),
@@ -847,12 +617,6 @@ export const blueprint = pgTable(
   ],
 );
 
-// The Shared resources a Blueprint provisions. Mirrors `attachment`: polymorphic
-// `resourceType` + `resourceId` pointing at an org-scoped resource, no FK on
-// `resourceId` (the relationship is enforced in application code, and deletion
-// of a Shared resource is blocked while any Blueprint lists it rather than
-// cascaded). The `blueprint_id` FK cascades so deleting a Blueprint drops its
-// items.
 export const blueprintItem = pgTable(
   "blueprint_item",
   (t) => ({
@@ -870,8 +634,6 @@ export const blueprintItem = pgTable(
   }),
   (t) => [
     index("idx_blueprint_item_blueprint").on(t.blueprintId),
-    // Drives the extended deletion guard ("is this resource listed in any
-    // Blueprint?")
     index("idx_blueprint_item_resource").on(t.resourceType, t.resourceId),
     unique("unique_blueprint_item").on(
       t.blueprintId,
@@ -903,10 +665,6 @@ export const sandbox = pgTable(
       .$type<Record<string, unknown>>()
       .notNull()
       .default({}),
-    // Workspace-default env split into two precedence tiers (ADR-0004 amendment,
-    // ADR-0006): adminEnv is org-admin-managed and wins; userEnv is
-    // workspace-owner-managed. Merge order at exec: adminEnv ▸ userEnv ▸
-    // model-provided input.env.
     adminEnv: t
       .jsonb("admin_env")
       .$type<Record<string, string>>()
@@ -923,9 +681,6 @@ export const sandbox = pgTable(
   (t) => [uniqueIndex("unique_sandbox_workspace_id").on(t.workspaceId)],
 );
 
-// Records sandbox destroy() failures so operators can reconcile leaked external
-// resources out-of-band. workspace_id is intentionally NOT a foreign key — the
-// table must survive Workspace deletion (see ADR-0001 cascade contract).
 export const sandboxTeardownFailure = pgTable(
   "sandbox_teardown_failure",
   (t) => ({
@@ -939,7 +694,6 @@ export const sandboxTeardownFailure = pgTable(
   (t) => [index("idx_sandbox_teardown_failure_workspace_id").on(t.workspaceId)],
 );
 
-// Organization membership - links users to organizations with roles
 export const organizationMember = pgTable(
   "organization_member",
   (t) => ({
@@ -967,7 +721,6 @@ export const organizationMember = pgTable(
   ],
 );
 
-// Invitations for organization membership
 export const invitation = pgTable(
   "invitation",
   (t) => ({
@@ -977,21 +730,11 @@ export const invitation = pgTable(
       .text("organization_id")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
-    // Null once the inviter's account is deleted: the invitation stays
-    // redeemable, it just no longer names who sent it.
     invitedBy: t
       .text("invited_by")
       .references(() => user.id, { onDelete: "set null" }),
-    status: t.text("status").notNull().default("pending"), // pending | accepted | declined | expired
-    // Optional name for the Workspace provisioned on accept (ADR-0008). Null
-    // defaults to "<member name>'s Workspace" at accept time.
+    status: t.text("status").notNull().default("pending"),
     workspaceName: t.text("workspace_name"),
-    // Redemption token minted with the invitation (ADR-0019, #549): a
-    // URL-safe, unguessable string that lets someone without an account yet
-    // resolve and redeem the invitation via its link rather than only after
-    // they already hold an account with the invited address. Plaintext and re-copyable by design (ADR-0019): there
-    // is no rotation action, and Platypus has no email to re-send a
-    // show-once secret through.
     token: t.text("token").notNull(),
     expiresAt: t.timestamp("expires_at").notNull(),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
@@ -1000,8 +743,6 @@ export const invitation = pgTable(
     index("idx_invitation_email").on(t.email),
     index("idx_invitation_org_id").on(t.organizationId),
     index("idx_invitation_invited_by").on(t.invitedBy),
-    // Partial: only a pending invitation claims the address (#1131), so an
-    // accepted, declined or expired one never blocks re-inviting it.
     uniqueIndex("unique_invitation_org_email")
       .on(t.organizationId, t.email)
       .where(sql`${t.status} = 'pending'`),
@@ -1009,13 +750,6 @@ export const invitation = pgTable(
   ],
 );
 
-// The ordered set of Blueprints an invitation carries (ADR-0009). On accept,
-// each Blueprint's macro runs in `position` order against the freshly
-// provisioned Workspace. Mirrors `blueprint_item`: `position` makes order
-// first-class, and the real `blueprint_id` FK powers the deletion guard
-// (a Blueprint cannot be deleted while a live pending invitation references it).
-// Both FKs cascade — deleting an invitation or a (legitimately deletable)
-// Blueprint cleans up the junction rows.
 export const invitationBlueprint = pgTable(
   "invitation_blueprint",
   (t) => ({
@@ -1033,7 +767,6 @@ export const invitationBlueprint = pgTable(
   }),
   (t) => [
     index("idx_invitation_blueprint_invitation").on(t.invitationId),
-    // Drives the deletion guard ("is this Blueprint referenced by an invite?")
     index("idx_invitation_blueprint_blueprint").on(t.blueprintId),
     unique("unique_invitation_blueprint").on(t.invitationId, t.blueprintId),
   ],
@@ -1043,10 +776,6 @@ export const skill = pgTable(
   "skill",
   (t) => ({
     id: t.text("id").primaryKey(),
-    // A Skill is scoped to either an Organization or a Workspace (mutually
-    // exclusive), mirroring the dual-scope shape of `provider`/`mcp`. Org-scoped
-    // Skills are Shared resources managed by Org Admins (ADR-0007); the
-    // database enforces the XOR.
     organizationId: t
       .text("organization_id")
       .references(() => organization.id, {
@@ -1063,27 +792,13 @@ export const skill = pgTable(
       .notNull()
       .default(false),
     argumentHint: t.text("argument_hint"),
-    // Every `SKILL.md` frontmatter key not mapped to a column above, kept as-is
-    // and merged back on export (ADR-0036).
     frontmatter: t
       .jsonb("frontmatter")
       .$type<Record<string, unknown>>()
       .notNull()
       .default({}),
-    // A hash over the stored content — the mapped fields, `frontmatter`, `body`
-    // and each `skill_file`'s path and sha256 (`bundleHash`). Null only on a
-    // Skill last written before bundles existed; its next write sets it.
     bundleHash: t.text("bundle_hash"),
-    // Whether the bundle has anything only a Sandbox can use: a file under
-    // `scripts/`, a text file starting with `#!`, or a binary file. Decided by
-    // content at import, never by extension.
     needsSandbox: t.boolean("needs_sandbox").notNull().default(false),
-    // Where a Skill installed from GitHub came from (ADR-0037), so it can be
-    // checked for updates: `sourceType` "github", `source` "<owner>/<repo>",
-    // `ref` as entered (null for the default branch), `skillPath` ("" for the
-    // repo root), the `commitSha` installed and the `bundleHash` it had then.
-    // All null for a Skill made by hand or from a zip; Replace bundle clears
-    // them, edits through the form keep them.
     sourceType: t.text("source_type"),
     source: t.text("source"),
     ref: t.text("ref"),
@@ -1105,13 +820,6 @@ export const skill = pgTable(
   ],
 );
 
-/**
- * One bundled file of a Skill other than `SKILL.md`, which lives on the `skill`
- * row (ADR-0036). The bytes are in the StorageBackend under `storageKey`
- * (`<orgId>/skills/<skillId>/<uploadId>/<fileId>`); the bundle path lives only
- * here, since key segments are restricted and the disk backend can be
- * case-insensitive.
- */
 export const skillFile = pgTable(
   "skill_file",
   (t) => ({
@@ -1123,7 +831,6 @@ export const skillFile = pgTable(
     path: t.text("path").notNull(),
     size: t.integer("size").notNull(),
     sha256: t.text("sha256").notNull(),
-    // Decided by content once at import, never by extension.
     isText: t.boolean("is_text").notNull(),
     storageKey: t.text("storage_key").notNull(),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
@@ -1149,8 +856,6 @@ export const context = pgTable(
   (t) => [
     index("idx_context_user_id").on(t.userId),
     index("idx_context_workspace_id").on(t.workspaceId),
-    // A global Context has a null workspace_id; nulls must collide so a
-    // user holds at most one global Context.
     unique("unique_context_user_workspace")
       .on(t.userId, t.workspaceId)
       .nullsNotDistinct(),
@@ -1171,7 +876,8 @@ export const memoryDailySummary = pgTable(
       .references(() => workspace.id, { onDelete: "cascade" }),
     summaryDate: t.date("summary_date").notNull(),
     summary: t.text("summary").notNull(),
-    embedding: unboundVector("embedding"), // No fixed dimensions — configurable per workspace
+    // why: no HNSW index; dimensions vary per Workspace, and reads are scoped per user
+    embedding: unboundVector("embedding"),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
   }),
@@ -1184,10 +890,6 @@ export const memoryDailySummary = pgTable(
     index("idx_daily_summary_user_workspace").on(t.userId, t.workspaceId),
     index("idx_daily_summary_date").on(t.summaryDate),
     index("idx_daily_summary_workspace_id").on(t.workspaceId),
-    // No HNSW index — dimensions vary per workspace. Exact nearest-neighbor
-    // search via <=> is fast enough for the scale of daily summaries (hundreds
-    // to low thousands of rows per workspace). Queries are already scoped by
-    // userId + workspaceId which narrows the search set significantly.
   ],
 );
 
@@ -1203,49 +905,26 @@ export const trigger = pgTable(
       .text("agent_id")
       .notNull()
       .references(() => agent.id, { onDelete: "restrict" }),
-    type: t.text("type").$type<TriggerType>().notNull(), // "cron" | "event" | "inbound"
+    type: t.text("type").$type<TriggerType>().notNull(),
     name: t.text("name").notNull(),
     description: t.text("description"),
     instruction: t.text("instruction").notNull(),
     enabled: t.boolean("enabled").notNull().default(true),
     maxRunsToKeep: t.integer("max_runs_to_keep").notNull().default(10),
     search: t.boolean("search").notNull().default(false),
-    // Off by default, and deliberately not backfilled (#645): a headless run
-    // should not have a system prompt that drifts with interactive-chat
-    // activity unrelated to it. Existing Triggers stop composing the
-    // `<memories>` block when this column lands — the intended outcome.
     includeMemories: t.boolean("include_memories").notNull().default(false),
-    // Whether memory extraction reads this Trigger's run Chats (ADR-0044).
-    // Off by default: a run has no User whose preferences a Memory captures.
     extractMemories: t.boolean("extract_memories").notNull().default(false),
-    // The validated shape. The repair migration fills the fields each type
-    // gained and refuses a config it cannot make valid; reads still narrow
-    // `type`/`config` together through `narrowTriggerConfig`, which reports a
-    // pair the upgrade could not repair.
     config: t
       .jsonb("config")
       .$type<z.infer<typeof triggerSchema>["config"]>()
       .notNull(),
     lastRunAt: t.timestamp("last_run_at"),
     nextRunAt: t.timestamp("next_run_at"),
-    // One-off Triggers only: when the scheduler claimed it. Set = spent — never
-    // re-armed, hidden from the Trigger list by default, and reaped a fixed
-    // time after its run ends. Null on a One-off disabled before it fired.
     firedAt: t.timestamp("fired_at"),
-    // Inbound Triggers only (ADR-0030). The token is shown once and stored as
-    // a SHA-256 hash — it is 256 random bits, so a slow hash buys nothing. Null
-    // on other types, and on an Inbound Trigger whose token was revoked.
     tokenHash: t.text("token_hash"),
     tokenCreatedAt: t.timestamp("token_created_at"),
     tokenExpiresAt: t.timestamp("token_expires_at"),
-    // The latest expiry Notification sent for the current token: null |
-    // "expiring_30" | "expiring_7" | "expired". The three are sent in that
-    // order, so one ordered value records all of them. Kept here rather than
-    // inferred from the Notification, which the Owner may delete; issuing or
-    // revoking a token clears it.
     tokenNotice: t.text("token_notice"),
-    // Written at most once a minute per Trigger, so a flood of calls cannot
-    // become a flood of writes.
     lastUsedAt: t.timestamp("last_used_at"),
     lastRejectedAt: t.timestamp("last_rejected_at"),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
@@ -1271,44 +950,24 @@ export const triggerRun = pgTable(
       .text("trigger_id")
       .notNull()
       .references(() => trigger.id, { onDelete: "cascade" }),
-    // pending | running | success | failed | cancelled | suppressed
     status: t
       .text("status")
       .$type<TriggerRunStatus>()
       .notNull()
       .default("pending"),
     eventType: t.text("event_type").$type<EventTriggerEvent>(),
-    // An Event Trigger's event payload, or an Inbound Trigger call's inputs.
     eventData: t
       .jsonb("event_data")
       .$type<
         EventTriggerEventPayload["data"] | { inputs: Record<string, string> }
       >(),
-    // The entity an Event Trigger's event named — the Card or Notification the
-    // run was for. Null on Cron runs, on rows written before the column
-    // existed, and on events that name no single entity (bulk
-    // `notification.read`); the run-rate breaker counts by this column and
-    // ignores null, so those firings are exempt by construction. An Inbound
-    // Trigger run always carries one: its record key's value, or the Trigger's
-    // own id when no key is marked, so every inbound run is under the breaker.
     entityId: t.text("entity_id"),
     startedAt: t.timestamp("started_at").notNull().defaultNow(),
     completedAt: t.timestamp("completed_at"),
     errorMessage: t.text("error_message"),
     stats: t.jsonb("stats").$type<TriggerRunStats>(),
-    // The final assistant text — "what did it conclude" — one value per run
-    // (#647, ADR-0023). Null until the run has one, and for ever on runs that
-    // predate the column or ended before answering. The runs LIST never
-    // selects it; only the run detail does.
     finalText: t.text("final_text"),
-    // The run's timeline hit the per-run event ceiling, so `trigger_run_event`
-    // holds a prefix of what happened rather than all of it.
     eventsTruncated: t.boolean("events_truncated").notNull().default(false),
-    // The Agent's granted Tool sets and MCPs that loaded no tools for this run,
-    // each `{ toolSetId, name, reason }`, and how many of its tool calls ended
-    // in error (#1184). Columns rather than `stats`, which is null until the
-    // first step: a run that fails before then still says what it never had.
-    // Warnings only — neither ever changes `status`.
     unloadedToolSets: t
       .jsonb("unloaded_tool_sets")
       .$type<UnloadedToolSet[]>()
@@ -1328,13 +987,9 @@ export const triggerRun = pgTable(
     ),
     index("idx_trigger_run_trigger_id").on(t.triggerId),
     index("idx_trigger_run_started_at").on(t.startedAt),
-    // The scheduler's every-minute checks for a Trigger's unfinished run.
     index("idx_trigger_run_unfinished")
       .on(t.triggerId)
       .where(sql`${t.status} in ('pending', 'running')`),
-    // The run-rate breaker's per-(Trigger, entity) count over its rolling window,
-    // and the retention union that keeps that window countable. Column order
-    // matches the predicate: exact Trigger, exact entity, range on time.
     index("idx_trigger_run_trigger_entity_started_at").on(
       t.triggerId,
       t.entityId,
@@ -1342,8 +997,6 @@ export const triggerRun = pgTable(
     ),
   ],
 );
-
-// Kanban Board
 
 export const kanbanBoard = pgTable(
   "kanban_board",
@@ -1436,23 +1089,6 @@ export const kanbanCard = pgTable(
   ],
 );
 
-/**
- * A **Run event**: one thing that happened during a Trigger run — a tool call,
- * a stretch of reasoning, a stretch of text, or a delegation — with when it
- * started, how long it took and how it ended, and never what it said (#647,
- * ADR-0023). Together, a run's rows are its **Run timeline**.
- *
- * A table rather than a JSONB column on the run because of concurrency: a run
- * that fans out to parallel Sub-Agents has several delegates appending to one
- * timeline at once, and a read-modify-write on a shared array loses updates.
- * Independent inserts make that the database's problem.
- *
- * Every event keys to the ROOT run, however deep the delegation it belongs to,
- * so the run's cascade — and with it Max Runs to Keep retention — removes the
- * whole timeline. Nesting is the self-referencing `parentEventId`: null for an
- * event of the root run, the `delegate` event's id for an event of that
- * delegate's run. Delegates get no run record of their own.
- */
 export const triggerRunEvent = pgTable(
   "trigger_run_event",
   (t) => ({
@@ -1466,25 +1102,13 @@ export const triggerRunEvent = pgTable(
       .references((): AnyPgColumn => triggerRunEvent.id, {
         onDelete: "cascade",
       }),
-    // Monotonic insertion order within the run, for incremental polling.
-    // Display order is `startedAt`, so parallel tool calls read as overlapping.
     seq: t.integer("seq").notNull(),
     type: t.text("type").$type<RunEventType>().notNull(),
     toolName: t.text("tool_name"),
-    // An absolute wall-clock instant in epoch milliseconds — not an offset from
-    // the run's start, so it correlates with logs and a delegate's events need
-    // no rebasing. Stored as the number the recorder measured.
     startedAt: t.bigint("started_at", { mode: "number" }).notNull(),
-    // Measured on a monotonic clock, never as a difference of two wall-clock
-    // reads. Null while the event is open — and for ever on an event the
-    // stuck-run sweep closed, whose end nobody saw.
     durationMs: t.integer("duration_ms"),
     status: t.text("status").$type<RunEventStatus>().notNull(),
-    // `{ message, truncated, originalBytes }` — the one content a Run event
-    // carries, capped at 1 KB on a character boundary. Null unless it failed.
     error: t.jsonb("error").$type<RunEventError>(),
-    // `{ from, to }` on a `model-switch` event (ADR-0043): the (Provider, model)
-    // pairs the run left and moved to. Null on every other event.
     modelSwitch: t.jsonb("model_switch").$type<ModelSwitch>(),
     childrenTruncated: t.boolean("children_truncated").notNull().default(false),
   }),
@@ -1497,14 +1121,10 @@ export const triggerRunEvent = pgTable(
       "trigger_run_event_status_allowed",
       sql`${t.status} in ('running', 'completed', 'error', 'cancelled')`,
     ),
-    // The detail read: one run's events, incrementally past a sequence number.
     index("idx_trigger_run_event_run_id_seq").on(t.runId, t.seq),
-    // Retention's cascade looks up each deleted event's children.
     index("idx_trigger_run_event_parent_event_id").on(t.parentEventId),
   ],
 );
-
-// Notifications
 
 export const notification = pgTable(
   "notification",
@@ -1514,15 +1134,11 @@ export const notification = pgTable(
       .text("workspace_id")
       .notNull()
       .references(() => workspace.id, { onDelete: "cascade" }),
-    // The Agent that posted it. Null on a Notification Platypus posts itself, such as a
-    // Workspace transfer's notice to the new Owner.
     agentId: t
       .text("agent_id")
       .references(() => agent.id, { onDelete: "cascade" }),
     title: t.text("title"),
     body: t.text("body").notNull(),
-    // The Chat or Trigger run it was posted from (#1229), at most one; both
-    // null outside a run, or once the source is deleted or pruned.
     sourceChatId: t
       .text("source_chat_id")
       .references(() => chat.id, { onDelete: "set null" }),
@@ -1562,8 +1178,6 @@ export const notificationRead = pgTable(
   ],
 );
 
-// Webhook (multiple per workspace)
-
 export const webhook = pgTable(
   "webhook",
   (t) => ({
@@ -1584,11 +1198,6 @@ export const webhook = pgTable(
   (t) => [index("idx_webhook_workspace_id").on(t.workspaceId)],
 );
 
-// A Pinned Agent: an Agent the Workspace Owner has pinned in one Workspace,
-// shown above the rest there. A join table rather than a column, because one
-// Shared Agent row is attached to many Workspaces (ADR-0007) and a Workspace
-// Agent has no Attachment. Deleting the Agent or Workspace deletes the pin;
-// detaching a Shared Agent deletes it in `detachResource`.
 export const workspaceAgentPin = pgTable(
   "workspace_agent_pin",
   (t) => ({
@@ -1608,10 +1217,6 @@ export const workspaceAgentPin = pgTable(
   ],
 );
 
-// An Agent made reachable over A2A from one Workspace (ADR-0032). The id is
-// the public, unguessable part of the URL — never the Agent's id. Deleting
-// the Agent deletes its endpoints; detaching a Shared Agent deletes them in
-// `detachResource`, since no foreign key sees the Attachment.
 export const a2aEndpoint = pgTable(
   "a2a_endpoint",
   (t) => ({
@@ -1624,15 +1229,9 @@ export const a2aEndpoint = pgTable(
       .text("agent_id")
       .notNull()
       .references(() => agent.id, { onDelete: "cascade" }),
-    // What outside callers see on the Agent Card, in place of the Agent's own.
     name: t.text("name").notNull(),
     description: t.text("description").notNull(),
     enabled: t.boolean("enabled").notNull().default(true),
-    // Both off by default: the caller may not be the Owner. `includeMemories`
-    // puts the Owner's Memories in a turn's System prompt and serves the
-    // Agent's Memory tools, on every turn in the endpoint's Chats, the Owner's
-    // own included; `extractMemories`
-    // lets the endpoint's Chats feed memory extraction, UI turns included.
     includeMemories: t.boolean("include_memories").notNull().default(false),
     extractMemories: t.boolean("extract_memories").notNull().default(false),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
@@ -1644,8 +1243,6 @@ export const a2aEndpoint = pgTable(
   ],
 );
 
-// One bearer token per A2A client. Shown once and stored as a SHA-256 hash,
-// as an Inbound Trigger's token is (ADR-0030).
 export const a2aToken = pgTable(
   "a2a_token",
   (t) => ({
@@ -1656,13 +1253,9 @@ export const a2aToken = pgTable(
       .references(() => a2aEndpoint.id, { onDelete: "cascade" }),
     name: t.text("name").notNull(),
     tokenHash: t.text("token_hash").notNull(),
-    // The current value's lifecycle, as on an Inbound Trigger (ADR-0030):
-    // regenerating moves both times on and clears `tokenNotice`, the latest
-    // expiry Notification sent for this value.
     tokenCreatedAt: t.timestamp("token_created_at").notNull(),
     tokenExpiresAt: t.timestamp("token_expires_at").notNull(),
     tokenNotice: t.text("token_notice"),
-    // Each written at most once a minute per token.
     lastUsedAt: t.timestamp("last_used_at"),
     lastRejectedAt: t.timestamp("last_rejected_at"),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
@@ -1670,26 +1263,13 @@ export const a2aToken = pgTable(
   (t) => [index("idx_a2a_token_endpoint_id").on(t.endpointId)],
 );
 
-/** How an A2A Task ended, as recorded when its run ended. */
 export type A2aTaskEndState = "completed" | "failed" | "canceled";
 
-// One A2A turn as a Task (ADR-0032), under a random UUID. While it runs, its
-// state is derived from the Chat's run; `state` records how that run ended,
-// since a Chat that moves on no longer has it. The turn is named by its user
-// message — the client's `messageId` — whose reply is the assistant message.
-// `canceledAt` is when a client's `CancelTask` claimed it: a run the cancel
-// message missed is found and stopped from it. `statusAt` is the Task's status
-// timestamp: when it was made, then when its end was recorded. `replyId` is the
-// reply recorded with its end, its artifact from then on: one the Owner deletes
-// or regenerates leaves the Task its state and no artifact. Lives as long as
-// its Chat; an endpoint or token deleted later leaves it with no way to be read.
 export const a2aTask = pgTable(
   "a2a_task",
   (t) => ({
     id: t.text("id").primaryKey(),
     chatId: t.text("chat_id").notNull(),
-    // The `contextId` the client minted for the Task's Chat, which the Task
-    // carries in place of the Chat id. Null where the context is the Chat id.
     contextId: t.text("context_id"),
     messageId: t.text("message_id").notNull(),
     endpointId: t
@@ -1701,8 +1281,6 @@ export const a2aTask = pgTable(
     state: t.text("state").$type<A2aTaskEndState>(),
     canceledAt: t.timestamp("canceled_at"),
     statusAt: t.timestamp("status_at", { precision: 3 }).notNull().defaultNow(),
-    // Push notifications sent for this Task, over every config it has had, so
-    // deleting a delivered config and registering another can't send more.
     pushCount: t.integer("push_count").notNull().default(0),
     replyId: t.text("reply_id"),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
@@ -1710,27 +1288,19 @@ export const a2aTask = pgTable(
   (t) => [
     uniqueIndex("idx_a2a_task_chat_id_message_id").on(t.chatId, t.messageId),
     index("idx_a2a_task_endpoint_id").on(t.endpointId),
-    // A token's ListTasks page, newest status first; its leading column
-    // serves the token's foreign key too. `NULLS FIRST` is what `DESC` sorts
-    // by, so the page's `ORDER BY` reads straight off it.
     index("idx_a2a_task_token_id_status_at_id").on(
       t.tokenId,
       t.statusAt.desc().nullsFirst(),
       t.id.desc().nullsFirst(),
     ),
-    // A token's Tasks with no end recorded, which ListTasks reads from their
-    // runs on every call.
     index("idx_a2a_task_token_id_unended")
       .on(t.tokenId)
       .where(sql`${t.state} IS NULL`),
     index("idx_a2a_task_chat_id_reply_id").on(t.chatId, t.replyId),
-    // Deleted with its Chat, and never names a message the Chat lacks.
     foreignKey({
       columns: [t.chatId, t.messageId],
       foreignColumns: [chatMessage.chatId, chatMessage.id],
     }).onDelete("cascade"),
-    // Its migration narrows the action to `SET NULL ("reply_id")`: the whole
-    // key would null `chat_id` too, which Drizzle can't express.
     foreignKey({
       name: "a2a_task_reply_fk",
       columns: [t.chatId, t.replyId],
@@ -1739,16 +1309,8 @@ export const a2aTask = pgTable(
   ],
 );
 
-/**
- * How an A2A client asked its push notifications to authenticate. Credentials
- * are optional, as in A2A 1.0's `AuthenticationInfo`.
- */
 export type A2aPushAuthentication = { scheme: string; credentials?: string };
 
-// Where an A2A client asked to be called when a Task ends (ADR-0032). The id
-// is the client's own, unique within its Task. The credentials are the
-// client's, sent back to it on delivery, so they are stored as given, like a
-// Webhook's headers. `notifiedAt` claims the one delivery a config gets.
 export const a2aPushConfig = pgTable(
   "a2a_push_config",
   (t) => ({
@@ -1791,17 +1353,6 @@ export const kanbanCardComment = pgTable(
   ],
 );
 
-/**
- * One write addressed to a Card, as its history remembers it (ADR-0024).
- * Cascades with the Card by design: a Card history is working context, so it
- * has no reason to outlive what it describes — which is also why `card.deleted`
- * is unloggable here.
- *
- * The actor is the leaf writer, taken from the `KanbanActor` the service was
- * called with and mirroring the Card's own `lastEditedBy*` columns, never the
- * ambient causation chain (ADR-0022) — that models who is responsible for a
- * run, which is a different question.
- */
 export const kanbanCardHistory = pgTable(
   "kanban_card_history",
   (t) => ({
@@ -1825,7 +1376,6 @@ export const kanbanCardHistory = pgTable(
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
   }),
   (t) => [
-    // Read newest-first for one card, and trimmed by the same key.
     index("idx_kanban_card_history_card_id_created_at").on(
       t.cardId,
       t.createdAt,

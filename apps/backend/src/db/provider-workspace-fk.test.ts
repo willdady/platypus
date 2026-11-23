@@ -5,11 +5,6 @@ import {
   migratedPglite,
 } from "./migrated-pglite.test-fixtures.ts";
 
-/**
- * Migration 0093 adds the `provider.workspace_id` FK, first removing the
- * Workspace Providers that past Organization and User deletes orphaned —
- * without that the FK could not be added.
- */
 let pg: PGlite;
 afterEach(() => pg.close());
 

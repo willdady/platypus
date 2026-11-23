@@ -5,11 +5,6 @@ import { eq } from "drizzle-orm";
 import { pgTable, text, timestamp } from "drizzle-orm/pg-core";
 import { databaseConfig, buildPoolConfig } from "./connection-config.ts";
 
-/**
- * The app's and the migration runner's connections run in UTC, whatever the database's own
- * default, so `defaultNow()` and a JS-written `Date` store the same instant
- * (#1615).
- */
 const stamp = pgTable("stamp", {
   id: text("id").primaryKey(),
   at: timestamp("at").notNull().defaultNow(),
@@ -22,10 +17,6 @@ afterEach(async () => {
   pg = undefined;
 });
 
-/**
- * Opens a session the way Postgres does for a client sending `options`: the
- * database default first, then each `-c name=value` on top.
- */
 const connect = async (databaseTimeZone: string, url: string) => {
   pg = await PGlite.create();
   await pg.exec(`SET TimeZone = '${databaseTimeZone}'`);

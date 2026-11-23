@@ -5,13 +5,7 @@ import {
   migratedPglite,
 } from "./migrated-pglite.test-fixtures.ts";
 
-/**
- * Column names become unique per Board (#1620): the migration first renames
- * the duplicates already stored, keeping the earliest column's name and
- * suffixing the later ones, so the constraint can be added and no name is lost.
- */
 const TAG = "0092_chat_indexes_kanban_column_name";
-/** A name at the 100-character limit a column name may have. */
 const LONG = "L".repeat(100);
 
 let pg: PGlite;

@@ -5,10 +5,6 @@ import {
   migratedPglite,
 } from "./migrated-pglite.test-fixtures.ts";
 
-/**
- * Dashboards are removed in 4.0.0 (#1430): the migration drops their tables
- * and strips the retired `dashboards` Tool set from stored `agent.tool_set_ids`.
- */
 const MIGRATION = "0099_drop_dashboards";
 
 const seeded: Record<string, string[]> = {

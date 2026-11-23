@@ -2,11 +2,6 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import type { PGlite } from "@electric-sql/pglite";
 import { migratedPglite } from "./migrated-pglite.test-fixtures.ts";
 
-/**
- * An A2A endpoint goes with its Agent, and its tokens go with it, while its
- * Chats and Tasks stay (ADR-0032), by the foreign keys the shipped migrations
- * create.
- */
 let pg: PGlite;
 beforeAll(async () => {
   pg = await migratedPglite();
@@ -40,7 +35,6 @@ describe("A2A endpoint foreign keys", () => {
     expect(rows).toEqual([{ a2a_gate: "off", a2a_allowed: false }]);
   });
 
-  // #1239 story 19: deleting an endpoint leaves the Owner its conversations.
   it("keep a deleted endpoint's Chats and Tasks", async () => {
     await pg.exec(`
       INSERT INTO "a2a_endpoint" ("id", "workspace_id", "agent_id", "name", "description")
