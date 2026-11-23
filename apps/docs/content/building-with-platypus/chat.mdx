@@ -553,14 +553,20 @@ The expanded summary also shows a quiet **Summarised by** line: the model that
 wrote the summary, and the input and output tokens it used. Those tokens are the
 summary's own cost; they are not counted in any reply's **Token usage**.
 
-Two things follow from that, and both are worth knowing:
+Three things follow from that, and all are worth knowing:
 
 - **Details above the line can come back fuzzier.** A summary keeps the intent,
-  your requests (quoted where they are short), the decisions and facts that
-  later steps depend on, what the assistant produced, what sources and tools
-  were used, what was corrected or dropped, what is still open, and where the
-  work stands — not every word. If something above the line matters to your
-  next question, state it again, or point the model at the message.
+  the instructions, constraints and preferences you set, your requests (quoted
+  in full unless very long), the decisions and facts that later steps depend on,
+  what the assistant produced, what sources and tools were used, what was
+  corrected or dropped, what is still open, and where the work stands — not
+  every word. If something above the line matters to your next question, state
+  it again, or point the model at the message.
+- **A request that was answered stops being quoted.** A request you made is
+  quoted in the first summary that covers it, even after it has been answered;
+  the summary after that drops it and keeps only the instructions, constraints
+  and preferences it set. A request that is still open stays quoted in full,
+  shortened only if it is very long.
 - **The line marks roughly where the Chat started growing.** The newest few
   turns are always sent in full, so the summary sits a few turns back rather
   than at the very top of the last exchange.
