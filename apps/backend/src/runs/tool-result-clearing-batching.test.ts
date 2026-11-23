@@ -6,26 +6,6 @@ import {
   DEFAULT_CLEARING_POLICY,
 } from "./tool-result-clearing.ts";
 
-/**
- * A before/after measurement of what batched clearing buys the Provider's
- * cached prompt prefix, on a simulated long tool-using turn.
- *
- * The quantity measured is what a cache miss costs: for every step after the
- * first, how many already-sent messages changed, and the characters from the
- * first changed message to the end — the suffix the Provider cannot serve from
- * its cache and must read again in full. It stands in for the vendor's
- * `cacheReadTokens` figure (`run-stats.ts`) without a live credential: a real
- * run's cache-read count also reflects the vendor's own breakpoint placement,
- * cached-write pricing and reasoning tokens a turn does not re-send, none of
- * which is observable here. What this pins is the mechanism — whether an earlier
- * message changes at all, and how much follows it.
- *
- * `prepareStep`'s `messages` override carries forward to later steps, so the
- * simulation carries the cleared markers forward too, which is how the real
- * loop behaves within one turn.
- */
-
-/** Occupancy is simulated at four characters per token; the rule never assumes it. */
 const CHARS_PER_TOKEN = 4;
 const DEFAULT_STEPS = 60;
 
@@ -64,7 +44,6 @@ type Measurement = {
   changedEarlierMessages: number;
   invalidatedChars: number;
   maxInvalidatedChars: number;
-  /** The largest occupancy a step READ, before clearing had a chance to run. */
   maxOccupancy: number;
 };
 
@@ -74,17 +53,11 @@ type Rule = (
   window: number,
 ) => ModelMessage[];
 
-/**
- * The rule before this change: clear everything past keep-recent once engaged.
- * `batchSize: 1` makes the shared prefix helper return every stale item, which
- * is exactly the old boundary.
- */
 const oldRule: Rule = (messages, occupancy, window) => {
   if (occupancy / window < POLICY.thresholdFraction) return messages;
   return clearStaleToolResults(messages, { ...POLICY, batchSize: 1 });
 };
 
-/** The shipped rule. */
 const newRule: Rule = (messages, occupancy, window) =>
   applyToolResultClearing(
     messages,
@@ -103,7 +76,6 @@ const simulate = (
   scenario: Scenario,
   rule: Rule,
 ): { measurement: Measurement; prompts: ModelMessage[][] } => {
-  // `prepareStep`'s override carries forward, markers included.
   let working: ModelMessage[] = [
     { role: "user", content: "u".repeat(scenario.basePromptChars) },
   ];
@@ -123,8 +95,6 @@ const simulate = (
       ...working,
       toolResultMessage(`t${step}`, "x".repeat(scenario.resultChars)),
     ];
-    // What the vendor reports for the call about to be made: the whole working
-    // conversation, markers included.
     const occupancy = Math.round(
       working.reduce((total, message) => total + messageChars(message), 0) /
         CHARS_PER_TOKEN,
@@ -165,19 +135,12 @@ const simulate = (
 const measure = (scenario: Scenario, rule: Rule): Measurement =>
   simulate(scenario, rule).measurement;
 
-/**
- * The regime the issue describes: four recent results plus the rest of the
- * conversation already reach the trigger, so clearing everything past
- * keep-recent cannot get back under it. The old rule then clears one more
- * result on every step; the batched rule waits for a batch.
- */
 const CREEP = {
   basePromptChars: 440_000,
   resultChars: 32_000,
   window: 200_000,
 };
 
-/** A turn that never reaches the trigger: neither rule touches it. */
 const BELOW = {
   basePromptChars: 40_000,
   resultChars: 6_000,
@@ -189,9 +152,6 @@ describe("Tool-result clearing — cached prompt prefix measurement", () => {
   const creepNew = measure(CREEP, newRule);
 
   it("stops moving the survivor boundary on most steps in the creep regime", () => {
-    // Recorded from this simulation. The batch moves the boundary once per
-    // four results instead of once per result, so the invalidation count is a
-    // quarter of the old rule's.
     expect(creepOld.stepsWithEarlierChange).toBe(56);
     expect(creepNew.stepsWithEarlierChange).toBe(14);
     expect(creepNew.stepsWithEarlierChange * POLICY.batchSize).toBe(
@@ -203,9 +163,6 @@ describe("Tool-result clearing — cached prompt prefix measurement", () => {
     expect(creepNew.invalidatedChars).toBeLessThan(
       creepOld.invalidatedChars / 3,
     );
-    // The change still happens in batches: an invalidation re-sends about the
-    // same suffix as one old-rule step (the live tail dominates it), but it
-    // happens a quarter as often.
     expect(creepNew.maxInvalidatedChars).toBeGreaterThanOrEqual(
       creepOld.maxInvalidatedChars,
     );
