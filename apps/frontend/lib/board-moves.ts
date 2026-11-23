@@ -15,10 +15,42 @@ export type ColumnWithCards = Serialized<KanbanColumn> & {
 
 const DROP_ZONE_PREFIX = "column-drop-";
 
+/** The droppable id for a column's empty space; the inverse of the parser. */
+export function dropZoneId(columnId: string): string {
+  return `${DROP_ZONE_PREFIX}${columnId}`;
+}
+
 export function parseDropZoneId(id: string): string | null {
   return id.startsWith(DROP_ZONE_PREFIX)
     ? id.slice(DROP_ZONE_PREFIX.length)
     : null;
+}
+
+/** The column whose cards include `cardId`, if any. */
+export function columnOfCard(
+  columns: ColumnWithCards[],
+  cardId: string,
+): ColumnWithCards | undefined {
+  return columns.find((col) => col.cards.some((c) => c.id === cardId));
+}
+
+/**
+ * The column an in-flight drag is over: its drop zone, the column itself, or
+ * the column holding the hovered card. Undefined when nothing matches, so the
+ * caller chooses its own fallback.
+ */
+export function resolveOverColumn(
+  columns: ColumnWithCards[],
+  overId: string,
+): ColumnWithCards | undefined {
+  const droppableColumnId = parseDropZoneId(overId);
+  return (
+    (droppableColumnId
+      ? columns.find((col) => col.id === droppableColumnId)
+      : undefined) ??
+    columns.find((col) => col.id === overId) ??
+    columnOfCard(columns, overId)
+  );
 }
 
 type Rect = { top: number; height: number };
@@ -47,19 +79,11 @@ export function placeCard(
   columns: ColumnWithCards[],
   { activeId, overId, activeRect, overRect }: CardDrop,
 ): CardPlacement | null {
-  const sourceColumn = columns.find((col) =>
-    col.cards.some((c) => c.id === activeId),
-  );
+  const sourceColumn = columnOfCard(columns, activeId);
   if (!sourceColumn) return null;
 
   const droppableColumnId = parseDropZoneId(overId);
-  const targetColumn =
-    (droppableColumnId
-      ? columns.find((col) => col.id === droppableColumnId)
-      : null) ??
-    columns.find((col) => col.id === overId) ??
-    columns.find((col) => col.cards.some((c) => c.id === overId)) ??
-    sourceColumn;
+  const targetColumn = resolveOverColumn(columns, overId) ?? sourceColumn;
 
   const isDropZone = droppableColumnId !== null;
   const targetCards = targetColumn.cards.filter((c) => c.id !== activeId);

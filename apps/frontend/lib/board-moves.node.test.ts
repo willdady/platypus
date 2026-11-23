@@ -6,9 +6,13 @@ import {
 } from "@platypus/schemas";
 import {
   applyCardMove,
+  columnOfCard,
+  dropZoneId,
   moveCard,
+  parseDropZoneId,
   placeCard,
   reorderColumns,
+  resolveOverColumn,
   type ColumnWithCards,
 } from "./board-moves";
 import {
@@ -37,6 +41,49 @@ function ids(columns: ColumnWithCards[]) {
 function rect(centreY: number) {
   return { top: centreY - 5, height: 10 };
 }
+
+describe("dropZoneId", () => {
+  it.each(["col-1", "a column id with spaces"])(
+    "round-trips %s through parseDropZoneId",
+    (columnId) => {
+      expect(parseDropZoneId(dropZoneId(columnId))).toBe(columnId);
+    },
+  );
+
+  it("is not a bare column id", () => {
+    expect(parseDropZoneId("col-1")).toBeNull();
+    expect(dropZoneId("col-1")).not.toBe("col-1");
+  });
+});
+
+describe("columnOfCard", () => {
+  const columns = [column("col-1", ["a"]), column("col-2", ["b", "c"])];
+
+  it("returns the column the card sits in", () => {
+    expect(columnOfCard(columns, "a")?.id).toBe("col-1");
+    expect(columnOfCard(columns, "c")?.id).toBe("col-2");
+  });
+
+  it("returns undefined when no column holds the card", () => {
+    expect(columnOfCard(columns, "zzz")).toBeUndefined();
+  });
+});
+
+describe("resolveOverColumn", () => {
+  const columns = [column("col-1", ["a"]), column("col-2", ["b"])];
+
+  it.each([
+    ["a column's drop zone", "column-drop-col-2", "col-2"],
+    ["a column id", "col-2", "col-2"],
+    ["a card's id", "a", "col-1"],
+  ])("resolves %s to its column", (_label, overId, columnId) => {
+    expect(resolveOverColumn(columns, overId)?.id).toBe(columnId);
+  });
+
+  it("returns undefined when nothing matches", () => {
+    expect(resolveOverColumn(columns, "zzz")).toBeUndefined();
+  });
+});
 
 describe("placeCard", () => {
   const columns = [column("col-1", ["a", "b", "c"]), column("col-2", ["d"])];
@@ -145,6 +192,21 @@ describe("placeCard", () => {
         overRect: rect(0),
       }),
     ).toBeNull();
+  });
+
+  it("falls back to the source column when the over id matches nothing", () => {
+    expect(
+      placeCard(columns, {
+        activeId: "a",
+        overId: "zzz",
+        activeRect: null,
+        overRect: rect(0),
+      }),
+    ).toEqual({
+      fromColumnId: "col-1",
+      toColumnId: "col-1",
+      afterCardId: null,
+    });
   });
 });
 
