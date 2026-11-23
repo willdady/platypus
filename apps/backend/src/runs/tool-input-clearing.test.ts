@@ -18,7 +18,6 @@ type Output = Extract<
     : never
   : never;
 
-/** One tool call and its result, as the assistant/tool message pair a step leaves. */
 const call = (
   toolName: string,
   toolCallId: string,
@@ -78,7 +77,6 @@ describe("applyToolInputClearing", () => {
     const messages = writes(8);
     const cleared = applyToolInputClearing(messages, ABOVE);
 
-    // floor((8 - 4) / 4) * 4 = 4: the oldest batch, with four kept live.
     for (const id of ["w0", "w1", "w2", "w3"]) {
       expect(inputOf(cleared, id)).toMatchObject({
         content: CLEARED_TOOL_INPUT_MARKER,
@@ -87,7 +85,6 @@ describe("applyToolInputClearing", () => {
     for (const id of ["w4", "w5", "w6", "w7"]) {
       expect(inputOf(cleared, id)).toBe(inputOf(messages, id));
     }
-    // Never mutates what it was given: the stored Transcript is the source.
     expect(inputOf(messages, "w0")).toMatchObject({ content: BODY });
   });
 
@@ -95,7 +92,6 @@ describe("applyToolInputClearing", () => {
     const messages = writes(12);
     const cleared = applyToolInputClearing(messages, ABOVE);
 
-    // floor((12 - 4) / 4) * 4 = 8: two batches, not all eight stale writes.
     expect(clearedWriteIds(cleared)).toEqual([
       "w0",
       "w1",
@@ -112,8 +108,6 @@ describe("applyToolInputClearing", () => {
   });
 
   it("stays engaged when an earlier reading on the path crossed the trigger", () => {
-    // The flip-flop, on the write-input sibling: a prior turn crossed 0.7 and
-    // moved the boundary, so the latest reading fell back under it.
     const messages = writes(8);
 
     expect(
@@ -229,8 +223,6 @@ describe("applyToolInputClearing", () => {
   });
 
   it("clears by count rather than by payload size", () => {
-    // The boundary no longer depends on bytes freed, so a small write in the
-    // oldest batch is cleared along with its neighbours.
     const messages = Array.from({ length: 8 }, (_, i) =>
       call("fsWrite", `s${i}`, { path: "p", content: "tiny" }),
     ).flat();
