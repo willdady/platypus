@@ -781,24 +781,62 @@ describe("processMemoryExtractionBatch chat selection", () => {
   it("keeps context within a quarter of the budget, and the prompt within the budget", async () => {
     seedChats(
       chat("big", {
-        messages: padded(messagesFor("big", 10), 300),
+        messages: padded(messagesFor("big", 10), 1_000),
         memoryCursorId: "big:17",
       }),
     );
-    // Half of 4,000 tokens is a 2,000-token budget: 8,000 characters.
-    declareWindow(4_000);
+    // Half of 16,384 tokens is 8,192, and the same window less the 8,192-token
+    // reply leaves 8,192: a 32,768-character budget.
+    declareWindow(16_384);
 
     expect(await run()).toEqual(["big"]);
     const { prompt } = mockGenerateText.mock.calls[0][0] as { prompt: string };
-    expect(prompt.length).toBeLessThanOrEqual(8_000);
+    expect(prompt.length).toBeLessThanOrEqual(32_768);
     const context = section("context");
-    expect(context.length).toBeLessThanOrEqual(2_000);
+    expect(context.length).toBeLessThanOrEqual(8_192);
     // The most recent of what came before, as much as fits.
-    expect(context.length).toBeGreaterThan(1_500);
+    expect(context.length).toBeGreaterThan(7_000);
     expect(context).toMatch(/assistant: a8x+$/);
     expect(section("new-messages")).toMatch(
       /^user: chat:big q9x+\n\nassistant: a9x+$/,
     );
+  });
+
+  it("makes no model call when the window leaves no room for input after the reply", async () => {
+    seedChats(
+      chat("tight", {
+        messages: messagesFor("tight", 2),
+        memoryCursorId: "tight:1",
+      }),
+    );
+    const warn = vi.spyOn(logger, "warn");
+    // 8,000 tokens against the 8,192-token reply: the reply alone fills it.
+    declareWindow(8_000);
+
+    expect(await run()).toEqual([]);
+    expect(chatRow("tight")).toMatchObject({
+      memoryExtractionStatus: "failed",
+      // Nothing read: the retry covers the same messages.
+      memoryCursorId: "tight:1",
+    });
+    expect(warn).toHaveBeenCalledWith(
+      expect.objectContaining({ chatId: "tight", contextWindow: 8_000 }),
+      expect.stringContaining("context window"),
+    );
+  });
+
+  it("sizes the input by the room the reply leaves when that is the smaller share", async () => {
+    seedChats(
+      chat("reply", { messages: padded(messagesFor("reply", 6), 2_000) }),
+    );
+    // Half of 12,288 tokens is 6,144; the same window less the 8,192-token
+    // reply is 4,096. The reply makes the tighter bound: 16,384 characters,
+    // where the half alone would have allowed 24,576.
+    declareWindow(12_288);
+
+    expect(await run()).toEqual(["reply"]);
+    const { prompt } = mockGenerateText.mock.calls[0][0] as { prompt: string };
+    expect(prompt.length).toBeLessThanOrEqual(16_384);
   });
 
   it("budgets 32k tokens when the model declares no context window", async () => {
@@ -815,9 +853,10 @@ describe("processMemoryExtractionBatch chat selection", () => {
 
   it("extracts new messages larger than the budget over several ticks, one chunk each", async () => {
     seedChats(
-      chat("chunk", { messages: padded(messagesFor("chunk", 6), 1_000) }),
+      chat("chunk", { messages: padded(messagesFor("chunk", 6), 4_000) }),
     );
-    declareWindow(4_000);
+    // A 32,768-character budget: eight 4,000-character messages fit a pass.
+    declareWindow(16_384);
 
     const extracted: string[] = [];
     let ticks = 0;
@@ -845,16 +884,16 @@ describe("processMemoryExtractionBatch chat selection", () => {
     seedChats(
       chat("cut", {
         messages: [
-          ...padded(messagesFor("cut").slice(0, 1), 20_000),
+          ...padded(messagesFor("cut").slice(0, 1), 40_000),
           ...messagesFor("cut").slice(1),
         ],
       }),
     );
-    declareWindow(4_000);
+    declareWindow(16_384);
 
     expect(await run()).toEqual(["cut"]);
     const { prompt } = mockGenerateText.mock.calls[0][0] as { prompt: string };
-    expect(prompt.length).toBeLessThanOrEqual(8_000);
+    expect(prompt.length).toBeLessThanOrEqual(32_768);
     expect(section("new-messages")).toMatch(
       /^user: chat:cut q0x+ \[truncated\]$/,
     );
