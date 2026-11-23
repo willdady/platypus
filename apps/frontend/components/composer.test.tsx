@@ -7,7 +7,7 @@ import {
   fireEvent,
   waitFor,
 } from "@testing-library/react";
-import { Composer, type ModelSelection } from "./composer";
+import { Composer, type ModelPickerConfig } from "./composer";
 import {
   PromptInputSpeechButton,
   type PromptInputMessage,
@@ -358,7 +358,7 @@ describe("Composer model picker — unsettled selection", () => {
 });
 
 describe("Composer model picker — substituted selection", () => {
-  const renderWith = (substitution?: ModelSelection["substitution"]) => {
+  const renderWith = (substitution?: ModelPickerConfig["substitution"]) => {
     render(
       <Composer
         onSubmit={vi.fn()}
