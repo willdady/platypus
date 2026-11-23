@@ -103,6 +103,7 @@ const eslintConfig = defineConfig([
       "src/fake-db.ts",
       "src/test-setup.ts",
       "vitest.config.ts",
+      "vitest.pg.config.ts",
     ],
     languageOptions: {
       parserOptions: {

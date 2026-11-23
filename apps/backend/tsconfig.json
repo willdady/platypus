@@ -26,6 +26,7 @@
     "src/test-utils.ts",
     "src/fake-db.ts",
     "src/test-setup.ts",
-    "vitest.config.ts"
+    "vitest.config.ts",
+    "vitest.pg.config.ts"
   ]
 }
