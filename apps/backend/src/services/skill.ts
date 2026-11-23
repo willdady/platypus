@@ -26,48 +26,16 @@ import {
 } from "./skill-bundle.ts";
 import { oneRow } from "../db/one-row.ts";
 
-/**
- * The Skill write model: create/update/delete that both route surfaces adapt
- * over — `routes/skill.ts` (Workspace surface) and `routes/org-skill.ts`
- * (Organization surface). They used to each carry a verbatim copy of the
- * insert/update column set (name/description/body) and the agent-association
- * SQL and had already drifted apart (#605): the Workspace copy owns `agentIds`
- * while the Organization copy re-lists the fields to discard them.
- *
- * `updateSkill`/`deleteSkill` also answer the agent-facing Tool surface
- * (`tools/skill-management.ts`), which catches the typed errors and translates
- * them to an `{ error }` result instead of letting them bubble to an HTTP
- * `onError`.
- *
- * "Not visible here" and "visible but locked" (a Shared Skill, a single source
- * of truth edited only on the Organization surface — ADR-0007) are the
- * cross-cutting errors of ADR-0010: at Workspace scope they throw via
- * `requireWorkspaceMutable`, letting the routes bubble to `app.onError` and the
- * Tool catch and translate. At Organization scope, "not visible here" throws
- * `NotFoundError` via `requireOrgScoped`/`requireSharedDeletable` the same way;
- * there is no "locked" case, since the Organization surface is where a Shared
- * Skill is always editable.
- */
-
 export type SkillRow = typeof skillTable.$inferSelect;
 
-/** The fields a create carries — every field but the id and its scope. */
 export type SkillCreateFields = z.input<typeof skillCreateSchema>;
 
-/** The fields an update may carry — a partial edit of the same set. */
 export type SkillUpdateFields = z.infer<typeof skillUpdateSchema>;
 
-/**
- * Which scope a write targets — the Workspace surface (ADR-0006 delegation
- * applies, a Shared row is locked) or the Organization surface (admin-only,
- * writes a Shared row directly). The one write model answers both surfaces by
- * branching on this rather than existing twice. Mirrors `ProviderScope`.
- */
 export type SkillScope =
   | { kind: "workspace"; ctx: ScopeContext }
   | { kind: "organization"; orgId: string };
 
-/** Appends `skillId` to `agentIds`' skill lists where it is not already set. */
 const assignToAgents = async (
   workspaceId: string,
   skillId: string,
@@ -90,12 +58,6 @@ const assignToAgents = async (
     );
 };
 
-/**
- * Rewrites a Skill's agent set: removes the Skill from every Workspace agent
- * not in the new list, then appends it to the ones that are. Runs only when an
- * update carries `agentIds`; the field's undefined/null distinction is what
- * separates "clear the set" from "leave it alone".
- */
 const syncAgentAssignments = async (
   workspaceId: string,
   skillId: string,
@@ -104,7 +66,6 @@ const syncAgentAssignments = async (
   const now = new Date();
   const skillIdJson = JSON.stringify([skillId]);
 
-  // Remove skill from agents not in the new list.
   const removeWhere = [
     eq(agentTable.workspaceId, workspaceId),
     sql`${agentTable.skillIds} @> ${skillIdJson}::jsonb`,
@@ -123,15 +84,6 @@ const syncAgentAssignments = async (
   await assignToAgents(workspaceId, skillId, agentIds);
 };
 
-/**
- * Creates a new Skill at the given scope. The scope comes from `scope`, never
- * the body — a caller cannot mint a Shared Skill from the Workspace surface by
- * naming an `organizationId` in the request (ADR-0006, ADR-0007). Agent
- * associations are a Workspace concern; at Organization scope any `agentIds`
- * are ignored, matching what the org surface used to do explicitly. A duplicate
- * name surfaces as a Postgres unique violation, mapped to 409 by the central
- * `onError` (ADR-0010).
- */
 export async function createSkill(
   scope: SkillScope,
   fields: SkillCreateFields,
@@ -160,13 +112,6 @@ export async function createSkill(
   return row;
 }
 
-/**
- * Updates a Skill at the given scope. Throws `NotFoundError` when the Skill is
- * not visible at this scope, and (Workspace scope only) `LockedError` when it
- * is a Shared Skill edited only on the Organization surface (ADR-0007). A
- * duplicate name surfaces as a Postgres unique violation, mapped to 409 by the
- * central `onError` (ADR-0010).
- */
 export async function updateSkill(
   scope: SkillScope,
   skillId: string,
@@ -176,9 +121,7 @@ export async function updateSkill(
 
   const where = await writableSkillWhere(scope, skillId);
 
-  // The body and mapped fields are part of the bundle hash; the files are not
-  // touched by this form, so they stay where they are. The rehash shares the
-  // update's transaction so a concurrent Replace bundle can't slip between them.
+  // why: rehash in the update's transaction, or a concurrent Replace bundle slips between
   const row = await db.transaction(async (tx) => {
     const [updated] = await tx
       .update(skillTable)
@@ -188,9 +131,6 @@ export async function updateSkill(
     return updated && rehashSkill(tx, updated);
   });
 
-  // The pre-checks above prove the row exists, but a concurrent delete can still
-  // win the race between the check and the UPDATE; that is a 404, not an empty
-  // 200.
   if (!row) {
     throw new NotFoundError("Skill not found");
   }
@@ -201,20 +141,6 @@ export async function updateSkill(
   return row;
 }
 
-/**
- * Creates or overwrites the Workspace's own version of a Skill in one statement
- * — the agent-facing Tool's write (it addresses Skills by name, no id). The
- * conflict target is `(workspaceId, name)`, which is what keeps the write
- * Workspace-private: reusing the name of an attached Shared Skill creates this
- * Workspace's own version rather than editing the Organization's row. The scope
- * comes from `ctx`, never the body.
- *
- * Throws `LockedError` when the name resolves to a Shared Skill with bundled
- * files: the Workspace version would carry none of them yet silently take
- * precedence over the bundle, and forking a bundle is not supported yet
- * (#1005). On the Workspace's own bundled Skill the files are kept and the
- * hash recomputed.
- */
 export async function upsertSkill(
   ctx: ScopeContext,
   fields: { name: string; description: string; body: string },
@@ -257,16 +183,6 @@ export async function upsertSkill(
   });
 }
 
-/**
- * Deletes a Skill at the given scope. At Workspace scope, throws
- * `NotFoundError`/`LockedError` (via `requireWorkspaceMutable`) under the same
- * rule as {@link updateSkill}, and `ConflictError` while a Workspace agent
- * still references the Skill. At Organization scope, throws `ConflictError`
- * (via `requireSharedDeletable`) while an Attachment or Blueprint still
- * references the Skill (ADR-0007/0008), and — because deleting a Shared Skill
- * can orphan an Agent's `skillIds` reference to it — scrubs that reference in
- * the same transaction as the delete.
- */
 export async function deleteSkill(
   scope: SkillScope,
   skillId: string,
@@ -274,9 +190,7 @@ export async function deleteSkill(
   if (scope.kind === "workspace") {
     await requireWorkspaceMutable(db, "skill", skillId, scope.ctx);
 
-    // A Skill that still names this Workspace's agents is still in use; refuse
-    // rather than leave dangling references. Not `inUseConflict`: its remedy
-    // (delete or switch the dependents) is wrong for an agent's Skill list.
+    // why: not inUseConflict; its delete-or-switch remedy is wrong for an agent's Skill list
     const referencingAgents = await db
       .select({ id: agentTable.id, name: agentTable.name })
       .from(agentTable)
@@ -306,13 +220,8 @@ export async function deleteSkill(
     return;
   }
 
-  // A Shared resource cannot be deleted while anything still points at it —
-  // an Attachment (ADR-0007) or a Blueprint (ADR-0008). Throws ConflictError
-  // → 409 via the central onError (ADR-0010).
   await requireSharedDeletable(db, "skill", skillId);
 
-  // Delete the Skill and scrub its (now-dead) id from any Agent's skillIds in
-  // the same transaction, so deletion never leaves a dangling reference.
   const result = await db.transaction(async (tx) => {
     const rows = await tx
       .delete(skillTable)

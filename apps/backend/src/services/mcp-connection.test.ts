@@ -18,7 +18,6 @@ import {
 } from "./mcp-client.ts";
 import { mockLookup } from "../test-setup.ts";
 
-/** A real SQL fragment — the functions under test just pass it through to `.where(...)`. */
 const someWhere = eq(mcpTable.id, "mcp-1");
 
 vi.mock("@ai-sdk/mcp", () => ({
@@ -96,9 +95,17 @@ describe("mcp-connection", () => {
       expect(call.transport.headers).toEqual(
         expect.objectContaining({ Authorization: "Bearer secret-token" }),
       );
-      // Legacy `initialize` first: a server with modern serving disabled
-      // makes the `server/discover` probe throw instead of falling back.
-      expect(call.protocolVersionDiscovery).toBe(false);
+    });
+
+    it("opens with the legacy initialize handshake, since server/discover throws on servers with modern serving disabled", async () => {
+      await probeMcpConnection(
+        { url: "http://mcp.example.com", authType: "None" } as never,
+        null,
+      );
+
+      expect(vi.mocked(createMCPClient)).toHaveBeenCalledWith(
+        expect.objectContaining({ protocolVersionDiscovery: false }),
+      );
     });
 
     it("returns a 404 result when the OAuth mcpId has no resolved row", async () => {
@@ -212,6 +219,22 @@ describe("mcp-connection", () => {
         error: "The MCP server responded with HTTP 405.",
         status: 400,
       });
+    });
+
+    it("shows the message of a JSON-RPC error, whose numeric code is not a Node system error code", async () => {
+      vi.mocked(createMCPClient).mockRejectedValueOnce(
+        Object.assign(new Error("Method not found"), {
+          name: "MCPClientError",
+          code: -32601,
+        }),
+      );
+
+      expect(
+        await probeMcpConnection(
+          { url: "http://mcp.example.com", authType: "None" } as never,
+          null,
+        ),
+      ).toEqual({ success: false, error: "Method not found", status: 400 });
     });
 
     it("reports a closed port and an unresolvable host identically", async () => {
@@ -329,6 +352,17 @@ describe("mcp-connection", () => {
         }),
       );
     });
+
+    it("drops the registered client and the tokens in one transaction, so no row keeps tokens without their client", async () => {
+      mockDb.returning.mockResolvedValueOnce([{ id: "mcp-1" }]);
+
+      await clearOAuthTokens(asDb(mockDb), someWhere, {
+        dropRegisteredClient: true,
+      });
+
+      expect(mockDb.transaction).toHaveBeenCalledTimes(1);
+      expect(mockDb.update).toHaveBeenCalledTimes(2);
+    });
   });
 
   describe("authorizeMcpOAuth", () => {
@@ -417,58 +451,62 @@ describe("mcp-connection", () => {
       expect(mcpAuth).not.toHaveBeenCalled();
     });
 
-    // The loaded record says the opposite: the row as it is now decides, so a
-    // client an Operator entered after the load is never dropped.
     it.each([
       ["drops a dynamically registered client", true, null],
       ["keeps an Operator-entered client", false, "client-1"],
-    ])("on force, %s", async (_label, dynamicallyRegistered, clientId) => {
-      vi.mocked(mcpAuth).mockResolvedValueOnce("AUTHORIZED");
-      const signedIn = {
-        ...baseMcp,
-        authType: "OAuth" as const,
-        oauthAccessToken: "a",
-        oauthClientId: "client-1",
-        oauthClientSecret: "secret-1",
-      };
-      const fake = seedDb({
-        mcp: [
+    ])(
+      "on force, %s, judged by the row as stored, not as loaded",
+      async (_label, dynamicallyRegistered, clientId) => {
+        vi.mocked(mcpAuth).mockResolvedValueOnce("AUTHORIZED");
+        const signedIn = {
+          ...baseMcp,
+          authType: "OAuth" as const,
+          oauthAccessToken: "a",
+          oauthClientId: "client-1",
+          oauthClientSecret: "secret-1",
+        };
+        const fake = seedDb({
+          mcp: [
+            {
+              ...signedIn,
+              oauthClientDynamicallyRegistered: dynamicallyRegistered,
+            },
+            {
+              ...signedIn,
+              id: "mcp-2",
+              oauthClientDynamicallyRegistered: true,
+            },
+          ],
+        });
+
+        await authorizeMcpOAuth(
+          fake.handle as Parameters<typeof authorizeMcpOAuth>[0],
           {
             ...signedIn,
-            oauthClientDynamicallyRegistered: dynamicallyRegistered,
+            oauthClientDynamicallyRegistered: !dynamicallyRegistered,
           },
-          { ...signedIn, id: "mcp-2", oauthClientDynamicallyRegistered: true },
-        ],
-      });
+          {
+            force: true,
+            clearTokensWhere: markerOperators().eq(
+              mcpTable.id,
+              "mcp-1",
+            ) as unknown as SQL,
+            userId: "user-1",
+          },
+        );
 
-      await authorizeMcpOAuth(
-        fake.handle as Parameters<typeof authorizeMcpOAuth>[0],
-        {
-          ...signedIn,
-          oauthClientDynamicallyRegistered: !dynamicallyRegistered,
-        },
-        {
-          force: true,
-          // A condition the fake can read, unlike the real `someWhere`.
-          clearTokensWhere: markerOperators().eq(
-            mcpTable.id,
-            "mcp-1",
-          ) as unknown as SQL,
-          userId: "user-1",
-        },
-      );
-
-      const [mine, other] = fake.tables.mcp;
-      expect(mine).toMatchObject({
-        oauthAccessToken: null,
-        oauthClientId: clientId,
-        oauthClientDynamicallyRegistered: false,
-      });
-      expect(other).toMatchObject({
-        oauthAccessToken: "a",
-        oauthClientId: "client-1",
-      });
-    });
+        const [mine, other] = fake.tables.mcp;
+        expect(mine).toMatchObject({
+          oauthAccessToken: null,
+          oauthClientId: clientId,
+          oauthClientDynamicallyRegistered: false,
+        });
+        expect(other).toMatchObject({
+          oauthAccessToken: "a",
+          oauthClientId: "client-1",
+        });
+      },
+    );
 
     it("reports alreadyAuthorized without clearing tokens when not forced", async () => {
       vi.mocked(mcpAuth).mockResolvedValueOnce("AUTHORIZED");

@@ -11,7 +11,6 @@ import { mcp as mcpTable, mcpOauthState } from "../db/schema.ts";
 
 export type McpRecord = typeof mcpTable.$inferSelect;
 
-/** Fields to null-out when clearing OAuth tokens. */
 export const OAUTH_TOKEN_CLEAR_FIELDS = {
   oauthAccessToken: null,
   oauthRefreshToken: null,
@@ -20,17 +19,14 @@ export const OAUTH_TOKEN_CLEAR_FIELDS = {
   oauthAuthorizationServer: null,
 } as const;
 
-/** Fields to reset when dropping the OAuth client registration. */
 export const OAUTH_CLIENT_CLEAR_FIELDS = {
   oauthClientId: null,
   oauthClientSecret: null,
   oauthClientDynamicallyRegistered: false,
 } as const;
 
-/** Cached callback URL (depends only on env vars, so computed once). */
 let _cachedCallbackUrl: string | undefined;
 
-/** Build the stable OAuth callback URL used across all OAuth flows. */
 export const buildOAuthCallbackUrl = () => {
   if (!_cachedCallbackUrl) {
     const frontendUrl = frontendBaseUrl().replace(/\/+$/, "");
@@ -39,10 +35,6 @@ export const buildOAuthCallbackUrl = () => {
   return _cachedCallbackUrl;
 };
 
-/**
- * Build a transport config object for an MCP client, handling
- * OAuth / Bearer / None auth types.
- */
 export const buildMcpTransportConfig = (mcp: McpRecord) => {
   if (!mcp.url) throw new Error(`MCP server '${mcp.name}' has no URL`);
   const config: {
@@ -75,19 +67,10 @@ export const buildMcpTransportConfig = (mcp: McpRecord) => {
   return config;
 };
 
-/**
- * Wraps the global fetch to work around a bug in @ai-sdk/mcp where
- * `parseErrorResponse` fails the `instanceof Response` check in Node.js,
- * producing an unhelpful "[object Response]" error message. This wrapper
- * returns a fresh Response constructed from the original, ensuring the
- * `instanceof Response` check succeeds in the library's error handler.
- */
+// why: @ai-sdk/mcp parseErrorResponse fails instanceof Response on Node fetch; drop when fixed
 export const oauthFetchFn: typeof fetch = async (input, init) => {
   const response = await fetch(input, init);
   if (!response.ok) {
-    // Work around @ai-sdk/mcp bug where `parseErrorResponse` fails the
-    // `instanceof Response` check in Node.js (different Response realms).
-    // Reconstruct using the global Response constructor.
     const body = await response.text();
     return new Response(body, {
       status: response.status,
@@ -98,17 +81,12 @@ export const oauthFetchFn: typeof fetch = async (input, init) => {
   return response;
 };
 
-/**
- * Database-backed OAuthClientProvider for MCP OAuth flows.
- * Used by both the authorize/callback endpoints and the HTTP transport during chat.
- */
 export class DatabaseOAuthClientProvider implements OAuthClientProvider {
   private mcpRecord: McpRecord;
   private callbackUrl: string;
   private userId: string | undefined;
   private pendingAuthUrl: URL | undefined;
 
-  /** `userId` is the user starting a sign-in; the callback admits only them. */
   constructor(mcpRecord: McpRecord, callbackUrl: string, userId?: string) {
     this.mcpRecord = mcpRecord;
     this.callbackUrl = callbackUrl;
@@ -124,16 +102,12 @@ export class DatabaseOAuthClientProvider implements OAuthClientProvider {
       redirect_uris: [this.callbackUrl],
       client_name: "Platypus",
       token_endpoint_auth_method: "client_secret_post" as const,
-      // Authorization servers require an explicit `scope` parameter (e.g. Google
-      // returns 400 "Missing required parameter: scope" otherwise). The MCP
-      // library forwards `clientMetadata.scope` into the authorize URL.
       ...(this.mcpRecord.oauthRequestedScope && {
         scope: this.mcpRecord.oauthRequestedScope,
       }),
     };
   }
 
-  /** This MCP's OAuth columns, re-read so a refresh sees the latest tokens. */
   private async oauthRow() {
     const records = await db
       .select({
@@ -183,8 +157,6 @@ export class DatabaseOAuthClientProvider implements OAuthClientProvider {
           ? new Date(Date.now() + tokens.expires_in * 1000)
           : null,
         oauthScope: tokens.scope ?? null,
-        // The library tags every token response with the server that issued
-        // it; that is the record a later refresh is checked against.
         ...(tokens.authorization_server &&
           tokens.token_endpoint && {
             oauthAuthorizationServer: {
@@ -196,16 +168,12 @@ export class DatabaseOAuthClientProvider implements OAuthClientProvider {
         updatedAt: new Date(),
       })
       .where(
-        // A refresh writes only over the sign-in it refreshed: a sign-out or
-        // Client ID change since must not get the old client's tokens back.
-        // A code exchange read no tokens and starts a new sign-in.
         this._refreshTokenRead
           ? this.sameSignIn(this._refreshTokenRead)
           : eq(mcpTable.id, this.mcpRecord.id),
       );
   }
 
-  /** This MCP, while it still holds the sign-in `refreshToken` belongs to. */
   private sameSignIn(refreshToken: string) {
     return and(
       eq(mcpTable.id, this.mcpRecord.id),
@@ -217,8 +185,6 @@ export class DatabaseOAuthClientProvider implements OAuthClientProvider {
     return toClientInformation(await this.oauthRow());
   }
 
-  // Only called after dynamic client registration: an Operator-entered client
-  // is written by mcp-write, never by the library.
   async saveClientInformation(clientInfo: {
     client_id: string;
     client_secret?: string;
@@ -238,10 +204,6 @@ export class DatabaseOAuthClientProvider implements OAuthClientProvider {
     return (await this.oauthRow())?.oauthClientDynamicallyRegistered ?? false;
   }
 
-  // The library only invalidates after a refresh or code exchange failed. Only
-  // the refresh token this provider read and failed with is dropped: a
-  // concurrent request may already have rotated it, and a callback's failed
-  // code exchange (read no tokens) leaves the MCP's sign-in alone.
   async invalidateCredentials(scope: "all" | "client" | "tokens" | "verifier") {
     if (scope === "verifier" || !this._refreshTokenRead) return;
     await db
@@ -254,10 +216,7 @@ export class DatabaseOAuthClientProvider implements OAuthClientProvider {
       .where(this.sameSignIn(this._refreshTokenRead));
   }
 
-  // @ai-sdk/mcp refuses the code exchange and token refresh without a record
-  // of the authorization server they belong to.
   async authorizationServerInformation() {
-    // A callback is checked against the server its own sign-in started with.
     if (this._stateForLookup) {
       const states = await db
         .select({ info: mcpOauthState.authorizationServer })
@@ -266,17 +225,12 @@ export class DatabaseOAuthClientProvider implements OAuthClientProvider {
         .limit(1);
       return states[0]?.info ?? undefined;
     }
-    // An MCP authorized before the library recorded this has no entry, and the
-    // library will not refresh without one. Those must sign in again; v4
-    // removed the one-off adoption that used to paper over it.
     return (await this.oauthRow())?.oauthAuthorizationServer ?? undefined;
   }
 
   async saveAuthorizationServerInformation(
     info: OAuthAuthorizationServerInformation,
   ) {
-    // Bound to this sign-in, not to the MCP: saveTokens() records it on the MCP
-    // once the code exchange succeeds.
     await db
       .update(mcpOauthState)
       .set({ authorizationServer: info })
@@ -284,9 +238,6 @@ export class DatabaseOAuthClientProvider implements OAuthClientProvider {
   }
 
   redirectToAuthorization(authorizationUrl: URL) {
-    // Google requires access_type=offline to return a refresh token.
-    // prompt=consent forces re-consent even if the user previously authorized,
-    // which is required when requesting offline access for the first time.
     if (
       authorizationUrl.hostname.endsWith(".google.com") ||
       authorizationUrl.hostname === "google.com"
@@ -303,8 +254,6 @@ export class DatabaseOAuthClientProvider implements OAuthClientProvider {
 
   async saveCodeVerifier(codeVerifier: string) {
     this._pendingCodeVerifier = codeVerifier;
-    // The library calls saveState() before saveCodeVerifier(), so if the
-    // state record already exists we need to update it with the real verifier.
     if (this._generatedState) {
       await db
         .update(mcpOauthState)
@@ -314,7 +263,6 @@ export class DatabaseOAuthClientProvider implements OAuthClientProvider {
   }
 
   async codeVerifier(): Promise<string> {
-    // Read from mcpOauthState table using the stored state
     if (this._stateForLookup) {
       const records = await db
         .select()
@@ -335,8 +283,7 @@ export class DatabaseOAuthClientProvider implements OAuthClientProvider {
 
   async saveState(state: string) {
     this._generatedState = state;
-    // Create the mcpOauthState record with the code verifier
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 min TTL
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
     await db.insert(mcpOauthState).values({
       id: state,
       mcpId: this.mcpRecord.id,
@@ -351,10 +298,6 @@ export class DatabaseOAuthClientProvider implements OAuthClientProvider {
     return this._stateForLookup;
   }
 
-  /**
-   * Sets the state value used for looking up the code verifier during callback.
-   * This is called before invoking auth() for the callback flow.
-   */
   setStateForLookup(state: string) {
     this._stateForLookup = state;
   }
@@ -379,8 +322,6 @@ const toClientInformation = (record: OAuthClientColumns | undefined) => {
     ...(record.oauthClientSecret && {
       client_secret: record.oauthClientSecret,
     }),
-    // Lets the library check, before reusing this client, that discovery
-    // still points at the server it was used with.
     ...(server && {
       issuer: server.issuer,
       authorization_server: server.authorizationServerUrl,

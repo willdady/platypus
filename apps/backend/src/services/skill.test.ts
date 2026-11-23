@@ -13,8 +13,6 @@ import {
 import { orgScopedWhere, workspaceScopedWhere } from "./scoped-resource.ts";
 import { ConflictError, LockedError, NotFoundError } from "../errors.ts";
 
-// The bundle hash and file list are exercised against a real Postgres in
-// `services/skill-bundle.test.ts`; here they pass the row through.
 vi.mock("./skill-bundle.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./skill-bundle.ts")>()),
   rehashSkill: vi.fn((_db: unknown, row: unknown) => Promise.resolve(row)),
@@ -30,10 +28,6 @@ const createFields = (): SkillCreateFields => ({
   body: "The skill body",
 });
 
-/**
- * A `sql` fragment interpolating exactly `values` — an asymmetric matcher typed
- * as the fragment it stands in for, so it composes into `and(...)`.
- */
 const sqlWith = (...values: unknown[]) =>
   expect.objectContaining({ op: "sql", values }) as unknown as SQL;
 
@@ -98,7 +92,6 @@ describe("skill write model", () => {
         skillIds: sqlWith(agentTable.skillIds, '["s1"]'),
         updatedAt: expect.any(Date) as unknown,
       });
-      // Only this Workspace's named agents that do not already hold the skill.
       expect(mockDb.where).toHaveBeenCalledWith(
         and(
           eq(agentTable.workspaceId, "ws-1"),
@@ -145,7 +138,7 @@ describe("skill write model", () => {
     });
 
     it("throws NotFoundError for a workspace skill not visible here, before the write", async () => {
-      mockDb.limit.mockResolvedValueOnce([]); // resolveScoped: no row
+      mockDb.limit.mockResolvedValueOnce([]);
 
       await expect(
         updateSkill(
@@ -162,7 +155,7 @@ describe("skill write model", () => {
         .mockResolvedValueOnce([
           { id: "s1", organizationId: "org-1", workspaceId: null },
         ])
-        .mockResolvedValueOnce([{ id: "att-1" }]); // attached
+        .mockResolvedValueOnce([{ id: "att-1" }]);
 
       await expect(
         updateSkill(
@@ -177,7 +170,7 @@ describe("skill write model", () => {
     it("updates an organization-scoped skill after checking it is a Shared resource here", async () => {
       mockDb.limit.mockResolvedValueOnce([
         { id: "s1", organizationId: "org-1", workspaceId: null },
-      ]); // requireOrgScoped
+      ]);
       const updated = { id: "s1", organizationId: "org-1" };
       mockDb.returning.mockResolvedValueOnce([updated]);
 
@@ -194,7 +187,7 @@ describe("skill write model", () => {
     });
 
     it("throws NotFoundError for an org skill that is not Shared here, before the write", async () => {
-      mockDb.limit.mockResolvedValueOnce([]); // requireOrgScoped: not found
+      mockDb.limit.mockResolvedValueOnce([]);
 
       await expect(
         updateSkill(
@@ -209,8 +202,8 @@ describe("skill write model", () => {
     it("throws NotFoundError when a concurrently-deleted org skill is gone by the write", async () => {
       mockDb.limit.mockResolvedValueOnce([
         { id: "s1", organizationId: "org-1", workspaceId: null },
-      ]); // requireOrgScoped
-      mockDb.returning.mockResolvedValueOnce([]); // UPDATE matched nothing
+      ]);
+      mockDb.returning.mockResolvedValueOnce([]);
 
       await expect(
         updateSkill(
@@ -223,7 +216,7 @@ describe("skill write model", () => {
 
     it("throws NotFoundError when a concurrently-deleted workspace skill is gone by the write", async () => {
       mockDb.limit.mockResolvedValueOnce([{ id: "s1", workspaceId: "ws-1" }]);
-      mockDb.returning.mockResolvedValueOnce([]); // UPDATE matched nothing
+      mockDb.returning.mockResolvedValueOnce([]);
 
       await expect(
         updateSkill(
@@ -245,9 +238,7 @@ describe("skill write model", () => {
         agentIds: ["agent-1"],
       });
 
-      // Skill row update, then agent removal + append.
       expect(mockDb.update).toHaveBeenCalledTimes(3);
-      // Removal: this Workspace's agents holding the skill but no longer listed.
       expect(mockDb.where).toHaveBeenCalledWith(
         and(
           eq(agentTable.workspaceId, "ws-1"),
@@ -275,7 +266,6 @@ describe("skill write model", () => {
         agentIds: [],
       });
 
-      // Skill row update, then removal only — nothing to append.
       expect(mockDb.update).toHaveBeenCalledTimes(2);
       expect(mockDb.where).toHaveBeenLastCalledWith(
         and(
@@ -328,12 +318,11 @@ describe("skill write model", () => {
 
   describe("deleteSkill", () => {
     it("deletes a workspace-scoped skill when no agent references it", async () => {
-      mockDb.limit.mockResolvedValueOnce([{ id: "s1", workspaceId: "ws-1" }]); // requireWorkspaceMutable
-      mockDb.orderBy.mockResolvedValueOnce([]); // referencing agents: none
+      mockDb.limit.mockResolvedValueOnce([{ id: "s1", workspaceId: "ws-1" }]);
+      mockDb.orderBy.mockResolvedValueOnce([]);
 
       await deleteSkill({ kind: "workspace", ctx: workspaceCtx }, "s1");
 
-      // The reference check only looks at this Workspace's agents.
       expect(mockDb.where).toHaveBeenCalledWith(
         and(
           eq(agentTable.workspaceId, "ws-1"),
@@ -347,8 +336,8 @@ describe("skill write model", () => {
     });
 
     it("throws ConflictError naming the workspace agent that references the skill", async () => {
-      mockDb.limit.mockResolvedValueOnce([{ id: "s1", workspaceId: "ws-1" }]); // requireWorkspaceMutable
-      mockDb.orderBy.mockResolvedValueOnce([{ id: "agent-1", name: "Helper" }]); // referencing agents
+      mockDb.limit.mockResolvedValueOnce([{ id: "s1", workspaceId: "ws-1" }]);
+      mockDb.orderBy.mockResolvedValueOnce([{ id: "agent-1", name: "Helper" }]);
 
       const deleting = deleteSkill(
         { kind: "workspace", ctx: workspaceCtx },
@@ -366,7 +355,7 @@ describe("skill write model", () => {
         .mockResolvedValueOnce([
           { id: "s1", organizationId: "org-1", workspaceId: null },
         ])
-        .mockResolvedValueOnce([{ id: "att-1" }]); // attached
+        .mockResolvedValueOnce([{ id: "att-1" }]);
 
       await expect(
         deleteSkill({ kind: "workspace", ctx: workspaceCtx }, "s1"),
@@ -375,9 +364,7 @@ describe("skill write model", () => {
     });
 
     it("deletes an org skill once it is confirmed deletable, scrubbing dead references in the same transaction", async () => {
-      mockDb.limit
-        .mockResolvedValueOnce([]) // requireSharedDeletable: no attachment
-        .mockResolvedValueOnce([]); // requireSharedDeletable: no blueprint
+      mockDb.limit.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
       mockDb.returning.mockResolvedValueOnce([{ id: "s1" }]);
 
       await deleteSkill({ kind: "organization", orgId: "org-1" }, "s1");
@@ -386,12 +373,11 @@ describe("skill write model", () => {
       expect(mockDb.where).toHaveBeenCalledWith(
         orgScopedWhere("skill", "s1", "org-1"),
       );
-      // The dead id is scrubbed from the same transaction's agent update.
       expect(mockDb.update).toHaveBeenCalledWith(agentTable);
     });
 
     it("throws ConflictError while an Attachment still references the org skill", async () => {
-      mockDb.limit.mockResolvedValueOnce([{ id: "att-1" }]); // attached
+      mockDb.limit.mockResolvedValueOnce([{ id: "att-1" }]);
 
       await expect(
         deleteSkill({ kind: "organization", orgId: "org-1" }, "s1"),
@@ -400,10 +386,8 @@ describe("skill write model", () => {
     });
 
     it("throws NotFoundError when the org delete matches no row", async () => {
-      mockDb.limit
-        .mockResolvedValueOnce([]) // requireSharedDeletable: no attachment
-        .mockResolvedValueOnce([]); // requireSharedDeletable: no blueprint
-      mockDb.returning.mockResolvedValueOnce([]); // delete matched nothing
+      mockDb.limit.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+      mockDb.returning.mockResolvedValueOnce([]);
 
       await expect(
         deleteSkill({ kind: "organization", orgId: "org-1" }, "missing"),

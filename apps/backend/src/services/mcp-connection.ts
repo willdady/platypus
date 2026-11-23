@@ -26,11 +26,6 @@ import { logger } from "../logger.ts";
 import { TOOL_SET_RESOLVE_TIMEOUT_MS } from "../tools/index.ts";
 import { withDeadline } from "../utils/abort-race.ts";
 
-/**
- * What `/test` tells the client about a failed probe. An HTTP error reports
- * its status only: the library's message carries the response body, which on
- * an internal host would let the probe read it.
- */
 const probeErrorMessage = (error: unknown): string => {
   if (!isServerAnswer(error) || !(error instanceof Error)) {
     return MCP_UNREACHABLE_MESSAGE;
@@ -41,75 +36,30 @@ const probeErrorMessage = (error: unknown): string => {
     : error.message;
 };
 
-/**
- * Whether `error` came from a server that answered — an MCP or HTTP-level
- * error worth showing as is — rather than from failing to reach one.
- */
 const isServerAnswer = (error: unknown): boolean => {
   for (let e = error; e instanceof Error; e = e.cause) {
     if (
       e instanceof McpEgressBlockedError ||
-      // undici's wrapper for every connect/DNS/TLS failure.
       e.message === "fetch failed" ||
-      // A Node system error (ECONNREFUSED, ENOTFOUND, …); JSON-RPC codes are numbers.
       typeof (e as { code?: unknown }).code === "string"
     ) {
       return false;
     }
   }
-  // @ai-sdk/mcp's errors for a server that replied (bad status, bad JSON-RPC, auth).
   return (
     error instanceof Error &&
     (error.name === "MCPClientError" || error.name === "UnauthorizedError")
   );
 };
 
-/**
- * The MCP-connection choreography — probe / authorize / revoke — that both
- * `routes/mcp.ts` (Workspace surface) and `routes/org-mcp.ts` (Organization
- * surface) delegate to, rather than each re-implementing client construction,
- * `Bearer` header assembly, close-on-error handling, and the OAuth
- * redirect/alreadyAuthorized branch.
- *
- * Every function here takes an already-resolved row (or `null`/`undefined`
- * when there is none), never a scope + id — resolving a row is the Scoped-
- * resource authority's job (`services/scoped-resource.ts`), not this module's.
- * That keeps this module ignorant of *how* a row became visible, so the same
- * probe/authorize/revoke choreography serves both surfaces even though they
- * resolve rows differently (`resolveScoped`/`requireWorkspaceMutable` on the
- * Workspace surface vs `resolveOrgScoped`/`requireOrgScoped` on the
- * Organization surface).
- *
- * **Decided Shared-MCP semantics on the Workspace surface** (ADR-0006,
- * ADR-0007): an attached Shared MCP is a single source of truth owned by the
- * Organization, but *reading through* it to probe a live server changes
- * nothing about who owns its credentials, so:
- * - `probeMcpConnection` is read-only and takes any row visible to the caller
- *   (workspace-scoped or an attached Shared MCP) — a route resolves it with
- *   `resolveScoped`/`resolveOrgScoped`, which admit both.
- * - `authorizeMcpOAuth` and `clearOAuthTokens` mutate org-owned OAuth
- *   credentials, so a route resolves the row with `requireWorkspaceMutable`
- *   first: `NotFoundError` (404) when the row is not visible at all, then
- *   `LockedError` (403) when it is a Shared row — the same refusal a
- *   Workspace Owner already gets from `PUT`/`DELETE` on this file, rather than
- *   the bare 404 that used to deny the row's existence.
- */
-
 type Database = typeof db;
 
-// The stored test's shape: `name` is optional because the row supplies it.
-// The anonymous test's required `name` is assignable to it.
 export type McpTestInput = z.infer<typeof mcpStoredTestSchema>;
 
 export type McpProbeResult =
   | { success: true; toolNames: string[]; invalidToolNames: string[] }
   | { success: false; error: string; status: 400 | 404 };
 
-/**
- * Whether a test connected the way a turn would — with the stored row's own
- * connection, not unsaved edits to it — so its success says something about
- * the stored MCP.
- */
 const testedStoredConnection = (
   data: McpTestInput,
   stored: McpRecord,
@@ -120,17 +70,6 @@ const testedStoredConnection = (
     isDeepStrictEqual(data.headers ?? null, stored.headers ?? null) &&
     (data.authType !== "Bearer" || data.bearerToken === stored.bearerToken));
 
-/**
- * Probes an MCP server and reports its (namespaced) tool names — the `/test`
- * route's whole job. `storedMcp` is the row a stored test resolved from its
- * path (`null` for the anonymous route, or no such row is visible). Only an
- * OAuth test connects with its stored credentials; a Bearer/None test uses
- * what it was sent. A success with the stored connection clears the row's
- * recorded fetch failure, so the next turn tries the server again (ADR-0031).
- *
- * Bounded by `TOOL_SET_RESOLVE_TIMEOUT_MS`, like a turn's own fetch: a server that
- * takes the connection and never answers is reported, not waited on.
- */
 export const probeMcpConnection = async (
   data: McpTestInput,
   storedMcp: McpRecord | null,
@@ -190,8 +129,6 @@ export const probeMcpConnection = async (
       }
     }
 
-    // Namespaced under the MCP's slug (issue #467), so this reports exactly
-    // what a Chat turn will see.
     const { toolNames, invalidToolNames } = resolveMcpTestToolNames(
       rawToolNames,
       data.name,
@@ -200,7 +137,6 @@ export const probeMcpConnection = async (
 
     return { success: true, toolNames, invalidToolNames };
   } catch (error) {
-    // Closed now, or when a connect that outran the deadline lands.
     void opening?.then(
       (client) =>
         client.close().catch((closeError: unknown) => {
@@ -220,25 +156,13 @@ export type McpOAuthAuthorizeResult =
   | { kind: "alreadyAuthorized" }
   | { kind: "error"; message: string; status: 400 | 404 | 500 };
 
-/**
- * Clears the OAuth token columns for the row(s) matching `where` — the
- * single spelling of the `force=true` reauthorize choreography and the
- * `/oauth/revoke` handler, so both surfaces share the null-patch and neither
- * hand-rolls it again. Returns the updated rows so a caller that needs the
- * refreshed value (the `force` branch of {@link authorizeMcpOAuth}) does not
- * re-read. `dropRegisteredClient` also drops a dynamically registered client.
- */
 export const clearOAuthTokens = async (
   database: Database,
   where: SQL,
   { dropRegisteredClient }: { dropRegisteredClient: boolean },
 ): Promise<McpRecord[]> =>
-  // One transaction: a row left with tokens but no client would refresh with
-  // a client the tokens were never issued to.
   database.transaction(async (tx) => {
     if (dropRegisteredClient) {
-      // Decided by the row as it is now, not as the caller loaded it: an
-      // Operator may have entered a client of their own since.
       await tx
         .update(mcpTable)
         .set({ ...OAUTH_CLIENT_CLEAR_FIELDS, updatedAt: new Date() })
@@ -251,16 +175,6 @@ export const clearOAuthTokens = async (
       .returning();
   });
 
-/**
- * Runs the OAuth authorize choreography for an already-resolved, visible MCP
- * row. `force` clears stored tokens first via `clearTokensWhere` so `mcpAuth`
- * always returns `REDIRECT`, letting the UI offer a single-click
- * "Reauthorize" even when Platypus still holds a valid refresh token (the SDK
- * would otherwise silently refresh and report `AUTHORIZED`, which the
- * frontend currently shows as a failure because no authorizationUrl is
- * returned). A static `oauthClientId`/`oauthClientSecret` is preserved; a
- * dynamically registered one is dropped and registered again.
- */
 export const authorizeMcpOAuth = async (
   database: Database,
   mcpRecord: McpRecord,
@@ -283,12 +197,9 @@ export const authorizeMcpOAuth = async (
 
   let record = mcpRecord;
   if (opts.force) {
-    // A client the library registered is registered again, so an MCP whose
-    // server moved to another authorization server gets a client it knows.
     const [cleared] = await clearOAuthTokens(database, opts.clearTokensWhere, {
       dropRegisteredClient: true,
     });
-    // Deleted or moved since it was resolved.
     if (!cleared) {
       return { kind: "error", message: "MCP not found", status: 404 };
     }
@@ -320,9 +231,6 @@ export const authorizeMcpOAuth = async (
       return { kind: "redirect", authorizationUrl: authUrl.toString() };
     }
 
-    // Already authorized — refresh token still valid, SDK rotated silently.
-    // Reported as success so the frontend can treat it as a no-op rather
-    // than an error.
     return { kind: "alreadyAuthorized" };
   } catch (error) {
     logger.error({ error }, "OAuth authorize error");

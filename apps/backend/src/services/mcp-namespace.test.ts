@@ -5,7 +5,6 @@ import { mcp as mcpTable, workspace as workspaceTable } from "../db/schema.ts";
 import { assertMcpSlugAvailable, deriveMcpSlug } from "./mcp-namespace.ts";
 import { ConflictError } from "../errors.ts";
 
-/** Either scope column naming this Organization — its Shared MCPs or its Workspaces'. */
 const inOrg = (orgId: string) =>
   or(
     eq(mcpTable.organizationId, orgId),
@@ -28,10 +27,19 @@ describe("assertMcpSlugAvailable", () => {
     await expect(
       assertMcpSlugAvailable("acme", { orgId: "org-1" }),
     ).resolves.toBeUndefined();
-    // Every MCP in the Organization counts, Shared or Workspace-owned.
     expect(mockDb.where).toHaveBeenCalledWith(
       and(eq(mcpTable.slug, "acme"), undefined, inOrg("org-1")),
     );
+  });
+
+  it("left-joins Workspaces, so a Shared MCP with no Workspace still matches", async () => {
+    mockDb.limit.mockResolvedValueOnce([]);
+    await assertMcpSlugAvailable("acme", { orgId: "org-1" });
+    expect(mockDb.leftJoin).toHaveBeenCalledWith(
+      workspaceTable,
+      eq(mcpTable.workspaceId, workspaceTable.id),
+    );
+    expect(mockDb.innerJoin).not.toHaveBeenCalled();
   });
 
   it("throws ConflictError naming the conflicting MCP", async () => {

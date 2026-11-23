@@ -1,9 +1,5 @@
 import type { ProviderRow } from "./provider-write.ts";
 
-/**
- * A Provider row as the database returns it, every optional column null.
- * Override only what the test is about.
- */
 export const makeProviderRow = (
   over: Partial<ProviderRow> = {},
 ): ProviderRow => ({

@@ -24,7 +24,6 @@ describe("mcp-oauth-provider", () => {
   });
 
   describe("buildOAuthCallbackUrl", () => {
-    // The URL is cached at module scope, so each case imports a fresh copy.
     beforeEach(() => {
       process.env.FRONTEND_URL = "http://localhost:3001";
       vi.resetModules();
@@ -158,8 +157,6 @@ describe("mcp-oauth-provider", () => {
       ...extra,
     });
 
-    // `mcp-2` holds credentials of its own that `mcp-1`'s provider must never
-    // read or overwrite.
     const world = (mine: Row = {}) =>
       seedDb({
         mcp: [

@@ -53,10 +53,6 @@ const skillMd = (frontmatter: string, body = "Do the thing.\n") =>
   strToU8(`---\n${frontmatter}\n---\n${body}`);
 const minimal = () => skillMd("name: demo\ndescription: Demo");
 
-/**
- * Rewrites every size a single-entry zip declares for its file to 1 byte, so a
- * parser trusting them would read a bomb as tiny.
- */
 const understateSizes = (zip: Uint8Array): Uint8Array => {
   const view = new DataView(zip.buffer, zip.byteOffset, zip.byteLength);
   const eocd = zip.length - 22;
@@ -275,6 +271,27 @@ describe("parseSkillZip contents", () => {
     expect(fields.disableModelInvocation).toBe(true);
     expect(fields.argumentHint).toBe("<env>");
     expect(frontmatter).toEqual({ compatibility: "needs git" });
+  });
+});
+
+describe("parseSkillZip YAML errors", () => {
+  it("numbers the line as SKILL.md counts it, fence included", () => {
+    expect(() =>
+      parseSkillZip(
+        zipSync({ "SKILL.md": skillMd("name: demo\ndescription: d\n: :") }),
+      ),
+    ).toThrow(/not valid YAML at line 4:/);
+  });
+});
+
+describe("bundleHash", () => {
+  it("ignores frontmatter key order, as a jsonb round-trip reorders it", () => {
+    const bundle = parseSkillZip(zipSync({ "SKILL.md": minimal() }));
+    expect(
+      bundleHash({ ...bundle, frontmatter: { a: 1, nested: { x: 1, y: 2 } } }),
+    ).toBe(
+      bundleHash({ ...bundle, frontmatter: { nested: { y: 2, x: 1 }, a: 1 } }),
+    );
   });
 });
 

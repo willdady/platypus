@@ -23,42 +23,16 @@ import {
 } from "./scoped-resource.ts";
 import { oneRow } from "../db/one-row.ts";
 
-/**
- * The MCP write model: create/update/delete that both route surfaces adapt
- * over — `routes/mcp.ts` (Workspace surface) and `routes/org-mcp.ts`
- * (Organization surface). They used to each carry a verbatim copy of the
- * OAuth-clear-on-URL-change logic and had already drifted (#689): the
- * Workspace surface's delete never scrubbed a deleted MCP's id from
- * referencing Agents' `toolSetIds`, unlike the Organization surface, which
- * already did. Both scopes now scrub identically.
- *
- * Mirrors `services/provider-write.ts` and `services/skill.ts`: a standalone
- * module, not a generalized Scoped-resource write model — `McpScope` is its
- * own independently-declared type, the same shape as `ProviderScope`/
- * `SkillScope` but not unified with them.
- */
-
 export type McpRow = typeof mcpTable.$inferSelect;
 
-/** The fields a create carries — every field but the id and its scope. */
 export type McpCreateFields = z.infer<typeof mcpCreateSchema>;
 
-/** The fields an update carries — mcpUpdateSchema replaces the form wholesale. */
 export type McpUpdateFields = z.infer<typeof mcpUpdateSchema>;
 
-/**
- * Which scope a write targets — the Workspace surface (ADR-0006 delegation
- * applies, a Shared row is locked) or the Organization surface (admin-only,
- * writes a Shared row directly). Mirrors `ProviderScope`/`SkillScope`.
- */
 export type McpScope =
   | { kind: "workspace"; ctx: ScopeContext }
   | { kind: "organization"; orgId: string };
 
-/**
- * Refuses a URL the egress guard blocks, as a 400 that does not say why — the
- * reason (which may name an internal address) goes to the server log.
- */
 const assertMcpUrlPermitted = async (
   url: string | null | undefined,
   mcpId?: string,
@@ -68,16 +42,6 @@ const assertMcpUrlPermitted = async (
   }
 };
 
-/**
- * Creates a new MCP at the given scope. The scope comes from `scope`, never
- * the body — a caller cannot name another Workspace, or mint a Shared MCP
- * from the Workspace surface, by setting `organizationId`/`workspaceId` in
- * the request (ADR-0006, ADR-0007): those fields are spread from `fields`
- * first, then overridden by the scope-derived values below. A duplicate slug
- * throws `ConflictError` from `assertMcpSlugAvailable`; a duplicate name
- * surfaces as a Postgres unique violation, mapped to 409 by the central
- * `onError` (ADR-0010).
- */
 export async function createMcp(
   scope: McpScope,
   fields: McpCreateFields,
@@ -103,7 +67,6 @@ export async function createMcp(
   return row;
 }
 
-/** The fields that decide what an MCP connects to, and as whom. */
 const CONNECTION_FIELDS = [
   "url",
   "headers",
@@ -114,14 +77,7 @@ const CONNECTION_FIELDS = [
   "oauthRequestedScope",
 ] as const satisfies ReadonlyArray<keyof McpUpdateFields & keyof McpRow>;
 
-/**
- * The OAuth columns a save resets, spread after the saved fields so it wins
- * over them. Tokens are issued to one client at one server, so a new URL or
- * Client ID needs a new sign-in.
- */
 const oauthResetPatch = (existing: McpRow, fields: McpUpdateFields) => {
-  // The old client belongs to the old server too; one entered in this same
-  // save is for the new server and is kept.
   if (existing.url !== fields.url) {
     return {
       ...OAUTH_TOKEN_CLEAR_FIELDS,
@@ -134,7 +90,6 @@ const oauthResetPatch = (existing: McpRow, fields: McpUpdateFields) => {
       }),
     };
   }
-  // The form sends "" for no client ID, which the row may hold as null.
   const clientIdChanged =
     fields.oauthClientId !== undefined &&
     // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- treats an empty client id the same as none
@@ -143,22 +98,10 @@ const oauthResetPatch = (existing: McpRow, fields: McpUpdateFields) => {
   return {
     ...OAUTH_TOKEN_CLEAR_FIELDS,
     oauthClientDynamicallyRegistered: false,
-    // A blank secret field means "keep", but the kept secret belonged to the
-    // old client.
     ...(fields.oauthClientSecret === undefined && { oauthClientSecret: null }),
   };
 };
 
-/**
- * Updates an MCP at the given scope. Throws `NotFoundError` when the MCP is
- * not visible at this scope, and (Workspace scope only) `LockedError` when it
- * is a Shared MCP edited only on the Organization surface (ADR-0007). If the
- * `url` is changing, the stored OAuth tokens are cleared — they are
- * server-specific and would otherwise be sent to whatever server now sits at
- * the new URL — while the DCR/static `oauthClientId`/`oauthClientSecret` are
- * also cleared, matching what both routes did inline before this module
- * existed. A changed `oauthClientId` clears the tokens as well.
- */
 export async function updateMcp(
   scope: McpScope,
   mcpId: string,
@@ -169,43 +112,29 @@ export async function updateMcp(
   let orgId: string;
 
   if (scope.kind === "workspace") {
-    // A Shared MCP is a single source of truth edited only on the
-    // Organization surface (ADR-0007); requireWorkspaceMutable throws
-    // NotFound (→404) when the MCP is not visible here, then Locked (→403)
-    // when it is org-scoped.
     const { row } = await requireWorkspaceMutable(db, "mcp", mcpId, scope.ctx);
     where = workspaceScopedWhere("mcp", mcpId, scope.ctx.workspaceId);
     existing = row;
     orgId = scope.ctx.orgId;
   } else {
-    // requireOrgScoped throws NotFound (→404) before the write ever runs,
-    // rather than deferring to an empty UPDATE result.
     const row = await requireOrgScoped(db, "mcp", mcpId, scope.orgId);
     where = orgScopedWhere("mcp", mcpId, scope.orgId);
     existing = row;
     orgId = scope.orgId;
   }
 
-  // A different endpoint or credential can mean a different tool list, so the
-  // Last-known tool listing is only good for the connection it was fetched
-  // over (ADR-0029). An omitted field is left as it is by the write, so it is
-  // not a change; headers compare by value, since `jsonb` re-sorts their keys.
   const connectionChanged = CONNECTION_FIELDS.some(
     (field) =>
       fields[field] !== undefined &&
       !isDeepStrictEqual(fields[field] ?? null, existing[field] ?? null),
   );
 
-  // Only a new URL: a stored one is checked on every connect, and a row saved
-  // before MCP URLs were guarded must still be renameable or re-pointed.
   if (fields.url !== existing.url) {
     await assertMcpUrlPermitted(fields.url, mcpId);
   }
   const slug = deriveMcpSlug(fields.name);
   await assertMcpSlugAvailable(slug, { orgId }, mcpId);
 
-  // A duplicate name surfaces as a Postgres unique violation, mapped to 409
-  // by the central onError (ADR-0010).
   const [row] = await db
     .update(mcpTable)
     .set({
@@ -222,34 +151,12 @@ export async function updateMcp(
     .where(where)
     .returning();
 
-  // The pre-checks above prove the row exists, but a concurrent delete can
-  // still win the race between the check and the UPDATE. Checked at both
-  // scopes here — unlike `updateProvider` (neither scope) and `updateSkill`
-  // (organization scope only) — since nothing about the race is
-  // scope-specific; this is a small tightening over those two, not a
-  // deliberate divergence.
   if (!row) {
     throw new NotFoundError("MCP not found");
   }
   return row;
 }
 
-/**
- * Deletes an MCP at the given scope. Throws `NotFoundError` (Workspace scope,
- * via `requireWorkspaceMutable`; Organization scope, when the delete matches
- * no row) and, Workspace scope only, `LockedError` for a Shared MCP
- * (ADR-0007). Organization scope also throws `ConflictError` while an
- * Attachment or Blueprint still references the MCP (ADR-0007/0008).
- *
- * Scrubs the deleted MCP's (now-dead) id from any referencing Agent's
- * `toolSetIds`, in the same transaction as the delete, at **both** scopes
- * (#689) — a dangling reference would otherwise persist forever (ADR-0007's
- * deletion-never-leaves-dangling-references guarantee). Deliberately does
- * *not* block the Workspace-scope delete behind a referencing-Agent check the
- * way `deleteSkill` does: that asymmetry has no documented rationale, and MCP
- * has never returned 409 for this reason at either scope — scrubbing both
- * scopes identically is the fix, not importing Skill's inconsistency.
- */
 export async function deleteMcp(scope: McpScope, mcpId: string): Promise<void> {
   if (scope.kind === "workspace") {
     await requireWorkspaceMutable(db, "mcp", mcpId, scope.ctx);
@@ -264,9 +171,6 @@ export async function deleteMcp(scope: McpScope, mcpId: string): Promise<void> {
     return;
   }
 
-  // A Shared resource cannot be deleted while anything still points at it —
-  // an Attachment (ADR-0007) or a Blueprint (ADR-0008). Throws ConflictError
-  // → 409 via the central onError (ADR-0010).
   await requireSharedDeletable(db, "mcp", mcpId);
 
   const result = await db.transaction(async (tx) => {
