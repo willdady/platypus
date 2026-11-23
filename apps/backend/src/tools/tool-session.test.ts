@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import type { Tool } from "ai";
 
-// Mock the db used by transitive imports (the sandbox tool set, etc.)
 vi.mock("../index.ts", () => ({ db: {} }));
 
 vi.mock("../services/event-dispatch.ts", () => ({ dispatchEvent: vi.fn() }));
@@ -10,8 +9,6 @@ vi.mock("../services/sub-agent-validation.ts", () => ({
 }));
 vi.mock("../storage/index.ts", () => ({ getStorage: vi.fn() }));
 
-// Which plugin contributed which Tool set — the loader's answer at boot, and
-// what a collision line names.
 const { pluginOwners } = vi.hoisted(() => ({
   pluginOwners: new Map<string, string>(),
 }));
@@ -48,8 +45,6 @@ import { logger } from "../logger.ts";
 import type { mcp as mcpTable } from "../db/schema.ts";
 import { makePluginContext } from "../test-utils.ts";
 
-// The deploy-time block core resolves per plugin. One shared instance, so a test
-// asserting on what a factory was handed can compare identity.
 const PLUGIN = makePluginContext();
 
 type McpRow = typeof mcpTable.$inferSelect;
@@ -63,10 +58,6 @@ const scope: ToolSessionScope = {
   sessionId: "chat-1",
 };
 
-/**
- * Opens a session with the options a test that has no opinion about them wants:
- * nothing withheld, and no User watching.
- */
 const openSession = (
   sessionScope: ToolSessionScope,
   sessionAgent: Parameters<typeof openToolSession>[1],
@@ -79,7 +70,6 @@ const openSession = (
     ...options,
   });
 
-/** The Agent a session resolves for, with the ids it was granted. */
 const grantedAgent = (...toolSetIds: string[]) => ({
   id: "agent-1",
   toolSetIds,
@@ -88,14 +78,6 @@ const grantedAgent = (...toolSetIds: string[]) => ({
 const toolNamed = (name: string): Tool =>
   ({ description: name }) as unknown as Tool;
 
-/**
- * Queues one `createMCPClient` resolution behind the client's own two-step
- * API (`listTools` + `toolsFromDefinitions`, #626) — mocked the way the real
- * one behaves: `toolsFromDefinitions` ignores the definitions it's handed and
- * returns the tools this helper already declared. `readOnlyHints` marks a
- * subset of `tools`'s keys as MCP-declared read-only, for the tests that need
- * one. Shared by every describe block below that opens an MCP connection.
- */
 const connected = (
   tools: Record<string, unknown>,
   readOnlyHints: Record<string, unknown> = {},
@@ -116,14 +98,6 @@ const connected = (
   return close;
 };
 
-/**
- * Register a Tool set through the composed path a plugin's would take.
- *
- * Core by default, so a test about session mechanics reads with the bare tool
- * names it declares. The third-party rule — every tool name namespaced under the
- * manifest name (issue #664) — has its own describe block below, and the tests
- * that turn on it pass `isCore: false` explicitly.
- */
 const register = (
   id: string,
   tools: Parameters<typeof composeToolSet>[0]["contribution"]["tools"],
@@ -164,7 +138,6 @@ const mcpRow = (overrides: Partial<McpRow> = {}): McpRow =>
     ...overrides,
   }) as unknown as McpRow;
 
-/** A queries seam serving exactly the MCP rows a test declares. */
 const queriesFor = (rows: McpRow[]) => ({
   getMcp: vi.fn((id: string) =>
     Promise.resolve(rows.find((r) => r.id === id) ?? null),
@@ -175,7 +148,6 @@ const queriesFor = (rows: McpRow[]) => ({
 
 const noMcps = () => queriesFor([]);
 
-/** Grant a Tool set serving `fsDownload` and `fsView`, as the Sandbox's does. */
 const grantDownloads = (id: string) => {
   register(id, {
     fsDownload: toolNamed("fsDownload"),
@@ -187,9 +159,7 @@ const grantDownloads = (id: string) => {
 describe("openToolSession", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // `clearAllMocks` keeps queued `*Once` values, and the Tool-set registry is
-    // module-global for the file — so the connection queue is reset here, and
-    // every test registers its Tool sets under ids of its own.
+    // why: clearAllMocks keeps queued *Once values; Tool-set registry is file-global, keep ids unique
     mockCreateMCPClient.mockReset();
   });
 
@@ -223,15 +193,12 @@ describe("openToolSession", () => {
         frontendUrl: "http://localhost:3000",
         timezone: "Australia/Melbourne",
         sessionId: "chat-1",
-        // The scope's fields, plus the one capability on the context.
         registerCloser: expect.any(Function) as unknown,
       },
       PLUGIN,
     );
   });
 
-  // Issue #1608: `fsDownload` only shows a User a download button, so a session
-  // with no User watching is not offered it. `fsView` the model reads itself.
   describe("fsDownload", () => {
     it("is served to an interactive session", async () => {
       const session = await openSession(
@@ -273,8 +240,6 @@ describe("openToolSession", () => {
     expect(Object.keys(session.tools)).toEqual(["fine"]);
   });
 
-  // Assignment order is the precedence order, as it always was. What is new is
-  // that the swap is reported, naming the Tool set and plugin that lost.
   it("reports a tool name one Tool set takes from another", async () => {
     register(
       "set.first",
@@ -306,9 +271,6 @@ describe("openToolSession", () => {
     );
   });
 
-  // One implementation two Tool sets both contribute (e.g. `listBoards` in
-  // Kanban Cards and Kanban Boards) is not a contest: each set builds its own
-  // instance, but the turn keeps the first and reports nothing.
   it("keeps the first claim of a shared tool and reports no collision", async () => {
     const shared = () =>
       shareTool("test.read", {
@@ -332,9 +294,6 @@ describe("openToolSession", () => {
     );
   });
 
-  // Issue #664 removed the cross-plugin case — two third-party plugins now
-  // namespace apart — but not this one: two Tool sets from ONE plugin still
-  // contest a name, and it is still reported. Within one author's control.
   it("still reports two Tool sets from the same plugin contesting a name", async () => {
     const origin = { pluginName: "acme", isCore: false };
     register("acme.first", { search: toolNamed("first") }, origin);
@@ -377,19 +336,12 @@ describe("openToolSession", () => {
       noMcps(),
     );
 
-    // Both present, neither dropped, nothing to report.
     expect(session.tools.acme__createIssue).toEqual(toolNamed("acme"));
     expect(session.tools.globex__createIssue).toEqual(toolNamed("globex"));
     expect(logger.warn).not.toHaveBeenCalled();
   });
 
   describe("resolving concurrently (issue #776)", () => {
-    /**
-     * Serve `servers` MCP connections, counting how many were opening at once.
-     * Every server parks until all of them have been asked to open, or until a
-     * short real timeout — so a sequential resolve fails the assertion below
-     * with a peak of 1 rather than hanging the suite.
-     */
     const instrumentConcurrentOpens = (servers: number) => {
       const counts = { inFlight: 0, peak: 0 };
       let markAllEntered: () => void = () => {};
@@ -437,8 +389,6 @@ describe("openToolSession", () => {
     it("merges in assignment order even when the later Tool set resolves first", async () => {
       const finished: string[] = [];
       let releaseSlow: () => void = () => {};
-      // Raced with a short real timeout so a resolve that never overlaps fails
-      // the order assertion below rather than hanging the suite.
       const slow = Promise.race([
         new Promise<void>((r) => (releaseSlow = r)),
         new Promise<void>((r) => setTimeout(r, 100)),
@@ -454,8 +404,6 @@ describe("openToolSession", () => {
       );
       register(
         "set.fast",
-        // Resolves before the set assigned ahead of it, and still loses the
-        // name: precedence is the Agent's assignment order, not the wire's.
         () => {
           releaseSlow();
           finished.push("set.fast");
@@ -511,9 +459,6 @@ describe("openToolSession", () => {
         throw new Error("no API key");
       });
       register("set.fanout-fine", { fine: toolNamed("fine") });
-      // Connects, then cannot list — the failure that used to strand a socket.
-      // Keyed by URL rather than queued, so the assertion does not depend on
-      // which of the concurrent opens reached the mock first.
       const stranded = vi.fn().mockResolvedValue(undefined);
       mockCreateMCPClient.mockImplementation(
         ({ transport }: { transport: { url: string } }) =>
@@ -538,8 +483,6 @@ describe("openToolSession", () => {
 
       const session = await openSession(
         scope,
-        // An unknown id, a throwing factory, an MCP with no URL, a listing
-        // failure and a healthy MCP — all resolving at once.
         grantedAgent(
           "nope",
           "set.fanout-broken",
@@ -560,9 +503,6 @@ describe("openToolSession", () => {
       expect(stranded).toHaveBeenCalled();
     });
 
-    // The DB lookup is the one thing in the resolve phase that can still reject.
-    // It surfaces to the caller as it always did, in assignment order, and only
-    // once every sibling has finished opening — so nothing is left connected.
     it("closes a sibling's connection when a lookup rejects the turn", async () => {
       const close = connected({ a: toolNamed("a") });
       const queries = {
@@ -583,9 +523,6 @@ describe("openToolSession", () => {
     });
   });
 
-  // A factory that never settles, or a server that takes the connection and
-  // never answers, used to hold the turn until the run's step timer killed it
-  // with a timeout that named neither (issue #1135).
   describe("bounded resolution (issue #1135)", () => {
     const never = <T>() => new Promise<T>(() => {});
 
@@ -713,7 +650,6 @@ describe("openToolSession", () => {
       await session.dispose();
       expect(close).toHaveBeenCalledTimes(1);
 
-      // Idempotent: the caller runs it on abort and again on finish.
       await session.dispose();
       expect(close).toHaveBeenCalledTimes(1);
     });
@@ -775,8 +711,6 @@ describe("openToolSession", () => {
 
       expect(session.tools).toEqual({});
       await session.dispose();
-      // The socket used to stay open for the life of the process: the client
-      // was only remembered once its tool listing had succeeded.
       expect(close).toHaveBeenCalledTimes(1);
     });
 
@@ -803,9 +737,6 @@ describe("openToolSession", () => {
       );
     });
 
-    // The bug issue #467 fixes: an MCP tool literally named `search` (or
-    // `web_search`) used to shadow a same-named Tool set or built-in outright.
-    // Namespacing means the two names never collide in the first place.
     it("does not let an MCP tool shadow a Tool set's same-named tool", async () => {
       register(
         "set.search",
@@ -878,10 +809,6 @@ describe("openToolSession", () => {
       );
     });
 
-    // The throw escapes `openToolSession`, so the caller never receives a
-    // session it could dispose. Both servers have connected by the time the
-    // merge reaches the second — they resolve side by side — so closing them is
-    // this session's own job on the way out.
     it("fails the turn loudly when two attached MCPs resolve to the same slug, closing both", async () => {
       const first = connected({ a: toolNamed("a") });
       const second = connected({ b: toolNamed("b") });
@@ -984,7 +911,6 @@ describe("openToolSession", () => {
     });
 
     it("never connects to an MCP saved with a URL now blocked, and fails it soft", async () => {
-      // A row saved before MCP URLs were guarded on save.
       const queries = queriesFor([
         mcpRow({ name: "Jira", url: "http://169.254.169.254/mcp" }),
       ]);
@@ -1168,7 +1094,6 @@ describe("openToolSession", () => {
       expect(session.readOnlyToolNames.has("test_mcp__plainTool")).toBe(false);
     });
 
-    // Tri-state, never coerced (ADR-0021): only the boolean `true` counts.
     it("treats a non-boolean hint as not read-only", async () => {
       connected(
         { sneaky: toolNamed("sneaky") },
@@ -1255,9 +1180,6 @@ describe("openToolSession", () => {
   });
 
   describe("registered closers", () => {
-    /** A Tool set whose factory registers `close`, guarded as an author's would be. */
-    // Third-party, because closer attribution is what these tests read: the
-    // `plugin` field on a closer's log line is the manifest name.
     const registering = (id: string, close: () => Promise<void> | void) =>
       register(
         id,
@@ -1282,7 +1204,6 @@ describe("openToolSession", () => {
       await session.dispose();
       expect(close).toHaveBeenCalledTimes(1);
 
-      // The caller disposes on abort *and* on finish; the second is a no-op.
       await session.dispose();
       expect(close).toHaveBeenCalledTimes(1);
     });
@@ -1309,8 +1230,6 @@ describe("openToolSession", () => {
       const close = vi.fn().mockResolvedValue(undefined);
       session.registerCloser(close);
 
-      // Fire-and-forget, so the call lands a microtask after the registration —
-      // a delegate unwinding under an abort is the real caller here.
       await vi.waitFor(() => expect(close).toHaveBeenCalledTimes(1));
     });
 
@@ -1382,7 +1301,6 @@ describe("openToolSession", () => {
       register(
         "set.js-plugin",
         (ctx) => {
-          // What the types forbid and a third-party *JS* plugin can still do.
           (ctx.registerCloser as unknown as (c: unknown) => void)("close me");
           return {};
         },
@@ -1423,8 +1341,6 @@ describe("openToolSession", () => {
 
         const disposed = session.dispose();
         await vi.advanceTimersByTimeAsync(CLOSER_TIMEOUT_MS);
-        // A hanging `close()` used to stall the run's terminal write for the
-        // life of the process.
         await expect(disposed).resolves.toBeUndefined();
         expect(logger.warn).toHaveBeenCalledWith(
           expect.objectContaining({ mcpId: "mcp-1", scope: "ws" }),
@@ -1461,8 +1377,6 @@ describe("openToolSession", () => {
 
       deferCloserRegistrar(failed)(close);
 
-      // Nothing else will ever dispose it, so dropping it would leak whatever
-      // the Contribution opened for the life of the process.
       await vi.waitFor(() => expect(close).toHaveBeenCalledTimes(1));
     });
   });
@@ -1482,19 +1396,13 @@ describe("openToolSession", () => {
         toolSetIds: ["mcp-1"],
       });
 
-      // The delegate's tools are its own — a parent must not be able to call
-      // them directly.
       expect(child.tools).toHaveProperty("test_mcp__delegateTool");
       expect(parent.tools).not.toHaveProperty("test_mcp__delegateTool");
 
-      // One dispose, at the seam that opened everything.
       await parent.dispose();
       expect(close).toHaveBeenCalledTimes(1);
     });
 
-    // Issue #664: a nested session resolves Tool sets through the same
-    // composition step, so a Sub-Agent's third-party sets follow the same rule
-    // without the nesting path knowing anything about it.
     it("namespaces a Sub-Agent's third-party Tool set by the same rule", async () => {
       register(
         "acme.sub-664",
@@ -1546,8 +1454,6 @@ describe("openToolSession", () => {
       expect(factory).toHaveBeenCalledWith(
         expect.objectContaining({
           agentId: "sub-agent-1",
-          // …and under the parent's Workspace and user: a delegated run is a run
-          // for the same human, in the same Workspace, and in their timezone.
           workspaceId: "ws-1",
           userId: "user-1",
           timezone: "Australia/Melbourne",
@@ -1556,8 +1462,6 @@ describe("openToolSession", () => {
       );
     });
 
-    // Issue #1294: an A2A Chat with Include Memories off withholds the Memory
-    // Tool set, and a delegate must not reach it either.
     it("withholds a withheld Tool set from the Agent and from its delegates", async () => {
       register("set.memory", () => ({ memoryGet: toolNamed("memoryGet") }));
       register("set.other", () => ({ other: toolNamed("other") }));
@@ -1577,8 +1481,6 @@ describe("openToolSession", () => {
       expect(Object.keys(child.tools)).toEqual(["other"]);
     });
 
-    // Issue #1608: a delegate's tool calls reach the User only as its activity
-    // list, so it has no one to show a download to — whoever delegated.
     it.each([
       ["an interactive turn", true],
       ["a Trigger run", false],
@@ -1613,10 +1515,7 @@ describe("openToolSession", () => {
         toolSetIds: ["mcp-1"],
       });
 
-      // An abort can cancel the turn while a delegate is still unwinding, so a
-      // session opened after teardown releases itself rather than leaking…
       expect(close).toHaveBeenCalledTimes(1);
-      // …and serves no tools, rather than tools whose connections are shut.
       expect(child.tools).toEqual({});
     });
   });
