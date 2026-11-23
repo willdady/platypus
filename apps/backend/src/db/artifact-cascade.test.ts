@@ -2,11 +2,6 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import type { PGlite } from "@electric-sql/pglite";
 import { migratedPglite } from "./migrated-pglite.test-fixtures.ts";
 
-/**
- * An Artifact outlives its source Chat but not its Workspace, and its versions
- * go with it. Pinned against the shipped migrations because these are
- * behaviours of the foreign keys, not of any service call.
- */
 let pg: PGlite;
 beforeAll(async () => {
   pg = await migratedPglite();

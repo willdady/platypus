@@ -3,14 +3,6 @@ import { readFileSync } from "node:fs";
 import { getTableConfig } from "drizzle-orm/pg-core";
 import { triggerRun, triggerRunEvent } from "./schema.ts";
 
-/**
- * "Deleting a Trigger run removes its events; Max Runs to Keep retention
- * leaves no orphaned events" (#647). Retention deletes run rows and nothing
- * else, so the whole of that guarantee is the cascade on the foreign key — in
- * the schema the code reads, and in the migration production applies. Both
- * are pinned here, since neither is exercised against a live database in
- * this suite.
- */
 describe("trigger_run_event cascades from its run", () => {
   const foreignKeyTo = (table: string) =>
     getTableConfig(triggerRunEvent).foreignKeys.find(

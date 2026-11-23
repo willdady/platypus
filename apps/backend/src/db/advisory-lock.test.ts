@@ -31,8 +31,6 @@ describe.each([{ wait: true }, { wait: false }] as const)(
 
     it("releases the lock even when the work issues its own queries", async () => {
       const pg = fakePool();
-      // The work's queries land on other pooled connections, as a job's do.
-      // The unlock must still go through the connection holding the lock.
       const work = async () => {
         const other = await pg.pool.connect();
         await other.query("SELECT 1");
@@ -89,7 +87,6 @@ describe.each([{ wait: true }, { wait: false }] as const)(
       ).rejects.toThrow("boom");
 
       expect(pg.held.has(7)).toBe(false);
-      // The unlock worked, so the connection is fit to go back to the pool.
       expect(pg.checkedOut[0].release).toHaveBeenCalledWith(undefined);
     });
 
@@ -100,7 +97,6 @@ describe.each([{ wait: true }, { wait: false }] as const)(
         pg.pool,
         7,
         () => {
-          // The lock is already taken by now; only the unlock hits this.
           pg.checkedOut[0].query = () =>
             Promise.reject(new Error("connection reset"));
           return Promise.resolve("done");
@@ -108,7 +104,6 @@ describe.each([{ wait: true }, { wait: false }] as const)(
         options,
       );
 
-      // The work succeeded; ending the session is what frees the lock.
       expect(result).toBe("done");
       expect(pg.checkedOut[0].release).toHaveBeenCalledWith(expect.any(Error));
       expect(mockLogger.error).toHaveBeenCalledWith(
@@ -174,7 +169,6 @@ describe("withAdvisoryLock (wait: true)", () => {
       },
       { wait: true },
     );
-    // Let the first caller take the lock before the second asks for it.
     await vi.waitFor(() => expect(order).toEqual(["first:start"]));
 
     const second = withAdvisoryLock(
@@ -207,7 +201,6 @@ describe("withAdvisoryLock (wait: false)", () => {
 
     expect(result).toBeUndefined();
     expect(work).not.toHaveBeenCalled();
-    // The peer's lock is untouched: a skipped caller never unlocks.
     expect(pg.held.get(7)).toBe(999);
     expect(pg.checkedOut).toHaveLength(1);
     expect(pg.checkedOut[0].release).toHaveBeenCalledWith(undefined);
@@ -242,8 +235,6 @@ describe("ADVISORY_LOCK_IDS", () => {
   });
 
   it("keeps the ids already in use by deployed backends", () => {
-    // An old and a new instance must contend for the same lock during a
-    // rolling restart, so these values never change.
     expect(ADVISORY_LOCK_IDS.scheduler).toBe(987654321);
     expect(ADVISORY_LOCK_IDS.memoryExtraction).toBe(123456789);
     expect(ADVISORY_LOCK_IDS.migrations).toBe(314159265);

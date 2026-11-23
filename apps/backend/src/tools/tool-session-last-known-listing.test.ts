@@ -4,13 +4,6 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { UnauthorizedError, type MCPTransport } from "@ai-sdk/mcp";
 import type { mcp as mcpTable } from "../db/schema.ts";
 
-/**
- * The Last-known tool listing (ADR-0029, issue #635), against the real
- * `@ai-sdk/mcp` client — unlike `tool-session.test.ts`, which mocks it — so the
- * byte-identity claim is tested on the request a Provider would actually send.
- * Only the transport is faked: an in-memory MCP server a test can take down.
- */
-
 vi.mock("../index.ts", () => ({ db: {} }));
 vi.mock("../services/event-dispatch.ts", () => ({ dispatchEvent: vi.fn() }));
 vi.mock("../services/sub-agent-validation.ts", () => ({
@@ -21,14 +14,10 @@ vi.mock("../storage/index.ts", () => ({ getStorage: vi.fn() }));
 const { server } = vi.hoisted(() => ({
   server: {
     up: true,
-    /** When set, the connect is rejected with this instead of succeeding. */
     rejectWith: null as Error | null,
-    /** Accepts the connection, then never answers `tools/list` (#1135). */
     listHangs: false,
-    /** Accepts the connection, then never answers `initialize`. */
     initializeHangs: false,
     tools: [] as Array<Record<string, unknown>>,
-    /** Every connect attempt, whether or not it succeeds. */
     attempts: 0,
     opened: 0,
     closed: 0,
@@ -86,7 +75,6 @@ vi.mock("../services/mcp-oauth-provider.ts", async (importOriginal) => ({
   ...(await importOriginal<
     typeof import("../services/mcp-oauth-provider.ts")
   >()),
-  // The URL is what the egress guard checks before connecting.
   buildMcpTransportConfig: () =>
     Object.assign(fakeTransport(), { url: "https://mcp.example.com" }),
 }));
@@ -113,10 +101,6 @@ const scope: ToolSessionScope = {
   sessionId: "chat-1",
 };
 
-/**
- * Opens a session with the options a test that has no opinion about them wants:
- * nothing withheld, and no User watching.
- */
 const openSession = (
   sessionScope: ToolSessionScope,
   sessionAgent: Parameters<typeof openToolSession>[1],
@@ -130,7 +114,7 @@ const openSession = (
   });
 const agent = { id: "agent-1", toolSetIds: ["mcp-1"] };
 
-// Keys deliberately out of alphabetical order: `jsonb` would re-sort them.
+// why: keys out of alphabetical order on purpose; `jsonb` would re-sort them
 const TOOLS = [
   {
     name: "search",
@@ -151,7 +135,6 @@ const TOOLS = [
 
 const HOUR = 60 * 60 * 1000;
 
-/** One MCP row, persisted the way `json` would: a text round trip. */
 const store = () => {
   let row = {
     id: "mcp-1",
@@ -201,7 +184,6 @@ const store = () => {
   };
 };
 
-/** The `tools` block of the request Anthropic would be sent, as bytes. */
 const wireTools = async (tools: Record<string, Tool>): Promise<string> => {
   let body = "";
   const anthropic = createAnthropic({
@@ -257,8 +239,6 @@ describe("openToolSession — Last-known tool listing (#635)", () => {
     await stale.dispose();
   });
 
-  // Served from its listing, the MCP is loaded; a call that later fails to
-  // reach it is a failed tool call, not an unloaded Tool set (#1184).
   it("does not list an MCP served from its stored listing as unloaded", async () => {
     const { queries } = store();
     await (await openSession(scope, agent, queries)).dispose();
@@ -270,8 +250,6 @@ describe("openToolSession — Last-known tool listing (#635)", () => {
     await stale.dispose();
   });
 
-  // A server that takes the connection and never answers is a failed fetch
-  // like any other, not one that holds the turn open (#1135).
   it("serves the stored listing when the server connects but never answers, and closes that connection", async () => {
     const { queries } = store();
     await (await openSession(scope, agent, queries)).dispose();
@@ -340,7 +318,6 @@ describe("openToolSession — Last-known tool listing (#635)", () => {
         content: [{ type: "text", text: "called write" }],
       }),
     );
-    // A second call reuses the lazily opened client.
     await call(session.tools.flaky__search, { zeta: "q" });
     expect(server.closed).toBe(closedBefore);
 
@@ -348,9 +325,6 @@ describe("openToolSession — Last-known tool listing (#635)", () => {
     expect(server.closed).toBe(closedBefore + 1);
   });
 
-  // The stale tool's own connect is bounded like the fetch it stands in for,
-  // so a server that comes back hung fails the call instead of holding it
-  // until the step timer kills it (#1135).
   it("fails a stale tool's call when the server connects but never answers, and connects afresh on the next call", async () => {
     const { queries } = store();
     await (await openSession(scope, agent, queries)).dispose();
@@ -372,7 +346,6 @@ describe("openToolSession — Last-known tool listing (#635)", () => {
       vi.useRealTimers();
     }
 
-    // The next call connects afresh rather than reusing the failed attempt.
     server.initializeHangs = false;
     expect(await call(session.tools.flaky__write, { body: "x" })).toEqual(
       expect.objectContaining({
@@ -433,7 +406,6 @@ describe("openToolSession — Last-known tool listing (#635)", () => {
     await (await openSession(scope, agent, queries)).dispose();
     expect(queries.saveMcpToolListing).toHaveBeenCalledTimes(2);
 
-    // A day after the first fetch, but minutes after the refresh.
     server.up = false;
     const session = await openSession(scope, agent, queries);
     expect(Object.keys(session.tools)).toHaveLength(2);
@@ -448,7 +420,6 @@ describe("openToolSession — Last-known tool listing (#635)", () => {
   });
 
   describe("an MCP that rejects its credentials (#1179)", () => {
-    /** As `@ai-sdk/mcp`'s HTTP transport throws for a Bearer/header MCP. */
     const httpStatusError = (statusCode: number) =>
       Object.assign(
         new Error(
@@ -573,7 +544,6 @@ describe("openToolSession — Last-known tool listing (#635)", () => {
         const opening = openSession(scope, agent, queries);
         await vi.advanceTimersByTimeAsync(TOOL_SET_RESOLVE_TIMEOUT_MS);
         const session = await opening;
-        // No listing to fall back to, so its tools are dropped.
         expect(session.tools).toEqual({});
         expect(row().lastFetchFailedAt).toBeInstanceOf(Date);
       } finally {
@@ -581,8 +551,6 @@ describe("openToolSession — Last-known tool listing (#635)", () => {
       }
     });
 
-    // Recording it would serve stale tools for the window and drop them after
-    // it, flapping the prefix ADR-0029 exists to protect.
     it("clears rather than records on an auth failure, since its listing is never served", async () => {
       const { queries, row, failedAgo } = store();
       await (await openSession(scope, agent, queries)).dispose();

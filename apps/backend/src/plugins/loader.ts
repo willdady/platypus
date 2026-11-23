@@ -34,7 +34,6 @@ import {
 import { errorMessage } from "../utils/error-message.ts";
 import { isRecord } from "../utils/is-record.ts";
 
-// Summary of one loaded plugin, for the boot log line and observability.
 export interface LoadedPlugin {
   name: string;
   version: string;
@@ -43,27 +42,9 @@ export interface LoadedPlugin {
   sandboxBackendIds: string[];
   webBackendIds: string[];
   toolGateIds: string[];
-  /**
-   * The plugin's boot-resolved, Operator-owned deploy-time **config** (never
-   * credentials) — present on every loaded plugin, and `undefined` when the
-   * manifest declares no `configSchema`. Carried so the registry can serve it to
-   * request handlers that need a plugin's resolved config without re-parsing the
-   * environment — e.g. the Docker network-allowlist endpoint (ADR-0005/0013).
-   * The read-only `GET /plugins` catalog cherry-picks fields and never exposes
-   * this.
-   */
   config: unknown;
 }
 
-/**
- * Which plugin contributed each registered id, one map per Extension point.
- * Built while registering — the loader needs it to attribute a collision to both
- * plugins — and returned so the plugin registry can annotate catalogs without
- * re-deriving the same maps from the id arrays on {@link LoadedPlugin}.
- *
- * One map per point because the registries are separate: a Tool set and a
- * Sandbox backend may share a bare id.
- */
 export interface ContributionOwners {
   toolSets: ReadonlyMap<string, string>;
   sandboxBackends: ReadonlyMap<string, string>;
@@ -71,18 +52,13 @@ export interface ContributionOwners {
   toolGates: ReadonlyMap<string, string>;
 }
 
-/** Everything one successful load produced, for the boot log and the registry. */
 export interface LoadPluginsResult {
   plugins: LoadedPlugin[];
   owners: ContributionOwners;
 }
 
-// A module that exports a plugin manifest. Values are `unknown` until validated.
 type PluginModule = { plugin?: unknown };
 
-// One row of the loader's Extension-point table: where a point's contributions
-// live on a manifest, which `LoadedPlugin` field reports the ids it registered,
-// the point itself, and the owner map it accumulates across plugins.
 interface LoaderExtensionPoint {
   contributions: (manifest: PlatypusPlugin) => readonly unknown[] | undefined;
   reportAs:
@@ -91,90 +67,34 @@ interface LoaderExtensionPoint {
   owners: Map<string, string>;
 }
 
-// Deploy-time config/credentials the Operator supplies for one plugin. Both
-// halves are optional and opaque until validated against the manifest's
-// plugin-level schemas at boot.
 interface RawPluginConfig {
   config?: unknown;
   credentials?: unknown;
 }
 
-/**
- * What the loader derives each plugin's logger from — core's own logger, whose
- * level the Operator sets with `LOG_LEVEL`. Declared structurally, one method
- * wide, so the seam a test replaces is "make me a child" rather than the whole
- * logging library, and so nothing here leaks pino's types into the SDK contract
- * the child is handed to plugins as.
- */
 export interface PluginLoggerParent {
   child(bindings: Record<string, unknown>): PluginLogger;
 }
 
 export interface LoadPluginsOptions {
-  /** Plugin names to load. Defaults to parsing `PLATYPUS_PLUGINS`. */
   pluginNames?: string[];
-  /**
-   * Core plugins loaded unconditionally, ahead of the gate-able list. Defaults
-   * to {@link ALWAYS_ON_PLUGINS} on the env-default path (when `pluginNames` is
-   * unset) and to `[]` when a caller supplies an explicit `pluginNames` (so the
-   * caller owns both lists). Listing any of these in the gate-able list is a
-   * fail-loud misconfiguration (they are not enable switches).
-   */
   alwaysOnPlugins?: readonly string[];
-  /** The core allowlist / static built-in map. Defaults to {@link BUILTIN_PLUGINS}. */
   builtinPlugins?: Record<string, () => Promise<PluginModule>>;
-  /** Resolves a third-party plugin. Defaults to dynamic `import()`. */
   importPlugin?: (name: string) => Promise<PluginModule>;
-  /**
-   * Registers one Tool set. Takes the *composed* registration — core has already
-   * wrapped the contribution's factory in its own guard — rather than the raw
-   * contribution, for the same reason `registerWeb` does (ADR-0013/0014).
-   * Defaults to the core `registerToolSet`.
-   */
   register?: (id: string, registration: ToolSetRegistration) => void;
-  /**
-   * Registers one Sandbox backend. Takes the *composed* registration — core has
-   * already resolved the contribution's `configSchema` factory form away and
-   * bound its `create` to the plugin's config block — rather than the raw
-   * contribution, for the same reason `register` and `registerWeb` do
-   * (ADR-0013/0014). Defaults to core `registerSandboxBackend`.
-   */
   registerSandbox?: (registration: SandboxBackendRegistration) => void;
-  /**
-   * Registers one Web-search backend. Takes the *composed* registration — core
-   * has already wrapped the contribution's executors in its own Tools — rather
-   * than the raw contribution, since a backend's model-facing surface is
-   * core-owned (ADR-0014). Defaults to core `registerWebBackend`.
-   */
   registerWeb?: (registration: WebBackendRegistration) => void;
-  /**
-   * Registers one Tool gate, its timeout resolved and `evaluate` bound to the
-   * plugin's config block (ADR-0033). Defaults to core `registerToolGate`.
-   */
   registerGate?: (registration: ToolGateRegistration) => void;
-  /**
-   * The environment the `PLATYPUS_PLUGIN_CONFIG_<NAME>` vars are read from.
-   * Defaults to `process.env`.
-   */
   env?: Record<string, string | undefined>;
-  /**
-   * Parent of the per-plugin child loggers. Defaults to core's own logger, so a
-   * plugin's lines share core's stream, format and `LOG_LEVEL`.
-   */
   baseLogger?: PluginLoggerParent;
 }
 
-/**
- * Parse the comma-separated `PLATYPUS_PLUGINS` value into a clean name list.
- * Trims whitespace and drops empty entries; an unset/empty value yields `[]`.
- */
 export const parsePluginList = (raw: string | undefined): string[] =>
   (raw ?? "")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
 
-// Parse an env var's JSON value into an object, fail-loud and naming the var.
 const parseJsonObject = (
   varName: string,
   raw: string,
@@ -196,12 +116,6 @@ const parseJsonObject = (
 
 const PER_PLUGIN_CONFIG_PREFIX = "PLATYPUS_PLUGIN_CONFIG_";
 
-/**
- * The env var carrying one plugin's deploy-time config: a core name drops its
- * `@platypus/` scope, then uppercase with `-` → `_`. `@platypus/web-fetch` →
- * `PLATYPUS_PLUGIN_CONFIG_WEB_FETCH`, `cloud-sandbox` →
- * `PLATYPUS_PLUGIN_CONFIG_CLOUD_SANDBOX`.
- */
 const pluginConfigVar = (manifestName: string): string =>
   PER_PLUGIN_CONFIG_PREFIX +
   manifestName
@@ -209,11 +123,6 @@ const pluginConfigVar = (manifestName: string): string =>
     .toUpperCase()
     .replaceAll("-", "_");
 
-/**
- * Read every `PLATYPUS_PLUGIN_CONFIG_<NAME>` var into a map keyed by var name,
- * each value one plugin's `{ config?, credentials? }`. Empty values are treated
- * as unset. Fail-loud on malformed JSON or a non-object value.
- */
 const parsePerPluginConfig = (
   env: Record<string, string | undefined>,
 ): Map<string, RawPluginConfig> => {
@@ -232,18 +141,6 @@ const parsePerPluginConfig = (
   return map;
 };
 
-/**
- * Resolve one plugin's deploy-time config/credentials into the {@link
- * PluginConfigContext} injected into its contribution factories. Each half is
- * validated against the manifest's plugin-level schema when declared (fail-loud,
- * plugin-named); when no schema is declared the raw Operator value passes
- * through untouched (`undefined` when absent — nothing to validate against).
- *
- * The plugin's logger joins the same block: a child of core's logger bound to
- * the manifest name, so a line a plugin writes is attributable to it without the
- * author having to remember to say so, and is filtered by the Operator's
- * `LOG_LEVEL` like every other line core emits.
- */
 const resolvePluginConfig = (
   manifest: PlatypusPlugin,
   raw: RawPluginConfig,
@@ -272,16 +169,10 @@ const resolvePluginConfig = (
       manifest.credentialsSchema,
       raw.credentials,
     ),
-    // Same `plugin` binding key core's own boot lines use, so an Operator
-    // filtering on one plugin gets core's lines about it and the plugin's own.
     logger: baseLogger.child({ plugin: manifest.name }),
   };
 };
 
-// Validate an imported module's `plugin` export into a typed manifest, or throw
-// a plugin-named error explaining why. Covers manifest shape and the ADR-0013
-// apiVersion compatibility window (N and N−1): a plugin needing a newer API than
-// core provides, or targeting a dropped major, is rejected fail-loud at boot.
 const validateManifest = (name: string, mod: PluginModule): PlatypusPlugin => {
   const p = mod.plugin;
   if (!p || typeof p !== "object") {
@@ -305,8 +196,6 @@ const validateManifest = (name: string, mod: PluginModule): PlatypusPlugin => {
       `Plugin "${name}": manifest "apiVersion" must be a positive integer (it names a major API version).`,
     );
   }
-  // Compatibility window (ADR-0013): apiVersion is a *minimum*. Core supports the
-  // current major and one previous (N and N−1). Reject only outside that window.
   if (m.apiVersion > PLUGIN_API_VERSION) {
     throw new Error(
       `Plugin "${name}": needs API v${m.apiVersion}, but core supports up to v${PLUGIN_API_VERSION}. Upgrade core.`,
@@ -358,54 +247,15 @@ const validateManifest = (name: string, mod: PluginModule): PlatypusPlugin => {
   return p as PlatypusPlugin;
 };
 
-/**
- * Load and register every plugin. Runs before the HTTP server so registries are
- * populated by the time Chat turns resolve tools.
- *
- * The always-on core set ({@link ALWAYS_ON_PLUGINS}) loads first and
- * unconditionally — independent of `PLATYPUS_PLUGINS` (ADR-0013 amendment) — so
- * a deployment always has Platypus's essential tools even with an empty list.
- * `PLATYPUS_PLUGINS` gates only the deny-worthy core plugins and third-party
- * ones. Listing an always-on plugin there is a fail-loud misconfiguration.
- *
- * Boot is fail-loud and all-or-nothing (ADR-0013): a plugin that can't resolve,
- * has an invalid manifest, whose deploy-time config/credentials fail schema
- * validation, or collides with another aborts startup. Runtime Chat-turn
- * resolution stays graceful and is unaffected.
- *
- * Deploy-time plugin config/credentials (keyed by plugin name) are resolved once
- * per plugin and the single shared block is injected into every one of that
- * plugin's contribution factories, alongside the existing per-Workspace config.
- *
- * Resolution differs by origin: core plugins (present in the built-in map) load
- * via their static thunk; third-party plugins load via dynamic `import()`.
- * "Loaded identically" means an identical manifest → register flow, not
- * identical module resolution.
- *
- * Contribution ids are namespaced by origin (ADR-0013): core keeps flat, bare
- * ids; third-party ids are auto-prefixed with the plugin's manifest `name`
- * (`example.<id>`). The built-in map is the sole authority for "core", so a
- * package borrowing an `@platypus/*` name but absent from the map is treated as
- * third-party and prefixed.
- */
 export async function loadPlugins(
   opts: LoadPluginsOptions = {},
 ): Promise<LoadPluginsResult> {
   const listedNames =
     opts.pluginNames ?? parsePluginList(process.env.PLATYPUS_PLUGINS);
-  // The always-on core set is injected on the env-default path (production,
-  // where `pluginNames` is unset). A caller that supplies an explicit
-  // `pluginNames` also owns its always-on set — it defaults to none — so tests
-  // and embedders load exactly what they pass unless they opt in via
-  // `alwaysOnPlugins`.
   const alwaysOn =
     opts.alwaysOnPlugins ??
     (opts.pluginNames === undefined ? ALWAYS_ON_PLUGINS : []);
 
-  // Always-on core plugins load unconditionally, so listing one in
-  // PLATYPUS_PLUGINS is a misconfiguration — the list is not their enable switch.
-  // Fail-loud (ADR-0013 amendment): a listed always-on name aborts boot rather
-  // than double-loading (which would collide) or being silently ignored.
   for (const listed of listedNames) {
     if (alwaysOn.includes(listed)) {
       throw new Error(
@@ -414,8 +264,6 @@ export async function loadPlugins(
     }
   }
 
-  // Compose the load order: the always-on core set first, then the Operator's
-  // gate-able list. Duplicate ids across the combined set still fail-loud below.
   const names = [...alwaysOn, ...listedNames];
   const builtins = opts.builtinPlugins ?? BUILTIN_PLUGINS;
   const importPlugin =
@@ -426,8 +274,6 @@ export async function loadPlugins(
   const registerWeb = opts.registerWeb ?? registerWebBackend;
   const registerGate = opts.registerGate ?? registerToolGate;
   const env = opts.env ?? process.env;
-  // The combined var was removed in v4 (#1046). Ignoring it would boot every
-  // plugin it configured without its credentials, so its presence aborts boot.
   if (env.PLATYPUS_PLUGIN_CONFIG?.trim()) {
     throw new Error(
       'PLATYPUS_PLUGIN_CONFIG is no longer supported. Move each of its keys into that plugin\'s own PLATYPUS_PLUGIN_CONFIG_<NAME> variable (the manifest name without "@platypus/", uppercased, with "-" as "_", e.g. PLATYPUS_PLUGIN_CONFIG_DOCKER), then unset PLATYPUS_PLUGIN_CONFIG.',
@@ -436,29 +282,15 @@ export async function loadPlugins(
   const perPluginConfig = parsePerPluginConfig(env);
   const baseLogger = opts.baseLogger ?? logger;
 
-  // Tracks contribution id -> owning plugin name for owner-attributed
-  // collisions, and is handed to the registry afterwards for catalog annotation.
   const toolSetOwners = new Map<string, string>();
   const sandboxOwners = new Map<string, string>();
   const webOwners = new Map<string, string>();
   const gateOwners = new Map<string, string>();
 
-  // Manifest name -> the package specifier that declared it. Keyed against the
-  // specifier rather than the manifest, because a duplicate is only actionable
-  // if the error names the two PLATYPUS_PLUGINS entries to look at, and the
-  // manifest carries only the name they share.
   const manifestNameOwners = new Map<string, string>();
 
-  // Per-plugin config var -> the manifest name that maps to it. The mapping
-  // drops the core scope, so core `@platypus/x` and a third-party slug `x`
-  // would both read PLATYPUS_PLUGIN_CONFIG_X.
   const configVarOwners = new Map<string, string>();
 
-  // The Extension-point table. Every point runs the same registration sequence
-  // (`contribution-pipeline.ts`) over its slice of a manifest and differs only
-  // in what it declares here plus its entry in `extension-points.ts`. A fourth
-  // point (ADR-0013 anticipates them) is one more row, not a fourth copy of the
-  // loop.
   const points: readonly LoaderExtensionPoint[] = [
     {
       contributions: (m) => m.contributes.toolSets,
@@ -489,11 +321,6 @@ export async function loadPlugins(
   const loaded: LoadedPlugin[] = [];
 
   for (const name of names) {
-    // The static built-in map IS the core allowlist and the SOLE authority for
-    // "core" (ADR-0013): membership here — not the `@platypus/*` scope on the
-    // package or the manifest name — decides origin. A package that borrows an
-    // `@platypus/*` name but is absent from the map is third-party, so scope
-    // impersonation cannot smuggle a package in as core.
     const isCore = Object.prototype.hasOwnProperty.call(builtins, name);
     const origin: LoadedPlugin["origin"] = isCore ? "core" : "third-party";
 
@@ -510,42 +337,18 @@ export async function loadPlugins(
 
     const manifest = validateManifest(name, mod);
 
-    // A third-party manifest name becomes the contribution-id prefix
-    // (`${name}.${id}`), so it must be a clean, url-safe slug — no `.`, `/`, `@`,
-    // or whitespace to muddle the `name.id` boundary or a URL path. Core plugins
-    // are exempt: their `@platypus/*` names are logical ids reached through the
-    // built-in map and never used as a prefix.
     if (!isCore && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(manifest.name)) {
       throw new Error(
         `Plugin "${name}": third-party manifest name "${manifest.name}" must be a url-safe slug (lowercase letters, digits, and hyphens) — it becomes the contribution-id prefix. Rename it in the manifest.`,
       );
     }
 
-    // The name is also the namespace every one of this plugin's Tool-set tool
-    // names enters a turn under (issue #664), so it is capped. With the tool-name
-    // cap `composeToolSet` applies, the composed `<name>__<toolName>` is bounded
-    // below the model-provider ceiling by arithmetic — which is why nothing
-    // downstream needs a total-length check. Core plugins are exempt for the same
-    // reason they are exempt from the slug rule: their names are never a prefix.
     if (!isCore && manifest.name.length > MAX_PLUGIN_NAME_LENGTH) {
       throw new Error(
         `Plugin "${name}": third-party manifest "name" is ${manifest.name.length} characters ("${manifest.name}"), over the cap of ${MAX_PLUGIN_NAME_LENGTH} characters — it becomes the namespace on every tool name this plugin contributes. Rename it in the manifest.`,
       );
     }
 
-    // A manifest name is the key for a plugin's deploy-time config and
-    // credentials — the block below is looked up by it, and the registry stores
-    // the result under it — so it has to be unique across loaded plugins.
-    // Contribution ids do not enforce that: two plugins both named `acme`
-    // contributing `foo` and `bar` namespace to `acme.foo` and `acme.bar` and
-    // collide on nothing, so both would load and then be handed each other's
-    // credentials. Refused here, ahead of the resolve below, so an Operator
-    // reads the shared name rather than the schema failure it causes.
-    //
-    // Uniform over both origins: core names are `@platypus/*` and third-party
-    // names are slugs, which the check above holds to a character set that
-    // forbids `@` and `/`, so the two spaces are disjoint and this can only ever
-    // fire on a same-origin pair.
     const nameOwner = manifestNameOwners.get(manifest.name);
     if (nameOwner !== undefined) {
       throw new Error(
@@ -565,27 +368,15 @@ export async function loadPlugins(
     }
     configVarOwners.set(configVar, manifest.name);
 
-    // Resolve the plugin's deploy-time config/credentials once (fail-loud) and
-    // share the single block across every contribution factory below — this
-    // object identity IS the "one credential block per plugin" of ADR-0013. The
-    // plugin's name-bound logger rides along in the same block, which is why one
-    // addition reaches all three Extension points with no per-point plumbing.
     const pluginCtx = resolvePluginConfig(
       manifest,
       perPluginConfig.get(configVar) ?? {},
       baseLogger,
     );
 
-    // Core Contributions keep their flat, bare ids (no data migration — every
-    // persisted `agent.toolSetIds` / `sandbox.backend` reference keeps working).
-    // Third-party Contributions are auto-namespaced by the plugin's manifest
-    // `name` (`example.<id>`): authors write bare ids, core prefixes at load so a
-    // third-party id can never collide with a current or future core built-in.
     const contributionId = (id: string): string =>
       isCore ? id : `${manifest.name}.${id}`;
 
-    // Register this plugin's contributions to every Extension point, in table
-    // order, collecting the ids each point took for the boot log.
     const registeredIds: Record<LoaderExtensionPoint["reportAs"], string[]> = {
       toolSetIds: [],
       sandboxBackendIds: [],
@@ -609,17 +400,10 @@ export async function loadPlugins(
       version: manifest.version,
       origin,
       ...registeredIds,
-      // Carry the resolved deploy-time config (config only, never credentials)
-      // so request handlers can read it via the registry (ADR-0013).
       config: pluginCtx.config,
     });
   }
 
-  // Fail-loud (ADR-0013) on deploy-time config that targets no loaded plugin.
-  // A var matching nothing is almost always a typo or a plugin missing from
-  // PLATYPUS_PLUGINS — silently dropping the block (so a credential never
-  // reaches its factory) is exactly the kind of quiet misconfiguration the
-  // fail-loud boot posture exists to catch.
   for (const varName of perPluginConfig.keys()) {
     if (!configVarOwners.has(varName)) {
       throw new Error(
