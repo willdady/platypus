@@ -21,10 +21,11 @@ import type { KanbanCard } from "@platypus/schemas";
 import type { Serialized } from "@/lib/api-write";
 import {
   applyCardMove,
+  columnOfCard,
   moveCard,
-  parseDropZoneId,
   placeCard,
   reorderColumns,
+  resolveOverColumn,
   type BoardSync,
   type ColumnWithCards,
 } from "@/lib/board-moves";
@@ -196,8 +197,7 @@ export function useBoardDrag({
       activeTypeRef.current = type;
       dragOriginColumnRef.current =
         type === "card"
-          ? (cols.find((col) => col.cards.some((c) => c.id === active.id))
-              ?.id ?? null)
+          ? (columnOfCard(cols, String(active.id))?.id ?? null)
           : null;
       setLocalColumns([...cols.map((c) => ({ ...c, cards: [...c.cards] }))]);
     },
@@ -218,17 +218,9 @@ export function useBoardDrag({
       const cols = localColumnsRef.current;
       if (!cols) return;
 
-      const activeColumn = cols.find((col) =>
-        col.cards.some((c) => c.id === active.id),
-      );
+      const activeColumn = columnOfCard(cols, String(active.id));
       const overId = String(over.id);
-      const droppableColumnId = parseDropZoneId(overId);
-      const overColumn =
-        (droppableColumnId
-          ? cols.find((col) => col.id === droppableColumnId)
-          : null) ??
-        cols.find((col) => col.id === over.id) ??
-        cols.find((col) => col.cards.some((c) => c.id === over.id));
+      const overColumn = resolveOverColumn(cols, overId);
 
       if (!activeColumn || !overColumn) return;
 
@@ -325,9 +317,8 @@ export function useBoardDrag({
         // over.id may be a column id or a card id within that column
         let newIndex = current.findIndex((c) => c.id === over.id);
         if (newIndex === -1) {
-          newIndex = current.findIndex((c) =>
-            c.cards.some((card) => card.id === over.id),
-          );
+          const overColumn = columnOfCard(current, String(over.id));
+          if (overColumn) newIndex = current.indexOf(overColumn);
         }
         if (oldIndex !== newIndex && newIndex !== -1) {
           const result = await reorderColumns(
