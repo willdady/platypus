@@ -2,36 +2,10 @@ import { isDeepStrictEqual } from "node:util";
 import { vi, type Mock } from "vitest";
 import { DrizzleQueryError } from "drizzle-orm/errors";
 
-/**
- * An in-memory stand-in for the Drizzle handle that **interprets the `WHERE` a
- * query builds** instead of ignoring it.
- *
- * The chainable mock in `test-utils.ts` stubs every Drizzle operator as a
- * no-op, so a predicate is `undefined` by the time `.where()` receives it: a
- * test can only say which query comes back *nth*, never which rows it would
- * match. A query that dropped a scope column from its `and(...)` still passes.
- *
- * Here the operators are replaced with introspectable markers
- * ({@link markerOperators}) and this module evaluates them against seeded rows,
- * so a route that forgot to scope a lookup reads another Workspace's fixture
- * and the test fails.
- *
- * This module is the engine, not the entry point: tests reach it through
- * `seedDb()`/`resetMockDb()` in `test-utils.ts`, which installs it as the `db`
- * every module imports and mocks `drizzle-orm` with the markers it reads.
- *
- * It is a fake, not Postgres: no SQL is parsed, no constraint exists that a
- * test did not ask for, and an operator or SQL fragment it cannot interpret
- * throws rather than quietly matching everything.
- */
-
-/** A seeded table row, keyed by camel-cased column name (or snake — both resolve). */
 export type Row = Record<string, unknown>;
 
-/** A column as a marker records it: which table it belongs to, and its name. */
 export type ColumnRef = { table: string; name: string };
 
-/** A comparison marker standing in for a Drizzle operator's `SQL` fragment. */
 export type Marker =
   | {
       op: "eq" | "ne" | "gt" | "gte" | "lt" | "lte";
@@ -43,35 +17,21 @@ export type Marker =
   | { op: "and" | "or"; conditions: Condition[] }
   | { op: "sql"; strings: readonly string[]; values: unknown[] };
 
-/** What a `.where()` may receive: a marker, or nothing at all. */
 export type Condition = Marker | undefined | null;
 
-/**
- * A marker standing in for `count()` in a `select({ n: count() })` projection.
- * `aliased` records `count().as(…)`, which a subquery's aggregate needs; the
- * alias itself is not kept, since the subquery reads the field by its key.
- */
 export type CountMarker = {
   isCount: true;
   aliased?: true;
   as: (alias: string) => CountMarker;
 };
 
-/** A marker standing in for `max(column)` in a `select({ top: max(…) })` projection. */
 export type MaxMarker = { isMax: true; column: ColumnRef };
 
-/** Resolves a {@link ColumnRef} against whichever row shape is in play. */
 type Resolve = (ref: ColumnRef) => unknown;
 
-/**
- * Drizzle stamps a table's name under this symbol. It is read directly rather
- * than through `getTableName`, because this module is imported from inside the
- * `drizzle-orm` mock factory and so must not import the package it stands in
- * for.
- */
+// why: read directly: this module is loaded inside the drizzle-orm mock, so must not import it
 const TABLE_NAME = Symbol.for("drizzle:Name");
 
-/** The Postgres name of a Drizzle table object. */
 const tableNameOf = (table: unknown): string => {
   const name = (table as Record<symbol, unknown> | null)?.[TABLE_NAME];
   if (typeof name !== "string") {
@@ -80,7 +40,6 @@ const tableNameOf = (table: unknown): string => {
   return name;
 };
 
-/** Whether a `select({...})` projection value is a column rather than a marker. */
 const isColumn = (value: unknown): boolean => {
   const candidate = value as { name?: unknown; table?: unknown } | null;
   return (
@@ -92,24 +51,14 @@ const isColumn = (value: unknown): boolean => {
   );
 };
 
-/** Snake-cased column names map back onto camel-cased row keys. */
 const toCamel = (name: string) =>
   name.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
 
-/** Records a Drizzle column as the table it belongs to plus its column name. */
 const refOf = (column: unknown): ColumnRef => {
   const col = column as { name: string; table: object };
   return { table: tableNameOf(col.table), name: col.name };
 };
 
-/**
- * The Drizzle operators as introspectable markers — the set the code under
- * test actually composes. A test file mocks `drizzle-orm` with these — spread
- * over `...actual` so `pgTable` and friends stay real — and this module's fake
- * handle then evaluates what the query asked for. An operator that no query
- * issues yet is deliberately absent: adding one here without a query to read it
- * is surface nothing exercises.
- */
 export const markerOperators = () => ({
   eq: (column: unknown, value: unknown) =>
     ({ op: "eq", column: refOf(column), value }) as Marker,
@@ -139,19 +88,12 @@ export const markerOperators = () => ({
   max: (column: unknown): MaxMarker => ({ isMax: true, column: refOf(column) }),
 });
 
-/** A `count()` marker; `.as(…)` returns an aliased one. */
 const countMarker = (aliased?: true): CountMarker => ({
   isCount: true,
   ...(aliased && { aliased }),
   as: () => countMarker(true),
 });
 
-/**
- * A `sql` template as an introspectable marker. It keeps the `getSQL`/`mapWith`
- * surface the chainable mock's `sql` already offered, so a test that only looks
- * at the rendered query is unaffected, and adds the template's parts so a
- * fragment inside a `WHERE` can be evaluated rather than skipped.
- */
 export const sqlMarker = (
   strings: readonly string[],
   values: unknown[],
@@ -165,7 +107,6 @@ export const sqlMarker = (
     {
       getSQL: () => ({ query: strings.join("?") }),
       mapWith: () => undefined,
-      // An aliased fragment reads the same as the fragment.
       as: () => marker,
     },
   );
@@ -187,25 +128,18 @@ const isMaxMarker = (value: unknown): value is MaxMarker =>
   "isMax" in value &&
   value.isMax === true;
 
-/** Whether a projection value is a plain object of further selections. */
 const isNested = (value: unknown): value is Record<string, unknown> =>
   !!value &&
   Object.getPrototypeOf(value) === Object.prototype &&
   !isMarker(value) &&
   !isAggregate(value);
 
-/** Whether a projection value folds many rows into one. */
 const isAggregate = (value: unknown): boolean =>
   isCountMarker(value) || isMaxMarker(value);
 
-/** Escapes the characters a regular expression would otherwise read as syntax. */
 const escapeRegex = (text: string): string =>
   text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-/**
- * Whether `value` matches a SQL `LIKE`/`ILIKE` pattern, where `%` matches any
- * run of characters, `_` matches one, and `\` escapes the next character.
- */
 const likeMatches = (value: string, pattern: string): boolean => {
   let source = "";
   for (let i = 0; i < pattern.length; i++) {
@@ -223,17 +157,10 @@ const likeMatches = (value: string, pattern: string): boolean => {
   return new RegExp(`^${source}$`, "is").test(value);
 };
 
-/**
- * Evaluates the handful of raw-SQL fragments the code under test composes into
- * a `WHERE`. Anything else throws: a fragment this fake silently treated as
- * "matches everything" would be the very blindness it exists to remove.
- */
 const matchesSql = (
   marker: Marker & { op: "sql" },
   resolve: Resolve,
 ): boolean => {
-  // Whitespace-insensitive, so `lower(${col}) = ${value}` reads the same
-  // however the template is spaced or wrapped.
   const shape = marker.strings.join("?").replace(/\s+/g, "");
   const [left, right] = marker.values;
   if (shape === "lower(?)=?") {
@@ -245,21 +172,16 @@ const matchesSql = (
     return typeof value === "string" && likeMatches(value, right as string);
   }
   if (shape === "?>=?") {
-    // A column against a literal, as memory retrieval's date cutoff is.
     const value = resolve(refOf(left));
     return value != null && (value as string) >= (right as string);
   }
   if (shape === "true") {
-    // A lateral join's `ON true`: its subquery already chose the rows.
     return true;
   }
   if (shape === "?ISDISTINCTFROM?") {
-    // Null-safe: two nulls are not distinct, a null and a value are.
     return (resolve(refOf(left)) ?? null) !== (resolve(refOf(right)) ?? null);
   }
   if (shape === "?@>?::jsonb") {
-    // A jsonb array column containing every element of a JSON-encoded array,
-    // as a reference scrub finds the rows holding a deleted id.
     const value = resolve(refOf(left));
     const wanted = JSON.parse(right as string) as unknown[];
     return Array.isArray(value) && wanted.every((v) => value.includes(v));
@@ -269,19 +191,12 @@ const matchesSql = (
   );
 };
 
-/**
- * Evaluates the raw-SQL values the code under test writes in an `update`'s
- * `set`, against the row as it stood. Anything else throws, as
- * {@link matchesSql} does.
- */
 const sqlValue = (
   marker: Marker & { op: "sql" },
   resolve: Resolve,
 ): unknown => {
   const shape = marker.strings.join("?").replace(/\s+/g, "");
   if (shape === "?::timestamp+(?-?)") {
-    // A timestamp plus the interval between two of the row's own: a
-    // regenerated token's new expiry, keeping the lifetime it had.
     const [start, later, earlier] = marker.values;
     const end = resolve(refOf(later)) as Date;
     const begin = resolve(refOf(earlier)) as Date;
@@ -290,7 +205,6 @@ const sqlValue = (
     );
   }
   if (shape === "?-?") {
-    // A jsonb array column minus a string: every element equal to it removed.
     const [column, element] = marker.values;
     const value = resolve(refOf(column)) as unknown[];
     return value.filter((v) => v !== element);
@@ -300,23 +214,10 @@ const sqlValue = (
   );
 };
 
-/**
- * Marks a `select` builder so a condition can run it as a subquery. It stays
- * off the builder's enumerable surface, which is what the code under test sees.
- */
 const SUBQUERY = Symbol("fake-db:subquery");
 
-/**
- * Marks a `select(…).as(alias)` subquery so a lateral join can run it once
- * per outer row, with that row's columns in scope.
- */
 const LATERAL = Symbol("fake-db:lateral");
 
-/**
- * The list an `inArray`/`notInArray` tests against: a literal array, or a
- * one-column `select` passed as a subquery (`inArray(col, db.select({ id })…)`),
- * evaluated against the rows as they stand when the outer query runs.
- */
 const listOf = (values: unknown): unknown[] => {
   if (Array.isArray(values)) return values;
   const run = (values as Record<symbol, unknown> | null)?.[SUBQUERY];
@@ -328,15 +229,9 @@ const listOf = (values: unknown): unknown[] => {
   return (run as () => Row[])().map((row) => Object.values(row)[0]);
 };
 
-/**
- * The right-hand side of a comparison. A join condition compares two columns
- * (`eq(workspace.id, attachment.workspaceId)`), so a column there is resolved
- * against the row rather than compared as a literal.
- */
 const operandOf = (value: unknown, resolve: Resolve): unknown =>
   isColumn(value) ? resolve(refOf(value)) : value;
 
-/** Whether a row (as seen through `resolve`) satisfies a condition. */
 const satisfies = (resolve: Resolve, condition: Condition): boolean => {
   if (!condition) return true;
   if (!isMarker(condition)) {
@@ -386,17 +281,11 @@ const satisfies = (resolve: Resolve, condition: Condition): boolean => {
   }
 };
 
-/** Looks a column up on a flat row, accepting either casing of its name. */
 const flatResolver =
   (row: Row): Resolve =>
   (ref) =>
     ref.name in row ? row[ref.name] : row[toCamel(ref.name)];
 
-/**
- * Looks a column up on a joined row — one keyed by table name, the shape
- * Drizzle returns for `select().from(a).innerJoin(b, …)` — falling back to a
- * flat lookup so the same resolver serves both.
- */
 const joinedResolver =
   (row: Row): Resolve =>
   (ref) => {
@@ -404,20 +293,16 @@ const joinedResolver =
     if (part && typeof part === "object") {
       return flatResolver(part as Row)(ref);
     }
-    // A left join's unmatched table: its columns read as null.
     if (part === null) return null;
     return flatResolver(row)(ref);
   };
 
-/** A `(column, direction)` pair as `asc()`/`desc()` record it. */
 type OrderMarker = {
   op: "asc" | "desc";
   column: ColumnRef;
-  /** Where nulls go, when the query says so (`... desc nulls last`). */
   nulls?: "first" | "last";
 };
 
-/** The ordering operators, kept apart from the comparison ones for clarity. */
 export const orderOperators = () => ({
   asc: (column: unknown) =>
     ({ op: "asc", column: refOf(column) }) as OrderMarker,
@@ -425,12 +310,6 @@ export const orderOperators = () => ({
     ({ op: "desc", column: refOf(column) }) as OrderMarker,
 });
 
-/**
- * A `.orderBy()` argument as the fake sorts by it. A plain `asc`/`desc` marker
- * is already the shape; a raw SQL fragment is read for the one form the code
- * under test uses — `<column> [asc|desc] [nulls first|last]` — so an explicit
- * null placement is honoured rather than silently dropped.
- */
 const orderMarkerOf = (marker: OrderMarker | Marker): OrderMarker => {
   if (!isMarker(marker) || marker.op !== "sql") {
     return marker as OrderMarker;
@@ -452,65 +331,31 @@ const orderMarkerOf = (marker: OrderMarker | Marker): OrderMarker => {
   };
 };
 
-/** A unique index, as the fake enforces it on insert. */
 type UniqueConstraint = {
-  /** The constraint name, as it reads in the Postgres error message. */
   name: string;
-  /** The columns whose combined value must be unique. */
   columns: string[];
-  /**
-   * A partial index's `WHERE`: only rows it accepts take part, on either side
-   * of the comparison. Omitted, every row does.
-   */
   where?: (row: Row) => boolean;
 };
 
 export type FakeDbOptions = {
-  /**
-   * Unique indexes to enforce per table, so a duplicate insert fails the way
-   * Postgres would — the 409 path a route only has because the database
-   * refuses the row.
-   */
   unique?: Record<string, UniqueConstraint[]>;
-  /** Called before every insert, for tests that inject a failure mid-write. */
   onInsert?: (table: string, values: Row) => void;
-  /**
-   * Column values Postgres fills from a column default on insert, per table
-   * (`createdAt`/`updatedAt` from `defaultNow()`). The fake has no column
-   * definitions to read, so a test that validates a write's response supplies
-   * the timestamps the database would have stamped.
-   */
   defaults?: Record<string, Row>;
-  /**
-   * Called as each query runs, before it touches a row. Throw (typically a
-   * {@link dbError}) to fail that query the way the driver would.
-   */
   onQuery?: (query: QueryRecord) => void;
 };
 
-/** The rows the fake holds, keyed by Postgres table name. */
 export type Store = Record<string, Row[]>;
 
-/** A query the fake ran: what it did, and to which table. */
 export type QueryRecord = {
   kind: "select" | "insert" | "update" | "delete";
   table: string;
-  /** A `select(…).for(strength)`'s lock strength, so a test can see it was taken. */
   lock?: string;
 };
 
 export type FakeDb = {
-  /** The Drizzle stand-in to hand the code under test. */
   handle: unknown;
-  /**
-   * Every query run so far, in order, inside transactions too. A subquery is
-   * part of the query that runs it. Clear it (`queries.length = 0`) to count
-   * from a point.
-   */
   queries: QueryRecord[];
-  /** The seeded rows, live — assert on these to see what a write did. */
   tables: Store;
-  /** `db.execute()`, a spy resolving to `{ rowCount: 0 }` unless restubbed. */
   execute: Mock<(...args: unknown[]) => unknown>;
 };
 
@@ -522,12 +367,6 @@ const normaliseStore = (rows: Store): Store => {
   return store;
 };
 
-/**
- * A database failure in the shape drizzle-orm 0.45 throws: a
- * `DrizzleQueryError` wrapping the pg error, whose SQLSTATE `code` sits on
- * `.cause`, never on the error itself. Use it wherever a test simulates a
- * failed query, so code that reads the wrong layer fails the test.
- */
 export const dbError = (
   code = "08006",
   message = "connection failure",
@@ -544,20 +383,6 @@ const uniqueViolation = (constraint: string) =>
     `duplicate key value violates unique constraint "${constraint}"`,
   );
 
-/**
- * Builds an in-memory Drizzle stand-in over `initialRows`, keyed by Postgres table
- * name (`seedDb({ workspace: [...], provider: [...] })`). Tables not seeded are
- * empty rather than an error, so a query for a resource a test never created
- * simply finds nothing.
- *
- * Covers `select`/`selectDistinct`/`selectDistinctOn`/`from`/`innerJoin`/`leftJoin`/`where`/`orderBy`/`groupBy`/`limit`/`offset`,
- * a `select(…).as(alias)` subquery joined by `leftJoinLateral` on `true`,
- * `insert`/`values`/`returning`, `update`/`set`/`where`/`returning`,
- * `delete`/`where`/`returning`, `execute`, and a `transaction` that really
- * rolls back: the callback gets a handle bound to a staging copy merged back
- * only on success, so code that used the outer `db` where it meant `tx` fails
- * rather than passing quietly.
- */
 export const createFakeDb = (
   initialRows: Store = {},
   options: FakeDbOptions = {},
@@ -581,11 +406,6 @@ export const createFakeDb = (
       return store[name];
     };
 
-    /**
-     * Applies a `select({...})` projection, or copies the row when there is
-     * none. `group` is every row the aggregates fold over — the whole match, or
-     * one `groupBy` bucket — and `row` the one a plain column is read from.
-     */
     const project = (
       row: Row,
       resolve: Resolve,
@@ -601,16 +421,12 @@ export const createFakeDb = (
           const values = group
             .map((r) => r(value.column))
             .filter((v) => v != null) as number[];
-          // Postgres' `max()` over no rows is `NULL`, not an empty result set.
           out[key] = values.length ? Math.max(...values) : null;
         } else if (isColumn(value)) {
           out[key] = resolve(refOf(value));
         } else if (isNested(value)) {
-          // A nested object of columns, as Drizzle returns it nested.
           out[key] = project(row, resolve, value, group);
         } else {
-          // Silently projecting `undefined` would let a query select something
-          // this fake cannot compute and still pass.
           throw new Error(
             `fake db cannot project the selection "${key}" — it is neither a column, count() nor max()`,
           );
@@ -619,11 +435,6 @@ export const createFakeDb = (
       return out;
     };
 
-    /**
-     * What an `insert`/`update`/`delete` resolves to: the rows it touched
-     * through `.returning(...)`, or nothing when the caller just awaits the
-     * write. One shape for all three, since Drizzle gives them one.
-     */
     const writeResult = (touched: Row[]) => ({
       returning(selection?: Record<string, unknown>) {
         return Promise.resolve().then(() =>
@@ -664,14 +475,8 @@ export const createFakeDb = (
         lateral?: boolean;
       }[] = [];
 
-      /**
-       * The query's rows. `outer` is the row of the query a lateral subquery
-       * runs inside: a column of a table this query does not read is read
-       * from it.
-       */
       const rows = (outer?: Resolve): Row[] => {
         const base = rowsFor(table);
-        // A join yields rows keyed by table name, the shape Drizzle returns.
         let combined: Row[] = joins.length
           ? base.map((row) => ({ [nameOf(table)]: row }))
           : base.slice();
@@ -693,7 +498,6 @@ export const createFakeDb = (
             for (const partner of partners) {
               next.push({ ...row, [nameOf(join.table)]: partner });
             }
-            // A left join keeps an unmatched row, its joined columns null.
             if (join.left && !partners.length) {
               next.push({ ...row, [nameOf(join.table)]: null });
             }
@@ -713,7 +517,6 @@ export const createFakeDb = (
 
         for (const { column, op, nulls } of [...order].reverse()) {
           matched = matched.slice().sort((a, b) => {
-            // Two Dates at the same moment tie, as in Postgres.
             const valueOf = (v: unknown): unknown =>
               v instanceof Date ? v.getTime() : v;
             const leftValue = valueOf(resolverFor(a)(column));
@@ -733,7 +536,6 @@ export const createFakeDb = (
           });
         }
 
-        // `SELECT DISTINCT ON`: the first row, in order, of each key.
         if (distinctOn.length) {
           const seen = new Set<string>();
           matched = matched.filter((row) => {
@@ -745,8 +547,6 @@ export const createFakeDb = (
           });
         }
 
-        // `groupBy` folds each bucket of matching rows into one, keyed by the
-        // grouped columns' values; a bucket exists only if a row fell into it.
         if (grouping.length) {
           const buckets = new Map<string, Row[]>();
           for (const row of matched) {
@@ -768,8 +568,6 @@ export const createFakeDb = (
             );
         }
 
-        // An aggregate selection is one row whatever the table holds — a
-        // `count()` over no rows is `0`, not an empty result set.
         if (selection && Object.values(selection).some(isAggregate)) {
           return [
             project({}, flatResolver({}), selection, matched.map(resolverFor)),
@@ -782,7 +580,6 @@ export const createFakeDb = (
             project(row, resolverFor(row), selection, [resolverFor(row)]),
           );
         if (!distinct) return page;
-        // `SELECT DISTINCT`: one of each projected row.
         const seen = new Set<string>();
         return page.filter((row) => {
           const key = JSON.stringify(row);
@@ -809,12 +606,7 @@ export const createFakeDb = (
           joins.push({ table: t, on, left: true, lateral: true });
           return builder;
         },
-        /**
-         * The query as a subquery named `alias`, for a lateral join. Each
-         * selected key is a column of it, read from the subquery's rows.
-         */
         as(alias: string) {
-          // Drizzle refuses to read an unaliased `count()` off a subquery.
           for (const [key, value] of Object.entries(selection ?? {})) {
             if (isCountMarker(value) && !value.aliased) {
               throw new Error(
@@ -851,8 +643,6 @@ export const createFakeDb = (
           skip = n;
           return builder;
         },
-        // This fake is single-threaded; lock behavior is tested on Postgres.
-        // Only the strength is recorded, so a test can see the lock was asked for.
         for(strength: string) {
           lock = strength;
           return builder;
@@ -910,12 +700,9 @@ export const createFakeDb = (
 
       return {
         values(values: Row | Row[]) {
-          // Written synchronously so a unique violation surfaces where the
-          // caller's `try` is, the way the driver's rejection does.
+          // why: synchronous, so a unique violation throws inside the caller's try like the driver's
           write(values);
           const result = writeResult(inserted);
-          // A clash has already thrown above: conflict targets are left to
-          // the tests that run on Postgres.
           return Object.assign(result, {
             onConflictDoUpdate: () => result,
             onConflictDoNothing: () => result,
@@ -927,8 +714,6 @@ export const createFakeDb = (
     const update = (table: unknown) => {
       let patch: Row = {};
       let updated: Row[] = [];
-      // `update(a).set(…).from(b)`: a row is updated when some row of `b`
-      // satisfies the condition beside it.
       let joined: unknown;
 
       const matches = (row: Row, condition: Condition) => {
@@ -947,7 +732,6 @@ export const createFakeDb = (
         record({ kind: "update", table: nameOf(table) });
         updated = rowsFor(table).filter((row) => matches(row, condition));
         for (const row of updated) {
-          // Every value is read off the row as it stood, as Postgres does.
           const resolve = flatResolver(row);
           const values = Object.fromEntries(
             Object.entries(patch).map(([key, value]) => [
@@ -1006,9 +790,7 @@ export const createFakeDb = (
         const before = structuredClone(store);
         const staged = structuredClone(store);
         const result = await callback(makeHandle(staged));
-        // Only the tables it wrote: copying back the rest would undo writes
-        // made outside it while it ran.
-        // ponytail: a table both sides wrote still loses the outside write.
+        // why: copy back only the tables it wrote, or writes made outside it while it ran are undone
         for (const [name, rows] of Object.entries(staged)) {
           if (isDeepStrictEqual(rows, before[name])) continue;
           store[name] ??= [];

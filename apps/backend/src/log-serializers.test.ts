@@ -8,23 +8,11 @@ import { errorSerializers, serializeLoggedError } from "./log-serializers.ts";
 // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- JSON.stringify returns undefined for a function or symbol, though typed string
 const sizeOf = (value: unknown) => JSON.stringify(value)?.length ?? 0;
 
-/**
- * The production failure, rebuilt from the SDK's own error classes.
- *
- * A tool result carrying Drizzle `Date` values used to fail
- * `standardizePrompt()`, producing the whole `InvalidPromptError` →
- * `TypeValidationError` → `ZodError` chain inside `generateText`. `ai` 7.0.164
- * removed that pre-call validation — the same prompt now reaches the provider —
- * so the fixture builds the links directly, keeping the chain the serializer
- * handles.
- */
 const invalidPromptError = () => {
   const at = new Date("2026-01-01T00:00:00.000Z");
   const card = (n: number) => ({
     id: `card-${n}`,
     title: `Card ${n}`,
-    // Padding so the rejected value is the payload-sized failure the cap
-    // exists for, not a handful of fields.
     notes: "x".repeat(1_000),
     createdAt: at,
     updatedAt: at,
@@ -56,7 +44,6 @@ const invalidPromptError = () => {
     },
   ];
 
-  // The field types `ModelMessage[]` required, with every `Date` a string.
   const messageSchema = z.array(
     z.object({
       role: z.literal("tool"),
@@ -107,19 +94,11 @@ const invalidPromptError = () => {
   });
 };
 
-// Built once: parsing the fixture costs hundreds of milliseconds, and nothing
-// here mutates the error.
 let promptError: unknown;
 beforeAll(() => {
   promptError = invalidPromptError();
 });
 
-/**
- * A real pino instance writing in-process, so the registration is exercised
- * through pino's own serializer dispatch rather than by calling the function
- * directly. Registering a serializer under a key that is not pino's `errorKey`
- * is the part most likely to break silently.
- */
 const logLine = (payload: Record<string, unknown>): string => {
   let written = "";
   const sink = new Writable({
@@ -148,8 +127,6 @@ describe("errorSerializers", () => {
       expect(line).toMatch(/content\[0\]\.output\.value\.columns\[\d+\]/);
       expect(line).not.toContain("invalid_union");
     }
-    // Same entry either way. Compared as the parsed payload rather than the
-    // raw line, which also carries pino's own per-call timestamp.
     const parse = (line: string) => JSON.parse(line) as Record<string, unknown>;
     expect(parse(underError).error).toEqual(parse(underErr).err);
   });
@@ -160,9 +137,6 @@ describe("errorSerializers", () => {
     );
   });
 
-  // A web backend's and a tool set factory's failure lines carry the error as
-  // `cause`. Unregistered, pino wrote it as `{}`: the line said a read failed
-  // and nothing about why.
   it("writes an error logged as cause with its message, not as {}", () => {
     const line = JSON.parse(
       logLine({
@@ -186,13 +160,11 @@ describe("serializeLoggedError", () => {
     });
 
     it("collapses a 320 KB nested ZodError into a readable entry", () => {
-      // The unserialized error is the problem this change exists to fix.
       expect(sizeOf(promptError)).toBeGreaterThan(100_000);
       expect(serialized.length).toBeLessThan(4096);
     });
 
     it("keeps the one sentence that names the failure", () => {
-      // Non-enumerable on `Error`, so today it is absent from the log entirely.
       expect(serialized).toContain(
         "The messages do not match the ModelMessage[] schema",
       );
@@ -204,9 +176,6 @@ describe("serializeLoggedError", () => {
     });
 
     it("does not complain about the message role it actually matched", () => {
-      // A tool message also fits the shape of an assistant message carrying a
-      // tool result, so both union branches reach the offending field. Leading
-      // with `expected "assistant"` sends the reader after the wrong thing.
       expect(serialized).not.toContain('expected \\"assistant\\"');
     });
 
@@ -219,8 +188,6 @@ describe("serializeLoggedError", () => {
     });
 
     it("does not echo the rejected payload back", () => {
-      // `TypeValidationError` carries the entire offending value as an
-      // enumerable property, which serializes today.
       expect(serialized).not.toContain("Card 7");
       expect(serialized).toMatch(/omitted/i);
     });
@@ -339,8 +306,6 @@ describe("serializeLoggedError", () => {
     });
 
     it("keeps the message when the issue tree summarises to nothing", () => {
-      // Suppressing the message because issues are *present* would lose the
-      // only readable line when the tree yields no reportable leaf.
       const error = Object.assign(new Error("the failure still has a name"), {
         issues: [] as unknown[],
       });

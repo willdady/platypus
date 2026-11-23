@@ -1,21 +1,3 @@
-/**
- * Whether the configured backend and frontend origins can authenticate
- * server-side requests at all.
- *
- * During server-side rendering the frontend calls the backend over the internal
- * URL and forwards the browser's `cookie` header. That header only carries the
- * better-auth session cookie when both origins resolve to the same host (cookies
- * ignore port) or when the cookie is scoped to a parent domain they share. Two
- * unrelated hosts can never work: the browser never sends one host's cookie to
- * the other, and there is no service credential an internal caller can present.
- *
- * The check is fatal. An Operator on an unsupported topology otherwise gets an
- * app that signs in and then silently serves degraded pages — every
- * server-rendered request arrives unauthenticated and nothing says so. Refusing
- * to start names the topologies and the variable that fixes them, at boot,
- * instead of serving a half-broken app until someone notices.
- */
-
 import { failStartup } from "./boot-env.ts";
 import { backendBaseUrl, frontendBaseUrl } from "./base-urls.ts";
 import { env } from "./env.ts";
@@ -28,7 +10,6 @@ const AUTH_COOKIE_DOMAIN_VAR = "AUTH_COOKIE_DOMAIN";
 
 const IPV4 = /^\d{1,3}(?:\.\d{1,3}){3}$/;
 
-/** True for an IPv4 literal in range, or anything containing a colon (IPv6). */
 const isIpAddress = (value: string): boolean => {
   const bare =
     value.startsWith("[") && value.endsWith("]") ? value.slice(1, -1) : value;
@@ -38,14 +19,9 @@ const isIpAddress = (value: string): boolean => {
   return bare.includes(":");
 };
 
-/**
- * True for a value carrying URL syntax rather than a bare domain. Matches on a
- * path separator or a scheme, so an IPv6 literal's colons don't read as one.
- */
 const looksLikeUrl = (value: string): boolean =>
   value.includes("/") || /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(value);
 
-/** `example.com` scopes `app.example.com` and itself; case-insensitively. */
 const isParentDomain = (host: string, domain: string): boolean =>
   host === domain || host.endsWith(`.${domain}`);
 
@@ -78,12 +54,6 @@ const badCookieDomain = (
     rule,
 });
 
-/**
- * Decide whether the three values can produce authenticated server-side
- * requests. `backendUrl` is the browser-facing backend URL (`BETTER_AUTH_URL`),
- * `frontendUrl` is `FRONTEND_URL`, and `cookieDomain` is the optional
- * `AUTH_COOKIE_DOMAIN`.
- */
 export const checkAuthTopology = (
   backendUrl: string,
   frontendUrl: string,
@@ -92,8 +62,6 @@ export const checkAuthTopology = (
   const backendHost = hostnameOf(backendUrl);
   const frontendHost = hostnameOf(frontendUrl);
   if (!backendHost || !frontendHost) {
-    // Without both hostnames the topology cannot be judged either way. Name
-    // whichever variable is unreadable rather than both.
     const unreadable = [
       backendHost ? undefined : `BETTER_AUTH_URL ("${backendUrl}")`,
       frontendHost ? undefined : `FRONTEND_URL ("${frontendUrl}")`,
@@ -160,16 +128,6 @@ export const checkAuthTopology = (
   return { valid: true, cookieDomain: undefined };
 };
 
-/**
- * Read the three values from the environment and refuse to start — at module
- * load, before the HTTP server listens — when the topology cannot authenticate
- * server-side requests. Returns the validated cookie domain, or `undefined`
- * when the deployment needs none.
- *
- * An unusable `AUTH_COOKIE_DOMAIN` is a startup failure too: a cookie scoped to
- * a domain neither origin sits under is not sent to either of them, so running
- * with it silently would leave every server-rendered request unauthenticated.
- */
 export const resolveAuthCookieDomain = (): string | undefined => {
   const cookieDomain = env().AUTH_COOKIE_DOMAIN;
 
@@ -184,13 +142,6 @@ export const resolveAuthCookieDomain = (): string | undefined => {
   return result.cookieDomain;
 };
 
-/**
- * The `advanced` block that scopes session cookies to a shared parent domain.
- *
- * Returns an empty object when no domain is set, so a single-origin deployment
- * sees exactly better-auth's default host-only cookie behaviour. The block is
- * omitted entirely — better-auth is never handed a disabled or empty form.
- */
 export const crossSubdomainCookieConfig = (
   domain: string | undefined,
 ):

@@ -4,7 +4,6 @@ import { respond } from "./respond.ts";
 
 const schema = z.object({ id: z.string(), scope: z.enum(["workspace"]) });
 
-/** The smallest thing `respond` needs from a Hono context. */
 const context = () => ({ json: vi.fn((body: unknown) => body) });
 
 describe("respond", () => {
@@ -21,8 +20,6 @@ describe("respond", () => {
   });
 
   it("fails a test when the response drifts from its schema", () => {
-    // The point of the helper: drop a field from a route and its test fails
-    // here rather than the frontend finding out.
     expect(() => respond(context() as never, schema, { id: "a" })).toThrow(
       /Response does not match its schema/,
     );

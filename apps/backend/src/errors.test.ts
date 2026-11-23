@@ -30,8 +30,6 @@ describe("central error mapping (app.onError)", () => {
   });
 
   it("maps ServiceUnavailableError → 503", () => {
-    // The stopping gate's rejection: a run claimed after the stop signal is
-    // answered 503 so an HTTP caller retries another instance.
     expect(mapError(new ServiceUnavailableError())).toEqual({
       status: 503,
       message: "Server is shutting down",
@@ -65,7 +63,6 @@ describe("central error mapping (app.onError)", () => {
 
   it("maps a Postgres unique violation (23505) → 409", () => {
     expect(mapError({ code: "23505" })?.status).toBe(409);
-    // The code can surface on the error's cause across driver shapes.
     expect(mapError({ cause: { code: "23505" } })?.status).toBe(409);
   });
 
