@@ -38,6 +38,7 @@ import {
 } from "@platypus/schemas";
 import { cn, joinUrl, optionalFetcher } from "@/lib/utils";
 import { workspaceRoutes } from "@/lib/routes";
+import { chatColumnClass } from "@/lib/artifact-panel-split";
 import { isTurnInFlight, runMayBeLive } from "@/lib/chat-recovery";
 import { scopedPath, scopedUrl } from "@/lib/api-write";
 import { useSandboxUploads } from "@/hooks/use-sandbox-uploads";
@@ -91,6 +92,7 @@ import {
   storedArtifactOf,
   type ArtifactOpenTarget,
 } from "./artifact-tool-card";
+import { ChatArtifactSplit } from "./chat-artifact-split";
 import { MessageEditor } from "./message-editor";
 import { ChatReconnectingNotice } from "./chat-reconnecting-notice";
 import { toast } from "sonner";
@@ -301,6 +303,11 @@ export function Chat({
   const openLiveArtifact: ArtifactLive | undefined = openArtifactPart
     ? artifactLiveFromPart(openArtifactPart)
     : undefined;
+  // The panel is drawn only once its target resolves, so the Chat keeps its
+  // reading column until then.
+  const artifactPanelOpen = Boolean(
+    openArtifact && (openStoredArtifact || openLiveArtifact),
+  );
 
   // The server-owned Transcript's client side: the row's read and poll,
   // monotonic hydration, the switch between Alternatives, the tree the
@@ -709,7 +716,27 @@ export function Chat({
   };
 
   return (
-    <div className="relative flex size-full min-h-0 overflow-hidden">
+    <ChatArtifactSplit
+      panel={
+        artifactPanelOpen ? (
+          <ArtifactViewer
+            key={openArtifactCount}
+            orgId={orgId}
+            workspaceId={workspaceId}
+            artifactId={openStoredArtifact?.id}
+            version={openStoredArtifact?.version}
+            live={openLiveArtifact}
+            onClose={() => setOpenArtifact(null)}
+            fullScreen={{
+              active: artifactFullScreen,
+              onToggle: () => setArtifactFullScreen((on) => !on),
+            }}
+            className="size-full"
+          />
+        ) : null
+      }
+      fullScreen={artifactFullScreen}
+    >
       <div
         className={cn(
           "relative flex h-full min-w-0 flex-1 flex-col overflow-hidden",
@@ -736,7 +763,12 @@ export function Chat({
               {/* The one owner of vertical spacing between chat items: messages,
             Thinking and tool disclosures, Sources and notices carry no margins
             of their own, so every gap in the transcript is this one. */}
-              <div className="w-full flex flex-col gap-4 xl:w-4/5 max-w-4xl">
+              <div
+                className={cn(
+                  "flex flex-col gap-4",
+                  chatColumnClass(artifactPanelOpen),
+                )}
+              >
                 {chatData?.a2aClientName && (
                   <p className="text-center text-xs text-muted-foreground">
                     Over A2A from {chatData.a2aClientName}
@@ -823,7 +855,12 @@ export function Chat({
         <TurnAnnouncer status={effectiveStatus} />
         <div className="grid shrink-0 gap-4 p-4">
           <div className="flex justify-center min-w-0">
-            <div className="relative w-full xl:w-4/5 max-w-4xl min-w-0">
+            <div
+              className={cn(
+                "relative min-w-0",
+                chatColumnClass(artifactPanelOpen),
+              )}
+            >
               {isRecoveringRun && <ChatReconnectingNotice />}
               {(summarisingStatus || compacting) && (
                 // This copy is the live region for a streamed status too: the
@@ -999,31 +1036,6 @@ export function Chat({
           error={error}
         />
       </div>
-      {openArtifact && (openStoredArtifact || openLiveArtifact) && (
-        <aside
-          className={cn(
-            "absolute inset-0 z-20 flex flex-col border-l bg-background",
-            artifactFullScreen
-              ? "lg:fixed lg:z-50 lg:border-l-0"
-              : "lg:static lg:w-[min(560px,45vw)] lg:shrink-0",
-          )}
-        >
-          <ArtifactViewer
-            key={openArtifactCount}
-            orgId={orgId}
-            workspaceId={workspaceId}
-            artifactId={openStoredArtifact?.id}
-            version={openStoredArtifact?.version}
-            live={openLiveArtifact}
-            onClose={() => setOpenArtifact(null)}
-            fullScreen={{
-              active: artifactFullScreen,
-              onToggle: () => setArtifactFullScreen((on) => !on),
-            }}
-            className="size-full"
-          />
-        </aside>
-      )}
-    </div>
+    </ChatArtifactSplit>
   );
 }

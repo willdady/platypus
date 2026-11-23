@@ -533,6 +533,32 @@ describe("Chat Artifact panel", () => {
     } as unknown as PlatypusUIMessage;
   }
 
+  it("keeps the centred Chat column while the panel is closed", () => {
+    harness.turn.messages = [message("a1", "Hello")];
+    renderChat();
+
+    const columns =
+      // eslint-disable-next-line testing-library/no-node-access
+      document.querySelectorAll(".max-w-4xl");
+    expect(columns.length).toBeGreaterThan(0);
+    for (const column of columns) {
+      expect(column).toHaveClass("xl:w-4/5");
+    }
+  });
+
+  it("fills the Chat column while the panel is open", () => {
+    harness.turn.messages = [message("a1", "Hello")];
+    renderChat();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open artifact a1" }));
+
+    expect(
+      screen.getByText("Artifact panel artifact-1 v1"),
+    ).toBeInTheDocument();
+    // eslint-disable-next-line testing-library/no-node-access
+    expect(document.querySelector(".max-w-4xl")).toBeNull();
+  });
+
   it("opens the viewer beside the transcript and closes it", () => {
     harness.turn.messages = [message("a1", "Hello")];
     renderChat();
@@ -550,6 +576,27 @@ describe("Chat Artifact panel", () => {
     expect(
       screen.queryByText("Artifact panel artifact-1 v1"),
     ).not.toBeInTheDocument();
+  });
+
+  it("keeps the composer's draft when the panel opens and closes", () => {
+    harness.turn.messages = [message("a1", "Hello")];
+    renderChat();
+    const currentComposer = () =>
+      screen.getByPlaceholderText<HTMLTextAreaElement>(
+        "What would you like to know?",
+      );
+
+    fireEvent.change(currentComposer(), {
+      target: { value: "half a message" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Open artifact a1" }));
+    expect(currentComposer().value).toBe("half a message");
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Close artifact panel" }),
+    );
+    expect(currentComposer().value).toBe("half a message");
   });
 
   it("keeps the open Artifact in the URL, so a refresh reopens it", () => {
@@ -998,6 +1045,7 @@ const DROPPED: ChatStatus[] = ["submitted", "streaming", "error"];
 const REFUSED: ChatStatus[] = ["submitted", "error"];
 
 beforeEach(() => {
+  window.history.replaceState(null, "", "/");
   harness.swrCalls = [];
   harness.data = new Map<string, unknown>([
     ["/providers", { results: [provider] }],
@@ -1878,6 +1926,24 @@ describe("loading", () => {
 
     expect(loadingSkeleton()).toHaveClass("justify-center");
     expect(composer()).not.toBeInTheDocument();
+  });
+
+  it("keeps the skeleton's centred column while an Artifact is open", () => {
+    // A refresh of a Chat URL carrying an open Artifact: the panel is not drawn
+    // until the Chat is, so the skeleton must keep its reading measure rather
+    // than stretch across the row the panel will take.
+    rowInFlight();
+    window.history.replaceState(null, "", "?artifact=artifact-1%3A1");
+
+    renderChat();
+
+    expect(loadingSkeleton()).toBeInTheDocument();
+    // eslint-disable-next-line testing-library/no-node-access
+    const columns = document.querySelectorAll(".max-w-4xl");
+    expect(columns.length).toBeGreaterThan(0);
+    for (const column of columns) {
+      expect(column).toHaveClass("xl:w-4/5");
+    }
   });
 
   it("shows the failure, not an endless skeleton, when providers fail to load", () => {
