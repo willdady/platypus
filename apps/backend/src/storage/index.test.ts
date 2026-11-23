@@ -3,15 +3,6 @@ import { getStorage, resetStorage } from "./index.ts";
 import { DiskStorage } from "./disk.ts";
 import { S3Storage } from "./s3.ts";
 
-vi.mock("./s3.ts", () => {
-  class MockS3Storage {
-    put = vi.fn();
-    get = vi.fn();
-    delete = vi.fn();
-  }
-  return { S3Storage: MockS3Storage };
-});
-
 describe("Storage index", () => {
   beforeEach(() => {
     resetStorage();
