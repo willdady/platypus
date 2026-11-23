@@ -15,6 +15,7 @@ import {
   runRegistry,
   TimeoutError,
   type RunHandle,
+  type RunRegistry,
   type RunTimeouts,
 } from "./run-registry.ts";
 import type { RunId, RunStats, RunStatus } from "./types.ts";
@@ -41,6 +42,7 @@ export const startRun = (params: {
   runId: RunId;
   log?: Record<string, unknown>;
   timeouts?: RunTimeouts;
+  registry?: RunRegistry;
   onTerminate: (ctx: {
     status: RunStatus;
     error?: Error;
@@ -49,6 +51,7 @@ export const startRun = (params: {
   onStepProgress?: (stats: RunStats) => void;
 }): RunLifecycle => {
   const { runId, onTerminate } = params;
+  const registry = params.registry ?? runRegistry;
   const logFields = { runId, ...params.log };
   let stats: RunStats = {};
   let usageModel: UsageModel | undefined;
@@ -79,7 +82,7 @@ export const startRun = (params: {
     } catch (err) {
       logger.error({ err, ...logFields }, "Error terminating run");
     }
-    runRegistry.unregister(runId);
+    registry.unregister(runId);
   };
 
   const adoptOrDispose = async (
@@ -99,7 +102,7 @@ export const startRun = (params: {
     return true;
   };
 
-  const handle = runRegistry.register(runId, {
+  const handle = registry.register(runId, {
     ...params.timeouts,
     onTimeout: (error) => {
       logger.error(
@@ -196,7 +199,7 @@ export const startRun = (params: {
   handle.signal.addEventListener(
     "abort",
     () => {
-      if (runRegistry.stopping) {
+      if (registry.stopping) {
         void finishFromSignal();
         return;
       }
