@@ -102,14 +102,12 @@ export interface ComposeWebBackendOptions {
   backend: string;
   plugin: PluginConfigContext;
   pluginName: string;
-  resolveHostname?: (hostname: string) => Promise<string[]>;
 }
 
 export const composeWebBackend = (
   options: ComposeWebBackendOptions,
 ): WebBackendRegistration => {
-  const { contribution, backend, plugin, pluginName, resolveHostname } =
-    options;
+  const { contribution, backend, plugin, pluginName } = options;
   const timeoutMs = contribution.timeoutMs ?? DEFAULT_WEB_TIMEOUT_MS;
 
   const logCall = (
@@ -287,7 +285,7 @@ export const composeWebBackend = (
           );
         }
 
-        const egress = await checkEgress(url, { resolve: resolveHostname });
+        const egress = await checkEgress(url);
         if (!egress.allowed) {
           logCall("read_url", "blocked", startedAt, {
             url,
