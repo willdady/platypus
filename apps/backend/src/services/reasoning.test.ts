@@ -6,6 +6,7 @@ import {
   resolveReasoning,
 } from "./reasoning.ts";
 import { makeProviderRow } from "./provider-row.test-fixtures.ts";
+import type { ProviderRow } from "./provider-write.ts";
 
 // Qwen-shaped: everything rides in `chat_template_kwargs`, so the deep merge
 // across always / thinking / effort is what this map exercises.
@@ -299,14 +300,65 @@ describe("jobCallSettings", () => {
 
 describe("jobMaxOutputTokens", () => {
   const qwen = "qwen3" as ConcreteModelId;
-  const compat = makeProviderRow({
-    name: "local",
-    modelIds: [{ id: qwen, passthroughFileTypes: [], reasoning: QWEN }],
-  });
+  /** The compatible Provider, with an optional ceiling on its Model entry. */
+  const compatWith = (
+    maxOutputTokens?: number,
+    providerType: ProviderRow["providerType"] = "OpenAI",
+  ) =>
+    makeProviderRow({
+      name: "local",
+      providerType,
+      modelIds: [
+        {
+          id: qwen,
+          passthroughFileTypes: [],
+          reasoning: QWEN,
+          ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
+        },
+      ],
+    });
+  const compat = compatWith();
 
   it("adds a sent Thinking budget to the cap, so thinking cannot crowd out the answer", () => {
     expect(
       jobMaxOutputTokens(compat, qwen, { thinkingBudget: 4096 }, 2048),
+    ).toBe(6144);
+  });
+
+  it("holds cap plus budget to a lower declared ceiling", () => {
+    expect(
+      jobMaxOutputTokens(
+        compatWith(4096),
+        qwen,
+        { thinkingBudget: 4096 },
+        2048,
+      ),
+    ).toBe(4096);
+  });
+
+  it("holds the bare cap to a ceiling declared below it, with no budget sent", () => {
+    expect(jobMaxOutputTokens(compatWith(4096), qwen, null, 8192)).toBe(4096);
+  });
+
+  it("holds the cap to the ceiling on a native Provider, whose budget is never sent", () => {
+    expect(
+      jobMaxOutputTokens(
+        compatWith(4096, "Anthropic"),
+        qwen,
+        { thinkingBudget: 4096 },
+        8192,
+      ),
+    ).toBe(4096);
+  });
+
+  it("sends cap plus budget when the declared ceiling is above it", () => {
+    expect(
+      jobMaxOutputTokens(
+        compatWith(10_000),
+        qwen,
+        { thinkingBudget: 4096 },
+        2048,
+      ),
     ).toBe(6144);
   });
 

@@ -415,6 +415,19 @@ describe("processMemoryExtractionBatch", () => {
         },
       });
     });
+
+    it("asks for no more than the extraction model's declared Max output tokens", async () => {
+      const options = await extractWith({
+        modelIds: [
+          {
+            id: "gpt-4o-mini",
+            passthroughFileTypes: [],
+            maxOutputTokens: 4_096,
+          },
+        ],
+      });
+      expect(options.maxOutputTokens).toBe(4_096);
+    });
   });
 });
 

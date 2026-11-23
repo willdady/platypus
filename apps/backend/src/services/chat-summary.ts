@@ -1053,18 +1053,11 @@ const withTaskSummariserModel = async (args: {
     const isChatModel =
       taskProvider.provider.id === chatProviderId &&
       taskModelId === chat.modelId;
-    // On the Chat's own model, its declared ceiling bounds the pass's cap
-    // before the Thinking budget is added, so the budget still rides on top.
     const maxOutputTokens = jobMaxOutputTokens(
       taskProvider.provider,
       pointerSettingModelId(taskModelId),
       taskProvider.provider.taskModelSettings,
-      isChatModel
-        ? Math.min(
-            TRANSCRIPT_SUMMARY_MAX_OUTPUT_TOKENS,
-            chat.outputCeiling ?? Infinity,
-          )
-        : TRANSCRIPT_SUMMARY_MAX_OUTPUT_TOKENS,
+      TRANSCRIPT_SUMMARY_MAX_OUTPUT_TOKENS,
     );
     if (isChatModel) {
       return {

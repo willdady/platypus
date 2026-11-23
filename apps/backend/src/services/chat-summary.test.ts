@@ -552,6 +552,8 @@ const seedTaskModelProviders = (
     taskModelSettings?: JobSettings;
     /** The task model's declared context window, as its Model entry. */
     taskContextWindow?: number;
+    /** The task model's declared output ceiling, as its Model entry. */
+    taskMaxOutputTokens?: number;
     /** The task model's Reasoning map, as its Model entry. */
     taskReasoning?: ReasoningMap;
     agent?: boolean;
@@ -562,7 +564,9 @@ const seedTaskModelProviders = (
     workspaceId: "ws-1",
     taskModelId: over.taskModelId ?? "task-model",
     taskModelSettings: over.taskModelSettings ?? null,
-    ...(over.taskContextWindow !== undefined || over.taskReasoning
+    ...(over.taskContextWindow !== undefined ||
+    over.taskMaxOutputTokens !== undefined ||
+    over.taskReasoning
       ? {
           modelIds: [
             {
@@ -570,6 +574,9 @@ const seedTaskModelProviders = (
               passthroughFileTypes: [],
               ...(over.taskContextWindow !== undefined
                 ? { contextWindow: over.taskContextWindow }
+                : {}),
+              ...(over.taskMaxOutputTokens !== undefined
+                ? { maxOutputTokens: over.taskMaxOutputTokens }
                 : {}),
               ...(over.taskReasoning ? { reasoning: over.taskReasoning } : {}),
             },
@@ -702,11 +709,12 @@ describe("beforeTurn", () => {
     expect(mockGenerateText).toHaveBeenCalledTimes(2);
   });
 
-  it("adds the Thinking budget on top of the ceiling when the Chat's model is the task model", async () => {
+  it("holds cap plus Thinking budget to the task entry's declared ceiling when it is the Chat's own model", async () => {
     seedTaskModelProviders({
       taskModelId: "m1",
       taskModelSettings: { thinkingBudget: 2_048 },
       taskReasoning: { budget: { field: "thinking_token_budget" } },
+      taskMaxOutputTokens: 4_096,
     });
 
     await beforeTurn({
@@ -716,7 +724,6 @@ describe("beforeTurn", () => {
       contextWindow: 10_000,
       model: { id: "chat-model" } as never,
       modelId: "m1",
-      outputCeiling: 4_096,
       taskModel: {
         scope: { orgId: "org-1", workspaceId: "ws-1" },
         providerId: "p1",
@@ -726,7 +733,7 @@ describe("beforeTurn", () => {
     expect(mockGenerateText).toHaveBeenCalledTimes(1);
     expect(mockGenerateText.mock.calls[0][0]).toMatchObject({
       model: { id: "chat-model" },
-      maxOutputTokens: 4_096 + 2_048,
+      maxOutputTokens: 4_096,
     });
   });
 
