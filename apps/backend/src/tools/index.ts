@@ -275,12 +275,10 @@ export const composeToolSet = (
   };
 };
 
-const CORE_PLUGIN_CONTEXT: PluginConfigContext = {
+export const CORE_PLUGIN_CONTEXT: PluginConfigContext = {
   config: undefined,
   credentials: undefined,
-  get logger() {
-    return logger.child({ plugin: CORE_BUILTIN_OWNER });
-  },
+  logger: logger.child({ plugin: CORE_BUILTIN_OWNER }),
 };
 
 export const MEMORY_TOOLSET_ID = "memory";
