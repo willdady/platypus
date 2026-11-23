@@ -1,17 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { v5 as uuidv5 } from "uuid";
-import {
-  and,
-  count,
-  desc,
-  eq,
-  gte,
-  inArray,
-  isNull,
-  lt,
-  lte,
-  or,
-} from "drizzle-orm";
+import { and, count, eq, gte, inArray, isNull, or } from "drizzle-orm";
 import {
   Role,
   TaskState,
@@ -47,7 +36,9 @@ import { callerDataBlock } from "./caller-data.ts";
 import type { LiveA2aEndpoint } from "./a2a-endpoint.ts";
 import {
   currentTurnId,
+  derivedTaskStatus,
   findA2aTask,
+  readTaskPage,
   readTaskRows,
   recordedReplies,
   taskContextId,
@@ -57,12 +48,12 @@ import {
   isTerminal,
   type Executor,
   type TaskRow,
+  type TaskRowCursor,
 } from "./a2a-task-state.ts";
 import {
   readTask,
   readTaskAfresh,
   readTokenTask,
-  statusOf,
   taskStatus,
 } from "./a2a-task-lifecycle.ts";
 import {
@@ -529,10 +520,7 @@ const pageTokenOf = (caller: A2aCaller, task: TaskRow): string =>
     JSON.stringify([caller.token.id, task.statusAt.toISOString(), task.id]),
   ).toString("base64url");
 
-const readPageToken = (
-  caller: A2aCaller,
-  token: string,
-): { at: Date; id: string } => {
+const readPageToken = (caller: A2aCaller, token: string): TaskRowCursor => {
   try {
     const [tokenId, at, id] = JSON.parse(
       Buffer.from(token, "base64url").toString(),
@@ -553,6 +541,23 @@ const readPageToken = (
 
 const invalidPageToken = () =>
   new RequestMalformedError("pageToken is not a valid page token");
+
+// why: only a running Chat can hold a Task with no recorded end that still matches a status, so this reads a Chat's live turns, not the token's backlog
+const derivedTaskIds = async (
+  caller: A2aCaller,
+  status: TaskState,
+): Promise<string[]> => {
+  const readings = await readTaskRows(
+    and(
+      eq(a2aTaskTable.tokenId, caller.token.id),
+      isNull(a2aTaskTable.state),
+      eq(chatTable.status, "running"),
+    ),
+  );
+  return readings.flatMap((reading) =>
+    derivedTaskStatus(reading).state === status ? [reading.id] : [],
+  );
+};
 
 export const listA2aTasks = async (
   caller: A2aCaller,
@@ -581,19 +586,13 @@ export const listA2aTasks = async (
     : undefined;
 
   const mine = eq(a2aTaskTable.tokenId, caller.token.id);
-  const unended = await readTaskRows(and(mine, isNull(a2aTaskTable.state)));
-  const running = new Map(
-    await Promise.all(
-      unended.map(async (task) => [task.id, await statusOf(task)] as const),
-    ),
-  );
+  const recorded = params.status ? endStateOf(params.status) : undefined;
+  const derived = params.status
+    ? await derivedTaskIds(caller, params.status)
+    : [];
 
   // why: an empty or() matches everything, so a state no Task is in returns no page here
-  const live = [...running]
-    .filter(([, status]) => status.state === params.status)
-    .map(([id]) => id);
-  const recorded = endStateOf(params.status);
-  if (params.status && !recorded && !live.length) {
+  if (params.status && !recorded && !derived.length) {
     return { tasks: [], nextPageToken: "", pageSize, totalSize: 0 };
   }
   const filters = and(
@@ -602,7 +601,7 @@ export const listA2aTasks = async (
     params.status
       ? or(
           recorded ? eq(a2aTaskTable.state, recorded) : undefined,
-          live.length ? inArray(a2aTaskTable.id, live) : undefined,
+          derived.length ? inArray(a2aTaskTable.id, derived) : undefined,
         )
       : undefined,
     after ? gte(a2aTaskTable.statusAt, after) : undefined,
@@ -611,31 +610,15 @@ export const listA2aTasks = async (
   const { total } = oneRow(
     await db.select({ total: count() }).from(a2aTaskTable).where(filters),
   );
-  const rows = await db
-    .select()
-    .from(a2aTaskTable)
-    .where(
-      and(
-        filters,
-        cursor
-          ? or(
-              lt(a2aTaskTable.statusAt, cursor.at),
-              and(
-                lte(a2aTaskTable.statusAt, cursor.at),
-                lt(a2aTaskTable.id, cursor.id),
-              ),
-            )
-          : undefined,
-      ),
-    )
-    .orderBy(desc(a2aTaskTable.statusAt), desc(a2aTaskTable.id))
-    .limit(pageSize + 1);
-  const page = await Promise.all(
-    rows.slice(0, pageSize).map(async (row) => ({
-      ...row,
-      status: running.get(row.id) ?? (await taskStatus(row)),
-    })),
-  );
+  const rows = await readTaskPage(filters, {
+    after: cursor,
+    limit: pageSize + 1,
+  });
+  // why: a Task's status comes from its page row, so this reads only the page
+  const page = rows.slice(0, pageSize).map((row) => ({
+    ...row,
+    status: derivedTaskStatus(row),
+  }));
   const last = page.at(-1);
   const replies = await recordedReplies(page, {
     withText: !!params.includeArtifacts,

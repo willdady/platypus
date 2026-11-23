@@ -266,6 +266,22 @@ describe("sweepMissedEnds", () => {
     expect(pushedStates()).toEqual(["TASK_STATE_CANCELED"]);
   });
 
+  it("records an end no one recorded for a Task with no push config", async () => {
+    await pg.exec(`
+      DELETE FROM "a2a_push_config";
+      UPDATE "chat" SET "status" = 'succeeded'
+    `);
+
+    await sweepMissedEnds();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(await taskRow()).toMatchObject({
+      state: "completed",
+      replyId: "reply-1",
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("leaves a Task whose turn is still running", async () => {
     await sweepMissedEnds();
     await new Promise((resolve) => setTimeout(resolve, 50));
