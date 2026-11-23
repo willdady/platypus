@@ -2,11 +2,6 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import type { PGlite } from "@electric-sql/pglite";
 import { migratedPglite } from "./migrated-pglite.test-fixtures.ts";
 
-/**
- * A Notification outlives the Chat or Trigger run it was posted from, its
- * source reading as none once that is gone (#1229), by the foreign keys the
- * shipped migrations create.
- */
 let pg: PGlite;
 beforeAll(async () => {
   pg = await migratedPglite();

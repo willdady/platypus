@@ -3,12 +3,6 @@ import { seedDb, resetMockDb } from "../test-utils.ts";
 import { db } from "../index.ts";
 import { backfillTriggerNextRunAt } from "./backfill-trigger-next-run.ts";
 
-/**
- * The v4 upgrade step's seam: a table of Triggers in, the same table with
- * every stranded schedule filled in. Evaluated through the same in-memory
- * fake the routes' tests use, so the `WHERE` the backfill writes is honoured
- * rather than asserted on as a string.
- */
 const hourly = {
   cronExpression: "0 * * * *",
   timezone: "UTC",
@@ -52,8 +46,6 @@ describe("backfillTriggerNextRunAt", () => {
     });
   });
 
-  // A firing disables a One-off, so an enabled one with no schedule never
-  // ran: this is the firing it was waiting for.
   it("schedules an enabled One-off that never fired", async () => {
     const fake = seedDb({
       trigger: [trigger({ id: "once", config: { ...hourly, isOneOff: true } })],

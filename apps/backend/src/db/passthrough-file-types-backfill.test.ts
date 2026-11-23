@@ -2,11 +2,6 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { readFileSync } from "node:fs";
 import { PGlite } from "@electric-sql/pglite";
 
-/**
- * Writing the retired Provider-type default into every model entry that was
- * inheriting it (#1594, ADR-0039), run for real against an in-process Postgres
- * over `provider` cut down to the columns the migration touches.
- */
 const migration = readFileSync(
   new URL(
     "../../drizzle/0091_backfill_passthrough_file_types.sql",
@@ -23,7 +18,6 @@ afterAll(() => db.close());
 
 type Row = { id: string; type: string; apiMode: string; models: unknown[] };
 
-/** Applies the migration over these Providers, returning each one's models. */
 const migrate = async (providers: Row[]) => {
   await db.exec(`
     DROP SCHEMA public CASCADE;

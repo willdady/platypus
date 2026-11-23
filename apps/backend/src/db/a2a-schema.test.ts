@@ -13,11 +13,6 @@ import { migratedPglite } from "./migrated-pglite.test-fixtures.ts";
 import { a2aTask as a2aTaskTable } from "./schema.ts";
 import { isUniqueViolation } from "../errors.ts";
 
-/**
- * The constraints the A2A code leans on (ADR-0032), against an in-process
- * Postgres built from the shipped migrations rather than the fake db the
- * route tests run on.
- */
 const { holder } = vi.hoisted(() => ({
   holder: { db: undefined as ReturnType<typeof drizzle> | undefined },
 }));
@@ -251,9 +246,6 @@ describe("ListTasks on Postgres", () => {
     origin: "http://localhost",
   } as A2aCaller;
 
-  // Four Tasks share a status timestamp, two of them only once Postgres has
-  // rounded to `timestamp(3)`; they are inserted out of id order, and another
-  // token's Task shares it too.
   const TIE = "2026-01-01 00:00:01";
   beforeEach(async () => {
     await pg.exec(`
@@ -275,7 +267,6 @@ describe("ListTasks on Postgres", () => {
 
   const ORDER = ["task-a", "task-e", "task-d", "task-c", "task-b", "task-z"];
 
-  /** Every page, following each page token to the end. */
   const allPages = async (pageSize: number, statusTimestampAfter?: string) => {
     const pages: string[][] = [];
     let pageToken = "";
