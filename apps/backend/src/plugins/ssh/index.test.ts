@@ -12,9 +12,6 @@ describe("@platypus/ssh plugin manifest", () => {
   });
 
   it("registers the ssh backend into the core registry when loaded", async () => {
-    // The registry is module-global; vitest isolates modules per file, so this
-    // load doesn't leak into other test files. Exercise the real plugin path:
-    // loader → registerSandboxBackend → getSandboxBackend.
     expect(getSandboxBackend("ssh")).toBeUndefined();
 
     const { plugins: loaded } = await loadPlugins({
