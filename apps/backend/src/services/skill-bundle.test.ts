@@ -19,7 +19,6 @@ import type { Tool } from "ai";
 import { z } from "zod";
 import type { SandboxBackend } from "@platypuschat/plugin-sdk";
 import { getStorage, resetStorage } from "../storage/index.ts";
-import { mockNanoid } from "../test-setup.ts";
 import { NotFoundError, ValidationError } from "../errors.ts";
 
 const { holder } = vi.hoisted(() => ({
@@ -117,8 +116,6 @@ const fakeSandbox = (): SandboxBackend => {
 
 let pg: PGlite;
 beforeAll(async () => {
-  const actual = await vi.importActual<typeof import("nanoid")>("nanoid");
-  mockNanoid.mockImplementation(actual.nanoid);
   pg = await migratedPglite();
   holder.db = drizzle(pg);
   registerSandboxBackend({

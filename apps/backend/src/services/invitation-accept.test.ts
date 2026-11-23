@@ -2,7 +2,6 @@ import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import type { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { migratedPglite } from "../db/migrated-pglite.test-fixtures.ts";
-import { mockNanoid } from "../test-setup.ts";
 
 const { holder } = vi.hoisted(() => {
   const holder: { db?: ReturnType<typeof drizzle> } = {};
@@ -20,9 +19,6 @@ let pg: PGlite;
 beforeAll(async () => {
   pg = await migratedPglite();
   holder.db = drizzle(pg);
-
-  let n = 0;
-  mockNanoid.mockImplementation(() => `id-${++n}`);
 
   await pg.exec(`
     INSERT INTO "user" ("id", "name", "email", "email_verified", "created_at", "updated_at")

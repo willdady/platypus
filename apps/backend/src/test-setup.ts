@@ -1,6 +1,6 @@
 import { beforeEach, vi } from "vitest";
 
-const { mockLogger, mockNanoid, mockLookup } = vi.hoisted(() => {
+const { mockLogger, mockLookup } = vi.hoisted(() => {
   const child = {
     debug: vi.fn(),
     info: vi.fn(),
@@ -17,7 +17,6 @@ const { mockLogger, mockNanoid, mockLookup } = vi.hoisted(() => {
       fatal: vi.fn(),
       child: vi.fn(() => child),
     },
-    mockNanoid: vi.fn(() => "test-id-1234567890abc"),
     mockLookup: vi.fn((hostname: string) =>
       hostname.endsWith(".invalid")
         ? Promise.reject(new Error(`getaddrinfo ENOTFOUND ${hostname}`))
@@ -37,10 +36,6 @@ const { mockLogger, mockNanoid, mockLookup } = vi.hoisted(() => {
 });
 
 vi.mock("./logger.ts", () => ({ logger: mockLogger }));
-vi.mock("nanoid", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("nanoid")>();
-  return { ...actual, nanoid: mockNanoid };
-});
 
 vi.mock("node:dns/promises", () => ({ lookup: mockLookup }));
 
@@ -48,8 +43,7 @@ beforeEach(() => {
   for (const spy of Object.values(mockLogger)) {
     spy.mockClear();
   }
-  mockNanoid.mockClear();
   mockLookup.mockClear();
 });
 
-export { mockLogger, mockNanoid, mockLookup };
+export { mockLogger, mockLookup };

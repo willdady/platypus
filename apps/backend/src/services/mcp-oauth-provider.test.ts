@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
-import { mockNanoid } from "../test-setup.ts";
+import { nanoid } from "nanoid";
 import { resetMockDb, seedDb, type Row } from "../test-utils.ts";
 import {
   buildMcpTransportConfig,
@@ -7,6 +7,8 @@ import {
   oauthFetchFn,
   type McpRecord,
 } from "./mcp-oauth-provider.ts";
+
+vi.mock("nanoid", { spy: true });
 
 const CALLBACK = "http://localhost:3001/oauth/mcp/callback";
 
@@ -510,7 +512,7 @@ describe("mcp-oauth-provider", () => {
 
     describe("state and code verifier", () => {
       it("generates one state per provider", () => {
-        mockNanoid.mockReturnValueOnce("state-1");
+        vi.mocked(nanoid).mockReturnValueOnce("state-1");
         const p = provider();
         expect(p.state()).toBe("state-1");
         expect(p.state()).toBe("state-1");

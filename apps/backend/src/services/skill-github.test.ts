@@ -16,7 +16,6 @@ import { drizzle } from "drizzle-orm/pglite";
 import { strToU8, zipSync, type Zippable } from "fflate";
 import { migratedPglite } from "../db/migrated-pglite.test-fixtures.ts";
 import { resetStorage } from "../storage/index.ts";
-import { mockNanoid } from "../test-setup.ts";
 import { ValidationError } from "../errors.ts";
 import type { SkillScope } from "./skill.ts";
 
@@ -41,8 +40,6 @@ const { updateSkill } = await import("./skill.ts");
 
 let pg: PGlite;
 beforeAll(async () => {
-  const actual = await vi.importActual<typeof import("nanoid")>("nanoid");
-  mockNanoid.mockImplementation(actual.nanoid);
   pg = await migratedPglite();
   holder.db = drizzle(pg);
 }, 60_000);

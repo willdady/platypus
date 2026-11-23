@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { nanoid } from "nanoid";
 import {
   dbError,
   mockDb,
@@ -6,7 +7,9 @@ import {
   seedDb,
   type Row,
 } from "../test-utils.ts";
-import { mockLogger, mockNanoid } from "../test-setup.ts";
+import { mockLogger } from "../test-setup.ts";
+
+vi.mock("nanoid", { spy: true });
 
 vi.mock("../services/trigger-firing.ts", () => ({
   fireTrigger: vi.fn(() => Promise.resolve("ran")),
@@ -118,7 +121,7 @@ describe("/hooks/triggers", () => {
 
   describe("POST /:triggerId", () => {
     it("accepts a call with 202 and a run id that already exists as pending", async () => {
-      mockNanoid.mockReturnValueOnce("run-1");
+      vi.mocked(nanoid).mockReturnValueOnce("run-1");
       const fake = seed();
 
       const res = await fire("trig-1");
@@ -336,7 +339,7 @@ describe("/hooks/triggers", () => {
             },
           ],
         });
-        mockNanoid.mockReturnValueOnce("run-suppressed");
+        vi.mocked(nanoid).mockReturnValueOnce("run-suppressed");
 
         const res = await fire("trig-1");
 
@@ -357,7 +360,7 @@ describe("/hooks/triggers", () => {
       vi.mocked(fireTrigger).mockImplementationOnce(
         () => new Promise(() => {}),
       );
-      mockNanoid.mockReturnValueOnce("run-1");
+      vi.mocked(nanoid).mockReturnValueOnce("run-1");
       seed();
 
       expect((await fire("trig-1")).status).toBe(202);
@@ -408,7 +411,7 @@ describe("/hooks/triggers", () => {
       vi.mocked(fireTrigger).mockImplementationOnce(
         () => new Promise(() => {}),
       );
-      mockNanoid.mockReturnValueOnce("run-1");
+      vi.mocked(nanoid).mockReturnValueOnce("run-1");
       const fake = seed();
 
       expect((await fire("trig-1")).status).toBe(202);
