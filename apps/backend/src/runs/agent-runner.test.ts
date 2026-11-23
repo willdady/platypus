@@ -1,10 +1,5 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 
-/**
- * As much of a stream part as the metadata extractor reads. The SDK hands it
- * the full `TextStreamPart` union; these tests hand it the fields the part
- * they are standing in for would carry.
- */
 type MetadataPart = {
   type: string;
   finishReason?: string;
@@ -18,9 +13,6 @@ const {
   mockToUIMessageStream,
   streamHarness,
 } = vi.hoisted(() => {
-  // A minimal, manually-driven async iterable standing in for the server-side
-  // snapshot branch of the UI message stream. The test pushes partial
-  // messages and ends it explicitly so timing is deterministic.
   class AsyncQueue {
     items: unknown[] = [];
     resolvers: ((r: { value: unknown; done: boolean }) => void)[] = [];
@@ -54,11 +46,6 @@ const {
     mockPrepareChatTurn: vi.fn(),
     mockValidateTurnAttachments: vi.fn(),
     mockStreamText: vi.fn(),
-    // The drive hands the `streamText` result's stream to this. Nothing reads
-    // what it returns: `readUIMessageStream` is mocked to the harness queue.
-    // The real SDK calls the metadata extractor for every part, the terminal
-    // finish included; the mocked stream is empty, so the finish part is
-    // replayed here from whatever `streamResultOf` reported.
     mockToUIMessageStream: vi.fn((_uiOpts: never) => {
       const uiOpts = _uiOpts as {
         messageMetadata?: (opts: {
@@ -76,26 +63,17 @@ const {
     streamHarness: {
       AsyncQueue,
       queue: null as InstanceType<typeof AsyncQueue> | null,
-      // The AI SDK callbacks the runner registers; captured so the test can
-      // drive step-completion and stream-completion by hand.
       onStepEnd: undefined as ((step: unknown) => void) | undefined,
       onFinish: undefined as
         ((ctx: { messages: unknown[] }) => Promise<void> | void) | undefined,
-      // Fires once per completed tool execution; the runner folds these into
-      // the finished messages.
       onToolExecutionEnd: undefined as
         | ((ctx: {
             toolCall: { toolCallId: string };
             toolExecutionMs: number;
           }) => void)
         | undefined,
-      // `toUIMessageStream`'s metadata extractor. The SDK calls it per stream
-      // part; the tests call it by hand with the part they care about.
       messageMetadata: undefined as
         ((opts: { part: MetadataPart }) => unknown) | undefined,
-      // The terminal finish reason `streamResultOf` scripted, so the default
-      // `toUIMessageStream` mock can put it through the metadata extractor the
-      // way the SDK would.
       terminalFinishReason: undefined as string | undefined,
       responseSentinel: { __isResponse: true },
     },
@@ -103,7 +81,6 @@ const {
 });
 
 vi.mock("../services/chat-execution.ts", () => ({
-  // Passed through to the mocked turn preparation, which ignores it.
   drizzleChatTurnQueries: {},
   prepareChatTurn: mockPrepareChatTurn,
   validateTurnAttachments: mockValidateTurnAttachments,
@@ -113,9 +90,6 @@ vi.mock("ai", async () => {
   const actual = await vi.importActual("ai");
   return {
     ...actual,
-    // The drive pipes the result's stream through overflow recovery before
-    // the (mocked) UI conversion reads it; a scripted result with no stream
-    // of its own gets an empty one.
     streamText: (...args: unknown[]) => {
       const result = mockStreamText(...args) as
         { stream?: unknown } | undefined;
@@ -211,7 +185,6 @@ class RecordingSink implements RunSink {
     return this.events.map((e) => e.name);
   }
 
-  /** The stats the run handed the sink at termination. */
   finalStats(): RunStats | undefined {
     const finish = this.events.find((e) => e.name === "onFinish");
     return finish?.name === "onFinish" ? finish.stats : undefined;
@@ -259,14 +232,6 @@ const fakeGenerateResult = {
   usage: { inputTokens: 10, outputTokens: 5 },
 };
 
-/**
- * What the headless drive reads off a `streamText` result: the promise-valued
- * terminal fields. The UI message stream it drains comes from the mocked
- * `toUIMessageStream` (empty — these tests drive the callbacks by hand).
- * `settleAfter`, when given, gates every field on it, so a test can make the
- * model "hang" until a signal fires and fail the fields with that signal's
- * reason.
- */
 const streamResultOf = (
   data: {
     text?: string;
@@ -279,8 +244,6 @@ const streamResultOf = (
 ) => {
   const gate = opts.settleAfter ?? Promise.resolve();
   const after = <T>(value: T) => gate.then(() => value);
-  // Read by the default `toUIMessageStream` mock so the terminal finish
-  // reaches the metadata extractor, as it does through the real SDK.
   streamHarness.terminalFinishReason = data.finishReason ?? "stop";
   return {
     text: after(data.text ?? "ok"),
@@ -291,7 +254,6 @@ const streamResultOf = (
   };
 };
 
-/** A model that hangs until `signal` aborts, then fails with its reason. */
 const hangingUntilAbort = ({ abortSignal }: { abortSignal: AbortSignal }) =>
   streamResultOf(fakeGenerateResult, {
     settleAfter: new Promise<never>((_, reject) => {
@@ -305,10 +267,6 @@ const hangingUntilAbort = ({ abortSignal }: { abortSignal: AbortSignal }) =>
     }),
   });
 
-// Issue #406: a step that ended at the output ceiling, or that the provider
-// rejected as a malformed tool use, used to log identically to a clean one.
-// The unified reason alone is not enough — it is exactly what collapses
-// Bedrock's `malformed_tool_use` into `other`, so the raw value must survive.
 describe("finish reason instrumentation", () => {
   let runner: AgentRunner;
   beforeEach(() => {
@@ -322,8 +280,6 @@ describe("finish reason instrumentation", () => {
       .mock.calls.filter((call) => call[1] === "Step finished")
       .map((call) => call[0] as Record<string, unknown>);
 
-  // The raw value is the point: an unrecognised provider reason collapses to
-  // `other` in the unified union and is otherwise unrecoverable.
   it.each([
     ["tool-calls", "tool_use"],
     ["other", "malformed_tool_use"],
@@ -381,8 +337,6 @@ describe("finish reason instrumentation", () => {
     expect(warned).toBe(true);
   });
 
-  // The unattended path returns its text to a caller that discards it, so the
-  // stats the sink persists are the only place a cut-short run can be recorded.
   it("flags the stats when an unattended run stopped at the output limit", async () => {
     mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
     mockStreamText.mockReturnValueOnce(
@@ -404,7 +358,6 @@ describe("finish reason instrumentation", () => {
 
     expect(sink.finalStats()?.truncatedByTokenLimit).toBe(true);
     expect(result.stats.truncatedByTokenLimit).toBe(true);
-    // The answer itself is returned as the model wrote it — no appended notice.
     expect(result.text).toBe("half an ans");
   });
 
@@ -430,8 +383,6 @@ describe("finish reason instrumentation", () => {
     expect(result.text).toBe("ok");
   });
 
-  // ADR-0044: the sink keeps a Trigger run's Transcript, so it is handed the
-  // reply after the run's own user message, as a Chat turn's sink is.
   it("hands the sink the unattended run's reply after its user message", async () => {
     mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
     mockStreamText.mockReturnValueOnce(streamResultOf(fakeGenerateResult));
@@ -489,9 +440,6 @@ describe("finish reason instrumentation", () => {
   });
 });
 
-// Issue #421: the finish reason says a tool call was rejected, not what the
-// model emitted. Both run paths record `tool-error` parts into step content,
-// so both are covered from the one step-finished callback.
 describe("rejected tool input instrumentation", () => {
   let runner: AgentRunner;
   beforeEach(() => {
@@ -622,8 +570,6 @@ describe("rejected tool input instrumentation", () => {
       { type: "tool-error", toolCallId: "call_1", input: '{"body":"cut' },
     ]);
 
-    // Emitted at `debug` alone: at the default LOG_LEVEL=info the payload is
-    // never written at all.
     const higher = [
       ...vi.mocked(logger.info).mock.calls,
       ...vi.mocked(logger.warn).mock.calls,
@@ -642,9 +588,6 @@ describe("AgentRunner.generate", () => {
     vi.clearAllMocks();
   });
 
-  // #647: a headless run's Run timeline. The runner owns the recorder — one per
-  // run — and hands it to the sink at start, so the sink can flush events on
-  // its own cadence, and to the drive, which fills it.
   it("hands the sink a Run event recorder for this run at start", async () => {
     mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
     mockStreamText.mockReturnValueOnce(streamResultOf(fakeGenerateResult));
@@ -710,17 +653,12 @@ describe("AgentRunner.generate", () => {
     expect(dispose).toHaveBeenCalledTimes(1);
   });
 
-  // ADR-0018: an unattended run's only record of how full the context got is
-  // the stats it hands the sink, and the two plausible-looking figures beside
-  // occupancy — `usage.inputTokens` and the accumulated `stats.inputTokens`
-  // — are both cross-step sums.
   it("records Context occupancy from the final step, not the sum across steps", async () => {
     mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
     const steps = [
       { toolCalls: [], usage: { inputTokens: 1_000, outputTokens: 40 } },
       { toolCalls: [], usage: { inputTokens: 3_500, outputTokens: 60 } },
     ];
-    // The run's stats fold each step as the SDK ends it.
     mockStreamText.mockImplementationOnce(
       ({ onStepEnd }: { onStepEnd: (s: unknown) => void }) => {
         steps.forEach(onStepEnd);
@@ -746,14 +684,10 @@ describe("AgentRunner.generate", () => {
       { name: "onFinish" }
     >;
     expect(finish.stats?.contextOccupancy).toBe(3_500);
-    // The billing sums keep their existing meaning.
     expect(finish.stats?.inputTokens).toBe(4_500);
     expect(finish.stats?.outputTokens).toBe(100);
   });
 
-  // The interim stats a long run flushes mid-flight are what the Operator reads
-  // while it is still going, so a step that reports nothing must not leave an
-  // earlier, smaller step's figure looking current.
   it("clears the interim occupancy when a step reports no usage", async () => {
     mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
     const progressed: Array<number | undefined> = [];
@@ -774,8 +708,7 @@ describe("AgentRunner.generate", () => {
 
     const sink = new RecordingSink();
     const recorded = sink.onProgress.bind(sink);
-    // Read at call time: the runner passes one mutated stats object every time,
-    // so the figure has to be copied out as each flush happens.
+    // why: the runner reuses one mutated stats object, so copy the figure per flush
     sink.onProgress = (ctx: { runId: string; stats?: RunStats }) => {
       progressed.push(ctx.stats?.contextOccupancy);
       return recorded(ctx);
@@ -808,8 +741,6 @@ describe("AgentRunner.generate", () => {
       options: { frontendUrl: "http://localhost:3000" },
     });
 
-    // Unknown stays unknown: nothing is estimated, and 0 would read as a
-    // measurement of an empty context.
     expect(result.stats.contextOccupancy).toBeUndefined();
   });
 
@@ -833,7 +764,6 @@ describe("AgentRunner.generate", () => {
     >;
     expect(finish.status).toBe("failed");
     expect(finish.error).toBe("Agent not found");
-    // Generate model was never invoked
     expect(mockStreamText).not.toHaveBeenCalled();
   });
 
@@ -864,8 +794,6 @@ describe("AgentRunner.generate", () => {
     expect(dispose).toHaveBeenCalledTimes(1);
   });
 
-  // Only a person at the keyboard gets an interactive turn; a Trigger run and a
-  // delegate resolve headless, on behalf of the human who owns them.
   it.each([
     [
       "a user",
@@ -916,7 +844,6 @@ describe("AgentRunner.generate", () => {
         expect.objectContaining({
           user,
           runMode,
-          // A Chat's run id is the chat id; a Trigger run's is that run's id.
           sessionId: baseInput.runId,
         }),
         expect.anything(),
@@ -924,8 +851,6 @@ describe("AgentRunner.generate", () => {
     },
   );
 
-  // The sink's writes are its own business: a failed terminal or progress
-  // write is logged, and the run's answer still reaches the caller.
   it("still returns the answer when the sink fails to record the run", async () => {
     mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
     mockStreamText.mockImplementationOnce(
@@ -991,8 +916,6 @@ describe("AgentRunner.generate", () => {
     expect(resolved?.plan.unloadedToolSets).toEqual(unloadedToolSets);
   });
 
-  // Unattended runs include a no-progress stop condition alongside the step
-  // ceiling. A board re-read whose result is identical K times trips it.
   const repeatedReadSteps = () => {
     const board = { cards: [] };
     const read = {
@@ -1015,9 +938,6 @@ describe("AgentRunner.generate", () => {
     mockStreamText.mockImplementation(
       ({ stopWhen }: { stopWhen: Array<(o: unknown) => unknown> }) => {
         capturedStopWhen = stopWhen;
-        // The detector is the second condition (the first is the mocked
-        // stepCountIs). Drive it as the SDK loop would, with repeated steps,
-        // and settle the result only once it has been asked.
         return streamResultOf(fakeGenerateResult, {
           settleAfter: Promise.resolve(
             stopWhen[1]({ steps: repeatedReadSteps() }),
@@ -1034,7 +954,6 @@ describe("AgentRunner.generate", () => {
       options: { frontendUrl: "http://localhost:3000" },
     });
 
-    // Two stop conditions for an unattended run: step ceiling + no-progress.
     expect(capturedStopWhen).toHaveLength(2);
     const finish = sink.events.at(-1) as Extract<
       LifecycleEvent,
@@ -1092,6 +1011,28 @@ describe("AgentRunner.stream — failure paths", () => {
     vi.clearAllMocks();
   });
 
+  it("rejects a turn's attachments before the sink writes anything", async () => {
+    mockValidateTurnAttachments.mockRejectedValueOnce(
+      new Error("unsupported file"),
+    );
+
+    const sink = new RecordingSink();
+    await expect(
+      runner.stream({
+        scope,
+        input: { ...baseInput, runId: "s-bad-file" },
+        sink,
+        options: {
+          origin: "http://test",
+          frontendUrl: "http://localhost:3000",
+        },
+      }),
+    ).rejects.toThrow("unsupported file");
+
+    expect(sink.events).toEqual([]);
+    expect(runRegistry.has("s-bad-file")).toBe(false);
+  });
+
   it("invariant: reaches onFinish when prepareChatTurn throws", async () => {
     mockPrepareChatTurn.mockRejectedValueOnce(new Error("Workspace missing"));
 
@@ -1115,17 +1056,10 @@ describe("AgentRunner.stream — failure paths", () => {
     >;
     expect(finish.status).toBe("failed");
     expect(finish.error).toBe("Workspace missing");
-    // Stream was never invoked
     expect(mockStreamText).not.toHaveBeenCalled();
   });
 });
 
-// Issue #648. A Chat run's id IS the chat id, so a duplicate submission into a
-// Chat with a live turn arrives with a runId the registry already holds. The
-// ORDER is the whole point: the claim has to come before the sink's start hook,
-// because that hook overwrites the row's messages with the second request's
-// history. Claim second and the duplicate destroys the live run's persisted
-// state on its way to failing.
 describe("AgentRunner — duplicate submission for a live run", () => {
   let runner: AgentRunner;
   beforeEach(() => {
@@ -1134,9 +1068,7 @@ describe("AgentRunner — duplicate submission for a live run", () => {
     resetStreamHarness();
   });
 
-  // These runs are deliberately left in flight, so the registry entries and the
-  // unconsumed `once` mock values have to be cleared by hand — `clearAllMocks`
-  // resets recorded calls but not a queued `mockResolvedValueOnce`.
+  // why: clearAllMocks keeps a queued mockResolvedValueOnce; these runs leave one unconsumed
   afterEach(() => {
     runRegistry.unregister("chat-live");
     runRegistry.unregister("chat-start-throws");
@@ -1164,8 +1096,6 @@ describe("AgentRunner — duplicate submission for a live run", () => {
     const sink = new RecordingSink();
     await liveRun(sink);
 
-    // The second submission carries its own history — what would have replaced
-    // the live run's messages.
     await expect(
       runner.stream({
         scope,
@@ -1186,8 +1116,6 @@ describe("AgentRunner — duplicate submission for a live run", () => {
       }),
     ).rejects.toThrow(ConflictError);
 
-    // One start hook, carrying the live run's own history — byte-for-byte what
-    // it was registered with.
     const starts = sink.events.filter((e) => e.name === "onStart");
     expect(starts).toHaveLength(1);
     expect(starts[0]).toMatchObject({ messages: [{ id: "u1" }] });
@@ -1214,9 +1142,6 @@ describe("AgentRunner — duplicate submission for a live run", () => {
     expect(runRegistry.has("chat-live")).toBe(true);
   });
 
-  // The claim being first means a hook that throws would otherwise hold the id
-  // forever — and since the id is the chat id, that locks the Chat out of every
-  // later turn, not just this one.
   it("releases the claim when the start hook throws", async () => {
     mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
     const sink = new RecordingSink();
@@ -1238,7 +1163,6 @@ describe("AgentRunner — duplicate submission for a live run", () => {
     expect(mockStreamText).not.toHaveBeenCalled();
   });
 
-  // Another instance holds the Chat (#1237): an expected refusal, not a fault.
   it("answers a lost claim with its ConflictError and logs no error", async () => {
     const sink = new RecordingSink();
     sink.onStart = () => Promise.reject(new ConflictError("busy"));
@@ -1260,11 +1184,6 @@ describe("AgentRunner — duplicate submission for a live run", () => {
   });
 });
 
-// Issue #1122. Once the run has adopted its turn, a throw before the drive
-// takes over — the sink's resolved hook, or converting a stored message part —
-// used to escape without finishing the run: the Chat stayed `running`, the
-// claim stayed held (every retry answered 409), and the step timer later wrote
-// a misleading timeout in place of the real error.
 describe("a throw after the run adopts its turn", () => {
   let runner: AgentRunner;
   beforeEach(() => {
@@ -1411,7 +1330,6 @@ describe("AgentRunner.cancel", () => {
 
   it("cancels an in-flight generate run with status=cancelled", async () => {
     mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
-    // Make generateText hang until aborted
     mockStreamText.mockImplementation(hangingUntilAbort);
 
     const sink = new RecordingSink();
@@ -1422,7 +1340,6 @@ describe("AgentRunner.cancel", () => {
       options: { frontendUrl: "http://localhost:3000" },
     });
 
-    // Wait a tick so the run registers
     await new Promise((r) => setTimeout(r, 0));
 
     expect(runRegistry.cancel("cancel-1")).toBe(true);
@@ -1437,16 +1354,8 @@ describe("AgentRunner.cancel", () => {
     expect(finish.status).toBe("cancelled");
   });
 
-  // AC 2 of #523 rests on this: a closer a Contribution registered runs on a
-  // cancelled turn because the run's teardown disposes the session, and it runs
-  // *once* because dispose is idempotent. That a session's dispose then closes
-  // each registered closer exactly once is pinned in `tool-session.test.ts`;
-  // what this pins is the half only the run knows — that cancellation reaches
-  // dispose at all, and reaches it before the terminal write.
   it("disposes the turn exactly once when a run is cancelled, before onFinish", async () => {
     const sink = new RecordingSink();
-    // What the sink had recorded at the moment teardown ran. Teardown must
-    // precede the terminal write, or a closer's work outlives the run's status.
     const seenAtDispose: string[][] = [];
     const dispose = vi.fn().mockImplementation(() => {
       seenAtDispose.push(sink.names());
@@ -1530,23 +1439,12 @@ const resetStreamHarness = (): void => {
   streamHarness.terminalFinishReason = undefined;
 };
 
-/**
- * A stand-in for what `toUIMessageStream` returns.
- *
- * A real (empty) `ReadableStream` rather than a `{ tee }` literal, because the
- * runner pipes it through the tool-duration transform before teeing — a literal
- * with only the methods used today silently becomes a lie the moment the
- * pipeline changes. Nothing reads the branches: `readUIMessageStream` is mocked
- * to the harness queue and the response is a sentinel.
- */
+// why: a real stream, not a { tee } literal that lies once the pipeline changes
 const emptyUIStream = () =>
   new ReadableStream({
     start: (controller) => controller.close(),
   });
 
-// Make streamText return a fake result whose UI-stream callbacks the test can
-// drive by hand: `onStepEnd` (per step), `onFinish` (completion), and
-// `messageMetadata` (per stream part).
 const primeStreamText = () => {
   mockStreamText.mockImplementation(
     (opts: {
@@ -1573,13 +1471,6 @@ const primeStreamText = () => {
   );
 };
 
-// Issue #630, Path B. Both run timers are armed when the run is registered,
-// which happens BEFORE Turn resolution is awaited — so a resolution slower
-// than the per-step bound terminates the run while it is still in flight.
-// The turn then arrives at a run that can no longer dispose it: the session,
-// its MCP clients and every closer a Contribution registered stayed open for
-// the life of the process, and the run — already recorded as failed — went
-// on to spend a provider call the caller was handed as a success.
 describe("a turn that resolves after its run has already terminated", () => {
   let runner: AgentRunner;
   beforeEach(() => {
@@ -1592,14 +1483,12 @@ describe("a turn that resolves after its run has already terminated", () => {
     vi.useRealTimers();
   });
 
-  /** Resolves a turn well after the 5ms per-step bound below has fired. */
   const slowPrepare = (dispose: () => Promise<void>) =>
     mockPrepareChatTurn.mockImplementationOnce(async () => {
       await new Promise((r) => setTimeout(r, 60));
       return fakeTurn({ dispose });
     });
 
-  /** Starts the run and lets the per-step bound fire before the turn lands. */
   const timedOutRun = async (sink: RunSink, dispose: () => Promise<void>) => {
     slowPrepare(dispose);
     const inFlight = runner.generate({
@@ -1611,8 +1500,7 @@ describe("a turn that resolves after its run has already terminated", () => {
         timeouts: { perStepTimeoutMs: 5, perRunTimeoutMs: 1_000_000 },
       },
     });
-    // Observed by the caller's own assertion; this only keeps the rejection
-    // from surfacing as unhandled while the clock is advanced.
+    // why: keeps the rejection from surfacing as unhandled while the clock advances
     inFlight.catch(() => {});
     await vi.advanceTimersByTimeAsync(60);
     return inFlight;
@@ -1628,11 +1516,6 @@ describe("a turn that resolves after its run has already terminated", () => {
     expect(dispose).toHaveBeenCalledTimes(1);
   });
 
-  // Against a REAL session, not a stub `dispose`: what leaks on this path is
-  // whatever the session holds, and a Contribution's closers are the half that
-  // a fake turn cannot speak for. `registerCloser` is the seam `ctx.registerCloser`
-  // reaches, so this is the Plugin-facing promise — "core runs your closer once,
-  // when the turn ends" — asserted on the path that used to break it.
   it("runs a closer a Contribution registered, exactly once", async () => {
     const session = await openToolSession(
       {
@@ -1670,8 +1553,6 @@ describe("a turn that resolves after its run has already terminated", () => {
     ).rejects.toThrow(TimeoutError);
 
     expect(mockStreamText).not.toHaveBeenCalled();
-    // The run was told it failed and nothing walked that back — no second
-    // terminal write, and no `onResolved` for a plan that never ran.
     expect(sink.names()).toEqual(["onStart", "onFinish"]);
     const finish = sink.events.at(-1) as Extract<
       LifecycleEvent,
@@ -1682,8 +1563,6 @@ describe("a turn that resolves after its run has already terminated", () => {
     expect(runRegistry.has("late-prepare")).toBe(false);
   });
 
-  // The caller has to be able to tell. Before the fix `generate` returned the
-  // model's text as though nothing had happened.
   it("fails the caller with the error the run terminated on", async () => {
     const inFlight = timedOutRun(
       new RecordingSink(),
@@ -1696,9 +1575,6 @@ describe("a turn that resolves after its run has already terminated", () => {
     });
   });
 
-  // A user pressing stop while the turn is still resolving: a cancellation
-  // carries no error of its own, so the caller is still told the run never
-  // started rather than being handed the model's answer.
   it("fails the caller when the run was cancelled while the turn resolved", async () => {
     const dispose = vi.fn().mockResolvedValue(undefined);
     slowPrepare(dispose);
@@ -1726,8 +1602,6 @@ describe("a turn that resolves after its run has already terminated", () => {
     ).toBe("cancelled");
   });
 
-  // Turn resolution races its slow sources against the run's signal, so a stop
-  // can surface as resolution throwing. That is the stop, not a failure.
   it("records a cancel that made the turn's resolution throw as cancelled", async () => {
     mockPrepareChatTurn.mockImplementationOnce(async () => {
       await new Promise((r) => setTimeout(r, 60));
@@ -1764,7 +1638,6 @@ describe("AgentRunner.stream — success & interruption", () => {
     resetStreamHarness();
   });
 
-  // #1337: the reply is saved on the run's first output, once.
   it("tells the sink of the run's first output once, with the reply so far", async () => {
     mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
     const queue = new streamHarness.AsyncQueue();
@@ -1805,7 +1678,6 @@ describe("AgentRunner.stream — success & interruption", () => {
     await tick();
 
     expect(outputs).toEqual([[text("He")]]);
-    // Progress keeps its own cadence: no step has ended.
     expect(sink.names()).not.toContain("onProgress");
     runRegistry.cancel("s-output");
     queue.end();
@@ -1827,15 +1699,12 @@ describe("AgentRunner.stream — success & interruption", () => {
     });
     expect(res).toBe(streamHarness.responseSentinel);
 
-    // A step completes -> onProgress.
     streamHarness.onStepEnd!({
       usage: { inputTokens: 3, outputTokens: 4 },
       toolCalls: [],
     });
-    // A partial snapshot streams in over the server-side branch.
     queue.push({ id: "m1", role: "assistant", parts: [] });
     await tick();
-    // Natural completion delivers the final assistant message.
     const finalMessages = [
       { id: "m1", role: "assistant", parts: [{ type: "text", text: "hi" }] },
     ];
@@ -1860,11 +1729,6 @@ describe("AgentRunner.stream — success & interruption", () => {
     expect(runRegistry.has("s-ok")).toBe(false);
   });
 
-  // A user-invoked Skill arrives as a trailing assistant message carrying the
-  // seeded `loadSkill` pair (issue #649). The SDK folds the reply into that
-  // same message and reuses its id, so a mid-run flush must REPLACE it — the
-  // append this path used to do wrote two assistant messages under one id, and
-  // a user reconnecting mid-run saw the card twice.
   it("replaces a trailing assistant message the stream continues rather than appending beside it", async () => {
     mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
     const queue = new streamHarness.AsyncQueue();
@@ -1904,8 +1768,6 @@ describe("AgentRunner.stream — success & interruption", () => {
       options: { origin: "http://test", frontendUrl: "http://localhost:3000" },
     });
 
-    // The SDK's continuation: the streamed message carries the seeded id, with
-    // the reply folded in beside the tool parts.
     const continued = {
       id: "msg-seed",
       role: "assistant",
@@ -2009,11 +1871,6 @@ describe("AgentRunner.stream — success & interruption", () => {
     });
   });
 
-  // The two branches of the teed UI stream race: `onFinish` fires on the source
-  // while the server-side snapshot branch may still have buffered chunks, and
-  // disposing the turn is real I/O that gives that branch time to drain. A
-  // snapshot landing in that window used to overwrite the finished messages —
-  // silently costing them their durations, since a snapshot carries none.
   it("keeps the final messages when a snapshot lands during teardown", async () => {
     const queue = new streamHarness.AsyncQueue();
     streamHarness.queue = queue;
@@ -2066,9 +1923,6 @@ describe("AgentRunner.stream — success & interruption", () => {
       ],
     });
     queue.end();
-    // The run is finished by the drive once the background snapshot branch
-    // drains (and teardown disposes the turn, pushing the racing snapshot).
-    // Await that drain deterministically before reading the terminal sink write.
     await vi.waitFor(
       () => expect(runRegistry.has("s-late-snapshot")).toBe(false),
       { timeout: 2_000 },
@@ -2113,7 +1967,6 @@ describe("AgentRunner.stream — success & interruption", () => {
       options: { origin: "http://test", frontendUrl: "http://localhost:3000" },
     });
 
-    // Only the step ceiling — no no-progress condition for interactive runs.
     expect(capturedStopWhen).toHaveLength(1);
 
     await streamHarness.onFinish!({ messages: [] });
@@ -2144,7 +1997,6 @@ describe("AgentRunner.stream — success & interruption", () => {
     await tick();
 
     expect(runRegistry.cancel("s-cancel")).toBe(true);
-    // The SDK observes the abort and finishes the UI stream.
     await streamHarness.onFinish!({ messages: [partial] });
     queue.end();
     await tick();
@@ -2157,9 +2009,6 @@ describe("AgentRunner.stream — success & interruption", () => {
     expect(finish.messages).toEqual([partial]);
   });
 
-  // Issue #1613: the drive's final stamping — tool durations, the steps that
-  // finished as it unwound — used to land on a run the abort had already
-  // finished, and was discarded.
   it("finalises a cancelled run with the drive's final messages and stats", async () => {
     mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
     const queue = new streamHarness.AsyncQueue();
@@ -2176,8 +2025,6 @@ describe("AgentRunner.stream — success & interruption", () => {
 
     expect(runRegistry.cancel("s-cancel-final")).toBe(true);
     await tick();
-    // The SDK unwinds: the in-flight tool call and its step end, then the UI
-    // stream hands over the folded final.
     streamHarness.onToolExecutionEnd!({
       toolCall: { toolCallId: "call-1" },
       toolExecutionMs: 1234,
@@ -2241,9 +2088,6 @@ describe("AgentRunner.stream — success & interruption", () => {
     };
     queue.push(partial);
     await tick();
-    // Let the per-run timer fire -> registry aborts the signal the model call
-    // was handed -> the SDK observes it and the stream ends -> the drive
-    // finishes the run.
     await vi.waitFor(() =>
       expect(
         (mockStreamText.mock.calls[0][0] as { abortSignal: AbortSignal })
@@ -2259,15 +2103,11 @@ describe("AgentRunner.stream — success & interruption", () => {
     >;
     expect(finish.status).toBe("failed");
     expect(finish.error).toMatch(/per-run timeout/);
-    // The snapshot accumulated before the timeout is what gets persisted.
     expect(finish.messages).toEqual([partial]);
     expect(runRegistry.has("s-timeout")).toBe(false);
   });
 });
 
-// The metadata callback is the only seam for saying anything about a stream
-// that has already been flushed to the client — issue #420's truncation flag
-// and issue #448's Context occupancy both ride on it.
 describe("AgentRunner.stream — message metadata", () => {
   let runner: AgentRunner;
   beforeEach(() => {
@@ -2303,9 +2143,6 @@ describe("AgentRunner.stream — message metadata", () => {
   it("attributes the message to the resolved agent at the start of the stream", async () => {
     const stream = await startStream(fakeTurn());
 
-    // `prepDurationMs` rides the same `start` part (issue #354) — real
-    // elapsed time from `setup()`, so only its presence and type are pinned
-    // here.
     expect(stream.metadataFor({ type: "start" })).toEqual({
       agentId: "agent-1",
       prepDurationMs: expect.any(Number) as unknown,
@@ -2314,10 +2151,6 @@ describe("AgentRunner.stream — message metadata", () => {
     await stream.end();
   });
 
-  // A direct provider/model chat resolves no agent, so its start carries no
-  // agent attribution — which is exactly the case that had no way to be
-  // flagged while `agentId` was a required field. `prepDurationMs` still
-  // rides `start` regardless, since it is a Turn resolution fact.
   it("still flags a truncated direct provider/model stream that has no attribution", async () => {
     const turn = fakeTurn();
     turn.resolved = {
@@ -2326,8 +2159,6 @@ describe("AgentRunner.stream — message metadata", () => {
     };
     const stream = await startStream(turn);
 
-    // `prepDurationMs` is present even with no agent to attribute — it is a
-    // Turn resolution fact, not an agent one.
     expect(stream.metadataFor({ type: "start" })).toEqual({
       prepDurationMs: expect.any(Number) as unknown,
     });
@@ -2338,9 +2169,6 @@ describe("AgentRunner.stream — message metadata", () => {
     await stream.end();
   });
 
-  // Issue #522: the flag is decided during Turn resolution and reaches the
-  // stream on the same path the attribution takes — the runner forwards what
-  // `prepareChatTurn` returned, and nothing re-derives it here.
   it("carries the search-unavailable flag from the prepared turn to the stream", async () => {
     const turn = { ...fakeTurn(), searchUnavailable: true };
     const stream = await startStream(turn);
@@ -2354,8 +2182,6 @@ describe("AgentRunner.stream — message metadata", () => {
     await stream.end();
   });
 
-  // A step inside a tool loop can end at the ceiling and the run still recover
-  // and finish normally. Marking those flags runs that were never truncated.
   it("ignores a step that ended at the limit mid tool-loop", async () => {
     const stream = await startStream(fakeTurn());
 
@@ -2370,9 +2196,6 @@ describe("AgentRunner.stream — message metadata", () => {
     await stream.end();
   });
 
-  // Issue #448. Occupancy rides on the step-finish part, not the terminal
-  // finish: a cancelled turn never gets a terminal finish, and cancelling a
-  // long turn is exactly when the context had grown most.
   it("records the model call's token counts on a finished step", async () => {
     const stream = await startStream(fakeTurn());
 
@@ -2384,8 +2207,6 @@ describe("AgentRunner.stream — message metadata", () => {
       }),
     ).toEqual({
       contextOccupancy: { inputTokens: 12_400, outputTokens: 180 },
-      // Token usage (issue #354) and the Model duration ride the same part.
-      // On a single-step turn the sum equals this step's own reading.
       tokenUsage: { inputTokens: 12_400, outputTokens: 180 },
       modelDurationMs: expect.any(Number) as unknown,
     });
@@ -2394,10 +2215,6 @@ describe("AgentRunner.stream — message metadata", () => {
   });
 });
 
-// Issue #454: the ceiling the Provider declares for the model has to reach the
-// generation call itself. Amazon Bedrock omits `inferenceConfig.maxTokens`
-// entirely when the SDK is passed nothing, so a value stopping short of the
-// call is a value that changes nothing.
 describe("model output ceiling", () => {
   let runner: AgentRunner;
   beforeEach(() => {
@@ -2444,9 +2261,6 @@ describe("model output ceiling", () => {
     );
   });
 
-  // Undeclared has to stay undeclared: the SDK reads an absent key and an
-  // `undefined` value the same way, and anything else would move the ceiling
-  // for every Provider that has never set one.
   it("sends no ceiling when the model declares none", async () => {
     mockPrepareChatTurn.mockResolvedValueOnce(turnWithCeiling(undefined));
     mockStreamText.mockReturnValueOnce(streamResultOf(fakeGenerateResult));
@@ -2465,12 +2279,6 @@ describe("model output ceiling", () => {
   });
 });
 
-/**
- * A turn cancelled while a tool was still running persists the tool call with
- * no result beside it. Sent as-is, a provider rejects the whole request
- * ("Tool result is missing for tool call ..."), so the next message in that
- * Chat — and every one after it — fails until the Chat is deleted.
- */
 describe("dangling tool calls in the Transcript", () => {
   const danglingTranscript = [
     { id: "u1", role: "user", parts: [{ type: "text", text: "run it" }] },
@@ -2508,9 +2316,6 @@ describe("dangling tool calls in the Transcript", () => {
     );
   });
 
-  // What that flag buys, against the real SDK — the behaviour the line above
-  // is only worth having if it keeps. A version that stopped dropping the
-  // unanswered call would put the 400 back without touching our code.
   it("drops the unanswered call and keeps the text beside it", async () => {
     const { convertToModelMessages: convert } =
       await vi.importActual<typeof import("ai")>("ai");
