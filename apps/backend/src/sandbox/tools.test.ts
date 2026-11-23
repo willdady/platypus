@@ -11,13 +11,10 @@ type TypedExecute = ToolExecuteFunction<
   unknown
 >;
 
-/** Call a tool's execute function without casting to `any`. */
 function callExecute(
   tools: ReturnType<typeof createSandboxTools>,
   name: string,
   input: Record<string, unknown>,
-  // Production always has a signal, so that is the default here. `null` is the
-  // explicit "the SDK handed us none" case.
   abortSignal: AbortSignal | null = new AbortController().signal,
 ): Promise<unknown> {
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- a tool the backend does not offer is absent
@@ -33,7 +30,6 @@ function callExecute(
   );
 }
 
-/** No model capabilities resolved: nothing reads natively, the default cap. */
 const noFileReading = () =>
   Promise.resolve({
     passthroughFileTypes: [],
@@ -46,7 +42,6 @@ const ctx: SandboxContext = {
   userId: "user-1",
 };
 
-/** Mocks held separately so destructuring never touches a method-typed interface. */
 type BackendMocks = {
   shellExec: Mock;
   fsRead: Mock;
@@ -73,7 +68,6 @@ function makeBackend(): { backend: SandboxBackend; mocks: BackendMocks } {
     fsList: vi.fn().mockResolvedValue({ entries: [], truncated: false }),
     destroy: vi.fn().mockResolvedValue(undefined),
   };
-  // Cast so we can pass a mock object that satisfies SandboxBackend.
   const backend = mocks as unknown as SandboxBackend;
   return { backend, mocks };
 }
@@ -231,8 +225,6 @@ describe("createSandboxTools", () => {
     );
   });
 
-  // An adapter written before the appended parameter existed takes two
-  // arguments and must keep working.
   it("runs a two-argument backend written before the signal existed", async () => {
     const backend = {
       shellExec: (_ctx: SandboxContext, input: { command: string }) =>
@@ -256,9 +248,6 @@ describe("createSandboxTools", () => {
     expect((result as { stdout: string }).stdout).toBe("ls");
   });
 
-  // The AI SDK declares `abortSignal` optional. Nothing in core drives a turn
-  // without one, but the options are required from API v3, so a call that
-  // arrives without it still hands the adapter a signal — one that never fires.
   it("hands the backend a never-firing signal when the SDK supplies none", async () => {
     const { backend, mocks } = makeBackend();
     const tools = createSandboxTools(backend, ctx, {}, noFileReading);
@@ -278,8 +267,6 @@ describe("createSandboxTools", () => {
     expect(options.signal.aborted).toBe(false);
   });
 
-  // Issue #921. The turn not being pinned open cannot rest on the adapter's
-  // cooperation: a backend that never settles must not hold the tool call open.
   it("rejects when the run aborts while a backend call is still in flight", async () => {
     const backend = {
       shellExec: () => new Promise<never>(() => {}),
@@ -430,7 +417,6 @@ describe("fsView", () => {
     return { tools, mocks, fsReadBytes };
   };
 
-  /** Run the tool, then build what the model would receive for that call. */
   const view = async (
     tools: ReturnType<typeof createSandboxTools>,
     path: string,
@@ -525,8 +511,6 @@ describe("fsView", () => {
       [],
     );
     const { modelOutput } = await view(tools, "scan.pdf");
-    // The bytes are not a parseable PDF, so extraction reports no text — what
-    // matters is that it went down the extraction path rather than native.
     expect(modelOutput).toEqual({
       type: "content",
       value: [

@@ -10,14 +10,6 @@ import type { RunStatus } from "../runs/types.ts";
 import { createSandboxTools } from "./tools.ts";
 import type { SandboxBackend, SandboxContext } from "./types.ts";
 
-/**
- * Issue #921. A sandbox tool call that never returns must not pin the turn
- * open: whatever the adapter does with the abort, the run has to reach a
- * terminal status. Driven through the real drive pipeline with a mock model,
- * because the symptom Operators saw — a chat row stranded on `running` — is
- * the terminal write that never happened, not anything visible at the tool.
- */
-
 const USAGE = {
   inputTokens: {
     total: 10,
@@ -34,7 +26,6 @@ const ctx: SandboxContext = {
   userId: "user-1",
 };
 
-/** One `shellExec` call, then a clean stop the tool never lets it reach. */
 const shellExecModel = (): MockLanguageModelV3 =>
   new MockLanguageModelV3({
     doStream: () => {
@@ -60,11 +51,6 @@ const shellExecModel = (): MockLanguageModelV3 =>
     },
   });
 
-/**
- * The adapter this issue is about: it takes the call and never comes back, and
- * never reads the signal it is handed. A third-party adapter compiled against
- * the contract before the signal existed behaves exactly like this.
- */
 const neverSettlingBackend = (): {
   backend: SandboxBackend;
   entered: Promise<void>;
@@ -102,7 +88,6 @@ const startRecordedRun = (timeouts?: {
   return { run, outcome, terminated: done };
 };
 
-/** Drives one turn against `backend`, draining its snapshots as a sink would. */
 const driveAgainst = (
   backend: SandboxBackend,
   run: ReturnType<typeof startRun>,
@@ -145,10 +130,6 @@ describe("a sandbox tool in flight when the run aborts", () => {
     expect(outcome).toEqual([{ status: "cancelled" }]);
   });
 
-  // The timeout paths clear both run timers and abort the same controller a
-  // cancel does, so they strand a run the same way — there is no backstop left
-  // behind them. Both bounds are covered: an Operator hits whichever their
-  // deployment configures.
   it.each([
     ["run", { perRunTimeoutMs: 50 }],
     ["step", { perStepTimeoutMs: 50 }],
@@ -164,7 +145,6 @@ describe("a sandbox tool in flight when the run aborts", () => {
       await drive.drained;
       await drive.done;
 
-      // A timeout is a failure, not a user cancel.
       expect(outcome).toEqual([{ status: "failed" }]);
     },
   );
