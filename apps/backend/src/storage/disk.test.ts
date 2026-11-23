@@ -67,11 +67,19 @@ describe("DiskStorage", () => {
       expect(await storage.get("non-existent-file")).toBeNull();
     });
 
+    it("keeps the sidecar beside the object a key resolves to", async () => {
+      await storage.put("d/x/..", Buffer.from("x"), "text/plain");
+
+      expect(await storage.get("d")).toEqual({
+        data: Buffer.from("x"),
+        contentType: "text/plain",
+      });
+    });
+
     it("rethrows a read failure other than a missing file", async () => {
       await storage.put("dir/file.txt", Buffer.from("x"), "text/plain");
       await fs.writeFile(path.join(tempDir, "dir.meta"), "{}");
 
-      // `dir` is a directory, so reading it fails with EISDIR, not ENOENT.
       await expect(storage.get("dir")).rejects.toMatchObject({
         code: "EISDIR",
       });
@@ -115,8 +123,6 @@ describe("DiskStorage", () => {
     });
 
     it("logs, rather than throws, an unlink failure other than a missing file", async () => {
-      // Both paths are directories, so each unlink fails with something other
-      // than ENOENT.
       await fs.mkdir(path.join(tempDir, "k"));
       await fs.mkdir(path.join(tempDir, "k.meta"));
 
@@ -133,8 +139,6 @@ describe("DiskStorage", () => {
     });
   });
 
-  // The Agent avatar path composes its own key without the `keys.ts` gate, so
-  // this is the only containment guard on the disk backend.
   describe("containment", () => {
     const escapes = () => [
       "../outside.txt",
