@@ -643,6 +643,19 @@ describe("combining gates", () => {
     );
   });
 
+  it("gives the first denying gate's reason when several deny", async () => {
+    gate("first", () => ({ verdict: "deny", reason: "First says no." }));
+    gate("second", () => ({ verdict: "deny", reason: "Second says no." }));
+    const { model, prompts } = callThenAnswer();
+    const { run } = startRecordedRun();
+
+    await driveOnce({ plan: planWith(model, []), prompt: "go", run });
+
+    const { reason } = toolResultSentBack(prompts).output;
+    expect(reason).toContain("First says no.");
+    expect(reason).not.toContain("Second says no.");
+  });
+
   it("runs the call when every gate allows, and records nothing extra", async () => {
     gate("open", () => ({ verdict: "allow" }));
     gate("also-open", () => ({ verdict: "allow" }));
