@@ -140,7 +140,18 @@ describe("the Chat and Artifact panel split", () => {
   it("covers the Chat on a row too narrow for both minimums", () => {
     renderSplit({ width: 700 });
 
-    expect(screen.queryByTestId("group")).not.toBeInTheDocument();
+    expect(screen.getByTestId("panel-chat")).toHaveAttribute(
+      "data-default-size",
+      "0%",
+    );
+    expect(screen.getByTestId("panel-artifact")).toHaveAttribute(
+      "data-default-size",
+      "100%",
+    );
+    expect(screen.getByRole("complementary")).toHaveAttribute(
+      "data-presentation",
+      "overlay",
+    );
     expect(screen.getByRole("complementary")).toHaveClass(
       "absolute",
       "inset-0",
@@ -181,14 +192,18 @@ describe("the Chat and Artifact panel split", () => {
     renderSplit({ panel: null });
 
     expect(screen.queryByTestId("group")).not.toBeInTheDocument();
+    expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
     expect(screen.getByText("Chat")).toBeInTheDocument();
   });
 
   it("covers the Chat below lg instead of splitting the row", () => {
     renderSplit({ wide: false });
 
-    expect(screen.queryByTestId("group")).not.toBeInTheDocument();
     expect(screen.getByText("Chat")).toBeInTheDocument();
+    expect(screen.getByRole("complementary")).toHaveAttribute(
+      "data-presentation",
+      "overlay",
+    );
     expect(screen.getByRole("complementary")).toHaveClass(
       "absolute",
       "inset-0",

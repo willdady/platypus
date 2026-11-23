@@ -640,7 +640,6 @@ export function Chat({
       <ChatSkeleton
         transcript={isTranscriptPending || messages.length > 0}
         readOnly={!isAuthLoading && !canSendMessages}
-        panelOpen={artifactPanelOpen}
       />
     );
   }
@@ -655,13 +654,7 @@ export function Chat({
   }
 
   if (isTranscriptPending) {
-    return (
-      <ChatSkeleton
-        transcript
-        readOnly={!canSendMessages}
-        panelOpen={artifactPanelOpen}
-      />
-    );
+    return <ChatSkeleton transcript readOnly={!canSendMessages} />;
   }
 
   // The selection ladder waits for the Agent list before it can resolve an

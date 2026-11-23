@@ -1024,6 +1024,7 @@ const DROPPED: ChatStatus[] = ["submitted", "streaming", "error"];
 const REFUSED: ChatStatus[] = ["submitted", "error"];
 
 beforeEach(() => {
+  window.history.replaceState(null, "", "/");
   harness.swrCalls = [];
   harness.data = new Map<string, unknown>([
     ["/providers", { results: [provider] }],
@@ -1904,6 +1905,24 @@ describe("loading", () => {
 
     expect(loadingSkeleton()).toHaveClass("justify-center");
     expect(composer()).not.toBeInTheDocument();
+  });
+
+  it("keeps the skeleton's centred column while an Artifact is open", () => {
+    // A refresh of a Chat URL carrying an open Artifact: the panel is not drawn
+    // until the Chat is, so the skeleton must keep its reading measure rather
+    // than stretch across the row the panel will take.
+    rowInFlight();
+    window.history.replaceState(null, "", "?artifact=artifact-1%3A1");
+
+    renderChat();
+
+    expect(loadingSkeleton()).toBeInTheDocument();
+    // eslint-disable-next-line testing-library/no-node-access
+    const columns = document.querySelectorAll(".max-w-4xl");
+    expect(columns.length).toBeGreaterThan(0);
+    for (const column of columns) {
+      expect(column).toHaveClass("xl:w-4/5");
+    }
   });
 
   it("shows the failure, not an endless skeleton, when providers fail to load", () => {

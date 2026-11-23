@@ -33,24 +33,39 @@ export function layOutRow(width: number) {
     y: 0,
     toJSON: () => ({}),
   });
+  // The split primitive sizes its items by `offsetWidth`/`offsetHeight`, which
+  // jsdom leaves at zero as well.
+  vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockReturnValue(width);
+  vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(600);
 }
 
 /**
  * Replaces the silent ResizeObserver stub with one that hands back a function
- * to fire the row's resize callback. Call it before mounting the split.
+ * to fire every observer's callback — the component's row observer and the
+ * split primitive's own. Call it before mounting the split.
  */
 export function captureRowResize(): () => void {
-  let resize: (() => void) | undefined;
+  const observers: Array<{
+    callback: ResizeObserverCallback;
+    observer: ResizeObserver;
+  }> = [];
   vi.stubGlobal(
     "ResizeObserver",
     class {
+      private readonly callback: ResizeObserverCallback;
       constructor(callback: ResizeObserverCallback) {
-        resize = () => callback([], this);
+        this.callback = callback;
+        observers.push({
+          callback,
+          observer: this,
+        });
       }
       observe() {}
       unobserve() {}
       disconnect() {}
     },
   );
-  return () => resize?.();
+  return () => {
+    for (const { callback, observer } of observers) callback([], observer);
+  };
 }

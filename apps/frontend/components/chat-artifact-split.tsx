@@ -38,6 +38,13 @@ const ARTIFACT_PANEL_ID = "artifact";
  * and reset with a double-click. Below `lg`, or on a row too narrow to hold
  * both minimums, the panel covers the Chat, exactly as it did before the split
  * existed.
+ *
+ * While a panel is open, the row keeps the same two panels and the same
+ * divider in every state, and picks between the split and the overlay by their
+ * sizes and the panel's classes. Moving the Artifact panel between tree
+ * positions — as a branch that returned it outside the group would — remounts
+ * the Viewer, dropping the version and tab the reader picked whenever the
+ * window or the row crosses a threshold.
  */
 export function ChatArtifactSplit({
   panel,
@@ -70,22 +77,40 @@ export function ChatArtifactSplit({
     return () => observer.disconnect();
   }, []);
 
-  // Apply the split whenever the panel joins the row or the row changes size,
+  const splitting = wide && rowFitsSplit(rowWidth);
+  // Until the row is measured there is nowhere to put the panel: drawing it
+  // first would mount the Viewer once as an overlay and again beside the Chat,
+  // resetting its tabs and version. Only the split needs the measurement.
+  const showPanel = panelOpen && (!wide || rowWidth > 0);
+  const splitShown = showPanel && splitting;
+  const overlay = showPanel && !splitting;
+
+  // Apply the sizes whenever the panel joins the row or the row changes size,
   // so a wider window hands the spare width to the panel rather than growing
-  // the Chat past its default and a remembered width holds its pixels.
-  const wasOpen = useRef(false);
+  // the Chat past its default and a remembered width holds its pixels. The
+  // overlay is 0/100: the panel takes the whole row and the Chat sits behind
+  // it, still mounted.
+  const wasSplitting = useRef(false);
   useLayoutEffect(() => {
     if (!panelOpen) {
-      wasOpen.current = false;
+      wasSplitting.current = false;
       return;
     }
-    if (!wide || !rowFitsSplit(rowWidth)) return;
-    if (!wasOpen.current) {
-      wasOpen.current = true;
+    if (wide && rowWidth <= 0) return;
+    if (splitting && !wasSplitting.current) {
+      wasSplitting.current = true;
       const stored = readStoredChatWidth();
       if (stored !== null) chosenWidth.current = stored;
     }
+    if (!splitting) wasSplitting.current = false;
     const apply = () => {
+      if (!splitting) {
+        groupRef.current?.setLayout({
+          [CHAT_PANEL_ID]: 0,
+          [ARTIFACT_PANEL_ID]: 100,
+        });
+        return;
+      }
       const split = artifactPanelSplit(
         rowWidth,
         chosenWidth.current ?? undefined,
@@ -102,7 +127,7 @@ export function ChatArtifactSplit({
     // remembered pixel width is not clamped to the old row's minimum.
     const frame = requestAnimationFrame(apply);
     return () => cancelAnimationFrame(frame);
-  }, [panelOpen, wide, rowWidth]);
+  }, [panelOpen, wide, rowWidth, splitting]);
 
   const handleLayoutChanged = useCallback(
     (layout: Layout, meta: LayoutChangedMeta) => {
@@ -127,81 +152,74 @@ export function ChatArtifactSplit({
     });
   }, [rowWidth]);
 
-  const splitting = wide && rowFitsSplit(rowWidth);
   const split = artifactPanelSplit(rowWidth);
-  const aside = panel && (
+  const chatPercent = splitShown
+    ? `${split.chatPercent}%`
+    : overlay
+      ? "0%"
+      : "100%";
+  const panelPercent = splitShown
+    ? `${split.panelPercent}%`
+    : showPanel
+      ? "100%"
+      : "0%";
+  const chatMinPercent = splitShown ? `${split.chatMinPercent}%` : "0%";
+  const panelMinPercent = splitShown ? `${split.panelMinPercent}%` : "0%";
+
+  const aside = showPanel && (
     <aside
+      data-presentation={
+        fullScreen ? "full-screen" : overlay ? "overlay" : "split"
+      }
       className={cn(
         "flex flex-col bg-background",
         fullScreen
           ? "fixed inset-0 z-50"
-          : splitting
-            ? "size-full"
-            : "absolute inset-0 z-20 border-l",
+          : overlay
+            ? "absolute inset-0 z-20 border-l"
+            : "size-full",
       )}
     >
       {panel}
     </aside>
   );
 
-  if (!panel) {
-    return (
-      <div ref={rowRef} className={ROW_CLASS}>
-        {children}
-      </div>
-    );
-  }
-
-  // Before the row has been measured there is nothing to divide, and waiting
-  // for the measurement keeps the panel from mounting once as an overlay and
-  // again beside the Chat, which would reset its tabs and version.
-  if (wide && rowWidth <= 0) {
-    return (
-      <div ref={rowRef} className={ROW_CLASS}>
-        {children}
-      </div>
-    );
-  }
-
-  if (!splitting) {
-    return (
-      <div ref={rowRef} className={ROW_CLASS}>
-        {children}
-        {aside}
-      </div>
-    );
-  }
-
   return (
     <div ref={rowRef} className={ROW_CLASS}>
-      <ResizablePanelGroup
-        orientation="horizontal"
-        groupRef={groupRef}
-        onLayoutChanged={handleLayoutChanged}
-        className="size-full"
-      >
-        <ResizablePanel
-          id={CHAT_PANEL_ID}
-          defaultSize={`${split.chatPercent}%`}
-          minSize={`${split.chatMinPercent}%`}
-          style={{ overflow: "hidden" }}
+      {panel ? (
+        <ResizablePanelGroup
+          orientation="horizontal"
+          groupRef={groupRef}
+          onLayoutChanged={handleLayoutChanged}
+          className="size-full"
         >
-          {children}
-        </ResizablePanel>
-        <ResizableHandle
-          withHandle
-          aria-label="Resize the Artifact panel"
-          disableDoubleClick
-          onDoubleClick={resetSplit}
-        />
-        <ResizablePanel
-          id={ARTIFACT_PANEL_ID}
-          minSize={`${split.panelMinPercent}%`}
-          style={{ overflow: "hidden" }}
-        >
-          {aside}
-        </ResizablePanel>
-      </ResizablePanelGroup>
+          <ResizablePanel
+            id={CHAT_PANEL_ID}
+            defaultSize={chatPercent}
+            minSize={chatMinPercent}
+            style={{ overflow: "hidden" }}
+          >
+            {children}
+          </ResizablePanel>
+          <ResizableHandle
+            withHandle
+            aria-label="Resize the Artifact panel"
+            disableDoubleClick
+            onDoubleClick={resetSplit}
+            className={splitShown ? undefined : "hidden"}
+          />
+          <ResizablePanel
+            id={ARTIFACT_PANEL_ID}
+            defaultSize={panelPercent}
+            minSize={panelMinPercent}
+            style={{ overflow: "hidden" }}
+          >
+            {aside}
+          </ResizablePanel>
+        </ResizablePanelGroup>
+      ) : (
+        children
+      )}
     </div>
   );
 }

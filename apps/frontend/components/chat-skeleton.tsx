@@ -18,20 +18,20 @@ const TURNS = [
  *
  * Mirrors `Chat`'s own containers — the same column widths, the composer's
  * resting height and where it sits — so the swap to the loaded page does not
- * move anything. `transcript` picks between the two resting layouts: a docked
+ * move anything. The column is always the centred reading measure: this draws
+ * before `ChatArtifactSplit` exists, so an Artifact open in the URL has no
+ * panel beside it yet and a filled column would stretch past the measure it
+ * lands at. `transcript` picks between the two resting layouts: a docked
  * composer under placeholder messages (an existing Chat), or the composer
  * centred on its own (a new one, which has nothing to wait for).
  */
 export function ChatSkeleton({
   transcript,
   readOnly,
-  panelOpen = false,
 }: {
   transcript: boolean;
   /** The Viewer's read-only notice stands where the composer would. */
   readOnly: boolean;
-  /** The Artifact panel is open, so the column fills rather than centres. */
-  panelOpen?: boolean;
 }) {
   return (
     <LoadingRegion
@@ -44,9 +44,7 @@ export function ChatSkeleton({
       {transcript && (
         <div className="flex-1 overflow-hidden p-4">
           <div className="flex justify-center">
-            <div
-              className={cn("flex flex-col gap-4", chatColumnClass(panelOpen))}
-            >
+            <div className={cn("flex flex-col gap-4", chatColumnClass(false))}>
               {TURNS.map((turn, index) => (
                 <div key={index} className="flex flex-col gap-4">
                   <div className="ml-auto flex w-full max-w-[85%] justify-end sm:max-w-[80%]">
@@ -68,7 +66,7 @@ export function ChatSkeleton({
       )}
       <div className="grid shrink-0 gap-4 p-4">
         <div className="flex justify-center min-w-0">
-          <div className={cn("relative min-w-0", chatColumnClass(panelOpen))}>
+          <div className={cn("relative min-w-0", chatColumnClass(false))}>
             {readOnly ? (
               // The read-only notice's box: one line of `text-sm` in `py-4`.
               <div className="flex items-center justify-center py-4 px-6 border rounded-lg bg-muted/50">
