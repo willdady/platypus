@@ -41,11 +41,9 @@ import { mockLogger } from "../test-setup.ts";
 import {
   recoverStuckChats,
   recoverStuckTriggers,
-  resetTokenReminderSweep,
   scheduleAligned,
   startScheduler,
   stuckTriggerCutoff,
-  sweepTokenRemindersIfDue,
 } from "./scheduler.ts";
 import {
   chat as chatTable,
@@ -331,38 +329,6 @@ describe("recoverStuckTriggers", () => {
   });
 });
 
-describe("sweepTokenRemindersIfDue", () => {
-  const HOUR = 60 * 60 * 1000;
-  const T0 = new Date("2026-08-30T12:00:00.000Z").getTime();
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    resetTokenReminderSweep();
-    mockSendReminders.mockResolvedValue(undefined);
-    mockSendA2aReminders.mockResolvedValue(undefined);
-  });
-
-  it("sweeps at most once an hour: the reminders' thresholds are days", async () => {
-    await sweepTokenRemindersIfDue(T0);
-    await sweepTokenRemindersIfDue(T0 + HOUR - 1);
-    expect(mockSendReminders).toHaveBeenCalledTimes(1);
-    expect(mockSendReminders).toHaveBeenCalledWith(new Date(T0));
-    expect(mockSendA2aReminders).toHaveBeenCalledTimes(1);
-    expect(mockSendA2aReminders).toHaveBeenCalledWith(new Date(T0));
-
-    await sweepTokenRemindersIfDue(T0 + HOUR);
-    expect(mockSendReminders).toHaveBeenCalledTimes(2);
-  });
-
-  it("tries again on the next tick after a sweep that failed", async () => {
-    mockSendReminders.mockRejectedValueOnce(new Error("db down"));
-
-    await expect(sweepTokenRemindersIfDue(T0)).rejects.toThrow("db down");
-    await sweepTokenRemindersIfDue(T0 + 60_000);
-    expect(mockSendReminders).toHaveBeenCalledTimes(2);
-  });
-});
-
 describe("scheduleAligned", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -494,6 +460,8 @@ describe("startScheduler", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-31T08:59:59.000Z"));
     pg = fakePg({ roundTripMs: 5 });
+    mockSendReminders.mockResolvedValue(undefined);
+    mockSendA2aReminders.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -515,6 +483,9 @@ describe("startScheduler", () => {
       return [];
     });
   };
+
+  const noDueTriggers = () =>
+    tickDb((q) => (q.op === "select" && q.fields ? [{ running: 0 }] : []));
 
   it("sweeps on every tick, on any instance, while a 45-minute Cron run is going", async () => {
     const sweepTimes: string[] = [];
@@ -573,5 +544,54 @@ describe("startScheduler", () => {
     );
     expect(tables).toEqual([chatTable, triggerTable]);
     expect(mockFireTrigger).toHaveBeenCalledTimes(1);
+  });
+
+  it("sweeps token reminders at most once an hour", async () => {
+    noDueTriggers();
+    const stop = startScheduler();
+
+    await vi.advanceTimersByTimeAsync(1_050);
+    expect(mockSendReminders).toHaveBeenCalledTimes(1);
+    expect(mockSendA2aReminders).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(59 * 60_000);
+    expect(mockSendReminders).toHaveBeenCalledTimes(1);
+    expect(mockSendA2aReminders).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(2 * 60_000);
+    expect(mockSendReminders).toHaveBeenCalledTimes(2);
+    expect(mockSendA2aReminders).toHaveBeenCalledTimes(2);
+    stop();
+  });
+
+  it("tries the token reminders again on the next tick after a sweep that failed", async () => {
+    noDueTriggers();
+    mockSendReminders.mockRejectedValueOnce(new Error("db down"));
+    const stop = startScheduler();
+
+    await vi.advanceTimersByTimeAsync(1_050);
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.anything(),
+      "Token expiry reminders failed",
+    );
+    expect(mockSendReminders).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(mockSendReminders).toHaveBeenCalledTimes(2);
+    stop();
+  });
+
+  it("sweeps on a restarted scheduler's first tick, not the previous one's clock", async () => {
+    noDueTriggers();
+
+    const stop = startScheduler();
+    await vi.advanceTimersByTimeAsync(1_050);
+    expect(mockSendReminders).toHaveBeenCalledTimes(1);
+    stop();
+
+    const stopAgain = startScheduler();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(mockSendReminders).toHaveBeenCalledTimes(2);
+    stopAgain();
   });
 });
