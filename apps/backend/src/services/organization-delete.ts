@@ -7,16 +7,6 @@ import {
   workspace as workspaceTable,
 } from "../db/schema.ts";
 
-/**
- * Deletes an Organization's rows, in the caller's transaction, leaves first.
- * `agent.provider_id` and `trigger.agent_id` are `ON DELETE RESTRICT`, and
- * Postgres checks each against the end of the cascade that deletes the
- * referenced row, not the end of the whole delete. So a single delete of the
- * Organization fails whenever a Provider cascade (the Organization's, or a
- * Workspace's) runs before the cascade that takes the Agents still using it
- * (issues #1609, #1610). Deleting Triggers, then every Agent, leaves nothing
- * for the Organization's cascade to trip over.
- */
 export const deleteOrganizationRows = async (
   tx: Tx,
   orgId: string,

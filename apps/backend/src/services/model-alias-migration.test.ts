@@ -35,8 +35,6 @@ describe("orphanedAliasRepoints", () => {
   });
 
   it("reports a renamed alias under its OLD name", () => {
-    // An alias has no identity apart from its name, so a rename is a delete
-    // plus a create — every `alias:flagship` reference is now dangling.
     expect(
       orphanedAliasRepoints(
         [model("gpt-4", "flagship")],
@@ -46,7 +44,6 @@ describe("orphanedAliasRepoints", () => {
   });
 
   it("treats a case-only rename as no change, matching how references resolve", () => {
-    // `alias:flagship` still resolves to `Flagship` — nothing is orphaned.
     expect(
       orphanedAliasRepoints(
         [model("gpt-4", "flagship")],
@@ -65,8 +62,6 @@ describe("orphanedAliasRepoints", () => {
   });
 
   it("skips an alias whose model entry was deleted in the same save", () => {
-    // No concrete id to fall back to — this is the pre-existing dangling-id
-    // case, and inventing a different model would be worse than failing.
     expect(
       orphanedAliasRepoints([model("gpt-4", "flagship")], [model("gpt-3.5")]),
     ).toEqual([]);

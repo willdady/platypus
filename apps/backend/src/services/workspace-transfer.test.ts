@@ -12,11 +12,6 @@ import { drizzle } from "drizzle-orm/pglite";
 import { migratedPglite } from "../db/migrated-pglite.test-fixtures.ts";
 import { ValidationError } from "../errors.ts";
 
-/**
- * A Workspace transfer (ADR-0035) run for real against an in-process Postgres
- * built from the shipped migrations: what it clears, what it keeps, and that
- * a refused one changes nothing.
- */
 const {
   holder,
   cancelRun,
@@ -38,9 +33,6 @@ vi.mock("../index.ts", () => ({
 vi.mock("../runs/run-cancel.ts", () => ({ cancelRun }));
 vi.mock("./a2a-cancel.ts", () => ({ stopRevokedA2aWork }));
 vi.mock("../storage/utils.ts", () => ({ deleteStoredPrefix }));
-// The delivery is the one part of a `trigger_run.*` Webhook event mocked: which
-// events a transfer produces, and that they follow the commit, are what this
-// file is about.
 vi.mock("./event-dispatch.ts", () => ({ dispatchWebhookEvent }));
 
 const { transferWorkspace } = await import("./workspace-transfer.ts");
@@ -52,12 +44,6 @@ beforeAll(async () => {
 }, 60_000);
 afterAll(() => pg.close());
 
-/**
- * Org 1 has an admin (Ada), the Owner (Olive), a recipient (Nina) and a banned
- * member (Bea); Otto is a member of Org 2 only. Olive owns `ws-1`, which holds
- * one of everything a transfer touches, and `ws-2`, which a transfer of `ws-1`
- * must leave alone.
- */
 beforeEach(async () => {
   vi.clearAllMocks();
   await pg.exec(`
@@ -299,11 +285,6 @@ describe("transferWorkspace, whatever the history choice", () => {
   it("announces the pending run it cancelled, once, after the transfer commits", async () => {
     await transfer("u-new");
 
-    // The pending run ends `cancelled` with its Webhook event — the behaviour
-    // change #1934 makes, so the pending case matches the running one and what
-    // the Webhooks docs already promise.
-    // Exactly one event, and it is the cancelled one. The announcement is
-    // started after the commit, not awaited by it, so let it land.
     await vi.waitFor(() =>
       expect(dispatchWebhookEvent).toHaveBeenCalledTimes(1),
     );
@@ -326,7 +307,6 @@ describe("transferWorkspace, whatever the history choice", () => {
 
     expect(cancelRun).not.toHaveBeenCalled();
     expect(stopRevokedA2aWork).not.toHaveBeenCalled();
-    // Nothing was committed, so nothing is announced.
     expect(dispatchWebhookEvent).not.toHaveBeenCalled();
   });
 

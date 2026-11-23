@@ -13,7 +13,6 @@ const resetChain = () => {
   vi.clearAllMocks();
   mockDb.where.mockReturnValue(mockDb);
   mockDb.innerJoin.mockReturnValue(mockDb);
-  // The accept holds the membership it lands on, the only "share" lock.
   mockDb.for.mockImplementation(((strength: string) =>
     strength === "share"
       ? Promise.resolve([{ id: "member-1" }])
@@ -27,11 +26,6 @@ describe("User Invitation Routes", () => {
 
   const DAY = 24 * 60 * 60 * 1000;
 
-  /**
-   * Invitations around the session user (`user@example.com`): one live pending
-   * invite, plus one each that is expired, already declined, and addressed to
-   * someone else — none of which the user may list or decline.
-   */
   const seedInvitations = () => {
     const invite = (over: Row): Row => ({
       organizationId: "org-1",
@@ -108,9 +102,6 @@ describe("User Invitation Routes", () => {
     });
   });
 
-  // An address match proves nothing until the address is verified (by
-  // redeeming an invitation link): an unverified account cannot see, accept or
-  // decline an invitation addressed to it.
   describe("an account whose email is unverified", () => {
     const unverified = () =>
       mockSession({
@@ -174,10 +165,9 @@ describe("User Invitation Routes", () => {
         workspaceName: "Contractor Sandbox",
       };
 
-      mockDb.limit.mockResolvedValueOnce([mockInvitation]); // fetch invitation
+      mockDb.limit.mockResolvedValueOnce([mockInvitation]);
 
-      // Transaction mocks
-      mockDb.orderBy.mockResolvedValueOnce([]); // no blueprints on the invite
+      mockDb.orderBy.mockResolvedValueOnce([]);
 
       const res = await app.request(`${baseUrl}/inv-1/accept`, {
         method: "POST",
@@ -186,8 +176,6 @@ describe("User Invitation Routes", () => {
       expect(res.status).toBe(200);
       expect(mockDb.transaction).toHaveBeenCalled();
 
-      // ADR-0008: accepting always provisions a workspace owned by the
-      // acceptor, using the invitation's workspace name.
       const insertedValues = mockDb.values.mock.calls.map(
         (c) => c[0] as Record<string, unknown>,
       );
@@ -198,8 +186,6 @@ describe("User Invitation Routes", () => {
         name: "Contractor Sandbox",
       });
 
-      // The response names where the member landed: the Organization and the
-      // Workspace this accept actually provisioned.
       expect(await res.json()).toEqual({
         message: "Invitation accepted",
         organizationId: "org-1",
@@ -207,8 +193,6 @@ describe("User Invitation Routes", () => {
       });
     });
 
-    // ADR-0008: a blueprint-less / unnamed invite yields an empty workspace
-    // named "<member name>'s Workspace".
     it("should default the workspace name to the member's name", async () => {
       mockSession({
         id: "u1",
@@ -230,8 +214,8 @@ describe("User Invitation Routes", () => {
           organizationId: "org-1",
           workspaceName: null,
         },
-      ]); // fetch invitation
-      mockDb.orderBy.mockResolvedValueOnce([]); // no blueprints on the invite
+      ]);
+      mockDb.orderBy.mockResolvedValueOnce([]);
 
       const res = await app.request(`${baseUrl}/inv-1/accept`, {
         method: "POST",
@@ -248,7 +232,6 @@ describe("User Invitation Routes", () => {
       });
     });
 
-    // A name ending in "s" takes a bare possessive apostrophe.
     it("uses a bare apostrophe for names ending in s", async () => {
       mockSession({
         id: "u1",
@@ -270,8 +253,8 @@ describe("User Invitation Routes", () => {
           organizationId: "org-1",
           workspaceName: null,
         },
-      ]); // fetch invitation
-      mockDb.orderBy.mockResolvedValueOnce([]); // no blueprints on the invite
+      ]);
+      mockDb.orderBy.mockResolvedValueOnce([]);
 
       const res = await app.request(`${baseUrl}/inv-1/accept`, {
         method: "POST",
@@ -285,8 +268,6 @@ describe("User Invitation Routes", () => {
       expect(provisioned).toMatchObject({ name: "James' Workspace" });
     });
 
-    // The default name must stay within the schema's 30-char max so the
-    // provisioned workspace remains editable.
     it("clamps a long member name to the workspace name limit", async () => {
       mockSession({
         id: "u1",
@@ -308,8 +289,8 @@ describe("User Invitation Routes", () => {
           organizationId: "org-1",
           workspaceName: null,
         },
-      ]); // fetch invitation
-      mockDb.orderBy.mockResolvedValueOnce([]); // no blueprints on the invite
+      ]);
+      mockDb.orderBy.mockResolvedValueOnce([]);
 
       const res = await app.request(`${baseUrl}/inv-1/accept`, {
         method: "POST",
@@ -326,9 +307,6 @@ describe("User Invitation Routes", () => {
       expect(provisioned?.name.endsWith(" Workspace")).toBe(true);
     });
 
-    // ADR-0009: accepting a Blueprint-bearing invite provisions the Workspace
-    // and runs each macro in order — Tier 1 Attachments compose as a union;
-    // Tier 2 conflicts resolve last-write-wins by position.
     it("applies the invitation's ordered blueprints (Tier 1 union, Tier 2 last-write-wins)", async () => {
       mockSession({
         id: "u1",
@@ -350,19 +328,16 @@ describe("User Invitation Routes", () => {
           organizationId: "org-1",
           workspaceName: "Provisioned",
         },
-      ]); // fetch invitation
-      // Ordered set: bp-1 then bp-2.
+      ]);
       mockDb.orderBy.mockResolvedValueOnce([
         { blueprintId: "bp-1" },
         { blueprintId: "bp-2" },
       ]);
-      // applyBlueprintsToWorkspace: Tier 2 source rows (unordered), then items.
       mockDb.where
-        .mockReturnValueOnce(mockDb) // fetch invitation -> limit
-        .mockReturnValueOnce(mockDb) // the membership it lands on -> for
-        .mockReturnValueOnce(mockDb) // ordered blueprints -> orderBy
+        .mockReturnValueOnce(mockDb)
+        .mockReturnValueOnce(mockDb)
+        .mockReturnValueOnce(mockDb)
         .mockResolvedValueOnce([
-          // bp-1 sets the task provider; bp-2 overrides it (last wins).
           {
             id: "bp-1",
             taskModelProviderId: "prov-A",
@@ -377,17 +352,16 @@ describe("User Invitation Routes", () => {
             memoryEmbeddingProviderId: null,
             context: null,
           },
-        ]) // blueprint Tier 2 select
+        ])
         .mockResolvedValueOnce([
-          // Union: agent-1 appears in both blueprints; skill-1 only in bp-2.
           { resourceType: "agent", resourceId: "agent-1" },
           { resourceType: "agent", resourceId: "agent-1" },
           { resourceType: "skill", resourceId: "skill-1" },
-        ]); // blueprint items select
+        ]);
       mockDb.returning.mockResolvedValueOnce([
         { id: "att-1" },
         { id: "att-2" },
-      ]); // attachments inserted
+      ]);
 
       const res = await app.request(`${baseUrl}/inv-1/accept`, {
         method: "POST",
@@ -395,7 +369,6 @@ describe("User Invitation Routes", () => {
 
       expect(res.status).toBe(200);
 
-      // Tier 1: the attachment insert receives the deduped union (2 distinct).
       const attachInsert = mockDb.values.mock.calls
         .map((c) => c[0])
         .find(
@@ -409,8 +382,6 @@ describe("User Invitation Routes", () => {
         "skill-1",
       ]);
 
-      // Tier 2: the later blueprint (bp-2) wins on taskModelProviderId; the
-      // null slot it leaves does not clobber bp-1's earlier context.
       const tier2Set = mockDb.set.mock.calls
         .map((c) => c[0] as Record<string, unknown>)
         .find((v) => v.taskModelProviderId !== undefined);
@@ -420,8 +391,6 @@ describe("User Invitation Routes", () => {
       });
     });
 
-    // ADR-0009: a Blueprint-less invite still provisions an empty Workspace and
-    // applies nothing (unchanged from #153).
     it("provisions an empty workspace and attaches nothing for a blueprint-less invite", async () => {
       mockSession({
         id: "u1",
@@ -443,15 +412,14 @@ describe("User Invitation Routes", () => {
           organizationId: "org-1",
           workspaceName: null,
         },
-      ]); // fetch invitation
-      mockDb.orderBy.mockResolvedValueOnce([]); // no blueprints
+      ]);
+      mockDb.orderBy.mockResolvedValueOnce([]);
 
       const res = await app.request(`${baseUrl}/inv-1/accept`, {
         method: "POST",
       });
 
       expect(res.status).toBe(200);
-      // No attachment insert ran — the service early-returns on an empty set.
       const attachInsert = mockDb.values.mock.calls
         .map((c) => c[0])
         .find(
@@ -537,19 +505,6 @@ describe("User Invitation Routes", () => {
     });
   });
 
-  // #548: an invitation created for a mixed-case address was stored verbatim,
-  // while better-auth lower-cases `user.email` on sign-up. Every read here
-  // matches the column with an exact equality predicate, so the invitee never
-  // saw it and the admin's table showed it pending forever.
-  //
-  // `db` is mocked and `eq` is a no-op stub, so the read handlers' predicate has
-  // no behaviour of its own — asserting on the arguments handed to `eq` would
-  // pin nothing. Instead this test plays the part of Postgres: it captures the
-  // row the create handler actually persisted and serves it back to the read
-  // handlers only when the stored address matches the session user's exactly.
-  // Remove the normalization in `invitation.ts` and the captured row keeps its
-  // capitals, the match fails, and the list, accept and decline below all go
-  // empty — which is precisely the reported bug.
   describe("mixed-case invitation round trip", () => {
     const invitee = {
       id: "u1",
@@ -559,11 +514,6 @@ describe("User Invitation Routes", () => {
       emailVerified: true,
     };
 
-    /** Restores the chainable mocks between phases of the round trip. */
-    /**
-     * Drives the create handler as an Org Admin and returns the `email` it wrote
-     * to the invitation row.
-     */
     const createInvitationAs = async (typedEmail: string): Promise<string> => {
       mockSession({
         id: "admin-1",
@@ -571,7 +521,7 @@ describe("User Invitation Routes", () => {
         role: "user",
         emailVerified: true,
       });
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
       mockDb.returning.mockResolvedValueOnce([{ id: "inv-1" }]);
 
       const res = await app.request("/organizations/org-1/invitations", {
@@ -605,11 +555,9 @@ describe("User Invitation Routes", () => {
         invitedByName: "Admin",
       };
 
-      /** What the exact-match read predicate returns for this session user. */
       const rowsVisibleTo = (email: string) =>
         storedRow.email === email ? [storedRow] : [];
 
-      // Listed.
       resetChain();
       mockSession(invitee);
       mockDb.where.mockResolvedValueOnce(rowsVisibleTo(invitee.email));
@@ -618,11 +566,10 @@ describe("User Invitation Routes", () => {
       expect(listRes.status).toBe(200);
       expect(await listRes.json()).toEqual({ results: [storedRow] });
 
-      // Accepted — and the workspace is provisioned as it is for any invite.
       resetChain();
       mockSession(invitee);
       mockDb.limit.mockResolvedValueOnce(rowsVisibleTo(invitee.email));
-      mockDb.orderBy.mockResolvedValueOnce([]); // no blueprints on the invite
+      mockDb.orderBy.mockResolvedValueOnce([]);
 
       const acceptRes = await app.request(`${baseUrl}/inv-1/accept`, {
         method: "POST",
@@ -643,7 +590,6 @@ describe("User Invitation Routes", () => {
         name: "Contractor Sandbox",
       });
 
-      // Declined — the same match, on the update's where clause.
       resetChain();
       mockSession(invitee);
       mockDb.returning.mockResolvedValueOnce(

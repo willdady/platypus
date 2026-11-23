@@ -4,11 +4,6 @@ import { organizationMember } from "../db/schema.ts";
 import { NotFoundError } from "../errors.ts";
 import { requireAdminRemains } from "./last-admin-guard.ts";
 
-/**
- * Sets a member's Organization role. A demotion is refused as
- * {@link requireAdminRemains} refuses it, in the transaction that writes it.
- * Throws `NotFoundError` unless the member is in the Organization.
- */
 export const changeMemberRole = ({
   orgId,
   memberId,

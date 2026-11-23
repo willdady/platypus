@@ -37,29 +37,18 @@ export type WorkspaceTransferInput = {
   workspaceId: string;
   newOwnerId: string;
   keepHistory: boolean;
-  /** The name of the Org Admin transferring it, for the new Owner's notice. */
   transferredBy: string;
 };
 
-/**
- * What a transfer leaves to do once it commits, since a rollback cannot undo
- * it: stop what was running, announce the runs it ended, and delete the files
- * of the Chats it cleared.
- */
 export type TransferAftermath = {
   orgId: string;
   workspaceId: string;
   runIds: string[];
-  /** The pending runs it ended, which are announced only once it commits. */
   endedTriggerRuns: EndedTriggerRun[];
   endpointIds: string[];
   clearedChatIds: string[];
 };
 
-/**
- * Refuses a recipient who is not a member of the Organization, is banned, or
- * already owns the Workspace.
- */
 const requireRecipient = async (
   tx: Tx,
   orgId: string,
@@ -80,8 +69,7 @@ const requireRecipient = async (
       ),
     )
     .limit(1)
-    // Held until commit, so removing the recipient meanwhile waits and then
-    // finds this Workspace among the ones it must decide.
+    // why: held to commit, so a concurrent removal of the recipient waits, then must decide this one
     .for("share", { of: organizationMember });
   if (!recipient) {
     throw new ValidationError("New Owner must be a member of the organization");
@@ -101,13 +89,6 @@ const noticeBody = ({ transferredBy, keepHistory }: WorkspaceTransferInput) =>
     "MCP servers that sign in need authorizing again.",
   ].join("\n\n");
 
-/**
- * A Workspace transfer (ADR-0035), inside the caller's transaction. Nothing
- * that acts as the Owner carries across: Triggers go off, tokens are revoked,
- * the Owner's own credentials are cleared, and self-management is switched
- * off. Throws `ValidationError` for a recipient who may not receive it.
- * Returns what is left for {@link finishTransfer} after commit.
- */
 export const applyWorkspaceTransfer = async (
   tx: Tx,
   input: WorkspaceTransferInput,
@@ -115,7 +96,6 @@ export const applyWorkspaceTransfer = async (
   const { orgId, workspaceId, newOwnerId, keepHistory } = input;
   const now = new Date();
 
-  // Locked, so two transfers of one Workspace run one after the other.
   const [workspace] = await tx
     .select({ ownerId: workspaceTable.ownerId })
     .from(workspaceTable)
@@ -175,9 +155,6 @@ export const applyWorkspaceTransfer = async (
     .update(triggerTable)
     .set({ enabled: false, ...revokedTokenFields(), updatedAt: now })
     .where(eq(triggerTable.workspaceId, workspaceId));
-  // An accepted Inbound call waits as a pending run; started after this, it
-  // would run as the new Owner. Ended here — announced only once this commits,
-  // so a transfer that rolls back announces nothing (see `finishTransfer`).
   const endedTriggerRuns = await cancelPendingTriggerRuns(tx, triggerIds);
   if (endpoints.length > 0) {
     await tx.delete(a2aTokenTable).where(
@@ -196,7 +173,6 @@ export const applyWorkspaceTransfer = async (
       updatedAt: now,
     })
     .where(eq(mcpTable.workspaceId, workspaceId));
-  // A sign-in the old Owner started must not finish into the new Owner's MCP.
   await tx
     .delete(mcpOauthStateTable)
     .where(inArray(mcpOauthStateTable.mcpId, mcpIds));
@@ -234,7 +210,6 @@ export const applyWorkspaceTransfer = async (
       .where(eq(notificationTable.workspaceId, workspaceId));
   }
 
-  // Posted by Platypus, so no Agent; and no Webhook event for a transfer.
   await createPlatypusNotification(tx, {
     workspaceId,
     title: "This Workspace is now yours",
@@ -251,13 +226,6 @@ export const applyWorkspaceTransfer = async (
   };
 };
 
-/**
- * Stops what a transfer found running: each Chat turn and Trigger run, by the
- * Chat cancel action's path, and each A2A Task, whose tokens are now gone.
- * Announces the pending Trigger runs it cancelled, now that they are committed,
- * then deletes the cleared Chats' files. Never throws: the transfer has
- * committed.
- */
 export const finishTransfer = async ({
   orgId,
   workspaceId,
@@ -285,7 +253,6 @@ export const finishTransfer = async ({
   );
 };
 
-/** A Workspace transfer in its own transaction, then finished. */
 export const transferWorkspace = async (
   input: WorkspaceTransferInput,
 ): Promise<void> => {

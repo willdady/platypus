@@ -14,11 +14,6 @@ import {
 } from "./model-capability.ts";
 import { DEFAULT_MAX_EXTRACTED_TEXT_CHARS } from "@platypus/schemas";
 
-/**
- * Stand in for the resolver where a test deliberately probes a model the
- * provider does NOT have — `resolveModelId` returns undefined there by design,
- * so the defensive fallbacks can only be reached with a hand-made id.
- */
 const concrete = (id: string) => id as ConcreteModelId;
 
 const provider = (over: Partial<ProviderRow>): ProviderRow =>
@@ -83,8 +78,6 @@ describe("providerModelReferences", () => {
   });
 
   it("lists the alias reference for an aliased model", () => {
-    // What the Agent picker submits: the concrete id of an aliased model is
-    // deliberately not offered, so a repoint reaches every reference (#386).
     const p = provider({
       modelIds: [
         { id: "gpt-4", passthroughFileTypes: [], alias: "flagship" },
@@ -145,9 +138,6 @@ describe("maxOutputTokensForModel", () => {
     expect(maxOutputTokensForModel(p, concrete("qwen"))).toBe(64000);
   });
 
-  // Undefined rather than a default of our own: the whole point is that an
-  // undeclared model behaves exactly as it did before the field existed, with
-  // the provider SDK's own default left in place.
   it("returns undefined when undeclared or unknown", () => {
     const p = provider({
       modelIds: [{ id: "qwen", passthroughFileTypes: [] }],
@@ -171,8 +161,6 @@ describe("contextWindowForModel", () => {
     const p = provider({
       modelIds: [{ id: "qwen", passthroughFileTypes: [] }],
     });
-    // No default to fall back to: unlike the extracted-text cap, an undeclared
-    // window has no safe substitute — inventing one is what ADR-0018 forbids.
     expect(contextWindowForModel(p, concrete("qwen"))).toBeUndefined();
     expect(contextWindowForModel(p, concrete("ghost"))).toBeUndefined();
   });

@@ -1,14 +1,5 @@
 import type { ReasoningChoice } from "@platypus/schemas";
 
-/**
- * The sampling parameters an Agent (or a Direct Chat turn) carries, as stored,
- * with its Reasoning controls beside them (ADR-0040) — resolved separately, by
- * `resolveReasoning`, because they reach the wire as a body fragment.
- *
- * Nullable because the UI clears a field back to "unset" by writing `null`
- * rather than dropping the key — without that, `JSON.stringify` omits the
- * cleared `undefined` and the column keeps its previous value (issue #263).
- */
 export type SamplingSource = {
   temperature?: number | null;
   topP?: number | null;
@@ -18,7 +9,6 @@ export type SamplingSource = {
   frequencyPenalty?: number | null;
 } & ReasoningChoice;
 
-/** The same parameters in the shape the AI SDK takes, with unset keys absent. */
 export type SamplingSettings = {
   temperature?: number;
   topP?: number;
@@ -28,17 +18,6 @@ export type SamplingSettings = {
   frequencyPenalty?: number;
 };
 
-/**
- * Narrow stored sampling parameters to the ones actually set.
- *
- * `null` and `undefined` both mean "unset" and are omitted entirely, so the
- * Provider's own default applies rather than an explicit null being sent.
- *
- * Shared rather than inlined because an Agent must generate with the parameters
- * assigned to it wherever it runs — a parent turn and a sub-agent run alike. Two
- * copies of this logic is how one of those quietly ends up with a shorter list
- * than the other.
- */
 export const resolveSamplingSettings = (
   source: SamplingSource,
 ): SamplingSettings => {

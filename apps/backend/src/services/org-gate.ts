@@ -9,27 +9,15 @@ import {
 import { NotFoundError } from "../errors.ts";
 import { logger } from "../logger.ts";
 
-/**
- * An Organization gate: off, every Workspace, or the Workspaces whose own
- * switch is on. Inbound Triggers (ADR-0030), A2A endpoints (ADR-0032) and
- * Skill imports (ADR-0037) each have one, in the same shape and stored side
- * by side, so the reading and saving live here once.
- */
 type GateKind = {
   gate: "inboundTriggerGate" | "a2aGate" | "skillImportGate";
   allowed: "inboundTriggersAllowed" | "a2aAllowed" | "skillImportAllowed";
-  /** How many resources the gate admits each Workspace holds, if any. */
   resourceCounts: (
     orgId: string,
   ) => Promise<{ workspaceId: string; count: number }[]>;
-  /** The info line an Org Admin's change writes. */
   changedMessage: string;
 };
 
-/**
- * The gate and every Workspace with its own switch and how many of the gated
- * resources it holds, so the Admin can see which ones a change would cut off.
- */
 export const getGateAccess = async (
   kind: GateKind,
   orgId: string,
@@ -66,12 +54,6 @@ export const getGateAccess = async (
   };
 };
 
-/**
- * Saves the gate and, when `allowedWorkspaceIds` is given, every Workspace's
- * switch with it: on for those listed, off for the rest. One transaction, so a
- * switch to `selected` takes effect with the Workspaces it should keep already
- * allowed. A listed id outside the Organization refuses the whole save.
- */
 export const setGateAccess = async (
   kind: GateKind,
   orgId: string,
@@ -100,8 +82,7 @@ export const setGateAccess = async (
   await db.transaction(async (tx) => {
     if (allowedIds) {
       const now = new Date();
-      // Only rows whose switch changes are written, so a Workspace's
-      // updatedAt still means something changed on it.
+      // why: only rows whose switch changes, so a Workspace's updatedAt still means it changed
       if (allowedIds.length > 0) {
         await tx
           .update(workspaceTable)
@@ -133,7 +114,6 @@ export const setGateAccess = async (
       .where(eq(organizationTable.id, orgId));
   });
 
-  // Who opened or closed a way in from outside, and how wide.
   logger.info(
     {
       organizationId: orgId,
