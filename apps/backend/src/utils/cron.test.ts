@@ -4,7 +4,6 @@ import { validateCronExpression } from "./cron.ts";
 describe("validateCronExpression", () => {
   beforeEach(() => {
     vi.useFakeTimers();
-    // A Monday, in winter: New York is UTC−5 and London is UTC+0.
     vi.setSystemTime(new Date("2026-01-05T08:30:00Z"));
   });
 
