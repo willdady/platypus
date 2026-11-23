@@ -42,6 +42,16 @@ const writeEnd = async (
   messageId: string,
   state: A2aTaskEndState,
 ): Promise<TaskRow | undefined> => {
+  // why: the run a cancel was owed to has ended, so the sweep owes it nothing more
+  await executor
+    .update(a2aTaskTable)
+    .set({ canceledAt: null })
+    .where(
+      and(
+        eq(a2aTaskTable.chatId, chatId),
+        eq(a2aTaskTable.messageId, messageId),
+      ),
+    );
   const replyId = (await firstReply(chatId, messageId, executor)) ?? null;
   const [recorded] = await executor
     .update(a2aTaskTable)
@@ -218,8 +228,8 @@ export const cancelTask = async (
   });
   if (!claimed) return undefined;
 
-  // why: the cancel is recorded; a run this message misses is stopped by the sweep
-  await cancelRun(task.chatId, { startedBefore: canceledAt }).catch(
+  // why: the cancel names the turn it claimed, so no run of a later turn is stopped
+  await cancelRun(task.chatId, { turnId: task.messageId }).catch(
     (error: unknown) =>
       logger.error({ error, taskId: task.id }, "Sending an A2A cancel failed"),
   );

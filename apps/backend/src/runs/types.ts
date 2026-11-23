@@ -71,6 +71,7 @@ export type TurnRequest = {
 
 export type RunInput = {
   runId: RunId;
+  turnId?: string;
 } & TurnRequest;
 
 export type TurnFacts = {
