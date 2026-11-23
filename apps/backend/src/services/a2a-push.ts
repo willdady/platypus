@@ -232,6 +232,12 @@ export const storePushConfig = async (
       "A push notification config's url can't change once its Task has ended",
     );
   const row = await db.transaction(async (tx) => {
+    // why: the Task row is the per-Task mutex, so racing registrations can't both pass the cap
+    await tx
+      .select({ id: a2aTaskTable.id })
+      .from(a2aTaskTable)
+      .where(eq(a2aTaskTable.id, task.id))
+      .for("update");
     const [existing] = await tx
       .select()
       .from(a2aPushConfigTable)
