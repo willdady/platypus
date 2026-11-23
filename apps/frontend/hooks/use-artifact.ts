@@ -50,6 +50,24 @@ export function useArtifactVersions(
 }
 
 /**
+ * Reads a stored Artifact back at the version a tool call wrote, or at the
+ * version a reply's tray row names — the read both the Card and the row need.
+ * `deleted` is a 404 rather than a failed read, and `data` is that version, not
+ * whatever the Artifact holds now. Withheld on the same terms as `useArtifact`.
+ */
+export function useStoredArtifact(
+  stored: { id: string; version: number } | undefined,
+  scope?: Scope | null,
+) {
+  const { data, error } = useArtifact(
+    stored ? (scope ?? null) : null,
+    stored?.id,
+    stored?.version,
+  );
+  return { data, deleted: stored !== undefined && isArtifactDeleted(error) };
+}
+
+/**
  * A 404 is a deleted Artifact, not a failed read: the Card and the viewer both
  * say so rather than showing an error. Every other failure stays an error.
  */

@@ -72,6 +72,9 @@ import { LoadSkillTool, ReadSkillFileTool } from "./load-skill-tool";
 import { SubAgentTool } from "./sub-agent-tool";
 import {
   ArtifactToolCard,
+  isArtifactToolPart,
+  replyArtifacts,
+  storedArtifactOf,
   type ArtifactOpenTarget,
 } from "./artifact-tool-card";
 import { ToolApprovalCard } from "./tool-approval-card";
@@ -119,12 +122,6 @@ type MessagePart = NonNullable<PlatypusUIMessage["parts"]>[number];
 
 /** A tool part of a Chat message, typed by `CustomUITools`. */
 type MessageToolPart = ToolUIPart<CustomUITools>;
-
-/** The two Artifact writes that share the one Artifact Card. */
-type ArtifactMessagePart = Extract<
-  MessageToolPart,
-  { type: "tool-createArtifact" | "tool-updateArtifact" }
->;
 
 type PartOfType<T extends MessagePart["type"]> = Extract<
   MessagePart,
@@ -201,11 +198,13 @@ function isWebToolPart(part: MessagePart): part is MessageToolPart {
   return isToolUIPart(part) && isNormalizedWebToolPart(part);
 }
 
-/** An Artifact Card has its own click target, so it stands alone. */
-function isArtifactToolPart(part: MessagePart): part is ArtifactMessagePart {
-  return (
-    part.type === "tool-createArtifact" || part.type === "tool-updateArtifact"
-  );
+/**
+ * A stored Artifact write: the kind that moves to the tray once the reply is
+ * finished. A write still streaming, or one that failed, was denied or was
+ * rejected, stored nothing and stays in the reply body as a card.
+ */
+function isStoredArtifactPart(part: MessagePart): boolean {
+  return isArtifactToolPart(part) && storedArtifactOf(part) !== undefined;
 }
 
 /**
@@ -246,8 +245,9 @@ export function isGenericToolPart(part: MessagePart): part is MessageToolPart {
 
 /**
  * Tool calls that sit in a Tool call group. A Sub-Agent delegation has
- * interactive UI of its own, and a call waiting on the User's approval must
- * be seen, so each stands alone and ends the group around it.
+ * interactive UI of its own, an Artifact Card has its own click target, and a
+ * call waiting on the User's approval must be seen, so each stands alone and
+ * ends the group around it.
  */
 function isGroupableToolPart(
   part: MessagePart,
@@ -688,12 +688,18 @@ export const ChatMessage = memo(function ChatMessage({
       />
     ) : null;
   };
+  // A stored Artifact write moves to the tray only once the reply is finished,
+  // which is the same gate the offered files use: while the reply is still
+  // being written, its Card stays where the call happened.
+  const hiddenFromBody = (part: MessagePart) =>
+    isOfferedFilePart(part) || (!isAwaitedReply && isStoredArtifactPart(part));
   const segments = partitionParts(
     (message.parts ?? []).map(shownAsDenied),
     isGroupableToolPart,
-    isOfferedFilePart,
+    hiddenFromBody,
   );
   const files = offeredFiles(message.parts ?? []);
+  const artifacts = replyArtifacts(message.parts ?? []);
   // Named for what it sits under, never "version" or "branch" (ADR-0026).
   const alternativeNoun = message.role === "user" ? "Message" : "Response";
   const alternativeLabel =
@@ -785,7 +791,14 @@ export const ChatMessage = memo(function ChatMessage({
           )}
         </>
       )}
-      {!isAwaitedReply && files.length > 0 && <OfferedFiles files={files} />}
+      {!isAwaitedReply && (files.length > 0 || artifacts.length > 0) && (
+        <OfferedFiles
+          files={files}
+          artifacts={artifacts}
+          scope={artifactScope}
+          onOpen={onOpenArtifact}
+        />
+      )}
       {/* The wait covers the whole turn, not only the chunks: between send and
       the first chunk the reply exists with nothing to show, and its controls
       would sit alone where the answer is about to appear. It is the REPLY that
