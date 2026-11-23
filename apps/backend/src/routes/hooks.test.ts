@@ -15,13 +15,10 @@ vi.mock("../services/notification.ts", () => ({
   createNotification: vi.fn(() => Promise.resolve({ id: "notification-1" })),
 }));
 
-import app from "../server.ts";
 import { fireTrigger } from "../services/trigger-firing.ts";
-import {
-  hashBearerToken,
-  resetTokenTouches,
-} from "../services/bearer-token.ts";
-import { resetInboundRunSlots } from "../services/inbound-trigger.ts";
+import { hashBearerToken } from "../services/bearer-token.ts";
+
+let app: (typeof import("../server.ts"))["default"];
 
 const TOKEN = "pit_the-right-token";
 const DAY = 24 * 60 * 60 * 1000;
@@ -103,12 +100,16 @@ const callLogLines = () =>
     .filter(([, message]) => message === "Inbound trigger call")
     .map(([fields]) => fields as Record<string, unknown>);
 
+const holdRun = () => {
+  vi.mocked(fireTrigger).mockImplementationOnce(() => new Promise(() => {}));
+};
+
 describe("/hooks/triggers", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     resetMockDb();
     vi.clearAllMocks();
-    resetInboundRunSlots();
-    resetTokenTouches();
+    vi.resetModules();
+    ({ default: app } = await import("../server.ts"));
   });
 
   afterEach(() => {
@@ -354,9 +355,7 @@ describe("/hooks/triggers", () => {
 
     it("returns a record's active run with 202 even at the concurrency cap", async () => {
       process.env.INBOUND_TRIGGER_MAX_CONCURRENT_RUNS = "1";
-      vi.mocked(fireTrigger).mockImplementationOnce(
-        () => new Promise(() => {}),
-      );
+      holdRun();
       mockNanoid.mockReturnValueOnce("run-1");
       seed();
 
@@ -405,9 +404,7 @@ describe("/hooks/triggers", () => {
 
     it("answers 429 with Retry-After past the concurrency cap, writing no row", async () => {
       process.env.INBOUND_TRIGGER_MAX_CONCURRENT_RUNS = "1";
-      vi.mocked(fireTrigger).mockImplementationOnce(
-        () => new Promise(() => {}),
-      );
+      holdRun();
       mockNanoid.mockReturnValueOnce("run-1");
       const fake = seed();
 

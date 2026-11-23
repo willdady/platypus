@@ -207,6 +207,9 @@ export const insertTimestamps = () => ({
   updatedAt: new Date("2026-01-01T00:00:00.000Z"),
 });
 
+export const flushAsyncWork = (): Promise<void> =>
+  new Promise((resolve) => setImmediate(resolve));
+
 export const resetMockDb = () => {
   fakeRef.current = null;
   installBuilderMethods(mockDb);
