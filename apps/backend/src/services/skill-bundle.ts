@@ -28,46 +28,20 @@ import {
 import type { SkillRow, SkillScope } from "./skill.ts";
 import { oneRow } from "../db/one-row.ts";
 
-/**
- * A Skill's bundle (ADR-0036): `SKILL.md` on the `skill` row, every other file
- * a `skill_file` row whose bytes sit in the StorageBackend. This module is the
- * one place bytes are written or read for it — import, Replace bundle, export —
- * and what the model-facing Skill Tools read files through.
- *
- * ponytail: every Skill owns its bytes, so the same zip in two Workspaces is
- * stored twice. Content addressing (keys by sha256, reference-counted delete)
- * is the upgrade path if storage cost ever matters.
- */
-
 export type SkillFileRow = typeof skillFileTable.$inferSelect;
 
 type Executor = Database | Tx;
 
-/**
- * Every file is stored as `application/octet-stream`, whatever it contains, so
- * a bundled `.html` or `.svg` can never be served inline from the deployment's
- * origin.
- */
 export const SKILL_FILE_CONTENT_TYPE = "application/octet-stream";
 
 const orgIdOf = (scope: SkillScope) =>
   scope.kind === "workspace" ? scope.ctx.orgId : scope.orgId;
 
-/** The scope columns a new Skill row is inserted with. */
 export const scopeColumnsOf = (scope: SkillScope) =>
   scope.kind === "workspace"
     ? { workspaceId: scope.ctx.workspaceId, organizationId: null }
     : { organizationId: scope.orgId, workspaceId: null };
 
-/**
- * The `where` that writes one Skill at `scope`, once it is known to be
- * writable there. At Workspace scope a Shared Skill is a single source of
- * truth edited only on the Organization surface (ADR-0007):
- * `requireWorkspaceMutable` throws NotFound (→404) when the Skill is not
- * visible here, then Locked (→403) when it is org-scoped. At Organization
- * scope `requireOrgScoped` throws NotFound (→404) before the write ever runs
- * (#605).
- */
 export const writableSkillWhere = async (
   scope: SkillScope,
   skillId: string,
@@ -80,7 +54,6 @@ export const writableSkillWhere = async (
   return orgScopedWhere("skill", skillId, scope.orgId);
 };
 
-/** The mapped fields of a row, or of a create, as the bundle hash sees them. */
 export const fieldsOf = (row: {
   name: string;
   description: string;
@@ -95,7 +68,6 @@ export const fieldsOf = (row: {
   argumentHint: row.argumentHint ?? null,
 });
 
-/** A Skill's bundled files, by path. */
 export const listSkillFiles = (
   database: Executor,
   skillId: string,
@@ -106,14 +78,9 @@ export const listSkillFiles = (
     .where(eq(skillFileTable.skillId, skillId))
     .orderBy(asc(skillFileTable.path));
 
-/**
- * Whether a Skill with a source record has been edited since it was installed
- * or updated (ADR-0037).
- */
 export const isModified = (row: SkillRow): boolean =>
   row.installedHash !== null && row.bundleHash !== row.installedHash;
 
-/** The bundle hash of a row as it now stands, with the files it holds. */
 export const hashSkillRow = async (
   database: Executor,
   row: SkillRow,
@@ -124,10 +91,6 @@ export const hashSkillRow = async (
     files: await listSkillFiles(database, row.id),
   });
 
-/**
- * Recomputes and stores a row's bundle hash after a write that changed its
- * body or mapped fields, keeping its files.
- */
 export const rehashSkill = async (
   database: Executor,
   row: SkillRow,
@@ -141,12 +104,6 @@ export const rehashSkill = async (
   return updated;
 };
 
-/**
- * Writes a bundle's files under a fresh upload prefix, and returns the
- * `skill_file` rows to insert. A fresh `uploadId` per write is what lets an
- * identical Replace leave the live files alone until its rows have swapped. If
- * any write fails, whatever was written is removed and the error rethrown.
- */
 const storeFiles = async (
   orgId: string,
   skillId: string,
@@ -182,7 +139,6 @@ const storeFiles = async (
   }
 };
 
-/** Where a Skill installed from GitHub came from (ADR-0037). */
 export type GithubInstallOrigin = {
   source: string;
   ref: string | null;
@@ -190,7 +146,6 @@ export type GithubInstallOrigin = {
   commitSha: string;
 };
 
-/** The source-record columns of a Skill not installed from anywhere. */
 const NO_SOURCE = {
   sourceType: null,
   source: null,
@@ -200,12 +155,6 @@ const NO_SOURCE = {
   installedHash: null,
 };
 
-/**
- * Creates a new Skill from an uploaded zip. Everything is validated before
- * anything is written (a `ValidationError` names the rule), and a name already
- * taken in the scope surfaces as a unique violation (→409, ADR-0010) with the
- * stored files removed again.
- */
 export async function importSkillBundle(
   scope: SkillScope,
   zip: Uint8Array,
@@ -213,10 +162,6 @@ export async function importSkillBundle(
   return createSkillFromBundle(scope, parseSkillZip(zip));
 }
 
-/**
- * Creates a new Skill from a validated bundle, all-or-nothing, recording
- * where it came from when it was installed from GitHub.
- */
 export async function createSkillFromBundle(
   scope: SkillScope,
   bundle: ParsedSkillBundle,
@@ -254,7 +199,6 @@ export async function createSkillFromBundle(
   }
 }
 
-/** The upload prefixes a set of stored files sit under. */
 const uploadPrefixesOf = (rows: { storageKey: string }[]) =>
   new Set(
     rows.map(({ storageKey }) =>
@@ -262,11 +206,6 @@ const uploadPrefixesOf = (rows: { storageKey: string }[]) =>
     ),
   );
 
-/**
- * Replaces an existing Skill's whole bundle from an uploaded zip. See
- * `swapSkillBundle`. The zip didn't come from GitHub, so the source record is
- * cleared.
- */
 export async function replaceSkillBundle(
   scope: SkillScope,
   skillId: string,
@@ -276,11 +215,6 @@ export async function replaceSkillBundle(
   return swapSkillBundle(scope, skillId, where, parseSkillZip(zip), NO_SOURCE);
 }
 
-/**
- * Replaces a GitHub-installed Skill's whole bundle with the one at
- * `commitSha`, keeping its source record and moving it to that commit. See
- * `swapSkillBundle`.
- */
 export async function updateSkillBundleFromGithub(
   scope: SkillScope,
   skillId: string,
@@ -294,14 +228,6 @@ export async function updateSkillBundleFromGithub(
   });
 }
 
-/**
- * Swaps in a Skill's whole bundle — mapped fields, frontmatter, body and
- * files — with `source` the source-record columns to set. The new files go
- * under a new upload prefix and the rows swap in one transaction; only then
- * is the old prefix deleted. A failed swap deletes the new prefix instead,
- * leaving the old bundle intact. `where` comes from `writableSkillWhere`, so
- * at Workspace scope a Shared Skill is locked (ADR-0007), as for any edit.
- */
 async function swapSkillBundle(
   scope: SkillScope,
   skillId: string,
@@ -348,16 +274,11 @@ async function swapSkillBundle(
   return replaced.row;
 }
 
-/** A stored file's bytes, or `null` where storage no longer holds them. */
 export const readStoredSkillFile = async (
   file: SkillFileRow,
 ): Promise<Buffer | null> =>
   (await getStorage().get(file.storageKey))?.data ?? null;
 
-/**
- * The zip an export downloads. See `buildSkillZip`. A `skill_file` row whose
- * bytes storage no longer holds is a server fault (→500), not a missing Skill.
- */
 export async function exportSkillBundle(row: SkillRow): Promise<Uint8Array> {
   const files = await Promise.all(
     (await listSkillFiles(db, row.id)).map(async (file) => {
@@ -373,7 +294,6 @@ export async function exportSkillBundle(row: SkillRow): Promise<Uint8Array> {
   });
 }
 
-/** One of a Skill's bundled files, or `NotFoundError`. */
 export const requireSkillFile = async (
   skillId: string,
   fileId: string,
@@ -389,7 +309,6 @@ export const requireSkillFile = async (
   return file;
 };
 
-/** One of a Skill's bundled files by its path in the bundle, if it has one. */
 export const findSkillFileByPath = async (
   skillId: string,
   path: string,
@@ -404,11 +323,6 @@ export const findSkillFileByPath = async (
   return file;
 };
 
-/**
- * One bundled file's bytes and download name, or `NotFoundError` when the
- * Skill has no such file. The caller has already established the Skill is
- * visible. A row whose bytes storage no longer holds is a server fault (→500).
- */
 export const downloadSkillFile = async (
   skillId: string,
   fileId: string,
@@ -419,7 +333,6 @@ export const downloadSkillFile = async (
   return { data, filename: file.path.slice(file.path.lastIndexOf("/") + 1) };
 };
 
-/** A Skill's files as the API returns them: no storage key. */
 export const skillFilesForApi = async (skillId: string) =>
   (await listSkillFiles(db, skillId)).map(
     ({ id, path, size, sha256, isText }) => ({

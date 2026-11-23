@@ -10,44 +10,17 @@ import { resolveModelId } from "./model-capability.ts";
 import { DeadlineExceededError, withDeadline } from "../utils/abort-race.ts";
 import { ValidationError } from "../errors.ts";
 
-/**
- * The Provider-connection probe both `/providers/test` routes delegate to, the
- * way `probeMcpConnection` serves the two MCP surfaces. It takes a config, not
- * a stored id: the form tests its current, unsaved values, and a blank key or
- * header means the operator cleared it rather than "use the saved one".
- *
- * The probe is one tiny real completion through `openProvider`, exactly as a
- * turn opens it, so a success says the whole path works — credentials, base
- * URL, API mode and model id. Nothing is stored. A failure is returned as a
- * class plus the vendor's own message, not thrown: the form needs to render it
- * on the card that was tested.
- */
-
-/**
- * The session id a test substitutes for `${SESSION_ID}`. Fixed rather than a
- * real Chat or Trigger run id because nothing is stored and no Chat is
- * involved; it is recognisable in a vendor's request log as a test.
- */
 const PROVIDER_TEST_SESSION_ID = "provider-connection-test";
 
-/** Bounds the probe, so a server that accepts the connection and never answers is reported, not waited on. */
 const PROVIDER_TEST_TIMEOUT_MS = 20_000;
 
-/** A one-word reply needs no more; a model that ignores the prompt is still cut here. */
 const PROVIDER_TEST_MAX_OUTPUT_TOKENS = 16;
 
 const PROVIDER_TEST_PROMPT = "Reply with the single word ok.";
 
-/** The vendor's own "there is no such model here" wording, across vendors. */
 const MODEL_NOT_FOUND_MESSAGE =
   /model_not_found|\bmodel\b[^.\n]{0,120}\bnot found\b|no such model|unknown model|\bmodel\b[^.\n]{0,120}\bdoes not exist\b/i;
 
-/**
- * Whether a caught error is a failure to reach the server at all — DNS, TLS,
- * a refused connection, or a timeout. The details live on the `cause` chain
- * (`fetch` reports the outer failure as a bare `TypeError`), so the walk goes
- * looking for the libuv/undici code rather than trusting the message alone.
- */
 const CONNECTION_ERROR_CODES = new Set([
   "ENOTFOUND",
   "EAI_AGAIN",
@@ -78,19 +51,9 @@ const isConnectionFailure = (error: unknown): boolean => {
   return false;
 };
 
-/**
- * The error the last attempt hit. The SDK wraps a failure that outlived its
- * retries in `RetryError`; the class and the message both describe the inner
- * one.
- */
 const failedAttempt = (error: unknown): unknown =>
   RetryError.isInstance(error) ? error.lastError : error;
 
-/**
- * The class a failed probe is reported as. The AI SDK throws `APICallError`
- * for a response with a status, and a transport failure as whatever `fetch`
- * threw.
- */
 const classifyProviderTestFailure = (
   error: unknown,
 ): ProviderTestFailureClass => {
@@ -102,14 +65,9 @@ const classifyProviderTestFailure = (
     if (statusCode === 429) return "rate-limited";
     if (statusCode === 404) return "model-not-available";
     if (MODEL_NOT_FOUND_MESSAGE.test(message)) return "model-not-available";
-    // An OpenAI-compatible server that has no Responses API rejects the route
-    // with a 400 naming it — the common cause of a vLLM/Ollama Provider that
-    // saves fine and fails every turn.
     if (statusCode === 400 && /responses/i.test(message)) {
       return "api-mode-wrong";
     }
-    // No status means the SDK never got a response: the connection itself
-    // failed rather than the request being rejected.
     if (statusCode == null) return "base-url-unreachable";
     return "unknown";
   }
@@ -118,7 +76,6 @@ const classifyProviderTestFailure = (
   if (failure instanceof Error) {
     if (failure.name === "TimeoutError") return "base-url-unreachable";
     if (isConnectionFailure(failure)) return "base-url-unreachable";
-    // `fetch` reports a connection failure as a bare TypeError.
     if (
       failure.name === "TypeError" &&
       /fetch failed|network|socket/i.test(failure.message)
@@ -130,7 +87,6 @@ const classifyProviderTestFailure = (
   return "unknown";
 };
 
-/** The Provider's own words, verbatim, for the inline alert. */
 const providerMessage = (error: unknown): string => {
   const failure = failedAttempt(error);
   if (failure instanceof Error) return failure.message;
@@ -138,7 +94,6 @@ const providerMessage = (error: unknown): string => {
   return "Unknown error connecting to the Provider";
 };
 
-/** Whether any custom header value carries the session placeholder to replace. */
 const substitutesSessionId = (headers: ProviderTest["headers"]): boolean =>
   Object.values(headers ?? {}).some(
     (value) =>
@@ -146,12 +101,6 @@ const substitutesSessionId = (headers: ProviderTest["headers"]): boolean =>
       value.includes(SESSION_ID_HEADER_PLACEHOLDER),
   );
 
-/**
- * Probes one of a Provider's models with the form's current values and reports
- * success, or a failure class together with the vendor's message. The model is
- * resolved through the Provider's own model list, exactly as a turn resolves
- * it, so an alias works.
- */
 export const probeProviderConnection = async (
   data: ProviderTest,
 ): Promise<ProviderTestResponse> => {
@@ -160,16 +109,11 @@ export const probeProviderConnection = async (
 
   const concreteModelId = resolveModelId({ modelIds: data.modelIds }, modelId);
   if (!concreteModelId) {
-    // Unreachable from the form, which only sends a card's own id. It is a
-    // malformed request, not a Provider result: nothing was sent, so there is
-    // no vendor message to report and none is invented.
     throw new ValidationError(
       `Model "${modelId}" is not one of this Provider's models.`,
     );
   }
 
-  // A half-filled form can test before it has a Name, which only names the
-  // vendor client in-process; the create rule still applies when one is sent.
   const connection = {
     name: data.name ?? "Provider test",
     providerType: data.providerType,
@@ -193,8 +137,7 @@ export const probeProviderConnection = async (
           prompt: PROVIDER_TEST_PROMPT,
           temperature: 0,
           maxOutputTokens: PROVIDER_TEST_MAX_OUTPUT_TOKENS,
-          // One attempt: the form already shows the failure and inviting a
-          // retry only makes a bad key or URL slower to report.
+          // why: one attempt; a retry only slows reporting a bad key or URL
           maxRetries: 0,
           abortSignal,
         }),

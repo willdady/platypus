@@ -11,11 +11,6 @@ import type { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { migratedPglite } from "../db/migrated-pglite.test-fixtures.ts";
 
-/**
- * The Provider write model against an in-process Postgres built from the
- * shipped migrations (#1611): an update or delete that fails after it has
- * nullified memory embeddings rolls the nullification back with it.
- */
 const { holder } = vi.hoisted(() => ({
   holder: { db: undefined as ReturnType<typeof drizzle> | undefined },
 }));
@@ -39,10 +34,6 @@ const workspaceScope = {
   ctx: { orgId: "org-1", workspaceId: "ws-1" },
 };
 
-/**
- * `ws-1` embeds its memory with Provider `p1`, alongside a second Provider
- * `p2`; Jane has one embedded daily summary there.
- */
 beforeEach(async () => {
   await pg.exec(`
     DROP TRIGGER IF EXISTS race_agent ON "memory_daily_summary";
@@ -66,7 +57,6 @@ beforeEach(async () => {
 });
 
 const UNIQUE_VIOLATION = "23505";
-// ON DELETE RESTRICT reports restrict_violation, not foreign_key_violation.
 const RESTRICT_VIOLATION = "23001";
 
 const embeddings = async () =>
@@ -108,9 +98,6 @@ describe("updateProvider", () => {
 });
 
 describe("deleteProvider", () => {
-  // Stands in for an Agent created concurrently: it lands once the embeddings
-  // are nullified, so the delete trips the agent.provider_id ON DELETE
-  // RESTRICT key after the in-use check has already passed.
   const raceAnAgentIn = () =>
     pg.exec(`
       CREATE OR REPLACE FUNCTION race_agent() RETURNS trigger AS $$
@@ -122,6 +109,13 @@ describe("deleteProvider", () => {
       CREATE TRIGGER race_agent AFTER UPDATE ON "memory_daily_summary"
         FOR EACH STATEMENT EXECUTE FUNCTION race_agent();
     `);
+
+  it("nullifies the Workspace's memory embeddings when the delete succeeds", async () => {
+    await deleteProvider(workspaceScope, "p1");
+
+    expect(await embeddings()).toEqual([null]);
+    expect(await provider("p1")).toEqual([]);
+  });
 
   it("keeps embeddings and the Provider row when the delete fails on an Agent created after the in-use check", async () => {
     await raceAnAgentIn();

@@ -17,30 +17,13 @@ import {
 } from "@platypus/schemas";
 import type { ProviderRow } from "./provider-write.ts";
 
-/**
- * `ConcreteModelId` rather than `string` so a raw `agent.modelId` — which may
- * hold an `alias:` reference the vendor SDK knows nothing about — cannot reach
- * the endpoint. `resolveModelId` is the only way to produce one; the Provider's
- * own pointer-settings go through `pointerSettingModelId` (ADR-0017).
- */
 export interface OpenedProvider {
   languageModel(modelId: ConcreteModelId): LanguageModel;
   embeddingModel?(modelId: ConcreteModelId): EmbeddingModel;
   searchTools?(): Record<string, Tool>;
 }
 
-/**
- * OpenRouter attributes usage to an app via request headers, which is what puts
- * Platypus on its public app pages and rankings. `HTTP-Referer` is the primary
- * identifier — without it OpenRouter creates no app page and does not track the
- * request; title and categories do nothing on their own.
- *
- * These are defaults, not policy: a Provider that sets its own attribution wins
- * outright, so an operator can re-attribute usage to their own deployment or opt
- * out per Provider. There is deliberately no environment variable for this —
- * every other per-Provider knob lives on the Provider row, and env vars here are
- * deploy-time infra.
- */
+// why: no env var; an operator re-attributes or opts out per Provider via its headers
 const OPENROUTER_ATTRIBUTION_HEADERS: Record<string, string> = {
   "HTTP-Referer": "https://github.com/willdady/platypus",
   "X-OpenRouter-Title": "Platypus",
@@ -51,24 +34,10 @@ const ATTRIBUTION_NAMES = Object.keys(OPENROUTER_ATTRIBUTION_HEADERS).map(
   (name) => name.toLowerCase(),
 );
 
-/**
- * What a Provider request is made for, so a Header value can carry a
- * request-scoped placeholder. Every Provider request happens inside a Chat or
- * a headless Trigger run, so a value always exists; `sessionId` is required
- * rather than optional to make a caller without one a type error.
- */
 export type ProviderRequestContext = {
-  /** The Chat's id, or the Trigger run's id for a headless run. */
   sessionId: string;
 };
 
-/**
- * What opening a Provider reads: the connection settings and the identity the
- * vendor SDK is named after. Narrower than the stored row on purpose, so a
- * config a route validated but never stored — the Provider form's unsaved
- * values sent to `/providers/test` — is opened directly, rather than a
- * synthetic row being invented to satisfy a type.
- */
 export type ProviderConnection = Pick<
   ProviderRow,
   "name" | "providerType" | "apiKey" | "apiMode"
@@ -81,14 +50,6 @@ export type ProviderConnection = Pick<
   project?: string | null;
 };
 
-/**
- * A Provider's custom headers with every `${SESSION_ID}` in a **value**
- * replaced. Names are never substituted. A `$` not followed by `{` is sent as
- * written, and Providers with no placeholder are passed through unchanged.
- *
- * `headers` is stored as jsonb and cast, not parsed, on read — a value can be a
- * non-string at runtime despite the type, so only strings are substituted.
- */
 const resolveSessionHeaders = (
   headers: Record<string, string> | null | undefined,
   { sessionId }: ProviderRequestContext,
@@ -104,21 +65,6 @@ const resolveSessionHeaders = (
   );
 };
 
-/**
- * Apply the attribution defaults to a Provider's own headers, all or nothing.
- * The three headers describe one app, so mixing them across two apps names
- * neither: the Platypus title on an operator's referer titles *their* app page
- * "Platypus", and an operator's title on the Platypus referer puts their name on
- * the project's page. So a Provider that sets any of the three supplies all of
- * them, and one that sets none gets all three defaults.
- *
- * Names are matched case-insensitively because HTTP header names are — otherwise
- * an operator's `http-referer` would sit alongside our `HTTP-Referer`.
- *
- * An empty (or whitespace-only) referer is an explicit opt-out: all three
- * attribution headers are dropped, rather than sending a blank referer OpenRouter
- * cannot attribute. The Provider's unrelated headers are untouched either way.
- */
 const withOpenRouterAttribution = (
   headers: Record<string, string> | null | undefined,
 ): Record<string, string> => {
@@ -126,13 +72,6 @@ const withOpenRouterAttribution = (
   const isAttribution = (key: string) =>
     ATTRIBUTION_NAMES.includes(key.toLowerCase());
 
-  // Every casing is checked, not just one: nothing stops an operator writing the
-  // same header twice, and resolving to a single key would let a later
-  // `HTTP-Referer` hide an earlier blank `http-referer` and defeat the opt-out.
-  //
-  // `headers` is stored as jsonb and cast, not parsed, on read — a value can be
-  // a non-string at runtime despite the type. Only a real blank string opts out;
-  // anything else is passed through rather than crashing the call.
   const optedOut = Object.entries(own).some(
     ([key, value]) =>
       key.toLowerCase() === "http-referer" &&
@@ -149,23 +88,11 @@ const withOpenRouterAttribution = (
   return { ...OPENROUTER_ATTRIBUTION_HEADERS, ...own };
 };
 
-/**
- * For a Provider path whose adapter cannot be trusted with a file inside a tool
- * result: the files move into a `user` message after the tool results
- * (ADR-0038). OpenAI on Chat Completions JSON-stringifies them; OpenRouter's
- * `/chat/completions` is unverified for them upstream, and carries files in a
- * `user` message either way.
- */
 const withToolResultFilesMoved = (
   model: Exclude<LanguageModel, string>,
 ): LanguageModel =>
   wrapLanguageModel({ model, middleware: toolResultFilesMiddleware });
 
-/**
- * The `providerOptions` key an OpenAI chat-mode Provider's model reads raw body
- * fields from — `@ai-sdk/openai-compatible` takes the `name` given below up to
- * its first dot. Where a Reasoning map's fragment is sent (ADR-0040).
- */
 export const compatProviderOptionsName = (
   provider: Pick<ProviderRow, "name">,
 ): string => provider.name.replace(/\..*/s, "").trim();
@@ -185,33 +112,13 @@ export const openProvider = (
         project: provider.project ?? undefined,
       });
       const useChatCompletions = provider.apiMode === "chat";
-      // Chat-completions mode is, in practice, only used against self-hosted /
-      // company OpenAI-compatible servers (vLLM, SGLang, llama.cpp, TGI, …) —
-      // real OpenAI is driven via the Responses API. Those servers expose the
-      // model's thinking in a `reasoning_content` field that `@ai-sdk/openai`'s
-      // chat model silently drops. `@ai-sdk/openai-compatible` reads it natively
-      // and emits reasoning stream parts the UI renders as a collapsible block.
-      // Embeddings + native search tools stay on the OpenAI SDK (unaffected).
-      // NOTE: leaving `supportsStructuredOutputs` at its default (false) means a
-      // requested JSON schema is downgraded to plain `json_object` mode; the AI
-      // SDK still validates client-side. Enabling it would send strict
-      // `json_schema` (vLLM guided decoding) but breaks servers lacking support.
       const compat = useChatCompletions
         ? createOpenAICompatible({
             name: provider.name,
-            // Fall back to OpenAI's endpoint when no baseUrl is configured.
-            // `baseUrl` is optional in the schema, so a real-OpenAI provider set
-            // to chat mode arrives here with it empty/undefined — `||` (not `??`)
-            // also catches the empty-string case the form can produce. Without
-            // this the compatible client would target an empty URL and fail.
-            // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- see above
+            // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- the form can send an empty string
             baseURL: provider.baseUrl || "https://api.openai.com/v1",
             apiKey: provider.apiKey,
             headers,
-            // Request `stream_options.include_usage` so streamed responses carry
-            // token usage. Without it the compatible provider omits stream_options
-            // and servers (vLLM/SGLang/…) return no usage on the streaming path,
-            // surfacing as In:0 / Out:0 in the UI. Non-streaming already reports it.
             includeUsage: true,
           })
         : undefined;

@@ -18,16 +18,10 @@ import { afterEach } from "vitest";
 import type { Tool } from "ai";
 import { z } from "zod";
 import type { SandboxBackend } from "@platypuschat/plugin-sdk";
-import { resetStorage } from "../storage/index.ts";
+import { getStorage, resetStorage } from "../storage/index.ts";
 import { mockNanoid } from "../test-setup.ts";
 import { NotFoundError, ValidationError } from "../errors.ts";
 
-/**
- * Skill bundles (ADR-0036) end to end against an in-process Postgres built
- * from the shipped migrations and a real disk StorageBackend in a temp dir:
- * what each write leaves in the database and in storage, and what the
- * model-facing Skill Tools read back.
- */
 const { holder } = vi.hoisted(() => ({
   holder: { db: undefined as ReturnType<typeof drizzle> | undefined },
 }));
@@ -54,10 +48,6 @@ const { createSkillManagementTools } =
 const { parseSkillZip, bundleHash } = await import("./skill-bundle-format.ts");
 const { registerSandboxBackend } = await import("../sandbox/index.ts");
 
-/**
- * An in-memory Sandbox: what the copy left in it, and every write it took.
- * `rm -rf` and `chmod +x` are the only commands it understands.
- */
 const sandboxState = {
   files: new Map<string, string>(),
   executable: new Set<string>(),
@@ -70,7 +60,6 @@ const quotedArgs = (command: string) =>
     m[1].replaceAll("'\\''", "'"),
   );
 const fakeSandbox = (): SandboxBackend => {
-  // Async, as a real backend's calls are: a stopped Sandbox rejects.
   const guard = () =>
     sandboxState.failing
       ? Promise.reject(new Error("sandbox stopped"))
@@ -128,7 +117,6 @@ const fakeSandbox = (): SandboxBackend => {
 
 let pg: PGlite;
 beforeAll(async () => {
-  // Every stored file needs its own key, so the suite-wide fixed id won't do.
   const actual = await vi.importActual<typeof import("nanoid")>("nanoid");
   mockNanoid.mockImplementation(actual.nanoid);
   pg = await migratedPglite();
@@ -143,8 +131,6 @@ beforeAll(async () => {
 }, 60_000);
 afterAll(() => pg.close());
 
-// Not `test-utils.ts`: importing it installs its own mocks of `../index.ts`
-// and `drizzle-orm` over the PGlite this suite runs against.
 beforeEach(async () => {
   process.env.STORAGE_DISK_PATH = await fs.mkdtemp(
     path.join(os.tmpdir(), "platypus-skill-bundle-test-"),
@@ -216,7 +202,6 @@ const pdfZip = (name = "pdf") =>
     "pdf/big.txt": strToU8("x".repeat(1024 * 1024 + 1)),
   });
 
-/** Every object stored under `prefix`, as relative paths. */
 const storedUnder = async (prefix: string): Promise<string[]> => {
   try {
     const entries = await fs.readdir(
@@ -260,6 +245,25 @@ describe("importSkillBundle", () => {
     });
     expect(await rowCounts()).toEqual({ skills: 1, files: 7 });
     expect(await storedUnder(skillPrefix(row.id))).toHaveLength(7);
+  });
+
+  it("stores every file as application/octet-stream, whatever its extension", async () => {
+    const row = await importSkillBundle(
+      wsScope,
+      zipSync({
+        "pdf/SKILL.md": skillMd("pdf"),
+        "pdf/page.html": strToU8("<script>alert(1)</script>"),
+      }),
+    );
+    const { rows } = await pg.query<{ storage_key: string }>(
+      `SELECT storage_key FROM "skill_file" WHERE skill_id = $1`,
+      [row.id],
+    );
+
+    expect(rows).toHaveLength(1);
+    expect((await getStorage().get(rows[0].storage_key))?.contentType).toBe(
+      "application/octet-stream",
+    );
   });
 
   it("reads every text file back by its bundle path", async () => {
@@ -381,7 +385,6 @@ describe("replaceSkillBundle", () => {
   });
 });
 
-/** The upload ids a Skill has files stored under. */
 const storedUploads = async (skillId: string) =>
   fs
     .readdir(path.join(process.env.STORAGE_DISK_PATH!, skillPrefix(skillId)))

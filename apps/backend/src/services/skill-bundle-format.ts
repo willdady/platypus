@@ -5,25 +5,13 @@ import { skillBaseSchema } from "@platypus/schemas";
 import { ValidationError } from "../errors.ts";
 import { isRecord } from "../utils/is-record.ts";
 
-/**
- * The on-the-wire shape of a Skill bundle (ADR-0036): reading an uploaded zip
- * into validated fields, preserved frontmatter and files, and writing one back
- * out. Pure — no database, no storage — so every rule here is checked before
- * anything is written.
- */
-
 const MiB = 1024 * 1024;
 
-/** The largest zip a request may carry. */
 export const SKILL_ZIP_MAX_BYTES = 10 * MiB;
-/** The most a bundle may decompress to, counted from the bytes actually inflated. */
 export const SKILL_BUNDLE_MAX_UNPACKED_BYTES = 25 * MiB;
-/** The most entries a zip may list, directories included. */
 export const SKILL_BUNDLE_MAX_ENTRIES = 500;
-/** The largest frontmatter block `SKILL.md` may open with. */
 export const SKILL_FRONTMATTER_MAX_BYTES = 16 * 1024;
 
-/** The `SKILL.md` frontmatter keys stored as columns rather than kept as-is. */
 const MAPPED_KEYS = {
   name: "name",
   description: "description",
@@ -49,23 +37,14 @@ export type SkillBundleFile = {
 
 export type ParsedSkillBundle = {
   fields: SkillBundleFields;
-  /** Every frontmatter key not mapped to a column, kept as-is. */
   frontmatter: Record<string, unknown>;
-  /** Every file but `SKILL.md`, at its bundle-root-relative path. */
   files: SkillBundleFile[];
 };
 
-// Annotated on the binding so a `fail(…)` call narrows like a `throw`.
 const fail: (message: string) => never = (message) => {
   throw new ValidationError(message);
 };
 
-/**
- * A bundle path in its one canonical form: empty and `.` segments dropped.
- * Rejects what could name something outside the bundle — absolute paths, `..`,
- * backslashes — rather than repairing it. Shared with `readSkillFile`, so the
- * model addresses a file by the same path the import stored it under.
- */
 export const normaliseBundlePath = (raw: string): string => {
   if (raw.includes("\0")) fail(`Path contains a NUL character: ${raw}`);
   if (raw.includes("\\")) fail(`Path contains a backslash: ${raw}`);
@@ -79,7 +58,6 @@ export const normaliseBundlePath = (raw: string): string => {
 
 const utf8 = new TextDecoder("utf-8", { fatal: true });
 
-/** Text is decided by content, never extension: no NUL in the first 8 KB, and strict UTF-8. */
 export const isTextContent = (bytes: Uint8Array): boolean => {
   if (bytes.subarray(0, 8192).includes(0)) return false;
   try {
@@ -93,12 +71,6 @@ export const isTextContent = (bytes: Uint8Array): boolean => {
 export const sha256Hex = (data: Uint8Array | string): string =>
   crypto.createHash("sha256").update(data).digest("hex");
 
-/**
- * One entry as a zip's central directory lists it, its bytes still
- * compressed. The central directory is the only place a zip records that an
- * entry is a symlink, so entries are read from it, never from the local
- * headers alone.
- */
 export type ZipRecord = {
   name: string;
   isDirectory: boolean;
@@ -108,10 +80,6 @@ export type ZipRecord = {
   raw: Uint8Array;
 };
 
-/**
- * Lists a zip's entries from its central directory, refusing more than
- * `maxEntries` before reading any. Nothing is decompressed here.
- */
 export const listZipRecords = (
   zip: Uint8Array,
   maxEntries = Infinity,
@@ -181,13 +149,6 @@ export const listZipRecords = (
   return records;
 };
 
-/**
- * Decompresses one entry, counting the bytes actually inflated against
- * `budget`, shared across the entries of one bundle; `overflow` is the
- * message when it runs out. The sizes a zip declares are never trusted: input
- * is fed to the inflater in small chunks, so even a maximal-ratio entry
- * overshoots the cap by at most about a megabyte before it is refused.
- */
 export const inflateZipRecord = (
   record: ZipRecord,
   budget: { left: number },
@@ -227,7 +188,6 @@ export const inflateZipRecord = (
   return data;
 };
 
-/** Reads every entry's bytes out of an uploaded zip, against the bundle caps. */
 const readZipEntries = (zip: Uint8Array): SkillBundleEntry[] => {
   const budget = { left: SKILL_BUNDLE_MAX_UNPACKED_BYTES };
   const overflow = `Zip unpacks to more than ${SKILL_BUNDLE_MAX_UNPACKED_BYTES / MiB} MiB`;
@@ -241,11 +201,6 @@ const readZipEntries = (zip: Uint8Array): SkillBundleEntry[] => {
   return entries;
 };
 
-/**
- * Splits `SKILL.md` into its frontmatter YAML and the body that follows it,
- * trimmed: the blank lines authors leave after the closing fence are layout,
- * not instructions.
- */
 const splitFrontmatter = (text: string): { yaml: string; body: string } => {
   const lines = text.replace(/^\uFEFF/, "").split("\n");
   const isFence = (line: string | undefined) => line?.trimEnd() === "---";
@@ -289,7 +244,6 @@ const parseSkillMd = (
       linePos?: [{ line: number }];
       message: string;
     };
-    // The YAML starts on SKILL.md's second line, after the opening fence.
     const where = linePos ? ` at line ${linePos[0].line + 1}` : "";
     fail(`Frontmatter is not valid YAML${where}: ${message.split("\n")[0]}`);
   }
@@ -333,22 +287,12 @@ const parseSkillMd = (
 const isIgnored = (path: string) =>
   path.split("/")[0] === "__MACOSX" || path.split("/").at(-1) === ".DS_Store";
 
-/** One file of a bundle as it arrives, before any rule is checked. */
 export type SkillBundleEntry = {
   path: string;
   bytes: Uint8Array;
   isSymlink: boolean;
 };
 
-/**
- * Validates a bundle's files, whatever they arrived in — an uploaded zip, or
- * a Skill's directory in a GitHub archive. Every rule is checked before the
- * caller writes anything, and any violation throws a `ValidationError` (400)
- * naming the rule — nothing is truncated, coerced or repaired, beyond trimming
- * the whitespace around the `SKILL.md` body. `SKILL.md` sits at the root, or
- * inside exactly one top-level directory that is stripped; the directory's
- * name is ignored, the frontmatter names the Skill.
- */
 export const validateSkillBundle = (
   entries: SkillBundleEntry[],
 ): ParsedSkillBundle => {
@@ -407,11 +351,9 @@ export const validateSkillBundle = (
   return { ...parseSkillMd(skillMd), files: bundled };
 };
 
-/** Parses and validates an uploaded Skill zip. See `validateSkillBundle`. */
 export const parseSkillZip = (zip: Uint8Array): ParsedSkillBundle =>
   validateSkillBundle(readZipEntries(zip));
 
-/** JSON with object keys sorted, so a jsonb round-trip cannot change a hash. */
 const canonicalJson = (value: unknown): string => {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
   if (value && typeof value === "object") {
@@ -426,11 +368,6 @@ const canonicalJson = (value: unknown): string => {
   return JSON.stringify(value);
 };
 
-/**
- * A hash over the stored content: the mapped fields, the preserved
- * frontmatter, the body, and each file's path and sha256. Scope and ids are
- * not content, so promoting a Skill leaves its hash alone.
- */
 export const bundleHash = (bundle: {
   fields: SkillBundleFields;
   frontmatter: Record<string, unknown>;
@@ -446,11 +383,6 @@ export const bundleHash = (bundle: {
     }),
   );
 
-/**
- * The zip an export downloads: `<name>/SKILL.md`, its frontmatter rebuilt from
- * the columns plus the preserved keys, and every other file at its stored path.
- * Re-importing it gives the same bundle hash.
- */
 export const buildSkillZip = (bundle: {
   fields: SkillBundleFields;
   frontmatter: Record<string, unknown>;
@@ -465,7 +397,6 @@ export const buildSkillZip = (bundle: {
   return zipSync(entries);
 };
 
-/** `SKILL.md` as an export writes it: frontmatter rebuilt, then the body. */
 export const buildSkillMd = (bundle: {
   fields: SkillBundleFields;
   frontmatter: Record<string, unknown>;
@@ -482,15 +413,9 @@ export const buildSkillMd = (bundle: {
   return `---\n${yaml}---\n${body}`;
 };
 
-/** Whether a file's first line starts with `#!`. */
 export const startsWithShebang = (data: Uint8Array): boolean =>
   data[0] === 0x23 && data[1] === 0x21;
 
-/**
- * Whether a bundle holds anything only a Sandbox can use: a file under
- * `scripts/`, a text file starting with `#!`, or a binary file. Decided from
- * content, never from extensions.
- */
 export const bundleNeedsSandbox = (files: SkillBundleFile[]): boolean =>
   files.some(
     (file) =>

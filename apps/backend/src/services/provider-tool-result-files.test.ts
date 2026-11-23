@@ -6,11 +6,6 @@ import { makeProviderRow } from "./provider-row.test-fixtures.ts";
 import { openProvider } from "./provider.ts";
 import { MOVED_FILE_PLACEHOLDER } from "./tool-result-files.ts";
 
-/**
- * Which Provider paths move tool-result files into a `user` message, observed
- * on the request body each real SDK would send.
- */
-
 const provider = (overrides: Partial<ProviderRow>): ProviderRow =>
   makeProviderRow({
     id: "p1",
@@ -28,7 +23,6 @@ const provider = (overrides: Partial<ProviderRow>): ProviderRow =>
     ...overrides,
   });
 
-/** The body the model would POST for a prompt holding one tool-result file. */
 const requestBody = async (p: ProviderRow): Promise<string> => {
   let body = "";
   vi.stubGlobal(
