@@ -22,6 +22,7 @@ import { CLEARED_TOOL_RESULT_MARKER } from "@platypus/schemas";
 import type { ModelMessage } from "ai";
 import { ANSWER_STEP_INSTRUCTION } from "./answer-step.ts";
 import type { RunPlan } from "./run-plan.ts";
+import { TEST_USAGE_MODEL } from "./run-plan.test-fixtures.ts";
 import {
   currentCausingAgents,
   withCausation,
@@ -131,12 +132,14 @@ const startRecordedRun = (timeouts?: {
 
 const planOf = (model: MockLanguageModelV3) => ({
   model,
+  usageModel: TEST_USAGE_MODEL,
   tools: {},
   maxSteps: 3,
 });
 
 const stuckPlanOf = (model: MockLanguageModelV3) => ({
   model,
+  usageModel: TEST_USAGE_MODEL,
   tools: {
     [STUCK_TOOL]: {
       inputSchema: z.object({}),
@@ -155,6 +158,7 @@ const causationProbePlan = (model: MockLanguageModelV3) => {
   const seen: AgentChain[] = [];
   const plan = {
     model,
+    usageModel: TEST_USAGE_MODEL,
     maxSteps: 5,
     tools: {
       probe: {
@@ -294,12 +298,15 @@ describe("driveOnce", () => {
       outputTokens: 8,
       contextOccupancy: 10,
     });
-    expect(outcome[0].stats).toEqual(stats);
+    expect(outcome[0].stats).toEqual({
+      ...stats,
+      usageByModel: [{ ...TEST_USAGE_MODEL, inputTokens: 20, outputTokens: 8 }],
+    });
   });
 
   it("reports the same statistics a streamed drive accumulates", async () => {
     const headless = startRecordedRun();
-    const { stats } = await driveOnce({
+    await driveOnce({
       plan: stuckPlanOf(streamingToolThenStopModel()),
       run: headless.run,
       prompt: "hi",
@@ -315,7 +322,7 @@ describe("driveOnce", () => {
     for await (const _ of drive.snapshots) void _;
     await drive.done;
 
-    expect(streamed.outcome[0].stats).toEqual(stats);
+    expect(streamed.outcome[0].stats).toEqual(headless.outcome[0].stats);
   });
 
   it("records the output ceiling cutoff on the run's stats", async () => {
@@ -930,6 +937,7 @@ describe("the Step ceiling's answer step", () => {
 
   const toolLoopPlan = (model: MockLanguageModelV3, maxSteps = 3): RunPlan => ({
     model,
+    usageModel: TEST_USAGE_MODEL,
     tools: {
       [STUCK_TOOL]: {
         inputSchema: z.object({ n: z.number().optional() }),
@@ -1207,6 +1215,7 @@ describe("Tool-result clearing inheritance", () => {
 
   const clearingPlanOf = (model: MockLanguageModelV3) => ({
     model,
+    usageModel: TEST_USAGE_MODEL,
     tools: {},
     maxSteps: 3,
     contextWindow: 100,
@@ -1340,6 +1349,7 @@ describe("driveOnce run events", () => {
 
     await driveOnce({
       plan: {
+        usageModel: TEST_USAGE_MODEL,
         model: reasonToolThenText(),
         tools: toolsOf(async () => {
           await sleep(20);
@@ -1372,6 +1382,7 @@ describe("driveOnce run events", () => {
 
     await driveOnce({
       plan: {
+        usageModel: TEST_USAGE_MODEL,
         model: reasonToolThenText(),
         tools: toolsOf(() => Promise.resolve("SECRET-OUTPUT".repeat(2000))),
         maxSteps: 3,
@@ -1405,6 +1416,7 @@ describe("driveOnce run events", () => {
 
     await driveOnce({
       plan: {
+        usageModel: TEST_USAGE_MODEL,
         model,
         tools: toolsOf(async () => {
           await sleep(10);
@@ -1430,6 +1442,7 @@ describe("driveOnce run events", () => {
 
     await driveOnce({
       plan: {
+        usageModel: TEST_USAGE_MODEL,
         model: reasonToolThenText(),
         tools: toolsOf(() => Promise.reject(new Error("upstream 503"))),
         maxSteps: 3,
@@ -1458,6 +1471,7 @@ describe("driveOnce run events", () => {
       driveOnce({
         plan: {
           model,
+          usageModel: TEST_USAGE_MODEL,
           tools: toolsOf(() => Promise.resolve("ok")),
           maxSteps: 3,
         },

@@ -24,7 +24,7 @@ export const ABORT_GRACE_MS = 5_000;
 export type RunLifecycle = {
   handle: RunHandle;
   readonly stats: RunStats;
-  setUsageModel: (model: UsageModel | undefined) => void;
+  setUsageModel: (model: UsageModel) => void;
   setDelegateUsage: (delegateRunId: RunId, stats: RunStats) => void;
   delegatedUsage: () => readonly ModelUsage[];
   setStats: (next: RunStats) => void;
@@ -51,6 +51,7 @@ export const startRun = (params: {
   const { runId, onTerminate } = params;
   const logFields = { runId, ...params.log };
   let stats: RunStats = {};
+  // why: a run can terminate before its model loop starts, so none is known yet
   let usageModel: UsageModel | undefined;
   let ownUsage: ModelUsage[] = [];
   let delegated: ModelUsage[] = [];
