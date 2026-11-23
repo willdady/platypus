@@ -18,12 +18,6 @@ import {
 } from "../db/schema.ts";
 import { getStorage } from "../storage/index.ts";
 
-/**
- * The cron claim and the NULL-schedule repair run for real against an
- * in-process Postgres built from the shipped migrations: the behaviour lives in
- * conditional updates, so they are what is exercised. Only the run itself
- * (`fireTrigger`) is stubbed.
- */
 const { holder, mockFireTrigger } = vi.hoisted(() => {
   const holder: { db?: ReturnType<typeof drizzle> } = {};
   return { holder, mockFireTrigger: vi.fn() };
@@ -52,9 +46,6 @@ let pg: PGlite;
 let db: ReturnType<typeof drizzle>;
 beforeAll(async () => {
   pg = await migratedPglite();
-  // The Triggers' Workspace and Agent are beside the point; skip the FKs. The
-  // Workspace row itself is read for the Organization a reaped run's Chat
-  // prefix sits under.
   await pg.exec(`
     SET session_replication_role = replica;
     INSERT INTO "user" ("id", "name", "email", "email_verified", "created_at", "updated_at")
@@ -116,7 +107,6 @@ const firedIds = () =>
 
 describe("processDueTriggers", () => {
   it("claims the oldest due Triggers up to the limit, writing each one's next slot", async () => {
-    // Newest first, so a claim that ignored age would take the wrong five.
     for (let i = 9; i >= 0; i--) {
       await seedTrigger(`t${i}`, { nextRunAt: minutesAgo(10 - i) });
     }
@@ -129,7 +119,6 @@ describe("processDueTriggers", () => {
         new Date("2026-08-30T13:00:00.000Z"),
       );
     }
-    // Waiting is not skipping: the rest are untouched, and still due.
     for (let i = 5; i < 10; i++) {
       expect((await row(`t${i}`)).nextRunAt).toEqual(minutesAgo(10 - i));
     }
@@ -200,7 +189,6 @@ describe("processDueTriggers", () => {
 
     await processDueTriggers();
 
-    // One running run leaves four slots; the skip spends none of them.
     expect(firedIds()).toEqual(["t0", "t1", "t2", "t3"]);
     expect((await row("overlap")).nextRunAt).toEqual(
       new Date("2026-08-30T13:00:00.000Z"),
@@ -226,9 +214,6 @@ describe("processDueTriggers", () => {
     );
   });
 
-  // PGlite serialises the two ticks' queries, so this pins that the second
-  // tick's claim no longer matches once the first has run, not true overlap;
-  // under real concurrency the row lock on the conditional update does that.
   it("fires a Trigger once when two ticks race for it", async () => {
     await seedTrigger("t1");
 
@@ -280,8 +265,6 @@ describe("recoverStuckTriggers", () => {
 
     await recoverStuckTriggers();
 
-    // The NULL-schedule repair is a one-off data step at upgrade
-    // (`scripts/backfill-trigger-next-run.ts`), not a runtime branch.
     expect((await row("crashed")).nextRunAt).toBeNull();
   });
 });
@@ -319,7 +302,6 @@ describe("reapFiredOneOffTriggers", () => {
 
     await reapFiredOneOffTriggers();
 
-    // The runs go by the FK cascade, which this fixture's replica mode skips.
     expect(await remaining()).toEqual(["recent"]);
   });
 

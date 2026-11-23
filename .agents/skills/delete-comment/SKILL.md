@@ -1,0 +1,33 @@
+---
+name: delete-comment
+description: Burn down the comment baseline in apps/backend. Classifies each comment in a scope, deletes them all, files Excuses as issues and moves Decision Records into an ADR.
+disable-model-invocation: true
+---
+
+# Delete comments
+
+Comments are banned in `apps/backend` (`local/no-comments` in `apps/backend/eslint.config.mjs`). `apps/backend/comment-baseline.json` lists how many comments each file still has. The rule fails when a file has more comments than its baseline allows, and also when it has fewer, so a baseline only ever moves down. Two kinds of comment are not counted and stay: directives (`eslint-disable`, `@ts-expect-error`, `prettier-ignore`, `///`), and a single-line `// why: …` that keeps a local, non-obvious warning beside the code it protects.
+
+The argument is the scope: a directory or file under `apps/backend`. With no argument, take the smallest directory still listed in the baseline.
+
+## Steps
+
+1. **List the comments.** Read every file in scope in full: a comment can only be classified next to its code. Done when every comment counted for the scope in the baseline has been read.
+2. **Classify each comment** as exactly one of:
+   - **Tautology.** Restates what the code, a name or a test already says.
+   - **Stale.** Names a file, function, issue or behaviour that no longer exists or no longer matches the code, or tells history ("used to", "since #N"). Check that the referenced thing really is gone before you call it Stale.
+   - **Excuse.** Justifies a shortcut: production code shaped for a fixture, a global mock, a test seam, a "for now", a disabled constraint. Verify the shortcut against the code (a FK, a caller, the schema) before you call it an Excuse.
+   - **Decision Record.** A non-obvious why that someone would otherwise "fix": an ordering dependency, a cross-instance safety argument, an option that was rejected.
+3. **Record Decision Records**, picking the first option that holds:
+   1. **A test.** If a test already pins the behaviour, or one cheaply could, the test is the record and the comment is deleted. Add the test if it's missing.
+   2. **An ADR**, when the decision spans more than one module and passes the "when to offer an ADR" test in `.agents/skills/domain-modeling/ADR-FORMAT.md`.
+   3. **A `// why:` one-liner**, when the warning is local to one function. Rewrite the comment as a single line, at most about 100 characters, that states the constraint and not its history (`// why: same value on every instance, or a peer's live run is failed`).
+
+   For an ADR, write one per topic, not one per comment, following `docs/adr/README.md`. First check that no existing ADR already holds the decision (`grep -ril <keyword> docs/adr`); if one does, reference it or append to it under that README's amending rules. Write the decision as it stands today; leave history out.
+
+4. **Draft Excuse issues.** Write a draft issue per shortcut (several comments about one hack make one issue) to the scratchpad, never straight to GitHub: a title as a Conventional Commit subject, `file:line` of the shortcut, why it is a hack, and the fix. First check for an existing issue (`gh issue list --search`). Show the drafts to the user and file only the ones they approve, with the label `ready-for-agent`. A security-relevant Excuse goes to the user privately and never into a public issue.
+5. **Delete.** From `apps/backend`, run `node ../../.agents/skills/delete-comment/strip-comments.mjs <file>` for each file, then `pnpm exec prettier --write <scope>`. Add line numbers after the file to delete only the comments starting on those lines.
+6. **Ratchet.** For each file, set its baseline to the new count, or delete its entry when the count is 0. `pnpm --filter @platypus/backend lint` reports each stale entry and its new count.
+7. **Verify.** Run `pnpm --filter @platypus/backend lint`, `typecheck` and `test` for the scope. All must pass, and `git diff` must show nothing removed except comments.
+
+Report back: the count per category, the ADR(s), the drafted issues, and the comment-only lines removed.

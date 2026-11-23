@@ -2,14 +2,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { type SQL } from "drizzle-orm";
 
-/**
- * Unlike most backend tests, this file does NOT import `../test-utils.ts`:
- * that module mocks `drizzle-orm` itself, which would replace `and`/`isNull`
- * with spies and leave nothing to render. The stuck-Chat sweep's whole
- * behaviour lives in the predicate it hands Postgres, so the test keeps
- * drizzle real and renders the query instead.
- */
-
 const {
   mockDb,
   mockFireTrigger,
@@ -66,13 +58,6 @@ const dialect = new PgDialect();
 
 type Captured = { table: unknown; set: Record<string, unknown>; where?: SQL };
 
-/**
- * Records every update chain in order. A sweep's update ends in
- * `.returning()`; the event update and the claim are awaited straight off
- * `.where()`, so the object `where` hands back is both thenable and has
- * `returning`. `selected` is what every `select` resolves to, its predicates
- * recorded in `selects`.
- */
 const captureUpdates = (
   returning: unknown[],
   selected: unknown[] = [],
@@ -108,7 +93,6 @@ const captureUpdates = (
   return { updates, selects };
 };
 
-/** The rendered SQL + bound parameters of a where clause. */
 const render = (predicate: SQL | undefined) => {
   if (!predicate) throw new Error("No where clause was captured");
   return dialect.sqlToQuery(predicate);
@@ -119,21 +103,9 @@ type FakeClient = {
   release: ReturnType<typeof vi.fn>;
 };
 
-/**
- * A stand-in for the node-postgres Pool behind `db`, modelling the one fact
- * the scheduler lock depends on: an advisory lock belongs to the connection
- * that took it, and only that connection can release it. `connect()` checks
- * out a dedicated connection; `db.execute` lands on whichever idle pooled
- * connection comes next, as a real pool's does.
- *
- * `held` maps a lock ID to the connection holding it. A lock still in it after
- * the scheduler's tick returns is one no peer can take until pg-pool closes that
- * connection.
- */
 const fakePg = ({ roundTripMs = 0 }: { roundTripMs?: number } = {}) => {
   const held = new Map<number, number>();
   const checkedOut: FakeClient[] = [];
-  // Connections 0 and 1 sit idle in the pool; `connect()` opens 2 onwards.
   const idle = [0, 1];
   let nextId = 2;
   let nextIdle = 0;
@@ -188,8 +160,6 @@ describe("stuckTriggerCutoff", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-30T12:00:00.000Z"));
 
-    // 60 min per-run timeout + 5 min buffer = 65 min — not the registry's
-    // 10-minute fallback, which would fail live Trigger runs at 15.
     expect(stuckTriggerCutoff().toISOString()).toBe("2026-08-30T10:55:00.000Z");
   });
 
@@ -198,7 +168,6 @@ describe("stuckTriggerCutoff", () => {
     vi.setSystemTime(new Date("2026-08-30T12:00:00.000Z"));
     process.env.TRIGGER_PER_RUN_TIMEOUT_MS = String(2 * 60 * 60 * 1000);
 
-    // 120 min per-run timeout + 5 min buffer = 125 min.
     expect(stuckTriggerCutoff().toISOString()).toBe("2026-08-30T09:55:00.000Z");
   });
 });
@@ -223,17 +192,10 @@ describe("recoverStuckChats", () => {
     expect(captured.table).toBe(chatTable);
     expect(captured.set).toMatchObject({ status: "failed" });
 
-    // The whole predicate, pinned exactly. Asserting the rendered string
-    // rather than fragments of it is what makes this a real test: it fails
-    // if the comparison flips direction (a `>` would sweep every live turn
-    // and spare every dead one), if the anchor moves off the heartbeat, or if
-    // the `running` guard is dropped.
     const { sql: text, params } = render(captured.where);
     expect(text).toBe(
       `("chat"."status" = $1 and "chat"."run_heartbeat_at" < $2)`,
     );
-    // 12:00 − one minute: four missed 15-second heartbeats, whatever the
-    // Chat per-run timeout.
     expect(params).toEqual(["running", "2026-08-30T11:59:00.000Z"]);
   });
 
@@ -270,11 +232,6 @@ describe("recoverStuckChats", () => {
   });
 });
 
-/**
- * The Trigger sweep's half of "no terminal run leaves an open event" (#647).
- * Rendered the same way as the Chat sweep above: the behaviour is the
- * predicate, so the predicate is what is pinned.
- */
 describe("recoverStuckTriggers", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -305,9 +262,6 @@ describe("recoverStuckTriggers", () => {
       `(("trigger_run"."status" = $1 and "trigger_run"."started_at" < $2) or ` +
         `("trigger_run"."status" = $3 and "trigger_run"."started_at" < $4))`,
     );
-    // `running`: 12:00 − (90 min + 5 min buffer). `pending` is an Inbound
-    // Trigger run whose process died between accepting the call and starting
-    // it: it never started, so no per-run timeout applies — 12:00 − 5 min.
     expect(params).toEqual([
       "running",
       "2026-08-30T10:25:00.000Z",
@@ -329,8 +283,6 @@ describe("recoverStuckTriggers", () => {
       triggerRunEventTable,
     ]);
     const events = updates[1];
-    // Status only. A duration would claim to know when the event ended, and
-    // the whole point of this path is that nobody does.
     expect(events.set).toEqual({ status: "error" });
     const { sql: text, params } = render(events.where);
     expect(text).toBe(
@@ -415,7 +367,6 @@ describe("scheduleAligned", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
-    // 20s past the minute: the next boundary is 40s away, not 60.
     vi.setSystemTime(new Date("2026-08-30T12:00:20.000Z"));
   });
 
@@ -423,7 +374,6 @@ describe("scheduleAligned", () => {
     vi.useRealTimers();
   });
 
-  /** A job that takes a few ms, as any real one does. */
   const takesTime = () => new Promise<void>((r) => setTimeout(r, 5));
 
   it("fires on the next wall-clock boundary rather than an interval after boot", async () => {
@@ -477,7 +427,6 @@ describe("scheduleAligned", () => {
     expect(job).toHaveBeenCalledTimes(1);
 
     stop();
-    // The pending boundary tick is cleared, and no later one is scheduled.
     await vi.advanceTimersByTimeAsync(10 * 60_000);
     expect(job).toHaveBeenCalledTimes(1);
   });
@@ -491,18 +440,12 @@ describe("scheduleAligned", () => {
     await vi.advanceTimersByTimeAsync(40_000);
     expect(job).toHaveBeenCalledTimes(1);
 
-    // Stop while the job is still running; it finishes but schedules nothing.
     stop();
     await vi.advanceTimersByTimeAsync(60_000);
     expect(job).toHaveBeenCalledTimes(1);
   });
 });
 
-/**
- * Every query a tick makes, answered by `answer` from the table it reads or
- * writes. A select's `fields` tell the running-run count apart, and `orderBy`
- * tells the due-Trigger read apart from the recovery sweep's.
- */
 type Query = {
   op: "select" | "update";
   table: unknown;
@@ -537,10 +480,6 @@ const tickDb = (answer: (q: Query) => unknown[]) => {
   );
 };
 
-/**
- * Scheduler ticks, end to end through the lock: both sweeps, then the due
- * cron Triggers.
- */
 describe("startScheduler", () => {
   const weekly = {
     id: "weekly",
@@ -554,7 +493,6 @@ describe("startScheduler", () => {
     vi.clearAllMocks();
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-31T08:59:59.000Z"));
-    // Each round trip takes a few ms, as a real one does.
     pg = fakePg({ roundTripMs: 5 });
   });
 
@@ -564,7 +502,6 @@ describe("startScheduler", () => {
 
   let pg: ReturnType<typeof fakePg>;
 
-  /** The 09:00 tick finds `weekly` due and claims it; later ticks find none. */
   const weeklyDueOnce = (onQuery: (q: Query) => void = () => {}) => {
     let claimed = false;
     tickDb((q) => {
@@ -579,9 +516,6 @@ describe("startScheduler", () => {
     });
   };
 
-  // #1158: the tick used to await every run it started while holding the
-  // lock, so one long Cron run stopped both sweeps, on every instance, until
-  // it ended.
   it("sweeps on every tick, on any instance, while a 45-minute Cron run is going", async () => {
     const sweepTimes: string[] = [];
     weeklyDueOnce((q) => {
@@ -594,15 +528,14 @@ describe("startScheduler", () => {
         new Promise((resolve) => setTimeout(() => resolve("ran"), 45 * 60_000)),
     );
 
-    startScheduler(); // backend instance A
-    startScheduler(); // backend instance B, sharing the database lock
+    startScheduler();
+    startScheduler();
 
-    await vi.advanceTimersByTimeAsync(1_050); // through the 09:00 tick
+    await vi.advanceTimersByTimeAsync(1_050);
     expect(mockFireTrigger).toHaveBeenCalledTimes(1);
     expect(sweepTimes).toEqual(["09:00"]);
 
-    await vi.advanceTimersByTimeAsync(30 * 60_000); // to 09:30
-    // One sweep a minute: whichever instance wins each tick runs it.
+    await vi.advanceTimersByTimeAsync(30 * 60_000);
     expect(sweepTimes).toEqual(
       Array.from({ length: 31 }, (_, i) => `09:${String(i).padStart(2, "0")}`),
     );
