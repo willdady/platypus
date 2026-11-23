@@ -6,17 +6,6 @@ import {
   type Database,
 } from "./authorization.ts";
 
-/**
- * The Drizzle stand-in these tests query: `seedDb()` from `test-utils.ts`, the
- * one fake executor the suite shares, seeded with the two tables
- * {@link resolveOrgMembership} and {@link resolveWorkspaceAccess} read, under
- * the Postgres names it keys rows by.
- *
- * Unlike the chainable `mockDb` — whose `.where()` throws its argument away —
- * this executor interprets the condition a query builds, so a query that
- * dropped a column from its `and(...)` (e.g. matching on `userId` alone)
- * filters the fixture rows incorrectly and the test fails.
- */
 const fakeDb = (tables: { organizationMember: Row[]; workspace: Row[] }) =>
   seedDb({
     organization_member: tables.organizationMember,
@@ -52,7 +41,6 @@ describe("resolveOrgMembership", () => {
   });
 
   it("denies not-a-member when no membership row matches both userId and organizationId", async () => {
-    // Same user, different org — a query keyed on userId alone would wrongly match this.
     const db = fakeDb({
       organizationMember: [
         { user_id: "u1", organization_id: "org-2", role: "member" },
@@ -142,9 +130,6 @@ describe("resolveWorkspaceAccess", () => {
   });
 
   it("denies cross-org when the workspace belongs to a different organization", async () => {
-    // Fixture rows carry camelCase keys, matching what a real Drizzle result
-    // row looks like — `resolveWorkspaceAccess` reads `ws.organizationId` /
-    // `ws.ownerId` directly, unlike the eq()/and() filtering above.
     const db = fakeDb({
       organizationMember: [],
       workspace: [{ id: "ws-1", organizationId: "org-2", ownerId: "u1" }],
