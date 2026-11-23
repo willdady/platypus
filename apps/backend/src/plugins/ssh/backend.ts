@@ -30,63 +30,23 @@ import {
 } from "../../sandbox/transport.ts";
 import type { SandboxBackend, SandboxContext } from "../../sandbox/types.ts";
 
-// The SSH reference Sandbox adapter (ADR-0012). Attaches to a pre-existing,
-// operator-owned host over SSH (public-key auth only) and supplies the
-// transport core builds the fixed tool core on.
-//
-// Commands run over the `exec` channel and files over the SFTP subsystem — the
-// faithful analogue of Docker's `putArchive` writes: literal paths, no
-// shell-injection surface, native `wx`=create / `w`=overwrite. `exec` is the
-// one place a shell is involved, because a login shell always is; every argv
-// element and every interpolated value is single-quoted there, which is what
-// lets core hand this transport an unescaped argv like any other.
-//
-// The adapter never provisions or destroys the machine.
-
 const DEFAULT_SSH_PORT = 22;
-// rootDir default (ADR-0012): resolved to `$HOME/platypus-workspace` on the host
-// at connect time. SFTP does not expand `~`, so $HOME is resolved once per
-// connection and the physical root is absolute.
 const DEFAULT_ROOT_DIR_NAME = "platypus-workspace";
 
-// Self-managed connection lifecycle (ADR-0012): a single connection is reused
-// across all tool calls within a Chat turn, closed by core at turn end through
-// `close()`, and by this idle reaper after inactivity as a backstop. Inactivity
-// means nothing in flight — the reaper never fires under a running command or
-// SFTP transfer. The timer is `unref()`'d so it never keeps the process alive.
 const IDLE_TIMEOUT_MS = 60_000;
 
-// Reported for a command whose channel closed without an exit status — the
-// connection under it dropped, so the command's outcome is unknown. 255 is what
-// OpenSSH's own client exits with when the connection fails, and anything but 0
-// keeps a cut-off build from reading as a success.
 const LOST_EXIT_CODE = 255;
 
-// Per-Workspace Sandbox config/credentials (ADR-0001/0006). These remain
-// per-Workspace settings — ADR-0013's deploy-time *plugin* config does not apply
-// here. Every field except a hypothetical display name is admin-only (ADR-0006);
-// the route enforces that gating, so no per-field logic is needed here.
 export const sshSandboxConfigSchema = z
   .object({
     host: z.string().min(1),
     port: z.number().int().min(1).max(65535).default(DEFAULT_SSH_PORT),
     user: z.string().min(1),
-    // Optional; defaults to `$HOME/platypus-workspace`, resolved on connect. A
-    // relative value is resolved against the login `$HOME`; an absolute value is
-    // used verbatim.
     rootDir: z.string().min(1).optional(),
-    // Optional host-key pin (ADR-0012). When set, the presented host key is
-    // strictly verified against it and a mismatch aborts the connection; when
-    // absent, we connect with a loud MITM warning (the frictionless fallback).
-    // Accepts `ssh-keyscan`/known_hosts output (`[host] <type> <base64>`) or a
-    // bare base64 key blob — see parseHostKeyPin.
     hostKey: z.string().min(1).optional(),
   })
   .strict();
 
-// Public-key auth only (ADR-0012). `privateKey` is a PEM/OpenSSH private key;
-// `passphrase` decrypts it when it is encrypted. Both are server-side secrets,
-// never returned to non-admins or the model.
 export const sshSandboxCredentialsSchema = z
   .object({
     privateKey: z.string().min(1),
@@ -97,21 +57,11 @@ export const sshSandboxCredentialsSchema = z
 export type SshSandboxConfig = z.infer<typeof sshSandboxConfigSchema>;
 export type SshSandboxCredentials = z.infer<typeof sshSandboxCredentialsSchema>;
 
-// A live, ready connection plus the absolute workspace root resolved on it.
-// `sftp` is opened lazily on the first fs.* call and reused for the rest of the
-// turn (it rides the same connection; closing the client tears it down too).
 type Connection = {
   client: Client;
   rootDir: string;
   sftp: SFTPWrapper | null;
 };
-
-// ---------------------------------------------------------------------------
-// Promisified SFTP primitives. ssh2's SFTP API is callback-based; these thin
-// wrappers make the fs.* methods readable. `write()`/`read()` handle packet
-// overflow internally (recursing on the remaining range), so one call transfers
-// the whole requested span and fires its callback once.
-// ---------------------------------------------------------------------------
 
 function sftpStatExists(sftp: SFTPWrapper, path: string): Promise<boolean> {
   return new Promise((resolve) => {
@@ -151,8 +101,7 @@ function sftpFstatSize(sftp: SFTPWrapper, handle: Buffer): Promise<number> {
   });
 }
 
-// Write the whole buffer at offset 0. ssh2's write splits oversized buffers into
-// packets internally, so a single call suffices.
+// why: ssh2's write() splits oversized buffers into packets, so one call writes it all
 function sftpWriteAll(
   sftp: SFTPWrapper,
   handle: Buffer,
@@ -169,9 +118,6 @@ function sftpWriteAll(
   });
 }
 
-// Read up to `cap` bytes from an open handle. Loops defensively over short reads
-// (a server may return fewer bytes than requested); stops at EOF (a zero-byte
-// read) or once the cap is reached.
 async function sftpReadCapped(
   sftp: SFTPWrapper,
   handle: Buffer,
@@ -191,18 +137,12 @@ async function sftpReadCapped(
   return buf.subarray(0, total);
 }
 
-// Disconnect best-effort — the connection may already be gone.
 function endQuietly(client: Client): void {
   try {
     client.end();
-  } catch {
-    // ignore
-  }
+  } catch {}
 }
 
-// The exit code a shell reports for a command killed by `signalName` (ssh2
-// passes it `SIG`-prefixed, e.g. `SIGKILL`): 128 + the signal number, or
-// LOST_EXIT_CODE for a signal this platform does not know.
 function signalExitCode(signalName: string | undefined): number {
   const num = signalName
     ? (osConstants.signals as Record<string, number | undefined>)[signalName]
@@ -210,15 +150,6 @@ function signalExitCode(signalName: string | undefined): number {
   return num === undefined ? LOST_EXIT_CODE : 128 + num;
 }
 
-// Parse an operator-supplied host-key pin to the raw public-key blob bytes that
-// ssh2's `hostVerifier` presents (with no `hostHash` set, it receives the raw
-// key Buffer). Accepts three shapes: a full `ssh-keyscan` / known_hosts line
-// (`[host] <type> <base64> [comment]`), a `<type> <base64>` pair, or a bare
-// base64 blob. Every SSH public-key blob base64-encodes a length-prefixed
-// algorithm name, so the blob token always begins with `AAAA` — we pick that
-// token when the input has several, else treat the sole token as the blob.
-// Throws on input we cannot turn into a non-empty key so a misconfigured pin
-// surfaces at connect time rather than silently failing every handshake.
 function parseHostKeyPin(pin: string): Buffer {
   const firstLine = pin
     .split("\n")
@@ -244,33 +175,14 @@ function parseHostKeyPin(pin: string): Buffer {
   return decoded;
 }
 
-/**
- * The SSH half of the Sandbox: ssh2 `exec` for commands, SFTP for files, and a
- * self-managed connection with an idle reaper (ADR-0012). The five model-facing
- * tools are built on top of this by {@link createPosixSandbox} — nothing here
- * parses find(1), counts lines, or decides what `truncated` means.
- */
 class SshSandboxTransport implements SandboxTransport {
   private config: SshSandboxConfig;
   private credentials: SshSandboxCredentials;
-  // Single reused connection and its in-flight promise (mirrors the Docker
-  // adapter's ensureContainer): concurrent first-callers share one connect.
   private connection: Connection | null;
   private inflight: Promise<Connection> | null;
   private idleTimer: NodeJS.Timeout | null;
-  // Count of exec channels and SFTP operations currently running on the
-  // connection. The idle reaper stays disarmed while this is above zero.
   private activeOps: number;
-  // Bumped by every close, so a connect that was already under way when the
-  // turn ended knows not to cache what it opened.
   private generation: number;
-  /**
-   * The logger core bound to `@platypus/ssh` and injected on the plugin's
-   * deploy-time block (ADR-0013) — see the Docker transport for why an in-tree
-   * plugin consumes the third-party contract rather than importing core's
-   * logger. Required, as {@link PluginConfigContext.logger} has been since API
-   * v2.
-   */
   private logger: PluginLogger;
 
   constructor(
@@ -288,10 +200,6 @@ class SshSandboxTransport implements SandboxTransport {
     this.logger = logger;
   }
 
-  // Lazy-connect on first use; reuse the single connection across all tool calls
-  // in the turn. Concurrent callers before the connection is ready share the one
-  // in-flight promise. Only reached through withConnection, which owns the idle
-  // reaper.
   private ensureConnection(): Promise<Connection> {
     if (this.connection) return Promise.resolve(this.connection);
     if (this.inflight) return this.inflight;
@@ -300,8 +208,6 @@ class SshSandboxTransport implements SandboxTransport {
     const p = this.connect()
       .then((conn) => {
         this.inflight = null;
-        // Closed while the handshake was under way: the turn that wanted this
-        // connection is over, so it goes rather than outliving the turn.
         if (generation !== this.generation) {
           endQuietly(conn.client);
           throw new Error(
@@ -319,20 +225,12 @@ class SshSandboxTransport implements SandboxTransport {
     return p;
   }
 
-  // Open the SSH connection (public-key auth), then resolve $HOME and `mkdir -p`
-  // the workspace root in a single exec, returning the absolute root.
   private async connect(): Promise<Connection> {
     const { host, port, user, hostKey } = this.config;
     const { privateKey, passphrase } = this.credentials;
 
-    // Parse the pin up front so a malformed value fails loudly here rather than
-    // silently rejecting every handshake. Absent → connect with a loud MITM
-    // warning (the frictionless fallback for localhost/dev; ADR-0012).
     const expectedHostKey = hostKey ? parseHostKeyPin(hostKey) : null;
     if (!expectedHostKey) {
-      // Public-key auth still prevents credential theft by an impostor host; the
-      // residual risk is session/output exposure to a MITM. Pin `hostKey` on
-      // internet-facing hosts.
       this.logger.warn(
         { host, port },
         "SSH sandbox connecting WITHOUT host-key verification — session and injected env are exposed to a MITM. Set `hostKey` to pin the host.",
@@ -348,10 +246,6 @@ class SshSandboxTransport implements SandboxTransport {
       ...(passphrase ? { passphrase } : {}),
     };
 
-    // Strict host-key pinning (ADR-0012). ssh2 calls this synchronous verifier
-    // with the presented raw key blob during the handshake; returning false
-    // aborts with a handshake `error`. `hostKeyMismatch` lets onError turn that
-    // opaque failure into a clear, actionable message.
     let hostKeyMismatch = false;
     if (expectedHostKey) {
       const expected = expectedHostKey;
@@ -378,9 +272,6 @@ class SshSandboxTransport implements SandboxTransport {
       };
       const onReady = () => {
         client.removeListener("error", onError);
-        // From here on nothing awaits the client, so these listeners are all
-        // that stands between a reset socket and an uncaught `error` that exits
-        // the process. A dead client is dropped so the next call reconnects.
         client.on("error", (err: Error) => {
           this.logger.warn(
             { host, port, err },
@@ -397,9 +288,6 @@ class SshSandboxTransport implements SandboxTransport {
       client.connect(connectConfig);
     });
 
-    // Resolve $HOME and create the root in one round-trip. A relative rootDir is
-    // resolved against $HOME; an absolute one is used verbatim. The command
-    // prints the resolved absolute path on stdout.
     const rootExpr = this.config.rootDir
       ? shQuote(this.config.rootDir)
       : `"$HOME/${DEFAULT_ROOT_DIR_NAME}"`;
@@ -427,10 +315,6 @@ class SshSandboxTransport implements SandboxTransport {
     return { client, rootDir, sftp: null };
   }
 
-  // (Re)arm the idle reaper. Closes the connection after IDLE_TIMEOUT_MS of
-  // inactivity; left disarmed while anything is in flight, and re-armed when the
-  // last of it finishes. `unref()` so a pending timer never keeps the process
-  // alive.
   private touchIdleTimer(): void {
     this.clearIdleTimer();
     if (this.activeOps > 0 || !this.connection) return;
@@ -440,11 +324,6 @@ class SshSandboxTransport implements SandboxTransport {
     this.idleTimer.unref();
   }
 
-  // Run `fn` on the connection as one unit of in-flight work: the idle reaper
-  // cannot fire until it settles. The count is taken before connecting, so a
-  // slow connect is covered too. `signal` only stops *this* call waiting on the
-  // connect — the connection is shared, so it is not torn down under whoever
-  // else is using it.
   private async withConnection<T>(
     fn: (conn: Connection) => Promise<T>,
     signal?: AbortSignal,
@@ -462,8 +341,6 @@ class SshSandboxTransport implements SandboxTransport {
     }
   }
 
-  // Forget `client` if it is still the cached connection — it closed, ended or
-  // errored under us. A later call reconnects. Leaves a newer connection alone.
   private dropConnection(client: Client): void {
     if (this.connection?.client !== client) return;
     this.connection = null;
@@ -475,8 +352,6 @@ class SshSandboxTransport implements SandboxTransport {
     this.idleTimer = null;
   }
 
-  // Close the connection (if any) and cancel the idle reaper. Idempotent.
-  // A connect still under way is ended when it lands (see ensureConnection).
   private closeConnection(): void {
     this.generation += 1;
     this.clearIdleTimer();
@@ -485,16 +360,6 @@ class SshSandboxTransport implements SandboxTransport {
     if (conn) endQuietly(conn.client);
   }
 
-  // Run a single command over `exec`, capping each stream independently and
-  // enforcing a timeout. On timeout the channel is closed and exit code 124 is
-  // reported (a remote command may keep running as an orphan — the host is not
-  // ours to reap; ADR-0012).
-  //
-  // `signal` closes the channel the same way, but rejects instead of reporting
-  // an exit code: the command did not finish, core stopped listening. It is
-  // honoured from before the channel exists, because opening one on a wedged
-  // connection is itself an unbounded wait and the timer is not armed until the
-  // channel is open (issue #921).
   private runExec(
     client: Client,
     command: string,
@@ -511,16 +376,13 @@ class SshSandboxTransport implements SandboxTransport {
 
       const onAbort = () => {
         cancelled = true;
-        // No channel yet — there is nothing to close, so stop waiting for one.
         if (!stream) {
           settle(() => reject(new SandboxCancelledError()));
           return;
         }
         try {
           stream.close();
-        } catch {
-          // ignore — we settle on the close event regardless
-        }
+        } catch {}
       };
       const settle = (act: () => void) => {
         if (settled) return;
@@ -541,19 +403,14 @@ class SshSandboxTransport implements SandboxTransport {
           return;
         }
         stream = channel;
-        // Aborted while the channel was being opened.
         if (cancelled) {
           try {
             channel.close();
-          } catch {
-            // ignore
-          }
+          } catch {}
         }
 
         const stdoutSink = createCappedSink(stdoutCap);
         const stderrSink = createCappedSink(stderrCap);
-        // Null until the channel reports how the command ended. A channel that
-        // closes with it still null lost its connection mid-command.
         let exitCode: number | null = null;
         let timedOut = false;
 
@@ -561,17 +418,12 @@ class SshSandboxTransport implements SandboxTransport {
           timedOut = true;
           try {
             channel.close();
-          } catch {
-            // ignore — resolve on the close event regardless
-          }
+          } catch {}
         }, timeoutMs);
         timer.unref();
 
         channel.on("data", (chunk: Buffer) => stdoutSink.push(chunk));
         channel.stderr.on("data", (chunk: Buffer) => stderrSink.push(chunk));
-        // The exit code arrives on `exit`; `close` fires afterwards and is when
-        // we settle. A signal-killed process reports a null code and the signal
-        // name, reported as the shell would (128 + signal number).
         channel.on("exit", (code: number | null, signalName?: string) => {
           exitCode =
             typeof code === "number" ? code : signalExitCode(signalName);
@@ -597,18 +449,10 @@ class SshSandboxTransport implements SandboxTransport {
     });
   }
 
-  // The workspace root, resolved once per connection against the host's `$HOME`
-  // and created if missing. Also the lazy-connect hook: core calls this first in
-  // every tool, so the connection opens on first use and is reused for the turn.
   rootDir(_ctx: SandboxContext): Promise<string> {
     return this.withConnection((conn) => Promise.resolve(conn.rootDir));
   }
 
-  // A login shell always sits between us and the process, so every argv element
-  // is single-quoted before being joined — that shell must not get a say in what
-  // the words are. `cwd` becomes a `cd` prefix (there is no native working
-  // directory over SSH) and the env goes in as `export` statements rather than
-  // ssh2's `env` option, which sshd's `AcceptEnv` rejects by default (ADR-0012).
   async exec(
     _ctx: SandboxContext,
     argv: string[],
@@ -616,9 +460,7 @@ class SshSandboxTransport implements SandboxTransport {
   ): Promise<SandboxExecResult> {
     const command = toShellCommand(argv, opts);
 
-    // Connecting is unbounded — a TCP dial, a handshake, the root-resolving
-    // exec — and it runs before any per-command timer exists, so the abort
-    // signal is raced against it as well as honoured by the channel.
+    // why: a reconnect is unbounded and precedes the command timer, so the signal races it too
     return this.withConnection(
       (conn) =>
         this.runExec(
@@ -633,10 +475,6 @@ class SshSandboxTransport implements SandboxTransport {
     );
   }
 
-  // Read over SFTP: literal paths, no shell, no injection surface. The file is
-  // sized first so only `min(size, cap)` is ever requested — but the size stops
-  // there. Whether a capped read counts as truncated is core's single rule, not
-  // this adapter's to answer better than the Docker one can.
   async readFile(
     _ctx: SandboxContext,
     absPath: string,
@@ -655,8 +493,6 @@ class SshSandboxTransport implements SandboxTransport {
     });
   }
 
-  // Write over SFTP. `wx` fails atomically when the path is taken — a native
-  // create with no racy stat/open window — and `w` truncates-or-creates.
   async writeFile(
     _ctx: SandboxContext,
     absPath: string,
@@ -672,8 +508,6 @@ class SshSandboxTransport implements SandboxTransport {
       try {
         handle = await sftpOpen(sftp, absPath, mode === "create" ? "wx" : "w");
       } catch (cause) {
-        // `wx` fails for more than just a collision (permissions, a missing
-        // parent), so confirm which it was rather than reporting them alike.
         if (mode === "create" && (await sftpStatExists(sftp, absPath))) {
           throw new SandboxPathExistsError(absPath, { cause });
         }
@@ -688,9 +522,6 @@ class SshSandboxTransport implements SandboxTransport {
     });
   }
 
-  // Open the SFTP subsystem lazily and reuse it for the rest of the turn. It
-  // rides the single reused connection, so closing the client (idle reaper /
-  // destroy) tears it down too.
   private getSftp(conn: Connection): Promise<SFTPWrapper> {
     if (conn.sftp) return Promise.resolve(conn.sftp);
     return new Promise<SFTPWrapper>((resolve, reject) => {
@@ -705,10 +536,6 @@ class SshSandboxTransport implements SandboxTransport {
     });
   }
 
-  // `mkdir -p` the parent directories of a file over SFTP, which has no
-  // recursive mkdir. Each segment is stat-probed and created only if absent.
-  // The walk starts at the workspace root and never climbs above it: everything
-  // above is the host's, not ours to create. Literal paths throughout, no shell.
   private async ensureParentDirs(
     sftp: SFTPWrapper,
     rootDir: string,
@@ -717,7 +544,7 @@ class SshSandboxTransport implements SandboxTransport {
     const idx = absPath.lastIndexOf("/");
     if (idx === -1) return;
     const parent = absPath.slice(0, idx);
-    // The root itself always exists — it was created at connect time.
+    // why: never mkdir at or above rootDir; the host's tree outside it isn't ours
     if (!parent.startsWith(`${rootDir}/`)) return;
 
     const segments = parent
@@ -733,27 +560,16 @@ class SshSandboxTransport implements SandboxTransport {
     }
   }
 
-  // destroy() is a no-op beyond disconnecting (ADR-0012): the host is not
-  // Platypus-owned, so we never mutate its filesystem. Just tear down our
-  // connection so no socket or idle timer leaks.
   destroy(_ctx: SandboxContext): Promise<void> {
     return this.close();
   }
 
-  // Core calls this when the Chat turn ends, so a turn's connection closes with
-  // the turn instead of lingering until the idle reaper (and a busy host's
-  // MaxSessions/MaxStartups) catches up with it.
   close(): Promise<void> {
     this.closeConnection();
     return Promise.resolve();
   }
 }
 
-/**
- * The SSH Sandbox backend: this plugin's transport under core's fixed five-tool
- * core. What the model sees comes from {@link createPosixSandbox}, so this
- * adapter cannot drift from the Docker one on anything but the transport.
- */
 export const createSshSandboxBackend = (
   config: SshSandboxConfig,
   credentials: SshSandboxCredentials,

@@ -4,32 +4,13 @@ import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { SANDBOX_TRANSFER_MAX_BYTES } from "@platypuschat/plugin-sdk";
 
-// ---------------------------------------------------------------------------
-// Mock ssh2. `new Client()` returns a fake EventEmitter-based client. connect()
-// emits "ready" (or "error"); exec() invokes its callback with a fake channel
-// that emits data/exit/close. Happy-path emissions are synchronous (so awaits
-// resolve without needing timer advancement); a `closeDelayMs` uses a real
-// timer to exercise the timeout path. State is pulled from `mockState`.
-// ---------------------------------------------------------------------------
-
 type ExecConfig = {
   stdout?: string | Buffer;
   stderr?: string | Buffer;
   exitCode?: number;
-  /** Delay (ms) before the channel emits + closes — used for the timeout test. */
   closeDelayMs?: number;
-  /**
-   * Never invoke the exec callback. Opening a channel on a wedged connection is
-   * itself an unbounded wait, and it happens before the per-command timer is
-   * armed (issue #921).
-   */
   hangOpen?: boolean;
-  /**
-   * Close the channel without ever emitting `exit` — what a channel does when
-   * the connection under it drops mid-command.
-   */
   noExit?: boolean;
-  /** Report the command as killed by this signal (ssh2's `SIG`-prefixed form). */
   exitSignal?: string;
 };
 
@@ -37,47 +18,25 @@ type MockState = {
   connectConfigs: Record<string, unknown>[];
   execCommands: string[];
   execQueue: ExecConfig[];
-  // stdout returned for the connect-time root-resolution exec.
   resolvedRoot: string;
-  // When set, connect() emits this error instead of "ready".
   connectShouldFail: Error | null;
-  // When true, the connect-time root-resolution exec exits non-zero.
   rootCreateFails: boolean;
-  // Count of client.end() calls (disconnects).
   ended: number;
-  // In-memory SFTP filesystem (absolute host paths). `files` maps a path to its
-  // byte content; `dirs` is the set of existing directories. Handles are minted
-  // by open() and carry the path + flag they were opened with.
   files: Map<string, Buffer>;
   dirs: Set<string>;
   handles: Map<number, { path: string; flag: string }>;
   nextHandle: number;
-  // Count of client.sftp() calls (SFTP subsystem opens).
   sftpOpens: number;
-  // When set, client.sftp() invokes its callback with this error.
   sftpShouldFail: Error | null;
-  // The raw host-key blob the fake server presents to a configured
-  // hostVerifier. When a verifier is present and rejects it, connect() emits an
-  // "error" instead of "ready" (mirroring ssh2's handshake failure).
   presentedHostKey: Buffer | null;
-  // Delay (ms) before connect() emits "ready" — a slow handshake.
   connectDelayMs: number;
-  // Delay (ms) before each SFTP read() calls back — a slow transfer.
   sftpReadDelayMs: number;
-  // Every client the adapter constructed, oldest first, so a test can make the
-  // live connection emit what a real socket would (a late `error`, a `close`).
   clients: import("node:events").EventEmitter[];
 };
 
-// The factory closure reads `mockState` lazily (at call time), by which point
-// beforeEach has assigned it — so a plain `let` is fine.
 let mockState: MockState;
 
-// The Client class is defined INSIDE the factory: a top-level `class` would be
-// in the TDZ when the hoisted factory runs, and a top-level `import` binding is
-// likewise uninitialised at that point (vi.mock hoists above imports). So
-// EventEmitter is required inside the factory, cast to its real type to keep the
-// fakes fully typed.
+// why: vi.mock hoists above imports, so the fakes and EventEmitter must live in the factory
 vi.mock("ssh2", () => {
   const { EventEmitter } =
     // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -90,7 +49,6 @@ vi.mock("ssh2", () => {
     stderr = new EventEmitter();
     closed = false;
 
-    // Adapter calls this on timeout to close the channel.
     close(): void {
       if (this.closed) return;
       this.closed = true;
@@ -103,9 +61,6 @@ vi.mock("ssh2", () => {
     }
   }
 
-  // A minimal in-memory SFTP subsystem backed by mockState. Handles are 4-byte
-  // buffers encoding an integer id; the id maps to the opened path + flag. Only
-  // the primitives the adapter calls are implemented.
   const encodeHandle = (id: number): Buffer => {
     const h = Buffer.alloc(4);
     h.writeUInt32BE(id, 0);
@@ -153,7 +108,6 @@ vi.mock("ssh2", () => {
         }
         mockState.files.set(path, Buffer.alloc(0));
       } else {
-        // "w" — truncate-or-create.
         mockState.files.set(path, Buffer.alloc(0));
       }
       const id = mockState.nextHandle++;
@@ -231,15 +185,10 @@ vi.mock("ssh2", () => {
 
     connect(config: Record<string, unknown>): this {
       mockState.connectConfigs.push(config);
-      // Listeners are registered by the adapter before connect() is called, so
-      // a synchronous emit is safe and keeps awaits resolving via microtasks.
       if (mockState.connectShouldFail) {
         this.emit("error", mockState.connectShouldFail);
         return this;
       }
-      // Honour a configured hostVerifier (sync form: returns boolean). ssh2
-      // presents the raw key blob during the handshake; a false result aborts
-      // with a handshake error rather than reaching "ready".
       const verifier = config.hostVerifier as
         ((key: Buffer) => boolean) | undefined;
       if (typeof verifier === "function") {
@@ -314,7 +263,6 @@ vi.mock("ssh2", () => {
   return { Client: FakeClient };
 });
 
-// Import AFTER vi.mock so the adapter binds to the mocked ssh2.
 import {
   createSshSandboxBackend,
   sshSandboxConfigSchema,
@@ -352,10 +300,6 @@ const CONFIG = {
 };
 const CREDENTIALS = { privateKey: "PRIVATE_KEY_PEM" };
 
-// Fake ed25519-shaped host-key blobs (base64). Real SSH key blobs base64-encode
-// a length-prefixed algorithm name, so they begin with "AAAA" — the adapter's
-// pin parser keys off that. The adapter compares the decoded bytes of the pin
-// against the raw blob the (mock) server presents.
 const HOST_KEY_B64 =
   "AAAAC3NzaC1lZDI1NTE5AAAAIExampleHostKeyBlobBytesForTestingAbc123";
 const WRONG_HOST_KEY_B64 =
@@ -387,9 +331,6 @@ function queueExec(cfg: ExecConfig = {}) {
   mockState.execQueue.push(cfg);
 }
 
-// The `PluginLogger` seam core injects on the plugin's deploy-time block. The
-// adapter logs through this rather than core's logger, so any suite asserting on
-// a log line injects one and watches it — watching core's would pass vacuously.
 let pluginLogger: FakePluginLogger;
 
 const withPluginLogger = () => ({
@@ -455,7 +396,6 @@ describe("SshSandboxTransport — connect", () => {
     expect(cc.username).toBe("platypus");
     expect(cc.privateKey).toBe("PRIVATE_KEY_PEM");
 
-    // First exec resolves $HOME and mkdir -p's the default root.
     expect(mockState.execCommands[0]).toContain(
       'ROOT="$HOME/platypus-workspace"',
     );
@@ -518,7 +458,6 @@ describe("SshSandboxTransport — host-key verification", () => {
     queueExec({ exitCode: 0 });
     mockState.presentedHostKey = Buffer.from(HOST_KEY_B64, "base64");
     const backend = createSshSandboxBackend(
-      // A full `ssh-keyscan`-style line: the parser picks the base64 blob token.
       { ...CONFIG, hostKey: `ssh-ed25519 ${HOST_KEY_B64}` },
       CREDENTIALS,
       withPluginLogger(),
@@ -527,14 +466,11 @@ describe("SshSandboxTransport — host-key verification", () => {
 
     expect(mockState.connectConfigs).toHaveLength(1);
     expect(typeof mockState.connectConfigs[0].hostVerifier).toBe("function");
-    // The root-resolution exec ran → the connection is live.
     expect(mockState.execCommands.length).toBeGreaterThan(0);
-    // No MITM warning is emitted when a pin is enforced.
     expect(pluginLogger.warn).not.toHaveBeenCalled();
   });
 
   it("rejects the connection with a clear error when the pin mismatches", async () => {
-    // A bare base64 blob (single token) is also accepted as a pin.
     mockState.presentedHostKey = Buffer.from(HOST_KEY_B64, "base64");
     const backend = createSshSandboxBackend(
       { ...CONFIG, hostKey: WRONG_HOST_KEY_B64 },
@@ -544,7 +480,6 @@ describe("SshSandboxTransport — host-key verification", () => {
     await expect(
       backend.shellExec(ctx, { command: "true" }, callOptions),
     ).rejects.toThrow(/host-key verification failed/);
-    // No tools run — connect aborts before the root-resolution exec.
     expect(mockState.execCommands).toHaveLength(0);
   });
 
@@ -584,7 +519,6 @@ describe("SshSandboxTransport — host-key verification", () => {
       await expect(
         backend.shellExec(ctx, { command: "true" }, callOptions),
       ).rejects.toThrow(expected);
-      // Never even attempted to connect.
       expect(mockState.connectConfigs).toHaveLength(0);
     },
   );
@@ -600,8 +534,6 @@ describe("SshSandboxTransport — shellExec", () => {
     );
     const res = await backend.shellExec(ctx, { command: "run" }, callOptions);
 
-    // Core hands the transport an argv (`/bin/sh -c <command>`); a login shell
-    // sits in between, so every element is single-quoted before being joined.
     const cmd = mockState.execCommands[1];
     expect(cmd).toBe(
       "cd '/home/platypus/platypus-workspace' && '/bin/sh' '-c' 'run'",
@@ -647,9 +579,7 @@ describe("SshSandboxTransport — shellExec", () => {
     );
     const cmd = mockState.execCommands[1];
     expect(cmd).toContain("export FOO='bar'; ");
-    // Single quotes in the value are escaped with the '\'' idiom.
     expect(cmd).toContain("export TOKEN='a b'\\''c'; ");
-    // env is applied inside the command string, never via a connect/env option.
     expect(mockState.connectConfigs[0].env).toBeUndefined();
   });
 
@@ -669,9 +599,6 @@ describe("SshSandboxTransport — shellExec", () => {
       },
       callOptions,
     );
-    // Run the built string through a real local shell: the cwd is missing, so
-    // the command must be skipped rather than run in whatever directory the
-    // shell started in.
     const res = spawnSync("/bin/sh", ["-c", mockState.execCommands[1]], {
       encoding: "utf8",
     });
@@ -691,7 +618,6 @@ describe("SshSandboxTransport — shellExec", () => {
       { command: 'echo "$A$B"', env: { A: "1", B: "2" } },
       callOptions,
     );
-    // Swap the fake remote root for one that exists locally, then run it.
     const remoteCd = `cd '${mockState.resolvedRoot}' && `;
     expect(mockState.execCommands[1]).toContain(remoteCd);
     const cmd = mockState.execCommands[1].replace(
@@ -714,8 +640,6 @@ describe("SshSandboxTransport — shellExec", () => {
       ctx,
       {
         command: "run",
-        // A malformed key (model-supplied env is not schema-key-validated) must
-        // never be interpolated raw into the shell string.
         env: { GOOD: "1", "bad;rm -rf": "x" },
       },
       callOptions,
@@ -726,9 +650,6 @@ describe("SshSandboxTransport — shellExec", () => {
   });
 
   it("keeps both ends of the ssh2 stream once the caller's stdout cap is reached", async () => {
-    // The cap is enforced while the channel is streaming, not afterwards: the
-    // fake emits more than the cap in one chunk, the head is clipped as it
-    // arrives and the tail rolls through a bounded buffer.
     const huge = "a".repeat(MAX_SHELL_OUTPUT_BYTES + 5_000);
     queueExec({ stdout: huge, exitCode: 0 });
     const backend = createSshSandboxBackend(
@@ -746,7 +667,6 @@ describe("SshSandboxTransport — shellExec", () => {
   });
 
   it("returns exit code 124 when a command exceeds its timeout", async () => {
-    // Channel closes after 200ms; timeout is 20ms, so the adapter closes first.
     queueExec({ closeDelayMs: 200, exitCode: 0 });
     const backend = createSshSandboxBackend(
       CONFIG,
@@ -764,9 +684,6 @@ describe("SshSandboxTransport — shellExec", () => {
     expect(res.exitCode).toBe(124);
   });
 
-  // Issue #921. A cancelled turn closes the channel like a timeout does, but
-  // rejects rather than reporting an exit code for a command that never
-  // finished.
   it("closes the channel and rejects when the turn is cancelled", async () => {
     queueExec({ closeDelayMs: 5_000, exitCode: 0 });
     const backend = createSshSandboxBackend(
@@ -780,7 +697,6 @@ describe("SshSandboxTransport — shellExec", () => {
       { command: "sleep 300" },
       { signal: controller.signal },
     );
-    // The connect-time root resolution, then the command's own exec.
     await vi.waitFor(() => expect(mockState.execCommands).toHaveLength(2));
     controller.abort();
 
@@ -808,6 +724,30 @@ describe("SshSandboxTransport — shellExec", () => {
 });
 
 describe("SshSandboxTransport — connection lifecycle", () => {
+  it("stops one caller waiting on a slow connect without tearing it down for the others", async () => {
+    mockState.connectDelayMs = 50;
+    queueExec({ exitCode: 0 });
+    const backend = createSshSandboxBackend(
+      CONFIG,
+      CREDENTIALS,
+      withPluginLogger(),
+    );
+    const controller = new AbortController();
+    const cancelled = backend.shellExec(
+      ctx,
+      { command: "a" },
+      { signal: controller.signal },
+    );
+    const other = backend.shellExec(ctx, { command: "b" }, callOptions);
+    await vi.waitFor(() => expect(mockState.connectConfigs).toHaveLength(1));
+    controller.abort();
+
+    await expect(cancelled).rejects.toThrow(/cancelled/i);
+    expect(mockState.execCommands).toHaveLength(0);
+    await expect(other).resolves.toMatchObject({ exitCode: 0 });
+    expect(mockState.ended).toBe(0);
+  });
+
   it("reuses a single connection across tool calls within a turn", async () => {
     queueExec({ exitCode: 0 });
     queueExec({ exitCode: 0 });
@@ -819,7 +759,6 @@ describe("SshSandboxTransport — connection lifecycle", () => {
     await backend.shellExec(ctx, { command: "a" }, callOptions);
     await backend.shellExec(ctx, { command: "b" }, callOptions);
 
-    // One connect, one root-resolution exec, then two command execs.
     expect(mockState.connectConfigs).toHaveLength(1);
     expect(mockState.execCommands).toHaveLength(3);
   });
@@ -851,11 +790,9 @@ describe("SshSandboxTransport — connection lifecycle", () => {
       await backend.shellExec(ctx, { command: "true" }, callOptions);
       expect(mockState.ended).toBe(0);
 
-      // Advance past the idle timeout — the reaper disconnects.
       await vi.advanceTimersByTimeAsync(60_000);
       expect(mockState.ended).toBe(1);
 
-      // A subsequent call reconnects.
       queueExec({ exitCode: 0 });
       await backend.shellExec(ctx, { command: "again" }, callOptions);
       expect(mockState.connectConfigs).toHaveLength(2);
@@ -866,9 +803,6 @@ describe("SshSandboxTransport — connection lifecycle", () => {
 });
 
 describe("SshSandboxTransport — a connection that drops", () => {
-  // Issue #1126. Nothing listened for `error` once the connection was ready, so
-  // a reset socket or failed keepalive was an uncaught exception that took the
-  // backend process down — and the dead client stayed cached.
   it("logs an error on the live connection instead of throwing, then reconnects", async () => {
     queueExec({ exitCode: 0 });
     const backend = createSshSandboxBackend(
@@ -955,7 +889,6 @@ describe("SshSandboxTransport — the idle reaper waits for work in flight", () 
       expect(res.stdout).toBe("built");
       expect(res.exitCode).toBe(0);
 
-      // Idle again once it finishes, so the reaper resumes.
       await vi.advanceTimersByTimeAsync(60_000);
       expect(mockState.ended).toBe(1);
     } finally {
@@ -1004,8 +937,6 @@ describe("SshSandboxTransport — close() at turn end", () => {
     expect(mockState.ended).toBe(1);
   });
 
-  // A turn cancelled mid-handshake ends before the connect does. The late
-  // connection must not be cached and kept up after the turn that opened it.
   it("disconnects a connection that finishes opening after the turn ended", async () => {
     mockState.connectDelayMs = 20;
     const backend = createSshSandboxBackend(
@@ -1048,7 +979,6 @@ describe("SshSandboxTransport — destroy() is a no-op", () => {
 
     await backend.destroy(ctx);
 
-    // No extra exec issued (no rm / cleanup) — just a disconnect.
     expect(mockState.execCommands.length).toBe(execCountBefore);
     expect(mockState.ended).toBe(1);
   });
@@ -1065,12 +995,9 @@ describe("SshSandboxTransport — destroy() is a no-op", () => {
   });
 });
 
-// The absolute workspace root the mock resolves at connect time (mockState.
-// resolvedRoot). fs.* paths are relative to this.
 const ROOT = "/home/platypus/platypus-workspace";
 const abs = (rel: string) => `${ROOT}/${rel}`;
 
-// Seed the in-memory SFTP filesystem with a file at a workspace-relative path.
 function seedFile(rel: string, content: string | Buffer) {
   mockState.files.set(
     abs(rel),
@@ -1097,7 +1024,6 @@ describe("SshSandboxTransport — fs.write (SFTP)", () => {
         callOptions,
       ),
     ).rejects.toThrow(/already exists/);
-    // Untouched — the atomic `wx` open never opened it for writing.
     expect(mockState.files.get(abs("exists.txt"))?.toString("utf8")).toBe(
       "old",
     );
@@ -1160,7 +1086,6 @@ describe("SshSandboxTransport — fs.write (SFTP)", () => {
       },
       callOptions,
     );
-    // The literal metachar path is a key in the store; no exec command ran it.
     expect(mockState.files.has(abs(weird))).toBe(true);
     expect(mockState.execCommands.every((c) => !c.includes("rm -rf"))).toBe(
       true,
@@ -1170,9 +1095,6 @@ describe("SshSandboxTransport — fs.write (SFTP)", () => {
 
 describe("SshSandboxTransport — fs.read (SFTP)", () => {
   it("reads no more than the cap however large the file is", async () => {
-    // The transport fstat()s first and asks for min(size, cap), so an oversized
-    // file costs the cap and no more. What that means for `truncated` is core's
-    // call, not this adapter's — see sandbox/posix.test.ts.
     seedFile("big.txt", "a".repeat(MAX_READ_BYTES + 5_000));
     const backend = createSshSandboxBackend(
       CONFIG,
@@ -1184,8 +1106,6 @@ describe("SshSandboxTransport — fs.read (SFTP)", () => {
   });
 
   it("reads a file smaller than the cap whole", async () => {
-    // min(size, cap) must not over-request either: asking for `cap` bytes of a
-    // short file is what a naive read would do, and SFTP would pad the buffer.
     seedFile("small.txt", "abc");
     const backend = createSshSandboxBackend(
       CONFIG,
@@ -1278,7 +1198,6 @@ describe("SshSandboxTransport — SFTP session lifecycle", () => {
       },
       callOptions,
     );
-    // One connect, one SFTP open, reused for all three fs calls.
     expect(mockState.connectConfigs).toHaveLength(1);
     expect(mockState.sftpOpens).toBe(1);
   });
@@ -1296,13 +1215,9 @@ describe("SshSandboxTransport — SFTP session lifecycle", () => {
   });
 });
 
-// The find command is the last exec (execCommands[0] is the connect-time root
-// resolution). Grab it for command-shape assertions.
 const lastFindCommand = () =>
   mockState.execCommands[mockState.execCommands.length - 1];
 
-// find(1)'s own `\t`/`\n` escapes, as they appear inside the single-quoted
-// -printf argument on the wire (the shell must pass them through untouched).
 const PRINTF_ARG = String.raw`'-printf' '%y\t%s\t%P\n'`;
 
 describe("SshSandboxTransport — fs.list (exec find)", () => {
@@ -1314,9 +1229,6 @@ describe("SshSandboxTransport — fs.list (exec find)", () => {
       withPluginLogger(),
     );
     await backend.fsList(ctx, {}, callOptions);
-    // Core passes cwd=rootDir, so the `cd` prefix precedes find as well; the
-    // argv itself (find, its target, its flags) is core's — this only asserts
-    // that none of it reaches the login shell unquoted.
     expect(lastFindCommand()).toBe(
       `cd '${ROOT}' && 'find' '${ROOT}' '-maxdepth' '1' '-mindepth' '1' ${PRINTF_ARG}`,
     );
@@ -1329,9 +1241,7 @@ describe("SshSandboxTransport — fs.list (exec find)", () => {
       CREDENTIALS,
       withPluginLogger(),
     );
-    // A metachar-laden path (schema rejects absolute/`..`, but quote defensively).
     await backend.fsList(ctx, { path: `foo; rm -rf ~` }, callOptions);
-    // The whole path is inside one single-quoted argument.
     expect(lastFindCommand()).toBe(
       `cd '${ROOT}' && 'find' '${ROOT}/foo; rm -rf ~' '-maxdepth' '1' '-mindepth' '1' ${PRINTF_ARG}`,
     );
@@ -1345,15 +1255,11 @@ describe("SshSandboxTransport — fs.list (exec find)", () => {
       withPluginLogger(),
     );
     await backend.fsList(ctx, { path: `it's` }, callOptions);
-    // classic '\'' escape idiom, matching shQuote.
     expect(lastFindCommand()).toContain(`'find' '${ROOT}/it'\\''s'`);
   });
 });
 
 describe("SshSandboxTransport — plugin-injected logger", () => {
-  // ADR-0012's security-relevant line. Its level and exact wording are pinned
-  // here as well as in the host-key suite above: this is a routing change, and a
-  // warning an Operator relies on must survive it byte for byte.
   it("writes the unpinned-host-key warning to the injected logger, not core's", async () => {
     queueExec({ exitCode: 0 });
 
@@ -1369,13 +1275,10 @@ describe("SshSandboxTransport — plugin-injected logger", () => {
       { host: "ssh.example.com", port: 22 },
       "SSH sandbox connecting WITHOUT host-key verification — session and injected env are exposed to a MITM. Set `hostKey` to pin the host.",
     );
-    // The whole point: core's logger is no longer the adapter's channel.
     expect(logger.warn).not.toHaveBeenCalled();
   });
 
   it("reaches the adapter through the manifest's create()", async () => {
-    // The full contribution path core uses: the loader calls `create` with the
-    // plugin block as its third argument, and the manifest must forward it.
     queueExec({ exitCode: 0 });
 
     const contribution = plugin.contributes.sandboxBackends![0];
@@ -1393,15 +1296,8 @@ describe("SshSandboxTransport — plugin-injected logger", () => {
   });
 
   it("carries the manifest name on the MITM warning when loaded by the real loader", async () => {
-    // End to end through the path production takes — loader → deploy-time block
-    // → `create` → transport. Every other test here supplies its own logger and
-    // would pass even if the loader bound the wrong name, or none. This warning
-    // is the one an Operator is most likely to alert on (ADR-0012), so what it
-    // is tagged with is worth pinning against the real loader.
     queueExec({ exitCode: 0 });
 
-    // Stands in for core's logger: records the bindings each child is made with
-    // and merges them into every line that child writes, exactly as pino does.
     const lines: Array<{ bindings: object; fields: object; msg?: string }> = [];
     const baseLogger = {
       child: (bindings: Record<string, unknown>) => {
