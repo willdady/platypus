@@ -15,18 +15,6 @@ import type { GenerationField, RunPlan } from "./run-plan.ts";
 
 export type RunId = string;
 
-/**
- * The slim request shape a run resolves its generation plan from: agent/
- * provider selection plus generation overrides. Distinct from
- * `@platypus/schemas`' `ChatSubmitData` (the HTTP payload, which also carries
- * id/workspaceId/messages) — those arrive as separate fields on `RunInput` /
- * `PrepareChatTurnInput`.
- *
- * Lives here rather than in `services/chat-execution.ts` so `runs/` never
- * imports a type from `services/` — the reverse dependency (`chat-execution.ts`
- * imports `ChatTurnRequest` from here) is what keeps this module and its
- * caller from cycling.
- */
 export type ChatTurnRequest = {
   agentId?: string;
   providerId?: string;
@@ -39,229 +27,59 @@ export type ChatTurnRequest = {
   seed?: number;
   presencePenalty?: number;
   frequencyPenalty?: number;
-  /** The Direct turn's Reasoning controls (ADR-0040); ignored on an Agent
-   *  turn like the sampling fields. Null and absent both mean unset. */
   reasoningThinking?: boolean | null;
   reasoningEffort?: ReasoningEffort | null;
   thinkingBudget?: number | null;
-  /**
-   * The per-chat Max steps setting (#539). Read only on the Direct
-   * (no-Agent) branch, where it overrides `DEFAULT_DIRECT_MAX_STEPS`; an
-   * Agent-backed turn ignores it exactly as it ignores the sampling fields,
-   * because the Agent's own stored `maxSteps` governs. Null and absent both
-   * mean cleared — the chat client clears by omission, and an explicit null
-   * is accepted so a client that clears the Agent form's way works too.
-   */
   maxSteps?: number | null;
 };
 
-/**
- * The run a sub-Agent delegation nests inside.
- *
- * A delegated run is a run in its own right — registry entry, timers,
- * statistics — so it has to say whose child it is (`workspaceScopeForSubAgent`
- * chains the principal), inherit the bounds the parent was started under rather
- * than the process defaults, and be cancelled when the parent is.
- */
 export type ParentRunContext = {
   runId: RunId;
   scope: WorkspaceScope;
   timeouts?: RunTimeouts;
-  /**
-   * Records a delegated run's latest stats, folded into this run's Token
-   * usage (issue #1634). Each call replaces that delegate's previous report.
-   * Called after each of the delegate's steps and from its terminal callback:
-   * a parent can be finished while a delegate is still unwinding (the abort
-   * grace, #1613), and still counts the steps the delegate was billed for.
-   */
   setDelegateUsage: (delegateRunId: RunId, stats: RunStats) => void;
 };
 
 export type RunStatus = "running" | "succeeded" | "failed" | "cancelled";
 
-/**
- * The Fallback model as a Drive receives it (ADR-0043): its generation plan
- * and the System prompt composed with the fallback Provider's guardrails, so a
- * switch changes the Provider's security directives with the model.
- */
 export type FallbackTurn = {
   plan: Pick<RunPlan, Exclude<GenerationField, "system">>;
   system: string;
 };
 
-/**
- * What a run reports about itself. Intersected with `CachedInputTokens`, whose
- * pair is the cached-input breakdown of `inputTokens` (issue #734), summed
- * across the run's model calls the same way that figure is — absent where the
- * Provider reported no cached reads (or writes) on any step, with `0` kept as
- * the genuine measurement it is.
- */
 export type RunStats = {
   steps?: number;
   toolCalls?: Array<{ name: string; count: number }>;
-  /**
-   * Cross-step SUMS of every step's usage — billing figures, not occupancy —
-   * including every delegated Sub-Agent run's (issue #1634).
-   */
   inputTokens?: number;
   outputTokens?: number;
-  /**
-   * The sums above broken down by (Provider, model): the run's own calls are
-   * one row, its delegates' merge into theirs. Absent until a model call is
-   * known to have been made under a known model.
-   */
   usageByModel?: ModelUsage[];
-  /**
-   * How full the model's context got: the input tokens reported for the LAST
-   * step, which is the whole conversation as last sent (ADR-0018). A last
-   * value, never a sum — `inputTokens` above folds every step together and on a
-   * long tool-using turn reads roughly an order of magnitude high.
-   *
-   * Absent where the Provider reported no usage. Nothing is estimated, and 0 is
-   * never substituted: it would read as a measurement of an empty context.
-   */
   contextOccupancy?: number;
-  /**
-   * Set only when the run stopped at the model's output ceiling. Absent rather
-   * than `false`, mirroring the Chat message metadata marker.
-   */
   truncatedByTokenLimit?: true;
-  /**
-   * Set only when the run's model loop stopped at its **Step ceiling** with the
-   * model still asking to continue. Absent rather than `false`, the same way its
-   * output-ceiling sibling above is.
-   *
-   * Never set for a run the no-progress detector halted: that stop reports
-   * itself as a failure with its own message, and both can be true of the same
-   * step on a low ceiling.
-   */
   stoppedAtStepLimit?: true;
-  /**
-   * The run switched to its Fallback model (ADR-0043), naming the pair it left
-   * and the pair it moved to. Absent on a run that never switched; never
-   * changes `status`.
-   */
   fallback?: ModelSwitch;
 } & CachedInputTokens;
 
-/**
- * Everything a caller says about the Chat turn it wants run, declared once and
- * carried unchanged from the route to `prepareChatTurn`.
- *
- * Every hop between those two ends relays this shape whole rather than
- * re-listing its fields, so a new turn-level fact is added here, at the
- * producer that supplies it and at the consumer that reads it — and nowhere in
- * between (issue #837).
- *
- * Lives here, beside `ChatTurnRequest`, so `runs/` never imports a type from
- * `services/`: `services/chat-execution.ts` builds `PrepareChatTurnInput` from
- * this shape by importing it back.
- */
 export type TurnRequest = {
   request: ChatTurnRequest;
   messages: PlatypusUIMessage[];
-  /**
-   * The Chat's Transcript summaries (ADR-0041, issue #1716), newest first —
-   * loaded by the caller that owns the Chat's id and carried down like the
-   * pinned Memories block, so turn preparation stays a pure function of its
-   * inputs. Absent for headless runs (triggers, sub-Agents), which have no
-   * Transcript to summarise.
-   */
   chatSummaries?: TranscriptSummaryRow[];
-  /**
-   * The pinned Memories block (ADR-0020) an interactive Chat turn resolved —
-   * the rendered summaries fragment, reused or re-taken by the Chat route
-   * against the re-pin horizon. Absent for headless runs (triggers, sub-Agents),
-   * which carry no Chat identity and so take the live block instead.
-   *
-   * Turn preparation stays a pure function of its inputs; the renderer never
-   * learns about clocks.
-   */
   memorySnapshot?: string;
-  /**
-   * The moment this run resolved, anchoring the Memories retrieval window
-   * (ADR-0020). Required: the window is an input, never a clock read inside
-   * turn preparation, so two runs given the same reference date render a
-   * byte-identical prefix. An interactive Chat passes the moment it resolved
-   * its pin; a headless run passes its own resolution moment.
-   *
-   * Unused on a pinned interactive turn, which retrieves nothing: a supplied
-   * `memorySnapshot` is rendered verbatim rather than re-retrieved.
-   */
   memoriesReferenceDate: Date;
-  /**
-   * Whether this run composes a Memories block at all (#645). A Trigger
-   * forwards its own opt-out here, exactly as it forwards `search`, so turn
-   * preparation decides from its inputs rather than re-reading the Trigger
-   * row.
-   *
-   * Beats `memorySnapshot` where a caller supplies both: this decides *whether*
-   * a block is composed, the pin only decides *what* is in it.
-   *
-   * Orthogonal to the `memory` tool set, which {@link memoryTools} decides: a
-   * Trigger's Agent holding `memorySearch` / `memoryGet` keeps them and can
-   * still retrieve deliberately.
-   */
   includeMemories: boolean;
-  /**
-   * Whether the run serves the Agent's `memory` Tool set, to it and to its
-   * delegates. A Chat turn sets it with `includeMemories`, so an A2A Chat with
-   * Include Memories off reaches the Owner's Memories by neither route
-   * (ADR-0032); a Trigger keeps its Agent's Memory tools whatever its own
-   * Include Memories says.
-   */
   memoryTools: boolean;
 };
 
-/**
- * Inputs for a single run: the turn the caller wants run, plus the id the run
- * is registered and cancelled under.
- */
 export type RunInput = {
   runId: RunId;
 } & TurnRequest;
 
-/**
- * What Turn resolution decided about a turn before its model stream existed,
- * carried unchanged from the runner through the drive to the metadata
- * extractor that stamps it onto the streamed message.
- *
- * One shape rather than three sibling arguments repeated at each hop: these
- * facts travel together the whole way, and the next one should not have to be
- * threaded through `driveChat` and `createMessageMetadata` by hand (issue
- * #837). None is ever told to the model.
- */
 export type TurnFacts = {
-  /** The resolved Agent id, absent on a turn that resolved no Agent. */
   agentId?: string;
-  /**
-   * Turn resolution served no search tools for a turn that asked for search,
-   * so the reply is written without it (issue #522).
-   */
   searchUnavailable?: boolean;
-  /**
-   * How long Turn resolution took, in whole milliseconds. Absent for a drive
-   * (e.g. a delegated sub-Agent) that never measured one.
-   */
   prepDurationMs?: number;
-  /**
-   * The id of the Transcript summary this turn read its occupancy reading
-   * through (ADR-0041, issue #1716) — stamped onto the reply's metadata so
-   * the next turn can tell a reading whose summary a Delete has since made
-   * unusable, and the composer meter can show "—" when the newest summary
-   * post-dates the last reading.
-   */
   summaryId?: string;
 };
 
-/**
- * What a run resolved its Agent/Provider/model selection to, for persistence —
- * already does agent-vs-direct nulling, so sinks just map fields to their
- * persistence schema. Mirrored by `ChatTurn["resolved"]` in
- * `services/chat-execution.ts`, which is this same shape by declaration
- * rather than the other way around, so `runs/` never imports a type from
- * `services/`.
- */
 export type ResolvedGeneration = {
   agentId?: string;
   providerId: string;
@@ -273,83 +91,25 @@ export type ResolvedGeneration = {
   frequencyPenalty?: number;
   presencePenalty?: number;
   seed?: number;
-  /** The Reasoning controls as requested (ADR-0040) — persisted rather than
-   *  resolved, since what the map made of them is no setting of the Chat's. */
   reasoningThinking?: boolean;
   reasoningEffort?: ReasoningEffort;
   thinkingBudget?: number;
-  /**
-   * The per-chat Max steps setting as REQUESTED, not as resolved (#539) —
-   * the plan always carries a concrete ceiling, so persisting it would turn
-   * "unset" into an explicit default on the row's first turn. Undefined
-   * leaves the column null, keeping "unset" and "explicitly set" distinct.
-   */
   maxSteps?: number;
 };
 
-/**
- * The fully-resolved plan for a run. Mirrors `ChatTurn["resolved"]`.
- */
 export type ResolvedRunPlan = {
   resolved: ResolvedGeneration;
-  /**
-   * The concrete model id this turn resolved to (ADR-0017), beside the
-   * reference `resolved.modelId` holds for persistence. A decision that asks
-   * whether some other model *is* this turn's model — the early title attempt
-   * (issue #2017) — compares against this, never the alias a Chat may store.
-   */
   resolvedModelId: ConcreteModelId;
-  /**
-   * The Agent's granted Tool sets and MCPs that loaded no tools for this run,
-   * and why (#1184). Only the Trigger sink records them; a Chat turn and an
-   * A2A Task ignore them.
-   */
   unloadedToolSets?: readonly UnloadedToolSet[];
-  /**
-   * The declared Context window the run's plan resolved with (ADR-0018) — the
-   * denominator the Transcript-summary trigger divides the turn's reading by
-   * (ADR-0041). Absent where the model declares none, in which case the Chat
-   * never summarises.
-   */
   contextWindow?: number;
-  /**
-   * The turn's clearable MCP tool names (ADR-0021, issue #626) — the half of
-   * clearability beyond the core allowlist, handed to the after-turn summary
-   * pass so it clears what the turn's session cleared. Only the session's OWN
-   * resolutions, exactly as the plan the drive ran carried them.
-   */
   readOnlyToolNames?: ReadonlySet<string>;
 };
 
-/**
- * Lifecycle events for a run. Sinks decide their own write cadence.
- *
- * - `onStart` fires exactly once, before any plan resolution. Sinks that
- *   need a row to exist for *all* terminal outcomes (including resolution
- *   failures) should write it here.
- * - `onResolved` fires once after the plan is resolved and just before
- *   model execution. Skipped if `prepare()` throws — `onFinish` fires.
- * - `onProgress` cadence is currently absent; PR #3 introduces time-based
- *   flushing controlled by the sink.
- * - `onFinish` fires exactly once at termination (any status), including
- *   resolution failures.
- */
 export interface RunSink {
   onStart(ctx: {
     runId: RunId;
     messages: PlatypusUIMessage[];
-    /**
-     * The pinned Memories block the turn resolved (ADR-0020). Only the Chat
-     * sink needs it, to persist the snapshot on its upsert/insert; headless
-     * runs pass none.
-     */
     memorySnapshot?: string;
-    /**
-     * The run's **Run event** recorder (#647), for a sink that persists a Run
-     * timeline. Handed over at start so the sink can flush events on its own
-     * cadence for the whole of the run; the drive fills it. Only headless runs
-     * carry one — a Chat turn's message parts remain its record.
-     */
     events?: RunEventRecorder;
   }): Promise<void>;
   onResolved(ctx: { runId: RunId; plan: ResolvedRunPlan }): Promise<void>;
@@ -358,13 +118,6 @@ export interface RunSink {
     messages: PlatypusUIMessage[];
     stats: RunStats;
   }): Promise<void>;
-  /**
-   * The run's first output — text, reasoning or a tool call — has reached
-   * `messages` (#1337). Called once per streamed run, before its first step
-   * ends. A sink that saves the reply saves it here and resolves once it is
-   * saved: the client stream's first output waits on it. Headless runs never
-   * call it.
-   */
   onOutput?(ctx: {
     runId: RunId;
     messages: PlatypusUIMessage[];
@@ -375,11 +128,6 @@ export interface RunSink {
     messages: PlatypusUIMessage[];
     stats: RunStats;
     error?: Error;
-    /**
-     * The final assistant text of a headless run (#647) — "what did it
-     * conclude", one value per run. Absent for a Chat turn, whose answer is
-     * in `messages`, and for a run that ended before it had one.
-     */
     finalText?: string;
   }): Promise<void>;
 }

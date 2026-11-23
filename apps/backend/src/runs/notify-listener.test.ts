@@ -11,7 +11,6 @@ import {
   startNotificationListener,
 } from "./notify-listener.ts";
 
-/** A fake PoolClient the LISTEN loop would hold. */
 const fakeClient = () => ({
   on: vi.fn(),
   query: vi.fn().mockResolvedValue({ rows: [] }),
@@ -34,8 +33,6 @@ describe("startNotificationListener", () => {
 
     stop();
 
-    // The one connection the listener held is returned to the pool, so
-    // `pool.end()` is not held open by it during the shutdown drain.
     expect(client.release).toHaveBeenCalled();
   });
 
@@ -45,12 +42,10 @@ describe("startNotificationListener", () => {
     pool.connect.mockResolvedValueOnce(client);
 
     const stop = startNotificationListener();
-    await vi.advanceTimersByTimeAsync(0); // the connect resolves
+    await vi.advanceTimersByTimeAsync(0);
     await vi.waitFor(() => expect(pool.connect).toHaveBeenCalled());
 
     stop();
-    // A connection error that lands after the stop handle must not schedule a
-    // reconnect: the process is draining and the pool is about to end.
     const errorHandler = client.on.mock.calls.find(
       ([event]) => event === "error",
     )?.[1] as ((err: unknown) => void) | undefined;
@@ -70,7 +65,6 @@ describe("startNotificationListener", () => {
     const stop = startNotificationListener();
     await vi.waitFor(() => expect(pool.connect).toHaveBeenCalled());
 
-    // The channel the module registered for is the one it LISTENs on.
     expect(client.on).toHaveBeenCalledWith(
       "notification",
       expect.any(Function),

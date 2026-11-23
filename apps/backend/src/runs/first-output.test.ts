@@ -17,7 +17,6 @@ const streamOf = (chunks: Chunk[]) =>
     },
   });
 
-/** Each reply `chunks` fold into, in turn, as the runner's drain sees them. */
 const folds = async (chunks: Chunk[]) => {
   const out: PlatypusUIMessage[] = [];
   for await (const message of readUIMessageStream<PlatypusUIMessage>({
@@ -33,7 +32,6 @@ const begun: Chunk[] = [
   { type: "start-step" },
 ];
 
-/** A `/skill` turn's seeded card, as `replaySeededParts` puts it back. */
 const seeded: Chunk[] = [
   { type: "start", messageId: "r1" },
   {
@@ -47,7 +45,6 @@ const seeded: Chunk[] = [
 ];
 
 describe("the first output", () => {
-  // Each chunk that can open a reply's output, after the step's start.
   const openers: Chunk[] = [
     { type: "text-start", id: "t1" },
     { type: "reasoning-start", id: "r1" },

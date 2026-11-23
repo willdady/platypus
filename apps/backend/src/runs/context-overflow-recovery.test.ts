@@ -12,13 +12,6 @@ import { CONTEXT_OVERFLOW_MESSAGE } from "./stream-error.ts";
 import { TOOL_RESULT_TOO_LARGE } from "./context-overflow-recovery.ts";
 import type { RunStatus } from "./types.ts";
 
-/**
- * Context-overflow recovery (issue #1717), driven through the real AI SDK
- * pipeline with a scripted model: R3 — an overflow straight after a tool step
- * fails that step's tool calls and retries the call once — and R1 — any
- * overflow left unrecovered ends with the actionable message, on every Drive.
- */
-
 const USAGE = {
   inputTokens: {
     total: 10,
@@ -65,7 +58,6 @@ const textStream = (): LanguageModelV3StreamPart[] => [
   },
 ];
 
-/** A model that answers each call from `script` and records every prompt. */
 const scriptedModel = (...script: Reply[]) => {
   const prompts: LanguageModelV3CallOptions["prompt"][] = [];
   const model = new MockLanguageModelV3({
@@ -115,7 +107,6 @@ const startRecordedRun = () => {
   return { run, outcome };
 };
 
-/** The tool-result parts of the last tool message in a recorded prompt. */
 const toolResultsOf = (prompt: LanguageModelV3CallOptions["prompt"]) =>
   prompt
     .filter((message) => message.role === "tool")
@@ -145,7 +136,6 @@ describe("an overflow right after a tool step (R3)", () => {
 
     const { result } = await runChat(model);
 
-    // Tool call, the overflowing call, and exactly one retry.
     expect(prompts).toHaveLength(3);
     expect(toolResultsOf(prompts[1])[0]?.output).toMatchObject({
       type: "text",
@@ -164,7 +154,6 @@ describe("an overflow right after a tool step (R3)", () => {
     const { result, chunks } = await runChat(model);
 
     const reply = result.messages?.at(-1);
-    // `readBig` is a test tool the Chat's UI contract does not name.
     const toolPart = reply?.parts.find(
       (part) => (part.type as string) === "tool-readBig",
     );
@@ -173,7 +162,6 @@ describe("an overflow right after a tool step (R3)", () => {
       errorText: TOOL_RESULT_TOO_LARGE,
     });
     expect(reply?.parts.some((part) => part.type === "text")).toBe(true);
-    // The client is told too, replacing the result it was already shown.
     expect(chunks).toContainEqual(
       expect.objectContaining({
         type: "tool-output-error",
@@ -214,8 +202,6 @@ describe("an overflow right after a tool step (R3)", () => {
   });
 });
 
-// The SDK's own backoff re-enters the wrapped model when the retried call
-// fails retryably; that must not open a second R3 retry for the same step.
 it("takes no second retry when the SDK's backoff re-sends the replaced step", async () => {
   const { model, prompts } = scriptedModel(
     "tool",

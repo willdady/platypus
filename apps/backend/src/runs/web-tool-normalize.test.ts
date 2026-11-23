@@ -149,8 +149,6 @@ describe("normalizeWebToolPart", () => {
       ).toBeUndefined();
     });
 
-    // camelCase, per @ai-sdk/openai@4.0.27's webSearchToolFactory output type —
-    // unlike the tool's own snake_case name and its sibling read_url.
     it("normalizes an openPage action to kind page", () => {
       const result = normalizeWebToolPart(
         openAiPart({
