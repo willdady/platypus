@@ -18,18 +18,17 @@ describe("Attachment Routes", () => {
     organizationId: orgId,
   };
 
-  /** Mocks the two middleware lookups: org membership, then workspace fetch. */
   const mockAdminAccess = () => {
     mockSession();
     mockDb.limit
-      .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
-      .mockResolvedValueOnce([workspace]); // requireWorkspaceAccess
+      .mockResolvedValueOnce([{ role: "admin" }])
+      .mockResolvedValueOnce([workspace]);
   };
 
   describe("POST /", () => {
     it("attaches an org-scoped resource for an admin", async () => {
       mockAdminAccess();
-      mockDb.limit.mockResolvedValueOnce([{ id: "mcp-1" }]); // org-scope lookup
+      mockDb.limit.mockResolvedValueOnce([{ id: "mcp-1" }]);
       const record = {
         id: "att-1",
         workspaceId,
@@ -50,7 +49,7 @@ describe("Attachment Routes", () => {
 
     it("attaches an org-scoped skill for an admin", async () => {
       mockAdminAccess();
-      mockDb.limit.mockResolvedValueOnce([{ id: "skill-1" }]); // org-scope lookup
+      mockDb.limit.mockResolvedValueOnce([{ id: "skill-1" }]);
       const record = {
         id: "att-2",
         workspaceId,
@@ -71,7 +70,7 @@ describe("Attachment Routes", () => {
 
     it("returns 403 for a non-admin", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
 
       const res = await app.request(baseUrl, {
         method: "POST",
@@ -84,7 +83,7 @@ describe("Attachment Routes", () => {
 
     it("returns 404 when the resource is not org-scoped in this org", async () => {
       mockAdminAccess();
-      mockDb.limit.mockResolvedValueOnce([]); // org-scope lookup miss
+      mockDb.limit.mockResolvedValueOnce([]);
 
       const res = await app.request(baseUrl, {
         method: "POST",
@@ -97,7 +96,7 @@ describe("Attachment Routes", () => {
 
     it("returns 409 when already attached", async () => {
       mockAdminAccess();
-      mockDb.limit.mockResolvedValueOnce([{ id: "mcp-1" }]); // org-scope lookup
+      mockDb.limit.mockResolvedValueOnce([{ id: "mcp-1" }]);
 
       const err = dbError(
         "23505",
@@ -139,7 +138,7 @@ describe("Attachment Routes", () => {
 
     it("returns 403 for a non-admin", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
 
       const res = await app.request(`${baseUrl}/mcp/mcp-1`, {
         method: "DELETE",
@@ -154,7 +153,6 @@ describe("Attachment Routes", () => {
       const rows = [
         { id: "att-1", workspaceId, resourceType: "mcp", resourceId: "mcp-1" },
       ];
-      // requireOrgAccess + requireWorkspaceAccess consume two `where`s, route the third
       mockDb.where
         .mockReturnValueOnce(mockDb)
         .mockReturnValueOnce(mockDb)

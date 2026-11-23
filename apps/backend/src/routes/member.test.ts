@@ -35,7 +35,6 @@ describe("Member Routes", () => {
     ...extra,
   });
 
-  // `u2` is a banned super admin, for the flags the GETs derive.
   const users = [
     user("admin-1"),
     user("u-other"),
@@ -48,11 +47,6 @@ describe("Member Routes", () => {
     }),
   ];
 
-  /**
-   * The caller (`admin-1`) is an admin of `org-1`; `extra` adds the members a
-   * test acts on. Another org's admin (`m-other`) is always present so a route
-   * that dropped its `organizationId` scope finds a row it must not.
-   */
   const world = (extra: Row[] = []): FakeDb =>
     seedDb({
       user: users,
@@ -88,7 +82,6 @@ describe("Member Routes", () => {
       const json = (await res.json()) as {
         results: { id: string; isSuperAdmin: boolean; isBanned: boolean }[];
       };
-      // Guards the list's `organizationId` filter: `m-other` is org-2's.
       expect(
         json.results.map((m) => [m.id, m.isSuperAdmin, m.isBanned]),
       ).toEqual([
@@ -109,7 +102,6 @@ describe("Member Routes", () => {
 
   describe("GET /:memberId", () => {
     it("returns 404 when the member is not in this organization", async () => {
-      // Guards the lookup's `organizationId` filter: `m-other` exists, in org-2.
       mockSession({ id: "admin-1", role: "user" });
       world();
 
@@ -130,8 +122,6 @@ describe("Member Routes", () => {
         isSuperAdmin: true,
         isBanned: true,
       });
-      // The list and single responses share one shape: the ban fields fold
-      // into `isBanned`.
       expect(body.user).toEqual({
         id: "u2",
         name: "User 2",
@@ -187,8 +177,6 @@ describe("Member Routes", () => {
     });
 
     it("refuses to demote the last admin of the organization", async () => {
-      // A super admin is not a member, so the only admin row is `m1`; the other
-      // org's admin must not count towards this org's total.
       mockSession({ id: "super-1", role: "admin" });
       const fake = seedDb({
         organization_member: [

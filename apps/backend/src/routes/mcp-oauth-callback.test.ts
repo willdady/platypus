@@ -36,7 +36,6 @@ describe("MCP OAuth Callback Route", () => {
   beforeEach(() => {
     resetMockDb();
     vi.clearAllMocks();
-    // Default: where returns mockDb for chaining, but also resolves for terminal calls
     mockDb.where.mockImplementation(() => mockDb);
   });
 
@@ -54,7 +53,7 @@ describe("MCP OAuth Callback Route", () => {
 
   it("should return 400 for invalid state", async () => {
     mockSession();
-    mockDb.limit.mockResolvedValueOnce([]); // No state record found
+    mockDb.limit.mockResolvedValueOnce([]);
 
     const res = await app.request(baseUrl, {
       method: "POST",
@@ -70,7 +69,7 @@ describe("MCP OAuth Callback Route", () => {
 
   it("should return 400 for expired state", async () => {
     mockSession();
-    const expiredDate = new Date(Date.now() - 60000); // 1 minute ago
+    const expiredDate = new Date(Date.now() - 60000);
     mockDb.limit.mockResolvedValueOnce([
       {
         id: "state-123",
@@ -103,8 +102,8 @@ describe("MCP OAuth Callback Route", () => {
           userId: "user-1",
           expiresAt: futureDate,
         },
-      ]) // state lookup
-      .mockResolvedValueOnce([]); // mcp lookup - not found
+      ])
+      .mockResolvedValueOnce([]);
 
     const res = await app.request(baseUrl, {
       method: "POST",
@@ -127,8 +126,8 @@ describe("MCP OAuth Callback Route", () => {
           userId: "user-1",
           expiresAt: futureDate,
         },
-      ]) // state lookup
-      .mockResolvedValueOnce([{ id: "mcp-1", url: null, workspaceId: "ws-1" }]); // mcp lookup - no URL
+      ])
+      .mockResolvedValueOnce([{ id: "mcp-1", url: null, workspaceId: "ws-1" }]);
 
     const res = await app.request(baseUrl, {
       method: "POST",
@@ -153,11 +152,11 @@ describe("MCP OAuth Callback Route", () => {
           userId: "user-1",
           expiresAt: futureDate,
         },
-      ]) // state lookup
+      ])
       .mockResolvedValueOnce([
         { id: "mcp-1", url: "http://mcp.example.com", workspaceId: "ws-1" },
-      ]) // mcp lookup
-      .mockResolvedValueOnce([]); // workspace lookup - not found
+      ])
+      .mockResolvedValueOnce([]);
 
     const res = await app.request(baseUrl, {
       method: "POST",
@@ -180,11 +179,11 @@ describe("MCP OAuth Callback Route", () => {
           userId: "user-1",
           expiresAt: futureDate,
         },
-      ]) // state lookup
+      ])
       .mockResolvedValueOnce([
         { id: "mcp-1", url: "http://mcp.example.com", workspaceId: "ws-1" },
-      ]) // mcp lookup
-      .mockResolvedValueOnce([{ id: "ws-1", organizationId: "org-1" }]); // workspace lookup
+      ])
+      .mockResolvedValueOnce([{ id: "ws-1", organizationId: "org-1" }]);
 
     vi.mocked(mcpAuth).mockResolvedValueOnce("AUTHORIZED");
 
@@ -263,7 +262,6 @@ describe("MCP OAuth Callback Route", () => {
     expect(await res.json()).toEqual({
       error: "OAuth token exchange failed",
     });
-    // Single-use: a failed exchange consumes the state too.
     expect(mockDb.delete).toHaveBeenCalledTimes(1);
   });
 

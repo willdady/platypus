@@ -16,10 +16,6 @@ import { servedFileHeaders } from "../storage/response-headers.ts";
 
 const files = new Hono<{ Variables: Variables }>();
 
-/**
- * Parse a storage key to extract org and workspace IDs.
- * Key format: {orgId}/{workspaceId}/{chatId}/{messageId}/{partIndex}-{hash8}.{ext}
- */
 function parseStorageKey(
   key: string,
 ): { orgId: string; workspaceId: string } | null {
@@ -30,38 +26,21 @@ function parseStorageKey(
   return { orgId, workspaceId };
 }
 
-/**
- * GET /files/* - Serve files from storage.
- *
- * This endpoint proxies files from the storage backend to the client.
- * It verifies that the user has access to the organization and workspace
- * before serving the file.
- *
- * When STORAGE_PUBLIC_URL is set, this endpoint is typically bypassed
- * as the browser fetches files directly from the storage URL.
- */
 files.get("/*", requireAuth, async (c) => {
   const user = userOf(c);
 
-  // Extract the storage key from the wildcard path
   const key = c.req.path.slice(FILES_ROUTE_PREFIX.length);
 
   if (!key) {
     return c.json({ error: "File key required" }, 400);
   }
 
-  // The path is attacker-controlled and `c.req.path` is not percent-decoded,
-  // so reject anything Platypus could not have stored before it reaches a
-  // backend. Throws, so the `onError` seam answers 400 (ADR-0010).
   assertValidStorageKey(key);
 
-  // A bundled Skill file is served only through its Skill's own download
-  // route, as an attachment (ADR-0036) — never from here, for anyone.
   if (isSkillStorageKey(key)) {
     return c.json({ error: "Access denied" }, 403);
   }
 
-  // Parse org and workspace from the key
   const keyParts = parseStorageKey(key);
   if (!keyParts) {
     return c.json({ error: "Invalid file key format" }, 400);
@@ -69,12 +48,7 @@ files.get("/*", requireAuth, async (c) => {
 
   const { orgId, workspaceId } = keyParts;
 
-  // Authorization check
-  // Super admins bypass all checks
-  if (user.role && isSuperAdmin(user)) {
-    // Continue to serve file
-  } else {
-    // Check org membership
+  if (!(user.role && isSuperAdmin(user))) {
     const [membership] = await db
       .select()
       .from(organizationMember)
@@ -90,7 +64,6 @@ files.get("/*", requireAuth, async (c) => {
       return c.json({ error: "Access denied" }, 403);
     }
 
-    // For non-admin members, check workspace ownership
     if (membership.role !== "admin") {
       const [ws] = await db
         .select()
@@ -108,9 +81,7 @@ files.get("/*", requireAuth, async (c) => {
     }
   }
 
-  // Fetch file from storage
   const storage = getStorage();
-  // Streamed, so a large file is never held in memory whole.
   const result = await storage.getStream(key);
 
   if (!result) {
@@ -119,14 +90,8 @@ files.get("/*", requireAuth, async (c) => {
 
   const { stream, contentType, contentLength } = result;
 
-  // Set response headers
   c.header("Content-Type", contentType);
-  // The stored media type is what the client's data URL claimed. Sniffing lets
-  // the browser pick a different one from the bytes, so a file stored as an
-  // expected type could still be treated as something else on our own origin.
   c.header("X-Content-Type-Options", "nosniff");
-  // Some stored types are documents the browser would run on this origin if
-  // opened in a tab; `servedFileHeaders` says what each type needs.
   for (const [name, value] of Object.entries(servedFileHeaders(contentType))) {
     c.header(name, value);
   }

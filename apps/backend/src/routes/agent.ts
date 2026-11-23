@@ -27,7 +27,6 @@ import { backendBaseUrl } from "../base-urls.ts";
 
 const agent = new Hono<{ Variables: Variables }>();
 
-/** Create a new agent (admin or editor) — always Workspace-scoped */
 agent.post(
   "/",
   requireAuth,
@@ -47,7 +46,6 @@ agent.post(
   },
 );
 
-/** List agents visible in this workspace (workspace-scoped + attached org-scoped) */
 agent.get(
   "/",
   requireAuth,
@@ -69,7 +67,6 @@ agent.get(
   },
 );
 
-/** Get an agent by ID (workspace-scoped, or attached org-scoped) */
 agent.get(
   "/:agentId",
   requireAuth,
@@ -89,7 +86,6 @@ agent.get(
   },
 );
 
-/** Update an agent by ID (workspace-scoped only; Shared agents edit on org surface) */
 agent.put(
   "/:agentId",
   requireAuth,
@@ -102,9 +98,6 @@ agent.put(
     const scope = workspaceScopeOf(c);
     const baseUrl = backendBaseUrl();
 
-    // A Shared Agent is a single source of truth edited only on the Organization
-    // surface (ADR-0007); `updateAgentRow` throws NotFound (→404) when the
-    // Agent is not visible here, then Locked (→403) when it is org-scoped.
     const result = await updateAgentRow(
       { kind: "workspace", ctx: scope },
       agentId,
@@ -117,7 +110,6 @@ agent.put(
   },
 );
 
-/** Pin an agent in this workspace (Workspace Owner only; idempotent) */
 agent.put(
   "/:agentId/pin",
   requireAuth,
@@ -130,7 +122,6 @@ agent.put(
   },
 );
 
-/** Unpin an agent in this workspace (Workspace Owner only; idempotent) */
 agent.delete(
   "/:agentId/pin",
   requireAuth,
@@ -143,7 +134,6 @@ agent.delete(
   },
 );
 
-/** Upload avatar for an agent */
 agent.post(
   "/:agentId/avatar",
   requireAuth,
@@ -161,7 +151,6 @@ agent.post(
   },
 );
 
-/** Delete avatar for an agent */
 agent.delete(
   "/:agentId/avatar",
   requireAuth,
@@ -176,7 +165,6 @@ agent.delete(
   },
 );
 
-/** Delete an agent by ID — Workspace-scoped only (Shared agents via org surface) */
 agent.delete(
   "/:agentId",
   requireAuth,
@@ -186,25 +174,12 @@ agent.delete(
     const agentId = c.req.param("agentId");
     const scope = workspaceScopeOf(c);
 
-    // A Shared Agent is deleted only from the Organization surface (ADR-0007):
-    // `deleteAgentRow` throws NotFound (→404) when the Agent is not visible
-    // here, then Locked (→403) when it is org-scoped.
     await deleteAgentRow({ kind: "workspace", ctx: scope }, agentId);
 
     return c.json({ message: "Agent deleted" });
   },
 );
 
-/**
- * Promote a workspace-scoped Agent to Organization scope (admin only — ADR-0007).
- *
- * Runs the no-cascade rule (`findNonSharedReferences`) as the module's guard: a
- * shared Agent may reference only other Shared resources, so Promotion is
- * blocked unless the Agent's Provider, every Skill, every sub-agent, and every
- * MCP-backed tool set is already Organization-scoped. When blocked, the
- * offending references are returned as `blockers`. On success the Agent
- * re-scopes to the Organization and its origin Workspace is auto-attached.
- */
 agent.post(
   "/:agentId/promote",
   requireAuth,

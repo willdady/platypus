@@ -17,7 +17,6 @@ import {
 
 const mcpOauthCallback = new Hono<{ Variables: Variables }>();
 
-/** Exchange OAuth authorization code for tokens (state-based lookup) */
 mcpOauthCallback.post(
   "/",
   requireAuth,
@@ -25,7 +24,6 @@ mcpOauthCallback.post(
   async (c) => {
     const { code, state } = c.req.valid("json");
 
-    // Look up the MCP via the state parameter
     const [stateRecord] = await db
       .select()
       .from(mcpOauthState)
@@ -36,14 +34,10 @@ mcpOauthCallback.post(
       return c.json({ error: "Invalid or expired OAuth state" }, 400);
     }
 
-    // Only the user who started the sign-in may complete it. Otherwise any
-    // signed-in user lured through the provider's consent screen would bind
-    // their third-party account to the starter's MCP.
     if (stateRecord.userId !== userOf(c).id) {
       return c.json({ error: "OAuth state belongs to another user" }, 403);
     }
 
-    // Check expiry
     if (stateRecord.expiresAt < new Date()) {
       await db.delete(mcpOauthState).where(eq(mcpOauthState.id, state));
       return c.json({ error: "OAuth state has expired" }, 400);
@@ -63,9 +57,6 @@ mcpOauthCallback.post(
       return c.json({ error: "MCP URL is not configured" }, 400);
     }
 
-    // Resolve the orgId for the redirect URL. An org-scoped (Shared) MCP
-    // carries its orgId directly; a workspace-scoped MCP gets it from its
-    // workspace.
     let redirectOrgId = mcpRecord.organizationId;
     if (!redirectOrgId && mcpRecord.workspaceId) {
       const [wsRecord] = await db
@@ -102,13 +93,10 @@ mcpOauthCallback.post(
 
       return c.json({ error: "Unexpected OAuth result" }, 500);
     } catch (error) {
-      // The library's message can name the authorization server's internals;
-      // it goes to the log, not the browser.
       logger.error({ error }, "OAuth callback error");
       return c.json({ error: "OAuth token exchange failed" }, 500);
     } finally {
-      // A state is single-use whatever the exchange's outcome. The provider
-      // reads the row during the exchange, so it is removed after, not before.
+      // why: the provider reads the state row during the exchange, so delete it after, not before
       await db.delete(mcpOauthState).where(eq(mcpOauthState.id, state));
     }
   },
