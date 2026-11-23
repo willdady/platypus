@@ -40,7 +40,6 @@ describe("Organization MCP Routes", () => {
     authType: "None",
   };
 
-  /** A Shared MCP of `org-1`, carrying every stored credential. */
   const sharedMcp = (over: Row = {}): Row => ({
     id: "mcp-1",
     name: "Org MCP",
@@ -60,11 +59,6 @@ describe("Organization MCP Routes", () => {
     ...over,
   });
 
-  /**
-   * The caller (`user-1`) is a member of `org-1` at `role`. Alongside `org-1`'s
-   * Shared MCP sit two it must never reach from this surface: another
-   * Organization's Shared MCP, and a Workspace-scoped MCP of its own org.
-   */
   const world = (
     role: "admin" | "member" = "admin",
     rows: Store = {},
@@ -153,8 +147,6 @@ describe("Organization MCP Routes", () => {
 
     it("returns 409 if an MCP name already exists in the org", async () => {
       mockSession();
-      // The slug check passes (the existing row carries another slug), so the
-      // database is what refuses the duplicate `(organizationId, name)` pair.
       const fake = seedDb(
         {
           organization_member: [
@@ -172,7 +164,6 @@ describe("Organization MCP Routes", () => {
 
       const res = await app.request(baseUrl, json("POST", createBody));
 
-      // The conflict now flows through the central onError (ADR-0010).
       expect(res.status).toBe(409);
       expect(await res.json()).toEqual({
         error: "A resource with that name already exists",
@@ -298,8 +289,6 @@ describe("Organization MCP Routes", () => {
       expect(namesOf(fake)).toEqual(["Renamed MCP", "Org MCP", "Org MCP"]);
     });
 
-    // Guards requireOrgScoped's `organizationId = orgId` filter, and the
-    // UPDATE's orgScopedWhere behind it.
     it.each([
       ["another organization's Shared MCP", "mcp-other-org"],
       ["a Workspace-scoped MCP", "mcp-ws"],
@@ -507,7 +496,6 @@ describe("Organization MCP Routes", () => {
         authorizationUrl: "https://provider.example.com/authorize?x=1",
       });
       expect(tokensOf(fake, "mcp-1")).toEqual([null, null]);
-      // The clear is scoped to this org's MCP alone.
       expect(tokensOf(fake, "mcp-other-org")).toEqual([
         "access-old",
         "refresh-old",

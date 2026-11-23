@@ -109,8 +109,6 @@ describe("Organization Routes", () => {
   });
 
   describe("GET /organizations/:orgId", () => {
-    // `user-1` is a member of `org-1` only; `org-2` is seeded first, so a
-    // lookup that dropped its `id` filter returns it.
     const seed = () =>
       seedDb({
         organization: [
@@ -134,8 +132,6 @@ describe("Organization Routes", () => {
       });
 
     it("should return 403 if user has no access", async () => {
-      // A member of `org-1` only: the membership lookup's `organizationId`
-      // scope is what keeps `org-2` out of reach.
       mockSession({ id: "user-1", role: "user" });
       seed();
 
@@ -144,7 +140,6 @@ describe("Organization Routes", () => {
     });
 
     it("should return organization if user has access", async () => {
-      // Guards the `id` filter: `org-2` must not come back for `org-1`.
       mockSession({ id: "user-1", role: "user" });
       seed();
 
@@ -244,7 +239,6 @@ describe("Organization Routes", () => {
         name: "Org 1",
         identityContext: "We are Acme.",
       });
-      // Guards the update's `id` filter: `org-2` is left as it was.
       expect(fake.tables.organization).toEqual([
         expect.objectContaining({
           id: "org-1",
@@ -383,7 +377,6 @@ describe("Organization Routes", () => {
         const fake = seedWithSandboxes([
           sandbox("sb-1", "ws-1"),
           sandbox("sb-2", "ws-2"),
-          // Another Organization's Sandbox: must be left alone.
           sandbox("sb-3", "ws-3"),
         ]);
         const orgPresent: boolean[] = [];

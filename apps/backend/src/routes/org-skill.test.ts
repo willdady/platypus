@@ -2,8 +2,6 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { dbError, mockDb, mockSession, resetMockDb } from "../test-utils.ts";
 import app from "../server.ts";
 
-// The bundle hash and file list are exercised against a real Postgres in
-// `services/skill-bundle.test.ts`; here they pass the row through.
 vi.mock("../services/skill-bundle.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../services/skill-bundle.ts")>()),
   rehashSkill: vi.fn((_db: unknown, row: unknown) => Promise.resolve(row)),
@@ -30,7 +28,7 @@ describe("Organization Skill Routes", () => {
   describe("POST /", () => {
     it("creates an org skill if org admin", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
 
       const mockSkill = {
         id: "skill-1",
@@ -52,7 +50,7 @@ describe("Organization Skill Routes", () => {
 
     it("returns 403 if not org admin", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
 
       const res = await app.request(baseUrl, {
         method: "POST",
@@ -65,7 +63,7 @@ describe("Organization Skill Routes", () => {
 
     it("returns 409 if a skill name already exists in the org", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
 
       const err = dbError(
         "23505",
@@ -86,7 +84,7 @@ describe("Organization Skill Routes", () => {
   describe("GET /", () => {
     it("lists org skills for any member", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       const skills = [{ id: "skill-1", name: "org-skill" }];
       mockDb.where.mockReturnValueOnce(mockDb).mockResolvedValueOnce(skills);
 
@@ -104,7 +102,7 @@ describe("Organization Skill Routes", () => {
   describe("GET /:skillId", () => {
     it("returns an org skill", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       const skill = { id: "skill-1", name: "org-skill", organizationId: orgId };
       mockDb.limit.mockResolvedValueOnce([skill]);
 
@@ -120,7 +118,7 @@ describe("Organization Skill Routes", () => {
 
     it("returns 404 if not found", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([]);
 
       const res = await app.request(`${baseUrl}/missing`);
@@ -131,8 +129,7 @@ describe("Organization Skill Routes", () => {
   describe("PUT /:skillId", () => {
     it("updates an org skill if org admin", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
-      // requireOrgScoped: the Skill is a Shared resource of this org
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
       mockDb.limit.mockResolvedValueOnce([
         { id: "skill-1", organizationId: orgId },
       ]);
@@ -157,12 +154,10 @@ describe("Organization Skill Routes", () => {
       expect(await res.json()).toEqual({ ...updated, scope: "organization" });
     });
 
-    // #605: the org surface used to skip the existence pre-check, discovering a
-    // missing Skill only when the UPDATE matched no row.
     it("404s a skill that is not a Shared resource of this org, without touching the write", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([]); // requireOrgScoped: not found
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
+      mockDb.limit.mockResolvedValueOnce([]);
 
       const res = await app.request(`${baseUrl}/missing`, {
         method: "PUT",
@@ -180,7 +175,7 @@ describe("Organization Skill Routes", () => {
 
     it("returns 403 for a non-admin", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
 
       const res = await app.request(`${baseUrl}/skill-1`, {
         method: "PUT",
@@ -200,23 +195,22 @@ describe("Organization Skill Routes", () => {
     it("deletes an org skill if org admin and not attached", async () => {
       mockSession();
       mockDb.limit
-        .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
-        .mockResolvedValueOnce([]) // attachment guard: none
-        .mockResolvedValueOnce([]); // blueprint guard: none
+        .mockResolvedValueOnce([{ role: "admin" }])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([]);
       mockDb.returning.mockResolvedValueOnce([{ id: "skill-1" }]);
 
       const res = await app.request(`${baseUrl}/skill-1`, { method: "DELETE" });
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ message: "Skill deleted" });
-      // The dead skill id is scrubbed from referencing agents in the same tx.
       expect(mockDb.update).toHaveBeenCalled();
     });
 
     it("returns 409 when the skill is attached to a workspace", async () => {
       mockSession();
       mockDb.limit
-        .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
-        .mockResolvedValueOnce([{ id: "att-1" }]); // attachment guard: attached
+        .mockResolvedValueOnce([{ role: "admin" }])
+        .mockResolvedValueOnce([{ id: "att-1" }]);
 
       const res = await app.request(`${baseUrl}/skill-1`, { method: "DELETE" });
       expect(res.status).toBe(409);
@@ -225,9 +219,9 @@ describe("Organization Skill Routes", () => {
     it("returns 409 when the skill is listed in a blueprint", async () => {
       mockSession();
       mockDb.limit
-        .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
-        .mockResolvedValueOnce([]) // attachment guard: none
-        .mockResolvedValueOnce([{ id: "bpi-1" }]); // blueprint guard: listed
+        .mockResolvedValueOnce([{ role: "admin" }])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([{ id: "bpi-1" }]);
 
       const res = await app.request(`${baseUrl}/skill-1`, { method: "DELETE" });
       expect(res.status).toBe(409);
@@ -235,7 +229,7 @@ describe("Organization Skill Routes", () => {
 
     it("returns 403 for a non-admin", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
 
       const res = await app.request(`${baseUrl}/skill-1`, { method: "DELETE" });
       expect(res.status).toBe(403);

@@ -2,14 +2,6 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { seedDb, mockSession, resetMockDb, type Store } from "../test-utils.ts";
 import app from "../server.ts";
 
-/**
- * These tests state fixture rows rather than counting queries: `seedDb()`
- * installs the in-memory fake executor from `fake-db.ts`, which interprets the
- * `WHERE` each query builds. A route that matched an Attachment on its
- * `resourceId` alone, or an "org-scoped" resource on its `organizationId`
- * alone, reads a row it should not see here and the test fails — where the
- * chainable mock would have handed back whichever rows the test stubbed next.
- */
 describe("Organization Attachment (central sharing) Routes", () => {
   beforeEach(() => {
     resetMockDb();
@@ -18,25 +10,21 @@ describe("Organization Attachment (central sharing) Routes", () => {
 
   const orgId = "org-1";
   const baseUrl = `/organizations/${orgId}/attachments`;
-  /** The one attachment address: the Workspace names the path. */
   const writeBaseFor = (workspaceId: string) =>
     `/organizations/${orgId}/workspaces/${workspaceId}/attachments`;
   const writeBase = writeBaseFor("ws-1");
   const createdAt = new Date("2026-01-01T00:00:00.000Z");
 
-  /** Membership rows: the caller is an admin of `org-1` unless stated otherwise. */
   const membership = (role: "admin" | "member") => [
     { id: "m1", userId: "user-1", organizationId: orgId, role },
   ];
 
-  /** The baseline org: two of its workspaces, plus one belonging to another org. */
   const workspaces = [
     { id: "ws-1", name: "Alpha", organizationId: orgId },
     { id: "ws-2", name: "Beta", organizationId: orgId },
     { id: "ws-elsewhere", name: "Gamma", organizationId: "org-2" },
   ];
 
-  /** A Shared Agent of this org — org-scoped, at no workspace (ADR-0007). */
   const sharedAgent = {
     id: "agent-1",
     name: "Shared Agent",
@@ -97,9 +85,6 @@ describe("Organization Attachment (central sharing) Routes", () => {
     });
 
     it("lists neither another resource's attachments nor another org's", async () => {
-      // The list joins through workspace and filters on all three columns. A
-      // query keyed on `resourceId` alone would return the MCP row; one that
-      // dropped the organization check would return the foreign workspace.
       mockSession();
       seed({
         organization_member: membership("admin"),
@@ -193,10 +178,6 @@ describe("Organization Attachment (central sharing) Routes", () => {
     });
 
     it("404s a resource that carries a workspace as well as this org", async () => {
-      // Sharing is managed only for a genuinely Shared resource: the lookup
-      // requires no Workspace, so a row carrying both scope columns cannot be
-      // attached elsewhere on the strength of its org column (ADR-0007).
-      // Drop `isNull(agent.workspaceId)` from `sharedWhere` and this passes.
       mockSession();
       const fake = seed({
         organization_member: membership("admin"),
@@ -333,8 +314,6 @@ describe("Organization Attachment (central sharing) Routes", () => {
       const res = await app.request(delUrl, { method: "DELETE" });
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ message: "Detached" });
-      // The other workspace's Attachment survives — a delete keyed on
-      // `resourceId` alone would have taken it too.
       expect(fake.tables.attachment).toEqual([
         expect.objectContaining({ id: "att-2" }),
       ]);

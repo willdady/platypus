@@ -30,7 +30,6 @@ import type { Variables } from "../server.ts";
 
 const organization = new Hono<{ Variables: Variables }>();
 
-/** Create a new organization (super admin only) */
 organization.post(
   "/",
   requireAuth,
@@ -49,17 +48,14 @@ organization.post(
   },
 );
 
-/** List all organizations (filtered to user's memberships) */
 organization.get("/", requireAuth, async (c) => {
   const user = userOf(c);
 
-  // Super admins see all organizations
   if (isSuperAdmin(user)) {
     const results = await db.select().from(organizationTable);
     return c.json({ results });
   }
 
-  // Regular users see only their organizations
   const memberships = await db
     .select({ organizationId: organizationMember.organizationId })
     .from(organizationMember)
@@ -79,7 +75,6 @@ organization.get("/", requireAuth, async (c) => {
   return c.json({ results });
 });
 
-/** Get a organization by ID */
 organization.get("/:orgId", requireAuth, requireOrgAccess(), async (c) => {
   const { orgId } = orgScopeOf(c);
   const record = await db
@@ -93,7 +88,6 @@ organization.get("/:orgId", requireAuth, requireOrgAccess(), async (c) => {
   return c.json(record[0]);
 });
 
-/** Update a organization by ID (admin only) */
 organization.put(
   "/:orgId",
   requireAuth,
@@ -117,15 +111,12 @@ organization.put(
   },
 );
 
-/** Delete a organization by ID (admin only) */
 organization.delete(
   "/:orgId",
   requireAuth,
   requireOrgAccess(["admin"]),
   async (c) => {
     const { orgId } = orgScopeOf(c);
-    // Read before the cascade takes the Agent rows, and their keys, away: the
-    // Org Agents and every Workspace's Agents.
     const workspaces = await db
       .select({ id: workspaceTable.id })
       .from(workspaceTable)
@@ -142,9 +133,6 @@ organization.delete(
           ),
         ),
       );
-    // Best-effort sandbox teardown while the Workspace rows still exist, as
-    // Workspace delete does. Never throws; failures are recorded in
-    // sandbox_teardown_failure (ADR-0001).
     await Promise.all(
       workspaces.map(({ id }) => destroyWorkspaceSandboxes(id)),
     );
@@ -155,7 +143,6 @@ organization.delete(
   },
 );
 
-/** Get user's membership for an organization */
 organization.get("/:orgId/membership", requireAuth, requireOrgAccess(), (c) => {
   return c.json(c.get("orgMembership"));
 });

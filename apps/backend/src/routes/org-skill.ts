@@ -39,13 +39,8 @@ import { attachment, skillZipBodyLimit } from "./skill-download.ts";
 import { mountGateAccess } from "./org-gate-access.ts";
 import type { Variables } from "../server.ts";
 
-// Org-scoped Skills are Shared resources (ADR-0007): a single source of truth
-// defined once at Organization scope and referenced by Workspaces through an
-// Attachment. They are managed only by Org Admins on the Organization surface,
-// so all mutations are org-admin-only; any member may read them.
 const orgSkill = new Hono<{ Variables: Variables }>();
 
-/** Create an org-scoped Skill (admin only) */
 orgSkill.post(
   "/",
   requireAuth,
@@ -55,15 +50,11 @@ orgSkill.post(
     const { orgId } = orgScopeOf(c);
     const data = c.req.valid("json");
 
-    // Agent associations are a workspace concern; `createSkill` ignores any
-    // `agentIds` at Organization scope. A duplicate name surfaces as a Postgres
-    // unique violation, mapped to 409 by the central onError (ADR-0010).
     const row = await createSkill({ kind: "organization", orgId }, data);
     return c.json(skillResponse(row, "organization"), 201);
   },
 );
 
-/** List org-scoped Skills */
 orgSkill.get("/", requireAuth, requireOrgAccess(), async (c) => {
   const { orgId } = orgScopeOf(c);
   const results = await listOrgScoped(db, "skill", orgId);
@@ -72,7 +63,6 @@ orgSkill.get("/", requireAuth, requireOrgAccess(), async (c) => {
   });
 });
 
-/** Get an org-scoped Skill by ID */
 orgSkill.get("/:skillId", requireAuth, requireOrgAccess(), async (c) => {
   const { orgId } = orgScopeOf(c);
   const skillId = c.req.param("skillId");
@@ -84,15 +74,12 @@ orgSkill.get("/:skillId", requireAuth, requireOrgAccess(), async (c) => {
   });
 });
 
-/** Import a zip as a new org-scoped Skill (admin only) */
 orgSkill.post(
   "/import",
   requireAuth,
   requireOrgAccess(["admin"]),
   skillZipBodyLimit,
   async (c) => {
-    // Always a new Skill: a name already taken is a 409 via the central
-    // onError (ADR-0010).
     const zip = new Uint8Array(await c.req.arrayBuffer());
     const row = await importSkillBundle(
       { kind: "organization", orgId: orgScopeOf(c).orgId },
@@ -102,7 +89,6 @@ orgSkill.post(
   },
 );
 
-/** Every Skill a GitHub source holds, at the commit its ref resolves to (admin only) */
 orgSkill.post(
   "/github/preview",
   requireAuth,
@@ -117,7 +103,6 @@ orgSkill.post(
     ),
 );
 
-/** Install previewed Skills as Shared Skills, each on its own (admin only) */
 orgSkill.post(
   "/github/install",
   requireAuth,
@@ -132,7 +117,6 @@ orgSkill.post(
     ),
 );
 
-/** Replace an org-scoped Skill's whole bundle from a zip (admin only) */
 orgSkill.put(
   "/:skillId/bundle",
   requireAuth,
@@ -149,7 +133,6 @@ orgSkill.put(
   },
 );
 
-/** Check a GitHub-installed Skill for updates (admin only) */
 orgSkill.post(
   "/:skillId/github/check",
   requireAuth,
@@ -163,7 +146,6 @@ orgSkill.post(
     ),
 );
 
-/** Update a GitHub-installed Skill to the checked commit (admin only) */
 orgSkill.post(
   "/:skillId/github/update",
   requireAuth,
@@ -179,7 +161,6 @@ orgSkill.post(
     ),
 );
 
-/** Export an org-scoped Skill as a zip */
 orgSkill.get("/:skillId/export", requireAuth, requireOrgAccess(), async (c) => {
   const { orgId } = orgScopeOf(c);
   const record = await requireOrgScoped(
@@ -192,7 +173,6 @@ orgSkill.get("/:skillId/export", requireAuth, requireOrgAccess(), async (c) => {
   return attachment(c, zip, `${record.name}.zip`, "application/zip");
 });
 
-/** Download one bundled file of an org-scoped Skill */
 orgSkill.get(
   "/:skillId/files/:fileId",
   requireAuth,
@@ -209,7 +189,6 @@ orgSkill.get(
   },
 );
 
-/** Update an org-scoped Skill by ID (admin only) */
 orgSkill.put(
   "/:skillId",
   requireAuth,
@@ -220,11 +199,6 @@ orgSkill.put(
     const skillId = c.req.param("skillId");
     const data = c.req.valid("json");
 
-    // `updateSkill` throws NotFound (→404) via requireOrgScoped when the Skill
-    // is not a Shared resource of this Organization, before the write ever
-    // runs (#605). Agent associations are a workspace concern and are ignored. A
-    // duplicate name surfaces as a Postgres unique violation, mapped to 409 by
-    // the central onError (ADR-0010).
     const row = await updateSkill(
       { kind: "organization", orgId },
       skillId,
@@ -234,7 +208,6 @@ orgSkill.put(
   },
 );
 
-/** Delete an org-scoped Skill by ID (admin only) */
 orgSkill.delete(
   "/:skillId",
   requireAuth,
@@ -243,19 +216,12 @@ orgSkill.delete(
     const { orgId } = orgScopeOf(c);
     const skillId = c.req.param("skillId");
 
-    // `deleteSkill` throws ConflictError (→409, ADR-0007/0008) while an
-    // Attachment or Blueprint still references the Skill, and NotFound (→404)
-    // when it is not visible here.
     await deleteSkill({ kind: "organization", orgId }, skillId);
 
     return c.json({ message: "Skill deleted" });
   },
 );
 
-/**
- * The Organization's Skill import gate (ADR-0037): which Workspaces may import
- * Skill bundles. Org Admin only.
- */
 const orgSkillImport = new Hono<{ Variables: Variables }>();
 mountGateAccess(orgSkillImport, getSkillImportAccess, setSkillImportAccess);
 

@@ -10,10 +10,7 @@ import {
 } from "../test-utils.ts";
 import app from "../server.ts";
 
-// Fakes the completion at the SDK boundary, as in `provider.test.ts`: the
-// Organization route's own work — admin guard, validation, opening the vendor
-// client — runs for real. File-local because the `ai` mock factory must be in
-// place before `ai` is first imported.
+// why: file-local, as the `ai` mock must be in place before `ai` is first imported
 const { mockGenerateText, mockCreateOpenAI } = vi.hoisted(() => ({
   mockGenerateText: vi.fn(),
   mockCreateOpenAI: vi.fn(
@@ -43,7 +40,6 @@ describe("Organization Provider Routes", () => {
     headers: { "Content-Type": "application/json" },
   });
 
-  /** A Shared Provider of `org-1`. */
   const sharedProvider = (over: Row = {}): Row => ({
     id: "p1",
     name: "Org OpenAI",
@@ -61,12 +57,6 @@ describe("Organization Provider Routes", () => {
     ...over,
   });
 
-  /**
-   * The caller (`user-1`) is a member of `org-1` at `role`. Alongside `org-1`'s
-   * Shared Provider sit two this surface must never reach: another
-   * Organization's Shared Provider and a Workspace-scoped Provider of its own
-   * org — all three named alike, so only the scope tells them apart.
-   */
   const world = (
     role: "admin" | "member" = "admin",
     rows: Store = {},
@@ -147,7 +137,6 @@ describe("Organization Provider Routes", () => {
 
     it("should return 409 if provider name already exists in org", async () => {
       mockSession();
-      // The database refuses the duplicate `(organizationId, name)` pair.
       const fake = world("admin");
 
       const res = await app.request(
@@ -155,7 +144,6 @@ describe("Organization Provider Routes", () => {
         json("POST", { ...createBody, name: "Org OpenAI" }),
       );
 
-      // The unique violation flows through the central onError (ADR-0010).
       expect(res.status).toBe(409);
       expect(await res.json()).toEqual({
         error: "A resource with that name already exists",
@@ -171,7 +159,6 @@ describe("Organization Provider Routes", () => {
       return { status: res.status, results: body.results };
     };
 
-    // Guards listOrgScoped's `organizationId = orgId` filter.
     it("should list only this organization's Shared providers", async () => {
       mockSession();
       world("member");
@@ -180,17 +167,12 @@ describe("Organization Provider Routes", () => {
 
       expect(status).toBe(200);
       expect(results.map((r) => r.id)).toEqual(["p1"]);
-      // The Organization surface tags its rows with the scope too, rather than
-      // leaving the caller to infer it from the endpoint.
       expect(results).toEqual([
         expect.objectContaining({ scope: "organization" }),
       ]);
     });
 
     it("redacts apiKey for a non-admin member", async () => {
-      // A plain member may list Shared Providers — it is how one is selected —
-      // but credentials are Org-Admin-only (ADR-0006), so the row comes back
-      // with the secret fields replaced by presence flags.
       mockSession();
       world("member");
 
@@ -221,7 +203,6 @@ describe("Organization Provider Routes", () => {
       const res = await app.request(`${baseUrl}/p1`);
 
       expect(res.status).toBe(200);
-      // Credentials are Org-Admin-only (ADR-0006); see the list route.
       const body = (await res.json()) as Row;
       expect(body).toMatchObject({
         id: "p1",
@@ -276,9 +257,6 @@ describe("Organization Provider Routes", () => {
       });
     });
 
-    // #605: the org surface used to skip this check entirely, discovering a
-    // missing Provider only when the UPDATE matched no row. Guards
-    // requireOrgScoped's `organizationId = orgId` filter.
     it.each([
       ["missing", "missing"],
       ["another organization's Shared provider", "p-other-org"],
@@ -324,17 +302,12 @@ describe("Organization Provider Routes", () => {
     });
 
     it("invalidates memory embeddings before deleting, without de-migrating aliases", async () => {
-      // The delete path used to run neither helper (#605): a Provider's
-      // models — and any alias among them — vanish along with the row, so
-      // there is no surviving concrete id for de-migration to rewrite to, but
-      // stale embedding vectors computed against it must still be cleared.
       mockSession();
       const fake = world("admin");
 
       const res = await remove();
 
       expect(res.status).toBe(200);
-      // nullifyEmbeddingsForProvider
       expect(fake.execute).toHaveBeenCalledTimes(1);
       expect(idsOf(fake)).not.toContain("p1");
     });
@@ -426,7 +399,6 @@ describe("Organization Provider Routes", () => {
         modelId: "gpt-4",
         sessionIdSubstituted: false,
       });
-      // Taken exactly as sent: nothing is resolved against a stored row.
       expect(mockCreateOpenAI.mock.calls.at(-1)?.[0]).toEqual(
         expect.objectContaining({ apiKey: "sk-unsaved" }),
       );
@@ -444,7 +416,6 @@ describe("Organization Provider Routes", () => {
 
     it("returns 403 for a caller outside the Organization", async () => {
       mockSession();
-      // An Admin of another Organization sees nothing here.
       world("admin", {
         organization_member: [
           {
