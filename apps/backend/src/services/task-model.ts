@@ -69,6 +69,24 @@ export const resolveTaskModelProvider = async (
   return { provider, ...selection };
 };
 
+/**
+ * Whether the task model and a Chat's own model are the same model: the same
+ * Provider serving the same concrete model id.
+ *
+ * Never compares model references, so a Chat or Agent naming its model through
+ * an alias counts as the same model as long as the alias points there
+ * (ADR-0017). Titling and Transcript summarising both ask this question, and
+ * read it here so they cannot answer it differently.
+ */
+export const isChatsOwnModel = (args: {
+  taskProviderId: string;
+  taskModelId: string;
+  chatProviderId: string;
+  chatModelId: string;
+}): boolean =>
+  args.taskProviderId === args.chatProviderId &&
+  args.taskModelId === args.chatModelId;
+
 /** The production Provider read: the Scoped-resource authority (ADR-0007), so
  *  a Shared Provider resolves only where an Attachment makes it visible. */
 export const drizzleTaskModelQueries: TaskModelQueries = {

@@ -7,7 +7,10 @@ import {
 } from "../../db/schema.ts";
 import { ConflictError, isUniqueViolation } from "../../errors.ts";
 import { logger } from "../../logger.ts";
-import { generateChatMetadata } from "../../services/chat-metadata.ts";
+import {
+  generateChatMetadata,
+  startEarlyChatTitle,
+} from "../../services/chat-metadata.ts";
 import { stillAwaits } from "../../services/chat-messages.ts";
 import { afterTurn } from "../../services/chat-summary.ts";
 import { extractFiles } from "../../storage/utils.ts";
@@ -132,6 +135,12 @@ export class ChatSink implements RunSink {
   /** Whether `onStart` claimed the Chat. A sink that lost the claim writes
    *  nothing, since the row belongs to the run that holds it. */
   private claimed = false;
+  /**
+   * The early title attempt the resolved step started, if any (issue #2017).
+   * The finish step's own attempt waits on it first, so a reply that finishes
+   * before titling settles never sets a second title call racing.
+   */
+  private earlyTitle?: Promise<void>;
   /** Stamps the Chat's run heartbeat while the run holds it. */
   private heartbeat?: ReturnType<typeof setInterval>;
 
@@ -323,6 +332,11 @@ export class ChatSink implements RunSink {
         messages: this.latestMessages,
       });
     }, this.params.flushIntervalMs);
+
+    // The User's message is stored and the reply has not started: titling can
+    // begin now where it would use a different model (issue #2017). Not
+    // awaited, and its promise kept for the finish step to wait on.
+    this.earlyTitle = this.startEarlyTitle();
     return Promise.resolve();
   }
 
@@ -467,25 +481,64 @@ export class ChatSink implements RunSink {
 
   /**
    * Kicks off title/tag generation for the just-finished run without awaiting
-   * it. Resolves the titling provider from the run plan — for agent runs the
-   * chat row's provider column is null, so the resolved plan's `providerId`
-   * (the agent's own provider) is the authoritative source. Skips silently
-   * when no plan resolved (nothing to title with).
+   * it. Waits first for the turn's early title attempt, if it started one: the
+   * two attempts must not race, and if the early one succeeded this call finds
+   * the Chat titled and makes no model call. Resolves the titling provider from
+   * the run plan — for agent runs the chat row's provider column is null, so
+   * the resolved plan's `providerId` (the agent's own provider) is the
+   * authoritative source. Skips silently when no plan resolved (nothing to
+   * title with).
    */
   private generateMetadata(): void {
     const providerId = this.plan?.resolved.providerId;
     if (!providerId) return;
 
     const { orgId, workspaceId } = this.params;
-    void generateChatMetadata({
-      chatId: this.runId,
-      workspaceId,
-      orgId,
-      providerId,
-    }).catch((error) => {
+    void (async () => {
+      // The early attempt's failure was caught where it started, so this wait
+      // cannot throw; a failed one has counted its failure and this call is
+      // the retry, now with the reply on the Active path.
+      await this.earlyTitle;
+      await generateChatMetadata({
+        chatId: this.runId,
+        workspaceId,
+        orgId,
+        providerId,
+      });
+    })().catch((error) => {
       logger.error(
         { error, chatId: this.runId, workspaceId },
         "Error generating chat metadata",
+      );
+    });
+  }
+
+  /**
+   * Starts (never awaits) the turn's early title attempt, where there is one
+   * (issue #2017). It runs only when a different model would title the Chat;
+   * that decision, and the attempt itself, live in `startEarlyChatTitle`. A
+   * Trigger run's Chat takes its Trigger's name and is never titled by a
+   * model (ADR-0044).
+   *
+   * The returned promise never rejects: a failed attempt is logged here, as
+   * the end-of-run attempt's is, so it can neither fail nor delay the run.
+   */
+  private startEarlyTitle(): Promise<void> | undefined {
+    if (this.keepsTriggerRun) return undefined;
+    const plan = this.plan;
+    if (!plan) return undefined;
+
+    const { orgId, workspaceId } = this.params;
+    return startEarlyChatTitle({
+      chatId: this.runId,
+      workspaceId,
+      orgId,
+      providerId: plan.resolved.providerId,
+      modelId: plan.resolvedModelId,
+    }).catch((error) => {
+      logger.error(
+        { error, chatId: this.runId, workspaceId },
+        "Error starting early chat title",
       );
     });
   }

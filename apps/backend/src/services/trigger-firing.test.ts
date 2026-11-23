@@ -1,5 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { chatSchema, TRIGGER_NAME_MAX_LENGTH } from "@platypus/schemas";
+import {
+  chatSchema,
+  TRIGGER_NAME_MAX_LENGTH,
+  type ConcreteModelId,
+} from "@platypus/schemas";
 import {
   cardEvent,
   resetMockDb,
@@ -1158,6 +1162,7 @@ describe("fireTrigger", () => {
             runId: input.runId,
             plan: {
               resolved: { agentId: "agent-1", providerId: "p1", modelId: "m1" },
+              resolvedModelId: "m1" as ConcreteModelId,
             },
           });
           vi.setSystemTime(COMPLETED);

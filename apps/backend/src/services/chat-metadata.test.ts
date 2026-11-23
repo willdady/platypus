@@ -3,7 +3,7 @@ import { mockDb, resetMockDb } from "../test-utils.ts";
 import { logger } from "../logger.ts";
 import { and, eq } from "drizzle-orm";
 import { chat as chatTable, provider as providerTable } from "../db/schema.ts";
-import { UNTITLED_CHAT_TITLE } from "@platypus/schemas";
+import { UNTITLED_CHAT_TITLE, type ConcreteModelId } from "@platypus/schemas";
 
 const { mockGenerateText, mockLanguageModel, mockLoadActivePath } = vi.hoisted(
   () => ({
@@ -26,7 +26,11 @@ vi.mock("./provider.ts", () => ({
   }),
 }));
 
-import { generateChatMetadata, MAX_TITLE_FAILURES } from "./chat-metadata.ts";
+import {
+  generateChatMetadata,
+  MAX_TITLE_FAILURES,
+  startEarlyChatTitle,
+} from "./chat-metadata.ts";
 import { openProvider } from "./provider.ts";
 import type { PlatypusUIMessage } from "../types.ts";
 
@@ -461,5 +465,145 @@ describe("generateChatMetadata", () => {
       expect.stringContaining("not visible in this workspace"),
     );
     warn.mockRestore();
+  });
+});
+
+// Issue #2017: a Chat whose title model is some other model than the one
+// writing its reply gets titled while the reply is still being written,
+// rather than only once the run ends.
+describe("startEarlyChatTitle", () => {
+  beforeEach(() => {
+    resetMockDb();
+    vi.clearAllMocks();
+    mockLanguageModel.mockReturnValue({});
+  });
+
+  const params = {
+    chatId: "chat-1",
+    workspaceId: "ws-1",
+    orgId: "org-1",
+    providerId: "p1",
+    // The turn's concrete model id, not the reference a Chat stores.
+    modelId: "chat-model" as ConcreteModelId,
+  };
+
+  const untitledChat = {
+    id: "chat-1",
+    title: "Untitled",
+    messages: [userMessage],
+  };
+
+  const expectTitled = () => {
+    expect(mockGenerateText).toHaveBeenCalledTimes(1);
+    expect(mockDb.set.mock.calls[0]?.[0]).toMatchObject({ title: "Titled" });
+  };
+
+  const titleSuccessfully = () => {
+    mockGenerateText.mockResolvedValueOnce({ output: { title: "Titled" } });
+    mockDb.returning.mockResolvedValueOnce([{ id: "chat-1", title: "Titled" }]);
+  };
+
+  it("titles early when the task model is a different model on the turn's provider", async () => {
+    stubReads({
+      chat: untitledChat,
+      workspace: { id: "ws-1", taskModelProviderId: null },
+      provider: { ...provider, id: "p1", taskModelId: "task-model" },
+    });
+    titleSuccessfully();
+
+    await startEarlyChatTitle(params);
+
+    expectTitled();
+  });
+
+  it("titles early when the task model lives on a different provider", async () => {
+    stubReads({
+      chat: untitledChat,
+      workspace: { id: "ws-1", taskModelProviderId: "override-provider" },
+      provider: {
+        ...provider,
+        id: "override-provider",
+        // The same concrete model id as the turn's, so only the Provider
+        // differs — still a different model as far as the run is concerned.
+        taskModelId: "chat-model",
+      },
+    });
+    titleSuccessfully();
+
+    await startEarlyChatTitle(params);
+
+    expectTitled();
+  });
+
+  it("leaves titling to the run's end when the task model is the Chat's own model", async () => {
+    stubReads({
+      chat: untitledChat,
+      workspace: { id: "ws-1", taskModelProviderId: null },
+      provider: { ...provider, id: "p1", taskModelId: "chat-model" },
+    });
+
+    await startEarlyChatTitle(params);
+
+    expect(mockGenerateText).not.toHaveBeenCalled();
+    expect(mockDb.set).not.toHaveBeenCalled();
+  });
+
+  it("makes no early attempt on an already titled chat", async () => {
+    stubReads({
+      chat: { ...untitledChat, title: "My renamed chat" },
+    });
+
+    await startEarlyChatTitle(params);
+
+    expect(mockGenerateText).not.toHaveBeenCalled();
+  });
+
+  it("makes no early attempt once titling has given up", async () => {
+    stubReads({
+      chat: { ...untitledChat, titleFailures: MAX_TITLE_FAILURES },
+    });
+
+    await startEarlyChatTitle(params);
+
+    expect(mockGenerateText).not.toHaveBeenCalled();
+  });
+
+  it("makes no early attempt when the provider has no task model configured", async () => {
+    stubReads({
+      chat: untitledChat,
+      workspace: { id: "ws-1", taskModelProviderId: null },
+      provider: { ...provider, id: "p1", taskModelId: "" },
+    });
+
+    await startEarlyChatTitle(params);
+
+    expect(mockGenerateText).not.toHaveBeenCalled();
+  });
+
+  it("makes no early attempt when the title provider cannot be resolved", async () => {
+    stubReads({
+      chat: untitledChat,
+      workspace: { id: "ws-1", taskModelProviderId: null },
+      provider: undefined,
+    });
+
+    await startEarlyChatTitle(params);
+
+    expect(mockGenerateText).not.toHaveBeenCalled();
+  });
+
+  it("counts a failed attempt and rethrows it, as any other title call does", async () => {
+    stubReads({
+      chat: untitledChat,
+      workspace: { id: "ws-1", taskModelProviderId: null },
+      provider,
+    });
+    mockGenerateText.mockRejectedValueOnce(new Error("provider down"));
+    mockDb.returning.mockResolvedValueOnce([{ titleFailures: 1 }]);
+
+    await expect(startEarlyChatTitle(params)).rejects.toThrow("provider down");
+    // The failure is counted, and no title is written.
+    expect(mockDb.set).toHaveBeenCalledTimes(1);
+    expect(mockDb.set.mock.calls[0]?.[0]).not.toHaveProperty("title");
   });
 });

@@ -1,6 +1,7 @@
 import type { PlatypusUIMessage } from "../types.ts";
 import type {
   CachedInputTokens,
+  ConcreteModelId,
   ReasoningEffort,
   ModelSwitch,
   ModelUsage,
@@ -291,6 +292,13 @@ export type ResolvedGeneration = {
  */
 export type ResolvedRunPlan = {
   resolved: ResolvedGeneration;
+  /**
+   * The concrete model id this turn resolved to (ADR-0017), beside the
+   * reference `resolved.modelId` holds for persistence. A decision that asks
+   * whether some other model *is* this turn's model — the early title attempt
+   * (issue #2017) — compares against this, never the alias a Chat may store.
+   */
+  resolvedModelId: ConcreteModelId;
   /**
    * The Agent's granted Tool sets and MCPs that loaded no tools for this run,
    * and why (#1184). Only the Trigger sink records them; a Chat turn and an

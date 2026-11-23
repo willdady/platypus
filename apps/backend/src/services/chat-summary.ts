@@ -35,6 +35,7 @@ import {
 import { jobCallSettings, jobMaxOutputTokens } from "./reasoning.ts";
 import { jobInputBudgetChars } from "./job-input-budget.ts";
 import {
+  isChatsOwnModel,
   resolveTaskModelProvider,
   type TaskModelWorkspace,
 } from "./task-model.ts";
@@ -1050,9 +1051,12 @@ const withTaskSummariserModel = async (args: {
       pointerSettingModelId(taskModelId),
       taskProvider.provider.taskModelSettings,
     );
-    const isChatModel =
-      taskProvider.provider.id === chatProviderId &&
-      taskModelId === chat.modelId;
+    const isChatModel = isChatsOwnModel({
+      taskProviderId: taskProvider.provider.id,
+      taskModelId,
+      chatProviderId,
+      chatModelId: chat.modelId,
+    });
     // On the Chat's own model, its declared ceiling bounds the pass's cap
     // before the Thinking budget is added, so the budget still rides on top.
     const maxOutputTokens = jobMaxOutputTokens(

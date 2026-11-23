@@ -762,12 +762,14 @@ Each Chat's menu offers:
 - **Delete** — permanent, and it says so before doing it.
 
 <Callout type="info">
-  A new Chat is called **Untitled** until a reply comes back, then the backend
-  names it from the conversation. If it can't produce a usable title, the Chat
-  stays **Untitled** and the next turn tries again. After a few failed tries it
-  stops, and the Chat stays **Untitled** until you rename it. You don't have to
-  wait — rename it whenever you like and the automatic titling leaves your name
-  alone.
+  A new Chat is called **Untitled** until Platypus names it from the
+  conversation. Naming starts as soon as you send, so the title can appear while
+  the reply is still being written — unless the reply runs on the same model
+  that names the Chat, and then it waits for the reply to finish. If Platypus
+  can't produce a usable title, the Chat stays **Untitled** and the next turn
+  tries again. After a few failed tries it stops, and the Chat stays
+  **Untitled** until you rename it. You don't have to wait — rename it whenever
+  you like and the automatic titling leaves your name alone.
 </Callout>
 
 ## Getting around without the mouse
