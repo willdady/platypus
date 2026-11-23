@@ -325,3 +325,131 @@ describe("the seeded fake beside the chainable mock", () => {
     });
   });
 });
+
+describe("the fake's transaction", () => {
+  const workspaceRow = (
+    over: Partial<typeof workspaceTable.$inferInsert> = {},
+  ) => ({
+    id: "ws-1",
+    name: "One",
+    organizationId: "org-1",
+    ownerId: "user-1",
+    ...over,
+  });
+
+  const hold = () => {
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    return { held, release: () => release() };
+  };
+
+  beforeEach(() => {
+    resetMockDb();
+    vi.clearAllMocks();
+  });
+
+  it("keeps a row inserted outside it to a table it also inserted into", async () => {
+    const seeded = seedDb({ workspace: [] });
+    const gate = hold();
+
+    const transaction = db.transaction(async (tx) => {
+      await tx
+        .insert(workspaceTable)
+        .values(workspaceRow({ id: "inside", name: "Inside" }));
+      await gate.held;
+    });
+
+    await db
+      .insert(workspaceTable)
+      .values(workspaceRow({ id: "outside", name: "Outside" }));
+    gate.release();
+    await transaction;
+
+    expect(seeded.tables.workspace).toEqual([
+      workspaceRow({ id: "outside", name: "Outside" }),
+      workspaceRow({ id: "inside", name: "Inside" }),
+    ]);
+  });
+
+  it("keeps an update made outside it to another row of a table it updated", async () => {
+    const seeded = seedDb({
+      workspace: [
+        { id: "ws-1", name: "One", organizationId: "org-1" },
+        { id: "ws-2", name: "Two", organizationId: "org-1" },
+      ],
+    });
+    const gate = hold();
+
+    const transaction = db.transaction(async (tx) => {
+      await tx
+        .update(workspaceTable)
+        .set({ name: "Two inside" })
+        .where(eq(workspaceTable.id, "ws-2"));
+      await gate.held;
+    });
+
+    await db
+      .update(workspaceTable)
+      .set({ name: "One outside" })
+      .where(eq(workspaceTable.id, "ws-1"));
+    gate.release();
+    await transaction;
+
+    expect(seeded.tables.workspace).toEqual([
+      { id: "ws-1", name: "One outside", organizationId: "org-1" },
+      { id: "ws-2", name: "Two inside", organizationId: "org-1" },
+    ]);
+  });
+
+  it("keeps a row inserted outside it to a table it deleted from", async () => {
+    const seeded = seedDb({
+      workspace: [
+        { id: "gone", name: "Gone", organizationId: "org-1" },
+        { id: "kept", name: "Kept", organizationId: "org-1" },
+      ],
+    });
+    const gate = hold();
+
+    const transaction = db.transaction(async (tx) => {
+      await tx.delete(workspaceTable).where(eq(workspaceTable.id, "gone"));
+      await gate.held;
+    });
+
+    await db
+      .insert(workspaceTable)
+      .values(workspaceRow({ id: "outside", name: "Outside" }));
+    gate.release();
+    await transaction;
+
+    expect(seeded.tables.workspace).toEqual([
+      { id: "kept", name: "Kept", organizationId: "org-1" },
+      workspaceRow({ id: "outside", name: "Outside" }),
+    ]);
+  });
+
+  it("leaves every table untouched when the callback throws", async () => {
+    const seeded = seedDb({
+      workspace: [{ id: "ws-1", name: "One", organizationId: "org-1" }],
+    });
+
+    await expect(
+      db.transaction(async (tx) => {
+        await tx
+          .insert(workspaceTable)
+          .values(workspaceRow({ id: "ws-2", name: "Two" }));
+        await tx
+          .update(workspaceTable)
+          .set({ name: "Renamed" })
+          .where(eq(workspaceTable.id, "ws-1"));
+        await tx.delete(workspaceTable).where(eq(workspaceTable.id, "ws-1"));
+        throw new Error("rollback");
+      }),
+    ).rejects.toThrow("rollback");
+
+    expect(seeded.tables).toEqual({
+      workspace: [{ id: "ws-1", name: "One", organizationId: "org-1" }],
+    });
+  });
+});
