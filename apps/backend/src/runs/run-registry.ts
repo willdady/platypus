@@ -1,23 +1,8 @@
 import { ConflictError, ServiceUnavailableError } from "../errors.ts";
 import type { RunId } from "./types.ts";
 
-/**
- * In-memory, single-process registry of in-flight runs.
- *
- * Owns the AbortController per Run plus its per-step and per-run timeout
- * timers — the state that is truly per process. What the deployment shares
- * lives in Postgres (#1237): a Chat's one-run lock is its row's `running`
- * status (`ChatSink`), and a cancel reaches the process holding the Run
- * through `run-cancel.ts`. A runId claimed here is refused only within this
- * process.
- *
- * Cancellation is idempotent. Looking up an unknown runId returns
- * `false` / `undefined` without throwing.
- */
 export class TimeoutError extends Error {
   readonly kind: "step" | "run";
-  /** The bound that was exceeded, so a caller can say it without re-reading
-   *  the configuration that set it. */
   readonly limitMs: number;
 
   constructor(message: string, kind: "step" | "run", limitMs: number) {
@@ -28,7 +13,6 @@ export class TimeoutError extends Error {
   }
 }
 
-/** A duration as a reader would say it: "90 seconds", "2 minutes". */
 const humanizeMs = (ms: number): string => {
   const seconds = Math.round(ms / 1000);
   if (seconds < 120) return `${seconds} second${seconds === 1 ? "" : "s"}`;
@@ -36,42 +20,17 @@ const humanizeMs = (ms: number): string => {
   return `${minutes} minute${minutes === 1 ? "" : "s"}`;
 };
 
-/**
- * A timeout in the terms the person who was waiting understands.
- *
- * `TimeoutError.message` names the run id and a millisecond bound — right for a
- * log line, wrong for the one sentence a user gets when their answer stops
- * mid-word. Both timeouts are reported, because a user cannot tell them apart
- * from the outside and the remedy differs: a stalled provider versus a run that
- * was simply too long.
- */
 export const describeTimeout = (error: TimeoutError): string =>
   error.kind === "step"
     ? `The model stopped sending output for ${humanizeMs(error.limitMs)}, so the run was stopped. Anything it had already written is kept above.`
     : `The run hit its ${humanizeMs(error.limitMs)} time limit and was stopped. Anything already written is kept above.`;
 
 export type RegisterOptions = {
-  /**
-   * Idle timeout: how long the run may show no sign of life at all — no
-   * streamed chunk, no step boundary, no tool-call edge — before it is
-   * aborted. Not a ceiling on how long one step may take. Defaults to 2
-   * minutes.
-   */
   perStepTimeoutMs?: number;
-  /** Wall-clock timeout for the whole run. Defaults to 10 minutes. */
   perRunTimeoutMs?: number;
-  /**
-   * Invoked when a per-step or per-run timeout fires. Receives a
-   * `TimeoutError`. The registry has already aborted the controller before
-   * calling this handler.
-   */
   onTimeout?: (error: TimeoutError) => void;
 };
 
-/**
- * The two bounds a caller may set per run. Named because four call sites
- * across three modules pass exactly this pair.
- */
 export type RunTimeouts = Pick<
   RegisterOptions,
   "perStepTimeoutMs" | "perRunTimeoutMs"
@@ -80,33 +39,9 @@ export type RunTimeouts = Pick<
 export type RunHandle = {
   runId: RunId;
   signal: AbortSignal;
-  /** Reset the per-step timer (e.g. when a step makes progress). */
   bumpStep(): void;
-  /**
-   * Record a sign of life from the model mid-step — one streamed chunk.
-   *
-   * The per-step bound is an IDLE timeout: "has the provider stopped talking to
-   * us?", not "has this step taken too long?". Only `bumpStep` fires at step
-   * boundaries, so without this a single step that streams for longer than the
-   * bound is aborted while it is still producing output. That is what cut long
-   * answers and long tool-call arguments off mid-stream (issue #552).
-   *
-   * Deliberately does not touch the timer. This is called once per streamed
-   * chunk — thousands of times in a long answer — so it only stamps a
-   * timestamp, and the timer re-arms itself from that stamp when it fires.
-   */
   noteActivity(): void;
-  /**
-   * Suspend the per-step stall timer for the duration of a tool call.
-   *
-   * The per-step timeout answers "has anything happened lately?", and a tool
-   * that is still executing produces no chunks to say so. Holds
-   * nest, so parallel tool calls are counted; the timer re-arms when the last
-   * one releases. The per-RUN timeout is deliberately untouched, so a tool that
-   * never returns is still bounded.
-   */
   holdStep(): void;
-  /** Release a hold taken by {@link RunHandle.holdStep}. */
   releaseStep(): void;
 };
 
@@ -120,70 +55,34 @@ type Entry = {
   runTimer?: ReturnType<typeof setTimeout>;
   onTimeout?: (error: TimeoutError) => void;
   finished: boolean;
-  /** Tool calls currently in flight; the step timer is off while this is > 0. */
   holds: number;
-  /** When this run last showed a sign of life — a step boundary, a tool-call
-   *  edge, or a streamed chunk. The per-step bound is measured from here. */
   lastActivityAt: number;
-  /** When the run was claimed, so a cancel decided earlier can spare it. */
   startedAt: number;
 };
 
-/** Narrows a cancel to the run that was going when it was decided. */
 export type CancelOptions = {
-  /** Spare a run claimed after this moment (epoch ms): a later turn's. */
   startedBefore?: number;
 };
 
 export class RunRegistry {
   private readonly entries = new Map<RunId, Entry>();
-  /** Waiting on {@link RunRegistry.whenIdle}; called when the last run goes. */
   private readonly idleWaiters = new Set<() => void>();
-  /** Set once the process is draining for shutdown; `register` rejects after. */
   private stopRequested = false;
 
-  /**
-   * Closes the gate: from here on `register` rejects with a
-   * `ServiceUnavailableError`, so a request that reaches the process during
-   * the drain is answered 503 (ADR-0010's central handler) instead of being
-   * written to the database and then killed by the exit. Idempotent; the
-   * drain and the crash handler may both call it.
-   */
   beginStop(): void {
     this.stopRequested = true;
   }
 
-  /** True once {@link RunRegistry.beginStop} was called — the /ready probe's gate. */
   get stopping(): boolean {
     return this.stopRequested;
   }
 
-  /**
-   * Test seam: reopen the gate as if no shutdown had happened, so one test
-   * process can exercise a drain and then register runs again. Shutdown is
-   * terminal in production; nothing there calls this.
-   */
   resetStopStateForTests(): void {
     this.stopRequested = false;
   }
 
-  /**
-   * Claims `runId` and returns its handle.
-   *
-   * A runId that is already claimed is a second run for something that already
-   * has one — a Chat whose turn has not finished, since a Chat run's id IS the
-   * chat id. Typed as a `ConflictError` so the central error handler answers
-   * 409 (ADR-0010) instead of an unhandled throw becoming a 500, and so the
-   * claim can be made the first thing a run does: registering before anything
-   * is persisted is what stops a duplicate submission overwriting the live
-   * run's messages on its way to failing (issue #648).
-   */
   register(runId: RunId, options: RegisterOptions = {}): RunHandle {
     if (this.stopping) {
-      // The process is draining: a run started now would be killed by the
-      // imminent exit having written nothing. Typed `ServiceUnavailableError`
-      // so the central error handler answers 503 (ADR-0010) — an HTTP caller
-      // should retry against another instance, not believe its run started.
       throw new ServiceUnavailableError("Server is shutting down");
     }
     const existing = this.entries.get(runId);
@@ -209,10 +108,6 @@ export class RunRegistry {
 
     const fireTimeout = (kind: "step" | "run") => {
       if (entry.finished) return;
-      // A step timer that wakes to find recent activity is not looking at a
-      // stall: re-arm for the remainder of the idle window instead of aborting
-      // a run that is still streaming. Re-arming here rather than on every
-      // chunk keeps the hot path to one timestamp write.
       if (kind === "step") {
         const idleMs = Date.now() - entry.lastActivityAt;
         if (idleMs < entry.perStepTimeoutMs) {
@@ -242,14 +137,9 @@ export class RunRegistry {
 
     this.entries.set(runId, entry);
 
-    // Re-arm the per-step timer, unless a tool call is holding it down. Every
-    // path that restarts the timer goes through here, so a hold cannot be
-    // undone by a concurrent bump.
     const armStep = (e: Entry) => {
       if (e.stepTimer) clearTimeout(e.stepTimer);
       e.stepTimer = undefined;
-      // Every path through here is itself a sign of life (a step finished, a
-      // tool call started or returned), so the idle window restarts from now.
       e.lastActivityAt = Date.now();
       if (e.holds > 0) return;
       e.stepTimer = setTimeout(() => fireTimeout("step"), e.perStepTimeoutMs);
@@ -266,6 +156,7 @@ export class RunRegistry {
       noteActivity: () => {
         const e = this.entries.get(runId);
         if (!e || e.finished) return;
+        // why: runs once per streamed chunk; stamp only, the step timer re-arms from the stamp
         e.lastActivityAt = Date.now();
       },
       holdStep: () => {
@@ -283,11 +174,6 @@ export class RunRegistry {
     };
   }
 
-  /**
-   * Cancel a run by id. Returns `true` if a run was cancelled, `false` if
-   * the run was unknown, already finished, or claimed after `startedBefore`.
-   * Repeated calls are safe.
-   */
   cancel(runId: RunId, options: CancelOptions = {}): boolean {
     const entry = this.entries.get(runId);
     if (!entry || entry.finished) return false;
@@ -304,7 +190,6 @@ export class RunRegistry {
     return true;
   }
 
-  /** Remove the entry once the run terminates. Always safe to call. */
   unregister(runId: RunId): void {
     const entry = this.entries.get(runId);
     if (!entry) return;
@@ -317,11 +202,6 @@ export class RunRegistry {
     }
   }
 
-  /**
-   * Resolves once no run is registered — every run has finished and written
-   * its end, since a run unregisters only after its terminal callback — or
-   * once `timeoutMs` has passed. `true` when it went idle.
-   */
   whenIdle(timeoutMs: number): Promise<boolean> {
     if (this.entries.size === 0) return Promise.resolve(true);
     return new Promise((resolve) => {
@@ -336,7 +216,6 @@ export class RunRegistry {
     });
   }
 
-  /** The runs going here, with when each was claimed. */
   heldRuns(): { runId: RunId; startedAt: number }[] {
     return [...this.entries]
       .filter(([, entry]) => !entry.finished)
@@ -348,5 +227,4 @@ export class RunRegistry {
   }
 }
 
-/** Singleton — services and routes share one instance. */
 export const runRegistry = new RunRegistry();

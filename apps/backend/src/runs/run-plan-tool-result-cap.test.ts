@@ -11,14 +11,6 @@ import {
   truncatedToolResultMarker,
 } from "../services/tool-result.ts";
 
-/**
- * Issue #1618. A tool result over the cap is cut where every Drive assembles
- * its model arguments, so the cut form is what the next step is sent and what
- * the step reports, which a Chat persists. Covers a tool
- * a Tool set or MCP server contributes (already normalized at its loader seam)
- * and one core builds itself (not normalized), since the cap is for both.
- */
-
 const USAGE = {
   inputTokens: {
     total: 1,
@@ -31,7 +23,6 @@ const USAGE = {
 
 const OVERSIZED = "x".repeat(MAX_TOOL_RESULT_CHARS + 50);
 
-/** Calls both tools on its first step, then stops; records every prompt. */
 const twoToolModel = (prompts: LanguageModelV3CallOptions["prompt"][]) => {
   let step = 0;
   return new MockLanguageModelV3({
@@ -70,7 +61,6 @@ const twoToolModel = (prompts: LanguageModelV3CallOptions["prompt"][]) => {
   });
 };
 
-/** Each tool result's output in a prompt, keyed by tool call. */
 const toolOutputs = (prompt: LanguageModelV3CallOptions["prompt"]) =>
   Object.fromEntries(
     prompt
@@ -115,9 +105,7 @@ describe("tool result size cap", () => {
       core1: cut(OVERSIZED),
     };
 
-    // What the next model step was sent.
     const sent = toolOutputs(prompts[1] ?? []);
-    // Compared as booleans: a failing diff of two 200k strings is unreadable.
     expect(
       Object.entries(expected).every(
         ([id, value]) =>
@@ -125,7 +113,6 @@ describe("tool result size cap", () => {
       ),
     ).toBe(true);
 
-    // What the step reports, which the UI stream a Chat persists is built from.
     const reported = Object.fromEntries(
       (result.steps[0]?.toolResults ?? []).map((r) => [r.toolCallId, r.output]),
     );

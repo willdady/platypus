@@ -2,10 +2,6 @@ import { EventEmitter } from "node:events";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mockLogger } from "../test-setup.ts";
 
-/**
- * Two instances share one Postgres. The pool here stands in for it: a
- * `pg_notify` sent through `query` reaches every connection that LISTENed.
- */
 const { pool, listeners } = vi.hoisted(() => {
   const listeners: EventEmitter[] = [];
   const pool = {
@@ -25,7 +21,6 @@ const { cancelRun } = await import("./run-cancel.ts");
 const { startNotificationListener } = await import("./notify-listener.ts");
 const { runRegistry } = await import("./run-registry.ts");
 
-/** A pooled connection: an emitter that can run `LISTEN`. */
 const fakeClient = () =>
   Object.assign(new EventEmitter(), {
     query: vi.fn(() => Promise.resolve()),
@@ -94,7 +89,6 @@ describe("the notification listener", () => {
     listeners.push(client);
     const handle = runRegistry.register("chat-1");
 
-    // What the other instance's cancel route sends, having no run to abort.
     await pool.query("SELECT pg_notify($1, $2)", [
       "run_cancel",
       JSON.stringify({ runId: "chat-1" }),
@@ -163,8 +157,6 @@ describe("the notification listener", () => {
     expect(handle.signal.aborted).toBe(true);
   });
 
-  // A dropped LISTEN connection would otherwise leave this instance deaf to
-  // every cancel sent from another one.
   it("reconnects when its connection drops", async () => {
     vi.useFakeTimers();
     const first = fakeClient();

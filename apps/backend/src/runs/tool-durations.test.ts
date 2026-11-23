@@ -2,8 +2,6 @@ import { describe, it, expect } from "vitest";
 import { applyToolDurations } from "./tool-durations.ts";
 import type { PlatypusUIMessage } from "../types.ts";
 
-/** An assistant message carrying the given parts, cast at the seam because
- *  the part union is wider than any single fixture needs to be. */
 const assistant = (parts: unknown[]): PlatypusUIMessage =>
   ({
     id: "msg-1",
@@ -36,7 +34,6 @@ const dynamicPart = (
   ...extra,
 });
 
-/** Reads back the patched metadata without restating the cast in each test. */
 const metadataOf = (message: PlatypusUIMessage, index: number) =>
   (message.parts[index] as { toolMetadata?: Record<string, unknown> })
     .toolMetadata;
@@ -50,8 +47,6 @@ describe("applyToolDurations", () => {
     expect(metadataOf(patched[0], 0)).toEqual({ durationMs: 1234 });
   });
 
-  // The SDK measures on a high-resolution clock; nothing reads below a
-  // millisecond, so the stored figure is not sixteen significant digits.
   it("rounds the high-resolution figure the SDK reports", () => {
     const messages = [assistant([staticPart("call-1")])];
 
