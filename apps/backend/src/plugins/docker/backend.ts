@@ -413,14 +413,14 @@ class DockerSandboxTransport implements SandboxTransport {
   private logger: PluginLogger;
 
   constructor(
-    config: Partial<DockerSandboxConfig>,
+    config: DockerSandboxConfig,
     _credentials: DockerSandboxCredentials,
     logger: PluginLogger,
   ) {
     this.docker = new Docker();
     this.inflight = new Map();
-    this.networks = config.networks ?? [];
-    this.extraHosts = config.extraHosts ?? [];
+    this.networks = config.networks;
+    this.extraHosts = config.extraHosts;
     this.logger = logger;
   }
 
@@ -646,7 +646,7 @@ class DockerSandboxTransport implements SandboxTransport {
 }
 
 export const createDockerSandboxBackend = (
-  config: Partial<DockerSandboxConfig>,
+  config: DockerSandboxConfig,
   credentials: DockerSandboxCredentials,
   plugin: PluginConfigContext,
 ): SandboxBackend =>
