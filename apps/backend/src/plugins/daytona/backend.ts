@@ -25,26 +25,12 @@ import {
 } from "../../sandbox/transport.ts";
 import type { SandboxBackend, SandboxContext } from "../../sandbox/types.ts";
 
-// The Daytona Sandbox adapter. Provisions one Daytona sandbox per Workspace,
-// found again by a deterministic name, and supplies the transport core builds
-// the fixed tool core on. Commands run in a throwaway toolbox session (which
-// keeps stdout and stderr apart, unlike `executeCommand`); files move over the
-// toolbox file API.
-//
-// Platypus owns the sandbox: `destroy()` deletes it, as the Docker adapter
-// removes its container and volume. Between turns Daytona's own auto-stop parks
-// it, and the next tool call starts it again.
-
 const LABEL_WORKSPACE_ID = "platypus.sandbox.workspaceId";
 const ROOT_DIR_NAME = "workspace";
 
-// The HTTP wait on a command outlives its own timeout by this much, so our
-// timer — not the SDK's — decides a timeout and reports it as exit 124.
+// why: the SDK's HTTP wait outlasts our timer, so a timeout is ours and reports as exit 124
 const HTTP_GRACE_MS = 5_000;
 
-// The adapter's own housekeeping commands (root and parent-directory setup).
-// They run outside a turn, so they carry no cancellation signal: the transport
-// contract's `signal` is the turn's, and there is no turn here.
 const UTILITY_EXEC: Omit<SandboxExecOptions, "signal"> = {
   timeoutMs: 30_000,
   stdoutCap: { head: 4_096 },
@@ -55,21 +41,12 @@ const listEntry = z
   .string()
   .regex(/^[^,\s]+$/, { message: "must not contain a comma or whitespace" });
 
-// Plugin-level, Operator-owned config for @platypus/daytona (ADR-0013),
-// supplied via PLATYPUS_PLUGIN_CONFIG_DAYTONA and validated at boot. One
-// Daytona account serves every Workspace in the deployment.
 export const daytonaPluginConfigSchema = z
   .object({
-    // Self-hosted Daytona, or a non-default region endpoint.
     apiUrl: z.url().optional(),
-    // Daytona region, e.g. "us" or "eu". The account default when unset.
     target: z.string().min(1).optional(),
-    // Snapshot new sandboxes are created from. Daytona's default when unset.
     snapshot: z.string().min(1).optional(),
-    // Minutes idle before Daytona stops a sandbox; 0 disables.
     autoStopInterval: z.number().int().min(0).default(15),
-    // Network egress for new sandboxes, passed through to Daytona. Daytona
-    // takes the allowlists comma-joined, so an entry may not hold one.
     networkBlockAll: z.boolean().optional(),
     networkAllowList: z.array(listEntry).optional(),
     domainAllowList: z.array(listEntry).optional(),
@@ -79,13 +56,10 @@ export const daytonaPluginConfigSchema = z
 export const daytonaPluginCredentialsSchema = z
   .object({
     apiKey: z.string().min(1),
-    // Routes sandbox HTTP(S) egress through this proxy. A credential because
-    // the URL may embed the proxy's own username and password.
     outboundProxyUrl: z.url().optional(),
   })
   .strict();
 
-// No per-Workspace settings: the deploy-time block above is the whole surface.
 export const daytonaSandboxConfigSchema = z.object({}).strict();
 export const daytonaSandboxCredentialsSchema = z.object({}).strict();
 
@@ -108,8 +82,6 @@ class DaytonaSandboxTransport implements SandboxTransport {
   private config: DaytonaPluginConfig;
   private outboundProxyUrl: string | undefined;
   private logger: PluginLogger;
-  // Per backend instance — one Chat turn — so a sandbox is looked up once per
-  // turn, and concurrent first calls share the one lookup.
   private provisioned: Map<string, Promise<Provisioned>>;
 
   constructor(
@@ -131,7 +103,6 @@ class DaytonaSandboxTransport implements SandboxTransport {
     let p = this.provisioned.get(ctx.workspaceId);
     if (!p) {
       p = this.provision(ctx);
-      // A failed lookup is not cached, so the next tool call tries again.
       p.catch(() => this.provisioned.delete(ctx.workspaceId));
       this.provisioned.set(ctx.workspaceId, p);
     }
@@ -146,9 +117,7 @@ class DaytonaSandboxTransport implements SandboxTransport {
       await sandbox.start();
     }
 
-    // The default Daytona user is not root, so the workspace root lives under
-    // its home rather than at SANDBOX_WORKSPACE_ROOT. The model only ever sees
-    // relative paths, so the physical root is free.
+    // why: Daytona's default user isn't root, so the root lives under $HOME
     const res = await this.run(
       ctx,
       sandbox,
@@ -186,7 +155,7 @@ class DaytonaSandboxTransport implements SandboxTransport {
         outboundProxyUrl: this.outboundProxyUrl,
       });
     } catch (err) {
-      // Another backend process created it first.
+      // why: another backend process created it between our get and create
       if (err instanceof DaytonaConflictError) return this.daytona.get(name);
       throw err;
     }
@@ -196,9 +165,6 @@ class DaytonaSandboxTransport implements SandboxTransport {
     return (await this.ensureSandbox(ctx)).rootDir;
   }
 
-  // Each command gets its own session, deleted afterwards: nothing it does to
-  // shell state leaks into the next, and deleting the session is what ends a
-  // command that timed out or was cancelled.
   async exec(
     ctx: SandboxContext,
     argv: string[],
@@ -262,8 +228,7 @@ class DaytonaSandboxTransport implements SandboxTransport {
       };
     } finally {
       clearTimeout(timer);
-      // Not awaited: the caller has its answer, and a leaked session is only
-      // an idle shell until Daytona stops the sandbox.
+      // why: deleting the session is what ends a command that timed out or was cancelled
       sandbox.process.deleteSession(sessionId).catch((err: unknown) => {
         this.logger.warn(
           { workspaceId: ctx.workspaceId, err },
@@ -273,7 +238,6 @@ class DaytonaSandboxTransport implements SandboxTransport {
     }
   }
 
-  // Streamed so only `cap` bytes are ever pulled, however large the file.
   async readFile(
     ctx: SandboxContext,
     absPath: string,
@@ -303,8 +267,7 @@ class DaytonaSandboxTransport implements SandboxTransport {
     mode: "create" | "overwrite",
   ): Promise<void> {
     const { sandbox } = await this.ensureSandbox(ctx);
-    // The upload overwrites unconditionally, so create-mode probes first. Not
-    // atomic, as with Docker, but a Sandbox is single-user.
+    // why: uploadFile always overwrites; this probe races, but a Sandbox is single-user
     const res = await this.run(
       ctx,
       sandbox,
@@ -338,10 +301,6 @@ class DaytonaSandboxTransport implements SandboxTransport {
   }
 }
 
-/**
- * The Daytona Sandbox backend: this plugin's transport under core's fixed
- * five-tool core.
- */
 export const createDaytonaSandboxBackend = (
   plugin: PluginConfigContext<DaytonaPluginConfig, DaytonaPluginCredentials>,
 ): SandboxBackend => createPosixSandbox(new DaytonaSandboxTransport(plugin));

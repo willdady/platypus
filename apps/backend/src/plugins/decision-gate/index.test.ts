@@ -22,7 +22,6 @@ const call: ToolGateCall = {
   readOnlyHint: "undeclared",
 };
 
-/** A decision model that answers `probability` and records what it was asked. */
 const stubModel = (
   probability: number,
   question: "destructive" | "injection" = "destructive",
@@ -254,15 +253,12 @@ describe("@platypus/decision-gate", () => {
         },
       });
 
-      // No model is reachable here, so an answer at all proves none was asked.
       expect(await gates[0].evaluateResult?.(call, result, { signal })).toEqual(
         { verdict: "allow" },
       );
     });
   });
 
-  // The contract test: the reference gate loads through the real Tool-gate
-  // point, so a change to the point that it doesn't follow fails here.
   it("is a built-in that is off by default and loads as a Tool gate", async () => {
     expect(Object.keys(BUILTIN_PLUGINS)).toContain(plugin.name);
     expect(ALWAYS_ON_PLUGINS).not.toContain(plugin.name);

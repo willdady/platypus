@@ -4,23 +4,6 @@ import type {
   LoadPluginsResult,
 } from "./loader.ts";
 
-// Read-only observability store for the plugins loaded at boot (ADR-0013).
-//
-// `loadPlugins()` returns its result to the boot sequence; `index.ts` hands that
-// result here once, after a successful, fail-loud load. From this single source
-// the process serves the read-only `GET /plugins` catalog and annotates the
-// existing catalogs (`GET /backends`, the Tools listing) with each
-// contribution's originating plugin. There is deliberately no mutation path —
-// enable/disable is deploy-time only (ADR-0013), so this module exposes setters
-// for boot/tests and getters for request handlers, nothing more.
-
-/**
- * Owner label for a Tool set (or Sandbox backend) that is a core built-in rather
- * than a plugin contribution — currently only the consumer-side `sandbox` Tool
- * set, which is a static registration (see `tools/index.ts`), not something any
- * plugin contributes. Catalogs annotate such entries with this so they read as
- * core/built-in instead of a blank/unknown owner (ADR-0013 observability).
- */
 export const CORE_BUILTIN_OWNER = "core (built-in)";
 
 const NO_OWNERS: ContributionOwners = {
@@ -34,15 +17,6 @@ let loadedPlugins: readonly LoadedPlugin[] = [];
 let owners: ContributionOwners = NO_OWNERS;
 let pluginConfigs = new Map<string, unknown>();
 
-/**
- * Record what the boot load produced. Called once from the boot sequence after
- * {@link loadPlugins} succeeds; also used by tests to seed the catalog.
- *
- * The id → plugin-name lookups come straight from the loader, which built them
- * while registering (it needs them to attribute a collision to both plugins).
- * Re-deriving them from each plugin's id arrays would be a second, drifting
- * answer to a question the loader has already answered.
- */
 export const setLoadedPlugins = (result: LoadPluginsResult): void => {
   loadedPlugins = result.plugins;
   owners = result.owners;
@@ -50,37 +24,16 @@ export const setLoadedPlugins = (result: LoadPluginsResult): void => {
   for (const p of result.plugins) pluginConfigs.set(p.name, p.config);
 };
 
-/** The plugins loaded at boot, for the read-only `GET /plugins` catalog. */
 export const getLoadedPlugins = (): readonly LoadedPlugin[] => loadedPlugins;
 
-/**
- * The plugin that contributed a Tool set, or `undefined` when the id belongs to
- * no loaded plugin (e.g. the core-internal `sandbox` Tool set, which is a static
- * registration rather than a plugin contribution — see `tools/index.ts`).
- */
 export const getToolSetPlugin = (toolSetId: string): string | undefined =>
   owners.toolSets.get(toolSetId);
 
-/** The plugin that contributed a Sandbox backend, or `undefined` if none. */
 export const getSandboxBackendPlugin = (backend: string): string | undefined =>
   owners.sandboxBackends.get(backend);
 
-/** The plugin that contributed a Web-search backend, or `undefined` if none. */
 export const getWebBackendPlugin = (backend: string): string | undefined =>
   owners.webBackends.get(backend);
 
-/**
- * A plugin's boot-resolved, Operator-owned deploy-time **config** (never
- * credentials), keyed by manifest name, or `undefined` when the plugin is not
- * loaded or declares no `configSchema`. Lets a request handler read a plugin's
- * resolved config without re-parsing the environment — e.g. the Docker
- * network-allowlist endpoint (ADR-0005/0013). Read-only, boot-populated.
- *
- * `TConfig` is the output type of that plugin's manifest `configSchema`
- * (`DockerPluginConfig`, say). The loader validated and parsed the value against
- * that schema at boot, so this returns it as-is: there is no second parse, and
- * no cast at the call site. Asking for a different shape than the manifest's own
- * schema produces is a caller error, not something core can detect here.
- */
 export const getPluginConfig = <TConfig>(name: string): TConfig | undefined =>
   pluginConfigs.get(name) as TConfig | undefined;
