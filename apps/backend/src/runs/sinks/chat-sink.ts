@@ -30,33 +30,15 @@ import type {
   RunStatus,
 } from "../types.ts";
 
-/** Why a Chat refuses a turn, a delete or a leaf switch while a run holds it. */
 export const CHAT_BUSY_MESSAGE = "A reply is still being written in this Chat";
 
 export type ChatSinkParams = {
   orgId: string;
   workspaceId: string;
-  /** The Owner this turn acts as; the claim refuses a Workspace that has
-   *  since been transferred to someone else. */
   ownerId: string;
-  /** The user message this turn submits; absent on a regenerate. */
   message?: PlatypusUIMessage;
-  /**
-   * The row this turn hangs from: the submitted message's parent, or the
-   * regenerated reply's parent — or, on a resume, the reply it continues.
-   */
   parentId: string | null;
-  /**
-   * Stored messages whose tool approvals this turn answers, as they now read.
-   * Their parts are written with the claim.
-   */
   answered?: PlatypusUIMessage[];
-  /**
-   * Columns a Chat this turn creates starts with, beside the defaults: an A2A
-   * Chat is bound to its endpoint, its Agent and its token from its first row
-   * (ADR-0032); a Trigger run's Chat to its run, titled from its Trigger
-   * (ADR-0044). Ignored when the Chat already exists.
-   */
   newChat?:
     | {
         agentId: string;
@@ -69,79 +51,23 @@ export type ChatSinkParams = {
         triggerRunId: string;
         title: string;
       };
-  /**
-   * Called once the run's terminal status is written, with that status. Not
-   * awaited by the run: it must not delay or fail it.
-   */
   onEnded?: (status: RunStatus) => void;
-  /**
-   * Writes rows that record the turn's end in the terminal write's own
-   * transaction, with `status`: they commit with the Chat leaving `running`,
-   * so no claim of the Chat's next turn lands between them. An A2A turn's
-   * Task records its end here (ADR-0032). Anything that must follow the
-   * commit, such as a push, belongs in `onEnded`.
-   */
   onEnding?: (tx: Tx, status: RunStatus) => Promise<unknown>;
-  /**
-   * Writes rows that belong to the turn in the claim's own transaction, after
-   * its user message: they commit with the claim, so no other call sees the
-   * Chat `running` without them, or fail it, so the turn never starts. An A2A
-   * turn's Task is made here (ADR-0032).
-   */
   onClaimed?: (tx: Tx) => Promise<void>;
-  /** Override the FlushScheduler interval. Defaults to 5 seconds. */
   flushIntervalMs?: number;
 };
 
-/**
- * Persists a Chat turn at run lifecycle boundaries, writing only the rows the
- * turn itself produced (ADR-0026) — never a row it continues from.
- *
- * - `onStart`: claim the Chat by flipping its row to `status: "running"`
- *   (creating it for a new Chat), insert the submitted user message and point
- *   the leaf at the message being answered, so a disconnected client can read
- *   the in-progress state, and write the tool approvals the turn answers. The
- *   claim is the one-run-per-Chat lock across every backend instance (#1237): a Chat already `running` is a `ConflictError`,
- *   unless its run's heartbeat has gone stale (#1297) — that run died with its
- *   instance, and the claim takes the Chat from it. Rows the turn owns
- *   (`onClaimed`) are written in the same transaction. Once claimed, the
- *   sink stamps the Chat's heartbeat until the run ends.
- * - `onOutput`: upsert the reply at once, on the run's first output, so the
- *   Chat holds it before the first step ends (#1337).
- * - `onProgress`: drive a FlushScheduler that periodically upserts the reply
- *   while keeping `status: "running"`.
- * - `onFinish`: write the terminal status (`succeeded`, `failed`,
- *   `cancelled`) and the final reply. A regenerate that wrote no reply puts
- *   back the leaf `onStart` moved, so the reply it meant to replace is not left
- *   off the Active path. All of it, and the rows that record the turn's end
- *   (`onEnding`), is one transaction (#1309): a claim of the next turn lands
- *   wholly after it, never between its writes.
- *
- * The sink intentionally only persists what `prepareChatTurn` resolved
- * (agent vs direct provider/model nulling already done) — it does not
- * inspect the agent table itself.
- */
 export class ChatSink implements RunSink {
   private plan?: ResolvedRunPlan;
   private latestMessages: PlatypusUIMessage[] = [];
   private flusher?: FlushScheduler;
   private runId = "";
   private readonly params: ChatSinkParams;
-  /** The message the reply answers: the submitted one, or the reply's parent. */
   private readonly answeredId: string | null;
-  /** On a regenerate, the leaf before `onStart` moved it to `answeredId`. */
   private leafBefore?: string | null;
   private replyWritten = false;
-  /** Whether `onStart` claimed the Chat. A sink that lost the claim writes
-   *  nothing, since the row belongs to the run that holds it. */
   private claimed = false;
-  /**
-   * The early title attempt the resolved step started, if any (issue #2017).
-   * The finish step's own attempt waits on it first, so a reply that finishes
-   * before titling settles never sets a second title call racing.
-   */
   private earlyTitle?: Promise<void>;
-  /** Stamps the Chat's run heartbeat while the run holds it. */
   private heartbeat?: ReturnType<typeof setInterval>;
 
   constructor(params: ChatSinkParams) {
@@ -160,13 +86,8 @@ export class ChatSink implements RunSink {
     const message =
       this.params.message && (await this.storeFiles(this.params.message));
 
-    // Not caught: a turn whose message cannot be stored must not run. The
-    // runner fails the run and the request with it. The pinned Memories block
-    // (ADR-0020) is written so a re-take on this turn survives for the next.
     await db.transaction(async (tx) => {
-      // A Workspace transfer holds this row while it lists the Chats to
-      // cancel, so a turn either claims before and is cancelled with them, or
-      // waits and finds a new Owner it was not started as (ADR-0035).
+      // why: a Workspace transfer waits on this lock, so a turn is cancelled by it or sees the new Owner
       const [owned] = await tx
         .select({ id: workspaceTable.id })
         .from(workspaceTable)
@@ -188,9 +109,6 @@ export class ChatSink implements RunSink {
         runHeartbeatAt: now,
         updatedAt: now,
       };
-      // The claim. Conditional, so of two instances racing for one Chat the
-      // second waits on the first's row lock and then matches nothing. A Chat
-      // still `running` whose heartbeat is stale is claimable: its run died.
       const updated = await tx
         .update(chatTable)
         .set(running)
@@ -211,9 +129,6 @@ export class ChatSink implements RunSink {
       if (!message) this.leafBefore = updated[0]?.activeLeafId;
 
       if (updated.length === 0) {
-        // A new Chat, unless the id is taken: a Chat already running, or one
-        // another Workspace holds. Either way the claim fails before any
-        // message is written into it.
         try {
           await tx.insert(chatTable).values({
             id: ctx.runId,
@@ -239,9 +154,6 @@ export class ChatSink implements RunSink {
         });
       }
 
-      // Checked again under the claim: another turn may have answered since
-      // this one was resolved. A resume that lost that race must not run the
-      // reply a second time; a new message that lost it leaves the answer be.
       for (const answered of this.params.answered ?? []) {
         const [stored] = await tx
           .select({ parts: chatMessage.parts })
@@ -271,11 +183,6 @@ export class ChatSink implements RunSink {
           );
       }
 
-      // The message being answered: the new one on a submit, the regenerated
-      // reply's own on a regenerate, the reply itself on a resume. A reader
-      // arriving before the reply's first write sees that message, not the
-      // reply being replaced, and the hydration guard keeps a partial reply on
-      // screen over it.
       await tx
         .update(chatTable)
         .set({ activeLeafId: this.answeredId })
@@ -287,11 +194,6 @@ export class ChatSink implements RunSink {
     this.startHeartbeat();
   }
 
-  /**
-   * Stamps the Chat's heartbeat every {@link RUN_HEARTBEAT_INTERVAL_MS} until
-   * `onFinish`, so a peer can tell this run from one that died (#1297).
-   * Unref'd: a heartbeat never keeps the process alive.
-   */
   private startHeartbeat(): void {
     this.heartbeat = setInterval(
       () => void this.beat(),
@@ -300,7 +202,6 @@ export class ChatSink implements RunSink {
     this.heartbeat.unref();
   }
 
-  /** One heartbeat. A missed one is logged; the next interval tries again. */
   private async beat(): Promise<void> {
     try {
       await db
@@ -321,11 +222,9 @@ export class ChatSink implements RunSink {
     }
   }
 
-  // Synchronous work; returns a resolved promise to satisfy the async RunSink contract.
   onResolved(ctx: { runId: RunId; plan: ResolvedRunPlan }): Promise<void> {
     this.plan = ctx.plan;
 
-    // Lazily create the FlushScheduler now that we have a plan to write.
     this.flusher = new FlushScheduler(async () => {
       await this.writeRow({
         status: "running",
@@ -333,14 +232,10 @@ export class ChatSink implements RunSink {
       });
     }, this.params.flushIntervalMs);
 
-    // The User's message is stored and the reply has not started: titling can
-    // begin now where it would use a different model (issue #2017). Not
-    // awaited, and its promise kept for the finish step to wait on.
     this.earlyTitle = this.startEarlyTitle();
     return Promise.resolve();
   }
 
-  // Synchronous work; returns a resolved promise to satisfy the async RunSink contract.
   onProgress(ctx: {
     runId: RunId;
     messages: PlatypusUIMessage[];
@@ -351,11 +246,6 @@ export class ChatSink implements RunSink {
     return Promise.resolve();
   }
 
-  /**
-   * Saves the reply at once, so the Chat holds it from the run's first output
-   * rather than from its first step's end (#1337). Later progress keeps the
-   * scheduler's cadence.
-   */
   async onOutput(ctx: {
     runId: RunId;
     messages: PlatypusUIMessage[];
@@ -385,55 +275,23 @@ export class ChatSink implements RunSink {
         messages: ctx.messages,
         ending: true,
       });
-      // A reply that could not be stored must not leave the Chat `running`.
       if (!written) status = "failed";
 
-      // A Trigger run's Chat gets neither of the two follow-ups below: its
-      // title is its Trigger's, and its run's model calls are a Chat turn's
-      // concern only (ADR-0044).
       if (!this.keepsTriggerRun) {
-        // Fire-and-forget authoritative titling. Runs for every terminal
-        // status (succeeded / failed / cancelled) so a chat is titled even
-        // when the first run errored, was cancelled, or the client tab closed
-        // before the old client-side path could fire. Deliberately not
-        // awaited: it must never block or delay run completion, and any
-        // failure is caught and logged.
         this.generateMetadata();
 
-        // Fire-and-forget Transcript summarising (ADR-0041, issue #1716): the
-        // turn's final Projected occupancy has crossed the trigger, so a
-        // summary is taken OFF the response path — the next turn finds it
-        // already waiting and pays no latency. If the User sends the next
-        // message before it lands, that turn simply runs without it; the row
-        // is immutable, so the race is harmless. Never fatal: a failure logs
-        // here and the next turn's finish-pass retries.
-        //
-        // Gated on `written`, not on `status`: a turn stopped by a
-        // cancellation or a timeout still stored its reply, and that reply's
-        // reading is the one the next turn starts from. A turn whose reply
-        // could not be stored has no reading to trigger on.
         if (written) this.scheduleTranscriptSummary();
       }
     }
-    // Resolution failed before there was a plan to persist, or the reply
-    // could not be stored: only the status, on the row `onStart` claimed.
     if (!written) await this.writeStatus(status);
 
     this.params.onEnded?.(status);
   }
 
-  /** Whether this Chat keeps a Trigger run's Transcript (ADR-0044). */
   private get keepsTriggerRun(): boolean {
     return !!this.params.newChat && "triggerRunId" in this.params.newChat;
   }
 
-  /**
-   * Writes only the Chat row's terminal status, with the leaf put back and
-   * the turn's end recorded as `onFinish` does. Should recording the end
-   * fail, the status is still written without it: a Chat must not stay
-   * `running` on a run that has ended, and the end is recorded once the run
-   * has called `onEnded`.
-   */
   private async writeStatus(status: RunStatus): Promise<void> {
     const write = async (tx: Tx, recordEnd: boolean) => {
       await tx
@@ -467,37 +325,18 @@ export class ChatSink implements RunSink {
     }
   }
 
-  /**
-   * The leaf a regenerate moved in `onStart`, to put back when the turn ended
-   * without writing a reply: a resolution that failed, or a run stopped before
-   * its first chunk. Left at the reply's parent, the reply it meant to replace
-   * would be off the Active path with no arrows leading back to it.
-   */
   private restoredLeaf(): { activeLeafId?: string } {
     return this.replyWritten || !this.leafBefore
       ? {}
       : { activeLeafId: this.leafBefore };
   }
 
-  /**
-   * Kicks off title/tag generation for the just-finished run without awaiting
-   * it. Waits first for the turn's early title attempt, if it started one: the
-   * two attempts must not race, and if the early one succeeded this call finds
-   * the Chat titled and makes no model call. Resolves the titling provider from
-   * the run plan — for agent runs the chat row's provider column is null, so
-   * the resolved plan's `providerId` (the agent's own provider) is the
-   * authoritative source. Skips silently when no plan resolved (nothing to
-   * title with).
-   */
   private generateMetadata(): void {
     const providerId = this.plan?.resolved.providerId;
     if (!providerId) return;
 
     const { orgId, workspaceId } = this.params;
     void (async () => {
-      // The early attempt's failure was caught where it started, so this wait
-      // cannot throw; a failed one has counted its failure and this call is
-      // the retry, now with the reply on the Active path.
       await this.earlyTitle;
       await generateChatMetadata({
         chatId: this.runId,
@@ -513,16 +352,6 @@ export class ChatSink implements RunSink {
     });
   }
 
-  /**
-   * Starts (never awaits) the turn's early title attempt, where there is one
-   * (issue #2017). It runs only when a different model would title the Chat;
-   * that decision, and the attempt itself, live in `startEarlyChatTitle`. A
-   * Trigger run's Chat takes its Trigger's name and is never titled by a
-   * model (ADR-0044).
-   *
-   * The returned promise never rejects: a failed attempt is logged here, as
-   * the end-of-run attempt's is, so it can neither fail nor delay the run.
-   */
   private startEarlyTitle(): Promise<void> | undefined {
     if (this.keepsTriggerRun) return undefined;
     const plan = this.plan;
@@ -543,19 +372,6 @@ export class ChatSink implements RunSink {
     });
   }
 
-  /**
-   * Starts (never awaits) the after-turn Transcript summary pass: the turn's
-   * final Projected occupancy crossed the trigger and the declared window
-   * exists — or the turn overflowed (issue #1717) — and a model reference is
-   * available to write the summary. The kept tail
-   * shrinks to one turn when the triggering reading itself ran with a summary
-   * in place. Registered in the in-flight map so a backstop on the next turn
-   * waits for this pass rather than starting a second.
-   *
-   * The due-ness decision and the take live in `chat-summary.ts`'s `afterTurn`;
-   * this method only hands it the finished path and the Chat's own model
-   * reference, from which it tries the Workspace's task model first.
-   */
   private scheduleTranscriptSummary(): void {
     const plan = this.plan;
     if (!plan) return;
@@ -566,10 +382,6 @@ export class ChatSink implements RunSink {
       workspaceId: this.params.workspaceId,
       path: this.latestMessages,
       contextWindow: plan.contextWindow,
-      // The Chat's own resolved model: an Agent turn re-resolves through its
-      // Agent row, a Direct turn through its Provider+model reference — the
-      // same authority the turn queue's own `resolveGenerationPlan` used
-      // (ADR-0017).
       source:
         resolved.agentId !== undefined
           ? { agentId: resolved.agentId }
@@ -578,7 +390,6 @@ export class ChatSink implements RunSink {
     });
   }
 
-  /** Stores a message's inline file bytes and swaps them for storage references. */
   private async storeFiles(
     message: PlatypusUIMessage,
   ): Promise<PlatypusUIMessage> {
@@ -592,22 +403,9 @@ export class ChatSink implements RunSink {
     return stored;
   }
 
-  /**
-   * Writes the Chat row with the resolved plan and the supplied status, and
-   * upserts the turn's reply (after running it through `extractFiles`).
-   * Resolves `false`, having written nothing, when either step fails.
-   *
-   * The reply is the trailing message when it is an assistant's. What the
-   * server loaded for the turn ends in a user message — the one submitted, or
-   * the regenerated reply's parent — or in the reply a resume continues, so a
-   * trailing assistant message is this turn's own: the streamed reply, the
-   * seeded `loadSkill` message, or the resumed reply, each of which the SDK
-   * continues under the same id. Before the first step that is all there is.
-   */
   private async writeRow(args: {
     status: RunStatus;
     messages: PlatypusUIMessage[];
-    /** The terminal write: puts the leaf back and records the turn's end. */
     ending?: boolean;
   }): Promise<boolean> {
     if (!this.plan) return false;
@@ -641,9 +439,6 @@ export class ChatSink implements RunSink {
       reasoningEffort: resolved.reasoningEffort ?? null,
       thinkingBudget: resolved.thinkingBudget ?? null,
       maxSteps: resolved.maxSteps ?? null,
-      // Every write points the leaf at the reply, so the first one moves it
-      // there. Nothing else moves it mid-run: a delete is refused while the
-      // run is in flight.
       ...(reply
         ? { activeLeafId: reply.id }
         : args.ending
@@ -655,8 +450,6 @@ export class ChatSink implements RunSink {
     try {
       await db.transaction(async (tx) => {
         if (reply) {
-          // Only the content: a reply deleted since the last write stays
-          // deleted.
           const content = storable({
             parts: reply.parts,
             metadata: reply.metadata ?? null,
