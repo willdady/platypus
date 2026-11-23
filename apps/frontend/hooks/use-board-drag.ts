@@ -197,7 +197,7 @@ export function useBoardDrag({
       activeTypeRef.current = type;
       dragOriginColumnRef.current =
         type === "card"
-          ? (columnOfCard(cols, active.id as string)?.id ?? null)
+          ? (columnOfCard(cols, String(active.id))?.id ?? null)
           : null;
       setLocalColumns([...cols.map((c) => ({ ...c, cards: [...c.cards] }))]);
     },

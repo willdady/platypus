@@ -20,6 +20,7 @@ export function dropZoneId(columnId: string): string {
   return `${DROP_ZONE_PREFIX}${columnId}`;
 }
 
+/** The column id inside a drop-zone id; null for any other id. */
 export function parseDropZoneId(id: string): string | null {
   return id.startsWith(DROP_ZONE_PREFIX)
     ? id.slice(DROP_ZONE_PREFIX.length)

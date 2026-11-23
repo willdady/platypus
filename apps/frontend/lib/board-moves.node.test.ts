@@ -50,9 +50,9 @@ describe("dropZoneId", () => {
     },
   );
 
-  it("is not a bare column id", () => {
+  it("is distinguishable from a bare column id", () => {
+    // So the round-trip above proves the prefix is stripped, not echoed.
     expect(parseDropZoneId("col-1")).toBeNull();
-    expect(dropZoneId("col-1")).not.toBe("col-1");
   });
 });
 
@@ -73,11 +73,24 @@ describe("resolveOverColumn", () => {
   const columns = [column("col-1", ["a"]), column("col-2", ["b"])];
 
   it.each([
-    ["a column's drop zone", "column-drop-col-2", "col-2"],
+    ["a column's drop zone", dropZoneId("col-2"), "col-2"],
     ["a column id", "col-2", "col-2"],
     ["a card's id", "a", "col-1"],
   ])("resolves %s to its column", (_label, overId, columnId) => {
     expect(resolveOverColumn(columns, overId)?.id).toBe(columnId);
+  });
+
+  it("prefers a column's drop zone over a card id of the same text", () => {
+    const collision = [
+      column("col-1", []),
+      column("col-2", [dropZoneId("col-1")]),
+    ];
+    expect(resolveOverColumn(collision, dropZoneId("col-1"))?.id).toBe("col-1");
+  });
+
+  it("prefers a column id over a card id of the same text", () => {
+    const collision = [column("col-1", []), column("col-2", ["col-1"])];
+    expect(resolveOverColumn(collision, "col-1")?.id).toBe("col-1");
   });
 
   it("returns undefined when nothing matches", () => {
@@ -92,7 +105,7 @@ describe("placeCard", () => {
     expect(
       placeCard(columns, {
         activeId: "a",
-        overId: "column-drop-col-2",
+        overId: dropZoneId("col-2"),
         activeRect: rect(0),
         overRect: rect(0),
       }),
