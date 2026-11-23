@@ -37,6 +37,17 @@ registerSandboxBackend({
   },
 });
 
+const FIELDS_BACKEND = "test-fields";
+registerSandboxBackend({
+  backend: FIELDS_BACKEND,
+  name: "Test Fields",
+  configSchema: z.object({ region: z.string().min(1) }).strict(),
+  credentialsSchema: z.object({ apiToken: z.string().min(1) }).strict(),
+  create: () => {
+    throw new Error("not used in this test");
+  },
+});
+
 describe("Sandbox Routes", () => {
   beforeEach(() => {
     resetMockDb();
@@ -109,8 +120,48 @@ describe("Sandbox Routes", () => {
       });
 
       expect(res.status).toBe(400);
-      const body = (await res.json()) as Record<string, unknown>;
-      expect(body.error).toMatch(/Invalid sandbox credentials/);
+      const body = (await res.json()) as {
+        error: Array<{ path: Array<string | number>; message: string }>;
+      };
+      expect(body.error).toContainEqual(
+        expect.objectContaining({ path: ["credentials", "privateKey"] }),
+      );
+    });
+
+    it("stores a generated backend's required config and credentials", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
+      mockDb.returning.mockResolvedValueOnce([
+        {
+          id: "sbx-1",
+          workspaceId,
+          name: "Cloud box",
+          backend: FIELDS_BACKEND,
+          config: { region: "eu" },
+          credentials: { apiToken: "tok" },
+        },
+      ]);
+
+      const res = await app.request(baseUrl, {
+        method: "POST",
+        body: JSON.stringify({
+          workspaceId,
+          name: "Cloud box",
+          backend: FIELDS_BACKEND,
+          config: { region: "eu" },
+          credentials: { apiToken: "tok" },
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(201);
+      expect(mockDb.values.mock.calls.at(-1)?.[0]).toMatchObject({
+        config: { region: "eu" },
+        credentials: { apiToken: "tok" },
+      });
     });
 
     it("returns 409 when a sandbox already exists for the workspace", async () => {
@@ -762,27 +813,21 @@ describe("Sandbox Routes", () => {
         "POST: config failing the backend's schema",
         "POST",
         { config: { unexpected: true }, credentials: { privateKey: "k" } },
-        /^Invalid sandbox config: /,
+        ["config"],
       ],
       [
         "PUT: config failing the backend's schema",
         "PUT",
         { config: { unexpected: true } },
-        /^Invalid sandbox config: /,
+        ["config"],
       ],
       [
         "PUT: credentials failing the backend's schema",
         "PUT",
         { config: {}, credentials: {} },
-        /^Invalid sandbox credentials: /,
+        ["credentials", "privateKey"],
       ],
-      [
-        "PUT: userEnv colliding with the stored adminEnv",
-        "PUT",
-        { config: {}, userEnv: { ADMIN_KEY: "y" } },
-        /ADMIN_KEY/,
-      ],
-    ] as const)("rejects %s (400)", async (_label, method, over, error) => {
+    ] as const)("rejects %s (400)", async (_label, method, over, path) => {
       asAdmin(method === "PUT" ? stored : undefined);
 
       const res = await send(method, {
@@ -793,9 +838,67 @@ describe("Sandbox Routes", () => {
       });
 
       expect(res.status).toBe(400);
-      expect(((await res.json()) as { error: string }).error).toMatch(error);
+      const body = (await res.json()) as {
+        error: Array<{ path: Array<string | number>; message: string }>;
+      };
+      expect(body.error).toContainEqual(
+        expect.objectContaining({ path: [...path] }),
+      );
       expect(mockDb.insert).not.toHaveBeenCalled();
       expect(mockDb.update).not.toHaveBeenCalled();
+    });
+
+    it("rejects a userEnv colliding with the stored adminEnv (400)", async () => {
+      asAdmin(stored);
+
+      const res = await send("PUT", {
+        name: "Creds backend",
+        backend: CREDS_BACKEND,
+        config: {},
+        userEnv: { ADMIN_KEY: "y" },
+      });
+
+      expect(res.status).toBe(400);
+      expect(((await res.json()) as { error: string }).error).toMatch(
+        /ADMIN_KEY/,
+      );
+      expect(mockDb.update).not.toHaveBeenCalled();
+    });
+
+    it("stores a generated backend's updated config and credentials", async () => {
+      asAdmin({
+        id: "sbx-1",
+        workspaceId,
+        name: "Cloud box",
+        backend: FIELDS_BACKEND,
+        config: { region: "us" },
+        credentials: { apiToken: "old" },
+        adminEnv: {},
+        userEnv: {},
+      });
+      mockDb.returning.mockResolvedValueOnce([
+        {
+          id: "sbx-1",
+          workspaceId,
+          name: "Cloud box",
+          backend: FIELDS_BACKEND,
+          config: { region: "eu" },
+          credentials: { apiToken: "new" },
+        },
+      ]);
+
+      const res = await send("PUT", {
+        name: "Cloud box",
+        backend: FIELDS_BACKEND,
+        config: { region: "eu" },
+        credentials: { apiToken: "new" },
+      });
+
+      expect(res.status).toBe(200);
+      expect(mockDb.set.mock.calls.at(-1)?.[0]).toMatchObject({
+        config: { region: "eu" },
+        credentials: { apiToken: "new" },
+      });
     });
   });
 });
