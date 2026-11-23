@@ -7,31 +7,15 @@ import { ConflictError, NotFoundError, ValidationError } from "../errors.ts";
 import type { PlatypusUIMessage } from "../types.ts";
 import { errorMessage } from "../utils/error-message.ts";
 
-/**
- * A Chat's messages as the rows the server owns (ADR-0026): a tree through
- * `parentId`, read as the one path a reader sees and a turn continues.
- */
-
-/** A live message's place in the tree. */
 export type ChatTreeNode = { id: string; parentId: string | null };
 
-/**
- * A stored message as the server reads it: the Chat UI message, plus the row's
- * own `createdAt` — the tree walk already holds it, and a reader that shows a
- * Transcript (the **Chats** Tool set, issue #1005) needs it per message.
- */
 export type StoredChatMessage = PlatypusUIMessage & { createdAt: Date };
 
-/** A path through a Chat's tree, and every live message's place in it. */
 export type ActivePath = {
   messages: StoredChatMessage[];
   tree: ChatTreeNode[];
 };
 
-/**
- * The shape of a Chat's whole tree, oldest first, without any content: a
- * Chat's Alternatives can be long, and nothing reads them.
- */
 const loadTree = (chatId: string) =>
   db
     .select({
@@ -44,23 +28,13 @@ const loadTree = (chatId: string) =>
     .where(eq(chatMessage.chatId, chatId))
     .orderBy(asc(chatMessage.createdAt));
 
-/**
- * The path ending at `leafId` — the Active path when that is the Chat's
- * `activeLeafId` — plus every live message's place in the tree, oldest first.
- *
- * Walks from the leaf up through `parentId`. A deleted row is left out of the
- * path but still links the messages under it to the ones above, which is what
- * lets Delete take one message out of the middle.
- */
 export const loadActivePath = async (
   chatId: string,
   leafId: string | null,
 ): Promise<ActivePath> => pathThrough(chatId, await loadTree(chatId), leafId);
 
-/** One row of a Chat's tree, as {@link loadTree} reads it. */
 type ChatTreeRow = Awaited<ReturnType<typeof loadTree>>[number];
 
-/** `loadActivePath` over a tree already loaded: reads only the path's content. */
 const pathThrough = async (
   chatId: string,
   nodes: Awaited<ReturnType<typeof loadTree>>,
@@ -103,7 +77,7 @@ const pathThrough = async (
       if (!row)
         throw new Error(`Message '${node.id}' on the path was not read`);
       const { metadata, ...message } = row;
-      // Absent rather than null, the shape a streamed message has.
+      // why: absent rather than null, the shape a streamed message has
       return {
         ...message,
         createdAt: node.createdAt,
@@ -130,10 +104,6 @@ const findMessage = async (chatId: string, id: string) => {
   return row;
 };
 
-/**
- * What a `POST …/chat/:chatId/turns` asks for, beside the turn's generation
- * settings.
- */
 export type TurnTarget =
   | {
       trigger: "submit";
@@ -148,28 +118,17 @@ export type TurnTarget =
     };
 
 export type ResolvedTurn = {
-  /** What the turn continues, from the server's rows, never the client's. */
   messages: PlatypusUIMessage[];
-  /** The user message this turn adds, absent on a regenerate or a resume. */
   message?: PlatypusUIMessage;
-  /** The row the turn's new messages hang from, or the reply it resumes. */
   parentId: string | null;
-  /**
-   * Stored messages on the path whose tool approvals this turn answers, as
-   * they now read. Written with the turn's claim, so they are never answered
-   * by a turn that did not run.
-   */
   answered: PlatypusUIMessage[];
 };
 
-/** The reason a call the User denied reaches the model with. */
 export const USER_DENIED_REASON = "The User denied this call.";
 
-/** The reason a call left unanswered under a newer message reaches it with. */
 export const MOVED_ON_REASON =
   "The User sent a new message instead of answering this approval request, so the call was not run.";
 
-/** The approval ids a message is still waiting on. */
 const pendingApprovalIds = (message: PlatypusUIMessage): string[] =>
   message.parts.flatMap((part) =>
     isToolUIPart(part) && part.state === "approval-requested"
@@ -177,11 +136,6 @@ const pendingApprovalIds = (message: PlatypusUIMessage): string[] =>
       : [],
   );
 
-/**
- * Whether a stored message still waits on what `answered` answers: something
- * is pending, and `answered` answers all of it. False once another turn has
- * answered it first.
- */
 export const stillAwaits = (
   stored: PlatypusUIMessage["parts"],
   answered: PlatypusUIMessage,
@@ -197,7 +151,6 @@ export const stillAwaits = (
   return pending.length > 0 && pending.every((id) => responded.has(id));
 };
 
-/** `message` with each approval it waits on answered as `answer` says. */
 const answerApprovals = (
   message: PlatypusUIMessage,
   answer: (approvalId: string) => { approved: boolean; reason?: string },
@@ -214,11 +167,6 @@ const answerApprovals = (
   ),
 });
 
-/**
- * The path with every approval still waiting denied: the User moved on
- * without answering. Without the denial the SDK leaves the call out of the
- * model's view altogether, as if it had never been made.
- */
 const denyUnanswered = (
   messages: PlatypusUIMessage[],
 ): { messages: PlatypusUIMessage[]; answered: PlatypusUIMessage[] } => {
@@ -237,26 +185,6 @@ const denyUnanswered = (
   };
 };
 
-/**
- * Works out what a turn continues from, refusing one that cannot run before
- * anything is written.
- *
- * - **Submit** adds the message under `parentId`, which may be deleted: a tab
- *   still showing a message another tab deleted adds its message as an
- *   Alternative on the path it held. Only the path up to that parent is sent
- *   to the model, so a stale tab can never write over a newer path.
- * - **Regenerate** runs again from the reply's parent, which must be a user
- *   message still in the Chat. The old reply stays, as an Alternative.
- * - **Respond to approvals** resumes the reply that stopped to ask, under its
- *   own id. It must be the Chat's Active leaf, and the answers must cover
- *   exactly the approvals it is waiting on.
- *
- * Every approval still waiting elsewhere on the path is denied: the User
- * moved on without answering it.
- *
- * `owned` is whether the Chat exists in this Workspace. A Chat that does not
- * has no messages to hang from or regenerate, whatever holds its id elsewhere.
- */
 export const resolveTurn = async ({
   chatId,
   owned,
@@ -265,7 +193,6 @@ export const resolveTurn = async ({
 }: {
   chatId: string;
   owned: boolean;
-  /** The Chat's Active leaf, the only reply whose approvals can be answered. */
   activeLeafId?: string | null;
   request: TurnTarget;
 }): Promise<ResolvedTurn> => {
@@ -334,9 +261,6 @@ export const resolveTurn = async ({
     return { ...denyUnanswered(messages), parentId: parent.id };
   }
 
-  // The message is the one thing a client still writes into the Transcript, so
-  // it is a trust boundary: the schema has already held it to a user message of
-  // text and files, and this holds each part to the shape the SDK converts.
   let message: PlatypusUIMessage | undefined;
   try {
     [message] = await validateUIMessages<PlatypusUIMessage>({
@@ -367,13 +291,6 @@ export const resolveTurn = async ({
   };
 };
 
-/**
- * Moves the Active path onto `messageId`, an Alternative the reader chose, and
- * returns the new path. It lands on the newest message under that one: a
- * message is always newer than the one it follows, so the newest message
- * under it is a leaf. Deleted messages are never landed on, but the walk goes
- * through them, as the Active path does.
- */
 export const switchActivePath = async (
   chatId: string,
   messageId: string,
@@ -402,11 +319,6 @@ export const switchActivePath = async (
   return pathThrough(chatId, nodes, leaf.id);
 };
 
-/**
- * Takes a message out of the Active path for good. The row stays, flagged, so
- * the tree keeps its shape and the messages under it keep their place.
- * Idempotent: deleting it again keeps the first deletion.
- */
 export const deleteMessage = async (
   chatId: string,
   messageId: string,

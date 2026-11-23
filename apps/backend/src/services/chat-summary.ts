@@ -44,22 +44,9 @@ import {
   type GenerationSource,
 } from "../runs/agent-plan.ts";
 
-/**
- * A durable **Transcript summary** of a Chat's older Transcript (ADR-0041,
- * issue #1716): everything the module that takes, reads and applies a summary
- * shares, so the turn's read path, the turn's finish and the backstop all
- * decide the same way.
- *
- * Rows are immutable facts about a path — "everything from the root to
- * message X, condensed" — checked for usability when they are READ. Nothing
- * here ever writes a `chat_message`; the stored Transcript never changes.
- */
-
 export type ChatSummaryRow = typeof chatSummary.$inferSelect;
 
-/** The data-access surface the pass's model resolution reads (a slice of
- *  `ChatTurnQueries`, stated structurally so this module never imports its
- *  caller — `chat-execution.ts` imports this one). */
+// why: structural, not imported; chat-execution.ts imports this module
 type TranscriptSummaryQueries = {
   getAgent(
     id: string,
@@ -71,7 +58,6 @@ type TranscriptSummaryQueries = {
     orgId: string,
     workspaceId: string,
   ): Promise<ProviderRow | null>;
-  /** Only the Workspace field task-model selection reads. */
   getWorkspace(
     orgId: string,
     workspaceId: string,
@@ -80,11 +66,6 @@ type TranscriptSummaryQueries = {
 
 import type { ProviderRow } from "./provider-write.ts";
 
-/**
- * The production `TranscriptSummaryQueries`: Scoped-resource reads, exactly as
- * a Chat turn serves them (ADR-0007), so a Shared (org-scoped) Provider/Agent
- * resolves for a summary pass the way it resolved the turn.
- */
 const drizzleTranscriptSummaryQueries: TranscriptSummaryQueries = {
   async getAgent(id, orgId, workspaceId) {
     return (
@@ -113,11 +94,6 @@ const drizzleTranscriptSummaryQueries: TranscriptSummaryQueries = {
   },
 };
 
-/**
- * The live `agent` row a generation plan re-resolves from, stated minimally
- * (a SamplingSource satisfies the rest of `GenerationSource`'s agent shape).
- * Production passes the real `agent` table row; tests pass a fixture.
- */
 type AgentRow = {
   providerId: string;
   modelId: string;
@@ -130,7 +106,6 @@ type AgentRow = {
   frequencyPenalty?: number | null;
 };
 
-/** The Chat's summaries, newest first. */
 export const loadChatSummaries = async (
   chatId: string,
 ): Promise<ChatSummaryRow[]> =>
@@ -141,19 +116,8 @@ export const loadChatSummaries = async (
     .orderBy(desc(chatSummary.createdAt))
     .limit(50);
 
-/** The label the summary text part opens with — all the model gets to know
- *  that this was not something the User said (ADR-0041). */
 export const SUMMARY_PART_LABEL = "[Summary of the earlier conversation]";
 
-/**
- * Whether a summary is usable on `path`: its anchor is on the path, and its
- * `coveredIds` are exactly the live path ids from the root through the anchor.
- *
- * A Delete inside the range changes the live path under the anchor, so the
- * pair no longer matches and the summary is skipped — the read-time check that
- * replaces any invalidation write (ADR-0041). A delete in the kept tail, or an
- * edit/regenerate that adds a sibling below the range, never touches the pair.
- */
 export const isSummaryUsable = (
   summary: Pick<ChatSummaryRow, "anchorId" | "coveredIds">,
   path: PlatypusUIMessage[],
@@ -164,33 +128,20 @@ export const isSummaryUsable = (
   if (anchorIndex < 0) return false;
   const live = path.slice(0, anchorIndex + 1).map((message) => message.id);
   if (!sameIds(live, summary.coveredIds)) return false;
-  // The anchor must still END a turn: the summary rides the first kept user
-  // message, which exists exactly when the anchor is followed by one. A
-  // Delete of the user message that opened the turn after the anchor leaves
-  // the next assistant floating on the path, and the summary has nothing to
-  // ride — so it reads as unusable and the backstop takes a fresh one, the
-  // same outcome as a Delete inside the range.
   return path[anchorIndex + 1]?.role === "user";
 };
 
 const sameIds = (a: readonly string[], b: readonly string[]): boolean =>
   a.length === b.length && a.every((id, index) => id === b[index]);
 
-/** A message's index on the path, as a depth two anchors can be compared on. */
 const depthOf = (index: ReadonlyMap<string, number>, id: string): number =>
   index.get(id) ?? -1;
 
-/** The static UI part type a completed `loadSkill` call+result pair uses. */
 type LoadSkillUIPart = Extract<
   PlatypusUIMessage["parts"][number],
   { type: `tool-${typeof LOAD_SKILL_TOOL_NAME}` }
 >;
 
-/**
- * The one completed `loadSkill` pair a message holds, or `undefined`: the
- * name and the loaded body, proved complete — a call whose result is not
- * beside it is an in-flight or failed load.
- */
 const skillLoadOf = (message: PlatypusUIMessage) => {
   const parts = message.parts.filter(
     (part): part is LoadSkillUIPart =>
@@ -208,8 +159,7 @@ const skillLoadOf = (message: PlatypusUIMessage) => {
   );
   if (!result) return undefined;
   const name = (call.input as { name: string }).name;
-  // The seeded pair's output is a `SkillLoadResult`; a resumed stream's may be
-  // its string form. Anything else is not a body worth re-injecting.
+  // why: a seeded pair's output is a SkillLoadResult; a resumed stream's may be its string
   const output: unknown =
     result.state === "output-error" ? result.errorText : result.output;
   const body =
@@ -224,11 +174,6 @@ const skillLoadOf = (message: PlatypusUIMessage) => {
   return body !== undefined ? { name, body } : undefined;
 };
 
-/**
- * Every completed `loadSkill` inside the summarised range, by Skill name — the
- * LATEST load wins, so a Skill re-loaded over a long Chat re-injects the
- * version the model last acted on.
- */
 const summarisedSkillLoads = (
   messages: PlatypusUIMessage[],
 ): Map<string, { name: string; body: string }> => {
@@ -240,7 +185,6 @@ const summarisedSkillLoads = (
   return loads;
 };
 
-/** The Skill names the kept tail has already loaded — re-injection skips these. */
 const keptTailSkillNames = (messages: PlatypusUIMessage[]): Set<string> => {
   const names = new Set<string>();
   for (const message of messages) {
@@ -250,24 +194,9 @@ const keptTailSkillNames = (messages: PlatypusUIMessage[]): Set<string> => {
   return names;
 };
 
-/** The labelled text part a re-injected Skill body opens with. */
 const SKILL_REINJECTION_PART = (name: string) => `\n[Loaded Skill: ${name}]`;
 
-/**
- * The summary a model call receives in place of the older Transcript, as a
- * leading text part of the FIRST KEPT message — always a user message, the
- * anchor being a turn's last assistant message. NEVER a message of its own:
- * two user messages in a row are rejected by some chat templates served
- * through vLLM (ADR-0041), and the System prompt is byte-stable while a Chat
- * is active (ADR-0020).
- *
- * Skill loads from inside the summarised range are re-injected as labelled
- * text parts after the summary, deduplicated by Skill name, latest load only,
- * skipping any Skill the kept tail already loads. They ride the same user
- * message because a UI tool pair has no other alternation-preserving home:
- * `convertToModelMessages` drops tool parts on a user message, and a separate
- * assistant message would break the very alternation the summary avoids.
- */
+// why: Skill bodies ride as text; convertToModelMessages drops tool parts on a user message
 const withSummary = (
   firstKept: PlatypusUIMessage,
   summaryText: string,
@@ -284,20 +213,6 @@ const withSummary = (
   ],
 });
 
-/**
- * Applies the deepest usable Transcript summary to a Chat's path — the
- * send-time half of a turn's read, and the pure function the divider's
- * usability check starts from.
- *
- * Picks the usable summary whose anchor is DEEPEST on `path`; at the same
- * anchor the newest wins (`summaries` is newest-first). A Delete inside a
- * summary's range makes it unusable (`isSummaryUsable`), so the next one up
- * is tried. Returns the path unchanged, and no summary, when none is usable.
- *
- * Runs on the stored messages before file URLs are inlined or file parts
- * normalised, so files attached inside the summarised prefix are no longer
- * fetched (ADR-0041).
- */
 export const applyTranscriptSummary = (
   path: PlatypusUIMessage[],
   summaries: readonly ChatSummaryRow[],
@@ -307,10 +222,6 @@ export const applyTranscriptSummary = (
     .filter((summary) => index.has(summary.anchorId))
     .filter((summary) => isSummaryUsable(summary, path))
     .sort(
-      // Deepest first — the largest coverage wins. At one depth (several
-      // rows at one anchor) the earlier row in `summaries` wins, which is the
-      // newest when the caller hands them newest-first as
-      // `loadChatSummaries` does.
       (a, b) =>
         depthOf(index, b.anchorId) - depthOf(index, a.anchorId) ||
         summaries.indexOf(a) - summaries.indexOf(b),
@@ -320,10 +231,6 @@ export const applyTranscriptSummary = (
 
   const anchorIndex = depthOf(index, summary.anchorId);
   const firstKept = path[anchorIndex + 1];
-  // An anchor is a mid-path turn boundary when usable, so there is always a
-  // kept tail reaching past it; a summary whose tail has since been deleted
-  // out from under it is left unread rather than forced into a view that
-  // would end on an assistant boundary.
   if (!firstKept) return { messages: path, summary };
 
   const covered = path.slice(0, anchorIndex + 1);
@@ -342,18 +249,11 @@ export const applyTranscriptSummary = (
   };
 };
 
-/**
- * The last Context occupancy reading on `messages`, and which Transcript
- * summary (if any) the turn that produced it was reading through — the
- * forward-looking shape the swing pass and the backstop both start from.
- */
 export const lastOccupancyReading = (
   messages: PlatypusUIMessage[],
 ): { reading: ContextOccupancyReading; summaryId?: string } | undefined => {
   for (let i = messages.length - 1; i >= 0; i -= 1) {
-    // Absent and `null` say the same thing for a reading — occupancy is
-    // unknown — but `null` still marks the message a reading was recorded on
-    // and then erased, so it must not be skipped before its `summaryId` is.
+    // why: null marks an erased reading; stop there, never read an older one past it
     const message = messages[i];
     if (message === undefined) continue;
     const reading = message.metadata?.contextOccupancy;
@@ -364,7 +264,6 @@ export const lastOccupancyReading = (
   return undefined;
 };
 
-/** The Projected occupancy (`nextTurnOccupancy`) of `lastOccupancyReading`, if a reading exists. */
 export const projectedOccupancyOf = (
   messages: PlatypusUIMessage[],
 ): { projected: number; summaryId?: string } | undefined => {
@@ -375,13 +274,6 @@ export const projectedOccupancyOf = (
   return { projected, summaryId: last.summaryId };
 };
 
-/**
- * Whether a turn whose finish produced `reading` should take a Transcript
- * summary off the response path: a declared window exists and the Projected
- * occupancy crosses {@link TRANSCRIPT_SUMMARY_TRIGGER}. Reading only, never an
- * estimate, and never a summary for a model without a declared window
- * (ADR-0018) — such a Chat never summarises.
- */
 export const transcriptSummaryDueAfterTurn = (
   projectedOccupancy: number | undefined,
   contextWindow: number | undefined,
@@ -391,10 +283,6 @@ export const transcriptSummaryDueAfterTurn = (
   contextWindow > 0 &&
   projectedOccupancy / contextWindow >= TRANSCRIPT_SUMMARY_TRIGGER;
 
-/**
- * The last reply on `path`, when the Provider rejected its turn as too long
- * (issue #1717): the summary that turn read, if any, as `summaryId`.
- */
 const overflowedReply = (
   path: PlatypusUIMessage[],
 ): { summaryId?: string } | undefined => {
@@ -406,27 +294,12 @@ const overflowedReply = (
     : undefined;
 };
 
-/**
- * Whether the pre-turn **backstop** must run before the model is called:
- * Projected occupancy is at {@link TRANSCRIPT_SUMMARY_BACKSTOP} of the declared
- * window and no usable summary exists — the turn would otherwise send a
- * Transcript that fills (or has already overflowed) the window — or the last
- * turn's model call was rejected as too long (issue #1717). A reading taken
- * with a summary that is no longer usable is stale and due for the same
- * treatment even beneath the backstop wall: that reading does not describe the
- * view this turn will send, so the turn could overflow without any wall being
- * crossed.
- */
 export const transcriptSummaryBackstopDue = (args: {
   projectedOccupancy: number | undefined;
   contextWindow: number | undefined;
-  /** The usable summary the turn's read found, if any. */
   usableSummary: ChatSummaryRow | undefined;
-  /** The summary id recorded on the last reading, or undefined. */
   readingSummaryId: string | undefined;
-  /** The Chat's summaries, for the stale check. */
   summaries: readonly ChatSummaryRow[];
-  /** The turn's path. */
   path: PlatypusUIMessage[];
 }): boolean => {
   const {
@@ -443,9 +316,6 @@ export const transcriptSummaryBackstopDue = (args: {
       (summary) =>
         summary.id === readingSummaryId && isSummaryUsable(summary, path),
     );
-  // The last turn overflowed (issue #1717): due unless a summary newer than
-  // the one it overflowed with is already usable. The Provider's rejection is
-  // the measurement, so neither a window nor a reading is needed.
   const overflowed = overflowedReply(path);
   const overflowDue =
     overflowed !== undefined && usableSummary?.id === overflowed.summaryId;
@@ -458,12 +328,6 @@ export const transcriptSummaryBackstopDue = (args: {
   return stale || overflowDue || overTheWall;
 };
 
-/**
- * How many of the most recent turns a summary leaves verbatim: the reading
- * that triggers it was either taken bare, or taken with a summary in place.
- * The latter keeps only one turn, so a turn whose tail alone crossed the
- * trigger does not grow a summary on top of the one it already reads.
- */
 export const transcriptSummaryKeptTurns = (
   readingSummaryId: string | undefined,
 ): number =>
@@ -471,17 +335,6 @@ export const transcriptSummaryKeptTurns = (
     ? TRANSCRIPT_SUMMARY_KEEP_TURNS
     : TRANSCRIPT_SUMMARY_KEEP_TURNS_WITH_SUMMARY;
 
-/**
- * The index in `path` of the assistant message that ends the kept tail — the
- * anchor of the summary this pass is about to take — or `undefined` when the
- * path does not hold enough turns for a tail.
- *
- * A **turn** is a user message followed by an assistant message. A leaf
- * assistant message (the seeded `loadSkill` message a slash command appends,
- * which the turn's reply continues under the same id) counts as ending a turn
- * too. The anchor is the last assistant before the `keptTurns` most recent
- * turns.
- */
 export const summaryAnchorIndex = (
   path: PlatypusUIMessage[],
   keptTurns: number,
@@ -498,12 +351,6 @@ export const summaryAnchorIndex = (
   return turnEnds.at(-(keptTurns + 1));
 };
 
-/**
- * The deepest summary whose anchor is on `path` strictly above `anchorIndex`
- * — the incremental base a new pass condenses from, whether it was usable (a
- * summary the turn just read) or only stale (a summary a Delete broke, whose
- * text is still an accurate base for the stretch its anchor covered).
- */
 const deepestPriorSummary = (
   path: PlatypusUIMessage[],
   summaries: readonly ChatSummaryRow[],
@@ -523,12 +370,6 @@ const deepestPriorSummary = (
   return onPath[0];
 };
 
-/**
- * The messages a summary pass hands the model: the previous usable summary's
- * text (the messages it covered are condensed inside it) plus the live
- * messages after its anchor — exclusive, already covered by that summary —
- * through the new anchor, inclusive.
- */
 const incrementalInput = (
   previousSummary: ChatSummaryRow | undefined,
   path: PlatypusUIMessage[],
@@ -537,9 +378,6 @@ const incrementalInput = (
   const previousIndex = previousSummary
     ? path.findIndex((message) => message.id === previousSummary.anchorId)
     : -1;
-  // The previous summary's anchor is inside this range only when it is on the
-  // live path; a summary whose anchor is off the path is unusable and should
-  // never have been offered as the base.
   const start = previousIndex >= 0 ? previousIndex + 1 : 0;
   return {
     ...(previousSummary ? { priorText: previousSummary.text } : {}),
@@ -547,16 +385,6 @@ const incrementalInput = (
   };
 };
 
-/**
- * The structured handoff a Transcript summary is written from (issue #2015):
- * eight required sections under fixed English headings, so the User's own
- * requests and the content of what was produced survive, done work stays
- * apart from planned work, and a reader can find each section in any
- * language. It explains the pass's own input — the leading `[Summary so far]`,
- * cleared tool results, and the closing `TRANSCRIPT_SUMMARY_REQUEST` — and
- * scales its length to the input. An optional steering instruction (the
- * User's, from `/compact`) tells the pass what to keep.
- */
 const TRANSCRIPT_SUMMARY_PROMPT = (steering?: string) =>
   `You are writing the handoff summary of the earlier part of a conversation. A model that continues the conversation reads your summary instead of those messages, so anything you leave out is lost for good.
 
@@ -603,111 +431,39 @@ Keep the headings exactly as written above, in English, whatever language the co
 Length: keep specifics rather than brevity, in dense bullet points rather than prose. Scale it to what the conversation holds: a short exchange needs a line or two per heading; a long conversation with substantial deliverables can need 1,500–2,500 words. Do not pad.
 ${steering !== undefined ? `The requester's instruction for this summary, which takes precedence over the length guidance above: ${steering}` : ""}`;
 
-/**
- * The user message that closes the pass's input. The range always ends with
- * the anchor, an assistant message, and a chat model handed a trailing
- * assistant message continues it (DeepSeek's prefix completion, and most
- * OpenAI-compatible templates) rather than reading the instructions — one
- * /compact stored a single space, the next stored the reply's continuation.
- * Ending on a user turn is what makes the model answer the instructions.
- */
+// why: a trailing assistant message is continued, not answered; end on a user turn
 export const TRANSCRIPT_SUMMARY_REQUEST =
   "Write the summary now, following the instructions you were given.";
 
-/** One opened model a summary pass may write with, and the id to record in
- *  `stats` when it does. */
 export type TranscriptSummaryModel = {
   model: LanguageModel;
   modelId: string;
-  /** The task model's Job settings as call options (ADR-0045). The Chat's
-   *  own model carries them only when it is the task model. */
   settings?: ReturnType<typeof jobCallSettings>;
-  /** The output cap raised by the Job settings' Thinking budget; absent, the
-   *  pass's own cap. */
   maxOutputTokens?: number;
-  /** The output ceiling declared on the Chat's own model when it writes
-   *  without Job settings. A summary call never asks for more, since a vendor
-   *  rejects a cap above the model's own. Absent on an entry carrying Job
-   *  settings: its `maxOutputTokens` already folds the ceiling in. */
   outputCeiling?: number;
-  /** The task model's declared context window, which a pass checks its input
-   *  against before calling; absent, the model's own error is the measure. */
   contextWindow?: number;
 };
 
-/** The models a pass tries: the Chat's own model, and the task model first
- *  where it differs from the Chat's. */
 export type TranscriptSummaryModels = {
   chat: TranscriptSummaryModel;
   task?: TranscriptSummaryModel;
 };
 
-/**
- * A summary pass's inputs, resolved by the caller — the models are parameters,
- * never read inside (ADR-0041, so a cheaper summariser is a resolver change).
- *
- * The pass tries `task` first where present and falls back to `chat`, so every
- * caller gets the same order.
- */
 export type TranscriptSummaryPassInput = {
-  /** The Chat's id — the ordering, the deletion cascade and the in-flight
-   *  registry all key on it. */
   chatId: string;
-  /** The models to try: the task model first where present, then the Chat's. */
   models: TranscriptSummaryModels;
-  /** The full live path at trigger time, oldest first. */
   path: PlatypusUIMessage[];
-  /** The occupancy reading the pass was triggered from. */
   triggeredFromOccupancy: number;
-  /** The deepest usable summary already on the path — the incremental base. */
   previousSummary: ChatSummaryRow | undefined;
-  /** The summary id the triggering reading was taken with, kept-tail rule. */
   readingSummaryId: string | undefined;
-  /** The turn's clearable read-only tool names (MCP hints), if any. */
   readOnlyToolNames?: ReadonlySet<string>;
-  /** The running turn's abort signal, when the pass runs inside a turn. */
   signal?: AbortSignal;
-  /** A steering instruction for the summary — the User's, on `/compact`. */
   instruction?: string;
-  /** Turns kept verbatim, when the caller decides rather than the reading
-   *  (`/compact` keeps none). */
   keptTurns?: number;
-  /** Injectable clock and summary id, for tests. */
   now?: () => Date;
   generateId?: () => string;
 };
 
-/**
- * Takes one Transcript summary: condenses the live path up to a new anchor
- * into a durable `chat_summary` row. NEVER fatal — every failure is logged and
- * produces no row, so the caller can proceed without one; the next pass
- * retries.
- *
- * The input is incremental: the previous usable summary plus the messages from
- * its anchor to the new one, so a pass costs roughly one window's worth of
- * input, never the whole Chat. Tool-result clearing is applied to every
- * clearable result in the input, unconditionally — the clearing that guards
- * ordinary turns at 0.7 does not gate a pass that may itself be the one
- * keeping a turn under the window.
- *
- * The pass tries the task model first where the caller supplied one, falling
- * back to the Chat's own model on any failure — a context overflow, an
- * unknown model, an auth error, or a blank or cut-off reply. Where the task
- * model declares a context window, an input over the job budget of it skips the
- * task model outright: a server that truncates an overlong prompt instead of
- * rejecting it would otherwise write a summary of a cut-off conversation, and
- * no error would trigger the fallback. The budget leaves room for the reply the
- * pass requests, so a window the reply alone fills skips it too. A summary
- * cannot be trimmed to fit the way memory extraction trims its input, because
- * every covered message is replaced by it. Without a declared window, the
- * model's own error is the only measurement available.
- *
- * Overflow on the Chat's model retries once with an earlier anchor (one more
- * turn kept verbatim); a second failure is an ordinary failed summary. A
- * model fallback is its own step beside that anchor retry, so a pass makes at
- * most three model calls. Summary tokens fold into no turn's Token usage;
- * `stats` records the model that actually wrote it and the counts from day one.
- */
 export const takeTranscriptSummary = async (
   input: TranscriptSummaryPassInput,
 ): Promise<ChatSummaryRow | undefined> => {
@@ -750,11 +506,6 @@ export const takeTranscriptSummary = async (
     };
   };
 
-  /**
-   * The output cap a call with `entry` requests: its Job settings' cap (or the
-   * pass's own) bounded by the Chat model's declared ceiling, Thinking budget
-   * already included. The input check measures the same value the call sends.
-   */
   const outputCap = (entry: TranscriptSummaryModel): number =>
     Math.min(
       entry.maxOutputTokens ?? TRANSCRIPT_SUMMARY_MAX_OUTPUT_TOKENS,
@@ -773,9 +524,6 @@ export const takeTranscriptSummary = async (
     try {
       const result = await generateText({
         model: entry.model,
-        // The summary is the conversation's first word in this call: the
-        // model is handed the handoff, then the previous summary, then the
-        // incremental range; it answers with the next summary.
         instructions: TRANSCRIPT_SUMMARY_PROMPT(instruction),
         messages: [
           ...(input.priorText !== undefined
@@ -794,11 +542,6 @@ export const takeTranscriptSummary = async (
         abortSignal: signal,
       });
 
-      // A blank reply, or one cut off at the output cap, is a failed summary,
-      // not a summary: stored, it would stand in for every covered message
-      // and the next turn would read nothing, or a summary ending
-      // mid-sentence. A task model that answers so falls back like any other
-      // task-model failure.
       if (result.finishReason === "length" || result.text.trim() === "") {
         return { kind: "unusable", finishReason: result.finishReason };
       }
@@ -821,8 +564,6 @@ export const takeTranscriptSummary = async (
         text: result.text,
         stats: {
           modelId: entry.modelId,
-          // A summary's usage is a measurement the pass's own call reported;
-          // 0 stands in for a Provider that reported none (ADR-0018's rule).
           inputTokens: result.usage.inputTokens ?? 0,
           outputTokens: result.usage.outputTokens ?? 0,
           triggeredFromOccupancy,
@@ -852,9 +593,7 @@ export const takeTranscriptSummary = async (
     }
   };
 
-  // Characters ÷ 4 over the serialised messages over-counts (keys, escaping,
-  // inline file data), so a misjudged input is one the Chat's model writes —
-  // the behaviour before a task model existed — never a summary lost.
+  // why: chars ÷ 4 over-counts, so a misjudged input falls to the Chat's model, never lost
   const fitsDeclaredWindow = (
     entry: TranscriptSummaryModel,
     input: SummaryInput,
@@ -868,6 +607,7 @@ export const takeTranscriptSummary = async (
 
   let summaryInput = await anchorInput(anchorIndex);
 
+  // why: a server may silently truncate an overlong prompt; no error would trigger fallback
   if (taskModel && !fitsDeclaredWindow(taskModel, summaryInput)) {
     logger.info(
       {
@@ -898,9 +638,6 @@ export const takeTranscriptSummary = async (
     );
   }
 
-  // The Chat's model keeps the existing overflow ladder: one retry with an
-  // earlier anchor. It is not preceded by another task-model attempt, which
-  // is what bounds a pass at three model calls.
   for (let retry = 0; retry < 2; retry += 1) {
     if (retry > 0) {
       summaryInput = await anchorInput(anchorIndex);
@@ -936,44 +673,19 @@ export const takeTranscriptSummary = async (
 
 const defaultSummaryId = (): string => `sum_${randomUUID()}`;
 
-/**
- * The incremental range as model messages, every clearable tool result in it
- * cleared unconditionally: converted once, like the turn's own pipeline
- * converts once, and cleared with a zero keep-recent so no clearable result
- * survives the pass — the pass must fit its own window, and re-clearing on the
- * way in costs nothing the clearing on the turn would not pay later anyway.
- */
 const clearedModelMessages = async (
   messages: PlatypusUIMessage[],
   readOnlyToolNames?: ReadonlySet<string>,
 ): Promise<ModelMessage[]> =>
   clearStaleToolResults(
     await convertToModelMessages(messages, { ignoreIncompleteToolCalls: true }),
-    // keepRecent 0: the pass's only limit is its own window, and every
-    // clearable result in the range is older than the tail the pass protects.
-    // `clearingPrefixLength` clears all of them for keepRecent 0; the batch size
-    // is irrelevant there.
     { keepRecent: 0, batchSize: TOOL_CLEARING_BATCH },
     (toolName) => readOnlyToolNames?.has(toolName) ?? false,
   );
 
-// --- The pass's model resolution && the in-flight registry ---
-
-/** The Chat's own model reference a summary pass re-resolves (ADR-0017). */
 export type SummariserSource =
   { agentId: string } | { providerId: string; modelId: string };
 
-/**
- * Re-resolves the models a summary pass tries, in order: the Workspace's task
- * model first where it differs, then the Chat's own model. The Chat's model
- * comes from the same authority a Chat turn resolves its model from
- * (`resolveGenerationPlan`) and with the same "the reference, whichever form it
- * was stored in" rule (ADR-0017).
- *
- * The pass takes the opened models as a parameter; this is the caller's half
- * of that contract, shared by the turn finish, `/compact` and the backstop so
- * they cannot rewrite the rule in two places.
- */
 const resolveSummariserModels = async (
   source: SummariserSource,
   orgId: string,
@@ -984,9 +696,6 @@ const resolveSummariserModels = async (
   const generation: GenerationSource =
     "agentId" in source
       ? {
-          // The agent row drives the same resolution a Chat turn gives the
-          // same id, sampling fields included — an alias resolves again here
-          // exactly as it would on the Chat's next turn (ADR-0017).
           agent: await mustGetAgent(
             source.agentId,
             orgId,
@@ -1016,14 +725,6 @@ const resolveSummariserModels = async (
   });
 };
 
-/**
- * The Chat's model with the task model in front of it, where there is one to
- * try. There is none for a Provider this Workspace cannot see, or an empty
- * Task Model ID. A task model that IS the Chat's model is not tried twice:
- * the Chat's entry carries its Job settings (ADR-0045), so the pass makes one
- * call and keeps its overflow ladder. Resolution never makes the pass fail —
- * an unavailable task model just means the Chat's model writes the summary.
- */
 const withTaskSummariserModel = async (args: {
   orgId: string;
   workspaceId: string;
@@ -1057,8 +758,6 @@ const withTaskSummariserModel = async (args: {
       return { chat };
     }
     const taskModelId = taskProvider.provider.taskModelId;
-    // An empty Task Model ID is a Provider with no task model configured, not
-    // a model to call: the form allows it, and every call would be doomed.
     if (taskModelId.trim() === "") return { chat };
     const settings = jobCallSettings(
       taskProvider.provider,
@@ -1127,27 +826,11 @@ const mustGetAgent = async (
   return agent;
 };
 
-/**
- * The in-flight summary passes on this instance, by Chat id. The registry is
- * what stops a backstop starting a second pass for a Chat whose finish-pass is
- * already running: the backstop awaits the same promise instead.
- *
- * Cross-instance, two instances could each hold a Chat's turn (the one-run
- * claim, #1253, prevents two RUNS, not a finish-pass racing another
- * instance's backstop); the immutable-row design makes the extra summary
- * harmless — several rows at one anchor are legal, and the newest usable one
- * wins at read time.
- */
 const inFlightSummaries = new Map<
   string,
   Promise<ChatSummaryRow | undefined>
 >();
 
-/**
- * Starts the pass for `chatId` and registers it as the in-flight one; the
- * fire-and-forget caller that starts an after-turn pass, and any backstop that
- * joins it, share the promise.
- */
 export const registerTranscriptSummary = (
   chatId: string,
   start: () => Promise<ChatSummaryRow | undefined>,
@@ -1155,10 +838,7 @@ export const registerTranscriptSummary = (
   const existing = inFlightSummaries.get(chatId);
   if (existing) return existing;
 
-  // Registered BEFORE `start` runs, so a second caller reached from inside it
-  // joins this entry instead of starting a second pass. `start` runs
-  // synchronously here rather than on a later tick, for the same reason: a
-  // backstop arriving a moment after an after-turn pass began must find it.
+  // why: registered before start runs, synchronously, so a caller reached from it joins
   const settled = Promise.withResolvers<ChatSummaryRow | undefined>();
   const inFlight = settled.promise.finally(() => {
     if (inFlightSummaries.get(chatId) === inFlight) {
@@ -1170,20 +850,11 @@ export const registerTranscriptSummary = (
   try {
     start().then(settled.resolve, settled.reject);
   } catch (error) {
-    // A `start` that throws synchronously rejects the pass rather than
-    // throwing at the caller; a summary is never fatal.
     settled.reject(error);
   }
   return inFlight;
 };
 
-/**
- * The one take the turn verbs start: the anchor, the incremental base and the
- * occupancy the pass records are derived here once, so the backstop and the
- * after-turn pass cannot drift. The caller supplies the models to try (already
- * resolved for the backstop, freshly resolved for the finish) and the summaries
- * it read.
- */
 const takeFromReading = (args: {
   chatId: string;
   models: TranscriptSummaryModels;
@@ -1214,35 +885,16 @@ const takeFromReading = (args: {
   });
 };
 
-// --- The two turn verbs a caller uses ---
-
-/**
- * What a Chat turn asks before the model is called: apply the deepest usable
- * Transcript summary, and — where the pre-turn backstop is due and a Chat id is
- * known — wait for (or join) a take and apply its result. A Trigger run has no
- * Chat id: it applies only, never takes (ADR-0041).
- *
- * The turn's own resolved model and signal are passed in, so the backstop
- * falls back to the model the turn already opened rather than re-resolving the
- * Chat's model (unlike {@link afterTurn}). It does resolve the Workspace's task
- * model to try first, and is cancellable with the turn that is waiting on it.
- */
 export const beforeTurn = async (args: {
-  /** The Chat's id; absent on a Trigger run, which never takes a summary. */
   chatId?: string;
-  /** The stored Transcript, oldest first. */
   path: PlatypusUIMessage[];
-  /** The Chat's summaries, already loaded by the caller. */
   summaries: ChatSummaryRow[];
   contextWindow?: number;
   model: LanguageModel;
   modelId: string;
-  /** The output ceiling declared on the turn's model, if any. */
   outputCeiling?: number;
-  /** Present on a Chat turn: where the task model is resolved from. */
   taskModel?: {
     scope: ScopeContext;
-    /** The Chat's own Provider id — the task-model fallback. */
     providerId: string;
   };
   readOnlyToolNames?: ReadonlySet<string>;
@@ -1250,7 +902,6 @@ export const beforeTurn = async (args: {
 }): Promise<{
   messages: PlatypusUIMessage[];
   summaryId?: string;
-  /** Whether the backstop waited for and applied a freshly taken summary. */
   backstopEngaged: boolean;
 }> => {
   const {
@@ -1322,15 +973,6 @@ export const beforeTurn = async (args: {
   };
 };
 
-/**
- * The after-turn pass: fire-and-forget, never throws. Decides due-ness from the
- * turn's final reading (or an overflowed reply, issue #1717) and registers the
- * take so a next turn's backstop joins it rather than starting a second.
- *
- * Unlike the backstop, this re-resolves the model from `source` — the same
- * authority the turn resolved it from (ADR-0017) — because the turn that just
- * finished is no longer holding its plan open.
- */
 export const afterTurn = (args: {
   chatId: string;
   orgId: string;
@@ -1350,10 +992,6 @@ export const afterTurn = (args: {
     readOnlyToolNames,
   } = args;
   const reading = projectedOccupancyOf(path);
-  // A reply the Provider rejected as too long (issue #1717) is due whatever
-  // the reading or the window: the rejection is the measurement. Taken now
-  // rather than only at the next turn's backstop, so a regenerate — whose
-  // path no longer holds this reply — still finds the summary waiting.
   const overflowed = overflowedReply(path);
   if (
     !overflowed &&
@@ -1361,8 +999,6 @@ export const afterTurn = (args: {
   ) {
     return;
   }
-  // The summary the shrinking tail is measured against: the one the
-  // overflowed reply ran with, or the one the triggering reading did.
   const readingSummaryId = overflowed
     ? overflowed.summaryId
     : reading?.summaryId;
@@ -1385,9 +1021,6 @@ export const afterTurn = (args: {
       readOnlyToolNames,
     });
   }).catch((error) => {
-    // `takeTranscriptSummary` never throws by itself; this is the model
-    // re-resolution's failure (an Agent or Provider deleted mid-flight) and
-    // the occasional join of a backstop's pass. Never fatal either way.
     logger.error(
       { error, chatId },
       "After-turn transcript summary failed; the next turn's finish retries",
@@ -1395,25 +1028,10 @@ export const afterTurn = (args: {
   });
 };
 
-/**
- * `/compact` (issue #1111): takes a Transcript summary NOW, of the whole
- * Active path through its last turn, steered by the User's instruction. The
- * same pass the trigger and the backstop take — nothing kept verbatim, so the
- * next message the User sends is the first one the summary rides.
- *
- * A pass already in flight for the Chat (an after-turn one) is awaited first
- * rather than joined: it was taken without the User's instruction and keeps a
- * tail, so it is not what was asked for. Ours is registered, so a backstop
- * arriving meanwhile joins it.
- *
- * Resolves `undefined` when the pass fails; the summary is never fatal, but a
- * failed `/compact` is the caller's to report.
- */
 export const compactTranscript = async (args: {
   chatId: string;
   orgId: string;
   workspaceId: string;
-  /** The Chat's own model reference, as its last turn resolved it. */
   source: SummariserSource;
   path: PlatypusUIMessage[];
   instruction?: string;
@@ -1422,6 +1040,7 @@ export const compactTranscript = async (args: {
   const anchorIndex = summaryAnchorIndex(path, 0);
   if (anchorIndex === undefined) return undefined;
 
+  // why: an in-flight after-turn pass lacks the instruction and keeps a tail; await, not join
   const claim = { ours: false };
   const start = async () => {
     claim.ours = true;
@@ -1447,8 +1066,7 @@ export const compactTranscript = async (args: {
       keptTurns: 0,
     });
   };
-  // `start` runs synchronously up to its first await, so `claim` is settled
-  // by the time `registerTranscriptSummary` returns.
+  // why: start runs synchronously to its first await, so claim is settled on return
   const first = registerTranscriptSummary(chatId, start);
   if (claim.ours) return first;
   await first.catch(() => undefined);

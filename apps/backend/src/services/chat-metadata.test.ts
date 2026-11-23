@@ -40,10 +40,6 @@ const userMessage: PlatypusUIMessage = {
   parts: [{ type: "text", text: "How do I center a div?" }],
 };
 
-/**
- * Stubs the reads generateChatMetadata makes before the model call. A Chat's
- * `messages` are its Active path, read from the Chat's leaf.
- */
 const stubReads = (opts: {
   chat:
     (Record<string, unknown> & { messages?: PlatypusUIMessage[] }) | undefined;
@@ -53,13 +49,13 @@ const stubReads = (opts: {
   const { messages = [], ...chat } = opts.chat ?? {};
   mockDb.limit.mockResolvedValueOnce(
     opts.chat ? [{ ...chat, activeLeafId: "leaf-1" }] : [],
-  ); // chat
+  );
   mockLoadActivePath.mockResolvedValue({ messages, tree: [] });
   if (opts.workspace !== undefined) {
-    mockDb.limit.mockResolvedValueOnce(opts.workspace ? [opts.workspace] : []); // workspace
+    mockDb.limit.mockResolvedValueOnce(opts.workspace ? [opts.workspace] : []);
   }
   if (opts.provider !== undefined) {
-    mockDb.limit.mockResolvedValueOnce(opts.provider ? [opts.provider] : []); // provider
+    mockDb.limit.mockResolvedValueOnce(opts.provider ? [opts.provider] : []);
   }
 };
 
@@ -72,7 +68,6 @@ const provider = {
   organizationId: null,
 };
 
-/** The same Provider as a Shared (org-scoped) row. */
 const sharedProvider = {
   ...provider,
   workspaceId: null,
@@ -108,25 +103,17 @@ describe("generateChatMetadata", () => {
     const result = await generateChatMetadata(params);
 
     expect(result).toEqual(updated);
-    // Titling is a Provider call inside the Chat, so its Header placeholder
-    // resolves to the Chat's id.
     expect(openProvider).toHaveBeenCalledWith(provider, {
       sessionId: "chat-1",
     });
-    // Not the Chat's memory snapshot, which titling never reads.
     expect(Object.keys(mockDb.select.mock.calls[0][0] as object)).not.toContain(
       "memorySnapshot",
     );
-    // The Active path is read once, and the shared readiness check hands the
-    // messages to the call rather than reading them again.
     expect(mockLoadActivePath).toHaveBeenCalledTimes(1);
-    // The Active path, not the Chat's Alternatives.
     expect(mockLoadActivePath).toHaveBeenCalledWith("chat-1", "leaf-1");
     const setArg = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
     expect(setArg.title).toBe("Centering a div");
     expect(setArg).not.toHaveProperty("tags");
-    // Read and written only within this Workspace; the write only while the
-    // Chat is still Untitled.
     expect(mockDb.where).toHaveBeenCalledWith(
       and(eq(chatTable.id, "chat-1"), eq(chatTable.workspaceId, "ws-1")),
     );
@@ -193,7 +180,6 @@ describe("generateChatMetadata", () => {
     expect(prompt).not.toContain("Existing tags");
     expect(prompt).toContain("Conversation:\nuser:\nWhat is this?");
     expect(prompt).not.toContain("data:,");
-    // No existing-tags lookup is made any more.
     expect(mockDb.execute).not.toHaveBeenCalled();
   });
 
@@ -241,7 +227,6 @@ describe("generateChatMetadata", () => {
       mockDb.returning.mockResolvedValueOnce([{ titleFailures: 1 }]);
 
       expect(await generateChatMetadata(params)).toBeNull();
-      // Only the failure count is written, never a title.
       expect(mockDb.set).toHaveBeenCalledTimes(1);
       expect(mockDb.set.mock.calls[0]?.[0]).not.toHaveProperty("title");
     },
@@ -410,7 +395,6 @@ describe("generateChatMetadata", () => {
       chat: {
         id: "chat-1",
         title: "Untitled",
-        // An attachment-only message: no text to title from.
         messages: [{ id: "m-1", role: "user", parts: [] }],
       },
       workspace: { id: "ws-1", taskModelProviderId: "unattached-provider" },
@@ -420,8 +404,6 @@ describe("generateChatMetadata", () => {
     const result = await generateChatMetadata(params);
 
     expect(result).toBeNull();
-    // Only the Chat read: with nothing to title there is no Workspace or
-    // Provider read, and no warning about a Provider that was never needed.
     expect(mockDb.limit).toHaveBeenCalledTimes(1);
     expect(warn).not.toHaveBeenCalledWith(
       expect.anything(),
@@ -447,8 +429,6 @@ describe("generateChatMetadata", () => {
     mockGenerateText.mockResolvedValueOnce({
       output: { title: "Titled" },
     });
-    // A concurrent run already flipped the title away from "Untitled", so the
-    // guarded UPDATE matches no rows.
     mockDb.returning.mockResolvedValueOnce([]);
 
     const result = await generateChatMetadata(params);
@@ -456,15 +436,12 @@ describe("generateChatMetadata", () => {
   });
 
   it("refuses a Shared provider that is not attached to this workspace", async () => {
-    // Titling resolves its Provider through the Scoped-resource authority, so a
-    // Shared Provider reaches this Workspace only where an Attachment does
-    // (ADR-0007) — matching every other resource a Chat turn resolves.
     stubReads({
       chat: { id: "chat-1", title: "Untitled", messages: [userMessage] },
       workspace: { id: "ws-1", taskModelProviderId: null },
       provider: sharedProvider,
     });
-    mockDb.limit.mockResolvedValueOnce([]); // attachment check → not attached
+    mockDb.limit.mockResolvedValueOnce([]);
 
     const result = await generateChatMetadata(params);
     expect(result).toBeNull();
@@ -477,7 +454,7 @@ describe("generateChatMetadata", () => {
       workspace: { id: "ws-1", taskModelProviderId: null },
       provider: sharedProvider,
     });
-    mockDb.limit.mockResolvedValueOnce([{ id: "att-1" }]); // attached here
+    mockDb.limit.mockResolvedValueOnce([{ id: "att-1" }]);
     mockGenerateText.mockResolvedValueOnce({
       output: { title: "Titled" },
     });
@@ -499,8 +476,6 @@ describe("generateChatMetadata", () => {
     expect(mockGenerateText).not.toHaveBeenCalled();
   });
 
-  // Titling is fire-and-forget: the caller swallows the outcome, so without a
-  // log an unresolvable provider is indistinguishable from "titling is broken".
   it("warns, naming the provider, when the provider cannot be resolved", async () => {
     const warn = vi.spyOn(logger, "warn").mockImplementation(() => logger);
     stubReads({
@@ -524,9 +499,6 @@ describe("generateChatMetadata", () => {
   });
 });
 
-// Issue #2017: a Chat whose title model is some other model than the one
-// writing its reply gets titled while the reply is still being written,
-// rather than only once the run ends.
 describe("startEarlyChatTitle", () => {
   beforeEach(() => {
     resetMockDb();
@@ -539,7 +511,6 @@ describe("startEarlyChatTitle", () => {
     workspaceId: "ws-1",
     orgId: "org-1",
     providerId: "p1",
-    // The turn's concrete model id, not the reference a Chat stores.
     modelId: "chat-model" as ConcreteModelId,
   };
 
@@ -579,8 +550,6 @@ describe("startEarlyChatTitle", () => {
       provider: {
         ...provider,
         id: "override-provider",
-        // The same concrete model id as the turn's, so only the Provider
-        // differs — still a different model as far as the run is concerned.
         taskModelId: "chat-model",
       },
     });
@@ -625,8 +594,6 @@ describe("startEarlyChatTitle", () => {
   });
 
   it("leaves the last permitted attempt to the run's end", async () => {
-    // One failure left: spending it before the reply would leave no attempt
-    // carrying the reply, and every later turn short-circuits on the cap.
     stubReads({
       chat: { ...untitledChat, titleFailures: MAX_TITLE_FAILURES - 1 },
       workspace: { id: "ws-1", taskModelProviderId: null },
@@ -672,7 +639,6 @@ describe("startEarlyChatTitle", () => {
     mockDb.returning.mockResolvedValueOnce([{ titleFailures: 1 }]);
 
     await expect(startEarlyChatTitle(params)).rejects.toThrow("provider down");
-    // The failure is counted, and no title is written.
     expect(mockDb.set).toHaveBeenCalledTimes(1);
     expect(mockDb.set.mock.calls[0]?.[0]).not.toHaveProperty("title");
   });

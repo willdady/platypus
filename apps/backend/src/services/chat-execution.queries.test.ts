@@ -9,7 +9,6 @@ vi.mock("@ai-sdk/mcp", () => ({
   createMCPClient: mockCreateMCPClient,
   auth: vi.fn(),
 }));
-// The live retrieval's own query is `memory-retrieval.test.ts`'s subject.
 vi.mock("./memory-retrieval.ts", async (importActual) => ({
   ...(await importActual<typeof import("./memory-retrieval.ts")>()),
   retrieveRecentSummaries: mockRetrieveRecentSummaries,
@@ -18,15 +17,6 @@ vi.mock("./memory-retrieval.ts", async (importActual) => ({
 import { drizzleChatTurnQueries, prepareChatTurn } from "./chat-execution.ts";
 import { NotFoundError } from "../errors.ts";
 import { SANDBOX_TOOLSET_ID } from "../tools/index.ts";
-
-/**
- * `prepareChatTurn` on its default, Drizzle-backed queries — the ones every
- * real turn runs. `chat-execution.test.ts` drives the turn through an in-memory
- * stand-in for them, so the scope rules and the prompt assembly those queries
- * own (Skill name precedence, sub-Agent order, which Context and Sandbox rows
- * belong to this Workspace) are pinned here against seeded rows that include
- * another Workspace's and another Organization's.
- */
 
 const agent = (id: string, scope: Row, extra: Row = {}): Row => ({
   id,
@@ -96,7 +86,6 @@ const world = (agents: Row[] = []) =>
     ],
     skill: [
       skill("s-ws", "triage", ws1),
-      // Loses the name collision to the Workspace's own `triage`.
       skill("s-shared-dup", "triage", shared),
       skill("s-shared", "deploy", shared),
       skill("s-hidden", "hidden-skill", ws1, { disableModelInvocation: true }),
@@ -137,7 +126,6 @@ const turnFor = (agentId: string, overrides: Record<string, unknown> = {}) =>
       origin: "http://localhost:4000",
       frontendUrl: "http://localhost:3000",
       request: { agentId },
-      // Pinned so no memory retrieval runs; memories are not what this pins.
       memorySnapshot: "",
       memoriesReferenceDate: new Date("2026-05-03T12:00:00Z"),
       runMode: "interactive",
@@ -166,7 +154,6 @@ describe("prepareChatTurn on the Drizzle-backed queries", () => {
   it("assembles the prompt from this Workspace's visible Skills, Contexts and Sandbox keys only", async () => {
     world([
       agent("caller", ws1, {
-        // The prompt only lists env keys to an Agent with the Sandbox tools.
         toolSetIds: [SANDBOX_TOOLSET_ID],
         skillIds: [
           "s-ws",
@@ -184,9 +171,7 @@ describe("prepareChatTurn on the Drizzle-backed queries", () => {
 
     expect(system).toContain("s-ws description");
     expect(system).toContain("s-shared description");
-    // A Workspace Skill wins a name collision with an attached Shared one.
     expect(system).not.toContain("s-shared-dup description");
-    // Hidden from the model, but still loadable by id.
     expect(system).not.toContain("hidden-skill");
     expect(system).not.toContain("leaked-skill");
     expect(system).not.toContain("unattached-skill");
@@ -197,7 +182,6 @@ describe("prepareChatTurn on the Drizzle-backed queries", () => {
     expect(system).not.toContain("WS2-CTX");
     expect(system).not.toContain("OTHER-USER");
 
-    // Keys of both env tiers, never their values or another Workspace's keys.
     expect(system).toContain("ADMIN_KEY");
     expect(system).toContain("USER_KEY");
     expect(system).not.toContain("secret-");
@@ -222,7 +206,6 @@ describe("prepareChatTurn on the Drizzle-backed queries", () => {
     const a = system.indexOf("Does sub-a things");
     expect(b).toBeGreaterThan(-1);
     expect(a).toBeGreaterThan(b);
-    // Unresolved ids are named, but nothing is read off their rows.
     expect(system).toContain("other-ws");
     expect(system).toContain("shared-loose");
     expect(system).not.toContain("Does other-ws things");

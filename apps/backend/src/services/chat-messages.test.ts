@@ -29,10 +29,6 @@ const row = (
   ...extra,
 });
 
-/**
- *   u1 ─ a1 ─ u2 ─ a2        (the Active path, leaf a2)
- *          └─ u2b             (an edit of u2: an Alternative)
- */
 const tree = () => [
   row("u1", null, "user", 1),
   row("a1", "u1", "assistant", 2, { metadata: { contextOccupancy: 10 } }),
@@ -85,7 +81,7 @@ describe("chat messages", () => {
 
     it("lists every live message in the tree, oldest first", async () => {
       const rows = tree().reverse();
-      rows[0].deletedAt = at(9); // u2b
+      rows[0].deletedAt = at(9);
       seedDb({ chat_message: rows });
 
       const { tree: nodes } = await loadActivePath("chat-1", "a2");
@@ -159,7 +155,7 @@ describe("chat messages", () => {
 
     it("hangs from a deleted parent, leaving it out of the history", async () => {
       const rows = tree();
-      rows[3].deletedAt = at(9); // a2
+      rows[3].deletedAt = at(9);
       seedDb({ chat_message: rows });
 
       const turn = await resolveTurn({
@@ -338,7 +334,6 @@ describe("chat messages", () => {
       },
     });
 
-    /** `tree()` with a2 waiting on two approvals. */
     const waiting = () => {
       const rows = tree();
       rows[3].parts = [text("a2"), asked("tc1", "ap1"), asked("tc2", "ap2")];

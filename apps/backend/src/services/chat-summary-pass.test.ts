@@ -1,6 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-// First, so its `vi.mock` of the database module is installed before the
-// module under test imports the real handle.
 import { resetMockDb, seedDb } from "../test-utils.ts";
 import { APICallError } from "ai";
 import { MockLanguageModelV3 } from "ai/test";
@@ -16,12 +14,6 @@ import {
   TRANSCRIPT_SUMMARY_REQUEST,
   type ChatSummaryRow,
 } from "./chat-summary.ts";
-
-/**
- * The IO half of Transcript summarising (ADR-0041, issue #1716): what one pass
- * writes, what it hands the model, and how it fails. The pure read-time rules
- * are pinned in `chat-summary.test.ts`.
- */
 
 const USAGE = {
   inputTokens: {
@@ -49,7 +41,6 @@ const assistant = (
   ...(metadata ? { metadata } : {}),
 });
 
-/** A Chat of six turns; the last 4 stay verbatim, so the anchor is a1. */
 const sixTurns = (): PlatypusUIMessage[] => [
   user("u1"),
   assistant("a1"),
@@ -71,7 +62,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** A model answering with one summary, recording every prompt it was sent. */
 const summaryModel = (
   prompts: PromptMessage[][] = [],
   text = "The summary.",
@@ -89,13 +79,11 @@ const summaryModel = (
     },
   });
 
-/** The parts of a prompt this test reads: roles and text. */
 type PromptMessage = {
   role: string;
   content: ReadonlyArray<{ type: string; text?: string }>;
 };
 
-/** The text a prompt carries, from its user messages. */
 const promptText = (prompt: readonly PromptMessage[]) =>
   prompt
     .flatMap((message) =>
@@ -128,7 +116,6 @@ describe("takeTranscriptSummary", () => {
     expect(row).toMatchObject({
       id: "sum-1",
       chatId: "chat-1",
-      // The last 4 turns (u3..a6) stay verbatim: the anchor is a2.
       anchorId: "a2",
       coveredIds: ["u1", "a1", "u2", "a2"],
       text: "The summary.",
@@ -140,7 +127,6 @@ describe("takeTranscriptSummary", () => {
       },
     });
     expect(fake.tables.chat_summary).toHaveLength(1);
-    // No message is ever written or changed by this feature (ADR-0026).
     expect(
       fake.queries.filter(
         (query) =>
@@ -190,8 +176,7 @@ describe("takeTranscriptSummary", () => {
         task: {
           model: summaryModel(taskPrompts, "The task summary."),
           modelId: "task-model",
-          // An 8k window against the pass's own 8,192-token reply: the reply
-          // alone fills it, so there is no input budget left to check against.
+          // why: under TRANSCRIPT_SUMMARY_MAX_OUTPUT_TOKENS, so the reply leaves no input budget
           contextWindow: 8_000,
         },
         chat: {
@@ -247,8 +232,6 @@ describe("takeTranscriptSummary", () => {
 
     expect(row?.text).toBe("The chat summary.");
     expect(row?.stats?.modelId).toBe("chat-model");
-    // The task model is not retried with an earlier anchor: the Chat's model
-    // gets the same range, and the anchor stays at a2.
     expect(row?.anchorId).toBe("a2");
     expect(taskPrompts).toHaveLength(1);
     expect(chatPrompts).toHaveLength(1);
@@ -291,7 +274,6 @@ describe("takeTranscriptSummary", () => {
 
     expect(row?.stats?.modelId).toBe("chat-model");
     expect(chatPrompts).toHaveLength(1);
-    // The fallback names the failed task model and the one that replaced it.
     expect(warn).toHaveBeenCalledWith(
       expect.objectContaining({
         modelId: "retired-task-model",
@@ -363,7 +345,6 @@ describe("takeTranscriptSummary", () => {
 
     expect(row).toBeUndefined();
     expect(fake.tables.chat_summary).toHaveLength(0);
-    // One task attempt, then the Chat model's existing two-attempt ladder.
     expect(taskCalls).toBe(1);
     expect(chatCalls).toBe(2);
   });
@@ -378,7 +359,6 @@ describe("takeTranscriptSummary", () => {
       previousSummary: undefined,
       readingSummaryId: "sum-old",
     });
-    // The last turn only (u6..a6) stays verbatim: the anchor is a5.
     expect(row?.anchorId).toBe("a5");
     expect(row?.coveredIds).toEqual([
       "u1",
@@ -395,9 +375,6 @@ describe("takeTranscriptSummary", () => {
   });
 
   it("clears every clearable tool result in its input, however small", async () => {
-    // The gated turn rule leaves a result no larger than its marker alone; the
-    // summary pass must not, because its input has no window of its own to
-    // protect and every clearable result in the range is surplus.
     seedSummaryTable();
     const prompts: PromptMessage[][] = [];
     const path = sixTurns();
@@ -449,7 +426,6 @@ describe("takeTranscriptSummary", () => {
     });
     const sent = promptText(prompts[0] ?? []);
     expect(sent).toContain("The earlier summary.");
-    // u2 onwards: u1 is already condensed into the previous summary.
     expect(sent).toContain("u2");
     expect(sent).not.toContain("u1");
   });
@@ -489,7 +465,6 @@ describe("takeTranscriptSummary", () => {
       readingSummaryId: undefined,
     });
     expect(prompts).toHaveLength(2);
-    // The retry ends one turn earlier: the anchor moves from a2 to a1.
     expect(row?.anchorId).toBe("a1");
     expect(row?.coveredIds).toEqual(["u1", "a1"]);
   });
@@ -628,7 +603,6 @@ describe("takeTranscriptSummary", () => {
   });
 
   describe("the summary prompt", () => {
-    /** The system prompt and output cap one pass sends. */
     const sentCall = async (instruction?: string, outputCeiling?: number) => {
       seedSummaryTable();
       const calls: { system: string; maxOutputTokens?: number }[] = [];
@@ -799,7 +773,6 @@ describe("the in-flight registry", () => {
     expect(a).toBe(b);
     first.resolve(undefined);
     await a;
-    // A finished pass is forgotten, so the next one starts fresh.
     const later = registerTranscriptSummary("chat-1", () =>
       Promise.resolve(undefined),
     );

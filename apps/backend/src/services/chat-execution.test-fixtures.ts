@@ -28,8 +28,6 @@ export type ChatTurnQueriesFixtures = {
     disableModelInvocation?: boolean;
   }>;
   mcps?: McpRow[];
-  // Attachments of org-scoped Shared resources to workspaces (ADR-0007). An
-  // org-scoped Provider/MCP/Skill resolves at Chat-turn time only where attached.
   attachments?: Array<{
     workspaceId: string;
     resourceType: AttachmentResourceType;
@@ -40,16 +38,11 @@ export type ChatTurnQueriesFixtures = {
     workspaceId: string | null;
     content: string;
   }>;
-  /** Profile timezones by user id; a user absent here has none set. */
   userTimezones?: Record<string, string>;
   memories?: Array<MemorySummary & { userId: string; workspaceId: string }>;
   sandboxEnvKeys?: Record<string, string[]>;
 };
 
-/**
- * Returns an in-memory `ChatTurnQueries` populated from explicit fixtures. Tests
- * specify only what they need; missing lookups return `null` / `[]`.
- */
 export const createInMemoryChatTurnQueries = (
   fx: ChatTurnQueriesFixtures = {},
 ): ChatTurnQueries => {
@@ -65,12 +58,6 @@ export const createInMemoryChatTurnQueries = (
         a.workspaceId === workspaceId,
     );
 
-  /**
-   * The visibility rule every lookup applies, as `resolveScoped` does:
-   * Workspace-scoped in the invoking workspace, or org-scoped (Shared) and
-   * attached here (ADR-0007). A row carrying both scope columns belongs to its
-   * Workspace, so it is not Shared.
-   */
   const isVisible = (
     resourceType: AttachmentResourceType,
     row: {
@@ -119,8 +106,6 @@ export const createInMemoryChatTurnQueries = (
       const visible = (fx.skills ?? []).filter(
         (s) => ids.includes(s.id) && isVisible("skill", s, orgId, workspaceId),
       );
-      // A Workspace Skill wins a name collision with an attached Shared one,
-      // as the real query does; both stay loadable by id.
       const workspaceNames = new Set(
         visible.filter((s) => s.workspaceId === workspaceId).map((s) => s.name),
       );
@@ -152,9 +137,6 @@ export const createInMemoryChatTurnQueries = (
 
     getSubAgentsByIds(ids, orgId, workspaceId) {
       if (ids.length === 0) return Promise.resolve([]);
-      // Same rule as getAgent — a sub-agent resolves in the invoking workspace,
-      // or at org scope where attached (ADR-0007). Enforced here rather than
-      // filtering by id alone, so tests exercise the boundary, not a hole in it.
       const visible = (fx.agents ?? []).filter((a) =>
         isVisible("agent", a, orgId, workspaceId),
       );
