@@ -25,14 +25,6 @@ import {
 } from "./kanban-shared.ts";
 import { oneRow } from "../db/one-row.ts";
 
-// --- Label pruning ---
-
-/**
- * Removes label IDs the board no longer has from every card on that board.
- * Board labels are an array on the board record and cards reference them by ID,
- * so deleting a label would otherwise leave cards holding an ID that resolves
- * to nothing. Only removes IDs — a card never gains a label here.
- */
 const pruneCardLabelsForBoard = async (
   executor: Executor,
   boardId: string,
@@ -64,19 +56,14 @@ const pruneCardLabelsForBoard = async (
   }
 };
 
-// --- Boards ---
-
-/** The fields a board write accepts. */
 export type BoardInput = {
   name: string;
   description?: string | null;
   labels?: KanbanLabel[];
 };
 
-/** The columns a new board starts with, in order. */
 const DEFAULT_COLUMNS = ["To Do", "In Progress", "Done"];
 
-/** The boards in scope, newest first. */
 export const listBoards = (
   database: Database,
   scope: KanbanScope,
@@ -87,10 +74,6 @@ export const listBoards = (
     .where(withinScope(scope))
     .orderBy(desc(kanbanBoardTable.createdAt));
 
-/**
- * Creates a board in the scope's Workspace with its default columns. Both
- * writes share a transaction, so a failure leaves no board without columns.
- */
 export const createBoard = async (
   database: Database,
   scope: KanbanScope,
@@ -126,12 +109,6 @@ export const createBoard = async (
   });
 };
 
-/**
- * Updates a board. Labels the update drops are gone from the board, so the
- * cards using them lose them in the same transaction — otherwise a card is
- * left holding an ID that resolves to nothing. The prune is a board-level
- * edit, not a card field write, so it leaves no Card history (ADR-0024).
- */
 export const updateBoard = async (
   database: Database,
   scope: KanbanScope,
@@ -156,13 +133,6 @@ export const updateBoard = async (
   return record;
 };
 
-/**
- * Deletes a board; its columns and cards go with it by FK cascade.
- *
- * Silent by decision: the cascaded cards are not announced, so no
- * `card.deleted` fires for them and Webhooks and Event Triggers do not hear
- * they went. `card.deleted` means a card deleted on its own.
- */
 export const deleteBoard = async (
   database: Database,
   scope: KanbanScope,
@@ -176,19 +146,11 @@ export const deleteBoard = async (
   if (rows.length === 0) throw new NotFoundError("Board not found");
 };
 
-// --- Board state ---
-
-/** A board with its columns in order, each holding its cards in order. */
 export type BoardState<Card = CardRow> = {
   board: BoardRow;
   columns: (ColumnRow & { cards: Card[] })[];
 };
 
-/**
- * The whole board in one read: its columns by position, and each column's
- * cards by position. Both surfaces start here — the HTTP route resolves it
- * for display ({@link resolveBoardState}), the Tool trims it to summaries.
- */
 export const getBoardState = async (
   database: Database,
   scope: KanbanScope,
@@ -228,7 +190,6 @@ export const getBoardState = async (
   };
 };
 
-/** An assignee with the name and picture a person sees. */
 export type ResolvedAssignee = {
   type: KanbanCardAssignee["type"];
   id: string;
@@ -236,7 +197,6 @@ export type ResolvedAssignee = {
   image: string | null;
 };
 
-/** A card as the board displays it. */
 export type ResolvedCard = Omit<CardRow, "dueDate"> & {
   dueDate: string | null;
   createdByName: string | null;
@@ -245,12 +205,6 @@ export type ResolvedCard = Omit<CardRow, "dueDate"> & {
   commentCount: number;
 };
 
-/**
- * Resolves a {@link getBoardState} read for display: who created and last
- * edited each card, its assignees' names and pictures, and how many comments
- * it has. `baseUrl` is where stored Agent avatars are served from. An assignee
- * who no longer resolves — a deleted user or Agent — is left out.
- */
 export const resolveBoardState = async (
   database: Database,
   state: BoardState,
@@ -315,8 +269,7 @@ export const resolveBoardState = async (
   const resolveAssignee = (
     assignee: KanbanCardAssignee,
   ): ResolvedAssignee | null => {
-    // Built field by field rather than spread: a stored assignee comes back
-    // from `jsonb` with its keys reordered, and the response keeps its shape.
+    // why: jsonb hands keys back reordered; build field by field to keep the response shape
     if (assignee.type === "user") {
       const found = userById.get(assignee.id);
       return found?.name

@@ -182,7 +182,6 @@ describe("announceTriggerRunsEnded", () => {
   });
 });
 
-/** Seeds the Trigger and the Workspace the announcement reads. */
 const seedAnnouncement = (trigger: Record<string, unknown> = {}) =>
   seedDb({
     trigger: [triggerRow(trigger)],

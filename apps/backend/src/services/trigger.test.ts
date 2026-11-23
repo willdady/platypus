@@ -35,9 +35,7 @@ import { NotFoundError, ValidationError } from "../errors.ts";
 const ctx = { orgId: "org-1", workspaceId: "ws-1" };
 const NEXT_RUN = new Date("2026-01-01T10:00:00Z");
 
-/** The Agent Tool surface's write options: never reaches Inbound Triggers. */
 const asTool = { allowInbound: false } as const;
-/** Both list flags off — the wider read. */
 const everyTrigger = { enabledOnly: false, includeFired: false } as const;
 
 const cronFields = (): TriggerCreateFields => ({
@@ -71,7 +69,6 @@ const inboundFields = (): TriggerCreateFields => ({
   },
 });
 
-/** A stored Trigger row in `ws-1`, pointing at `agent-1`. */
 const triggerRow = (overrides: Row = {}): Row => ({
   id: "trig-1",
   workspaceId: "ws-1",
@@ -85,10 +82,6 @@ const triggerRow = (overrides: Row = {}): Row => ({
   ...overrides,
 });
 
-/**
- * `ws-1` in `org-1` holds `agent-1`; `org-1` shares `shared-attached` (attached
- * to `ws-1`) and `shared-unattached`; `ws-2` holds `agent-other`.
- */
 const world = (rows: Store = {}) =>
   seedDb({
     agent: [
@@ -124,6 +117,22 @@ describe("trigger module", () => {
       expect(fake.tables.trigger).toEqual([
         expect.objectContaining({ id: "trig-new", nextRunAt: NEXT_RUN }),
       ]);
+    });
+
+    it("stores the normalized cron config, with its timezone filled in", async () => {
+      const fake = world();
+
+      await createTrigger(
+        ctx,
+        { ...cronFields(), config: { cronExpression: "0 9 * * *" } as never },
+        asTool,
+      );
+
+      expect(fake.tables.trigger[0].config).toEqual({
+        cronExpression: "0 9 * * *",
+        timezone: "UTC",
+        isOneOff: false,
+      });
     });
 
     it("accepts a Shared agent attached to this workspace", async () => {
@@ -333,7 +342,6 @@ describe("trigger module", () => {
     });
 
     it("does not check the agent when agentId is omitted", async () => {
-      // The stored agent is gone; an update that doesn't touch it still lands.
       const fake = world({
         trigger: [triggerRow({ agentId: "agent-deleted" })],
       });
@@ -402,9 +410,6 @@ describe("trigger module", () => {
     });
 
     it("recomputes nextRunAt when a disabled cron trigger is enabled", async () => {
-      // The regression: disabling leaves `nextRunAt` in the past, so without a
-      // recompute here the scheduler's `nextRunAt <= NOW()` due query fires an
-      // off-schedule catch-up run on the next tick.
       const fake = world({
         trigger: [
           triggerRow({
@@ -420,8 +425,6 @@ describe("trigger module", () => {
     });
 
     it("leaves nextRunAt untouched when an already-enabled cron trigger is updated", async () => {
-      // Only the false -> true edge restarts the schedule. A no-op `enabled:
-      // true` on a running Trigger must not push its next run out.
       const current = new Date("2026-06-01T09:00:00Z");
       const fake = world({ trigger: [triggerRow({ nextRunAt: current })] });
 
@@ -436,7 +439,6 @@ describe("trigger module", () => {
     });
 
     it("does not recompute nextRunAt when an event trigger is enabled", async () => {
-      // Event triggers have no schedule; enabling one must still clear it.
       const fake = world({
         trigger: [
           triggerRow({
@@ -471,6 +473,18 @@ describe("trigger module", () => {
       ).rejects.toThrow(ValidationError);
     });
 
+    it("repairs a malformed stored config with a supplied one", async () => {
+      const fake = world({ trigger: [triggerRow({ config: { bogus: 1 } })] });
+      const config = { cronExpression: "0 9 * * *", timezone: "UTC" };
+
+      await updateTrigger(ctx, "trig-1", { config }, asTool);
+
+      expect(fake.tables.trigger[0]).toMatchObject({
+        config: { ...config, isOneOff: false },
+        nextRunAt: NEXT_RUN,
+      });
+    });
+
     it("clears nextRunAt when switching to event type", async () => {
       const fake = world({ trigger: [triggerRow({ nextRunAt: NEXT_RUN })] });
 
@@ -490,11 +504,6 @@ describe("trigger module", () => {
       });
     });
 
-    // A type change re-reads the stored config under the other shape's schema.
-    // Without it, a cron config survives under `type: "event"`: the cron
-    // scheduler skips it (nextRunAt is nulled) and the event dispatcher never
-    // matches it (no `events`), so the Trigger looks configured and can never
-    // fire. The cron branch already guarded the mirror case.
     it("throws ValidationError when flipping to event type without a config", async () => {
       world({ trigger: [triggerRow()] });
 
@@ -503,7 +512,6 @@ describe("trigger module", () => {
       ).rejects.toThrow(ValidationError);
     });
 
-    // The mirror of the above, kept alongside it so the symmetry is visible.
     it("throws ValidationError when flipping to cron type without a config", async () => {
       world({
         trigger: [
@@ -516,9 +524,6 @@ describe("trigger module", () => {
       ).rejects.toThrow(ValidationError);
     });
 
-    // The guard keys on the type *field being present*, not on it changing, so
-    // a caller that re-sends the type it already has must still succeed — the
-    // stored config revalidates cleanly under its own schema.
     it("accepts a no-op event type on update, leaving the stored config alone", async () => {
       const config = { events: ["card.created"], filters: { boardId: "b-1" } };
       const fake = world({ trigger: [triggerRow({ type: "event", config })] });
@@ -911,8 +916,6 @@ describe("trigger module", () => {
     });
 
     it("refuses an Inbound Trigger unless the caller is the Owner's surface", async () => {
-      // An inbound run's context carries caller text: an Agent talked into
-      // deleting its own integration would stop it silently.
       const fake = world({ trigger: [triggerRow({ type: "inbound" })] });
 
       await expect(deleteTrigger(ctx, "trig-1", asTool)).rejects.toThrow(

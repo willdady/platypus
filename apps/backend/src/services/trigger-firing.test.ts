@@ -14,13 +14,6 @@ import {
 import type { WorkspaceScope } from "../scope.ts";
 import type { RunInput, RunSink } from "../runs/types.ts";
 
-/**
- * Firing goes through its interface: the Agent run is the only seam mocked,
- * and everything else — the breaker, the sink's run row, the bookkeeping and
- * retention — runs against a seeded fake that reads the queries' predicates.
- */
-
-/** Shape of the argument object passed to agentRunner.generate in these tests. */
 type GenerateArgs = { scope: WorkspaceScope; input: RunInput; sink: RunSink };
 
 const { mockGenerate, mockDeliverWebhook } = vi.hoisted(() => ({
@@ -32,8 +25,6 @@ vi.mock("../runs/agent-runner.ts", () => ({
   agentRunner: { generate: mockGenerate },
 }));
 
-// The outbound HTTP call is the only part of a `trigger_run.*` delivery
-// mocked; which Webhook it reaches and what it carries are read from the fake.
 vi.mock("./webhook-delivery.ts", () => ({
   deliverWebhook: mockDeliverWebhook,
 }));
@@ -52,7 +43,6 @@ import {
 
 const NOW = new Date("2026-08-30T12:30:00.000Z");
 const COMPLETED = new Date("2026-08-30T12:41:00.000Z");
-/** Outside the default one-hour breaker window, so retention may prune it. */
 const LONG_AGO = (minutes: number) =>
   new Date(Date.UTC(2026, 7, 28, 0, minutes));
 
@@ -107,11 +97,6 @@ const oldRun = (id: string, minutes: number, over: Row = {}): Row => ({
   ...over,
 });
 
-/**
- * Seeds the world a firing reads: the Workspace and its owner, and the
- * Trigger row as it is *now* — which a test may make differ from the snapshot
- * it fires.
- */
 const world = (
   current: TriggerRow | null,
   runs: Row[] = [],
@@ -139,11 +124,6 @@ const world = (
     trigger_run: runs,
   });
 
-/**
- * Stands in for the Drive: opens the run row through the sink, then ends it
- * with `status` — and, like `driveOnce`, rethrows when the run failed by
- * throwing. Time moves to COMPLETED while it runs.
- */
 const drive = (status: "succeeded" | "failed" | "cancelled", error?: Error) => {
   mockGenerate.mockImplementationOnce(async ({ input, sink }: GenerateArgs) => {
     await sink.onStart({ runId: input.runId, messages: input.messages });
@@ -168,7 +148,6 @@ const instructionText = () => {
   return part.text;
 };
 
-/** The run-start line the logger recorded, if any. */
 const startLine = (): Record<string, unknown> | undefined =>
   mockLogger.info.mock.calls.find(
     (call) => call[1] === "Starting trigger execution",
@@ -177,7 +156,6 @@ const startLine = (): Record<string, unknown> | undefined =>
 const triggerRow = (fake: FakeDb) => fake.tables.trigger[0];
 const runIds = (fake: FakeDb) => fake.tables.trigger_run.map((r) => r.id);
 
-/** Subscribes a Webhook in the Workspace to every `trigger_run.*` event. */
 const subscribeWebhook = (fake: FakeDb) => {
   fake.tables.webhook = [
     {
@@ -197,7 +175,6 @@ const subscribeWebhook = (fake: FakeDb) => {
   ];
 };
 
-/** The envelopes delivered so far, once the fire-and-forget chain settles. */
 const deliveries = async () => {
   for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0));
   return mockDeliverWebhook.mock.calls.map(
@@ -226,9 +203,6 @@ describe("fireTrigger", () => {
       oldRun("old-3", 3),
     ];
 
-    // The row as the scheduler's claim left it: the next slot already written
-    // for a recurring cron, a one-off already disabled. 14:00, not the 13:00
-    // the hourly cadence would name from completion, so a recompute shows.
     const CLAIMED_NEXT = new Date("2026-08-30T14:00:00.000Z");
     const firedTriggers = [
       [
@@ -280,7 +254,6 @@ describe("fireTrigger", () => {
           nextRunAt: trigger.nextRunAt,
           enabled: trigger.enabled,
         });
-        // The newest two: this run and the newest of the old ones.
         expect(runIds(fake).sort()).toEqual(["old-3", "run-new"]);
       },
     );
@@ -446,7 +419,6 @@ describe("fireTrigger", () => {
   });
 
   describe("the run-rate breaker", () => {
-    /** Twenty recent runs for `entityId` — the default ceiling. */
     const recentRuns = (entityId: string) =>
       Array.from({ length: 20 }, (_, i) => ({
         id: `recent-${i}`,
@@ -476,7 +448,6 @@ describe("fireTrigger", () => {
           eventData: payload.data,
         }),
       ]);
-      // Not a run, so not a `lastRunAt`.
       expect(triggerRow(fake).lastRunAt).toBeNull();
     });
 
@@ -498,7 +469,6 @@ describe("fireTrigger", () => {
         }),
       ).resolves.toBe("failed");
 
-      // Failing closed: no run, and no bookkeeping as if one happened.
       expect(mockGenerate).not.toHaveBeenCalled();
       expect(triggerRow(fake).lastRunAt).toBeNull();
       expect(mockLogger.error).toHaveBeenCalledWith(
@@ -523,7 +493,6 @@ describe("fireTrigger", () => {
           entityId: "c1",
         });
 
-        // The new suppressed row and the newest old one survive.
         expect(
           fake.tables.trigger_run
             .filter((r) => r.status === "suppressed")
@@ -587,8 +556,6 @@ describe("fireTrigger", () => {
 
       await fireTrigger(trigger, { kind: "cron" });
 
-      // The Agent chain is the Drive's to establish; this layer only names the
-      // Trigger and the run.
       expect(seen).toEqual({
         trigger: "trigger-1",
         agents: [],
@@ -742,8 +709,6 @@ describe("fireTrigger", () => {
     });
 
     it("logs identifiers only — never the event payload's user content", async () => {
-      // The instruction an event Trigger runs opens with the serialised
-      // payload, so a prefix of it is a prefix of the Card (#812).
       const trigger = eventTrigger();
       world(trigger);
       drive("succeeded");
@@ -820,9 +785,6 @@ describe("fireTrigger", () => {
       ]);
     });
 
-    // Issue #1294: only a Chat turn withholds the Memory Tool set with its
-    // Memories. An Inbound Trigger with Include Memories off keeps its
-    // Agent's Memory tools, as it always has.
     it("keeps its Agent's Memory tools with Include Memories off", async () => {
       const trigger = { ...inboundTrigger(), includeMemories: false };
       world(trigger, [pendingRow()]);
@@ -903,8 +865,6 @@ describe("fireTrigger", () => {
     });
 
     it("does not start a run whose row is no longer pending", async () => {
-      // The recovery sweep failed it first: reviving it as `running` would be
-      // a live run on a row the caller was already told had failed.
       const trigger = inboundTrigger();
       const fake = world(trigger, [{ ...pendingRow(), status: "failed" }]);
       drive("succeeded");
@@ -1125,7 +1085,6 @@ describe("fireTrigger", () => {
       mockGenerate.mockImplementationOnce(
         async ({ input, sink }: GenerateArgs) => {
           await sink.onStart({ runId: input.runId, messages: input.messages });
-          // The cascade takes the Trigger and its runs with it.
           fake.tables.trigger = [];
           fake.tables.trigger_run = [];
           await sink.onFinish({
@@ -1144,8 +1103,6 @@ describe("fireTrigger", () => {
       expect(mockLogger.error).not.toHaveBeenCalled();
     });
   });
-  // ADR-0044: a run keeps its Transcript as a Chat bound to it, hidden from
-  // the Chat list and titled from its Trigger, never by a model.
   describe("keeping the run's Transcript as a Chat", () => {
     const reply = {
       id: "msg-reply",
@@ -1153,7 +1110,6 @@ describe("fireTrigger", () => {
       parts: [{ type: "text" as const, text: "Done." }],
     };
 
-    /** The Drive, writing a reply before it ends with `status`. */
     const driveWithReply = (status: "succeeded" | "failed" | "cancelled") => {
       mockGenerate.mockImplementationOnce(
         async ({ input, sink }: GenerateArgs) => {
@@ -1265,8 +1221,6 @@ describe("fireTrigger", () => {
       },
     );
 
-    // The title is derived, so the Chat title bound must hold the longest
-    // Trigger name whole rather than clip it.
     it("titles the Chat from the longest Trigger name without clipping", async () => {
       const name = "N".repeat(TRIGGER_NAME_MAX_LENGTH);
       const trigger = makeTrigger({ name });
