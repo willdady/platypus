@@ -62,10 +62,6 @@ export const revokedTokenFields = () => ({
 const TOUCH_INTERVAL_MS = 60_000;
 const lastTouched = new Map<string, number>();
 
-export const resetTokenTouches = (): void => lastTouched.clear();
-
-export const tokenTouchCount = (): number => lastTouched.size;
-
 export const touchToken = async (
   table: TokenTable,
   id: string,

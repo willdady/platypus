@@ -138,10 +138,7 @@ vi.mock("../services/notification.ts", () => ({
 
 import app from "../server.ts";
 import { createNotification } from "../services/notification.ts";
-import {
-  hashBearerToken,
-  resetTokenTouches,
-} from "../services/bearer-token.ts";
+import { hashBearerToken } from "../services/bearer-token.ts";
 import {
   A2A_MAX_STREAMS_PER_TOKEN,
   activeA2aFollowerCount,
@@ -463,7 +460,6 @@ describe("POST /a2a/:endpointId — the token", () => {
   beforeEach(() => {
     resetMockDb();
     vi.clearAllMocks();
-    resetTokenTouches();
     resetA2aRunSlots();
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(NOW);
@@ -550,7 +546,13 @@ const LIVE = {
 
 const seedConversation = (
   rows: Record<string, Row[]> = {},
-  { onInsert }: { onInsert?: (table: string, values: Row) => void } = {},
+  {
+    onInsert,
+    tokenId = "tok-1",
+  }: {
+    onInsert?: (table: string, values: Row) => void;
+    tokenId?: string;
+  } = {},
 ) =>
   ({ tables } = seedDb(
     {
@@ -632,7 +634,7 @@ const seedConversation = (
       ],
       a2a_token: [
         {
-          id: "tok-1",
+          id: tokenId,
           endpointId: "ep-1",
           name: "Telegram via Hermes",
           tokenHash: hashBearerToken(TOKEN),
@@ -811,7 +813,6 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
     model.holdMidReply = null;
     model.prompts = [];
     model.toolNames = [];
-    resetTokenTouches();
     resetA2aRunSlots();
   });
 
@@ -2506,7 +2507,6 @@ describe("POST /a2a/:endpointId — ListTasks", () => {
     model.holdMidReply = null;
     model.prompts = [];
     model.toolNames = [];
-    resetTokenTouches();
     resetA2aRunSlots();
   });
 
@@ -2831,7 +2831,6 @@ describe("POST /a2a/:endpointId — CancelTask", () => {
     model.holdMidReply = null;
     model.prompts = [];
     model.toolNames = [];
-    resetTokenTouches();
     resetA2aRunSlots();
   });
 
@@ -3223,7 +3222,6 @@ describe("POST /a2a/:endpointId — push notifications", () => {
     model.holdMidReply = null;
     model.prompts = [];
     model.toolNames = [];
-    resetTokenTouches();
     resetA2aRunSlots();
     push.mockResolvedValue(new Response(null, { status: 200 }));
     vi.stubGlobal("fetch", push);
@@ -3945,7 +3943,6 @@ describe("POST /a2a/:endpointId — the load cap", () => {
     model.hold = null;
     model.prompts = [];
     model.toolNames = [];
-    resetTokenTouches();
     resetA2aRunSlots();
     process.env.A2A_MAX_CONCURRENT_RUNS = "1";
   });
@@ -3955,7 +3952,7 @@ describe("POST /a2a/:endpointId — the load cap", () => {
   });
 
   it("answers 429 with Retry-After past the cap, writing no Chat or Task", async () => {
-    seedConversation();
+    seedConversation({}, { tokenId: "tok-load-cap" });
     let release = () => {};
     model.hold = new Promise((resolve) => (release = resolve));
     await send({ messageId: "msg-a" }, { returnImmediately: true });
@@ -4165,7 +4162,6 @@ describe("POST /a2a/:endpointId — the body cap", () => {
     model.hold = null;
     model.prompts = [];
     model.toolNames = [];
-    resetTokenTouches();
     resetA2aRunSlots();
     process.env.A2A_MAX_BODY_BYTES = "64";
   });
@@ -4181,7 +4177,7 @@ describe("POST /a2a/:endpointId — the body cap", () => {
   ])(
     "answers 413 with %s, before the token is checked",
     async (_case, token) => {
-      seedConversation();
+      seedConversation({}, { tokenId: "tok-body-cap" });
 
       const res = await post(oversized, token);
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -4283,7 +4279,6 @@ describe("the A2A call log", () => {
     model.hold = null;
     model.prompts = [];
     model.toolNames = [];
-    resetTokenTouches();
     resetA2aRunSlots();
   });
 
@@ -4893,7 +4888,6 @@ describe("POST /a2a/:endpointId — streaming", () => {
     model.holdMidReply = null;
     model.prompts = [];
     model.toolNames = [];
-    resetTokenTouches();
   });
 
   it("streams the reply as artifact updates, from the Task to its completed status", async () => {
@@ -5440,7 +5434,6 @@ describe("POST /a2a/:endpointId — a token reaches only what it started", () =>
     model.holdMidReply = null;
     model.prompts = [];
     model.toolNames = [];
-    resetTokenTouches();
     resetA2aRunSlots();
   });
 
@@ -5636,7 +5629,6 @@ describe("POST /a2a/:endpointId — cutting off access stops running work", () =
     model.holdMidReply = null;
     model.prompts = [];
     model.toolNames = [];
-    resetTokenTouches();
     resetA2aRunSlots();
     push.mockResolvedValue(new Response(null, { status: 200 }));
     vi.stubGlobal("fetch", push);
@@ -6007,7 +5999,6 @@ describe("POST /a2a/:endpointId — the follower cap", () => {
     model.holdMidReply = null;
     model.prompts = [];
     model.toolNames = [];
-    resetTokenTouches();
     resetA2aRunSlots();
     resetA2aFollowerSlots();
     process.env.A2A_MAX_CONCURRENT_STREAMS = "1";

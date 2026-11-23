@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { resetMockDb, seedDb, type Row } from "../test-utils.ts";
+import { resetMockDb, seedDb, type FakeDb, type Row } from "../test-utils.ts";
 import { mockLogger, mockNanoid } from "../test-setup.ts";
 
 const { mockDeletePrefix } = vi.hoisted(() => ({
@@ -29,8 +29,6 @@ import {
   bearerTokenStatus,
   dueReminder,
   hashBearerToken,
-  resetTokenTouches,
-  tokenTouchCount,
 } from "./bearer-token.ts";
 import { ConflictError, NotFoundError } from "../errors.ts";
 import {
@@ -83,6 +81,11 @@ const inboundTrigger = (over: Row = {}): Row => ({
   ...over,
 });
 
+const writes = (fake: FakeDb) =>
+  fake.queries.filter(
+    ({ kind, table }) => kind === "update" && table === "trigger",
+  ).length;
+
 const seed = ({
   trigger = [inboundTrigger()],
   gate = "all",
@@ -133,7 +136,6 @@ describe("inbound triggers", () => {
     resetMockDb();
     vi.clearAllMocks();
     resetInboundRunSlots();
-    resetTokenTouches();
     mockDeletePrefix.mockResolvedValue(undefined);
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(NOW);
@@ -689,33 +691,53 @@ describe("inbound triggers", () => {
       const soon = new Date(NOW.getTime() + 30_000);
       await touchInboundTrigger("trig-1", "lastUsedAt", soon);
       expect(fake.tables.trigger[0].lastUsedAt).toEqual(NOW);
+      expect(writes(fake)).toBe(1);
 
       await touchInboundTrigger("trig-1", "lastRejectedAt", soon);
       expect(fake.tables.trigger[0].lastRejectedAt).toEqual(soon);
+      expect(writes(fake)).toBe(2);
 
       const later = new Date(NOW.getTime() + 61_000);
       await touchInboundTrigger("trig-1", "lastUsedAt", later);
       expect(fake.tables.trigger[0].lastUsedAt).toEqual(later);
+      expect(writes(fake)).toBe(3);
     });
 
-    it("forgets touches older than a minute, so memory stays bounded", async () => {
-      seed();
+    it("forgets touches older than a minute, so a Trigger is written again", async () => {
+      const fake = seed({
+        trigger: [
+          inboundTrigger({ id: "trig-a" }),
+          inboundTrigger({ id: "trig-b" }),
+          inboundTrigger({ id: "trig-c" }),
+        ],
+      });
+      const ids = ["trig-a", "trig-b", "trig-c"];
+      const half = new Date(NOW.getTime() + 30_000);
+      const after = new Date(NOW.getTime() + 61_000);
 
-      await touchInboundTrigger("trig-1", "lastUsedAt", NOW);
-      await touchInboundTrigger("trig-1", "lastRejectedAt", NOW);
-      await touchInboundTrigger(
-        "trig-2",
-        "lastUsedAt",
-        new Date(NOW.getTime() + 30_000),
-      );
-      expect(tokenTouchCount()).toBe(3);
+      for (const id of ids) await touchInboundTrigger(id, "lastUsedAt", NOW);
+      expect(fake.tables.trigger.map((row) => row.lastUsedAt)).toEqual([
+        NOW,
+        NOW,
+        NOW,
+      ]);
+      expect(writes(fake)).toBe(3);
 
-      await touchInboundTrigger(
-        "trig-3",
-        "lastUsedAt",
-        new Date(NOW.getTime() + 61_000),
-      );
-      expect(tokenTouchCount()).toBe(2);
+      for (const id of ids) await touchInboundTrigger(id, "lastUsedAt", half);
+      expect(fake.tables.trigger.map((row) => row.lastUsedAt)).toEqual([
+        NOW,
+        NOW,
+        NOW,
+      ]);
+      expect(writes(fake)).toBe(3);
+
+      for (const id of ids) await touchInboundTrigger(id, "lastUsedAt", after);
+      expect(fake.tables.trigger.map((row) => row.lastUsedAt)).toEqual([
+        after,
+        after,
+        after,
+      ]);
+      expect(writes(fake)).toBe(6);
     });
   });
 
