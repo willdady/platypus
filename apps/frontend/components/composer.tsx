@@ -43,8 +43,11 @@ import type { Serialized } from "@/lib/api-write";
  * What a composer needs to render the model picker. The pieces travel together
  * only to reach `ModelSelectorDialog`, so they are bundled rather than threaded
  * individually through every surface (issue #724).
+ *
+ * Distinct from `useModelSelection`'s `ModelSelection`, which is only the
+ * chosen Agent, model and Provider ids (issue #1976).
  */
-export type ModelSelection = {
+export type ModelPickerConfig = {
   agents: Serialized<Agent>[];
   providers: Serialized<Provider>[];
   agentId: string;
@@ -89,7 +92,7 @@ type ComposerProps = {
    */
   canUploadToSandbox?: boolean;
   passthroughFileTypes: string[];
-  modelSelection: ModelSelection;
+  modelSelection: ModelPickerConfig;
   textarea: ComposerTextareaProps;
   /** What dictation writes into the textarea. */
   onTranscriptionChange: (text: string) => void;

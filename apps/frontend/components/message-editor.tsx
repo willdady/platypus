@@ -8,14 +8,14 @@ import {
   PromptInputSubmit,
   type PromptInputMessage,
 } from "./ai-elements/prompt-input";
-import { Composer, type ModelSelection } from "./composer";
+import { Composer, type ModelPickerConfig } from "./composer";
 
 type MessageEditorProps = {
   /** The message's text as it stands, which the editor opens on. */
   initialText: string;
   /** The attachments it already carries, which the editor opens holding. */
   initialAttachments: FileUIPart[];
-  modelSelection: ModelSelection;
+  modelSelection: ModelPickerConfig;
   /** What the resolved model reads natively, for the compatibility notice. */
   passthroughFileTypes: string[];
   onSubmit: (message: PromptInputMessage) => void;

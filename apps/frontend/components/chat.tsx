@@ -98,7 +98,7 @@ import { copyWithToast } from "@/lib/clipboard";
 import { ChatComposer } from "./chat-composer";
 import { ChatSkeleton } from "./chat-skeleton";
 import { ListError } from "./list-state";
-import type { ModelSelection } from "./composer";
+import type { ModelPickerConfig } from "./composer";
 import {
   builtInCommandOf,
   skillsForAgent,
@@ -402,7 +402,7 @@ export function Chat({
   const contextWindowHref = workspaceRoutes(orgId, workspaceId).settings
     .providers;
   // What the model picker on both surfaces is configured with (issue #724).
-  const modelSelection: ModelSelection = {
+  const modelSelection: ModelPickerConfig = {
     agents,
     providers,
     agentId,
