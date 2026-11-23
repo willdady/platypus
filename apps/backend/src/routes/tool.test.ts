@@ -15,15 +15,11 @@ vi.mock("../tools/index.ts", () => ({
       name: "Math",
       category: "Utilities",
       description: "Math tools",
-      // A static-map set names its tools ahead of any turn…
       staticTools: {
         add: { description: "Add numbers" },
       },
       buildTurnTools: vi.fn(),
     },
-    // A core-internal static set (e.g. `sandbox`) with no owning plugin: it
-    // must annotate as core/built-in, not crash. …and a factory-backed set
-    // names none, since what it serves depends on the Workspace.
     {
       id: "sandbox",
       name: "Sandbox",
@@ -39,9 +35,6 @@ describe("Tool Routes", () => {
     resetMockDb();
     vi.clearAllMocks();
     mockDb.where.mockReturnValue(mockDb);
-    // Seed the plugin registry so the Tools listing can annotate the `math`
-    // set with its originating plugin (ADR-0013). `sandbox` is intentionally
-    // absent — it is a static registration, not a plugin contribution.
     setLoadedPlugins(
       loadedPluginsFixture(
         [
@@ -68,22 +61,21 @@ describe("Tool Routes", () => {
   describe("GET /", () => {
     it("should list all tool sets including MCPs", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
+      ]);
 
       mockDb.where
-        .mockReturnValueOnce(mockDb) // requireOrgAccess
-        .mockReturnValueOnce(mockDb) // requireWorkspaceAccess
-        .mockResolvedValueOnce([{ id: "mcp-1", name: "MCP 1" }]) // workspace MCPs
-        .mockResolvedValueOnce([]); // attached Shared MCPs
+        .mockReturnValueOnce(mockDb)
+        .mockReturnValueOnce(mockDb)
+        .mockResolvedValueOnce([{ id: "mcp-1", name: "MCP 1" }])
+        .mockResolvedValueOnce([]);
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
       const json = (await res.json()) as Record<string, unknown>;
 
-      // Static tools, annotated with the contributing plugin (ADR-0013).
       expect(json.results).toContainEqual(
         expect.objectContaining({
           id: "math",
@@ -94,8 +86,6 @@ describe("Tool Routes", () => {
         }),
       );
 
-      // A set with no owning plugin annotates as core/built-in, not blank, and
-      // a factory-backed one names no individual tools.
       expect(json.results).toContainEqual(
         expect.objectContaining({
           id: "sandbox",
@@ -105,7 +95,6 @@ describe("Tool Routes", () => {
         }),
       );
 
-      // MCPs
       expect(json.results).toContainEqual(
         expect.objectContaining({
           id: "mcp-1",
@@ -116,21 +105,16 @@ describe("Tool Routes", () => {
     });
 
     it("includes Shared MCPs attached to this workspace", async () => {
-      // The catalog lists what the Workspace may actually use, which is what
-      // `GET /mcps` already lists: its own MCPs plus the Shared ones attached
-      // here (ADR-0007). Listing only workspace-scoped rows hid every attached
-      // Shared MCP from the tool-set picker.
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
+      ]);
 
       mockDb.where
         .mockReturnValueOnce(mockDb)
         .mockReturnValueOnce(mockDb)
-        .mockResolvedValueOnce([]) // no workspace-scoped MCPs
-        // attached Shared MCPs arrive from an inner join, keyed by table name.
+        .mockResolvedValueOnce([])
         .mockResolvedValueOnce([
           { mcp: { id: "mcp-shared", name: "Shared MCP" } },
         ]);

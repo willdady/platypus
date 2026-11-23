@@ -10,8 +10,6 @@ import app from "../server.ts";
 import { registerSandboxBackend } from "../sandbox/index.ts";
 import { setLoadedPlugins } from "../plugins/registry.ts";
 
-// Register a backend directly (bypassing the loader) so the catalog has a
-// stable entry to assert against.
 const ANNOTATED_BACKEND = "test-catalog";
 registerSandboxBackend({
   backend: ANNOTATED_BACKEND,
@@ -36,8 +34,7 @@ describe("Sandbox backend catalog routes", () => {
   describe("GET /", () => {
     it("returns registered backends with id, name, and originating plugin", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess()
-      // Attribute the pre-registered backend to a plugin (ADR-0013).
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       setLoadedPlugins(
         loadedPluginsFixture(
           [
@@ -65,9 +62,6 @@ describe("Sandbox backend catalog routes", () => {
           plugin: string | null;
         }>;
       };
-      // Every entry carries backend/name/plugin — plugin is `null` when the id
-      // belongs to no loaded plugin, and the contributing plugin's name when it
-      // does.
       for (const r of body.results) {
         expect(Object.keys(r).sort()).toEqual(["backend", "name", "plugin"]);
       }

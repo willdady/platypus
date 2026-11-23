@@ -24,15 +24,10 @@ import { logger } from "../logger.ts";
 
 const trigger = new Hono<{ Variables: Variables }>();
 
-/** The list's one filter: include Fired One-off Triggers. */
 const listQuerySchema = z.strictObject({
   includeFired: z.enum(["true", "false"]).optional(),
 });
 
-/**
- * List the triggers in the workspace. Fired One-off Triggers are left out
- * unless `?includeFired=true`.
- */
 trigger.get(
   "/",
   requireAuth,
@@ -49,7 +44,6 @@ trigger.get(
   },
 );
 
-/** Get a trigger by ID */
 trigger.get(
   "/:triggerId",
   requireAuth,
@@ -64,7 +58,6 @@ trigger.get(
   },
 );
 
-/** Create a new trigger */
 trigger.post(
   "/",
   requireAuth,
@@ -76,8 +69,6 @@ trigger.post(
     const data = c.req.valid("json");
     const scope = workspaceScopeOf(c);
 
-    // This route is the Workspace Owner in the UI — the one surface allowed
-    // to create an Inbound Trigger (ADR-0030).
     const { issuedToken, ...record } = await createTrigger(scope, data, {
       allowInbound: true,
     });
@@ -86,7 +77,6 @@ trigger.post(
       `Created trigger '${record.id}' in workspace '${scope.workspaceId}'${record.nextRunAt ? ` - next run at ${record.nextRunAt.toISOString()}` : ""}`,
     );
 
-    // An Inbound Trigger's token is in this response and never again.
     return c.json(
       {
         ...toPublicTrigger(record),
@@ -97,7 +87,6 @@ trigger.post(
   },
 );
 
-/** Update a trigger */
 trigger.patch(
   "/:triggerId",
   requireAuth,
@@ -119,10 +108,6 @@ trigger.patch(
   },
 );
 
-/**
- * Issue a new token for an Inbound Trigger. The old one stops working at
- * once; the new one is in this response and never again.
- */
 trigger.post(
   "/:triggerId/token",
   requireAuth,
@@ -139,7 +124,6 @@ trigger.post(
   },
 );
 
-/** Delete a trigger */
 trigger.delete(
   "/:triggerId",
   requireAuth,
@@ -149,8 +133,6 @@ trigger.delete(
   async (c) => {
     const triggerId = c.req.param("triggerId");
 
-    // The Workspace Owner in the UI — the one surface allowed to delete an
-    // Inbound Trigger (ADR-0030).
     if (
       !(await deleteTrigger(workspaceScopeOf(c), triggerId, {
         allowInbound: true,
