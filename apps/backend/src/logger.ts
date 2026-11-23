@@ -8,7 +8,7 @@ const transport = pino.transport({
     isProduction
       ? {
           target: "pino/file",
-          options: { destination: 1 }, // Write to stdout
+          options: { destination: 1 },
         }
       : {
           target: "pino-pretty",

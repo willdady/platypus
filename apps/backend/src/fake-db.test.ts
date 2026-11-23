@@ -15,11 +15,6 @@ import {
 } from "drizzle-orm";
 import { workspace as workspaceTable } from "./db/schema.ts";
 
-/**
- * The harness itself: the two `db` stand-ins have to coexist, because the route
- * test files that stub queries positionally and the ones that seed rows both
- * reach `db` through the same mocked module — sometimes in the same run.
- */
 describe("the seeded fake beside the chainable mock", () => {
   beforeEach(() => {
     resetMockDb();
@@ -48,8 +43,6 @@ describe("the seeded fake beside the chainable mock", () => {
       .limit(1);
     expect(found).toEqual([expect.objectContaining({ name: "Alpha" })]);
 
-    // The same id under the wrong Organization matches nothing — the condition
-    // the chainable mock would have thrown away.
     const crossOrg = await db
       .select()
       .from(workspaceTable)
@@ -123,7 +116,6 @@ describe("the seeded fake beside the chainable mock", () => {
       .where(sql`${workspaceTable.name} ILIKE ${"%alpha%"}`);
     expect(alpha).toEqual([{ id: "ws-1" }]);
 
-    // An escaped `%` and `_` match literally, not as wildcards.
     const literal = await db
       .select({ id: workspaceTable.id })
       .from(workspaceTable)
@@ -147,7 +139,6 @@ describe("the seeded fake beside the chainable mock", () => {
       .where(ne(triggerRun.status, "suppressed"));
     expect(notSuppressed).toEqual([{ id: "r1" }, { id: "r3" }]);
 
-    // Strict: the row started exactly at the bound is not before it.
     const before = await db
       .select({ id: triggerRun.id })
       .from(triggerRun)
@@ -327,7 +318,6 @@ describe("the seeded fake beside the chainable mock", () => {
     const [a1, a2] = seeded.tables.agent;
     expect(a1.subAgentIds).toEqual(["kept"]);
     expect(a1.updatedAt).toBeInstanceOf(Date);
-    // Not matched, so not written at all.
     expect(a2).toEqual({
       id: "a2",
       subAgentIds: ["kept"],

@@ -13,18 +13,12 @@ import { logger } from "../src/logger.ts";
 
 const { Pool } = pg;
 
-// Resolved from this file rather than the cwd, so the script works whether it
-// is run from the repo root (as the image does) or from `apps/backend`.
 const MIGRATIONS_FOLDER = fileURLToPath(new URL("../drizzle", import.meta.url));
 
 async function runMigrations() {
-  // Through the same validation the server applies to `DATABASE_URL`, so the
-  // migrate step cannot fall back to node-postgres' `PG*` variables or run
-  // against a URL the server would have refused.
   const pool = new Pool(databaseConfig(databaseUrl()));
 
-  // An idle client dropped mid-migration (e.g. the one holding the lock) would
-  // otherwise crash the process with an unhandled 'error' event.
+  // why: an idle client dropped mid-migration would otherwise crash the process
   pool.on("error", (error) => {
     logger.error({ error }, "Idle database connection failed");
   });
@@ -32,22 +26,16 @@ async function runMigrations() {
   const db = drizzle(pool);
 
   try {
-    // Replicas starting together each run this script; the lock makes them
-    // take turns, and each one after the first finds nothing left to apply.
     await withAdvisoryLock(
       pool,
       ADVISORY_LOCK_IDS.migrations,
       async () => {
         logger.info("Running migrations...");
 
-        // Enable pgvector extension before running schema migrations
         await db.execute("CREATE EXTENSION IF NOT EXISTS vector");
 
         await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
 
-        // A data step the SQL migrations cannot express: a stranded Cron
-        // Trigger's next run is a cron expression in its own timezone. Runs
-        // after the schema is current, and finds nothing on a healthy database.
         const { scheduled, skipped } = await backfillTriggerNextRunAt(db);
         if (scheduled > 0 || skipped > 0) {
           logger.info(

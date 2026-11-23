@@ -7,36 +7,10 @@ import { renderSecurityGuardrails } from "./security-prompt.ts";
 
 type AgentRecord = typeof agentTable.$inferSelect;
 
-/**
- * The half of the prompt context that is per-turn and therefore must NEVER
- * reach the prefix renderer (ADR-0020). It carries the volatile inputs a turn
- * resolves — data that would change the prefix if a fragment read it directly.
- *
- * The seam is the renderer's parameter type: `renderSystemPrompt` accepts only
- * {@link SystemPromptStableContext}, which physically lacks these fields. A
- * future volatile fragment therefore cannot read this data — doing so requires
- * widening the stable type, a one-line diff in a type named for stability that
- * a reviewer will question — rather than a review-miss guardrail. Today the
- * only volatile fragment input is the live memory retrieval, which the turn
- * folds into the stable `memoriesBlock` text before composition.
- */
 export type SystemPromptTurnContext = {
-  /**
-   * The memories this turn resolved, when it retrieved them live (a headless
-   * run with no Chat pin). Empty for an interactive run that re-used a pinned
-   * snapshot. Folded into `SystemPromptStableContext.memoriesBlock` before the
-   * renderer is ever called.
-   */
   memories: MemorySummary[];
 };
 
-/**
- * The stable half of the prompt context — everything `renderSystemPrompt`
- * reads. By construction it carries no per-turn field (see
- * {@link SystemPromptTurnContext}): reaching the prefix requires a field to be
- * here, and the volatile inputs are deliberately absent, so a future fragment
- * cannot make the prefix vary with a background writer or the wall clock.
- */
 export type SystemPromptStableContext = {
   workspace: { id: string; context?: string };
   agent: AgentRecord | null;
@@ -45,84 +19,19 @@ export type SystemPromptStableContext = {
     name: string;
     globalContext?: string;
     workspaceContext?: string;
-    /**
-     * The User timezone from their profile. Absent when unset — never the
-     * deployment `TIMEZONE`, so the model is not told a zone as fact that the
-     * User never chose.
-     */
     timezone?: string;
   };
-  /**
-   * The resolved Memories block — the output of `formatSummariesForSystemPrompt`.
-   * For an interactive Chat this is the text pinned on the Chat row, re-taken
-   * only after the Chat idles past the re-pin horizon (ADR-0020); for a headless
-   * run it is the live block resolved at turn time. Empty string → no Memories
-   * block. The renderer never retrieves or reads a clock — it renders this text
-   * as given, which is what keeps the prefix byte-identical across turns.
-   */
   memoriesBlock: string;
-  /**
-   * Whether this turn offers `memorySearch`. The Memory Tool set leaves it out
-   * when the Workspace has no embedding Provider, so the fragment names only
-   * the tools the model actually has. A Workspace setting, so it holds steady
-   * for the life of a Chat like the Agent's own configuration.
-   */
   memorySearchAvailable: boolean;
-  /**
-   * Whether this turn offers `fsDownload`. The Sandbox Tool set leaves it out
-   * when the backend has no `fsReadBytes` (ADR-0027), and the Tool session
-   * withholds it from a run no User watches (#1608). A property of the
-   * Workspace's Sandbox and the run, so it holds steady like
-   * `memorySearchAvailable`.
-   */
   fsDownloadAvailable: boolean;
   skills: Array<Pick<Skill, "name" | "description">>;
   subAgents: Array<{ name: string; description?: string | null }>;
-  /**
-   * Sub-agents assigned to this Agent that have no delegation tool this turn.
-   * Named in the prompt as explicitly unavailable: staying silent leaves the
-   * model to discover the gap by taking an AI_NoSuchToolError, and leaves the
-   * user with no idea why.
-   *
-   * `name` is present only where the sub-agent's row resolved and the failure
-   * came after (its Provider, its model). An assignment that did not resolve in
-   * this Workspace has no name to report — deliberately: reading one off the row
-   * is the Workspace boundary crossing being closed — so it is identified by the
-   * `id` the Agent's own configuration holds.
-   */
   unavailableSubAgents?: Array<{ id: string; name?: string; reason?: string }>;
-  /**
-   * Names of workspace-default env vars that will be merged into every
-   * sandbox shell.exec call. Keys only — values never enter the system prompt
-   * (see docs/adr/0004-sandbox-workspace-default-env-vars.md).
-   */
   sandboxEnvKeys?: string[];
-  /** Used as the instructions fragment when `agent` is null. */
   fallbackInstructions?: string;
-  /**
-   * Free-text security directives from the run's provider
-   * (`provider.securityGuardrails`). Rendered LAST (recency). Empty/nullish →
-   * no security block is added.
-   */
   securityGuardrails?: string | null;
-  /**
-   * Free-text organization identity / context (`organization.identityContext`).
-   * Rendered EARLY, beside the workspace context, as framing — NOT a security
-   * control. Empty/nullish → no organization block is added. A plain string:
-   * no org id is printed (unlike the workspace, whose id tools require).
-   */
   organizationIdentityContext?: string | null;
-  /**
-   * "interactive" — a live user is chatting; the agent may swap between turns.
-   * "headless" — a trigger or sub-agent run; the agent is fixed for the whole
-   * run and there is no live participant. Headless mode surfaces the agent's
-   * own identity and reframes the user line as an on-behalf-of owner.
-   */
   runMode: "interactive" | "headless";
-  /**
-   * The A2A token's name when an A2A client started this turn (ADR-0032).
-   * Never the endpoint URL.
-   */
   a2aClientName?: string;
 };
 
@@ -139,9 +48,6 @@ const agentIdentityFragment: Fragment = (ctx) => {
   return `You are an agent named "${ctx.agent.name}" with id \`${ctx.agent.id}\`. When a tool requires an agent identifier (for example, to assign a task or card to you), use this id.`;
 };
 
-// Organization identity / context, rendered early (beside the workspace
-// context) as framing. Not a security control — that is securityFragment, which
-// renders last. Deliberately not adjacent to it.
 const organizationFragment: Fragment = (ctx) => {
   const context = ctx.organizationIdentityContext?.trim();
   if (!context) return null;
@@ -223,9 +129,6 @@ const subAgentsFragment: Fragment = (ctx) => {
         // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- an empty string falls back too
         `- **${sa.name}**: ${sa.description || "No description provided"}`,
     );
-    // The catalogue is the model's only route to a valid target — the
-    // `delegate` tool resolves what it is given against exactly these names —
-    // so each entry is named the way the tool expects it back.
     sections.push(`## Available Sub-Agents
 
 You can delegate specialized tasks to the following sub-agents. Call the \`${DELEGATE_TOOL_NAME}\` tool with \`subAgent\` set to the name of the one you want:
@@ -239,15 +142,10 @@ Each task description MUST be entirely self-contained — sub-agents cannot see 
     const lines = unavailable.map((sa) => {
       // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- an empty string falls back too
       const reason = sa.reason || "failed to load";
-      // Listed by whichever identifier it has — a nameless entry never resolved
-      // far enough to have a name. Either way it is the identifier the
-      // delegation tool refuses it under, where that tool exists at all.
       return sa.name
         ? `- **${sa.name}**: ${reason}`
         : `- Sub-agent \`${sa.id}\`: ${reason}`;
     });
-    // With nothing left to delegate to there is no delegation tool this turn,
-    // so promising a refusal would describe a tool the model was never given.
     const consequence = ctx.subAgents.length
       ? "Delegating to them will be refused:"
       : "None of them can be delegated to, and you have no delegation tool this turn:";
@@ -293,9 +191,6 @@ To give the user a file — especially a binary or large one — call \`fsDownlo
 Shell commands time out (default 60s, hard cap 600s). For long jobs, run them in the background and poll for completion.`;
 };
 
-// Security directives from the provider, rendered last so they are the final
-// instructions the model reads before the conversation (recency strengthens
-// injection resistance). No-op when the provider has no security text.
 const securityFragment: Fragment = (ctx) =>
   renderSecurityGuardrails(ctx.securityGuardrails);
 

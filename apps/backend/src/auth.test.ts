@@ -2,16 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { betterAuth } from "better-auth";
 import { memoryAdapter } from "better-auth/adapters/memory";
 
-// The auth module builds the database adapter at import time; the adapter only
-// stores the handle, so a stub is enough to inspect the composed options.
 vi.mock("./index.ts", () => ({ db: {} }));
 
 const originalEnv = { ...process.env };
 
-/**
- * better-auth's inferred options type does not surface base options alongside
- * the plugin tuple, so the tests reach for the fields they assert explicitly.
- */
 type AdvancedOptions = {
   advanced?: { crossSubDomainCookies?: unknown };
 };
@@ -28,20 +22,10 @@ const loadAuth = async () => {
 const loadAdvancedOptions = async (): Promise<AdvancedOptions> =>
   (await loadAuth()).options as AdvancedOptions;
 
-/**
- * The composed options, run for real: the same `emailAndPassword` block and
- * plugins, with an in-memory database in place of Postgres. The tables are
- * pre-declared because the adapter reads a missing one as an error, not as
- * empty. Password hashing is swapped for a reversible stand-in: which
- * endpoints the fence leaves open does not depend on the hash, and scrypt
- * costs seconds per test.
- */
 const runnableAuth = async ({ rateLimited = false } = {}) => {
   const { options } = await loadAuth();
   return betterAuth({
     ...options,
-    // The limiter is off outside production, so a test that exercises it turns
-    // it on around the composed rules rather than replacing them.
     ...(rateLimited
       ? {
           rateLimit: {
@@ -68,7 +52,6 @@ const runnableAuth = async ({ rateLimited = false } = {}) => {
   });
 };
 
-/** The `Cookie` header a browser would send back after this sign-in. */
 const sessionCookie = (response: Response): string =>
   response.headers
     .getSetCookie()
@@ -81,11 +64,6 @@ const INVITEE = {
   name: "Robin",
 };
 
-/**
- * The cookie-domain contract is asserted against the composed better-auth
- * options, not just the helper that builds the fragment, so the wiring in
- * `auth.ts` is covered end to end.
- */
 describe("better-auth cookie configuration", () => {
   beforeEach(() => {
     vi.resetModules();
@@ -119,15 +97,6 @@ describe("better-auth cookie configuration", () => {
   });
 });
 
-/**
- * Requiring an invitation to sign up (#550, ADR-0019) is asserted first
- * against the composed options — the wiring in `auth.ts` — and then against
- * the library itself, run on an in-memory database with those same options.
- * The second half is the confirmation the ADR asks for rather than assumes:
- * `disableSignUp` closes the public sign-up endpoint and nothing else, so an
- * upgrade of the library that moved the fence would fail here. How the
- * variable's spellings parse is `sign-up.test.ts`'s, at the HTTP seam.
- */
 describe("REQUIRE_INVITATION_TO_SIGN_UP", () => {
   beforeEach(() => {
     vi.resetModules();
@@ -171,9 +140,6 @@ describe("REQUIRE_INVITATION_TO_SIGN_UP", () => {
       });
     });
 
-    // The invitation-link redemption route and the first-boot seed both mint
-    // accounts this way — headerless, so no admin session is involved — and
-    // the account they mint must be a normal credential account afterwards.
     it("still creates an account through the administrative API, signs it in, and lets it change its password", async () => {
       const auth = await runnableAuth();
 
@@ -239,13 +205,6 @@ describe("REQUIRE_INVITATION_TO_SIGN_UP", () => {
   });
 });
 
-/**
- * `/get-session`'s bound (#1761). The composed options run for real with the
- * limiter switched on, because the failure this guards against was a page
- * reload getting a 429: the path is read on every load and again whenever a
- * tab regains focus. A reload's handful of reads must pass; a client that
- * never stops must still be cut off.
- */
 describe("/get-session rate limit", () => {
   beforeEach(() => {
     vi.resetModules();
@@ -274,8 +233,6 @@ describe("/get-session rate limit", () => {
   it("never rate-limits a normal round of page reloads", async () => {
     const auth = await runnableAuth({ rateLimited: true });
 
-    // 40 reloads, each reading the session three times: more than a person
-    // switching tabs produces in a minute, and still nowhere near the bound.
     for (let i = 0; i < 120; i++) {
       expect(await readSession(auth)).toBe(200);
     }
@@ -297,7 +254,6 @@ describe("User timezone", () => {
     process.env.FRONTEND_URL = "http://localhost:3001";
     process.env.BETTER_AUTH_SECRET = "a-test-secret-that-is-at-least-32-chars";
     delete process.env.AUTH_COOKIE_DOMAIN;
-    // These tests mint their accounts through public sign-up.
     process.env.REQUIRE_INVITATION_TO_SIGN_UP = "false";
   });
 
@@ -351,11 +307,6 @@ describe("User timezone", () => {
   });
 });
 
-/**
- * A `BACKEND_URL` served under a prefix a reverse proxy strips (#1810): the
- * server hands better-auth the browser-facing path, so better-auth must route
- * on `<prefix>/auth` and build its links with the prefix in them.
- */
 describe("a path-prefixed BACKEND_URL", () => {
   beforeEach(() => {
     vi.resetModules();

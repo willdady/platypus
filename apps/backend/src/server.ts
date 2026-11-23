@@ -51,52 +51,22 @@ import { runRegistry } from "./runs/run-registry.ts";
 import type { OrgScope, WorkspaceScope } from "./scope.ts";
 import { env } from "./env.ts";
 
-/**
- * Organization membership type inferred from the database schema.
- * Represents a user's membership and role within an organization.
- */
 export type OrganizationMembership = typeof organizationMember.$inferSelect;
 
-/**
- * Organization membership with super admin flag.
- * Used when a super admin accesses an organization (bypasses normal membership checks).
- */
 export type SuperAdminOrgMembership = {
   role: "admin";
   isSuperAdmin: true;
 };
 
-/**
- * Valid organization roles.
- * - admin: Can manage the organization and all workspaces within it
- * - member: Regular member who creates and owns their own workspaces
- */
 export type { OrgRole } from "@platypus/schemas";
 
-/**
- * Hono context variables available throughout the request lifecycle.
- * These are set by various middleware functions and can be accessed in route handlers.
- */
 export type Variables = {
-  /** Authenticated user from session (set by requireAuth middleware) */
   user?: typeof auth.$Infer.Session.user;
 
-  /**
-   * Organization membership data (set by requireOrgAccess middleware).
-   * Can be either regular membership or super admin membership.
-   */
   orgMembership?: OrganizationMembership | SuperAdminOrgMembership;
 
-  /**
-   * Organization-level scope (set by requireOrgAccess middleware).
-   * Extends UserScope with orgId.
-   */
   orgScope?: OrgScope;
 
-  /**
-   * Workspace-level scope (set by requireWorkspaceAccess middleware).
-   * Extends OrgScope with workspaceId and isWorkspaceOwner.
-   */
   workspaceScope?: WorkspaceScope;
 };
 
@@ -106,7 +76,7 @@ app.use(
   "/*",
   cors({
     origin: env().ALLOWED_ORIGINS,
-    credentials: true, // Important for cookies
+    credentials: true,
   }),
 );
 
@@ -120,9 +90,6 @@ app.use("*", async (c, next) => {
     status: c.res.status,
     duration: `${ms}ms`,
   };
-  // `/health` is polled by the image's health check every 30s — at `info` it
-  // would be half the log. It says nothing a probe run says; `debug` keeps it
-  // for the moment it is actually asked about.
   if (c.req.path === "/health") {
     logger.debug(fields, "Request processed");
   } else {
@@ -130,16 +97,10 @@ app.use("*", async (c, next) => {
   }
 });
 
-// Auth routes - must be before the db middleware. Requests arrive at `/auth/*`
-// (a prefix-stripping proxy, or the frontend's internal URL), but better-auth
-// routes on the browser-facing path, which carries any `BACKEND_URL` prefix.
 const authPath = new URL(authBaseUrl()).pathname;
 app.on(["POST", "GET"], "/auth/*", (c) => {
   const url = new URL(c.req.url);
   url.pathname = authPath + url.pathname.slice("/auth".length);
-  // Fields copied one by one: under @hono/node-server `c.req.raw` is not a real
-  // Request, and passing it as the init makes undici call its `duplex` getter on
-  // it, which throws "Illegal invocation" from Node 26.13.
   const raw = c.req.raw;
   return auth.handler(
     new Request(url, {
@@ -152,19 +113,8 @@ app.on(["POST", "GET"], "/auth/*", (c) => {
   );
 });
 
-// Liveness only: `ok` says the process is up and serving, nothing about the
-// database a probe that walks away from a dead pool would not learn from the
-// orchestrator's restart. `/ready` is the one that asks the database.
 app.get("/health", (c) => c.json({ status: "ok" }));
-// Readiness: the backend answers traffic only when it could actually serve a
-// request — Postgres answered within the probe's patience, and the process is
-// not draining for shutdown (once the drain starts, new runs are refused, so
-// a load balancer should stop sending them here). `/health` stays up while
-// `/ready` is 503, so an orchestrator replacing this pod doesn't also tear
-// down its liveness.
 app.get("/ready", async (c) => {
-  // 503 answers carry the `error` key like every other failure (ADR-0010);
-  // an orchestrator reads the status line, a human reads the body.
   if (runRegistry.stopping) {
     return c.json({ error: "Server is shutting down" }, 503);
   }
@@ -173,16 +123,8 @@ app.get("/ready", async (c) => {
     ? c.json({ status: "ready" })
     : c.json({ error: "Database unavailable" }, 503);
 });
-// Whether public sign-up is open. Unauthenticated (#550, ADR-0019): the one
-// authority the frontend reads to decide whether to offer Sign up, so a second
-// frontend-side variable that could disagree with the backend never exists. It
-// discloses nothing an anonymous caller could not learn by trying to sign up.
 app.get("/sign-up", (c) => c.json({ open: !requireInvitationToSignUp() }));
 
-// Callers that are not a browser session (ADR-0030, ADR-0032). Outside
-// `/organizations/...` so an Operator can expose `/hooks/*` or `/a2a/*` alone;
-// every route under them authenticates its own bearer token, or none, and
-// reads no session.
 app.route("/hooks", hooks);
 app.route("/a2a", a2a);
 app.route("/files", files);
@@ -210,8 +152,6 @@ app.route(
 );
 app.route("/organizations/:orgId/workspaces/:workspaceId/tools", tool);
 app.route("/organizations/:orgId/workspaces/:workspaceId/triggers", trigger);
-// Runs are addressed at Workspace scope, not under their Trigger: the list
-// mixes every Trigger in the Workspace and filters down to one.
 app.route(
   "/organizations/:orgId/workspaces/:workspaceId/trigger-runs",
   triggerRun,
@@ -233,25 +173,13 @@ app.route("/organizations/:orgId/members", member);
 app.route("/users/me/invitations", userInvitation);
 app.route("/users/me/contexts", context);
 app.route("/oauth/mcp/callback", mcpOauthCallback);
-// Read-only, deployment-wide plugin catalog (ADR-0013), backing the Org-Admin
-// "Installed plugins" view (#295). Org-scoped for access control only — the
-// payload is identical across orgs; the handler gates it to Org Admins.
 app.route("/organizations/:orgId/plugins", plugins);
-// Read-only, deployment-wide Web-search backend catalog (ADR-0014), backing the
-// `searchSource` selector on the Provider form. Org-scoped for the same reason as
-// `plugins` above — and org-scoped rather than workspace-scoped because a
-// Provider can be org-scoped (ADR-0007) while a sandbox cannot. See the route.
 app.route("/organizations/:orgId/web-backends", webBackends);
 app.route("/organizations/:orgId/sandbox-backends", sandboxBackends);
 
 app.notFound((c) => c.json({ error: "Not Found" }, 404));
 
-// Central error seam (ADR-0010): typed domain errors and Postgres unique
-// violations map to their HTTP status here, so routes throw instead of
-// hand-rolling `c.json({ error }, status)` for these cross-cutting modes.
-// Anything unmapped is an unexpected fault → 500.
 app.onError((error, c) => {
-  // Hono's own 4xx, e.g. the validator's "Malformed JSON in request body".
   if (error instanceof HTTPException && error.status < 500) {
     return c.json({ error: error.message }, error.status);
   }

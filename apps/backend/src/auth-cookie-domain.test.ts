@@ -6,26 +6,14 @@ import {
 } from "./auth-cookie-domain.ts";
 import { logger } from "./logger.ts";
 
-/**
- * Narrows a result to its failure branch, so each test can assert on the
- * message without repeating the `valid` guard.
- */
 const expectInvalid = (result: ReturnType<typeof checkAuthTopology>) => {
   expect(result.valid).toBe(false);
   if (result.valid) throw new Error("expected the topology to be rejected");
   return result.message;
 };
 
-/**
- * The backend and frontend host relationship decides whether server-rendered
- * requests can be authenticated at all. The pure check is covered row by row
- * against the table in the issue; the env-reading wrapper is covered separately
- * so the fatal path is exercised without booting a server.
- */
 describe("checkAuthTopology", () => {
   it("starts when both origins share a host and no cookie domain is set", () => {
-    // The default compose topology: same host, different ports. Cookies ignore
-    // ports, so nothing more is needed.
     const result = checkAuthTopology(
       "http://localhost:4000",
       "http://localhost:3001",
@@ -114,8 +102,6 @@ describe("checkAuthTopology", () => {
   });
 
   it("rejects a leading-dot cookie domain", () => {
-    // The variable takes a bare domain. Accepting the legacy dotted form would
-    // leave two spellings of the same value in circulation.
     const result = checkAuthTopology(
       "https://api.example.com",
       "https://app.example.com",
@@ -128,9 +114,6 @@ describe("checkAuthTopology", () => {
   });
 
   it("rejects a cookie domain given as a URL, saying so", () => {
-    // Without this the value falls through to the suffix check and is refused
-    // as "not a parent domain of both", which sends the Operator hunting the
-    // wrong rule.
     const result = checkAuthTopology(
       "https://api.example.com",
       "https://app.example.com",
@@ -197,8 +180,6 @@ describe("checkAuthTopology", () => {
   });
 
   it("refuses a backend URL it cannot read a hostname from", () => {
-    // Neither hostname can be compared, so the topology is unjudgeable and the
-    // same refusal applies. The message names only the variable at fault.
     const result = checkAuthTopology(
       "api.example.com",
       "https://app.example.com",
@@ -234,7 +215,6 @@ describe("checkAuthTopology", () => {
 
 describe("crossSubdomainCookieConfig", () => {
   it("adds nothing when no cookie domain is set", () => {
-    // The single-origin deployment must see exactly today's configuration.
     const config = crossSubdomainCookieConfig(undefined);
 
     expect(config).toEqual({});
@@ -274,10 +254,6 @@ describe("resolveAuthCookieDomain", () => {
     expect(resolveAuthCookieDomain()).toBe("example.com");
   });
 
-  /**
-   * Runs `resolveAuthCookieDomain` with `process.exit` captured, so the fatal
-   * path can be asserted without ending the test process.
-   */
   const refuseToStart = (): { message: string } => {
     const exit = vi
       .spyOn(process, "exit")

@@ -11,7 +11,6 @@ import { MockLanguageModelV4 } from "ai/test";
 import { logger } from "./logger.ts";
 import { installProviderWarningLogger } from "./provider-warnings.ts";
 
-/** Call the hook the way the SDK does, through the global it reads. */
 const emit = (options: {
   warnings: Warning[];
   provider?: string;
@@ -24,7 +23,6 @@ const emit = (options: {
   log(options);
 };
 
-/** The `(fields, message)` pair of the nth `logger.warn` call. */
 const warnCall = (index: number) => {
   const call = vi.mocked(logger.warn).mock.calls[index] as unknown as [
     Record<string, unknown>,
@@ -195,13 +193,6 @@ describe("installProviderWarningLogger", () => {
   });
 });
 
-/**
- * The wiring, driven through the SDK rather than through the global directly.
- *
- * This is what makes "install it once and every call site is covered" a claim
- * the suite checks: the model here is a stand-in for any Provider, and nothing
- * in the calling code mentions warnings.
- */
 describe("warnings raised by a generation", () => {
   const usage = {
     inputTokens: {
@@ -275,10 +266,6 @@ describe("warnings raised by a generation", () => {
     expect(logger.warn).not.toHaveBeenCalled();
   });
 
-  // The same construction a sub-agent run uses: a `ToolLoopAgent` streamed to
-  // completion. Warnings arrive on a stream part rather than a result object
-  // here, which is the case a per-call-site read of `warnings` would have had
-  // to handle separately.
   it("reaches the log from a sub-agent's streamed run", async () => {
     const subAgent = new ToolLoopAgent({
       model: model([
