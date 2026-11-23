@@ -30,7 +30,6 @@ describe("@platypus/tools-basic plugin manifest", () => {
       "convertVolume",
     ]);
 
-    // A factory, so getCurrentTime reports in the acting User's timezone
     expect(typeof time.tools).toBe("function");
 
     expect(typeof identifiers.tools).not.toBe("function");
@@ -44,7 +43,6 @@ describe("@platypus/tools-basic plugin manifest", () => {
     const time = (plugin.contributes.toolSets ?? []).find(
       (t) => t.id === "time",
     )!;
-    // The plugin argument goes unread by core's own factories
     const factory = time.tools as (ctx: ToolSetContext) => Record<string, Tool>;
     const tools = factory({
       workspaceId: "ws",

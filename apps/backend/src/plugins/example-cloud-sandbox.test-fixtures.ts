@@ -9,21 +9,6 @@ import { PLUGIN_API_VERSION } from "@platypuschat/plugin-sdk";
 import { tool } from "ai";
 import { z } from "zod";
 
-// Test-only fixture for the deploy-time plugin-config + shared-credential
-// mechanics of ADR-0013, exercised through the loader. It is NOT a core plugin
-// (absent from the allowlist in `builtin.ts`) and is NOT listed in any default
-// `PLATYPUS_PLUGINS`, so it never loads in a real deployment.
-//
-// It mimics a hosted-sandbox vendor ("Daytona"-style): the Operator supplies
-// one deploy-time credential block (an API token) plus non-secret config (a
-// region). Core validates them at boot against the plugin-level schemas below
-// and injects the single resolved block into BOTH contributions — the Sandbox
-// backend and the management Tool set — proving one credential block is shared
-// across every contribution and every tenant (deployment-wide).
-
-// Plugin-level deploy-time schemas (separate from the per-Workspace Sandbox
-// config/credentials the SandboxBackendContribution declares). `config` is
-// non-secret shape; `credentials` is secret material shared across tenants.
 const examplePluginConfigSchema = z
   .object({ region: z.string().min(1).default("us") })
   .strict();
@@ -38,10 +23,6 @@ type ExamplePluginContext = PluginConfigContext<
   ExampleCredentials
 >;
 
-// A stub Sandbox backend that closes over the shared deploy-time credentials.
-// A real adapter would use `apiToken` to authenticate every provisioning call
-// to the vendor API; here it only records what it was handed so tests can
-// assert the shared block reached it.
 class ExampleSandboxBackend implements SandboxBackend {
   readonly apiToken: string;
   readonly region: string;
@@ -77,9 +58,6 @@ class ExampleSandboxBackend implements SandboxBackend {
   }
 }
 
-// Contribution 1 — a Sandbox backend. Its create() ignores the per-Workspace
-// config/credentials (an empty schema here) and instead authenticates with the
-// deploy-time plugin credentials handed in as the third argument.
 const exampleSandboxBackend: SandboxBackendContribution<
   unknown,
   unknown,
@@ -93,8 +71,6 @@ const exampleSandboxBackend: SandboxBackendContribution<
   create: (_config, _credentials, plugin) => new ExampleSandboxBackend(plugin),
 };
 
-// Contribution 2 — a management Tool set. Its factory reads the SAME shared
-// credential block (the second argument) to talk to the vendor's control API.
 const exampleManagementToolSet: ToolSetContribution<
   ExampleConfig,
   ExampleCredentials
@@ -109,7 +85,6 @@ const exampleManagementToolSet: ToolSetContribution<
       listSandboxes: tool({
         description: "List sandboxes in the configured region",
         inputSchema: z.object({}),
-        // A real tool would call the vendor API with `credentials.apiToken`.
         execute: () =>
           Promise.resolve(
             `Listing sandboxes in ${config.region} (token ${credentials.apiToken.slice(0, 3)}…)`,
@@ -120,11 +95,6 @@ const exampleManagementToolSet: ToolSetContribution<
 };
 
 export const plugin: PlatypusPlugin<ExampleConfig, ExampleCredentials> = {
-  // A third-party manifest name is a url-safe slug of at most 24 characters (it
-  // becomes the contribution-id prefix, and the namespace on every tool name
-  // this plugin contributes), distinct from the npm package specifier an
-  // Operator would list in PLATYPUS_PLUGINS. See PlatypusPlugin.name in
-  // @platypuschat/plugin-sdk.
   name: "example-cloud-sandbox",
   version: "0.1.0",
   apiVersion: PLUGIN_API_VERSION,
