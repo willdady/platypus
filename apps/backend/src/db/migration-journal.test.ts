@@ -10,19 +10,7 @@ const journal = JSON.parse(
   ),
 ) as { entries: JournalEntry[] };
 
-/**
- * Drizzle's migrator reads the newest `created_at` recorded in the database
- * once, then applies only the journal entries whose `when` is later than it.
- * A migration generated on a branch before an earlier-numbered one merged
- * carries an older `when`, and every database that already ran the newer
- * neighbour skips it for good — which is how 3.7.0 shipped a backend selecting
- * two `skill` columns that 3.6.0 upgraders never received (0065, re-applied by
- * 0068). Fresh databases apply everything, so nothing local ever notices.
- *
- * Entries listed here are the ones that already shipped out of order; each
- * names the migration that re-applies it. Nothing may be added to this list —
- * regenerate the migration on a branch rebased onto `main` instead.
- */
+// why: shipped out of order; never add here, regenerate the migration on a rebased branch
 const shippedOutOfOrder: Record<string, string> = {
   "0065_sparkling_frightful_four": "0068_reapply_skill_invocation_columns",
 };

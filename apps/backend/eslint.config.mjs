@@ -33,11 +33,6 @@ const noComments = {
   },
 };
 
-/**
- * Route tests still on the chainable `mockDb`, which ignores every `WHERE` and
- * answers queries in call order (#1621). Migrate a file to `seedDb()` and
- * delete it here; never add one.
- */
 const POSITIONAL_DB_ROUTE_TESTS = [
   "src/routes/a2a.test.ts",
   "src/routes/attachment.test.ts",
@@ -68,7 +63,6 @@ const POSITIONAL_DB_ROUTE_TESTS = [
 ];
 
 const eslintConfig = defineConfig([
-  // Generated migration artifacts and build/cache output are not source.
   globalIgnores(["drizzle/**", ".turbo/**", "dist/**"]),
 
   ...baseConfig(import.meta.dirname),
@@ -82,9 +76,6 @@ const eslintConfig = defineConfig([
   },
 
   {
-    // A route test seeds rows with `seedDb()`, so a query that dropped its
-    // filter reads the wrong row and fails, rather than stubbing results in
-    // the order the route happens to query.
     files: ["src/routes/**/*.test.ts"],
     ignores: POSITIONAL_DB_ROUTE_TESTS,
     rules: {
@@ -105,9 +96,6 @@ const eslintConfig = defineConfig([
   },
 
   {
-    // The production tsconfig excludes these (they type-check without
-    // `noUncheckedIndexedAccess`), so the project service would find no
-    // project for them. Point them at the test tsconfig instead.
     files: [
       "**/*.test.ts",
       "**/*.test-fixtures.ts",

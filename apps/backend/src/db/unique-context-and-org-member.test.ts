@@ -5,11 +5,6 @@ import {
   migratedPglite,
 } from "./migrated-pglite.test-fixtures.ts";
 
-/**
- * One global Context per user and one membership per Organization (#1130),
- * run for real: duplicates the old constraints let through are seeded, then
- * the migration that closes the gap is applied over them.
- */
 const MIGRATION = "0076_unique_context_and_org_member";
 
 let pg: PGlite;

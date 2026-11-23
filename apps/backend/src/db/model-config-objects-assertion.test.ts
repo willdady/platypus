@@ -2,10 +2,6 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { readFileSync } from "node:fs";
 import { PGlite } from "@electric-sql/pglite";
 
-/**
- * 0101 refuses a Provider row the earlier backfills did not resolve, so the
- * backend never reads a `modelIds` shape its schema no longer has.
- */
 const migration = readFileSync(
   new URL("../../drizzle/0101_assert_model_configs.sql", import.meta.url),
   "utf8",

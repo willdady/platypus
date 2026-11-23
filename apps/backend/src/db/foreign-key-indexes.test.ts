@@ -2,13 +2,6 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import type { PGlite } from "@electric-sql/pglite";
 import { migratedPglite } from "./migrated-pglite.test-fixtures.ts";
 
-/**
- * A parent delete has to find its referencing rows to cascade, set null or
- * restrict, and without an index on the referencing columns that is a scan of
- * the whole child table per deleted parent (#1139). Pinned against the shipped
- * migrations, so a new unindexed foreign key fails here rather than in a slow
- * production delete.
- */
 let pg: PGlite;
 beforeAll(async () => {
   pg = await migratedPglite();

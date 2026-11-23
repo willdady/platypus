@@ -1,4 +1,4 @@
-// First: validates the environment before any module below reads it.
+// why: first import: it parses the environment before any later module reads it
 import { failStartup } from "./src/boot-env.ts";
 import { serve } from "@hono/node-server";
 import app from "./src/server.ts";
@@ -14,7 +14,7 @@ import {
 import { startMemoryScheduler } from "./src/jobs/memory-scheduler.ts";
 import { startScheduler } from "./src/jobs/scheduler.ts";
 import { startNotificationListener } from "./src/runs/notify-listener.ts";
-// Register the channels the listener LISTENs on.
+// why: side-effect imports register the channels the notification listener LISTENs on
 import "./src/runs/run-cancel.ts";
 import "./src/services/a2a-events.ts";
 import {
@@ -33,14 +33,6 @@ import { getStorage } from "./src/storage/index.ts";
 
 const { PORT } = env();
 
-/**
- * The production admin-User creator handed to the seed: the better-auth admin
- * plugin's create-user API, called in-process with no headers, which the
- * plugin treats as a trusted internal call needing no session. It hashes the
- * password and links a credential account exactly as public sign-up would,
- * without going through the public sign-up endpoint — so seeding works whether
- * or not `REQUIRE_INVITATION_TO_SIGN_UP` has closed it (#550, ADR-0019).
- */
 const createAdminUser: AdminCreateUser = async (input) => {
   const { user } = await auth.api.createUser({ body: input });
   return { id: user.id };
@@ -49,55 +41,29 @@ const createAdminUser: AdminCreateUser = async (input) => {
 const main = async () => {
   logger.info(`Serving on port: ${PORT}`);
 
-  // Before anything can generate: the AI SDK's warning hook is a process
-  // global, so this one call is what puts "the Provider ignored a setting you
-  // gave it" in the log for every generation path there is (#411).
   installProviderWarningLogger();
 
-  // A seed that cannot complete must not reach `serve()`: an HTTP server nobody
-  // can authenticate against reports healthy while being unusable (#369). Retry
-  // the transient failures, then exit non-zero so the orchestrator says so.
   let loadedPlugins: LoadPluginsResult;
   try {
-    // Fail loud before the database is touched: the run-rate breaker is the only
-    // ceiling on an Event Trigger's run rate against one entity, and a
-    // malformed setting must not silently become a default nobody chose.
     validateTriggerBreakerConfig();
-    // Same rule for the Inbound Trigger caps (ADR-0030): the concurrency and
-    // body caps are what bound what an outside caller can make this server do.
     validateInboundTriggerSettings();
-    // And for the A2A load cap (ADR-0032).
     validateA2aSettings();
-    // Build the storage backend now, so a backend that cannot be built stops
-    // boot instead of surfacing on the first upload (#1686). The `STORAGE_*`
-    // values themselves were already validated by `boot-env.ts`.
+    // why: builds the storage backend now, so a bad one stops boot rather than the first upload
     getStorage();
 
     await exponentialBackoff(async () => {
-      // Enable pgvector extension for embedding storage (needed before drizzle-kit push in dev)
       await db.execute(sql`CREATE EXTENSION IF NOT EXISTS vector`);
 
-      // Under an advisory lock: replicas booting together would otherwise
-      // race to seed, and the loser fail on the admin User the winner created.
       await seedFirstBootExclusively(db, db.$client, {
         createUser: createAdminUser,
       });
     });
 
-    // Load plugins before the HTTP server accepts traffic so their Tool set
-    // contributions are registered by the time Chat turns resolve tools. Fail-loud
-    // and all-or-nothing: a bad plugin aborts startup (ADR-0013). Outside the
-    // retry, since a bad plugin fails the same way every time, but inside this
-    // try so the fatal line names the plugin and the reason.
     loadedPlugins = await loadPlugins();
   } catch (error) {
     failStartup(error);
   }
 
-  // Enumerate each loaded plugin — version, origin, and the contributions it
-  // fills — so the boot log is a complete, auditable statement of what runs
-  // (ADR-0013 observability). Then hand the result to the registry, the single
-  // read-only source behind `GET /plugins` and the catalog annotations.
   for (const p of loadedPlugins.plugins) {
     logger.info(
       {
@@ -118,17 +84,8 @@ const main = async () => {
     fetch: app.fetch,
     port: PORT,
   });
-  // `serve` returns a union of Node server types; ours is the plain HTTP one.
   const httpServer = server as import("node:http").Server;
 
-  // A deploy or `docker stop` ends this process's runs as cancelled before it
-  // exits, so their Chats are free at once rather than once their heartbeat
-  // goes stale (#1297). The drain: no new work (the registry's stopping gate
-  // answers new runs 503; the scheduler timers and listeners below are stopped;
-  // the HTTP listener stops taking requests; idle keep-alive/SSE connections
-  // are dropped), the held runs write their ends, the server's in-flight
-  // requests are awaited, and the pool is ended last — all inside the drain
-  // budget, with a non-zero exit when the budget runs out (#1616).
   installShutdownHandlers({
     stopBackground: () => {
       stopMemoryScheduler();
@@ -142,18 +99,11 @@ const main = async () => {
       new Promise<void>((resolve) => httpServer.close(() => resolve())),
     endPool: () => pool.end(),
   });
-  // A stray rejection in a plugin timer must not die through Node's stderr
-  // path: log it fatal, cancel the held runs, and exit 1 after a short drain.
   installCrashHandlers();
 
-  // Start background jobs (safe for horizontal scaling). Each returns a stop
-  // handle so the shutdown above can clear its timer / listener.
   const stopMemoryScheduler = startMemoryScheduler();
   const stopScheduler = startScheduler();
-  // A cancel received by another instance reaches the runs held here, and an
-  // A2A Task's events reach the streams following it here.
   const stopNotificationListener = startNotificationListener();
-  // An A2A cancel that missed the run held here, as while listening resumed.
   const stopA2aWatcher = watchForCanceledA2aRuns();
 };
 
@@ -165,8 +115,6 @@ const exponentialBackoff = async <T>(
   try {
     return await fn();
   } catch (error) {
-    // A missing environment variable or input better-auth rejected fails the
-    // same way every time — retrying only delays the message the Operator needs.
     if (retries > 0 && !(error instanceof NonRetryableSeedError)) {
       logger.warn(
         { err: error },
@@ -181,5 +129,4 @@ const exponentialBackoff = async <T>(
 
 await main();
 
-// Needed for top-level await to work
 export {};

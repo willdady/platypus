@@ -9,11 +9,6 @@ import {
 import { createTimeTools } from "../../tools/time.ts";
 import { generateUuid, generateNanoId } from "../../tools/identifiers.ts";
 
-// First core plugin: pure utility Tool sets (math, time, identifiers). Grouped
-// by cohesion
-// per ADR-0013 (a capability gets its own plugin when an Operator would
-// plausibly want to deny it in isolation — utilities don't). Core ids stay
-// unprefixed, so every persisted `agent.toolSetIds` reference keeps working.
 export const plugin: PlatypusPlugin = {
   name: "@platypus/tools-basic",
   version: "0.1.0",
@@ -38,7 +33,6 @@ export const plugin: PlatypusPlugin = {
         category: "Utilities",
         description:
           "Tools for getting current time and converting between timezones",
-        // Core always fills `timezone` (required as of API v4)
         tools: ({ timezone }) => createTimeTools(timezone),
       },
       {

@@ -7,7 +7,6 @@ import {
   formatPath,
 } from "./zod-issues.ts";
 
-/** Run a real parse so the issue shapes can't drift from what zod produces. */
 const issuesFor = (schema: z.ZodType, value: unknown) => {
   const result = schema.safeParse(value);
   if (result.success) throw new Error("expected the parse to fail");
@@ -35,8 +34,6 @@ describe("flattenIssues", () => {
   });
 
   it("descends a union and reports the absolute path of the offending field", () => {
-    // The union sits at `[0]`; the offending field is `meta.at` inside the
-    // matching branch. Only the concatenation of the two is actionable.
     const schema = z.array(
       z.union([
         z.string(),
@@ -53,9 +50,6 @@ describe("flattenIssues", () => {
   });
 
   it("keeps the branch that got furthest and discards the rest of the search space", () => {
-    // A discriminated-ish union: the `b` branch fails immediately on `kind`,
-    // the `a` branch gets all the way down to `nested.value`. Reporting both
-    // is what buries the signal.
     const schema = z.union([
       z.object({
         kind: z.literal("a"),
@@ -73,9 +67,6 @@ describe("flattenIssues", () => {
   });
 
   it("merges equally-shallow alternatives into one issue naming every accepted type", () => {
-    // A `Date` against a JSON-value union fails all branches at the same path.
-    // Reporting only the first ("expected null") implies null was the sole
-    // option; reporting all six verbatim is six near-identical lines.
     const schema = z.object({
       at: z.union([z.null(), z.string(), z.number(), z.boolean()]),
     });
@@ -91,9 +82,6 @@ describe("flattenIssues", () => {
   });
 
   it("prefers the branch that objected least when two reach the same depth", () => {
-    // Both branches descend to `nested.at` and fail there, but the second also
-    // rejects the discriminator. The first is the shape the value was trying
-    // to be, so complaining about `kind` is noise.
     const schema = z.union([
       z.object({
         kind: z.literal("tool"),
@@ -145,9 +133,6 @@ describe("flattenIssues", () => {
   });
 
   it("keeps the union's own message when no branch reported anything", () => {
-    // Losing the last record that a field failed is the bug being fixed, so
-    // an unhelpful tree has to degrade to the union's own line, not to
-    // nothing.
     const flat = flattenIssues([
       {
         code: "invalid_union",
@@ -179,9 +164,6 @@ describe("flattenIssues", () => {
 
 describe("formatIssues", () => {
   it("descends a union so the line names the field that failed", () => {
-    // Rendering the raw tree gives `payload: Invalid input`, which names the
-    // union node and nothing a caller can act on. Every surface wants the
-    // descent, so it belongs here rather than at each call site.
     const schema = z.object({
       payload: z.union([
         z.object({
@@ -202,8 +184,6 @@ describe("formatIssues", () => {
   });
 
   it("renders an already-flattened list the same way", () => {
-    // The log serializer flattened before calling this. Flattening twice has
-    // to be identity, or moving the descent inside would have changed it.
     const schema = z.object({ rows: z.array(z.object({ at: z.string() })) });
     const issues = issuesFor(schema, { rows: [{ at: 1 }] });
 
@@ -250,8 +230,6 @@ describe("findIssues", () => {
   });
 
   it("reads issues even though zod makes them non-enumerable", () => {
-    // The bug this whole change exists for: `Object.keys(zodError)` omits
-    // `issues`, so anything enumeration-based finds nothing.
     const parsed = z.object({ body: z.string() }).safeParse({ body: 1 });
     const error = (parsed as { error: unknown }).error;
 

@@ -5,10 +5,6 @@ import {
   migratedPglite,
 } from "./migrated-pglite.test-fixtures.ts";
 
-/**
- * Chats no longer carry tags (#1873): the migration drops the column outright,
- * since the API is not public and the tags were model-generated.
- */
 const MIGRATION = "0104_drop_chat_tags";
 
 let pg: PGlite;

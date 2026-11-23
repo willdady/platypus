@@ -1,17 +1,6 @@
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { FileValidationError } from "./services/file-gate.ts";
 
-/**
- * Typed domain errors raised by services and route handlers for the
- * cross-cutting failure modes, mapped to HTTP status in a single Hono
- * `app.onError` (ADR-0010): a resource that does not exist, an
- * Organization-scoped (Shared) resource locked against Workspace-surface
- * mutation, and a unique- or foreign-key-constraint violation.
- * Route-specific 4xx responses (validation, sub-agent rules,
- * `findNonSharedReferences`) stay inline.
- */
-
-/** The requested resource does not exist (or is not visible here). → 404 */
 export class NotFoundError extends Error {
   constructor(message = "Not found") {
     super(message);
@@ -19,12 +8,6 @@ export class NotFoundError extends Error {
   }
 }
 
-/**
- * The resource exists but is locked against the attempted mutation — an
- * Organization-scoped (Shared) resource is a single source of truth edited only
- * on the Organization surface, so it is locked in every Workspace (ADR-0007).
- * → 403
- */
 export class LockedError extends Error {
   constructor(message = "This resource is managed at the organization level") {
     super(message);
@@ -32,14 +15,6 @@ export class LockedError extends Error {
   }
 }
 
-/**
- * The request is well-formed but asks for something the domain rejects — a
- * label the board does not have, an assignee who cannot work in this
- * Workspace. Raised by domain modules whose rules serve more than one surface
- * (the Kanban module serves both the HTTP routes and the Agent Tool set), so
- * the rule and its message live in one place instead of once per caller.
- * Surface-specific validation still answers inline. → 400
- */
 export class ValidationError extends Error {
   constructor(message: string) {
     super(message);
@@ -47,7 +22,6 @@ export class ValidationError extends Error {
   }
 }
 
-/** The operation conflicts with existing state (e.g. a duplicate name). → 409 */
 export class ConflictError extends Error {
   constructor(message = "This operation conflicts with an existing resource") {
     super(message);
@@ -55,10 +29,6 @@ export class ConflictError extends Error {
   }
 }
 
-/**
- * The server is draining for shutdown and will not take new work — a run
- * claimed after the stop signal. → 503
- */
 export class ServiceUnavailableError extends Error {
   constructor(message = "Server is shutting down") {
     super(message);
@@ -66,11 +36,6 @@ export class ServiceUnavailableError extends Error {
   }
 }
 
-/**
- * A system outside Platypus refused the request because its rate limit is
- * spent — GitHub, for a Skill install (ADR-0037). The message says when it
- * resets. → 429
- */
 export class RateLimitError extends Error {
   constructor(message: string) {
     super(message);
@@ -78,7 +43,6 @@ export class RateLimitError extends Error {
   }
 }
 
-/** The configured backend does not implement what was asked of it. → 501 */
 export class UnsupportedError extends Error {
   constructor(message: string) {
     super(message);
@@ -86,11 +50,6 @@ export class UnsupportedError extends Error {
   }
 }
 
-/**
- * A system outside Platypus failed what was asked of it — e.g. a Sandbox
- * adapter's `destroy()` rejected. The message may carry the upstream error.
- * → 502
- */
 export class UpstreamError extends Error {
   constructor(message: string) {
     super(message);
@@ -98,12 +57,6 @@ export class UpstreamError extends Error {
   }
 }
 
-/**
- * Detects a Postgres unique-constraint violation (SQLSTATE `23505`) across the
- * driver shapes we see — the code can surface on the error itself or on its
- * `cause`, and some drivers only expose it in the message text. Centralised
- * here so the previously-duplicated per-route copies all collapse to one.
- */
 export const isUniqueViolation = (error: unknown): boolean => {
   const e = error as
     | {
@@ -122,14 +75,6 @@ export const isUniqueViolation = (error: unknown): boolean => {
   );
 };
 
-/**
- * Detects a Postgres foreign-key violation (SQLSTATE `23503`) — a delete
- * refused by an `ON DELETE RESTRICT` reference, or a write naming a row that
- * does not exist. The code can surface on the error itself or on its `cause`.
- * The in-use delete guards name what still holds a row before the database is
- * asked; this is the backstop for a reference they do not check, or one that
- * lands between the check and the delete.
- */
 export const isForeignKeyViolation = (error: unknown): boolean => {
   const e = error as
     { code?: string; cause?: { code?: string } } | null | undefined;
@@ -137,11 +82,6 @@ export const isForeignKeyViolation = (error: unknown): boolean => {
   return e.code === "23503" || e.cause?.code === "23503";
 };
 
-/**
- * Maps a thrown error to its HTTP response, or returns `null` when the error is
- * not one of the cross-cutting modes (the caller then falls back to a 500). The
- * mapping lives in a pure function so it can be unit-tested without a request.
- */
 export const mapError = (
   error: unknown,
 ): {

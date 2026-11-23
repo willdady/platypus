@@ -5,11 +5,6 @@ import {
   migratedPglite,
 } from "./migrated-pglite.test-fixtures.ts";
 
-/**
- * The schedules→triggers rename left `schedule` in stored `agent.tool_set_ids`
- * (#1380); the migration rewrites it to `triggers` in place, without
- * duplicating it.
- */
 const MIGRATION = "0086_user_timezone_and_schedule_tool_set_rename";
 
 const seeded: Record<string, string[]> = {
