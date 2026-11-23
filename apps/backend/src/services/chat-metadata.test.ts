@@ -117,6 +117,9 @@ describe("generateChatMetadata", () => {
     expect(Object.keys(mockDb.select.mock.calls[0][0] as object)).not.toContain(
       "memorySnapshot",
     );
+    // The Active path is read once, and the shared readiness check hands the
+    // messages to the call rather than reading them again.
+    expect(mockLoadActivePath).toHaveBeenCalledTimes(1);
     // The Active path, not the Chat's Alternatives.
     expect(mockLoadActivePath).toHaveBeenCalledWith("chat-1", "leaf-1");
     const setArg = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
@@ -401,6 +404,32 @@ describe("generateChatMetadata", () => {
     expect(mockGenerateText).not.toHaveBeenCalled();
   });
 
+  it("decides there is nothing to title before resolving the provider", async () => {
+    const warn = vi.spyOn(logger, "warn");
+    stubReads({
+      chat: {
+        id: "chat-1",
+        title: "Untitled",
+        // An attachment-only message: no text to title from.
+        messages: [{ id: "m-1", role: "user", parts: [] }],
+      },
+      workspace: { id: "ws-1", taskModelProviderId: "unattached-provider" },
+      provider: null,
+    });
+
+    const result = await generateChatMetadata(params);
+
+    expect(result).toBeNull();
+    // Only the Chat read: with nothing to title there is no Workspace or
+    // Provider read, and no warning about a Provider that was never needed.
+    expect(mockDb.limit).toHaveBeenCalledTimes(1);
+    expect(warn).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.stringContaining("not visible in this workspace"),
+    );
+    warn.mockRestore();
+  });
+
   it("returns null when the chat does not exist", async () => {
     stubReads({ chat: undefined });
 
@@ -462,7 +491,7 @@ describe("generateChatMetadata", () => {
     stubReads({
       chat: { id: "chat-1", title: "Untitled", messages: [userMessage] },
       workspace: { id: "ws-1", taskModelProviderId: null },
-      provider: undefined,
+      provider: null,
     });
 
     const result = await generateChatMetadata(params);
@@ -477,7 +506,7 @@ describe("generateChatMetadata", () => {
     stubReads({
       chat: { id: "chat-1", title: "Untitled", messages: [userMessage] },
       workspace: { id: "ws-1", taskModelProviderId: "prov-override" },
-      provider: undefined,
+      provider: null,
     });
 
     await generateChatMetadata(params);
@@ -595,6 +624,20 @@ describe("startEarlyChatTitle", () => {
     expect(mockGenerateText).not.toHaveBeenCalled();
   });
 
+  it("leaves the last permitted attempt to the run's end", async () => {
+    // One failure left: spending it before the reply would leave no attempt
+    // carrying the reply, and every later turn short-circuits on the cap.
+    stubReads({
+      chat: { ...untitledChat, titleFailures: MAX_TITLE_FAILURES - 1 },
+      workspace: { id: "ws-1", taskModelProviderId: null },
+      provider,
+    });
+
+    await startEarlyChatTitle(params);
+
+    expect(mockGenerateText).not.toHaveBeenCalled();
+  });
+
   it("makes no early attempt when the provider has no task model configured", async () => {
     stubReads({
       chat: untitledChat,
@@ -611,7 +654,7 @@ describe("startEarlyChatTitle", () => {
     stubReads({
       chat: untitledChat,
       workspace: { id: "ws-1", taskModelProviderId: null },
-      provider: undefined,
+      provider: null,
     });
 
     await startEarlyChatTitle(params);

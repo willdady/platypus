@@ -140,20 +140,18 @@ const readTitleProvider = async (
 };
 
 /**
- * Titles a Chat already known to be Untitled, with a Provider already resolved:
- * reads the Active path, calls the task model, and writes the title guarded on
+ * Titles a Chat already known to be Untitled, with its Provider resolved and
+ * its Active path read: calls the task model and writes the title guarded on
  * the Chat still being Untitled.
  */
 const titleChat = async (args: {
   chat: TitleChat;
+  messages: PlatypusUIMessage[];
   provider: ProviderRow;
   workspaceId: string;
 }): Promise<{ id: string; title: string } | null> => {
-  const { chat, provider, workspaceId } = args;
+  const { chat, messages, provider, workspaceId } = args;
   const chatId = chat.id;
-
-  const { messages } = await loadActivePath(chat.id, chat.activeLeafId);
-  if (!hasUserText(messages)) return null;
 
   const taskModelId = pointerSettingModelId(provider.taskModelId);
   const model = openProvider(provider, { sessionId: chatId }).languageModel(
@@ -260,10 +258,11 @@ const titleChat = async (args: {
   return updateResult[0] ?? null;
 };
 
-/** A Chat ready to be titled, and the Provider that will title it. */
+/** A Chat ready to be titled, its Active path, and the Provider that will title it. */
 type ReadyTitle = {
   status: "ready";
   chat: TitleChat;
+  messages: PlatypusUIMessage[];
   provider: ProviderRow;
 };
 
@@ -278,11 +277,17 @@ type TitleReadiness =
 
 /**
  * The checks every title attempt makes first: the Chat still exists, is still
- * Untitled, has not used up its failures, and has a Provider to title with.
+ * Untitled, has not used up its failures, has a user message with text, and
+ * has a Provider to title with.
  *
  * Shared so the early and end-of-run attempts decide identically. The end-of-run
  * caller says why an invisible Provider skipped it; the early one stays quiet,
  * since the end-of-run attempt will say it.
+ *
+ * The user-text check comes before the Provider reads: a Chat with nothing to
+ * title is skipped silently, without resolving — or warning about — a Provider
+ * it never needed. The Active path read here is handed to `titleChat`, so the
+ * shared check costs one read rather than two.
  */
 const prepareTitle = async (
   params: GenerateChatMetadataParams,
@@ -298,6 +303,9 @@ const prepareTitle = async (
   if (chat.title !== UNTITLED_CHAT_TITLE) return { status: "skip" };
   if (chat.titleFailures >= MAX_TITLE_FAILURES) return { status: "skip" };
 
+  const { messages } = await loadActivePath(chat.id, chat.activeLeafId);
+  if (!hasUserText(messages)) return { status: "skip" };
+
   const titleProvider = await readTitleProvider(params);
   if (titleProvider.status === "no-workspace") return { status: "skip" };
   if (titleProvider.status === "invisible") {
@@ -307,7 +315,12 @@ const prepareTitle = async (
       fromOverride: titleProvider.fromOverride,
     };
   }
-  return { status: "ready", chat, provider: titleProvider.provider };
+  return {
+    status: "ready",
+    chat,
+    messages,
+    provider: titleProvider.provider,
+  };
 };
 
 /**
@@ -355,6 +368,7 @@ export const generateChatMetadata = async (
 
   return titleChat({
     chat: readiness.chat,
+    messages: readiness.messages,
     provider: readiness.provider,
     workspaceId: params.workspaceId,
   });
@@ -389,6 +403,12 @@ export const startEarlyChatTitle = async (
   if (readiness.status !== "ready") return;
   const { provider } = readiness;
 
+  // Leave the last permitted attempt to the end of the run. Spending it here
+  // would count a failure against a prompt without the reply, and with the cap
+  // reached every later turn short-circuits: a Chat that the run's own attempt
+  // would have titled from the reply would stay Untitled for good.
+  if (readiness.chat.titleFailures >= MAX_TITLE_FAILURES - 1) return;
+
   // A Provider with no task model configured has no title model to call: an
   // early attempt would be a doomed call, and would count a failure that the
   // end-of-run attempt is about to count again.
@@ -405,5 +425,10 @@ export const startEarlyChatTitle = async (
     return;
   }
 
-  await titleChat({ chat: readiness.chat, provider, workspaceId });
+  await titleChat({
+    chat: readiness.chat,
+    messages: readiness.messages,
+    provider,
+    workspaceId,
+  });
 };
