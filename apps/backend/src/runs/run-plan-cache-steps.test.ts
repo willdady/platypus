@@ -3,18 +3,6 @@ import type { ModelMessage } from "ai";
 import { createOverflowRecovery } from "./context-overflow-recovery.ts";
 import { buildModelInvocation, type RunPlan } from "./run-plan.ts";
 
-/**
- * The Bedrock cache point across a multi-step turn.
- *
- * `prepareStep`'s `messages` override carries forward: the SDK computes the
- * next step's input as `[...stepMessages, ...responseMessages]`, where
- * `stepMessages` is the override when one was returned. So whatever this
- * attaches on step one is still in the array on step two. These tests drive
- * `prepareStep` the way the SDK does and assert the point *moves* rather than
- * accumulating — a request may only carry so many checkpoints, so one per step
- * eventually fails the whole call.
- */
-
 const plan = (): RunPlan => ({
   model: "test-model",
   system: "system prompt",
@@ -35,17 +23,14 @@ const invocation = () =>
     }) => { messages: ModelMessage[] };
   };
 
-/** How many messages carry a Bedrock cache point. */
 const cachePointCount = (messages: ModelMessage[]): number =>
   messages.filter((m) => m.providerOptions?.amazonBedrock.cachePoint).length;
 
-/** Index of the messages carrying a cache point. */
 const cachePointIndexes = (messages: ModelMessage[]): number[] =>
   messages.flatMap((m, i) =>
     m.providerOptions?.amazonBedrock.cachePoint ? [i] : [],
   );
 
-/** Exactly what `ai` does between steps. */
 const nextStepMessages = (
   override: ModelMessage[],
   step: number,
@@ -68,7 +53,6 @@ describe("Bedrock cache point across steps", () => {
       });
 
       expect(cachePointCount(override)).toBe(1);
-      // ...and it is on the tail, not stranded behind it.
       expect(cachePointIndexes(override)).toEqual([override.length - 1]);
 
       messages = nextStepMessages(override, step);
@@ -91,7 +75,6 @@ describe("Bedrock cache point across steps", () => {
       stepNumber: 1,
     }).messages;
 
-    // The point that was on index 0 is gone; only the new tail carries one.
     expect(cachePointIndexes(second)).toEqual([second.length - 1]);
     expect(second[0].providerOptions?.amazonBedrock.cachePoint).toBeUndefined();
   });

@@ -14,14 +14,6 @@ import { ANSWER_STEP_INSTRUCTION } from "./answer-step.ts";
 import { logger } from "../logger.ts";
 import { createOverflowRecovery } from "./context-overflow-recovery.ts";
 
-/**
- * `buildModelInvocation` is the one seam every Drive shares (`drive.ts`), so
- * these tests lock the `prepareStep` wiring for Tool-result clearing
- * (ADR-0018 Notes, issue #524) and the trailing Bedrock cache point
- * (ADR-0020 Notes, issue #682) at the level every Drive inherits them from,
- * without a run around it.
- */
-
 const BASE_PLAN: Omit<RunPlan, "model" | "tools" | "maxSteps"> = {};
 
 const planOf = (overrides: Partial<RunPlan> = {}): RunPlan => ({
@@ -40,8 +32,6 @@ const toolResultMessages = (n: number, toolName = "read_url"): ModelMessage[] =>
         type: "tool-result" as const,
         toolCallId: `t${i}`,
         toolName,
-        // Any payload works now that the boundary is a count: the batch does
-        // not depend on bytes freed.
         output: {
           type: "text" as const,
           value: `content ${i} ${"x".repeat(5_000)}`,
@@ -50,7 +40,6 @@ const toolResultMessages = (n: number, toolName = "read_url"): ModelMessage[] =>
     ],
   }));
 
-/** `n` successful `fsWrite` calls, each an assistant call and its tool result. */
 const fsWriteMessages = (n: number): ModelMessage[] =>
   Array.from({ length: n }, (_, i): ModelMessage[] => [
     {
@@ -87,7 +76,6 @@ const invoke = (plan: RunPlan) =>
     overflowRecovery: createOverflowRecovery(),
   });
 
-/** The `prepareStep` override, as the SDK calls it. */
 type PrepareStep = (opts: {
   steps: Array<{ usage?: { inputTokens?: number } }>;
   stepNumber: number;
@@ -106,7 +94,6 @@ describe("buildModelInvocation prepareStep", () => {
     expect(last?.providerOptions).toEqual(BEDROCK_CACHE_POINT);
   });
 
-  // `initialOccupancy` already past threshold clears on the very first call.
   it("carries both Tool-result clearing and the cache point in the same pass", async () => {
     const prepareStep = prepareStepOf(
       planOf({ contextWindow: 100, initialOccupancy: 90 }),
@@ -147,9 +134,6 @@ describe("buildModelInvocation prepareStep", () => {
   );
 
   it("keeps clearing below the trigger when a reading on the Active path engaged", async () => {
-    // The gate flip-flop: the plan's latest reading is under the trigger, but
-    // an earlier reading on the path crossed it. Clearing must stay on rather
-    // than re-send every result for this turn.
     const prepareStep = prepareStepOf(
       planOf({
         contextWindow: 100,
@@ -173,8 +157,6 @@ describe("buildModelInvocation prepareStep", () => {
     expect(firstOutput.value).toBe(CLEARED_TOOL_RESULT_MARKER);
   });
 
-  // An MCP tool is clearable only when the turn resolved it read-only
-  // (ADR-0021); the plan is how that reaches the clearing pass.
   it.each([
     [new Set(["docs__search"]), true],
     [undefined, false],
@@ -201,8 +183,6 @@ describe("buildModelInvocation prepareStep", () => {
     const snapshot = messages.map((m) => ({ ...m, content: [...m.content] }));
     await prepareStep({ steps: [], stepNumber: 0, messages });
     expect(messages).toEqual(snapshot);
-    // Every original message object must be untouched — only the returned
-    // array's final entry is a clone carrying the cache point.
     expect(messages.every((m) => m.providerOptions === undefined)).toBe(true);
   });
 
@@ -233,11 +213,6 @@ describe("buildModelInvocation prepareStep", () => {
   });
 });
 
-/**
- * The Step ceiling's answer step (issue #1730), wired once here so every Drive
- * inherits it: the last permitted step is told to answer rather than having its
- * tools taken away.
- */
 describe("buildModelInvocation final-step instruction", () => {
   const isInstruction = (message: ModelMessage | undefined): boolean =>
     message?.role === "user" && message.content === ANSWER_STEP_INSTRUCTION;
@@ -266,9 +241,6 @@ describe("buildModelInvocation final-step instruction", () => {
     expect(isInstruction(out.messages?.at(-1))).toBe(true);
   });
 
-  // The instruction rides the same pass as clearing and the cache point, and
-  // the point has to end up after it: Bedrock's trailing point names the last
-  // message of the request, which is now the instruction.
   it("lands the Bedrock cache point on the instruction itself", async () => {
     const prepareStep = prepareStepOf(planOf({ maxSteps: 1 }));
     const out = await prepareStep({
@@ -282,9 +254,6 @@ describe("buildModelInvocation final-step instruction", () => {
     expect(last?.providerOptions).toEqual(BEDROCK_CACHE_POINT);
   });
 
-  // The point moves rather than accumulates: a conversation carrying one from
-  // an earlier step must end with exactly one point, on the instruction. A
-  // leftover mid-conversation point counts against Converse's checkpoint cap.
   it("strips an earlier cache point so only the instruction carries one", async () => {
     const cachePointOf = (message: ModelMessage | undefined) => {
       const bedrock = (
@@ -313,9 +282,6 @@ describe("buildModelInvocation final-step instruction", () => {
     expect(cachePointOf(out.messages![1])).toBeUndefined();
   });
 
-  // Deliberate: the tool set and tool choice are identical to every earlier
-  // step. Removing them would rewrite the cached `tools` prefix (ADR-0020) and
-  // on Bedrock drop every tool from a request whose history still holds calls.
   it("changes no tool on the last step, and sends the plan's tools through", async () => {
     const plan = planOf({
       maxSteps: 1,
@@ -327,8 +293,6 @@ describe("buildModelInvocation final-step instruction", () => {
       messages: [{ role: "user", content: "hi" }],
     });
 
-    // The override carries a conversation and nothing else, so there is no
-    // `activeTools`/`toolChoice` for the SDK to apply to this step.
     expect(Object.keys(out)).toEqual(["messages"]);
     expect(Object.keys(invoke(plan).tools)).toEqual(["probe"]);
   });
@@ -338,6 +302,15 @@ describe("buildModelInvocation request-level cache directive", () => {
   it("sends the Anthropic and OpenRouter ephemeral directives and no Bedrock namespace", () => {
     const invocation = invoke(planOf({}));
     expect(invocation.providerOptions).toEqual(REQUEST_LEVEL_CACHE_DIRECTIVE);
+  });
+});
+
+describe("buildModelInvocation generation settings", () => {
+  it("leaves a setting the plan never set off entirely", () => {
+    const invocation = invoke(planOf({ temperature: 0.2 }));
+    expect(invocation).toHaveProperty("temperature", 0.2);
+    expect(invocation).not.toHaveProperty("maxOutputTokens");
+    expect(invocation).not.toHaveProperty("topP");
   });
 });
 
@@ -357,11 +330,6 @@ describe("buildModelInvocation instructions", () => {
   });
 });
 
-/**
- * The evidence a later decision on summarising older steps rests on (issue
- * #1717): one structured line whenever a step's reading is at 0.8 of the
- * declared window and Tool-result clearing had nothing left to clear.
- */
 describe("buildModelInvocation context-pressure evidence", () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -424,7 +392,6 @@ describe("buildModelInvocation context-pressure evidence", () => {
     expect(evidenceLines(spy)).toEqual([]);
   });
 
-  // Tool-input clearing (issue #1722) counts as something left to clear.
   it("logs nothing when only write inputs were cleared", async () => {
     const spy = vi.spyOn(logger, "info");
     const prepareStep = prepareStepOf(planOf({ contextWindow: 100 }));

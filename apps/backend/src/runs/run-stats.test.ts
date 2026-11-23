@@ -9,13 +9,6 @@ import {
 } from "./run-stats.ts";
 import type { RunStats } from "./types.ts";
 
-/**
- * The two usage folds (issue #734): the streaming accumulator and the
- * non-streaming `generateText` equivalent must carry the cached-input
- * breakdown the same way, summed across steps and never written as a key
- * where the Provider reported no cache detail.
- */
-
 const step = (partial: Partial<RunStep> = {}): RunStep => ({
   toolCalls: [],
   ...partial,
@@ -91,7 +84,6 @@ describe("accumulateStepStats", () => {
       }),
     );
 
-    // A reported 0 is a measurement and is kept, but the sum is unchanged by it.
     expect(stats.cacheReadTokens).toBe(900);
   });
 
@@ -118,7 +110,6 @@ describe("accumulateStepStats", () => {
         },
       }),
     );
-    // A billing sum only grows: this step reports no cache detail at all.
     accumulateStepStats(
       stats,
       step({ usage: { inputTokens: 4_200, outputTokens: 70 } }),
@@ -126,6 +117,22 @@ describe("accumulateStepStats", () => {
 
     expect(stats.cacheReadTokens).toBe(700);
     expect(stats.cacheWriteTokens).toBe(100);
+  });
+
+  it("replaces contextOccupancy with the latest step's, clearing it when that step reports none", () => {
+    const stats: RunStats = {};
+    accumulateStepStats(
+      stats,
+      step({ usage: { inputTokens: 1_000, outputTokens: 30 } }),
+    );
+    accumulateStepStats(
+      stats,
+      step({ usage: { inputTokens: 4_200, outputTokens: 70 } }),
+    );
+    expect(stats.contextOccupancy).toBe(4_200);
+
+    accumulateStepStats(stats, step());
+    expect(stats.contextOccupancy).toBeUndefined();
   });
 });
 
@@ -142,7 +149,6 @@ describe("computeStats", () => {
 
     expect(stats.inputTokens).toBe(1_000);
     expect(stats.cacheReadTokens).toBe(900);
-    // A reported write of 0 is a measurement and is kept.
     expect(stats.cacheWriteTokens).toBe(0);
   });
 
@@ -154,6 +160,18 @@ describe("computeStats", () => {
 
     expect(stats.cacheReadTokens).toBeUndefined();
     expect(stats.cacheWriteTokens).toBeUndefined();
+  });
+
+  it("takes contextOccupancy from the final step only, never an earlier one", () => {
+    const stats = computeStats({
+      steps: [
+        { toolCalls: [], usage: { inputTokens: 1_000 } },
+        { toolCalls: [] },
+      ],
+      totalUsage: { inputTokens: 1_000, outputTokens: 30 },
+    });
+
+    expect(stats).not.toHaveProperty("contextOccupancy");
   });
 });
 
@@ -176,10 +194,6 @@ describe("pickCachedInput", () => {
   });
 });
 
-/**
- * A run's reported Token usage spans its delegated Sub-Agent runs (issue
- * #1634): the headline sums fold them in and `usageByModel` breaks them down.
- */
 describe("withDelegatedUsage", () => {
   const PARENT = { providerId: "p1", model: "big" };
   const own: RunStats = {
@@ -236,7 +250,6 @@ describe("withDelegatedUsage", () => {
     });
   });
 
-  // ADR-0018: occupancy is the parent's last call, never a delegate's.
   it("leaves contextOccupancy as the run's own", () => {
     expect(
       withDelegatedUsage(own, PARENT, [

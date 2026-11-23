@@ -11,22 +11,12 @@ import {
 import { RUN_EVENT_ERROR_MAX_BYTES } from "@platypus/schemas";
 import { DELEGATE_TOOL_NAME } from "../tools/turn-tool-names.ts";
 
-/**
- * The recorder is the one place a Run event's shape is decided (ADR-0023):
- * what is captured, which clock each field reads, how an error is capped, and
- * when the ceiling cuts a timeline short. These tests pin those rules with
- * fake clocks; the drive and sink suites cover how events reach it and the
- * database.
- */
-
-/** Two controllable clocks: a settable wall clock and a monotonic one. */
 const clocks = () => {
   const state = { wall: 1_700_000_000_000, mono: 1000 };
   return {
     state,
     now: () => state.wall,
     monotonic: () => state.mono,
-    /** Advance both clocks together, the way real time passes. */
     tick: (ms: number) => {
       state.wall += ms;
       state.mono += ms;
@@ -78,14 +68,12 @@ describe("RunEventRecorder", () => {
     });
   });
 
-  // The two fields read different clocks on purpose: a start correlates with
-  // logs, a duration must survive the wall clock being adjusted mid-run.
   it("measures duration on the monotonic clock, so a wall-clock step back cannot make it negative", () => {
     const { recorder, c } = recorderOf();
 
     const id = recorder.open(null, { type: "text" });
     c.state.mono += 40;
-    c.state.wall -= 60_000; // NTP pulls the wall clock back a minute
+    c.state.wall -= 60_000;
     recorder.close(id!, { status: "completed" });
 
     expect(recorder.events[0].durationMs).toBe(40);
@@ -113,8 +101,6 @@ describe("RunEventRecorder", () => {
     expect(recorder.events[1].parentEventId).toBe("ev-1");
   });
 
-  // Two observers see one tool call — the stream's chunks and the tool's own
-  // execute wrapper — and neither knows which will get there first.
   it("opens and closes a keyed event exactly once however many times it is asked", () => {
     const { recorder, c } = recorderOf();
 
@@ -151,7 +137,7 @@ describe("RunEventRecorder", () => {
 
   it("stores a failed event's error capped and explicitly marked", () => {
     const { recorder } = recorderOf();
-    const long = "é".repeat(700); // 1400 bytes, 700 characters
+    const long = "é".repeat(700);
 
     const id = recorder.open(null, { type: "tool-call", toolName: "t" });
     recorder.close(id!, { status: "error", error: long });
@@ -162,8 +148,6 @@ describe("RunEventRecorder", () => {
     expect(Buffer.byteLength(stored.message, "utf8")).toBeLessThanOrEqual(
       RUN_EVENT_ERROR_MAX_BYTES,
     );
-    // Cut on a character boundary: the preview is whole characters, and
-    // serializing it cannot produce a lone surrogate.
     expect(stored.message).toBe("é".repeat(512));
     const roundTripped = JSON.parse(
       JSON.stringify(recorder.events),
@@ -171,8 +155,6 @@ describe("RunEventRecorder", () => {
     expect(roundTripped[0].error?.message).toBe(stored.message);
   });
 
-  // The ceiling is a runaway guard. What matters is that hitting it is
-  // visible on the node whose children were lost, not only on the run.
   it("stops appending at the ceiling and marks the run and the open parent as truncated", () => {
     const { recorder } = recorderOf({ ceiling: 3 });
 
@@ -201,8 +183,6 @@ describe("RunEventRecorder", () => {
     c.tick(5);
     recorder.close(a!, { status: "completed" });
 
-    // An event opened and closed inside one flush window is inserted in its
-    // final state — never inserted running and then patched.
     const first = recorder.drain();
     expect(first.inserts.map((e) => [e.id, e.status])).toEqual([
       ["ev-1", "completed"],
@@ -297,8 +277,6 @@ describe("capRunEventError", () => {
   });
 
   it("never splits a multi-byte character at the cap", () => {
-    // 4-byte characters: 1024 is divisible by 4, so shift by one byte with an
-    // ASCII prefix and the cap lands mid-character unless the cut respects it.
     const message = "x" + "𝄞".repeat(300);
     const capped = capRunEventError(message);
 
@@ -421,7 +399,6 @@ describe("recordUiChunk", () => {
         durationMs: 250,
       }),
     ]);
-    // Neither the input nor the output survives anywhere on the event.
     expect(JSON.stringify(recorder.events)).not.toContain("secret things");
     expect(JSON.stringify(recorder.events)).not.toContain("xxxxx");
   });
@@ -455,7 +432,6 @@ describe("recordUiChunk", () => {
     });
     const delegateId = recorder.events[1].id;
     const child = { recorder, parentEventId: delegateId };
-    // The Sub-Agent reuses tool-call ids its parent already used.
     recordUiChunk(child, {
       type: "tool-input-start",
       toolCallId: "tc1",
@@ -543,8 +519,6 @@ describe("recordUiChunk", () => {
     });
   });
 
-  // The model produced an input the tool could not take: the call never ran,
-  // and that rejection is the failure the event records.
   it("records a tool call whose input was rejected as an error, never left running", () => {
     const { scope, recorder } = scopeOf();
 
