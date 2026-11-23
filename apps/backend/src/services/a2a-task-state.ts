@@ -23,62 +23,37 @@ import type { ChatStatus } from "@platypus/schemas";
 import { a2aTextPart, replyArtifact } from "./a2a-parts.ts";
 import type { A2aCaller } from "./a2a-task.ts";
 
-/**
- * An A2A Task as a client reads it (ADR-0032): the read model, which derives
- * a Task's status and records nothing. While its run is going, its state is
- * read from its Chat's run every time, so any backend instance answers alike.
- * When the run ends, how it ended is recorded on the Task, with the reply it
- * wrote: the Chat can move on to another turn, and its Owner can regenerate
- * or delete that reply, and the Task keeps what it was. Recording is the
- * lifecycle's (`a2a-task-lifecycle.ts`, ADR-0034), as is every read that
- * would record an end derived here.
- */
-
 export type TaskRow = typeof a2aTaskTable.$inferSelect;
 
-/**
- * The `contextId` a Task carries: the one its client minted, else its Chat's
- * id. `isTaskContext` is the same rule as a query.
- */
 export const taskContextId = (
   task: Pick<TaskRow, "chatId" | "contextId">,
 ): string => task.contextId ?? task.chatId;
 
-/** Matches the Tasks whose `taskContextId` is `contextId`. */
 export const isTaskContext = (contextId: string): SQL | undefined =>
   or(
     eq(a2aTaskTable.contextId, contextId),
     and(isNull(a2aTaskTable.contextId), eq(a2aTaskTable.chatId, contextId)),
   );
 
-/** Where a Task's rows are read and written: the database, or a transaction. */
 export type Executor = typeof db | Tx;
 
-/** A finished run's Chat status as the end a Task records. */
 export const END_OF_RUN: Partial<Record<RunStatus, A2aTaskEndState>> = {
   succeeded: "completed",
   failed: "failed",
   cancelled: "canceled",
 };
 
-/** A recorded end as a Task state. */
 const STATE_OF_END: Record<A2aTaskEndState, TaskState> = {
   completed: TaskState.TASK_STATE_COMPLETED,
   failed: TaskState.TASK_STATE_FAILED,
   canceled: TaskState.TASK_STATE_CANCELED,
 };
 
-/** The recorded end a Task state is, if it is one. */
 export const endStateOf = (state: TaskState): A2aTaskEndState | undefined =>
   (Object.keys(STATE_OF_END) as A2aTaskEndState[]).find(
     (end) => STATE_OF_END[end] === state,
   );
 
-/**
- * The reply the turn answering `messageId` wrote: the first assistant message
- * under it still in the Chat. A later one is a regenerate the Owner ran in
- * the UI.
- */
 export const firstReply = async (
   chatId: string,
   messageId: string,
@@ -100,19 +75,10 @@ export const firstReply = async (
   return reply?.id;
 };
 
-/**
- * Whether a Chat is an A2A client's, and so may hold A2A Tasks: it names the
- * endpoint that started it. `chat` is the Chat as read, or the columns a new
- * one starts with.
- */
 export const isA2aChat = (
   chat: { a2aEndpointId?: string | null } | undefined,
 ): boolean => !!chat?.a2aEndpointId;
 
-/**
- * The user message the Chat's current turn answers: its active leaf, or the
- * leaf's parent when the leaf is the reply.
- */
 export const currentTurnId = async (
   chatId: string,
   executor: Executor = db,
@@ -132,13 +98,6 @@ export const currentTurnId = async (
   return leaf.role === "assistant" ? (leaf.parentId ?? undefined) : chat.leafId;
 };
 
-/**
- * One of the Tasks `tokenId` started on `endpointId` (ADR-0032). A token
- * reaches only its own: another token's Task, on this endpoint or another,
- * answers as an unknown id does, so the caller learns nothing. A deleted
- * token's Tasks are reached by no one. A missing id is invalid params, not
- * an unknown Task.
- */
 export const findTokenTask = async (
   owner: { endpointId: string; tokenId: string },
   taskId: string,
@@ -159,7 +118,6 @@ export const findTokenTask = async (
   return task;
 };
 
-/** One of the Tasks the calling token started; any other is not found. */
 export const findA2aTask = (
   caller: A2aCaller,
   taskId: string,
@@ -169,31 +127,22 @@ export const findA2aTask = (
     taskId,
   );
 
-/** A Task's state, status timestamp and recorded reply, as `readTask` reads them. */
 export type TaskStatus = {
   state: TaskState;
   statusAt: Date;
   replyId: string | null;
 };
 
-/**
- * A Task's row with what its state is read from while its run is going: its
- * Chat's status and active leaf, and the first reply of its turn. Null where
- * the Chat is gone; the reply is read only for a Task with no end recorded.
- */
 export type TaskReading = TaskRow & {
   chatStatus: ChatStatus | null;
   leafId: string | null;
   firstReplyId: string | null;
 };
 
-/**
- * Tasks matching `where`, each read with its Chat and its turn's first reply
- * in the one query (see `firstReply`, which this reads the same way).
- */
 export const readTaskRows = async (
   where: SQL | undefined,
 ): Promise<TaskReading[]> => {
+  // why: the same first-reply rule as firstReply; change them together
   const reply = db
     .select({ id: chatMessage.id })
     .from(chatMessage)
@@ -222,25 +171,15 @@ export const readTaskRows = async (
     .where(where);
 };
 
-/** A Task with an end recorded, as its status. */
 export const recordedStatus = (task: TaskRow & { state: A2aTaskEndState }) => ({
   state: STATE_OF_END[task.state],
   statusAt: task.statusAt,
   replyId: task.replyId,
 });
 
-/** A Task's status as `deriveStatus` reads it. */
 export type DerivedStatus =
   { status: TaskStatus } | { unrecordedEnd: A2aTaskEndState };
 
-/**
- * A Task's status as its reading derives it, recording nothing: the end
- * recorded on it, or, while its turn's run is going, `submitted` until the
- * reply's first write and `working` after. A turn that has ended with no end
- * recorded — a Task made just as its run ended, or one whose run's end was
- * lost — derives the end it reached instead, for the lifecycle to record: until
- * it is, a regenerate or delete of its reply could change it.
- */
 export const deriveStatus = (task: TaskReading): DerivedStatus => {
   if (task.state) {
     return { status: recordedStatus({ ...task, state: task.state }) };
@@ -249,8 +188,6 @@ export const deriveStatus = (task: TaskReading): DerivedStatus => {
   const isThisTurn =
     task.leafId === task.messageId ||
     (replyId !== undefined && task.leafId === replyId);
-  // Moved past with no end recorded, which the end of its run and its first
-  // read both missed. Its reply, if any, is the best evidence of how it ended.
   if (!isThisTurn) return { unrecordedEnd: replyId ? "completed" : "failed" };
   if (task.chatStatus === "running") {
     return {
@@ -269,16 +206,12 @@ export const deriveStatus = (task: TaskReading): DerivedStatus => {
   };
 };
 
-/** A reply's parts, as stored. */
 type ReplyParts = { type: string; text?: string }[];
 
-/** Why a completed Task's reply was cut short, as `Task.metadata.stopReason`. */
 export type StopReason = "max_steps" | "output_limit";
 
-/** What a Task's recorded reply tells its client: its text, and if it was cut short, why. */
 export type RecordedReply = { text: string; stopReason?: StopReason };
 
-/** The cut-short marker a reply's metadata carries, as a stop reason. */
 const stopReasonOf = (metadata: unknown): StopReason | undefined => {
   const marked = (metadata ?? {}) as Pick<
     ChatMessageMetadata,
@@ -289,20 +222,12 @@ const stopReasonOf = (metadata: unknown): StopReason | undefined => {
   return undefined;
 };
 
-/** What the status message of a cut-short Task says, by why it was cut short. */
 const STOP_REASON_TEXT: Record<StopReason, string> = {
   max_steps: "Reply cut short at the step limit, so it may be incomplete.",
   output_limit:
     "Reply cut short at the model's output limit, so it may be incomplete.",
 };
 
-/**
- * Each completed Task's recorded reply still in its Chat, keyed by Task id,
- * in one query: its text, and why it was cut short, if it was. Read from the
- * reply the Task recorded, not the Chat's current leaf, so a regenerate in
- * the UI leaves the Task as it was. A Task whose reply the Owner deleted has
- * none. Without `withText`, the text is left unread, and empty.
- */
 export const recordedReplies = async (
   tasks: { id: string; chatId: string; status: TaskStatus }[],
   { withText }: { withText: boolean },
@@ -356,7 +281,6 @@ export const recordedReplies = async (
   return read;
 };
 
-/** The agent message a cut-short Task's status carries, saying why. */
 const stopMessage = (
   task: Pick<Task, "id" | "contextId">,
   replyId: string,
@@ -372,12 +296,6 @@ const stopMessage = (
   referenceTaskIds: [],
 });
 
-/**
- * The Task as the client reads it, from its status and, if completed, its
- * recorded reply: the reply's text is its artifact, and a reply cut short
- * adds a `stopReason` to its metadata and a status message saying so. A
- * completed Task whose reply the Owner has deleted has neither.
- */
 export const toTask = (
   task: TaskRow,
   { state, statusAt, replyId }: TaskStatus,
@@ -407,16 +325,10 @@ export const toTask = (
   return result;
 };
 
-/** The Chat of each Task `toTask` made, which a client-minted contextId is not. */
 const chatIds = new WeakMap<Task, string>();
 
-/** The id of the Chat a Task `toTask` made is in. */
 export const chatIdOf = (task: Task): string | undefined => chatIds.get(task);
 
-/**
- * A Task, read with `status`: then its recorded reply if it completed. One
- * query for the reply.
- */
 export const readWithStatus = async (
   task: TaskRow,
   status: TaskStatus,
@@ -427,19 +339,11 @@ export const readWithStatus = async (
   return toTask(task, status, replies.get(task.id));
 };
 
-/**
- * The reading of the Task's row as it is now. A Task gone since, deleted with
- * its Chat, is read from `task` with no Chat.
- */
 export const readingOf = async (task: TaskRow): Promise<TaskReading> => {
   const [reading] = await readTaskRows(eq(a2aTaskTable.id, task.id));
   return reading ?? bareReading(task);
 };
 
-/**
- * A Task's row as a reading with nothing read beside it: all a Task with an
- * end recorded needs, and all one whose Chat is gone has.
- */
 export const bareReading = (task: TaskRow): TaskReading => ({
   ...task,
   chatStatus: null,
@@ -447,18 +351,10 @@ export const bareReading = (task: TaskRow): TaskReading => ({
   firstReplyId: null,
 });
 
-/**
- * A Task whose end is recorded, as the client reads it, from its row alone
- * and one query for its reply.
- */
 export const readRecordedTask = (
   task: TaskRow & { state: A2aTaskEndState },
 ): Promise<Task> => readWithStatus(task, recordedStatus(task));
 
-/**
- * Whether the Task has ended: an end recorded on it, or one its reading
- * derives. One with an end recorded is read from `task`; any other, afresh.
- */
 export const taskHasEnded = async (task: TaskRow): Promise<boolean> => {
   if (task.state) return true;
   const derived = deriveStatus(await readingOf(task));
@@ -467,10 +363,6 @@ export const taskHasEnded = async (task: TaskRow): Promise<boolean> => {
   );
 };
 
-/**
- * One of the Tasks `tokenId` started on `endpointId`, as `findTokenTask` finds
- * it, read with its Chat and its turn's first reply in one query.
- */
 export const findTokenTaskReading = async (
   owner: { endpointId: string; tokenId: string },
   taskId: string,
@@ -493,15 +385,10 @@ export const TERMINAL_TASK_STATES = new Set([
   TaskState.TASK_STATE_CANCELED,
 ]);
 
-/**
- * A Task's status. Optional only in the protocol's generated type: every Task
- * this server builds carries one.
- */
 export const requireStatus = (task: Task): NonNullable<Task["status"]> => {
   if (!task.status) throw new Error(`Task '${task.id}' has no status`);
   return task.status;
 };
 
-/** Whether a Task has ended: completed, failed or canceled. */
 export const isTerminal = (task: Task): boolean =>
   TERMINAL_TASK_STATES.has(requireStatus(task).state);

@@ -10,36 +10,11 @@ import { currentTurnId, findA2aTask, type TaskRow } from "./a2a-task-state.ts";
 import { cancelTask, readTask } from "./a2a-task-lifecycle.ts";
 import { taskIsLive } from "./a2a-liveness.ts";
 
-/**
- * Cancelling A2A Tasks (ADR-0032). A cancel is recorded on its Task, by the
- * lifecycle's `cancelTask` (`a2a-task-lifecycle.ts`), before its run is
- * stopped, so every reader sees `canceled` at once, and the record
- * outlives the cancel message: a run the message missed, while its instance's
- * listener was reconnecting, is found from it by that instance's sweep.
- *
- * A run is its Chat's, keyed by the Chat's id, so a cancel is narrowed to the
- * run of its Task's turn: never the Chat's next turn, nor a regenerate the
- * Owner started after it.
- *
- * Cutting off a client's access cancels its running Tasks the same way: at
- * once for what an Org Admin or the Owner changes here, and at the next sweep
- * for what happens elsewhere — the Owner leaving the Organization or being
- * banned, or an endpoint deleted with its Agent.
- */
-
-/** How often each instance looks for canceled Tasks whose run it holds. */
 const SWEEP_MS = 5_000;
 
-/** Whether the Chat is still on `task`'s turn, so its run is the Task's. */
 const isCurrentTurn = async (task: Pick<TaskRow, "chatId" | "messageId">) =>
   (await currentTurnId(task.chatId)) === task.messageId;
 
-/**
- * `CancelTask`: one of this endpoint's Tasks, `canceled`, its run stopped on
- * whichever instance holds it. A Task whose run has already ended, though
- * its end was written a moment ago, is refused as not cancelable, keeps that
- * end, and nothing is stopped.
- */
 export const cancelA2aTask = async (
   caller: A2aCaller,
   taskId: string,
@@ -49,26 +24,18 @@ export const cancelA2aTask = async (
   return readTask(claimed);
 };
 
-/** Cancels each of `tasks` whose token or endpoint is no longer live. */
 const cancelRevoked = async (tasks: TaskRow[]): Promise<void> => {
   for (const task of tasks) {
     if (!(await taskIsLive(task))) await cancelTask(task);
   }
 };
 
-/**
- * Cancels the running Tasks of Chats started on `endpointIds` whose token or
- * endpoint is no longer live, after access to them was cut off: a token
- * deleted or regenerated, an endpoint disabled, deleted or revoked, or the
- * Org gate narrowed. Every other Task on them runs on. Found by Chat, whose
- * endpoint id outlives the endpoint. Never throws: the cut-off has happened,
- * and the sweep cancels anything missed here.
- */
 export const stopRevokedA2aWork = async (
   endpointIds: string[],
 ): Promise<void> => {
   if (endpointIds.length === 0) return;
   try {
+    // why: by the Chat, whose endpoint id outlives the endpoint; the Task's is nulled with it
     const running = await db
       .select()
       .from(a2aTaskTable)
@@ -88,12 +55,6 @@ export const stopRevokedA2aWork = async (
   }
 };
 
-/**
- * Cancels each run held here whose Task's token or endpoint is no longer
- * live. Catches what no change here announces: the Owner leaving the
- * Organization or being banned, an endpoint deleted with its Agent, or a
- * Task started just as its access was cut off.
- */
 export const stopRevokedA2aRuns = async (): Promise<void> => {
   const held = runRegistry.heldRuns();
   if (held.length === 0) return;
@@ -112,10 +73,6 @@ export const stopRevokedA2aRuns = async (): Promise<void> => {
   await cancelRevoked(running);
 };
 
-/**
- * Stops each run held here whose Task was canceled after the run started, and
- * is still that run's turn. Finds nothing while every cancel arrives.
- */
 export const stopCanceledA2aRuns = async (): Promise<void> => {
   const held = runRegistry.heldRuns();
   if (held.length === 0) return;
@@ -150,15 +107,6 @@ export const stopCanceledA2aRuns = async (): Promise<void> => {
   }
 };
 
-/**
- * Sweeps for canceled Tasks' runs, and revoked clients' runs, every few
- * seconds, for as long as the process runs. Returns a stop handle that clears
- * the interval, for a graceful shutdown.
- *
- * ponytail: a run's start and a cancel's moment come from different
- * instances' clocks. A regenerate of a canceled turn started within the skew
- * between them could be stopped too.
- */
 export const watchForCanceledA2aRuns = (): (() => void) => {
   const timer = setInterval(() => {
     stopCanceledA2aRuns().catch((error: unknown) =>

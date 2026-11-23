@@ -19,14 +19,6 @@ import {
 } from "../db/schema.ts";
 import type { Tx } from "../index.ts";
 
-/**
- * The A2A Task lifecycle (ADR-0034) against an in-process Postgres built from
- * the shipped migrations: every end is a conditional update, so they are what
- * is exercised. PGlite runs one transaction at a time, so these pin the
- * transactions' semantics in either order, not true concurrency. Pushes are
- * observed at `fetch`; whether the Task's client is still live, and the
- * cancel message to the run's instance, are beside the point and stubbed.
- */
 const { holder, mockCancelRun } = vi.hoisted(() => ({
   holder: { db: undefined as ReturnType<typeof drizzle> | undefined },
   mockCancelRun: vi.fn(),
@@ -50,7 +42,6 @@ let pg: PGlite;
 const fetchMock = vi.fn();
 beforeAll(async () => {
   pg = await migratedPglite();
-  // The endpoint, token and Workspace are beside the point; skip the FKs.
   await pg.exec("SET session_replication_role = replica");
   holder.db = drizzle(pg);
 }, 60_000);
@@ -65,8 +56,6 @@ beforeEach(async () => {
   vi.stubGlobal("fetch", fetchMock);
   mockCancelRun.mockReset();
   mockCancelRun.mockResolvedValue(undefined);
-  // A Chat running the turn answering `msg-1`, which has begun its reply, and
-  // that turn's Task with one push config owed.
   await pg.exec(`
     DELETE FROM "a2a_push_config";
     DELETE FROM "a2a_task";
@@ -90,7 +79,6 @@ afterEach(() => {
 
 const db = () => holder.db!;
 
-/** The Task's row as it is now. */
 const taskRow = async () => {
   const [row] = await db()
     .select()
@@ -99,7 +87,6 @@ const taskRow = async () => {
   return row;
 };
 
-/** Ends the Chat's run with `status`, as the sink's terminal write does. */
 const endRun = (status: "succeeded" | "failed" | "cancelled") =>
   db().transaction(async (tx) => {
     await tx.execute(
@@ -108,7 +95,6 @@ const endRun = (status: "succeeded" | "failed" | "cancelled") =>
     return endTurnIn(tx as unknown as Tx, "chat-1", "msg-1", status);
   });
 
-/** The states each push delivered, in order. */
 const pushedStates = () =>
   fetchMock.mock.calls.map(
     ([, init]) =>
@@ -119,7 +105,6 @@ const pushedStates = () =>
       ).task.status.state,
   );
 
-/** Waits for the pushes started in the background to land, then a bit more. */
 const pushesLanded = async () => {
   await vi.waitFor(async () => {
     const [config] = await db()
@@ -231,7 +216,6 @@ describe("readTask", () => {
   it("keeps the end it recorded after the reply is regenerated", async () => {
     await pg.exec(`UPDATE "chat" SET "status" = 'succeeded'`);
     const first = await readTask(await taskRow());
-    // The Owner regenerates the reply, and the regenerate fails.
     await pg.exec(`
       UPDATE "chat_message" SET "deleted_at" = now() WHERE "id" = 'reply-1';
       UPDATE "chat" SET "status" = 'failed', "active_leaf_id" = 'msg-1';
@@ -242,13 +226,11 @@ describe("readTask", () => {
 
     expect(again.status).toEqual(first.status);
     expect(again.status!.state).toBe(TaskState.TASK_STATE_COMPLETED);
-    // Its reply was deleted, so it reads with no artifact.
     expect(again.artifacts).toEqual([]);
     expect(pushedStates()).toEqual(["TASK_STATE_COMPLETED"]);
   });
 
   it("would read a different end had nothing recorded the first", async () => {
-    // The same Chat as above, never read until after the regenerate failed.
     await pg.exec(`
       UPDATE "chat_message" SET "deleted_at" = now() WHERE "id" = 'reply-1';
       UPDATE "chat" SET "status" = 'failed', "active_leaf_id" = 'msg-1';

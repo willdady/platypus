@@ -12,96 +12,41 @@ import {
 } from "./a2a-task-state.ts";
 import { readTaskAfresh } from "./a2a-task-lifecycle.ts";
 
-/**
- * Every stream on an A2A Task gets the same events, in the same order (A2A
- * 1.0 §3.5.2, ADR-0032 #1308). The instance running a Task's run is its one
- * producer: it reads the run's own stream and publishes what happens — a
- * change of status, each piece of the reply, the end — as numbered events.
- * Streams on that instance get them in-process; every other instance gets
- * them through Postgres NOTIFY, each event carrying its piece of the reply,
- * so no instance reads another's memory. Each instance keeps the reply so far
- * of every Task it hears of, so a stream that joins mid-reply is sent it
- * first and then follows on.
- *
- * A notification lost while an instance's listener reconnects leaves a gap
- * in the numbers. A stream there then sends no more pieces of the reply, and
- * its followers' fallback poll (`a2aFallbackPollMs`) reads the Task's status
- * and end from the database, as a stream did before #1308.
- */
-
-/** What happens to a Task, as its producer publishes it. */
 export type A2aTaskEvent =
-  /** A change of status short of the end, as `readTask` reads it. */
   | { kind: "status"; status: NonNullable<Task["status"]> }
-  /**
-   * A piece of the reply: `text` follows the first `offset` characters of
-   * the reply artifact `artifactId`.
-   */
   | { kind: "delta"; artifactId: string; offset: number; text: string }
-  /**
-   * The Task has ended. `task` is it as its producer read it, handed only to
-   * streams on the producer's instance; any other reads it.
-   */
   | { kind: "end"; task?: Task };
 
 export type SequencedA2aTaskEvent = A2aTaskEvent & { seq: number };
 
-/** The NOTIFY channel events travel on between instances. */
 const CHANNEL = "a2a_task_event";
 
-/**
- * The most of the reply one event carries. A NOTIFY payload must be under
- * 8000 bytes; this many characters fit at four bytes each with room to spare.
- */
+// why: a NOTIFY payload must stay under 8000 bytes, at up to 4 bytes a character
 const MAX_DELTA_CHARS = 1_500;
 
-/** How long a Task's events are kept with no stream and no news of it. */
 const LOG_TTL_MS = 10 * 60_000;
 
-/**
- * How long a follower waits for an event before reading its Task from the
- * database, when no producer on its instance will tell it of the end.
- */
 const FALLBACK_POLL_MS = 15_000;
 let fallbackPollMs = FALLBACK_POLL_MS;
 
-/** How long a follower with no producer here waits before reading its Task. */
 export const a2aFallbackPollMs = (): number => fallbackPollMs;
 
-/** Test seam: a shorter fallback poll, or the default with none. */
 export const setA2aFallbackPollMs = (ms?: number): void => {
   fallbackPollMs = ms ?? FALLBACK_POLL_MS;
 };
 
-/** What an instance knows of one Task's events. */
 type TaskLog = {
   subscriptions: Set<A2aTaskSubscription>;
-  /** A producer on this instance is publishing them. */
   producing: boolean;
-  /** The number the next event should carry; none seen yet when undefined. */
   nextSeq?: number;
-  /** `replyText` is the whole reply so far: no event was missed. */
   complete: boolean;
   artifactId?: string;
   replyText: string;
   touchedAt: number;
 };
 
-/**
- * One stream's place in a Task's events, taken before it reads the Task so
- * nothing published meanwhile is missed. Close it when the stream ends.
- */
 export class A2aTaskSubscription {
-  /**
-   * The reply so far, when this instance has all of it: a stream joining
-   * mid-reply sends it first, as one artifact.
-   */
   readonly catchUp: { artifactId: string; text: string } | undefined;
-  /**
-   * How much of the reply the stream will have sent, once it has sent
-   * `catchUp`: a piece starting there is the next one. `null` when this
-   * instance missed some of the reply, so pieces cannot be followed.
-   */
   readonly replyFrom: number | null;
   private readonly log: TaskLog;
   private readonly onClose: () => void;
@@ -118,30 +63,19 @@ export class A2aTaskSubscription {
       log.complete || log.nextSeq === undefined ? log.replyText.length : null;
   }
 
-  /**
-   * Whether a producer on this instance will publish the Task's end. A
-   * follower that has one waits for it; one that has none polls as well.
-   */
   get produced(): boolean {
     return this.log.producing;
   }
 
-  /** @internal Queues an event for the stream. */
   push(event: SequencedA2aTaskEvent): void {
     this.queue.push(event);
     this.wake?.();
   }
 
-  /** @internal Wakes the stream with no event: its producer has stopped. */
   poke(): void {
     this.wake?.();
   }
 
-  /**
-   * The next event, or `undefined` once `timeoutMs` passes, `signal`
-   * aborts, or the producer stops without an end. Waits with no timeout when
-   * `timeoutMs` is undefined.
-   */
   next(
     timeoutMs: number | undefined,
     signal?: AbortSignal,
@@ -167,22 +101,16 @@ export class A2aTaskSubscription {
   }
 }
 
-/** Publishes one Task's events, as its producer. */
 export type A2aTaskPublisher = {
   publish(event: A2aTaskEvent): void;
-  /** Stops without an end: its followers fall back to polling. */
   stop(): void;
 };
 
-/**
- * One instance's view of every Task's events: those its producers publish,
- * and those it hears from other instances through `send` and `receive`.
- */
 export class A2aTaskEventBus {
   private readonly logs = new Map<string, TaskLog>();
   private readonly instanceId: string;
   private readonly send: (payload: string) => Promise<void>;
-  /** NOTIFYs go out one at a time, so they commit in the order published. */
+  // why: one NOTIFY at a time, so they commit in the order published
   private sending: Promise<void> = Promise.resolve();
   private sweptAt = Date.now();
 
@@ -209,7 +137,6 @@ export class A2aTaskEventBus {
     return log;
   }
 
-  /** Hands `event` to every stream on the Task here, keeping the reply. */
   private deliver(taskId: string, log: TaskLog, event: SequencedA2aTaskEvent) {
     log.touchedAt = Date.now();
     if (event.kind === "delta") {
@@ -227,13 +154,6 @@ export class A2aTaskEventBus {
     }
   }
 
-  /**
-   * Makes this instance the Task's producer.
-   *
-   * ponytail: one NOTIFY per piece of the reply, as the model streams it.
-   * Coalesce pieces on a short timer, for every stream alike, if NOTIFY
-   * traffic bites.
-   */
   produce(taskId: string): A2aTaskPublisher {
     const log = this.logOf(taskId);
     log.producing = true;
@@ -269,12 +189,10 @@ export class A2aTaskEventBus {
     };
   }
 
-  /** A stream's place in the Task's events, from now on. */
   subscribe(taskId: string): A2aTaskSubscription {
     const log = this.logOf(taskId);
     const subscription = new A2aTaskSubscription(log, () => {
       log.subscriptions.delete(subscription);
-      // A Task no event was heard of is not kept for a stream that left.
       if (
         !log.subscriptions.size &&
         !log.producing &&
@@ -288,7 +206,6 @@ export class A2aTaskEventBus {
     return subscription;
   }
 
-  /** An event another instance published, as NOTIFY delivered it. */
   receive(payload: string): void {
     let message: {
       instanceId: string;
@@ -310,10 +227,6 @@ export class A2aTaskEventBus {
     this.deliver(message.taskId, log, message.event);
   }
 
-  /**
-   * Forgets the Tasks no stream follows and nothing has been heard of for a
-   * while: their end was missed, or their producer died with its instance.
-   */
   private sweep(): void {
     const now = Date.now();
     if (now - this.sweptAt < 60_000) return;
@@ -330,7 +243,6 @@ export class A2aTaskEventBus {
   }
 }
 
-/** This instance's events. */
 export const a2aTaskEvents = new A2aTaskEventBus({
   instanceId: randomUUID(),
   send: (payload) => notify(CHANNEL, payload),
@@ -338,19 +250,13 @@ export const a2aTaskEvents = new A2aTaskEventBus({
 
 onNotification(CHANNEL, (payload) => a2aTaskEvents.receive(payload));
 
-// ------------------------------------------------------------------ producer
-
-/** How often a producer re-reads a Task not yet `working`, at most. */
 const STATUS_READ_MS = 1_000;
-/** How often, and how many times, a producer reads its Task once its run's
- * stream closes, until the end its run wrote is there. */
 const END_READ_MS = 250;
 const END_READS = 120;
 
 const wait = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-/** `text` in pieces no larger than one event carries, never splitting a pair. */
 const pieces = (text: string): string[] => {
   const out: string[] = [];
   let at = 0;
@@ -364,11 +270,6 @@ const pieces = (text: string): string[] => {
   return out;
 };
 
-/**
- * Makes this instance the producer of the Task whose run started here, and
- * returns the starting call's own subscription, taken before any of the
- * run's stream is read. The run's stream is read to its end whoever follows.
- */
 export const produceA2aTaskEvents = (
   task: TaskRow,
   run: ReadableStream<Uint8Array>,
@@ -379,12 +280,6 @@ export const produceA2aTaskEvents = (
   return starter;
 };
 
-/**
- * Publishes the run's text as it is produced, a change of state `readTask`
- * reports while the Task is `submitted` — read on the run's first output, and
- * at most every `STATUS_READ_MS` otherwise — and, once the run's stream closes
- * and its end is recorded, the end.
- */
 const produce = async (
   task: TaskRow,
   run: ReadableStream<Uint8Array>,
@@ -400,12 +295,11 @@ const produce = async (
     let readAt = Date.now();
     let artifactId = task.id;
     let offset = 0;
-    // A text part after the first is set apart as `readTask` joins them.
+    // why: set apart with "\n\n" as recordedReplies joins parts, so offsets match a read
     let separate = false;
     const isFirstOutput = firstOutputLatch();
     for (;;) {
-      // A cancel or a timeout aborts the run, breaking off its stream. How it
-      // ended is the Task's to say.
+      // why: a cancel or timeout breaks the stream off; how it ended is the Task's to say
       const next = await chunks.read().catch(() => null);
       if (!next || next.done) break;
       if (!next.value.success) continue;
@@ -413,10 +307,6 @@ const produce = async (
       if (chunk.type === "start" && chunk.messageId) {
         artifactId = chunk.messageId;
       }
-      // Past `submitted`, the only change left is the end, which follows
-      // the stream's close. The run's first output reaches here only once its
-      // reply is saved (`holdFirstOutput`), so it is read at once: the Task
-      // reads `working` before any of the reply is sent (#1337).
       const firstOutput = isFirstOutput(chunk);
       if (
         state === TaskState.TASK_STATE_SUBMITTED &&

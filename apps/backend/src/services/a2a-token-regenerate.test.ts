@@ -13,10 +13,6 @@ import { migratedPglite } from "../db/migrated-pglite.test-fixtures.ts";
 import { hashBearerToken } from "./bearer-token.ts";
 import { NotFoundError } from "../errors.ts";
 
-/**
- * Regenerating an A2A token is one `UPDATE … FROM a2a_endpoint` (#1301): the
- * Workspace check and the lifetime it keeps are real SQL here.
- */
 const { holder } = vi.hoisted(() => ({
   holder: { db: undefined as ReturnType<typeof drizzle> | undefined },
 }));
@@ -76,8 +72,7 @@ describe("regenerateA2aToken", () => {
     const row = await stored();
     expect(row.token_hash).toBe(hashBearerToken(regenerated.token));
     expect(row.token_notice).toBeNull();
-    // Read back through Drizzle, which takes the stored times as UTC, so an
-    // expiry written in the session's time zone would be hours off.
+    // why: Drizzle reads stored times as UTC, so a session-time-zone expiry would be hours off
     const created = regenerated.tokenCreatedAt.getTime();
     expect(created).toBeGreaterThanOrEqual(before);
     expect(created).toBeLessThanOrEqual(Date.now());

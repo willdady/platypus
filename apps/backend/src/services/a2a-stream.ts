@@ -24,19 +24,6 @@ import {
 import { callerIsLive } from "./a2a-liveness.ts";
 import { replyArtifact } from "./a2a-parts.ts";
 
-/**
- * A2A Tasks over SSE (ADR-0032): `SendStreamingMessage` and `SubscribeToTask`.
- * Every stream on a Task, on any instance, follows the same events
- * (`a2a-events.ts`): the reply as it is written, each change of status, and
- * the end, when it reads the Task, so its last events say what `GetTask`
- * says. A follower of a run it did not start holds a follower slot until its
- * stream ends (`takeFollowerSlot`).
- */
-
-/**
- * Ends the stream with an error once the caller's access is cut off: it is
- * told nothing more, as a new call would be told nothing.
- */
 const assertCallerLive = async (caller: A2aCaller): Promise<void> => {
   if (!(await callerIsLive(caller))) throw new TaskNotFoundError();
 };
@@ -45,7 +32,6 @@ const taskEvent = (task: Task): StreamResponse => ({
   payload: { $case: "task", value: task },
 });
 
-/** A change of the Task's status, with its metadata: a cut-short reply's `stopReason`. */
 const statusEvent = (task: Task): StreamResponse => ({
   payload: {
     $case: "statusUpdate",
@@ -76,13 +62,6 @@ const artifactEvent = (
   },
 });
 
-/**
- * From `seen` on: the reply so far when `events` has it, then each piece of
- * the reply and each change of state, then, once the Task ends, its
- * artifacts whole and its terminal status, which ends the stream. Ends at
- * once when the client hangs up. With no producer on this instance to say
- * the Task ended, it is also read every `a2aFallbackPollMs`.
- */
 async function* followTask(
   caller: A2aCaller,
   task: TaskRow,
@@ -90,7 +69,6 @@ async function* followTask(
   events: A2aTaskSubscription,
 ): AsyncGenerator<StreamResponse> {
   let state = requireStatus(seen).state;
-  // How much of the reply this stream has sent; `null` once it missed some.
   let sent = events.replyFrom;
   if (events.catchUp && sent !== null) {
     const { artifactId, text } = events.catchUp;
@@ -137,18 +115,12 @@ async function* followTask(
   }
 }
 
-/**
- * `SendStreamingMessage`: the turn's Task, its reply as the run writes it,
- * then its artifact whole and its terminal status. A retry of a message
- * follows the Task it already started, as `SubscribeToTask` does, on a
- * follower slot: past the follower cap it is refused before its first event.
- */
 export async function* streamA2aMessage(
   caller: A2aCaller,
   params: SendMessageRequest,
 ): AsyncGenerator<StreamResponse> {
   const { task, events: started } = await startA2aTurn(caller, params);
-  // Taken before the Task is read, so nothing published meanwhile is missed.
+  // why: subscribed before the read, or an event published between them is missed
   const events = started ?? a2aTaskEvents.subscribe(task.id);
   let release: (() => void) | undefined;
   try {
@@ -159,16 +131,10 @@ export async function* streamA2aMessage(
     yield* followTask(caller, task, read, events);
   } finally {
     release?.();
-    // Stops following the run, never the run: it goes on server-side.
     events.close();
   }
 }
 
-/**
- * `SubscribeToTask`: one of this endpoint's Tasks from its current state
- * onward, on a follower slot. A Task that has ended has nothing more to say;
- * `GetTask` reads it.
- */
 export async function* subscribeToA2aTask(
   caller: A2aCaller,
   taskId: string,

@@ -4,10 +4,6 @@ vi.mock("../index.ts", () => ({ db: {} }));
 
 const { A2aTaskEventBus } = await import("./a2a-events.ts");
 
-/**
- * Two instances sharing one Postgres: what one publishes reaches the other
- * through NOTIFY, unless `drop` says that notification is lost.
- */
 const twoInstances = (drop: (payload: string) => boolean = () => false) => {
   const sent: string[] = [];
   const elsewhere = new A2aTaskEventBus({
@@ -19,7 +15,7 @@ const twoInstances = (drop: (payload: string) => boolean = () => false) => {
     send: (payload) => {
       sent.push(payload);
       if (!drop(payload)) elsewhere.receive(payload);
-      // Postgres delivers a NOTIFY to its sender's listener too.
+      // why: Postgres delivers a NOTIFY to its sender's own listener too
       here.receive(payload);
       return Promise.resolve();
     },
@@ -27,7 +23,6 @@ const twoInstances = (drop: (payload: string) => boolean = () => false) => {
   return { here, elsewhere, sent };
 };
 
-/** Lets the serialized NOTIFYs go out. */
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 const delta = (offset: number, text: string) => ({
@@ -93,7 +88,6 @@ describe("A2aTaskEventBus", () => {
 
   it("says nothing of the reply's start to a stream joining after it was missed", () => {
     const { elsewhere } = twoInstances();
-    // Its listener was down for the first events.
     elsewhere.receive(
       JSON.stringify({
         instanceId: "a",
