@@ -20,11 +20,15 @@ vi.mock("../../storage/utils.ts", () => ({
 // Titling is exercised by chat-metadata tests; stub it here so onFinish's
 // fire-and-forget call doesn't touch the model or add stray db calls, and so
 // we can assert when (and with what provider) the sink triggers it.
-const { mockGenerateChatMetadata } = vi.hoisted(() => ({
-  mockGenerateChatMetadata: vi.fn(),
-}));
+const { mockGenerateChatMetadata, mockStartEarlyChatTitle } = vi.hoisted(
+  () => ({
+    mockGenerateChatMetadata: vi.fn(),
+    mockStartEarlyChatTitle: vi.fn(),
+  }),
+);
 vi.mock("../../services/chat-metadata.ts", () => ({
   generateChatMetadata: mockGenerateChatMetadata,
+  startEarlyChatTitle: mockStartEarlyChatTitle,
 }));
 
 // The after-turn Transcript-summary pass (ADR-0041). The sink's part is to
@@ -50,6 +54,7 @@ import { extractFiles } from "../../storage/utils.ts";
 import { ConflictError } from "../../errors.ts";
 import type { ResolvedRunPlan } from "../types.ts";
 import type { PlatypusUIMessage } from "../../types.ts";
+import type { ConcreteModelId } from "@platypus/schemas";
 
 const planWithAgent: ResolvedRunPlan = {
   resolved: {
@@ -65,6 +70,7 @@ const planWithAgent: ResolvedRunPlan = {
     presencePenalty: undefined,
     frequencyPenalty: undefined,
   },
+  resolvedModelId: "m1" as ConcreteModelId,
 };
 
 const planAdhoc: ResolvedRunPlan = {
@@ -81,6 +87,7 @@ const planAdhoc: ResolvedRunPlan = {
     frequencyPenalty: 0.2,
     maxSteps: 25,
   },
+  resolvedModelId: "m1" as ConcreteModelId,
 };
 
 const chatRow = (overrides: Row = {}): Row => ({
@@ -189,6 +196,8 @@ describe("ChatSink", () => {
     resetMockDb();
     mockGenerateChatMetadata.mockReset();
     mockGenerateChatMetadata.mockResolvedValue(null);
+    mockStartEarlyChatTitle.mockReset();
+    mockStartEarlyChatTitle.mockResolvedValue(undefined);
   });
 
   describe("onStart", () => {
@@ -886,6 +895,7 @@ describe("ChatSink", () => {
       });
 
       await runTurn(submitSink(), [u0, a0, u1], [u0, a0, u1], {
+        ...planAdhoc,
         resolved: { ...planAdhoc.resolved, maxSteps: undefined },
       });
 
@@ -943,6 +953,98 @@ describe("ChatSink", () => {
       });
 
       expect(mockGenerateChatMetadata).not.toHaveBeenCalled();
+    });
+  });
+
+  // Issue #2017: a Chat whose title model is some other model than the reply's
+  // is named while the reply is still being written.
+  describe("onResolved — early titling", () => {
+    it("starts an early attempt with the turn's provider and concrete model", async () => {
+      seedChat();
+      const sink = submitSink();
+      await sink.onStart({ runId: "chat-1", messages: [u0, a0, u1] });
+      await sink.onResolved({ runId: "chat-1", plan: planWithAgent });
+
+      expect(mockStartEarlyChatTitle).toHaveBeenCalledTimes(1);
+      expect(mockStartEarlyChatTitle).toHaveBeenCalledWith({
+        chatId: "chat-1",
+        workspaceId: "ws-1",
+        orgId: "org-1",
+        // The plan's resolved provider (an agent run nulls the row's column)
+        // and the CONCRETE model, not the reference the Chat stores.
+        providerId: "p1",
+        modelId: "m1",
+      });
+    });
+
+    it("hands over the concrete model even when the Chat names it through an alias", async () => {
+      seedChat();
+      const sink = submitSink();
+      await sink.onStart({ runId: "chat-1", messages: [u0, a0, u1] });
+      await sink.onResolved({
+        runId: "chat-1",
+        plan: {
+          resolved: { ...planWithAgent.resolved, modelId: "alias:fast" },
+          resolvedModelId: "m1" as ConcreteModelId,
+        },
+      });
+
+      // The decision compares models, so the alias never crosses the seam.
+      expect(mockStartEarlyChatTitle).toHaveBeenCalledWith(
+        expect.objectContaining({ modelId: "m1" }),
+      );
+    });
+
+    it("waits for the early attempt before its own end-of-run attempt", async () => {
+      seedChat();
+      let settle!: () => void;
+      mockStartEarlyChatTitle.mockReturnValueOnce(
+        new Promise<void>((resolve) => {
+          settle = resolve;
+        }),
+      );
+      const sink = submitSink();
+      await sink.onStart({ runId: "chat-1", messages: [u0, a0, u1] });
+      await sink.onResolved({ runId: "chat-1", plan: planWithAgent });
+
+      await sink.onFinish({
+        runId: "chat-1",
+        status: "succeeded",
+        messages: [u0, a0, u1],
+        stats: {},
+      });
+
+      // The reply finished first: the end-of-run attempt is held back so the
+      // two title calls never race.
+      expect(mockGenerateChatMetadata).not.toHaveBeenCalled();
+
+      settle();
+      await vi.waitFor(() =>
+        expect(mockGenerateChatMetadata).toHaveBeenCalledTimes(1),
+      );
+    });
+
+    it("still attempts a title at the end when the early attempt failed", async () => {
+      const fake = seedChat();
+      mockStartEarlyChatTitle.mockRejectedValueOnce(new Error("boom"));
+      const sink = submitSink();
+      await sink.onStart({ runId: "chat-1", messages: [u0, a0, u1] });
+      await sink.onResolved({ runId: "chat-1", plan: planWithAgent });
+
+      await expect(
+        sink.onFinish({
+          runId: "chat-1",
+          status: "succeeded",
+          messages: [u0, a0, u1],
+          stats: {},
+        }),
+      ).resolves.toBeUndefined();
+
+      await vi.waitFor(() =>
+        expect(mockGenerateChatMetadata).toHaveBeenCalledTimes(1),
+      );
+      // The failure changed nothing about the run.
+      expect(rowOf(fake, "chat", "chat-1")?.status).toBe("succeeded");
     });
   });
 
@@ -1251,6 +1353,8 @@ describe("ChatSink — a Trigger run's Chat", () => {
   beforeEach(() => {
     resetMockDb();
     mockGenerateChatMetadata.mockReset();
+    mockStartEarlyChatTitle.mockReset();
+    mockStartEarlyChatTitle.mockResolvedValue(undefined);
     mockAfterTurn.mockReset();
   });
 
@@ -1294,6 +1398,7 @@ describe("ChatSink — a Trigger run's Chat", () => {
       parentId: "m-user",
     });
     expect(mockGenerateChatMetadata).not.toHaveBeenCalled();
+    expect(mockStartEarlyChatTitle).not.toHaveBeenCalled();
     expect(mockAfterTurn).not.toHaveBeenCalled();
   });
 });

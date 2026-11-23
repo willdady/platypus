@@ -9,6 +9,7 @@ import {
   triggerRunEvent as triggerRunEventTable,
 } from "../../db/schema.ts";
 import type { ResolvedRunPlan } from "../types.ts";
+import type { ConcreteModelId } from "@platypus/schemas";
 
 /** Every `.set()` payload, paired with the table its `.update()` targeted. */
 const updates = () =>
@@ -35,6 +36,7 @@ const plan: ResolvedRunPlan = {
     providerId: "p1",
     modelId: "m1",
   },
+  resolvedModelId: "m1" as ConcreteModelId,
 };
 
 const owner = { workspaceId: "ws-1", ownerId: "user-1" };

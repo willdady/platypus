@@ -355,6 +355,9 @@ export class AgentRunner {
       async () => {
         const plan: ResolvedRunPlan = {
           resolved: turn.resolved,
+          // The concrete model, beside the reference `turn.resolved.modelId`
+          // carries — the early title attempt compares models, not references.
+          resolvedModelId: turn.resolvedModelId,
           unloadedToolSets: turn.unloadedToolSets,
           // The declared window this turn ran under — the denominator the
           // sink's Transcript-summary trigger divides the turn's reading by

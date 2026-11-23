@@ -35,6 +35,7 @@ import {
 import { jobCallSettings, jobMaxOutputTokens } from "./reasoning.ts";
 import { jobInputBudgetChars } from "./job-input-budget.ts";
 import {
+  isChatsOwnModel,
   resolveTaskModelProvider,
   type TaskModelWorkspace,
 } from "./task-model.ts";
@@ -1064,9 +1065,12 @@ const withTaskSummariserModel = async (args: {
       pointerSettingModelId(taskModelId),
       taskProvider.provider.taskModelSettings,
     );
-    const isChatModel =
-      taskProvider.provider.id === chatProviderId &&
-      taskModelId === chat.modelId;
+    const isChatModel = isChatsOwnModel({
+      taskProviderId: taskProvider.provider.id,
+      taskModelId,
+      chatProviderId,
+      chatModelId: chat.modelId,
+    });
     const maxOutputTokens = jobMaxOutputTokens(
       taskProvider.provider,
       pointerSettingModelId(taskModelId),

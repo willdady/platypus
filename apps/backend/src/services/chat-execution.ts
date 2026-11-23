@@ -138,6 +138,13 @@ type ChatContext = {
 export type ChatTurn = {
   stream: RunPlan & { messages: PlatypusUIMessage[] };
   resolved: ResolvedGeneration;
+  /**
+   * The concrete model id this turn resolved to (ADR-0017), distinct from the
+   * reference `resolved.modelId` persists — an Agent or Chat may name its model
+   * through an alias. A decision that asks whether another model is this
+   * turn's own — the early title attempt (issue #2017) — compares against it.
+   */
+  resolvedModelId: ConcreteModelId;
   /** The Fallback model a Trigger run may switch to (ADR-0043). */
   fallback?: FallbackTurn;
   /**
@@ -957,6 +964,9 @@ export const prepareChatTurn = async (
         // null writes null to the column like every other unset field here.
         maxSteps: agent ? undefined : (request.maxSteps ?? undefined),
       },
+      // What `modelId` above resolved to, for decisions that compare models
+      // rather than persist references (issue #2017).
+      resolvedModelId: context.resolvedModelId,
       searchUnavailable,
       ...(context.fallback && fallbackSystem !== undefined
         ? {
