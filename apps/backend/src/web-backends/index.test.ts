@@ -6,7 +6,6 @@ import { EGRESS_BLOCKED_MESSAGE } from "../utils/egress-guard.ts";
 import { logger } from "../logger.ts";
 import { runCloser, type CoreCloserRegistrar } from "../tools/closers.ts";
 import {
-  clearWebBackends,
   composeWebBackend,
   getWebBackend,
   getWebBackends,
@@ -86,7 +85,6 @@ const read = (
 
 beforeEach(() => {
   vi.clearAllMocks();
-  clearWebBackends();
 });
 
 describe("web-backend registry", () => {
@@ -109,13 +107,17 @@ describe("web-backend registry", () => {
     expect(found?.backend).toBe("searx");
     expect(found?.name).toBe("SearXNG");
     expect(typeof found?.buildTurnTools).toBe("function");
-    expect(getWebBackends().map((r) => r.backend)).toEqual(["searx", "brave"]);
+    expect(
+      getWebBackends()
+        .map((r) => r.backend)
+        .filter((backend) => backend === "searx" || backend === "brave"),
+    ).toEqual(["searx", "brave"]);
   });
 
   it("refuses a second registration under the same discriminator", () => {
-    registerWebBackend(registration("searx"));
-    expect(() => registerWebBackend(registration("searx"))).toThrow(
-      "Web backend 'searx' has already been registered.",
+    registerWebBackend(registration("duplicate"));
+    expect(() => registerWebBackend(registration("duplicate"))).toThrow(
+      "Web backend 'duplicate' has already been registered.",
     );
   });
 });

@@ -42,6 +42,4 @@ export const getSandboxBackend = (
 export const getSandboxBackends =
   (): ReadonlyArray<SandboxBackendRegistration> => SANDBOX_BACKENDS.list();
 
-export const clearSandboxBackends = (): void => SANDBOX_BACKENDS.clear();
-
 export * from "./types.ts";

@@ -36,7 +36,10 @@ vi.mock("ai", async () => {
 });
 
 import { logger } from "../logger.ts";
-import { clearToolGates, registerToolGate } from "../tool-gates/index.ts";
+import {
+  registerToolGate,
+  type ToolGateRegistration,
+} from "../tool-gates/index.ts";
 
 const GATE_SCOPE = {
   orgId: "org-1",
@@ -320,7 +323,7 @@ describe("createSubAgentDelegate", () => {
 
     it("stops a delegate's own tool call when a Tool gate denies it", async () => {
       const seen: unknown[] = [];
-      registerToolGate({
+      const gate: ToolGateRegistration = {
         id: "no-fetch",
         name: "No fetch",
         timeoutMs: 1_000,
@@ -328,7 +331,8 @@ describe("createSubAgentDelegate", () => {
           seen.push(call);
           return { verdict: "deny" };
         },
-      });
+      };
+      registerToolGate(gate);
       const execute = vi.fn(() => Promise.resolve("result"));
       try {
         await delegate({
@@ -341,7 +345,8 @@ describe("createSubAgentDelegate", () => {
           }),
         });
       } finally {
-        clearToolGates();
+        // why: the registry cannot unregister, so silence this gate for later cases
+        gate.evaluate = () => ({ verdict: "allow" });
       }
 
       expect(execute).not.toHaveBeenCalled();

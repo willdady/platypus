@@ -67,8 +67,6 @@ export const getWebBackend = (
 export const getWebBackends = (): ReadonlyArray<WebBackendRegistration> =>
   WEB_BACKENDS.list();
 
-export const clearWebBackends = (): void => WEB_BACKENDS.clear();
-
 const asRecord = (value: unknown): Record<string, unknown> =>
   typeof value === "object" && value !== null
     ? (value as Record<string, unknown>)

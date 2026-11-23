@@ -1,7 +1,6 @@
-import { beforeEach, describe, it, expect } from "vitest";
+import { describe, it, expect } from "vitest";
 import { z } from "zod";
 import {
-  clearSandboxBackends,
   MAX_SHELL_OUTPUT_BYTES,
   registerSandboxBackend,
   getSandboxBackend,
@@ -40,10 +39,6 @@ const makeRegistration = (
 });
 
 describe("sandbox backend registry", () => {
-  beforeEach(() => {
-    clearSandboxBackends();
-  });
-
   it("splits the shell output budget between the head and the tail", () => {
     expect(SHELL_OUTPUT_HEAD_BYTES + SHELL_OUTPUT_TAIL_BYTES).toBe(
       MAX_SHELL_OUTPUT_BYTES,
@@ -60,7 +55,9 @@ describe("sandbox backend registry", () => {
     const found = getSandboxBackend("test-lookup");
     expect(found?.backend).toBe("test-lookup");
     expect(found?.name).toBe("Test test-lookup");
-    expect(getSandboxBackends().map((r) => r.backend)).toEqual(["test-lookup"]);
+    expect(getSandboxBackends()).toContainEqual(
+      expect.objectContaining({ backend: "test-lookup" }),
+    );
   });
 
   it("refuses a second registration under the same backend id", () => {

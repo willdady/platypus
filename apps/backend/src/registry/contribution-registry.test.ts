@@ -77,14 +77,8 @@ describe("createContributionRegistry", () => {
     expect(makeRegistry().list()).toEqual([]);
   });
 
-  it("empties on clear() so a test can re-register the same id", () => {
-    const registry = makeRegistry();
-    registry.register("alpha", { label: "Alpha" });
-    registry.clear();
-    expect(registry.get("alpha")).toBeUndefined();
-    expect(registry.list()).toEqual([]);
-    registry.register("alpha", { label: "Again" });
-    expect(registry.get("alpha")?.label).toBe("Again");
+  it("offers no way to empty a live registry", () => {
+    expect(makeRegistry()).not.toHaveProperty("clear");
   });
 
   it("keeps instances independent", () => {
