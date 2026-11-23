@@ -13,7 +13,11 @@ import {
   ne,
   sql,
 } from "drizzle-orm";
-import { workspace as workspaceTable } from "./db/schema.ts";
+import {
+  kanbanColumn as kanbanColumnTable,
+  workspace as workspaceTable,
+} from "./db/schema.ts";
+import { isUniqueViolation } from "./errors.ts";
 
 describe("the seeded fake beside the chainable mock", () => {
   beforeEach(() => {
@@ -301,6 +305,52 @@ describe("the seeded fake beside the chainable mock", () => {
       { org: "org-1", name: "New" },
       { org: "org-2", name: "Only" },
     ]);
+  });
+
+  describe("an insert that clashes with a declared key", () => {
+    const columnRows = {
+      kanban_column: [{ id: "c1", boardId: "b1", name: "Todo", position: 1 }],
+    };
+
+    const seeded = () =>
+      seedDb(columnRows, {
+        unique: {
+          kanban_column: [{ name: "kanban_column_pkey", columns: ["id"] }],
+        },
+      });
+
+    it("skips the clashing rows under `onConflictDoNothing`, keeping the rest", async () => {
+      const fake = seeded();
+
+      await db
+        .insert(kanbanColumnTable)
+        .values([
+          { id: "c1", boardId: "b1", name: "Again", position: 1 },
+          { id: "c2", boardId: "b1", name: "Doing", position: 2 },
+        ])
+        .onConflictDoNothing();
+
+      expect(fake.tables.kanban_column).toEqual([
+        { id: "c1", boardId: "b1", name: "Todo", position: 1 },
+        { id: "c2", boardId: "b1", name: "Doing", position: 2 },
+      ]);
+    });
+
+    it("throws on a plain insert", async () => {
+      const fake = seeded();
+
+      let failure: unknown;
+      try {
+        await db
+          .insert(kanbanColumnTable)
+          .values({ id: "c1", boardId: "b1", name: "Again", position: 1 });
+      } catch (error) {
+        failure = error;
+      }
+
+      expect(isUniqueViolation(failure)).toBe(true);
+      expect(fake.tables.kanban_column).toEqual(columnRows.kanban_column);
+    });
   });
 
   it("scrubs an id out of only the jsonb arrays that contain it", async () => {

@@ -669,44 +669,66 @@ export const createFakeDb = (
 
     const insert = (table: unknown) => {
       const name = nameOf(table);
-      let inserted: Row[] = [];
 
-      const write = (values: Row | Row[]) => {
+      const clashingConstraint = (row: Row): UniqueConstraint | undefined => {
+        const resolve = flatResolver(row);
+        return (options.unique?.[name] ?? []).find((constraint) => {
+          const covers = constraint.where ?? (() => true);
+          if (!covers(row)) return false;
+          return rowsFor(table).some(
+            (existing) =>
+              covers(existing) &&
+              constraint.columns.every(
+                (column) =>
+                  flatResolver(existing)({ table: name, name: column }) ===
+                  resolve({ table: name, name: column }),
+              ),
+          );
+        });
+      };
+
+      const write = (
+        values: Row | Row[],
+        conflicts: "throw" | "skip",
+      ): Row[] => {
         record({ kind: "insert", table: name });
-        inserted = (Array.isArray(values) ? values : [values]).map((row) => ({
-          ...(options.defaults?.[name] ?? {}),
-          ...row,
-        }));
-        for (const row of inserted) {
-          options.onInsert?.(name, row);
-          for (const constraint of options.unique?.[name] ?? []) {
-            const covers = constraint.where ?? (() => true);
-            if (!covers(row)) continue;
-            const resolve = flatResolver(row);
-            const clashes = rowsFor(table).some(
-              (existing) =>
-                covers(existing) &&
-                constraint.columns.every(
-                  (column) =>
-                    flatResolver(existing)({ table: name, name: column }) ===
-                    resolve({ table: name, name: column }),
-                ),
-            );
-            if (clashes) throw uniqueViolation(constraint.name);
+        const written: Row[] = [];
+        for (const row of (Array.isArray(values) ? values : [values]).map(
+          (row) => ({ ...(options.defaults?.[name] ?? {}), ...row }),
+        )) {
+          const clash = clashingConstraint(row);
+          if (clash) {
+            if (conflicts === "skip") continue;
+            throw uniqueViolation(clash.name);
           }
+          options.onInsert?.(name, row);
           rowsFor(table).push(row);
+          written.push(row);
         }
+        return written;
       };
 
       return {
         values(values: Row | Row[]) {
-          // why: synchronous, so a unique violation throws inside the caller's try like the driver's
-          write(values);
-          const result = writeResult(inserted);
-          return Object.assign(result, {
-            onConflictDoUpdate: () => result,
-            onConflictDoNothing: () => result,
-          });
+          // why: deferred to the terminal call, so `.onConflictDoNothing()` can skip a clash a plain insert throws on
+          let settled: ReturnType<typeof writeResult> | undefined;
+          const settle = (conflicts: "throw" | "skip") => {
+            settled ??= writeResult(write(values, conflicts));
+            return settled;
+          };
+          return {
+            returning(selection?: Record<string, unknown>) {
+              return settle("throw").returning(selection);
+            },
+            then(
+              onFulfilled?: (result: unknown) => unknown,
+              onRejected?: (error: unknown) => unknown,
+            ) {
+              return settle("throw").then(onFulfilled, onRejected);
+            },
+            onConflictDoNothing: () => settle("skip"),
+            onConflictDoUpdate: () => settle("throw"),
+          };
         },
       };
     };

@@ -7,6 +7,7 @@ import {
   type FakeDb,
   type Store,
 } from "../test-utils.ts";
+import type { FakeDbOptions } from "../fake-db.ts";
 import app from "../server.ts";
 import { deleteAvatar, storeAvatar } from "../services/avatar.ts";
 
@@ -62,21 +63,26 @@ describe("Agent Routes", () => {
     role = "member",
     owner = "user-1",
     rows = {},
+    options = {},
   }: {
     role?: "admin" | "member";
     owner?: string;
     rows?: Store;
+    options?: FakeDbOptions;
   } = {}): FakeDb =>
-    seedDb({
-      organization_member: [
-        { id: "m1", userId: "user-1", organizationId: orgId, role },
-      ],
-      workspace: [
-        { id: workspaceId, organizationId: orgId, ownerId: owner },
-        { id: "ws-2", organizationId: orgId, ownerId: owner },
-      ],
-      ...rows,
-    });
+    seedDb(
+      {
+        organization_member: [
+          { id: "m1", userId: "user-1", organizationId: orgId, role },
+        ],
+        workspace: [
+          { id: workspaceId, organizationId: orgId, ownerId: owner },
+          { id: "ws-2", organizationId: orgId, ownerId: owner },
+        ],
+        ...rows,
+      },
+      options,
+    );
 
   const agentOf = (fake: FakeDb, id: string) =>
     fake.tables.agent.find((a) => a.id === id);
@@ -741,6 +747,16 @@ describe("Agent Routes", () => {
           ],
           workspace_agent_pin: pins,
         },
+        options: {
+          unique: {
+            workspace_agent_pin: [
+              {
+                name: "workspace_agent_pin_workspace_id_agent_id_pk",
+                columns: ["workspace_id", "agent_id"],
+              },
+            ],
+          },
+        },
       });
 
     const pin = (agentId: string, method: "PUT" | "DELETE", ws = workspaceId) =>
@@ -796,6 +812,17 @@ describe("Agent Routes", () => {
       expect((await pin("agent-1", "DELETE")).status).toBe(200);
       expect((await pin("agent-1", "DELETE")).status).toBe(200);
       expect(pinned(fake)).toEqual([]);
+    });
+
+    it("pins with one insert, without reading the pin table first", async () => {
+      mockSession();
+      const fake = pinWorld();
+
+      expect((await pin("agent-1", "PUT")).status).toBe(200);
+
+      expect(
+        fake.queries.filter((q) => q.table === "workspace_agent_pin"),
+      ).toEqual([{ kind: "insert", table: "workspace_agent_pin" }]);
     });
 
     it("pins a Shared Agent in this Workspace only", async () => {
