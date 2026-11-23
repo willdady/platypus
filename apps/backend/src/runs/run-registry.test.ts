@@ -32,11 +32,6 @@ describe("RunRegistry", () => {
     expect(registry.cancel("nope")).toBe(false);
   });
 
-  // Issue #648. A Chat run's id IS the chat id, so a second submission into a
-  // Chat with a live turn lands here — and the claim is now the first thing a
-  // run does, ahead of any persistence, so this rejection is what protects the
-  // live run's state. Typed as a `ConflictError` because ADR-0010's central
-  // handler answers 409 for one; a plain `Error` became a 500.
   it("rejects a duplicate runId with a ConflictError", () => {
     registry.register("dup-1");
 
@@ -50,8 +45,6 @@ describe("RunRegistry", () => {
     expect(() => registry.register("dup-2")).not.toThrow();
   });
 
-  // The rejection must not disturb the run that holds the id: its signal and
-  // its timers belong to the first claim.
   it("leaves the holding run untouched when a duplicate is rejected", () => {
     const handle = registry.register("dup-3", {
       perStepTimeoutMs: 1000,
@@ -82,8 +75,6 @@ describe("RunRegistry", () => {
       expect(handle.signal.aborted).toBe(true);
       registry.unregister("held");
       expect(registry.heldRuns()).toEqual([]);
-      // A run that finishes after the stop signal frees its id as usual; the
-      // gate stays closed for anything that tries to claim a new one.
       expect(() => registry.register("held")).toThrow(ServiceUnavailableError);
     });
 
@@ -184,7 +175,6 @@ describe("RunRegistry", () => {
     handle.bumpStep();
     vi.advanceTimersByTime(800);
 
-    // 1.6s elapsed but bumped at 800ms, so per-step (1000ms) hasn't fired yet
     expect(handle.signal.aborted).toBe(false);
     expect(onTimeout).not.toHaveBeenCalled();
 
@@ -202,8 +192,6 @@ describe("RunRegistry", () => {
       });
 
       handle.holdStep();
-      // Ten times the stall threshold: a tool that is still executing is not a
-      // stalled step, however long it takes.
       vi.advanceTimersByTime(10_000);
       expect(onTimeout).not.toHaveBeenCalled();
       expect(handle.signal.aborted).toBe(false);
@@ -256,8 +244,6 @@ describe("RunRegistry", () => {
       expect(handle.signal.aborted).toBe(false);
     });
 
-    // The per-RUN ceiling is the backstop: a tool that never returns must not
-    // buy the run unlimited wall-clock just by holding the step timer down.
     it("does not suspend the per-run timeout", () => {
       const onTimeout = vi.fn();
       const handle = registry.register("hold-4", {
@@ -271,6 +257,21 @@ describe("RunRegistry", () => {
 
       expect(handle.signal.aborted).toBe(true);
       expect((onTimeout.mock.calls[0][0] as TimeoutError).kind).toBe("run");
+    });
+
+    it("a step bump during a hold does not re-arm the timer", () => {
+      const onTimeout = vi.fn();
+      const handle = registry.register("hold-6", {
+        perStepTimeoutMs: 1000,
+        perRunTimeoutMs: 1_000_000,
+        onTimeout,
+      });
+
+      handle.holdStep();
+      handle.bumpStep();
+      vi.advanceTimersByTime(5000);
+
+      expect(onTimeout).not.toHaveBeenCalled();
     });
 
     it("a hold taken after the run finished never re-arms a timer", () => {
@@ -315,10 +316,6 @@ describe("RunRegistry", () => {
     expect(registry.has("x")).toBe(false);
   });
 
-  // The per-step bound measures silence, not elapsed time. A step that streams
-  // for longer than the bound is still working; only one that goes quiet for
-  // the whole window is a stall. This is the regression from issue #552, where
-  // a single long answer was aborted mid-stream at exactly the bound.
   describe("per-step timeout as an idle timeout", () => {
     it("noteActivity keeps a step alive far past the per-step bound", () => {
       const onTimeout = vi.fn();
@@ -328,8 +325,6 @@ describe("RunRegistry", () => {
         onTimeout,
       });
 
-      // Ten times the bound, streaming steadily throughout, with no step ever
-      // finishing — exactly the shape of one long answer.
       for (let i = 0; i < 20; i++) {
         vi.advanceTimersByTime(500);
         handle.noteActivity();
@@ -349,8 +344,6 @@ describe("RunRegistry", () => {
 
       vi.advanceTimersByTime(900);
       handle.noteActivity();
-      // Silence from here. The timer that was armed at registration wakes at
-      // 1000ms, finds 100ms of idle, and re-arms for the remaining 900ms.
       vi.advanceTimersByTime(1000);
 
       expect(onTimeout).toHaveBeenCalledTimes(1);
@@ -370,8 +363,6 @@ describe("RunRegistry", () => {
         handle.noteActivity();
       }
 
-      // A run that streams forever is still bounded — that is the whole point
-      // of keeping the two timers independent.
       expect(
         onTimeout.mock.calls.some(
           (call) => (call[0] as TimeoutError).kind === "run",
@@ -393,8 +384,6 @@ describe("RunRegistry", () => {
       );
       expect(text).toContain("2 minutes");
       expect(text).toContain("stopped sending output");
-      // The internal message names a run id and a millisecond figure; neither
-      // belongs in front of a user.
       expect(text).not.toContain("internal wording");
       expect(text).not.toContain("120000");
     });

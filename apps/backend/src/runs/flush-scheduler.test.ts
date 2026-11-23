@@ -56,7 +56,6 @@ describe("FlushScheduler", () => {
     await sched.flush();
     expect(fn).toHaveBeenCalledTimes(1);
 
-    // Pending timer was cleared, so advancing past intervalMs should not fire again
     await vi.advanceTimersByTimeAsync(2000);
     expect(fn).toHaveBeenCalledTimes(1);
   });
@@ -84,7 +83,6 @@ describe("FlushScheduler", () => {
 
     sched.bump();
     await vi.advanceTimersByTimeAsync(100);
-    // flush is now running but its promise hasn't resolved
     expect(fn).toHaveBeenCalledTimes(1);
 
     let disposed = false;
@@ -92,7 +90,6 @@ describe("FlushScheduler", () => {
       disposed = true;
     });
 
-    // Microtask flush — dispose should still be waiting on the in-flight fn
     await Promise.resolve();
     expect(disposed).toBe(false);
 
@@ -128,15 +125,12 @@ describe("FlushScheduler", () => {
 
     sched.bump();
     await vi.advanceTimersByTimeAsync(100);
-    // Should not have rejected
     sched.bump();
     await vi.advanceTimersByTimeAsync(100);
 
     expect(fn).toHaveBeenCalledTimes(2);
   });
 
-  // #1124: callers don't await a scheduled flush, so a failure nobody logs
-  // leaves no trace at all.
   it("logs the error a scheduled flush throws", async () => {
     const error = new Error("db down");
     const fn = vi.fn().mockRejectedValue(error);

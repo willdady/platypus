@@ -33,7 +33,6 @@ const POLICY: ClearingPolicy = {
   batchSize: TOOL_CLEARING_BATCH,
 };
 
-/** The summary pass and any other caller clearing everything it is given. */
 const SUMMARY_POLICY = { keepRecent: 0, batchSize: POLICY.batchSize };
 
 const bigResult = (toolCallId: string, size = 5_000): ModelMessage =>
@@ -73,7 +72,6 @@ describe("isClearableToolName", () => {
     expect(isClearableToolName(name)).toBe(true);
   });
 
-  // Denied by default — mutating tools, delegation, and skill loading.
   it.each([
     "fsWrite",
     "fsEdit",
@@ -86,8 +84,6 @@ describe("isClearableToolName", () => {
     expect(isClearableToolName(name)).toBe(false);
   });
 
-  // The MCP read-only hint (ADR-0021, issue #626): a caller-supplied resolver,
-  // never a concept this module holds itself.
   describe("with an isReadOnlyTool resolver", () => {
     it("allows a name the resolver reports read-only", () => {
       expect(isClearableToolName("docs__search", () => true)).toBe(true);
@@ -113,7 +109,6 @@ describe("clearStaleToolResults", () => {
 
     const result = clearStaleToolResults(messages, POLICY);
 
-    // floor((8 - 4) / 4) * 4 = 4.
     expect(clearedIds(result)).toEqual(["t0", "t1", "t2", "t3"]);
     result.slice(4).forEach((message, index) => {
       expect(message).toBe(messages[index + 4]);
@@ -121,9 +116,6 @@ describe("clearStaleToolResults", () => {
   });
 
   it("clears everything when keep-recent is zero, so the summary pass leaves nothing live", () => {
-    // The summary pass calls this with `keepRecent: 0`; it must not adopt the
-    // batched boundary's "wait for a whole batch" posture, because its window
-    // is the pass's own input and every clearable result in it is surplus.
     const messages = ["a", "b", "c", "d", "e"].map((id) =>
       toolResultMessage("read_url", id, "tiny"),
     );
@@ -153,7 +145,6 @@ describe("clearStaleToolResults", () => {
   });
 
   it("returns the same array reference while fewer than a batch are stale", () => {
-    // keepRecent + batchSize - 1 stay live: no earlier message changes.
     const messages = results(7);
     expect(clearStaleToolResults(messages, POLICY)).toBe(messages);
   });
@@ -198,8 +189,6 @@ describe("clearStaleToolResults", () => {
 });
 
 describe("applyToolResultClearing", () => {
-  // Below the threshold with nothing engaged earlier — or with either figure
-  // unknown, however high the other reads — the messages go out byte-identical.
   it.each([
     [69, 100, false],
     [70, 100, true],
@@ -225,9 +214,6 @@ describe("applyToolResultClearing", () => {
   );
 
   it("keeps clearing when an earlier reading on the path crossed the trigger", () => {
-    // The flip-flop: an earlier turn crossed 0.7 and its pass cleared the
-    // oldest results, so the latest reading — taken with them cleared — is
-    // back below 0.7. Gating on the latest reading alone re-sends everything.
     const messages = results(8);
 
     expect(
@@ -302,8 +288,6 @@ describe("batched boundary", () => {
     let grown = pass(results(8));
     expect(clearedIds(grown)).toEqual(["t0", "t1", "t2", "t3"]);
 
-    // Up to B - 1 appends: the boundary does not move, so the same call returns
-    // the array untouched and every message keeps its identity.
     for (let added = 1; added < POLICY.batchSize; added += 1) {
       grown = [...grown, bigResult(`t${7 + added}`)];
       expect(pass(grown)).toBe(grown);
@@ -320,8 +304,6 @@ describe("batched boundary", () => {
 
     const after = pass(next);
 
-    // The four cleared results keep their exact objects; the next batch is
-    // exactly four more, and the newest four stay live.
     before.slice(0, 4).forEach((message, index) => {
       expect(after[index]).toBe(message);
     });

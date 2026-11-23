@@ -98,6 +98,22 @@ describe("Files Routes", () => {
       expect(mockDb.limit).not.toHaveBeenCalled();
     });
 
+    it.each(["org-1/skills/s-1/u-1/f-1", "org-1/SKILLS/s-1/u-1/f-1"])(
+      "should refuse the Skill file %s even to a super admin",
+      async (key) => {
+        mockSession({
+          id: "user-1",
+          email: "admin@example.com",
+          role: "admin",
+        });
+
+        const res = await app.request(`/files/${key}`);
+
+        expect(res.status).toBe(403);
+        expect(mockStorageGetStream).not.toHaveBeenCalled();
+      },
+    );
+
     it("should return 403 when user is not org member", async () => {
       mockSession();
       // Membership check returns empty array

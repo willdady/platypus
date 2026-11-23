@@ -1,9 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { checkEgress, EGRESS_BLOCKED_MESSAGE } from "./egress-guard.ts";
 
-// Tests inject `resolve`, so nothing here touches real DNS. Literal IP hosts
-// skip resolution entirely and pass no resolver at all; `localhost` exercises
-// the default resolver.
 const resolvesTo =
   (...addresses: string[]) =>
   () =>
@@ -32,7 +29,6 @@ describe("checkEgress", () => {
     });
 
     it("blocks an IPv4-mapped IPv6 literal in hex form", async () => {
-      // isIP() calls this v6, so the v4 rules only see it once unwrapped.
       const reason = expectBlocked(
         await checkEgress("http://[::ffff:a9fe:a9fe]/", {
           allowPrivateNetworks: true,
@@ -50,8 +46,6 @@ describe("checkEgress", () => {
     });
 
     it("blocks a link-local address carrying a zone id", async () => {
-      // A resolver can hand back a scoped address; the zone scopes which
-      // interface it sits on and must not hide it from the link-local rule.
       const reason = expectBlocked(
         await checkEgress("http://intranet.example.com/", {
           allowPrivateNetworks: true,
@@ -164,7 +158,6 @@ describe("checkEgress", () => {
   });
 
   describe("numeric encodings normalised by URL parsing", () => {
-    // These need no guard logic — WHATWG URL rewrites the host before we look.
     it.each([
       ["decimal", "http://2852039166/", "169.254.169.254"],
       ["octal", "http://0251.0376.0251.0376/", "169.254.169.254"],
@@ -199,7 +192,6 @@ describe("checkEgress", () => {
     });
 
     it("allows a hostname resolving into RFC-1918 by default", async () => {
-      // The intranet case the inverted posture exists for.
       expect(
         await checkEgress("https://wiki.internal/page", {
           allowPrivateNetworks: true,
@@ -303,7 +295,6 @@ describe("checkEgress", () => {
     });
 
     it("resolves through the system resolver when none is injected", async () => {
-      // `localhost` resolves from the hosts file, so no network is touched.
       const reason = expectBlocked(
         await checkEgress("http://localhost/", { allowPrivateNetworks: true }),
       );
@@ -321,9 +312,6 @@ describe("checkEgress", () => {
   });
 
   it("keeps the model-facing message uniform across causes", () => {
-    // The reason string is for the server log. The model sees only this, so it
-    // cannot tell "does not resolve" from "resolves somewhere blocked" and use
-    // the tool to probe internal DNS.
     expect(EGRESS_BLOCKED_MESSAGE).not.toContain("resolve");
     expect(EGRESS_BLOCKED_MESSAGE).not.toContain("169.254");
   });

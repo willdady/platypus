@@ -9,6 +9,7 @@ import {
   isProviderUnavailableError,
   sanitizeMessagesForFallback,
 } from "./fallback.ts";
+import { describeSdkError } from "./stream-error.ts";
 
 const apiError = (statusCode: number | undefined, message = "failed") =>
   new APICallError({
@@ -35,6 +36,8 @@ describe("isProviderUnavailableError", () => {
     ["forbidden credentials", apiError(403)],
     ["a request timeout", apiError(408)],
     ["a connection failure", new TypeError("fetch failed")],
+    ["a call that never reached the Provider", apiError(undefined)],
+    ["a stringified rate limit", describeSdkError(apiError(429))],
     [
       "a retryable error that outlived the retries",
       retryOf(new TypeError("fetch failed")),

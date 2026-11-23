@@ -13,22 +13,6 @@ import {
   type OccupancyReading,
 } from "./tool-result-clearing.ts";
 
-/**
- * Tool-input clearing (ADR-0018 Notes, issue #1722).
- *
- * Tool-result clearing's sibling for writes: replaces the bulky input fields
- * of an older, successful call to a core write tool
- * (`CLEARABLE_TOOL_INPUT_FIELDS`) in what one model call receives. Send-time
- * only, like result clearing — what is persisted and what a User sees keep
- * the full input. Wired in beside `applyToolResultClearing` in
- * `buildModelInvocation` (`./run-plan.ts`), so every Drive gets it.
- *
- * Same batched boundary and sticky gate as result clearing, through the same
- * `clearingPrefixLength` and `clearingEngaged`: once engaged it moves the
- * survivor boundary by a whole batch of successful writes, so the cached
- * prompt prefix survives the steps in between.
- */
-
 export const DEFAULT_INPUT_CLEARING_POLICY: ClearingPolicy = {
   thresholdFraction: TOOL_RESULT_CLEARING_THRESHOLD,
   keepRecent: TOOL_INPUT_CLEARING_KEEP_RECENT,
@@ -37,11 +21,6 @@ export const DEFAULT_INPUT_CLEARING_POLICY: ClearingPolicy = {
 
 type ToolOutput = { type: string; value?: unknown };
 
-/**
- * Whether a result says its call succeeded: not an SDK error or denial, and
- * not the `{ error }` value a domain tool's `asToolResult` returns. A failed
- * call keeps its input — the model needs it to correct and retry.
- */
 const succeeded = (output: ToolOutput): boolean => {
   if (output.type.startsWith("error-") || output.type === "execution-denied")
     return false;
@@ -54,7 +33,6 @@ const succeeded = (output: ToolOutput): boolean => {
   );
 };
 
-/** The `toolCallId`s whose result is present and successful. */
 const succeededCallIds = (messages: ModelMessage[]): Set<string> => {
   const ids = new Set<string>();
   for (const message of messages) {
@@ -68,7 +46,6 @@ const succeededCallIds = (messages: ModelMessage[]): Set<string> => {
   return ids;
 };
 
-/** `input` with each of `fields` it holds set to the marker, or `input` itself if nothing changes. */
 const clearFields = (input: unknown, fields: readonly string[]): unknown => {
   if (typeof input !== "object" || input === null) return input;
   const record = input as Record<string, unknown>;
@@ -82,7 +59,6 @@ const clearFields = (input: unknown, fields: readonly string[]): unknown => {
   };
 };
 
-/** The `toolCallId`s of successful calls to a clearable write tool, in transcript order. */
 const clearableCallIds = (messages: ModelMessage[]): string[] => {
   const succeededIds = succeededCallIds(messages);
   const ids: string[] = [];
@@ -99,12 +75,6 @@ const clearableCallIds = (messages: ModelMessage[]): string[] => {
   return ids;
 };
 
-/**
- * Clears the batched prefix of clearable calls' input — the oldest
- * `floor((n - keepRecent) / batchSize) * batchSize` — leaving the newest
- * `keepRecent` untouched. No occupancy check: `applyToolInputClearing` is the
- * gated entry point.
- */
 export const clearStaleToolInputs = (
   messages: ModelMessage[],
   policy: Pick<
@@ -141,15 +111,6 @@ export const clearStaleToolInputs = (
     : cleared;
 };
 
-/**
- * The gated entry point: clears a batch of allowlisted input fields once
- * clearing has engaged — the current reading is at `thresholdFraction` of the
- * declared window, or an earlier reading on the Active path was. An undeclared
- * window clears nothing, as with result clearing.
- *
- * Returns the same array reference when nothing changes, so a caller can tell
- * "untouched" from "rebuilt" by identity.
- */
 export const applyToolInputClearing = (
   messages: ModelMessage[],
   reading: OccupancyReading,

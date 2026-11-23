@@ -52,7 +52,6 @@ describe("file reference", () => {
       ).toEqual({ key: KEY, valid: true });
     });
 
-    // Issue #839: the form a client replays on a deployment with a CDN.
     it("reads the public form", () => {
       process.env.STORAGE_PUBLIC_URL = "https://cdn.example.com";
       expect(
@@ -60,12 +59,6 @@ describe("file reference", () => {
       ).toEqual({ key: KEY, valid: true });
     });
 
-    /**
-     * A client can put any URL on a part. A `/files/` path under somebody
-     * else's host names nothing this deployment served, so it stays the
-     * external URL it claims to be rather than becoming a read of our own
-     * store.
-     */
     it("ignores a /files/ URL under a host this deployment does not serve", () => {
       expect(
         resolvableStorageKeyFromUrl(
@@ -118,7 +111,6 @@ describe("file reference", () => {
       expect(new TextDecoder().decode(decoded!.bytes)).toBe("hello");
     });
 
-    // The three shapes the second, stricter parser used to refuse (issue #839).
     it("reads an omitted media type as application/octet-stream", () => {
       const decoded = decodeDataUrl("data:;base64,aGVsbG8=");
       expect(decoded?.mediaType).toBe("application/octet-stream");

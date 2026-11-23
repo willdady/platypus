@@ -16,20 +16,6 @@ import { z } from "zod";
 import { createMessageMetadata } from "./message-metadata.ts";
 import type { PlatypusUIMessage } from "../types.ts";
 
-/**
- * Context occupancy, driven through a real multi-step stream.
- *
- * The run-lifecycle suite mocks the AI SDK wholesale: the model is a sentinel
- * and the usage numbers are whatever the test author typed, so an
- * implementation reading the SDK's cumulative usage passes it happily. This
- * suite is the only one that can fail on ADR-0018's central trap — three
- * numbers look like occupancy and two of them are sums.
- *
- * Per-step usage is deliberately different, and deliberately not a multiple of
- * itself, so the last step's count, the sum, and any average are three
- * distinguishable numbers.
- */
-
 const usage = (inputTotal: number, outputTotal: number) => ({
   inputTokens: {
     total: inputTotal,
@@ -40,7 +26,6 @@ const usage = (inputTotal: number, outputTotal: number) => ({
   outputTokens: { total: outputTotal, text: outputTotal, reasoning: undefined },
 });
 
-/** A Provider that reports an input count and no output one. */
 const inputOnlyUsage = (inputTotal: number) => ({
   inputTokens: {
     total: inputTotal,
@@ -51,7 +36,6 @@ const inputOnlyUsage = (inputTotal: number) => ({
   outputTokens: { total: undefined, text: undefined, reasoning: undefined },
 });
 
-/** A Provider that reports no token usage — occupancy is then unknowable. */
 const NO_USAGE = {
   inputTokens: {
     total: undefined,
@@ -62,11 +46,6 @@ const NO_USAGE = {
   outputTokens: { total: undefined, text: undefined, reasoning: undefined },
 };
 
-/**
- * The Anthropic / Bedrock wire shape: the input figure is the TOTAL, inclusive
- * of whatever was read from cache or newly written (issue #734). The cache
- * fields are the breakdown the fold must carry alongside the flat sum.
- */
 const cachedUsage = (
   inputTotal: number,
   outputTotal: number,
@@ -75,8 +54,6 @@ const cachedUsage = (
 ) => ({
   inputTokens: {
     total: inputTotal,
-    // The non-cached tail, derived so `total` is the inclusive figure a real
-    // vendor reports — the number the panel keeps meaning as Input.
     noCache: inputTotal - (cacheRead ?? 0) - (cacheWrite ?? 0) || undefined,
     cacheRead,
     cacheWrite,
@@ -84,18 +61,12 @@ const cachedUsage = (
   outputTokens: { total: outputTotal, text: outputTotal, reasoning: undefined },
 });
 
-/** The tool the model calls to force a second round trip. */
 const ping = tool({
   description: "Ping a service.",
   inputSchema: z.object({}),
   execute: () => Promise.resolve("pong"),
 });
 
-/**
- * The provider-level stream result and part types, reached through the mock
- * model's own signature — `@ai-sdk/provider`, which declares them, is a
- * transitive dependency rather than one this app imports directly.
- */
 type StreamResult = Extract<
   NonNullable<ConstructorParameters<typeof MockLanguageModelV4>[0]>["doStream"],
   ReadonlyArray<unknown>
@@ -103,14 +74,12 @@ type StreamResult = Extract<
 type StreamPart = StreamResult extends { stream: ReadableStream<infer Part> }
   ? Part
   : never;
-/** What a Provider reports for one model call. */
 type ProviderUsage = Extract<StreamPart, { type: "finish" }>["usage"];
 
 const chunks = (parts: StreamPart[]): StreamResult => ({
   stream: simulateReadableStream({ chunks: parts }),
 });
 
-/** Step one: the model calls the tool. */
 const toolCallStep = (reported: ProviderUsage) =>
   chunks([
     { type: "stream-start", warnings: [] },
@@ -125,7 +94,6 @@ const toolCallStep = (reported: ProviderUsage) =>
     },
   ]);
 
-/** Step two: the tool result is back in the prompt, and the model answers. */
 const answerStep = (reported: ProviderUsage) =>
   chunks([
     { type: "stream-start", warnings: [] },
@@ -146,11 +114,6 @@ const mockModel = (steps: StreamResult[]) =>
     doStream: steps,
   });
 
-/**
- * Consume a UI message stream the way both the client and the run's own
- * snapshot reader do, and return the message they end up with — metadata
- * chunks merged, which is where a reading either survives or is overwritten.
- */
 const lastSnapshot = async (
   stream: Parameters<
     typeof readUIMessageStream<PlatypusUIMessage>
@@ -165,7 +128,6 @@ const lastSnapshot = async (
   return message;
 };
 
-/** The production wiring: the runner passes exactly this to the SDK. */
 const uiStreamOf = <TOOLS extends ToolSet>(result: {
   stream: ReadableStream<TextStreamPart<TOOLS>>;
 }) =>
@@ -177,12 +139,6 @@ const uiStreamOf = <TOOLS extends ToolSet>(result: {
     }),
   });
 
-/**
- * A two-step turn: 1,000 tokens in on the first call, 4,200 on the second
- * because the tool call and its result are now part of the prompt. Returns the
- * finished message alongside the SDK's own cumulative figure, so a test can
- * name the number occupancy must not be.
- */
 const runTurn = async () => {
   const result = streamText({
     model: mockModel([
@@ -206,9 +162,6 @@ describe("Context occupancy over a real multi-step stream", () => {
       inputTokens: 4_200,
       outputTokens: 70,
     });
-    // The number the implementation must not have read. It is the SDK's
-    // cumulative usage — correct as a billing figure, and on a twenty-step
-    // turn it reads roughly an order of magnitude high.
     expect(totalUsage.inputTokens).toBe(5_200);
   });
 
@@ -218,8 +171,6 @@ describe("Context occupancy over a real multi-step stream", () => {
     expect(message?.metadata?.agentId).toBe("agent-1");
   });
 
-  // A cancelled turn never emits a terminal finish part, and cancelling a long
-  // turn is exactly when the context had grown most.
   it("keeps the reading from a turn cancelled mid-stream", async () => {
     const controller = new AbortController();
     const result = streamText({
@@ -231,14 +182,11 @@ describe("Context occupancy over a real multi-step stream", () => {
       tools: { ping },
       stopWhen: [stepCountIs(5)],
       abortSignal: controller.signal,
-      // Cancelled the moment the first step lands, so the turn ends with one
-      // step's reading taken and no terminal finish part.
       onStepEnd: () => controller.abort(),
     });
 
     const message = await lastSnapshot(uiStreamOf(result));
 
-    // The turn really did stop early: the second step's answer never arrived.
     expect(message?.parts).not.toContainEqual(
       expect.objectContaining({ type: "text" }),
     );
@@ -256,14 +204,10 @@ describe("Context occupancy over a real multi-step stream", () => {
 
     const message = await lastSnapshot(uiStreamOf(result));
 
-    // Attributed, but nothing estimated from the text it produced.
     expect(message?.metadata?.agentId).toBe("agent-1");
     expect(message?.metadata).not.toHaveProperty("contextOccupancy");
   });
 
-  // The first step's 1,000 tokens are not this turn's context size, and the
-  // merge would keep them on the message unless something concrete replaces
-  // them.
   it("does not leave an earlier step's figure standing when the last step reports no usage", async () => {
     const result = streamText({
       model: mockModel([toolCallStep(usage(1_000, 30)), answerStep(NO_USAGE)]),
@@ -277,8 +221,6 @@ describe("Context occupancy over a real multi-step stream", () => {
     expect(message?.metadata?.contextOccupancy).toBeNull();
   });
 
-  // The same hazard one level down, and the merge is deep: an omitted output
-  // count would pair the last step's 4,200 with the first step's 30.
   it("does not leave an earlier step's output count standing beside a fresh input count", async () => {
     const result = streamText({
       model: mockModel([
@@ -296,7 +238,6 @@ describe("Context occupancy over a real multi-step stream", () => {
       inputTokens: 4_200,
       outputTokens: null,
     });
-    // Token usage, a sum rather than a reading, folds the missing count as 0.
     expect(message?.metadata?.tokenUsage).toEqual({
       inputTokens: 5_200,
       outputTokens: 30,
@@ -304,18 +245,7 @@ describe("Context occupancy over a real multi-step stream", () => {
   });
 });
 
-/**
- * Tool durations over a real stream.
- *
- * The point of driving the real SDK here is that the mechanism this feature
- * depends on is entirely the SDK's. `applyToolDurations` stamps the figure onto
- * the tool part, but the stream's tool reducer rebuilds that part from its
- * stored invocation and discards the stamp — so a unit test of the stamp passes
- * while the browser shows nothing (issue #353). Only a real stream can tell the
- * two apart, and these tests assert on the message a client actually reduces.
- */
 describe("tool durations over a real multi-step stream", () => {
-  /** Takes long enough that a rounded millisecond figure is non-zero. */
   const slowPing = tool({
     description: "Ping a service.",
     inputSchema: z.object({}),
@@ -325,7 +255,6 @@ describe("tool durations over a real multi-step stream", () => {
     },
   });
 
-  /** Runs a two-step turn, wiring the durations exactly as the runner does. */
   const runToolTurn = async (tools: Record<string, typeof slowPing>) => {
     const toolDurations = new Map<string, number>();
     const result = streamText({
@@ -362,10 +291,6 @@ describe("tool durations over a real multi-step stream", () => {
     expect(delivered).toBeGreaterThanOrEqual(15);
   });
 
-  // The reason the duration travels as message metadata at all: the SDK gives
-  // the tool part back without it, so this asserts the gap the metadata fills.
-  // If a future SDK starts honouring the output chunk's `toolMetadata`, this
-  // test failing is the signal that the metadata channel is now redundant.
   it("confirms the SDK leaves the tool part itself without a duration", async () => {
     const { message } = await runToolTurn({ ping: slowPing });
 
@@ -398,11 +323,6 @@ describe("tool durations over a real multi-step stream", () => {
   });
 });
 
-/**
- * Token usage (issue #354), driven through the same real multi-step stream as
- * Context occupancy above — the two must diverge on exactly this fixture, or
- * the panel is showing occupancy twice under two names.
- */
 describe("Token usage over a real multi-step stream", () => {
   const runTokenUsageTurn = async () => {
     const result = streamText({
@@ -431,15 +351,12 @@ describe("Token usage over a real multi-step stream", () => {
   it("folds input and output tokens across every step, not the last one", async () => {
     const { message } = await runTokenUsageTurn();
 
-    // 1,000 + 4,200 and 30 + 70 — the sum, which is a different number from
-    // Context occupancy's 4,200 / 70 on this same fixture.
     expect(message?.metadata?.tokenUsage).toEqual({
       inputTokens: 5_200,
       outputTokens: 100,
     });
   });
 
-  // Issue #1634: a delegate's tokens were billed to this turn too.
   it("adds the usage the turn's delegates reported", async () => {
     const result = streamText({
       model: mockModel([
@@ -474,15 +391,12 @@ describe("Token usage over a real multi-step stream", () => {
       outputTokens: 120,
       cacheReadTokens: 100,
     });
-    // Occupancy stays the turn's own last call (ADR-0018).
     expect(message?.metadata?.contextOccupancy).toEqual({
       inputTokens: 4_200,
       outputTokens: 70,
     });
   });
 
-  // Issue #1256: a reply resumed after its approvals were answered is two
-  // requests, and both were billed.
   it("adds onto what a continued reply already recorded", async () => {
     const result = streamText({
       model: mockModel([answerStep(usage(4_200, 70))]),
@@ -564,7 +478,6 @@ describe("Token usage over a real multi-step stream", () => {
     expect(message?.metadata).not.toHaveProperty("tokenUsage");
   });
 
-  /** Runs a two-step turn with the given per-step usage fixtures. */
   const runWithUsages = async (first: ProviderUsage, second: ProviderUsage) => {
     const result = streamText({
       model: mockModel([toolCallStep(first), answerStep(second)]),
@@ -584,8 +497,6 @@ describe("Token usage over a real multi-step stream", () => {
     );
   };
 
-  // Issue #734. Anthropic/Bedrock report both a cached-read and a cached-write
-  // count, so a turn on those Providers must carry both — summed across steps.
   it("folds cached-read and cached-write tokens across every step (Anthropic/Bedrock shape)", async () => {
     const message = await runWithUsages(
       cachedUsage(1_000, 30, 700, 100),
@@ -600,9 +511,6 @@ describe("Token usage over a real multi-step stream", () => {
     });
   });
 
-  // Issue #734. OpenAI and Google cache implicitly and report a read count but
-  // no write one, so the write key (and any UI row) is legitimately missing on
-  // those two rather than zero.
   it("reports a cached-read count without a write one (OpenAI/Google shape)", async () => {
     const message = await runWithUsages(
       cachedUsage(1_000, 30, 500, undefined),
@@ -616,9 +524,6 @@ describe("Token usage over a real multi-step stream", () => {
     });
   });
 
-  // The breakdown must never change what Input means. The input figure already
-  // includes cached tokens, so it stays the same sum whether or not the
-  // Provider reports any cache detail.
   it("keeps Input, Output and Total unchanged when a Provider reports cache details", async () => {
     const message = await runWithUsages(
       cachedUsage(1_000, 30, 700, 100),
@@ -629,10 +534,6 @@ describe("Token usage over a real multi-step stream", () => {
     expect(message?.metadata?.tokenUsage?.outputTokens).toBe(100);
   });
 
-  // Decision 4: a Provider that reports no cache detail stores no cache key and
-  // renders no row — the existing `usage()` helper reports no cache fields at
-  // all, exactly the shape of a Provider that caches nothing (or has nothing
-  // yet in the cache).
   it("persists no cache keys for a Provider that reports no cache detail", async () => {
     const message = await runWithUsages(usage(1_000, 30), usage(4_200, 70));
 
@@ -642,17 +543,12 @@ describe("Token usage over a real multi-step stream", () => {
     });
   });
 
-  // The trap ADR-0018 documents for occupancy reapplies here: on a multi-step
-  // turn these are SUMS, so a later step's reports accumulate rather than
-  // replace the earlier ones.
   it("sums the cached counts across steps, never replacing an earlier step's", async () => {
     const message = await runWithUsages(
       cachedUsage(1_000, 30, 700, 100),
       cachedUsage(4_200, 70, 2_000, undefined),
     );
 
-    // The earlier step's write of 100 survives even though the last step
-    // reported none — a billing sum only grows, unlike occupancy.
     expect(message?.metadata?.tokenUsage).toEqual({
       inputTokens: 5_200,
       outputTokens: 100,
@@ -662,11 +558,6 @@ describe("Token usage over a real multi-step stream", () => {
   });
 });
 
-/**
- * Preparation and Model durations (issue #354) — the two-phase wall clock the
- * panel shows instead of first-token latency. A fake clock makes the
- * assertions exact rather than "at least however long the test took".
- */
 describe("Preparation and Model durations", () => {
   const answerOnly = () =>
     streamText({
@@ -704,9 +595,6 @@ describe("Preparation and Model durations", () => {
   });
 
   it("computes Model duration as the elapsed time since the Drive started, last step standing", async () => {
-    // Each call to the fake clock advances by 500ms; two steps means two
-    // `finish-step` reads, at 0 and 500ms elapsed. The message keeps
-    // whichever one was read last — the second step's, 500.
     let calls = 0;
     const now = () => 1_000 + calls++ * 500;
 
@@ -749,8 +637,6 @@ describe("Preparation and Model durations", () => {
       tools: { ping },
       stopWhen: [stepCountIs(5)],
       abortSignal: controller.signal,
-      // Cancelled the moment the first step lands, so the turn ends with only
-      // that step's `finish-step` reading taken and no terminal finish part.
       onStepEnd: () => controller.abort(),
     });
 
@@ -769,9 +655,6 @@ describe("Preparation and Model durations", () => {
     expect(message?.parts).not.toContainEqual(
       expect.objectContaining({ type: "text" }),
     );
-    // Only the first step's `finish-step` was ever read (0ms elapsed) before
-    // the abort — proof that a reading exists at all even though the turn
-    // never reached a terminal finish.
     expect(message?.metadata?.modelDurationMs).toBe(0);
   });
 
@@ -790,11 +673,6 @@ describe("Preparation and Model durations", () => {
   });
 });
 
-/**
- * The turn's clearable Tool names, among the ones it actually called
- * (ADR-0021, issue #626) — the fact the Chat UI's client-side clearing mirror
- * reads instead of importing a name list of its own.
- */
 describe("read-only Tool names over a real multi-step stream", () => {
   it("reports a called tool the resolver says is clearable", async () => {
     const result = streamText({
@@ -871,16 +749,55 @@ describe("read-only Tool names over a real multi-step stream", () => {
 
     expect(message?.metadata).not.toHaveProperty("readOnlyToolNames");
   });
+
+  it("keeps every called tool's name and duration across steps, not only the last", async () => {
+    const toolDurations = new Map<string, number>();
+    const result = streamText({
+      model: mockModel([
+        toolCallStep(usage(1_000, 30)),
+        chunks([
+          { type: "stream-start", warnings: [] },
+          {
+            type: "tool-call",
+            toolCallId: "call-2",
+            toolName: "echo",
+            input: "{}",
+          },
+          {
+            type: "finish",
+            finishReason: { unified: "tool-calls", raw: "tool_use" },
+            usage: usage(2_000, 30),
+          },
+        ]),
+        answerStep(usage(4_200, 70)),
+      ]),
+      prompt: "Ping the service, then echo.",
+      tools: { ping, echo: ping },
+      stopWhen: [stepCountIs(5)],
+      onToolExecutionEnd: ({ toolCall, toolExecutionMs }) => {
+        toolDurations.set(toolCall.toolCallId, toolExecutionMs);
+      },
+    });
+
+    const message = await lastSnapshot(
+      toUIMessageStream({
+        stream: result.stream,
+        messageMetadata: createMessageMetadata({
+          stepCeiling: 5,
+          toolDurations,
+          isClearableTool: () => true,
+        }),
+      }),
+    );
+
+    expect(message?.metadata?.readOnlyToolNames).toEqual(["ping", "echo"]);
+    expect(Object.keys(message?.metadata?.toolDurations ?? {})).toEqual([
+      "call-1",
+      "call-2",
+    ]);
+  });
 });
 
-/**
- * The search-was-unavailable flag (issue #522).
- *
- * Driven through a real stream for one reason the unit shape cannot show: the
- * fact is emitted on `start`, and `start` is the only part guaranteed to have
- * been sent by the time a turn is cancelled. A `finish`-derived flag would be
- * absent on exactly the turns a reader most needs it on.
- */
 describe("search availability over a real stream", () => {
   const answerOnly = () =>
     streamText({
@@ -919,9 +836,6 @@ describe("search availability over a real stream", () => {
     expect(message?.metadata?.searchUnavailable).toBe(true);
   });
 
-  // A key that does not apply is absent rather than `false` — the metadata
-  // convention `ChatMessageMetadata` states, and what the Chat's render guard
-  // relies on.
   it("says nothing about search on a turn that had it", async () => {
     const message = await lastSnapshot(
       toUIMessageStream({
@@ -952,8 +866,6 @@ describe("search availability over a real stream", () => {
     expect(message?.metadata).not.toHaveProperty("agentId");
   });
 
-  // The reason it rides `start`: no `finish` part is ever emitted here, and a
-  // turn cancelled halfway still ran without the search it was promised.
   it("marks a turn cancelled mid-stream", async () => {
     const controller = new AbortController();
     const result = streamText({
@@ -986,20 +898,7 @@ describe("search availability over a real stream", () => {
   });
 });
 
-/**
- * The step-ceiling stop (issue #540).
- *
- * Driven through a real stream because the trap is entirely in the shape of
- * what the SDK reports. At the stream-part level the terminal finish reason is
- * a plain string; the provider-level chunk a mock writes carries the
- * `{ unified, raw }` object — so the run-lifecycle suite, which mocks the SDK
- * wholesale, cannot fail on the reading this feature depends on. Only a real
- * `stopWhen: [stepCountIs(n)]` halt produces the pair of facts the flag needs:
- * a terminal `"tool-calls"` reason and a step count that reached the ceiling.
- */
 describe("the step-ceiling stop over a real multi-step stream", () => {
-  /** A turn halted by its step ceiling: the model asked for the tool, the
-   *  ceiling of one call was already spent, and the answer never came. */
   const haltedAtCeiling = (stepCeiling: number) => {
     const result = streamText({
       model: mockModel([
@@ -1027,9 +926,6 @@ describe("the step-ceiling stop over a real multi-step stream", () => {
     expect(message?.metadata?.stoppedAtStepLimit).toBe(true);
   });
 
-  // The dangling tool card with no reply after it — the symptom the notice
-  // exists to explain, asserted so the fixture cannot drift into a turn that
-  // did finish.
   it("describes a turn that really did end without an answer", async () => {
     const message = await haltedAtCeiling(1);
 
@@ -1045,8 +941,6 @@ describe("the step-ceiling stop over a real multi-step stream", () => {
     expect(message?.metadata).not.toHaveProperty("stoppedAtStepLimit");
   });
 
-  // The ceiling was reached, but the last allowed step was the answer. Nothing
-  // was cut short, so nothing is reported.
   it("says nothing when the last allowed step ended on a normal stop", async () => {
     const message = await haltedAtCeiling(2);
 
@@ -1056,10 +950,6 @@ describe("the step-ceiling stop over a real multi-step stream", () => {
     expect(message?.metadata).not.toHaveProperty("stoppedAtStepLimit");
   });
 
-  // The no-progress detector's shape: an unattended run halted by a second stop
-  // condition ends on the same terminal `"tool-calls"` reason, but below the
-  // ceiling. It reports itself as a failed run with its own message, and must
-  // not also be relabelled a step-limit stop.
   it("says nothing when another stop condition halted the loop below the ceiling", async () => {
     const result = streamText({
       model: mockModel([
@@ -1084,8 +974,6 @@ describe("the step-ceiling stop over a real multi-step stream", () => {
     expect(message?.metadata).not.toHaveProperty("stoppedAtStepLimit");
   });
 
-  // The output ceiling is the other way a turn is cut short, and the two are
-  // separate facts: a truncated reply is not a step-limit stop.
   it("reports the output ceiling, not the step limit, when the reply ran out of room", async () => {
     const result = streamText({
       model: mockModel([
@@ -1117,14 +1005,10 @@ describe("the step-ceiling stop over a real multi-step stream", () => {
 
     expect(message?.metadata?.truncatedByTokenLimit).toBe(true);
     expect(message?.metadata).not.toHaveProperty("stoppedAtStepLimit");
-    // Each part contributes only the key it owns, so the flag lands beside
-    // the attribution `start` stamped rather than over it.
     expect(message?.metadata?.agentId).toBe("agent-1");
   });
 
-  // The extractor is constructed without a ceiling on any path that has none to
-  // give, and reports nothing rather than guessing one.
-  it("reports nothing when it was given no ceiling to compare against", async () => {
+  it("reports nothing when the loop stopped below the ceiling it was given", async () => {
     const result = streamText({
       model: mockModel([
         toolCallStep(usage(1_000, 30)),

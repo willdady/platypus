@@ -8,14 +8,10 @@ import {
 } from "ai";
 import { z } from "zod";
 import { serializeLoggedError } from "../log-serializers.ts";
-import { formatStreamError } from "./stream-error.ts";
+import { describeSdkError, formatStreamError } from "./stream-error.ts";
+import { TOOL_RESULT_TOO_LARGE } from "./context-overflow-recovery.ts";
+import { mockLogger } from "../test-setup.ts";
 
-/**
- * The real error the SDK raises when a tool call's arguments fail their input
- * schema: an `InvalidToolInputError` wrapping a `TypeValidationError` wrapping
- * the `ZodError`. Built from a real Zod failure so the shape can't drift from
- * what the SDK actually produces.
- */
 const invalidToolInput = (opts: {
   toolName: string;
   schema: z.ZodType;
@@ -109,8 +105,6 @@ describe("formatStreamError", () => {
       expect(formatted).toContain("updateNotification");
       expect(formatted).toContain("body");
       expect(formatted).toMatch(/2000/);
-      // The whole point: this must REPLACE the SDK's message, which embeds the
-      // entire rejected value plus the serialized ZodError.
       expect(formatted).not.toBe(error.message);
       expect(formatted).not.toContain("x".repeat(50));
     });
@@ -154,12 +148,6 @@ describe("formatStreamError", () => {
     });
   });
 
-  // Where the two surfaces used to disagree. A union reports why every branch
-  // failed, and only a descent that concatenates the union's path with the
-  // branch's produces the one path worth reading. The log serializer flattened
-  // and this did not, so the log named the field while the user — and, on a
-  // failed step, the model asked to correct itself — got `payload: Invalid
-  // input`.
   describe("invalid tool input rejected by a union", () => {
     const schema = z.object({
       payload: z.union([
@@ -196,11 +184,6 @@ describe("formatStreamError", () => {
     });
   });
 
-  // The streaming path never hands the formatter an Error for this case. An
-  // invalid tool call is converted to a `tool-error` stream part whose `error`
-  // is `getErrorMessage(cause)` — i.e. `error.toString()`, a plain string — so
-  // `isInstance` is false and the real production failure lands here. Both
-  // production log lines from the reported incident are represented below.
   describe("invalid tool input arriving as a stringified error", () => {
     const stringified = (toolName: string, issues: unknown) =>
       `AI_InvalidToolInputError: Invalid input for tool ${toolName}: ` +
@@ -224,7 +207,6 @@ describe("formatStreamError", () => {
       expect(formatted).toContain("body");
       expect(formatted).toContain("2000");
       expect(formatted).not.toContain("An unexpected error occurred");
-      // The rejected value must not be echoed back.
       expect(formatted).not.toContain("z".repeat(50));
       expect(formatted.length).toBeLessThan(500);
     });
@@ -239,7 +221,6 @@ describe("formatStreamError", () => {
     });
 
     it("passes an unrecognised string through rather than discarding it", () => {
-      // Previously ANY string hit the generic fallback and its content was lost.
       expect(formatStreamError("upstream connection reset")).toContain(
         "upstream connection reset",
       );
@@ -260,8 +241,6 @@ describe("formatStreamError", () => {
   });
 
   describe("generic fallback", () => {
-    // Strings are handled above — they carry their own message and are
-    // returned rather than replaced. The fallback is for values that don't.
     it.each([
       ["a plain object throw", { nope: true }],
       ["a null throw", null],
@@ -269,11 +248,27 @@ describe("formatStreamError", () => {
     ])("records what actually arrived for %s", (_label, thrown) => {
       const formatted = formatStreamError(thrown);
       expect(formatted).toContain("An unexpected error occurred");
-      // Must carry enough to identify the value that arrived — the reported
-      // failure hit this branch and the type was never captured.
       expect(formatted.length).toBeGreaterThan(
         "An unexpected error occurred.".length,
       );
     });
+  });
+
+  it("passes a replaced tool result through without logging it as a failure", () => {
+    expect(formatStreamError(TOOL_RESULT_TOO_LARGE)).toBe(
+      TOOL_RESULT_TOO_LARGE,
+    );
+    expect(mockLogger.error).not.toHaveBeenCalled();
+  });
+});
+
+describe("describeSdkError", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("words the failure without logging it", () => {
+    expect(describeSdkError(new Error("boom"))).toBe("boom");
+    expect(mockLogger.error).not.toHaveBeenCalled();
   });
 });
