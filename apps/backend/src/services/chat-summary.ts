@@ -560,7 +560,7 @@ const incrementalInput = (
 const TRANSCRIPT_SUMMARY_PROMPT = (steering?: string) =>
   `You are writing the handoff summary of the earlier part of a conversation. A model that continues the conversation reads your summary instead of those messages, so anything you leave out is lost for good.
 
-If the input begins with "[Summary so far]", that is the summary of the part before it. Merge it into your new summary. The newer messages take precedence: update or remove an item they resolved, superseded or made stale. Never drop something only because it came from the earlier summary. A user request carried in from the earlier summary that was fully answered may be shortened to the instructions, constraints and preferences it set.
+If the input begins with "[Summary so far]", that is the summary of the part before it. Merge it into your new summary. The newer messages take precedence: update or remove an item they resolved, superseded or made stale. Never drop something only because it came from the earlier summary. A carried-in user request that is fully answered — as the earlier summary records it, or as the newer messages answer it — is the one exception: "## User requests" says what to keep and when to drop it.
 
 Search results and pages that were read may appear only as cleared placeholders. Rely on what the assistant's replies concluded from them, and never present a result you cannot see as fact.
 
@@ -574,7 +574,11 @@ Then write the summary under exactly these headings, in this order, starting dir
 One paragraph: what the user is trying to achieve overall and why, including who they are or which organisation they represent where that was established.
 
 ## User requests
-Requests carried in from the earlier summary come first. Then count the user messages in the conversation itself, leaving out the "[Summary so far]" message and the final message that asks for this summary; each one gets its own bullet, short follow-ups included. Copy each of them verbatim, in its original language, in order, one bullet each. Shorten only a message longer than about 300 characters, keeping every instruction, constraint, preference and correction (language, format, audience, deadlines, "not X but Y"). The number of these bullets must equal the number of user messages you counted. End each bullet with whether it was fully answered.
+**Standing instructions.** A short, deduplicated list of the durable instructions, constraints and preferences that user requests set, whether they came from the earlier summary or from this conversation — language, format, audience, deadlines, "not X but Y". When a newer message supersedes or contradicts one, update it or remove it; never list both.
+
+**Open requests.** A request carried in from the earlier summary that is not fully answered stays word for word, in its original language, shortened only by the about-300-character rule below. A request that is fully answered — whether the earlier summary records it as answered or the newer messages answer it — is dropped: its standing instructions are in the list above, and it is not quoted again.
+
+**This pass's user messages.** Count the user messages in the conversation itself, leaving out the "[Summary so far]" message and the final message that asks for this summary; each one gets its own bullet, short follow-ups included. Copy each of them verbatim, in its original language, in order, one bullet each. Shorten only a message longer than about 300 characters, keeping every instruction, constraint, preference and correction (language, format, audience, deadlines, "not X but Y"). There must be exactly one bullet per message you counted, and each of those bullets ends with whether it was fully answered. A request answered in this pass is dropped on the next pass, once the instructions it set are listed under Standing instructions; a request that is not fully answered moves to Open requests and stays word for word.
 
 ## Key facts and decisions
 The facts established and the decisions made that later answers depend on, with exact values: names, numbers, dates, versions, ids, URLs. Never write "a value was set" or "several options were discussed". When the conversation states a date, number or name more than once with different values, give both and say they disagree instead of picking one.
@@ -692,10 +696,11 @@ export type TranscriptSummaryPassInput = {
  * model declares a context window, an input over the job budget of it skips the
  * task model outright: a server that truncates an overlong prompt instead of
  * rejecting it would otherwise write a summary of a cut-off conversation, and
- * no error would trigger the fallback. A summary cannot be trimmed to fit the
- * way memory extraction trims its input, because every covered message is
- * replaced by it. Without a declared window, the model's own error is the
- * only measurement available.
+ * no error would trigger the fallback. The budget leaves room for the reply the
+ * pass requests, so a window the reply alone fills skips it too. A summary
+ * cannot be trimmed to fit the way memory extraction trims its input, because
+ * every covered message is replaced by it. Without a declared window, the
+ * model's own error is the only measurement available.
  *
  * Overflow on the Chat's model retries once with an earlier anchor (one more
  * turn kept verbatim); a second failure is an ordinary failed summary. A
@@ -745,6 +750,17 @@ export const takeTranscriptSummary = async (
     };
   };
 
+  /**
+   * The output cap a call with `entry` requests: its Job settings' cap (or the
+   * pass's own) bounded by the Chat model's declared ceiling, Thinking budget
+   * already included. The input check measures the same value the call sends.
+   */
+  const outputCap = (entry: TranscriptSummaryModel): number =>
+    Math.min(
+      entry.maxOutputTokens ?? TRANSCRIPT_SUMMARY_MAX_OUTPUT_TOKENS,
+      entry.outputCeiling ?? Infinity,
+    );
+
   const attempt = async (
     entry: TranscriptSummaryModel,
     input: SummaryInput,
@@ -774,10 +790,7 @@ export const takeTranscriptSummary = async (
           { role: "user" as const, content: TRANSCRIPT_SUMMARY_REQUEST },
         ],
         ...entry.settings,
-        maxOutputTokens: Math.min(
-          entry.maxOutputTokens ?? TRANSCRIPT_SUMMARY_MAX_OUTPUT_TOKENS,
-          entry.outputCeiling ?? Infinity,
-        ),
+        maxOutputTokens: outputCap(entry),
         abortSignal: signal,
       });
 
@@ -851,7 +864,7 @@ export const takeTranscriptSummary = async (
       (input.priorText?.length ?? 0) +
       JSON.stringify(input.modelMessages).length +
       TRANSCRIPT_SUMMARY_REQUEST.length <=
-      jobInputBudgetChars(entry.contextWindow);
+      jobInputBudgetChars(entry.contextWindow, outputCap(entry));
 
   let summaryInput = await anchorInput(anchorIndex);
 
@@ -861,6 +874,7 @@ export const takeTranscriptSummary = async (
         chatId,
         modelId: taskModel.modelId,
         contextWindow: taskModel.contextWindow,
+        maxOutputTokens: outputCap(taskModel),
         fallbackModelId: chatModel.modelId,
       },
       "Transcript summary skipped the task model: the input exceeds its declared context window",
@@ -1057,18 +1071,11 @@ const withTaskSummariserModel = async (args: {
       chatProviderId,
       chatModelId: chat.modelId,
     });
-    // On the Chat's own model, its declared ceiling bounds the pass's cap
-    // before the Thinking budget is added, so the budget still rides on top.
     const maxOutputTokens = jobMaxOutputTokens(
       taskProvider.provider,
       pointerSettingModelId(taskModelId),
       taskProvider.provider.taskModelSettings,
-      isChatModel
-        ? Math.min(
-            TRANSCRIPT_SUMMARY_MAX_OUTPUT_TOKENS,
-            chat.outputCeiling ?? Infinity,
-          )
-        : TRANSCRIPT_SUMMARY_MAX_OUTPUT_TOKENS,
+      TRANSCRIPT_SUMMARY_MAX_OUTPUT_TOKENS,
     );
     if (isChatModel) {
       return {

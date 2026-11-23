@@ -10,7 +10,10 @@ import {
 } from "@platypus/schemas";
 import type { JSONObject } from "@ai-sdk/provider";
 import { compatProviderOptionsName } from "./provider.ts";
-import { reasoningMapForModel } from "./model-capability.ts";
+import {
+  maxOutputTokensForModel,
+  reasoningMapForModel,
+} from "./model-capability.ts";
 import type { ProviderRow } from "./provider-write.ts";
 import {
   resolveSamplingSettings,
@@ -186,10 +189,14 @@ const offeredReasoningSet = (
 };
 
 /**
- * A job's output cap raised by the Thinking budget its Job settings send. On
- * an OpenAI-compatible server thinking counts toward `max_tokens`, so a budget
- * at or above the job's cap would be cut off before any answer is written.
- * Native Providers never send a stored budget (see `resolveSdkReasoning`).
+ * A job's output cap raised by the Thinking budget its Job settings send, then
+ * held to the ceiling the job model declares. On an OpenAI-compatible server
+ * thinking counts toward `max_tokens`, so a budget at or above the job's cap
+ * would be cut off before any answer is written; on any Provider, asking for
+ * more than the Model entry's Max output tokens is rejected outright.
+ * Native Providers never send a stored budget (see `resolveSdkReasoning`), and
+ * a model declaring no ceiling sends the sum unchanged — only the vendor knows
+ * its limit.
  */
 export const jobMaxOutputTokens = (
   provider: ReasoningProvider,
@@ -198,14 +205,19 @@ export const jobMaxOutputTokens = (
   cap: number,
 ): number => {
   const budget = settings?.thinkingBudget;
-  if (budget == null || !providerHonoursReasoningMap(provider)) return cap;
-  const map = reasoningMapForModel(provider, modelId);
-  if (!map?.budget) return cap;
-  // Mirrors `resolveReasoning`: Thinking off drops the budget.
-  const thinking = map.thinking
-    ? (settings?.reasoningThinking ?? map.default?.thinking)
-    : true;
-  return thinking === false ? cap : cap + budget;
+  let requestedCap = cap;
+  if (budget != null && providerHonoursReasoningMap(provider)) {
+    const map = reasoningMapForModel(provider, modelId);
+    if (map?.budget) {
+      // Mirrors `resolveReasoning`: Thinking off drops the budget.
+      const thinking = map.thinking
+        ? (settings?.reasoningThinking ?? map.default?.thinking)
+        : true;
+      if (thinking !== false) requestedCap = cap + budget;
+    }
+  }
+  const ceiling = maxOutputTokensForModel(provider, modelId);
+  return ceiling === undefined ? requestedCap : Math.min(requestedCap, ceiling);
 };
 
 /**

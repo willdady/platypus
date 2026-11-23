@@ -330,6 +330,33 @@ describe("generateChatMetadata", () => {
     expect(call.abortSignal).toBeInstanceOf(AbortSignal);
   });
 
+  it("asks for no more than the task model's declared Max output tokens", async () => {
+    stubReads({
+      chat: { id: "chat-1", title: "Untitled", messages: [userMessage] },
+      workspace: { id: "ws-1", taskModelProviderId: null },
+      provider: {
+        ...provider,
+        modelIds: [
+          {
+            id: "task-model",
+            passthroughFileTypes: [],
+            maxOutputTokens: 1_024,
+          },
+        ],
+      },
+    });
+    mockGenerateText.mockResolvedValueOnce({
+      output: { title: "Titled" },
+    });
+    mockDb.returning.mockResolvedValueOnce([{ id: "chat-1" }]);
+
+    await generateChatMetadata(params);
+
+    expect(mockGenerateText.mock.calls[0]?.[0]).toMatchObject({
+      maxOutputTokens: 1_024,
+    });
+  });
+
   it("prefers the workspace task-model provider override", async () => {
     stubReads({
       chat: { id: "chat-1", title: "Untitled", messages: [userMessage] },

@@ -17,13 +17,16 @@ import {
 } from "./ai-elements/tool";
 import { artifactTypeLabel } from "@/lib/artifact-file";
 import { toolErrorText } from "@/lib/message-parts";
-import { isArtifactDeleted, useArtifact } from "@/hooks/use-artifact";
+import { useStoredArtifact } from "@/hooks/use-artifact";
 import type { ArtifactLive } from "./artifact-viewer";
 
 type ArtifactToolPart = Extract<
   ToolUIPart<CustomUITools>,
   { type: "tool-createArtifact" | "tool-updateArtifact" }
 >;
+
+/** One part of a Chat message, as the predicates below receive it. */
+type MessagePart = NonNullable<PlatypusUIMessage["parts"]>[number];
 
 /** The input a `createArtifact` call carries; partial while it streams. */
 type ArtifactInput = Partial<{
@@ -36,11 +39,27 @@ type ArtifactInput = Partial<{
 /** The stored Artifact a completed write call produced. */
 export type StoredArtifact = { id: string; title: string; version: number };
 
+/**
+ * One of the two writes that share the Artifact Card: a create (or whole
+ * rewrite) or a targeted update. A finished, stored one moves to the reply's
+ * tray; a call still streaming, or one that failed, denied or was rejected,
+ * stays in the reply body as a card.
+ */
+export function isArtifactToolPart(
+  part: MessagePart,
+): part is ArtifactToolPart {
+  return (
+    part.type === "tool-createArtifact" || part.type === "tool-updateArtifact"
+  );
+}
+
 /** What the Card asks the Chat to open in the side panel. */
 export type ArtifactOpenTarget =
   { id: string; version: number } | { toolCallId: string };
 
 export const ARTIFACT_DELETED_LABEL = "Artifact deleted";
+/** What a deleted Artifact's Card and tray row say under that label. */
+export const ARTIFACT_DELETED_DETAIL = "This Artifact has been deleted.";
 
 export function artifactInput(toolPart: ArtifactToolPart): ArtifactInput {
   // An update's input is an id and edits; only a create carries content the
@@ -58,12 +77,33 @@ export function artifactTypeOf(value: unknown): ArtifactType | undefined {
   return parsed.success ? parsed.data : undefined;
 }
 
-/** The stored Artifact a completed call produced, or `undefined` while it runs. */
+/** The stored Artifact a completed write call produced, or `undefined` while it runs. */
 export function storedArtifactOf(
   toolPart: ArtifactToolPart,
 ): StoredArtifact | undefined {
   const output = toolPart.output;
   return output && "id" in output ? output : undefined;
+}
+
+/**
+ * Every Artifact a message wrote, across all its steps: one entry per Artifact,
+ * at the highest version that message produced. A write that failed, was denied
+ * or was rejected stored nothing, so it offers no entry.
+ */
+export function replyArtifacts(
+  parts: readonly MessagePart[],
+): StoredArtifact[] {
+  const byId = new Map<string, StoredArtifact>();
+  for (const part of parts) {
+    if (!isArtifactToolPart(part)) continue;
+    const stored = storedArtifactOf(part);
+    if (stored === undefined) continue;
+    const listed = byId.get(stored.id);
+    if (listed === undefined || stored.version > listed.version) {
+      byId.set(stored.id, stored);
+    }
+  }
+  return [...byId.values()];
 }
 
 /** Why a call wrote nothing: a validation error, a rejection or a failure. */
@@ -147,12 +187,7 @@ export function ArtifactToolCard({
   const created = storedArtifactOf(toolPart);
   const failure = artifactFailureOf(toolPart);
 
-  const { data, error } = useArtifact(
-    created ? (scope ?? null) : null,
-    created?.id,
-    created?.version,
-  );
-  const deleted = created !== undefined && isArtifactDeleted(error);
+  const { data, deleted } = useStoredArtifact(created, scope);
 
   const title = created?.title ?? input.title;
   const type = artifactTypeOf(input.type) ?? data?.artifact.type;
@@ -205,7 +240,7 @@ export function ArtifactToolCard({
       )}
       {deleted && (
         <div className="mt-1 pl-9 text-muted-foreground text-xs">
-          This Artifact has been deleted.
+          {ARTIFACT_DELETED_DETAIL}
         </div>
       )}
     </div>

@@ -180,6 +180,37 @@ describe("takeTranscriptSummary", () => {
     expect(chatPrompts).toHaveLength(0);
   });
 
+  it("skips a task model whose window leaves no room for input after its reply", async () => {
+    seedSummaryTable();
+    const taskPrompts: PromptMessage[][] = [];
+    const chatPrompts: PromptMessage[][] = [];
+    const row = await takeTranscriptSummary({
+      chatId: "chat-1",
+      models: {
+        task: {
+          model: summaryModel(taskPrompts, "The task summary."),
+          modelId: "task-model",
+          // An 8k window against the pass's own 8,192-token reply: the reply
+          // alone fills it, so there is no input budget left to check against.
+          contextWindow: 8_000,
+        },
+        chat: {
+          model: summaryModel(chatPrompts, "The chat summary."),
+          modelId: "chat-model",
+        },
+      },
+      path: sixTurns(),
+      triggeredFromOccupancy: 8_200,
+      previousSummary: undefined,
+      readingSummaryId: undefined,
+    });
+
+    expect(row?.text).toBe("The chat summary.");
+    expect(row?.stats?.modelId).toBe("chat-model");
+    expect(taskPrompts).toHaveLength(0);
+    expect(chatPrompts).toHaveLength(1);
+  });
+
   it("falls back to the Chat's model over the same range when the task model overflows", async () => {
     seedSummaryTable();
     const taskPrompts: PromptMessage[][] = [];
@@ -662,6 +693,58 @@ describe("takeTranscriptSummary", () => {
       expect(system).toContain("cleared placeholders");
       expect(system).toContain(
         "The final message, which asks you to write the summary, is the instruction for this task",
+      );
+    });
+
+    it("states the drop-when-answered and keep-when-open rule for carried-in requests", async () => {
+      const { system } = await sentCall();
+      const userRequests = system.slice(
+        system.indexOf("## User requests"),
+        system.indexOf("## Key facts and decisions"),
+      );
+      expect(userRequests).toContain("**Standing instructions.**");
+      expect(userRequests).toContain("supersedes or contradicts");
+      expect(userRequests).toContain(
+        "whether they came from the earlier summary or from this conversation",
+      );
+      expect(userRequests).toContain("not fully answered stays word for word");
+      expect(userRequests).toContain(
+        "whether the earlier summary records it as answered or the newer messages answer it",
+      );
+      expect(userRequests).toContain("is dropped");
+      expect(userRequests).toContain(
+        "A request answered in this pass is dropped on the next pass, once the instructions it set are listed under Standing instructions",
+      );
+      expect(userRequests).toContain(
+        "a request that is not fully answered moves to Open requests and stays word for word",
+      );
+      expect(system).not.toContain(
+        "folded into the standing instructions on the next pass",
+      );
+      expect(system).not.toContain("may be shortened to the instructions");
+      expect(system).not.toContain(
+        "quoted verbatim once before it is compacted",
+      );
+    });
+
+    it("keeps the this-pass rule: one verbatim bullet per counted message, closing with its answered status", async () => {
+      const { system } = await sentCall();
+      const userRequests = system.slice(
+        system.indexOf("## User requests"),
+        system.indexOf("## Key facts and decisions"),
+      );
+      expect(userRequests).toContain(
+        "Count the user messages in the conversation itself",
+      );
+      expect(userRequests).toContain("Copy each of them verbatim");
+      expect(userRequests).toContain(
+        "There must be exactly one bullet per message you counted",
+      );
+      expect(userRequests).toContain(
+        "each of those bullets ends with whether it was fully answered",
+      );
+      expect(userRequests).toContain(
+        "Shorten only a message longer than about 300 characters",
       );
     });
 

@@ -39,9 +39,11 @@ import { withDeadline } from "../utils/abort-race.ts";
 
 /**
  * How much one pass may send: the job budget of the extraction model's
- * context window (`jobInputBudgetChars`), or 32k tokens when it declares none.
- * The context gets at most a quarter of it, and only what the new messages
- * leave.
+ * context window (`jobInputBudgetChars`), which leaves room for the reply the
+ * pass asks for, or 32k tokens when it declares none. The context gets at most
+ * a quarter of it, and only what the new messages leave. A window no bigger
+ * than the reply leaves no room at all: the pass makes no call rather than
+ * losing messages to a reply that would be cut off.
  */
 const DEFAULT_BUDGET_TOKENS = 32_000;
 const CONTEXT_SHARE = 0.25;
@@ -177,6 +179,14 @@ const processChat = async (
   embeddingProvider: typeof providerTable.$inferSelect | null,
   readAt: Date,
 ): Promise<void> => {
+  /**
+   * Ends the pass as failed without moving the cursor, so the retry covers the
+   * same messages: a skip, a call error and an empty reply all leave progress
+   * exactly where it was.
+   */
+  const failPass = (): Promise<void> =>
+    updateChatExtractionStatus(chat.id, "failed", readAt);
+
   // The Active path only: an Alternative the User has moved away from is not
   // something they said.
   const { messages } = await loadActivePath(chat.id, chat.activeLeafId);
@@ -223,11 +233,37 @@ const processChat = async (
   const modelId = pointerSettingModelId(
     extractionProvider.memoryExtractionModelId,
   );
+  const maxOutputTokens = jobMaxOutputTokens(
+    extractionProvider,
+    modelId,
+    extractionProvider.memoryExtractionModelSettings,
+    SUMMARY_MAX_OUTPUT_TOKENS,
+  );
   const contextWindow = contextWindowForModel(extractionProvider, modelId);
-  const budgetChars = contextWindow
-    ? jobInputBudgetChars(contextWindow)
-    : DEFAULT_BUDGET_TOKENS * CHARS_PER_TOKEN;
-  const room = budgetChars - buildSummaryPrompt(existingSummary, "", "").length;
+  const budgetChars =
+    contextWindow !== undefined
+      ? jobInputBudgetChars(contextWindow, maxOutputTokens)
+      : DEFAULT_BUDGET_TOKENS * CHARS_PER_TOKEN;
+  const fixedPromptChars = buildSummaryPrompt(existingSummary, "", "").length;
+  const room = budgetChars - fixedPromptChars;
+
+  // A window the reply alone fills, or leaves too little of to hold the fixed
+  // prompt: no call fits, and the reply is not shrunk to make one. Fails the
+  // pass like an error, so the cursor stays where it was.
+  if (contextWindow !== undefined && room <= 0) {
+    logger.warn(
+      {
+        chatId: chat.id,
+        modelId,
+        contextWindow,
+        maxOutputTokens,
+        promptLength: fixedPromptChars,
+      },
+      "Memory extraction skipped: the model's context window leaves no room for input after its reply",
+    );
+    await failPass();
+    return;
+  }
 
   // The new messages first, oldest first, as many as fit.
   const freshLines = fresh.map(formatMessage);
@@ -306,12 +342,7 @@ const processChat = async (
             extractionProvider.memoryExtractionModelSettings,
             { temperature: 0.3 },
           ),
-          maxOutputTokens: jobMaxOutputTokens(
-            extractionProvider,
-            modelId,
-            extractionProvider.memoryExtractionModelSettings,
-            SUMMARY_MAX_OUTPUT_TOKENS,
-          ),
+          maxOutputTokens,
           maxRetries: SUMMARY_MAX_RETRIES,
           abortSignal,
         }),
@@ -327,7 +358,7 @@ const processChat = async (
       },
       `Memory summary extraction LLM call failed: ${message}`,
     );
-    await updateChatExtractionStatus(chat.id, "failed", readAt);
+    await failPass();
     return;
   }
 
@@ -337,7 +368,7 @@ const processChat = async (
   // model out of output tokens) would otherwise skip these messages for good.
   if (!updatedSummary) {
     logger.warn(`Empty summary returned for chat ${chat.id}`);
-    await updateChatExtractionStatus(chat.id, "failed", readAt);
+    await failPass();
     return;
   }
 

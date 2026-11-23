@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import {
   WEB_TOOL_NORMALIZED_KEY,
   type Agent,
@@ -9,11 +15,25 @@ import {
 import { setErrorReporter } from "@/lib/error-reporting";
 import { authMock } from "@/test/test-utils";
 
+// What each Artifact row's read lands on, keyed `<id>:<version>`.
+const { artifactReads } = vi.hoisted(() => ({
+  artifactReads: new Map<string, { data?: unknown; deleted?: boolean }>(),
+}));
+
 vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("next/navigation", () => ({
   useParams: () => ({ orgId: "org1", workspaceId: "ws1" }),
 }));
+vi.mock("@/hooks/use-artifact", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/hooks/use-artifact")>();
+  return {
+    ...actual,
+    useStoredArtifact: (stored?: { id: string; version: number }) =>
+      artifactReads.get(`${stored?.id}:${stored?.version}`) ?? {},
+  };
+});
 
+import { ARTIFACT_DELETED_DETAIL } from "./artifact-tool-card";
 import {
   ChatMessage,
   CUT_SHORT_NOTICE,
@@ -77,7 +97,10 @@ class TestImage extends EventTarget {
   }
 }
 
-beforeEach(() => vi.stubGlobal("Image", TestImage));
+beforeEach(() => {
+  vi.stubGlobal("Image", TestImage);
+  artifactReads.clear();
+});
 afterEach(() => vi.unstubAllGlobals());
 
 describe("ChatMessage agent attribution", () => {
@@ -747,33 +770,65 @@ describe("ChatMessage and provider-executed web_search", () => {
   });
 });
 
-describe("ChatMessage Artifact Card", () => {
-  it("draws the card and opens the Artifact its call produced", () => {
+describe("ChatMessage reply Artifacts", () => {
+  const scope = { orgId: "org1", workspaceId: "ws1" };
+
+  const write = (over: Record<string, unknown> = {}) =>
+    ({
+      type: "tool-createArtifact",
+      toolCallId: "call-1",
+      state: "output-available",
+      input: { title: "Release notes", type: "markdown", content: "# 1.0" },
+      output: { id: "artifact-1", title: "Release notes", version: 1 },
+      ...over,
+    }) as unknown as MessagePart;
+
+  const update = (version: number) =>
+    write({
+      type: "tool-updateArtifact",
+      toolCallId: `call-update-${version}`,
+      input: { id: "artifact-1", edits: [{ old: "1.0", new: "1.1" }] },
+      output: { id: "artifact-1", title: "Release notes", version },
+    });
+
+  const message = (parts: MessagePart[]): PlatypusUIMessage => ({
+    id: "m1",
+    role: "assistant",
+    parts,
+  });
+
+  const tray = () =>
+    screen.queryByRole("list", { name: "Files and artifacts" });
+
+  /** The read a tray row makes for `artifact-1` at `version` lands. */
+  const readAt = (version: number) =>
+    artifactReads.set(`artifact-1:${version}`, {
+      data: {
+        artifact: {
+          id: "artifact-1",
+          title: "Release notes",
+          type: "markdown",
+          language: null,
+        },
+        version: { version, content: "# 1.1" },
+      },
+    });
+
+  it("moves a stored Artifact into the tray once the reply finishes", () => {
+    readAt(1);
     const onOpenArtifact = vi.fn();
-    renderMessage(
-      {
-        ...assistantMessage(),
-        parts: [
-          {
-            type: "tool-createArtifact",
-            toolCallId: "call-1",
-            state: "output-available",
-            input: {
-              title: "Release notes",
-              type: "markdown",
-              content: "# 1.0",
-            },
-            output: { id: "artifact-1", title: "Release notes", version: 1 },
-          },
-        ],
-      } as unknown as PlatypusUIMessage,
-      { onOpenArtifact },
-    );
+    renderMessage(message([write()]), {
+      artifactScope: scope,
+      onOpenArtifact,
+    });
 
-    expect(screen.getByText("Release notes")).toBeInTheDocument();
-    expect(screen.getByText(/Markdown/)).toBeInTheDocument();
+    const list = screen.getByRole("list", { name: "Files and artifacts" });
+    expect(within(list).getByText("Release notes")).toBeInTheDocument();
+    expect(within(list).getByText("Markdown · Version 1")).toBeInTheDocument();
+    // The Card is gone from the reply body, not shown twice.
+    expect(screen.queryByText("Completed")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /Release notes/ }));
+    fireEvent.click(screen.getByRole("button", { name: /open/i }));
 
     expect(onOpenArtifact).toHaveBeenCalledWith({
       id: "artifact-1",
@@ -781,33 +836,112 @@ describe("ChatMessage Artifact Card", () => {
     });
   });
 
-  it("draws an update call as a card and opens its version", () => {
-    const onOpenArtifact = vi.fn();
+  it("keeps the Card where the call happened while the reply is still writing", () => {
     renderMessage(
-      {
-        ...assistantMessage(),
-        parts: [
-          {
-            type: "tool-updateArtifact",
-            toolCallId: "call-2",
-            state: "output-available",
-            input: { id: "artifact-1", edits: [{ old: "1.0", new: "1.1" }] },
-            output: { id: "artifact-1", title: "Release notes", version: 2 },
-          },
-        ],
-      } as unknown as PlatypusUIMessage,
-      { onOpenArtifact },
+      message([
+        write({
+          state: "input-streaming",
+          input: { title: "Release notes", type: "markdown" },
+          output: undefined,
+        }),
+      ]),
+      { status: "streaming", artifactScope: scope },
     );
 
-    expect(screen.getByText("Release notes")).toBeInTheDocument();
-    expect(screen.getByText(/Version 2/)).toBeInTheDocument();
+    expect(tray()).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Release notes/ })).toBeEnabled();
+  });
 
-    fireEvent.click(screen.getByRole("button", { name: /Release notes/ }));
-
-    expect(onOpenArtifact).toHaveBeenCalledWith({
-      id: "artifact-1",
-      version: 2,
+  it("lists several writes to one Artifact as one row, at the latest version", () => {
+    readAt(2);
+    renderMessage(message([write(), { type: "step-start" }, update(2)]), {
+      artifactScope: scope,
     });
+
+    const list = screen.getByRole("list", { name: "Files and artifacts" });
+    expect(within(list).getAllByRole("listitem")).toHaveLength(1);
+    expect(within(list).getByText("Markdown · Version 2")).toBeInTheDocument();
+  });
+
+  it("lists an earlier reply's Artifact while a later turn runs", () => {
+    readAt(1);
+    renderMessage(message([write()]), {
+      status: "streaming",
+      isLastMessage: false,
+      artifactScope: scope,
+    });
+
+    expect(tray()).toBeVisible();
+  });
+
+  it("says a deleted Artifact is gone in its tray row", () => {
+    artifactReads.set("artifact-1:1", { deleted: true });
+    renderMessage(message([write()]), { artifactScope: scope });
+
+    const list = screen.getByRole("list", { name: "Files and artifacts" });
+    expect(within(list).getByText("Release notes")).toBeInTheDocument();
+    expect(within(list).getByText(ARTIFACT_DELETED_DETAIL)).toBeInTheDocument();
+    expect(within(list).queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  it("leaves a failed write in the body as a call row with its reason", () => {
+    renderMessage(
+      message([
+        write({
+          state: "output-error",
+          output: undefined,
+          errorText: "Artifact content must be at most 512 KB",
+        }),
+      ]),
+    );
+
+    expect(tray()).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Artifact content must be at most 512 KB"),
+    ).toBeInTheDocument();
+  });
+
+  // ADR-0033: a Tool gate's denial is shown where the call happened.
+  it("leaves a denied write in the body with its reason", () => {
+    renderMessage(
+      message([
+        write({
+          state: "output-denied",
+          output: undefined,
+          approval: {
+            id: "approval-1",
+            approved: false,
+            reason: "Blocked by a Tool gate",
+          },
+        }),
+      ]),
+    );
+
+    expect(tray()).not.toBeInTheDocument();
+    expect(screen.getByText("Blocked by a Tool gate")).toBeInTheDocument();
+  });
+
+  // A call the User turned down keeps its answered state, and is drawn as a
+  // denial rather than as the reply's output.
+  it("leaves a rejected write in the body with its reason", () => {
+    renderMessage(
+      message([
+        write({
+          state: "approval-responded",
+          output: undefined,
+          approval: {
+            id: "approval-1",
+            approved: false,
+            reason: "You did not approve this call",
+          },
+        }),
+      ]),
+    );
+
+    expect(tray()).not.toBeInTheDocument();
+    expect(
+      screen.getByText("You did not approve this call"),
+    ).toBeInTheDocument();
   });
 });
 
@@ -1763,7 +1897,8 @@ describe("ChatMessage offered files", () => {
     parts,
   });
 
-  const tray = () => screen.queryByRole("list", { name: "Files" });
+  const tray = () =>
+    screen.queryByRole("list", { name: "Files and artifacts" });
 
   it("lists each offered path once, in a tray under the finished reply", () => {
     renderMessage(
