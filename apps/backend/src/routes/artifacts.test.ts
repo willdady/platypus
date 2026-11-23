@@ -23,7 +23,6 @@ describe("Artifact Routes", () => {
     vi.unstubAllEnvs();
   });
 
-  /** The members, Workspaces and User every Artifact test runs against. */
   const baseWorld = (owner = "user-1") => ({
     organization_member: [
       { id: "m1", userId: "user-1", organizationId: orgId, role: "member" },

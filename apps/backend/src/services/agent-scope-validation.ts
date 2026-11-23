@@ -9,11 +9,6 @@ import { eq, inArray } from "drizzle-orm";
 import { hasToolSet } from "../tools/index.ts";
 import { isSharedRow } from "./scoped-resource.ts";
 
-/**
- * A reference that blocks Promotion because it is not itself Organization-scoped
- * (ADR-0007 no-cascade rule). `name` is included so the UI can render a
- * fix-this checklist that names the offending Workspace-private references.
- */
 export type ReferenceBlocker = {
   type: "provider" | "skill" | "subAgent" | "mcp";
   id: string;
@@ -22,37 +17,18 @@ export type ReferenceBlocker = {
 
 type AgentReferences = {
   providerId: string;
-  /** The optional Fallback model's Provider (ADR-0043) — Shared like the primary. */
   fallbackProviderId?: string | null;
   skillIds?: string[] | null;
   subAgentIds?: string[] | null;
   toolSetIds?: string[] | null;
 };
 
-/**
- * The defining rule of a Shared resource: it may reference only other Shared
- * (Organization-scoped) resources (ADR-0007). Returns every reference of the
- * given Agent that is NOT org-scoped and therefore blocks Promotion — an empty
- * array means the Agent is safe to promote.
- *
- * Reference buckets (ADR-0007 Consequences):
- * - **travels-with** — `providerId`, `skillIds`, `subAgentIds`, and MCP-backed
- *   tool sets must already be Organization-scoped; each that isn't is a blocker.
- * - **rebinds-per-Workspace** — the Sandbox tool set is statically registered
- *   and rebinds to the invoking Workspace at Chat-turn time, so it never blocks.
- * - **always-available** — every other statically registered tool set is always
- *   present and never blocks.
- *
- * Any tool-set id that is not a statically registered set is treated as an
- * MCP-backed tool set and must resolve to an Organization-scoped MCP.
- */
 export const findNonSharedReferences = async (
   orgId: string,
   refs: AgentReferences,
 ): Promise<ReferenceBlocker[]> => {
   const blockers: ReferenceBlocker[] = [];
 
-  // Provider — exactly one, always required.
   const providerRows = await db
     .select({
       id: providerTable.id,
@@ -71,7 +47,6 @@ export const findNonSharedReferences = async (
     });
   }
 
-  // The Fallback model's Provider travels with the Agent the same way (ADR-0043).
   if (refs.fallbackProviderId) {
     const [fallback] = await db
       .select({
@@ -91,7 +66,6 @@ export const findNonSharedReferences = async (
     }
   }
 
-  // Skills — each must be org-scoped.
   const skillIds = refs.skillIds ?? [];
   if (skillIds.length > 0) {
     const rows = await db
@@ -112,7 +86,6 @@ export const findNonSharedReferences = async (
     }
   }
 
-  // Sub-Agents — each must be org-scoped.
   const subAgentIds = refs.subAgentIds ?? [];
   if (subAgentIds.length > 0) {
     const rows = await db
@@ -133,9 +106,6 @@ export const findNonSharedReferences = async (
     }
   }
 
-  // Tool sets — statically registered sets (including the Sandbox set) are
-  // always allowed; any other id is an MCP-backed tool set and must resolve to
-  // an org-scoped MCP.
   const toolSetIds = refs.toolSetIds ?? [];
   const mcpIds = toolSetIds.filter((id) => !hasToolSet(id));
   if (mcpIds.length > 0) {

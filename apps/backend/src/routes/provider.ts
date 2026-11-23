@@ -31,11 +31,6 @@ import type { Variables } from "../server.ts";
 
 const provider = new Hono<{ Variables: Variables }>();
 
-/**
- * Create a workspace-scoped provider. Org-admin by default; a workspace owner
- * may create one only when the workspace's `providerSelfManagement` flag is set
- * (ADR-0006).
- */
 provider.post(
   "/",
   requireAuth,
@@ -46,13 +41,7 @@ provider.post(
   async (c) => {
     const data = c.req.valid("json");
     const ctx = workspaceScopeOf(c);
-    // The scope comes from the route, never the body — as it does for Agents
-    // and Skills. Spreading the body let a caller name another Workspace, or
-    // set `organizationId` and mint a Shared Provider from the Workspace
-    // surface, which only an Org Admin may do (ADR-0006, ADR-0007).
     const row = await createProvider({ kind: "workspace", ctx }, data, db);
-    // The caller just wrote the credentials and may manage this Provider, so
-    // the write response reads the row back in full.
     return respond(
       c,
       providerResponseSchema,
@@ -62,7 +51,6 @@ provider.post(
   },
 );
 
-/** List providers visible in this workspace (workspace-scoped + attached org-scoped) */
 provider.get(
   "/",
   requireAuth,
@@ -70,12 +58,6 @@ provider.get(
   requireWorkspaceAccess,
   async (c) => {
     const scoped = await listScoped(db, "provider", workspaceScopeOf(c));
-    // Credentials are revealed only to a caller who may manage this Provider
-    // (ADR-0006) — the same rule the write routes reject on. The rows themselves
-    // still list, because selecting a Provider on an Agent or Chat does not
-    // require self-management.
-    // A Shared row is configured only by an Org Admin on the Organization
-    // surface (ADR-0007), so the delegation never reveals its credentials.
     const reveal = await workspaceCredentialsVisible(c, "provider");
     const results = scoped.map(({ row, scope }) =>
       providerReadModel(row, {
@@ -87,7 +69,6 @@ provider.get(
   },
 );
 
-/** Get a provider by ID (workspace-scoped, or attached org-scoped) */
 provider.get(
   "/:providerId",
   requireAuth,
@@ -102,7 +83,6 @@ provider.get(
       providerId,
       workspaceScopeOf(c),
     );
-    // See the list route: redacted unless this caller may manage the Provider.
     const reveal = await workspaceCredentialsVisible(c, "provider");
     return respond(
       c,
@@ -115,7 +95,6 @@ provider.get(
   },
 );
 
-/** Update a provider by ID (org-admin, or owner when delegated — ADR-0006) */
 provider.put(
   "/:providerId",
   requireAuth,
@@ -128,10 +107,6 @@ provider.put(
     const providerId = c.req.param("providerId");
     const data = c.req.valid("json");
 
-    // The five-step save ordering — dedupe, embedding invalidation, alias
-    // snapshot, write, de-migration — lives in the write model; here it's the
-    // Workspace scope's "not visible → 404, Shared → 403" rule (ADR-0007) that
-    // matters (`updateProvider` enforces it via `requireWorkspaceMutable`).
     const { row, aliasRepoints } = await updateProvider(
       { kind: "workspace", ctx },
       providerId,
@@ -150,7 +125,6 @@ provider.put(
   },
 );
 
-/** Delete a provider by ID (org-admin, or owner when delegated — ADR-0006) */
 provider.delete(
   "/:providerId",
   requireAuth,
@@ -161,21 +135,12 @@ provider.delete(
     const ctx = workspaceScopeOf(c);
     const providerId = c.req.param("providerId");
 
-    // A Shared Provider is deleted only from the Organization surface
-    // (ADR-0007): `deleteProvider` throws NotFound (→404) when the Provider is
-    // not visible here, then Locked (→403) when it is org-scoped.
     await deleteProvider({ kind: "workspace", ctx }, providerId);
 
     return c.json({ message: "Provider deleted" });
   },
 );
 
-/**
- * Test one of this Provider's models with the form's current, unsaved config
- * (org-admin, or owner when delegated — ADR-0006). The same guard as creating
- * a Provider here: reading a failure is not more sensitive than configuring
- * what it tests. Nothing is stored, so the body carries the whole connection.
- */
 provider.post(
   "/test",
   requireAuth,

@@ -17,7 +17,6 @@ describe("Invitation Link Routes", () => {
     vi.clearAllMocks();
     mockDb.where.mockReturnValue(mockDb);
     mockDb.innerJoin.mockReturnValue(mockDb);
-    // The accept holds the membership it lands on, the only "share" lock.
     mockDb.for.mockImplementation(((strength: string) =>
       strength === "share"
         ? Promise.resolve([{ id: "member-1" }])
@@ -26,8 +25,6 @@ describe("Invitation Link Routes", () => {
 
   const baseUrl = "/invitation-links";
   const INVALID_LINK_BODY = { error: "This invitation link is not valid" };
-  // The account exists and is signed in; only the invitation is gone. The
-  // register route says so rather than reporting a bare not-found/expired.
   const ACCOUNT_WITHOUT_INVITATION_BODY = {
     error:
       "Your account was created and you are signed in, but this invitation " +
@@ -108,10 +105,6 @@ describe("Invitation Link Routes", () => {
       expect(await res.json()).toEqual(INVALID_LINK_BODY);
     });
 
-    // The oracle-safety property itself: an unknown token, a non-pending
-    // invitation, and an expired one must be byte-identical to a caller —
-    // otherwise the endpoint lets an attacker enumerate which unredeemed
-    // tokens are still live.
     it("responds identically for an unknown token, a non-pending invitation, and an expired one", async () => {
       mockDb.limit.mockResolvedValueOnce([]);
       const unknown = await app.request(`${baseUrl}/tok_a`);
@@ -160,7 +153,7 @@ describe("Invitation Link Routes", () => {
     };
 
     it("creates the account via the admin create-user API, signs in, and accepts through the shared accept path", async () => {
-      mockDb.limit.mockResolvedValueOnce([validInvitationRow]); // resolveValidInvitationByToken
+      mockDb.limit.mockResolvedValueOnce([validInvitationRow]);
       mockCreateUser({
         id: "new-user",
         email: "invitee@example.com",
@@ -169,8 +162,8 @@ describe("Invitation Link Routes", () => {
       mockSignInEmail(["better-auth.session_token=tok; Path=/; HttpOnly"]);
       mockDb.limit.mockResolvedValueOnce([
         { ...validInvitationRow, workspaceName: null },
-      ]); // acceptInvitationForUser: fetch invitation
-      mockDb.orderBy.mockResolvedValueOnce([]); // acceptInvitationForUser: no blueprints
+      ]);
+      mockDb.orderBy.mockResolvedValueOnce([]);
 
       const res = await app.request(`${baseUrl}/tok_valid/register`, {
         method: "POST",
@@ -183,8 +176,6 @@ describe("Invitation Link Routes", () => {
         "better-auth.session_token=tok",
       );
 
-      // The response names the Organization and the Workspace this accept
-      // provisioned, so the client can land the new member there.
       const provisioned = mockDb.values.mock.calls
         .map((c) => c[0] as Record<string, unknown>)
         .find((v) => v.name);
@@ -194,8 +185,6 @@ describe("Invitation Link Routes", () => {
         workspaceId: provisioned!.id,
       });
 
-      // The email that reaches auth.api.createUser is the token's, never
-      // anything the client could have supplied in the body.
       expect(mockAuth.api.createUser.mock.calls.at(-1)?.[0]).toMatchObject({
         body: {
           email: "invitee@example.com",
@@ -203,10 +192,13 @@ describe("Invitation Link Routes", () => {
           data: { emailVerified: true },
         },
       });
+      expect(mockAuth.api.createUser.mock.calls.at(-1)?.[0]).not.toHaveProperty(
+        "headers",
+      );
     });
 
     it("404s with the generic message for an invalid token", async () => {
-      mockDb.limit.mockResolvedValueOnce([]); // resolveValidInvitationByToken: no row
+      mockDb.limit.mockResolvedValueOnce([]);
 
       const res = await app.request(`${baseUrl}/tok_unknown/register`, {
         method: "POST",
@@ -235,8 +227,6 @@ describe("Invitation Link Routes", () => {
       });
     });
 
-    // The redemption path must refuse a spent or lapsed token *before* it
-    // mints an account -- otherwise a dead link still creates users.
     it.each([
       ["an already-redeemed", { status: "accepted", expiresAt: futureDate() }],
       ["a declined", { status: "declined", expiresAt: futureDate() }],
@@ -261,18 +251,15 @@ describe("Invitation Link Routes", () => {
       },
     );
 
-    // The token resolved, the account was made, and only then did the
-    // invitation turn out to be gone. The account is real either way, so the
-    // caller gets the invitation-specific reason rather than the generic one.
     it("reports the invitation as already processed when it is redeemed between resolution and accept", async () => {
-      mockDb.limit.mockResolvedValueOnce([validInvitationRow]); // resolveValidInvitationByToken
+      mockDb.limit.mockResolvedValueOnce([validInvitationRow]);
       mockCreateUser({
         id: "new-user",
         email: "invitee@example.com",
         name: "Robin",
       });
       mockSignInEmail();
-      mockDb.limit.mockResolvedValueOnce([]); // acceptInvitationForUser: no longer pending
+      mockDb.limit.mockResolvedValueOnce([]);
 
       const res = await app.request(`${baseUrl}/tok_valid/register`, {
         method: "POST",
@@ -285,7 +272,7 @@ describe("Invitation Link Routes", () => {
     });
 
     it("reports the invitation as expired when it lapses between resolution and accept", async () => {
-      mockDb.limit.mockResolvedValueOnce([validInvitationRow]); // resolveValidInvitationByToken
+      mockDb.limit.mockResolvedValueOnce([validInvitationRow]);
       mockCreateUser({
         id: "new-user",
         email: "invitee@example.com",
@@ -294,7 +281,7 @@ describe("Invitation Link Routes", () => {
       mockSignInEmail();
       mockDb.limit.mockResolvedValueOnce([
         { ...validInvitationRow, expiresAt: pastDate() },
-      ]); // acceptInvitationForUser: fetch invitation, now past its expiry
+      ]);
 
       const res = await app.request(`${baseUrl}/tok_valid/register`, {
         method: "POST",
@@ -334,18 +321,17 @@ describe("Invitation Link Routes", () => {
         name: "Robin",
         role: "user",
       });
-      mockDb.limit.mockResolvedValueOnce([validInvitationRow]); // resolveValidInvitationByToken
+      mockDb.limit.mockResolvedValueOnce([validInvitationRow]);
       mockDb.limit.mockResolvedValueOnce([
         { ...validInvitationRow, workspaceName: null },
-      ]); // acceptInvitationForUser: fetch invitation
-      mockDb.orderBy.mockResolvedValueOnce([]); // no blueprints
+      ]);
+      mockDb.orderBy.mockResolvedValueOnce([]);
 
       const res = await app.request(`${baseUrl}/tok_valid/accept`, {
         method: "POST",
       });
 
       expect(res.status).toBe(200);
-      // Redeeming the token verifies the address it was sent to.
       expect(mockDb.set).toHaveBeenCalledWith({ emailVerified: true });
 
       const provisioned = mockDb.values.mock.calls
@@ -422,8 +408,8 @@ describe("Invitation Link Routes", () => {
 
     it("reports the invitation as already processed when it is redeemed between resolution and accept", async () => {
       mockSession({ id: "u1", email: "invitee@example.com", role: "user" });
-      mockDb.limit.mockResolvedValueOnce([validInvitationRow]); // resolveValidInvitationByToken
-      mockDb.limit.mockResolvedValueOnce([]); // acceptInvitationForUser: no longer pending
+      mockDb.limit.mockResolvedValueOnce([validInvitationRow]);
+      mockDb.limit.mockResolvedValueOnce([]);
 
       const res = await app.request(`${baseUrl}/tok_valid/accept`, {
         method: "POST",
@@ -437,10 +423,10 @@ describe("Invitation Link Routes", () => {
 
     it("reports the invitation as expired when it lapses between resolution and accept", async () => {
       mockSession({ id: "u1", email: "invitee@example.com", role: "user" });
-      mockDb.limit.mockResolvedValueOnce([validInvitationRow]); // resolveValidInvitationByToken
+      mockDb.limit.mockResolvedValueOnce([validInvitationRow]);
       mockDb.limit.mockResolvedValueOnce([
         { ...validInvitationRow, expiresAt: pastDate() },
-      ]); // acceptInvitationForUser: fetch invitation, now past its expiry
+      ]);
 
       const res = await app.request(`${baseUrl}/tok_valid/accept`, {
         method: "POST",

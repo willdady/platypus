@@ -4,16 +4,9 @@ import { openProvider } from "./provider.ts";
 import type { ProviderRow } from "./provider-write.ts";
 import { withDeadline } from "../utils/abort-race.ts";
 
-/** Bounds on one embedding call, retries included (issue #1618). */
 const EMBEDDING_TIMEOUT_MS = 30_000;
 const EMBEDDING_MAX_RETRIES = 1;
 
-/**
- * Generates an embedding vector for the given text. Throws if the Provider
- * type does not support text embeddings (e.g. Anthropic). `sessionId` is the
- * Chat or Trigger run whose Header placeholder this call resolves; `signal` is
- * the caller's own, such as a Chat turn's, honoured alongside the deadline.
- */
 export const generateEmbedding = async (
   provider: ProviderRow,
   embeddingModelId: ConcreteModelId,

@@ -48,7 +48,6 @@ describe("blueprint-guard", () => {
       expiresAt,
     });
 
-    /** Seeds invitations, each linked to `bp-1` unless it names another blueprint. */
     const seed = (invitations: Row[], blueprintId = "bp-1") =>
       seedDb({
         invitation: invitations,
@@ -63,8 +62,6 @@ describe("blueprint-guard", () => {
       expect(await isBlueprintReferencedByLiveInvitation("bp-1")).toBe(true);
     });
 
-    // Expiry is lazy with write-back, so a row past expiresAt may still read
-    // 'pending'. The guard must exclude it in app code.
     it("is false when the only referencing pending invite is lazily-expired", async () => {
       seed([invitation("inv-1", "pending", past())]);
       expect(await isBlueprintReferencedByLiveInvitation("bp-1")).toBe(false);

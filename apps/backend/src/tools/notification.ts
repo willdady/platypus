@@ -8,7 +8,6 @@ import {
   updateNotification,
 } from "../services/notification.ts";
 
-// The Agent has no use for its own Chat or run id; Webhooks and the API carry it.
 const withoutSource = <T extends { source: unknown }>({
   source: _source,
   ...rest

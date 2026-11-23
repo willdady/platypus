@@ -8,7 +8,6 @@ import {
 import app from "../server.ts";
 import { mockNanoid } from "../test-setup.ts";
 
-// Predictable IDs
 mockNanoid.mockReturnValue("test-id-123");
 
 describe("Notification Routes", () => {
@@ -31,10 +30,10 @@ describe("Notification Routes", () => {
 
     it("should return notifications with agent name, avatar URL, and read status", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
+      ]);
 
       const mockNotifications = [
         {
@@ -69,10 +68,10 @@ describe("Notification Routes", () => {
 
     it("returns each notification's source, null when it has none", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
+      ]);
       const row = (id: string, over: Record<string, unknown>) => ({
         id,
         workspaceId,
@@ -105,10 +104,10 @@ describe("Notification Routes", () => {
 
     it("should return empty array when no notifications exist", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
+      ]);
       mockDb.offset.mockResolvedValueOnce([]);
 
       const res = await app.request(baseUrl);
@@ -119,10 +118,10 @@ describe("Notification Routes", () => {
 
     it("defaults to the first 50 notifications", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
+      ]);
       mockDb.offset.mockResolvedValueOnce([]);
 
       const res = await app.request(baseUrl);
@@ -135,10 +134,10 @@ describe("Notification Routes", () => {
       "rejects %s with a 400",
       async (query) => {
         mockSession();
-        mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+        mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
         mockDb.limit.mockResolvedValueOnce([
           { ownerId: "user-1", organizationId: "org-1" },
-        ]); // requireWorkspaceAccess
+        ]);
 
         const res = await app.request(`${baseUrl}?${query}`);
         expect(res.status).toBe(400);
@@ -158,15 +157,14 @@ describe("Notification Routes", () => {
 
     it("should return correct unread count", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
-      // where() is used by middleware (sync chaining) then by handler (terminal)
+      ]);
       mockDb.where
-        .mockReturnValueOnce(mockDb) // requireOrgAccess
-        .mockReturnValueOnce(mockDb) // requireWorkspaceAccess
-        .mockResolvedValueOnce([{ count: 3 }]); // handler query
+        .mockReturnValueOnce(mockDb)
+        .mockReturnValueOnce(mockDb)
+        .mockResolvedValueOnce([{ count: 3 }]);
 
       const res = await app.request(`${baseUrl}/unread-count`);
       expect(res.status).toBe(200);
@@ -176,14 +174,14 @@ describe("Notification Routes", () => {
 
     it("should return 0 when all notifications read", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
+      ]);
       mockDb.where
-        .mockReturnValueOnce(mockDb) // requireOrgAccess
-        .mockReturnValueOnce(mockDb) // requireWorkspaceAccess
-        .mockResolvedValueOnce([{ count: 0 }]); // handler query
+        .mockReturnValueOnce(mockDb)
+        .mockReturnValueOnce(mockDb)
+        .mockResolvedValueOnce([{ count: 0 }]);
 
       const res = await app.request(`${baseUrl}/unread-count`);
       expect(res.status).toBe(200);
@@ -203,13 +201,12 @@ describe("Notification Routes", () => {
 
     it("should mark notification as read", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([{ id: "notif-1" }]); // notification exists
+      ]);
+      mockDb.limit.mockResolvedValueOnce([{ id: "notif-1" }]);
 
-      // onConflictDoNothing returns the mock chain
       mockDb.onConflictDoNothing = vi.fn().mockResolvedValueOnce({});
       mockDb.values.mockReturnValueOnce(mockDb);
 
@@ -224,11 +221,11 @@ describe("Notification Routes", () => {
 
     it("should return 404 if notification does not exist", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([]); // notification not found
+      ]);
+      mockDb.limit.mockResolvedValueOnce([]);
 
       const res = await app.request(`${baseUrl}/notif-1/read`, {
         method: "POST",
@@ -248,12 +245,11 @@ describe("Notification Routes", () => {
 
     it("should mark all workspace notifications as read", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
+      ]);
 
-      // One INSERT … SELECT … RETURNING marks them all read
       mockDb.returning.mockResolvedValueOnce([
         { notificationId: "notif-1" },
         { notificationId: "notif-2" },
@@ -280,10 +276,10 @@ describe("Notification Routes", () => {
 
     it("should delete notification successfully", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
+      ]);
       mockDb.returning.mockResolvedValueOnce([{ id: "notif-1" }]);
 
       const res = await app.request(`${baseUrl}/notif-1`, {
@@ -296,10 +292,10 @@ describe("Notification Routes", () => {
 
     it("should return 404 if notification does not exist", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
+      ]);
       mockDb.returning.mockResolvedValueOnce([]);
 
       const res = await app.request(`${baseUrl}/notif-1`, {

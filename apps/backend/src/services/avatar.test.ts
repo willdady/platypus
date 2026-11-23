@@ -25,7 +25,6 @@ const putMock = vi.fn();
 const deleteMock = vi.fn();
 const mockStorage = { get: vi.fn(), put: putMock, delete: deleteMock };
 
-/** A real File so `instanceof File`, `.type`, `.size`, and `.arrayBuffer()` behave. */
 function makeFile(bytes: number, type: string): File {
   return new File([Buffer.alloc(bytes)], "avatar", { type });
 }

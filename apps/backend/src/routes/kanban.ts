@@ -60,33 +60,18 @@ import {
   type KanbanScope,
 } from "../services/kanban-shared.ts";
 
-/**
- * The human-facing surface over the Kanban modules (`services/kanban-*`): each
- * handler authorizes the request, calls the module, and returns its result.
- * The board's rules live in the module and are shared with the Agent Tool set,
- * and its typed failures are mapped to a status by `app.onError` (ADR-0010).
- */
-
 const kanban = new Hono<{ Variables: Variables }>();
 
-/**
- * Everything the module needs to place this request: the Workspace the
- * middleware already resolved, narrowed to the board this route addresses.
- */
 const scopeOf = (c: Context<{ Variables: Variables }>): KanbanScope => ({
   ...workspaceScopeOf(c),
   boardId: c.req.param("boardId"),
 });
 
-/** The scope plus the signed-in user, for the handlers that write. */
 const contextOf = (c: Context<{ Variables: Variables }>): KanbanContext => ({
   ...scopeOf(c),
   actor: { userId: userOf(c).id },
 });
 
-// --- Board CRUD ---
-
-/** List all boards in workspace */
 kanban.get(
   "/",
   requireAuth,
@@ -97,7 +82,6 @@ kanban.get(
   },
 );
 
-/** Create a board with default columns */
 kanban.post(
   "/",
   requireAuth,
@@ -115,7 +99,6 @@ kanban.post(
   },
 );
 
-/** Get a board by ID */
 kanban.get(
   "/:boardId",
   requireAuth,
@@ -126,7 +109,6 @@ kanban.get(
   },
 );
 
-/** Update a board */
 kanban.put(
   "/:boardId",
   requireAuth,
@@ -145,7 +127,6 @@ kanban.put(
   },
 );
 
-/** Delete a board */
 kanban.delete(
   "/:boardId",
   requireAuth,
@@ -158,9 +139,6 @@ kanban.delete(
   },
 );
 
-// --- Board State ---
-
-/** Get full board state */
 kanban.get(
   "/:boardId/state",
   requireAuth,
@@ -172,9 +150,6 @@ kanban.get(
   },
 );
 
-// --- Column CRUD ---
-
-/** Reorder columns (must be before /:boardId/columns/:columnId) */
 kanban.put(
   "/:boardId/columns/reorder",
   requireAuth,
@@ -193,7 +168,6 @@ kanban.put(
   },
 );
 
-/** Create a column */
 kanban.post(
   "/:boardId/columns",
   requireAuth,
@@ -212,7 +186,6 @@ kanban.post(
   },
 );
 
-/** Update a column */
 kanban.put(
   "/:boardId/columns/:columnId",
   requireAuth,
@@ -232,7 +205,6 @@ kanban.put(
   },
 );
 
-/** Delete a column */
 kanban.delete(
   "/:boardId/columns/:columnId",
   requireAuth,
@@ -250,9 +222,6 @@ kanban.delete(
   },
 );
 
-// --- Card CRUD + Move ---
-
-/** Create a card */
 kanban.post(
   "/:boardId/columns/:columnId/cards",
   requireAuth,
@@ -270,7 +239,6 @@ kanban.post(
   },
 );
 
-/** Update a card */
 kanban.patch(
   "/:boardId/cards/:cardId",
   requireAuth,
@@ -290,7 +258,6 @@ kanban.patch(
   },
 );
 
-/** Move a card */
 kanban.post(
   "/:boardId/cards/:cardId/move",
   requireAuth,
@@ -308,7 +275,6 @@ kanban.post(
   },
 );
 
-/** Delete a card */
 kanban.delete(
   "/:boardId/cards/:cardId",
   requireAuth,
@@ -321,12 +287,6 @@ kanban.delete(
   },
 );
 
-// --- Card Comments ---
-
-/**
- * A comment is addressed through its card, so one that belongs to a different
- * card is not found at this URL even when both are on this board.
- */
 const requireCommentOnCard = async (
   c: Context<{ Variables: Variables }>,
   commentId: string,
@@ -338,11 +298,9 @@ const requireCommentOnCard = async (
   return comment;
 };
 
-/** Whether this user may edit or delete a comment somebody else wrote. */
 const canModerate = (c: Context<{ Variables: Variables }>) =>
   isSuperAdmin(c.get("user")) || c.get("orgMembership")?.role === "admin";
 
-/** A card's history, newest first */
 kanban.get(
   "/:boardId/cards/:cardId/history",
   requireAuth,
@@ -359,7 +317,6 @@ kanban.get(
   },
 );
 
-/** List comments for a card */
 kanban.get(
   "/:boardId/cards/:cardId/comments",
   requireAuth,
@@ -372,7 +329,6 @@ kanban.get(
   },
 );
 
-/** Create a comment on a card */
 kanban.post(
   "/:boardId/cards/:cardId/comments",
   requireAuth,
@@ -392,7 +348,6 @@ kanban.post(
   },
 );
 
-/** Update a comment */
 kanban.patch(
   "/:boardId/cards/:cardId/comments/:commentId",
   requireAuth,
@@ -418,7 +373,6 @@ kanban.patch(
   },
 );
 
-/** Delete a comment */
 kanban.delete(
   "/:boardId/cards/:cardId/comments/:commentId",
   requireAuth,

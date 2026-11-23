@@ -38,7 +38,6 @@ describe("createLoadSkillTool", () => {
         skill("unattached", "unattached-skill", { organizationId: orgId }),
         skill("elsewhere", "elsewhere-skill", { workspaceId: "ws-2" }),
         skill("other-org", "other-org-skill", { organizationId: "org-2" }),
-        // An unassigned workspace skill shadowing an assigned Shared one.
         skill("shadow", "shadowed", { workspaceId }),
         skill("shadowed-shared", "shadowed", { organizationId: orgId }),
         skill("unassigned", "unassigned-skill", { workspaceId }),

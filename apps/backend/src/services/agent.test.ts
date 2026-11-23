@@ -16,14 +16,11 @@ vi.mock("./agent-references.ts", () => ({
   scrubDeletedAgentReference: vi.fn(),
 }));
 
-// deleteAgent's avatar cleanup goes through avatar.ts's own getStorage() call.
 const { storageDelete } = vi.hoisted(() => ({ storageDelete: vi.fn() }));
 vi.mock("../storage/index.ts", () => ({
   getStorage: () => ({ delete: storageDelete }),
 }));
 
-// storeAvatar's image processing is avatar.ts's own concern; deleteAvatar
-// stays real so its cleanup is seen through storageDelete.
 vi.mock("./avatar.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./avatar.ts")>()),
   storeAvatar: vi.fn(),
@@ -65,10 +62,6 @@ const agentRow = (
   ...extra,
 });
 
-/**
- * `a1` is ws-1's own; `other` belongs to ws-2; `shared` is org-1's and attached
- * to ws-1; `loose` is org-1's and unattached; `foreign` is org-2's.
- */
 const world = () =>
   seedDb({
     agent: [

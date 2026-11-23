@@ -46,8 +46,6 @@ export const generateUuid = tool({
   },
 });
 
-// "url-safe" has no pool here: it maps to nanoid's own built-in alphabet, used
-// via the plain `nanoid()` call below rather than `customAlphabet`.
 const ALPHABETS = {
   "lowercase-alphanumeric": LOWERCASE_ALPHANUMERIC,
   alphanumeric: ALPHANUMERIC,

@@ -23,8 +23,6 @@ vi.mock("./webhook-delivery.ts", () => ({
   deliverWebhook: mockDeliverWebhook,
 }));
 
-// Dispatch decides which Trigger fires and when; what firing does — the
-// breaker, the run, its bookkeeping — is `trigger-firing.test.ts`'s subject.
 vi.mock("./trigger-firing.ts", () => ({
   fireTrigger: mockFireTrigger,
 }));
@@ -34,19 +32,16 @@ import { mockLogger } from "../test-setup.ts";
 import { dispatchEvent, dispatchWebhookEvent } from "./event-dispatch.ts";
 import { withCausation, withOriginatingTrigger } from "../event-causation.ts";
 
-/** The dispatch-decision lines the logger recorded, newest last. */
 const decisionLines = (): Record<string, unknown>[] =>
   mockLogger.info.mock.calls
     .filter((call) => call[1] === "Event trigger dispatch decision")
     .map((call) => call[0] as Record<string, unknown>);
 
-/** A `card.deleted` naming one card — the ids it carries and nothing else. */
 const deletedEvent = (cardId: string): EventTriggerEventPayload => ({
   event: "card.deleted",
   data: { cardId, boardId: "board-1", columnId: "col-1" },
 });
 
-/** A `notification.read` in either of its two declared shapes. */
 const readEvent = (
   data: WebhookEventData<"notification.read">,
 ): EventTriggerEventPayload => ({ event: "notification.read", data });
@@ -83,35 +78,21 @@ const makeEventTrigger = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
-/**
- * dispatchEvent is fire-and-forget. We flush microtasks to let
- * the internal async IIFE settle before asserting.
- * Also advances past the 5s debounce window for event triggers.
- */
 async function flushMicrotasks() {
-  // Multiple rounds to allow nested void async IIFEs to resolve
   for (let i = 0; i < 10; i++) {
     await vi.advanceTimersByTimeAsync(0);
   }
-  // Advance past the 5s debounce window for event triggers
   await vi.advanceTimersByTimeAsync(5_000);
-  // Flush again so the debounced callback's async work settles
   for (let i = 0; i < 10; i++) {
     await vi.advanceTimersByTimeAsync(0);
   }
 }
 
-/**
- * Dispatches two events of the same type back-to-back inside the debounce
- * window and reports how many trigger runs came out the other side: 1 when
- * the pair shared a debounce key, 2 when it keyed apart.
- */
 async function runsForPair(
   trigger: ReturnType<typeof makeEventTrigger>,
   first: EventTriggerEventPayload,
   second: EventTriggerEventPayload,
 ): Promise<number> {
-  // Each dispatch runs its own webhook query (none) then trigger query.
   mockDb.where
     .mockResolvedValueOnce([])
     .mockResolvedValueOnce([trigger])
@@ -142,9 +123,7 @@ describe("event-dispatch", () => {
   describe("dispatchEvent", () => {
     it("should deliver webhooks for matching events", async () => {
       const webhook = makeWebhook();
-      mockDb.where
-        .mockResolvedValueOnce([webhook]) // webhooks query
-        .mockResolvedValueOnce([]); // event triggers query
+      mockDb.where.mockResolvedValueOnce([webhook]).mockResolvedValueOnce([]);
 
       const created = cardEvent("card.created", { id: "c1" });
       dispatchEvent("org-1", "ws-1", created);
@@ -158,7 +137,6 @@ describe("event-dispatch", () => {
         null,
       );
 
-      // The delivered envelope carries both org and workspace coordinates.
       const body = JSON.parse(
         mockDeliverWebhook.mock.calls[0][1] as string,
       ) as Record<string, unknown>;
@@ -192,9 +170,7 @@ describe("event-dispatch", () => {
 
     it("should execute matching event triggers", async () => {
       const trigger = makeEventTrigger();
-      mockDb.where
-        .mockResolvedValueOnce([]) // no webhooks
-        .mockResolvedValueOnce([trigger]); // event triggers
+      mockDb.where.mockResolvedValueOnce([]).mockResolvedValueOnce([trigger]);
 
       const created = cardEvent("card.created", { id: "c1" });
       dispatchEvent("org-1", "ws-1", created);
@@ -205,7 +181,6 @@ describe("event-dispatch", () => {
         payload: created,
         entityId: "c1",
       });
-      // Only this Workspace's enabled event Triggers are candidates.
       expect(mockDb.where).toHaveBeenLastCalledWith(
         and(
           eq(triggerTable.workspaceId, "ws-1"),
@@ -236,7 +211,6 @@ describe("event-dispatch", () => {
       });
       mockDb.where.mockResolvedValueOnce([]).mockResolvedValueOnce([trigger]);
 
-      // Event data has a different boardId
       dispatchEvent(
         "org-1",
         "ws-1",
@@ -335,8 +309,6 @@ describe("event-dispatch", () => {
       });
       mockDb.where.mockResolvedValueOnce([]).mockResolvedValueOnce([trigger]);
 
-      // A move emits card.moved (no changedFields) then card.updated. Only
-      // card.updated answers to the filter, so the move still fires.
       dispatchEvent(
         "org-1",
         "ws-1",
@@ -470,14 +442,10 @@ describe("event-dispatch", () => {
       );
       await flushMicrotasks();
 
-      // Both calls key onto the same trigger+card debounce entry, so they
-      // coalesce into a single execution — same as card.updated does.
       expect(mockFireTrigger).toHaveBeenCalledTimes(1);
     });
 
     it("should not coalesce card.deleted events for two different cards", async () => {
-      // card.deleted names its card as `cardId`, not `id`. Two unrelated cards
-      // deleted inside the debounce window must key apart (#811).
       const runs = await runsForPair(
         makeEventTrigger({ config: { events: ["card.deleted"] } }),
         deletedEvent("c1"),
@@ -518,8 +486,6 @@ describe("event-dispatch", () => {
     });
 
     it("should coalesce bulk notification.read events, which name no single entity", async () => {
-      // A bulk mark-all-read is legitimately a multi-entity event, so it keeps
-      // sharing the per-trigger fallback bucket.
       const runs = await runsForPair(
         makeEventTrigger({ config: { events: ["notification.read"] } }),
         readEvent({
@@ -554,7 +520,6 @@ describe("event-dispatch", () => {
         dispatchEvent("org-1", "ws-1", deleted);
         await flushMicrotasks();
 
-        // Keyed by the event-specific id (`cardId`), not a shared bucket.
         expect(mockFireTrigger).toHaveBeenCalledWith(trigger, {
           kind: "event",
           payload: deleted,
@@ -563,8 +528,6 @@ describe("event-dispatch", () => {
       });
 
       it("names no entity for an event that names a set", async () => {
-        // A bulk mark-all-read names a set, so counting its firings would trip
-        // the breaker after N unrelated Notifications.
         const trigger = makeEventTrigger({
           config: { events: ["notification.read"] },
         });
@@ -592,8 +555,6 @@ describe("event-dispatch", () => {
         dispatchEvent("org-1", "ws-1", cardEvent("card.created", { id: "c1" }));
         await vi.advanceTimersByTimeAsync(1_000);
 
-        // Still inside the window: nothing has been decided yet, so a burst
-        // folded into it reaches the breaker as one firing.
         expect(mockFireTrigger).not.toHaveBeenCalled();
 
         await flushMicrotasks();
@@ -780,9 +741,6 @@ describe("event-dispatch", () => {
       });
 
       it("records no decision for a filtered-out trigger, even when its own agent caused the event", async () => {
-        // Otherwise a filter mismatch would masquerade as loop suppression:
-        // the Operator would read `skipped_self_actor` on a Trigger this event
-        // never selected in the first place.
         const trigger = makeEventTrigger({
           id: "trigger-1",
           agentId: "agent-1",
@@ -843,7 +801,6 @@ describe("event-dispatch", () => {
       const trigger = makeEventTrigger({ agentId: "agent-1" });
       mockDb.where.mockResolvedValueOnce([]).mockResolvedValueOnce([trigger]);
 
-      // The run's chain is the parent Agent plus the delegate beneath it.
       withCausation(["agent-1", "sub-1"], () =>
         dispatchEvent("org-1", "ws-1", cardEvent("card.updated", { id: "c1" })),
       );
@@ -868,8 +825,6 @@ describe("event-dispatch", () => {
       const trigger = makeEventTrigger({ agentId: "agent-1" });
       mockDb.where.mockResolvedValueOnce([]).mockResolvedValueOnce([trigger]);
 
-      // Human write path supplies no actor, even though the card row still
-      // carries a stale lastEditedByAgentId from a prior agent edit.
       dispatchEvent(
         "org-1",
         "ws-1",
@@ -884,8 +839,6 @@ describe("event-dispatch", () => {
       const trigger = makeEventTrigger({ agentId: "agent-1" });
       mockDb.where.mockResolvedValueOnce([]).mockResolvedValueOnce([trigger]);
 
-      // A genuinely unrelated Agent, with no delegation relationship to the
-      // trigger's Agent, still fires it.
       withCausation(["agent-2"], () =>
         dispatchEvent("org-1", "ws-1", cardEvent("card.updated", { id: "c1" })),
       );
@@ -970,10 +923,7 @@ describe("event-dispatch", () => {
       withCausation(["agent-1"], () => dispatchEvent("org-1", "ws-1", created));
       await flushMicrotasks();
 
-      // Every subscribed Webhook still receives the event even though one of
-      // the triggers was suppressed.
       expect(mockDeliverWebhook).toHaveBeenCalledTimes(1);
-      // The suppressed trigger's run never starts, but the unrelated one does.
       expect(mockFireTrigger).toHaveBeenCalledTimes(1);
       expect(mockFireTrigger).toHaveBeenCalledWith(unrelated, {
         kind: "event",
@@ -1029,7 +979,6 @@ describe("event-dispatch", () => {
     });
 
     it("never reaches an Event Trigger, even one whose stored row subscribes to it", async () => {
-      // A legacy or hand-edited row the API would now reject.
       const legacy = makeEventTrigger({
         config: { events: ["trigger_run.failed"] },
       });
@@ -1042,7 +991,6 @@ describe("event-dispatch", () => {
 
       expect(mockFireTrigger).not.toHaveBeenCalled();
       expect(mockDeliverWebhook).not.toHaveBeenCalled();
-      // The Webhook lookup is the only query: Event Triggers are never read.
       expect(mockDb.where).toHaveBeenCalledTimes(1);
       expect(decisionLines()).toEqual([]);
     });

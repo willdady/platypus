@@ -32,12 +32,6 @@ import {
 } from "../services/artifact.ts";
 import type { Variables } from "../server.ts";
 
-/**
- * The human-facing Artifact routes: the paged list, one Artifact at a named or
- * latest version, its version history, create from an upload, rename and
- * delete, under the same access rule as Chats. Reads are open to anyone with Workspace access; the writes that
- * change what everyone sees are the Workspace Owner's.
- */
 const artifacts = new Hono<{ Variables: Variables }>();
 
 const readers = [
@@ -52,12 +46,6 @@ const listQuerySchema = paginationQuerySchema(50).extend({
   type: artifactTypeSchema.optional(),
 });
 
-/**
- * One Artifact read, with the deployment settings the viewer needs: the library
- * origins the Artifact frame may load from, and the base stored files are served
- * from. Every read carries them, so the viewer builds the frame's policy and
- * recognises the deployment's own images without fetching a setting of its own.
- */
 function withViewerSettings(
   read: Awaited<ReturnType<typeof getArtifactWithVersion>>,
 ) {
