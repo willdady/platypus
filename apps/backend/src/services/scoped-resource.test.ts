@@ -9,6 +9,7 @@ import {
   resolveScopedByName,
   listScoped,
   listScopedByIds,
+  listScopedByIdsForWorkspaces,
   requireScoped,
   requireWorkspaceMutable,
   requireSharedDeletable,
@@ -292,6 +293,96 @@ describe("ScopedResource module", () => {
       const select = vi.spyOn(fake.handle as typeof db, "select");
 
       await expect(listScopedByIds(db, "agent", [], ctx)).resolves.toEqual([]);
+      expect(select).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("listScopedByIdsForWorkspaces", () => {
+    beforeEach(() => world());
+
+    it("resolves each Workspace's own rows and the Shared rows attached there", async () => {
+      await expect(
+        listScopedByIdsForWorkspaces(
+          db,
+          "agent",
+          ["mine", "shared", "sibling", "loose", "foreign"],
+          [ctx, { orgId: "org-1", workspaceId: "ws-2" }],
+        ),
+      ).resolves.toEqual(
+        new Map([
+          [
+            "ws-1",
+            new Map([
+              ["mine", { row: AGENTS.mine, scope: "workspace" }],
+              ["shared", { row: AGENTS.shared, scope: "organization" }],
+            ]),
+          ],
+          [
+            "ws-2",
+            new Map([
+              ["sibling", { row: AGENTS.sibling, scope: "workspace" }],
+              ["loose", { row: AGENTS.loose, scope: "organization" }],
+            ]),
+          ],
+        ]),
+      );
+    });
+
+    it("queries a fixed number of tables however many Workspaces it is given", async () => {
+      const fake = world();
+
+      const countReads = async (contexts: (typeof ctx)[]) => {
+        fake.queries.length = 0;
+        await listScopedByIdsForWorkspaces(
+          db,
+          "agent",
+          ["mine", "shared", "sibling", "loose"],
+          contexts,
+        );
+        return fake.queries.filter((q) => q.table === "agent").length;
+      };
+
+      expect(await countReads([ctx])).toBe(2);
+      expect(
+        await countReads([
+          ctx,
+          { orgId: "org-1", workspaceId: "ws-2" },
+          { orgId: "org-1", workspaceId: "ws-3" },
+          { orgId: "org-2", workspaceId: "ws-4" },
+        ]),
+      ).toBe(2);
+    });
+
+    it("gives every Workspace the Shared rows attached to it", async () => {
+      world({
+        attachment: [
+          attachment("att-shared-ws1", "ws-1", "shared"),
+          attachment("att-shared-ws2", "ws-2", "shared"),
+        ],
+      });
+
+      const visible = await listScopedByIdsForWorkspaces(
+        db,
+        "agent",
+        ["shared"],
+        [ctx, { orgId: "org-1", workspaceId: "ws-2" }],
+      );
+
+      for (const workspaceId of ["ws-1", "ws-2"]) {
+        expect(visible.get(workspaceId)?.get("shared")).toEqual({
+          row: AGENTS.shared,
+          scope: "organization",
+        });
+      }
+    });
+
+    it("returns empty maps without querying when given no ids", async () => {
+      const fake = world();
+      const select = vi.spyOn(fake.handle as typeof db, "select");
+
+      await expect(
+        listScopedByIdsForWorkspaces(db, "agent", [], [ctx]),
+      ).resolves.toEqual(new Map([["ws-1", new Map()]]));
       expect(select).not.toHaveBeenCalled();
     });
   });
