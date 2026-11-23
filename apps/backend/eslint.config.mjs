@@ -1,5 +1,37 @@
+import path from "node:path";
 import { defineConfig, globalIgnores } from "eslint/config";
 import { baseConfig } from "../../eslint.config.base.mjs";
+import commentBaseline from "./comment-baseline.json" with { type: "json" };
+
+const DIRECTIVE = /^\s*(eslint-|@ts-|prettier-ignore|global\s)|^\/\s*</;
+
+const noComments = {
+  meta: { type: "suggestion", schema: [] },
+  create(context) {
+    return {
+      Program(node) {
+        const file = path.relative(import.meta.dirname, context.filename);
+        const count = context.sourceCode
+          .getAllComments()
+          .filter(
+            (c) =>
+              !DIRECTIVE.test(c.value) &&
+              !(c.type === "Line" && /^ why: \S/.test(c.value)),
+          ).length;
+        const allowed = commentBaseline[file] ?? 0;
+        if (count === allowed) return;
+        context.report({
+          node,
+          loc: { line: 1, column: 0 },
+          message:
+            count > allowed
+              ? `${count} comments, baseline allows ${allowed}. Comments are banned in apps/backend except a one-line "// why: …"; run /delete-comment.`
+              : `${count} comments, below the baseline of ${allowed}. Set "${file}" to ${count} in comment-baseline.json (delete the entry at 0).`,
+        });
+      },
+    };
+  },
+};
 
 /**
  * Route tests still on the chainable `mockDb`, which ignores every `WHERE` and
@@ -40,6 +72,11 @@ const eslintConfig = defineConfig([
   globalIgnores(["drizzle/**", ".turbo/**", "dist/**"]),
 
   ...baseConfig(import.meta.dirname),
+
+  {
+    plugins: { local: { rules: { "no-comments": noComments } } },
+    rules: { "local/no-comments": "error" },
+  },
 
   {
     // A route test seeds rows with `seedDb()`, so a query that dropped its
