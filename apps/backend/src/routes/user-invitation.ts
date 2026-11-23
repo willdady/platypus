@@ -15,14 +15,8 @@ import { NotFoundError } from "../errors.ts";
 
 const userInvitation = new Hono<{ Variables: Variables }>();
 
-// These routes match an invitation to the caller by address alone, which
-// proves nothing while sign-up is open and addresses go unconfirmed. Only an
-// account whose address is verified — by redeeming an invitation link, or
-// the seeded admin — may list or answer invitations here; anyone else uses
-// the link, where the token is the proof.
 const NOT_FOUND_ERROR = "Invitation not found or already processed";
 
-/** List pending invitations for the current user */
 userInvitation.get("/", requireAuth, async (c) => {
   const user = userOf(c);
   if (!user.emailVerified) {
@@ -48,7 +42,6 @@ userInvitation.get("/", requireAuth, async (c) => {
       organizationTable,
       eq(invitationTable.organizationId, organizationTable.id),
     )
-    // Left: the inviter's account may since have been deleted.
     .leftJoin(userTable, eq(invitationTable.invitedBy, userTable.id))
     .where(
       and(
@@ -62,7 +55,6 @@ userInvitation.get("/", requireAuth, async (c) => {
   return c.json({ results: activeResults });
 });
 
-/** Accept an invitation */
 userInvitation.post("/:invitationId/accept", requireAuth, async (c) => {
   const user = userOf(c);
   const invitationId = c.req.param("invitationId");
@@ -75,7 +67,6 @@ userInvitation.post("/:invitationId/accept", requireAuth, async (c) => {
   return acceptResultResponse(c, result);
 });
 
-/** Decline an invitation */
 userInvitation.post("/:invitationId/decline", requireAuth, async (c) => {
   const user = userOf(c);
   const invitationId = c.req.param("invitationId");

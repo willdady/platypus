@@ -10,12 +10,7 @@ import {
 } from "../test-utils.ts";
 import app from "../server.ts";
 
-// The Test action's only real work is one completion at the SDK boundary, so
-// that is where a test fakes the Provider: the rest of the route — auth,
-// validation, opening the vendor client, classification — runs for real. The
-// values stay here rather than in a shared fixture because the `ai` factory
-// must be in place before `ai` is first imported (see the same block in
-// org-provider.test.ts).
+// why: file-local, as the `ai` mock must be in place before `ai` is first imported
 const { mockGenerateText, mockCreateOpenAI } = vi.hoisted(() => ({
   mockGenerateText: vi.fn(),
   mockCreateOpenAI: vi.fn(
@@ -29,24 +24,13 @@ vi.mock("ai", async (importOriginal) => {
 });
 vi.mock("@ai-sdk/openai", () => ({ createOpenAI: mockCreateOpenAI }));
 
-/**
- * These tests state fixture rows rather than counting queries: `seedDb()`
- * installs the in-memory fake executor from `fake-db.ts`, which interprets the
- * `WHERE` each query builds. The stub sequences this file used to carry —
- * membership, then workspace, then the resource, then the delegation flag, in
- * the order the middleware happened to issue them, and a different number of
- * them for an admin than for an owner — are gone: what the route sees now
- * follows from the rows, so a lookup that dropped its Workspace or Organization
- * column reads a row it should not and the test fails.
- */
 describe("Provider Routes", () => {
   let fake: FakeDb;
 
   beforeEach(() => {
     resetMockDb();
     vi.clearAllMocks();
-    // `clearAllMocks` keeps implementations, so a rejection one case set would
-    // otherwise leak into the next.
+    // why: clearAllMocks keeps implementations, so one case's rejection would leak into the next
     mockGenerateText.mockReset();
   });
 
@@ -54,11 +38,6 @@ describe("Provider Routes", () => {
   const workspaceId = "ws-1";
   const baseUrl = `/organizations/${orgId}/workspaces/${workspaceId}/providers`;
 
-  /**
-   * The baseline world: the caller (`user-1`) is a member of `org-1` at the
-   * given role and owns `ws-1`. `providerSelfManagement` decides whether a
-   * non-admin owner may configure Providers here (ADR-0006).
-   */
   const world = (
     options: {
       role?: "admin" | "member";
@@ -108,7 +87,6 @@ describe("Provider Routes", () => {
     );
   };
 
-  /** A Provider owned by this Workspace. */
   const workspaceProvider = (over: Store[string][number] = {}) => ({
     id: "p1",
     name: "WS OpenAI",
@@ -126,7 +104,6 @@ describe("Provider Routes", () => {
     ...over,
   });
 
-  /** A Shared Provider of this Organization — org-scoped, at no Workspace. */
   const sharedProvider = (over: Store[string][number] = {}) => ({
     id: "p2",
     name: "Org OpenAI",
@@ -182,9 +159,6 @@ describe("Provider Routes", () => {
         expect.objectContaining({
           name: "OpenAI",
           providerType: "OpenAI",
-          // A write response is the same shape as a read: the caller may manage
-          // this Provider, so the credential and its presence indicator both
-          // come back, tagged with the scope the route created it at.
           apiKey: "sk-123",
           apiKeySet: { configured: true },
           headersSet: { configured: false },
@@ -233,8 +207,6 @@ describe("Provider Routes", () => {
     });
 
     it("rejects any scope in the body", async () => {
-      // A workspace-surface create takes its scope from the route; naming one
-      // in the body is a 400 rather than a silently dropped field.
       mockSession();
       fake = world({ rows: { provider: [] } });
 
@@ -250,8 +222,6 @@ describe("Provider Routes", () => {
 
     it("should return 409 if provider name already exists in workspace", async () => {
       mockSession();
-      // The database refuses the duplicate `(workspaceId, name)` pair, and the
-      // unique violation flows through the central onError (ADR-0010).
       fake = world({
         rows: { provider: [workspaceProvider({ name: "Duplicate OpenAI" })] },
       });
@@ -265,8 +235,6 @@ describe("Provider Routes", () => {
       expect(fake.tables.provider).toHaveLength(1);
     });
 
-    // ADR-0006: workspace-provider config is admin-only unless the workspace's
-    // providerSelfManagement flag delegates it to the owner.
     it("returns 403 for a non-admin owner when self-management is disabled", async () => {
       mockSession();
       fake = world({
@@ -304,10 +272,6 @@ describe("Provider Routes", () => {
     };
 
     it("lists this workspace's providers and only the org providers attached here", async () => {
-      // Four Providers exist and two are visible here. Drop
-      // `eq(provider.workspaceId, ctx.workspaceId)` from `listScoped` and the
-      // other Workspace's private Provider is listed; drop the Attachment join
-      // and the unattached Shared one is.
       mockSession();
       world({
         role: "member",
@@ -315,9 +279,7 @@ describe("Provider Routes", () => {
           provider: [
             workspaceProvider(),
             sharedProvider(),
-            // Shared, but attached to no workspace of ours.
             sharedProvider({ id: "p3", name: "Unattached" }),
-            // Another workspace's private Provider.
             workspaceProvider({
               id: "p4",
               name: "Beta OpenAI",
@@ -337,9 +299,6 @@ describe("Provider Routes", () => {
     });
 
     it("redacts apiKey when the owner has no providerSelfManagement", async () => {
-      // ADR-0006: a Workspace Owner who was not delegated Provider management
-      // may still LIST providers — selecting one on an Agent does not need the
-      // delegation — but must not receive the stored credential.
       mockSession();
       world({
         role: "member",
@@ -384,8 +343,6 @@ describe("Provider Routes", () => {
     });
 
     it("redacts a Shared Provider's apiKey from an owner delegated providerSelfManagement", async () => {
-      // The delegation covers this Workspace's own Providers only; a Shared
-      // Provider's credentials belong to the Org Admins (ADR-0007).
       mockSession();
       world({
         role: "member",
@@ -474,9 +431,6 @@ describe("Provider Routes", () => {
     });
 
     it("should 404 for another workspace's provider", async () => {
-      // The lookup matches this Workspace's rows or a Shared row of this Org,
-      // and classifies by the scope column the row actually carries — a
-      // Provider private to `ws-2` is neither.
       mockSession();
       world({
         role: "member",
@@ -522,8 +476,6 @@ describe("Provider Routes", () => {
       const res = await put("p1");
 
       expect(res.status).toBe(200);
-      // The single row, not the raw `.returning()` array, plus the
-      // alias de-migration report (empty — no alias was removed).
       expect(await res.json()).toEqual(
         expect.objectContaining({
           id: "p1",
@@ -565,8 +517,6 @@ describe("Provider Routes", () => {
 
     it("reports how many Agents and Chats were repointed when an alias is removed", async () => {
       mockSession();
-      // The alias `flagship` exists before this save and not after it, so the
-      // Agents and Chats that referenced it fall back to the concrete model.
       fake = world({
         rows: {
           provider: [
@@ -577,7 +527,6 @@ describe("Provider Routes", () => {
           agent: [
             { id: "a1", providerId: "p1", modelId: "alias:flagship" },
             { id: "a2", providerId: "p1", modelId: "alias:FLAGSHIP" },
-            // Another Provider's Agent, and one on a different model.
             { id: "a3", providerId: "p9", modelId: "alias:flagship" },
             { id: "a4", providerId: "p1", modelId: "gpt-4" },
           ],
@@ -595,8 +544,6 @@ describe("Provider Routes", () => {
           ],
         }),
       );
-      // The other Provider's Agent keeps its dangling reference: the repoint is
-      // keyed on this Provider, not on the alias alone.
       expect(fake.tables.agent.map((row) => row.modelId)).toEqual([
         "gpt-4",
         "gpt-4",
@@ -607,8 +554,6 @@ describe("Provider Routes", () => {
 
     it("should 403 when updating an attached org-scoped provider", async () => {
       mockSession();
-      // Visible here through its Attachment, but Shared providers are edited
-      // only on the Organization surface (ADR-0007).
       fake = world({
         rows: {
           provider: [sharedProvider()],
@@ -644,10 +589,6 @@ describe("Provider Routes", () => {
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ message: "Provider deleted" });
       expect(fake.tables.provider).toHaveLength(0);
-      // #605: the delete path used to run neither helper. A Provider's models
-      // — and any alias among them — vanish along with the row, so there is
-      // no surviving concrete id for de-migration to rewrite to, but stale
-      // embedding vectors computed against it must still be cleared.
       expect(fake.execute).toHaveBeenCalledTimes(1);
     });
 
@@ -905,8 +846,6 @@ describe("Provider Routes", () => {
 
       const res = await probe(testBody({ modelId: "gpt-5" }));
 
-      // A malformed request, not a Provider verdict: nothing was sent, so the
-      // failure carries no invented vendor message.
       expect(res.status).toBe(400);
       const body = (await res.json()) as { error: string };
       expect(body.error).toBe(
@@ -920,8 +859,6 @@ describe("Provider Routes", () => {
       world();
       mockGenerateText.mockResolvedValue({ text: "ok" });
 
-      // No Name, Web search, task or memory model: a form that could not be
-      // saved yet must still be testable.
       const res = await probe({
         providerType: "OpenAI",
         apiKey: "sk-test",
@@ -961,8 +898,6 @@ describe("Provider Routes", () => {
 
     it("returns 403 for a member who does not own this Workspace", async () => {
       mockSession();
-      // A member of the Organization, but not the Owner of ws-1 — and the
-      // delegation is on, so only Workspace access stands in the way.
       world({
         role: "member",
         providerSelfManagement: true,

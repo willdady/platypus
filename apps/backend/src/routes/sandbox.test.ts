@@ -15,9 +15,6 @@ import { SANDBOX_TRANSFER_MAX_BYTES } from "@platypuschat/plugin-sdk";
 import { setLoadedPlugins } from "../plugins/registry.ts";
 import { logger } from "../logger.ts";
 
-// Register a backend directly (bypassing the loader) so the route has a stable
-// entry to write against, and record its owning plugin in the registry so the
-// annotation (ADR-0013) has something to resolve.
 const ANNOTATED_BACKEND = "test-annotated";
 registerSandboxBackend({
   backend: ANNOTATED_BACKEND,
@@ -29,8 +26,6 @@ registerSandboxBackend({
   },
 });
 
-// A backend whose credentials schema requires a field, so the route's
-// credentials validation (ADR-0012 / ADR-0013) has something to reject against.
 const CREDS_BACKEND = "test-creds";
 registerSandboxBackend({
   backend: CREDS_BACKEND,
@@ -64,10 +59,10 @@ describe("Sandbox Routes", () => {
   describe("POST /", () => {
     it("creates a sandbox and returns 201 with credentials stripped", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
+      ]);
 
       mockDb.returning.mockResolvedValueOnce([
         {
@@ -108,7 +103,7 @@ describe("Sandbox Routes", () => {
           name: "Creds backend",
           backend: CREDS_BACKEND,
           config: {},
-          credentials: {}, // missing required privateKey
+          credentials: {},
         }),
         headers: { "Content-Type": "application/json" },
       });
@@ -124,8 +119,6 @@ describe("Sandbox Routes", () => {
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
       ]);
-      // The unique index on workspaceId rejects the insert — also what a
-      // concurrent duplicate POST that passed every check hits.
       mockDb.returning.mockRejectedValueOnce({ code: "23505" });
 
       const res = await app.request(baseUrl, {
@@ -167,8 +160,6 @@ describe("Sandbox Routes", () => {
       expect(body.id).toBe("sbx-1");
     });
 
-    // Issue #1056: the settings form needs to know a key is stored, and no
-    // caller ever gets the key back, admins included.
     it.each([
       ["admin", { privateKey: "PRIVATE-KEY", passphrase: "PASSPHRASE" }, true],
       ["member", { privateKey: "PRIVATE-KEY", passphrase: "PASSPHRASE" }, true],
@@ -205,6 +196,33 @@ describe("Sandbox Routes", () => {
       },
     );
 
+    it.each([
+      ["admin", { ADMIN_KEY: "secret" }],
+      ["member", { ADMIN_KEY: "" }],
+    ])("shows a %s adminEnv as %j", async (role, adminEnv) => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
+      mockDb.limit.mockResolvedValueOnce([
+        {
+          id: "sbx-1",
+          workspaceId,
+          name: "SSH host",
+          backend: "ssh",
+          config: {},
+          credentials: {},
+          adminEnv: { ADMIN_KEY: "secret" },
+          userEnv: {},
+        },
+      ]);
+
+      const res = await app.request(baseUrl);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({ adminEnv });
+    });
+
     it("returns 404 when no sandbox is configured", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
@@ -225,7 +243,6 @@ describe("Sandbox Routes", () => {
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
       ]);
-      // Existence check — same backend, no destroy will fire
       mockDb.limit.mockResolvedValueOnce([
         {
           id: "sbx-1",
@@ -293,7 +310,6 @@ describe("Sandbox Routes", () => {
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
       ]);
-      // Existing row uses an unregistered backend → destroy throws
       mockDb.limit.mockResolvedValueOnce([
         {
           id: "sbx-1",
@@ -363,9 +379,6 @@ describe("Sandbox Routes", () => {
     });
 
     it("attributes the force-change leak warning to the outgoing backend's plugin", async () => {
-      // The adapter that was skipped is the one that may have leaked, so it is
-      // the one `backend`/`plugin` name — the incoming backend rides along as
-      // `replacedBy` so neither key can be read as spanning both.
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
       mockDb.limit.mockResolvedValueOnce([
@@ -419,7 +432,6 @@ describe("Sandbox Routes", () => {
         }),
         expect.stringContaining("external resources may leak"),
       );
-      // The plugin taking over has leaked nothing and must not be named here.
       expect(warn).not.toHaveBeenCalledWith(
         expect.objectContaining({ plugin: "@platypus/incoming" }),
         expect.anything(),
@@ -433,7 +445,6 @@ describe("Sandbox Routes", () => {
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
       ]);
-      // Existence check returns empty
       mockDb.limit.mockResolvedValueOnce([]);
 
       const res = await app.request(baseUrl, {
@@ -458,7 +469,6 @@ describe("Sandbox Routes", () => {
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
       ]);
-      // Existence check
       mockDb.limit.mockResolvedValueOnce([
         {
           id: "sbx-1",
@@ -490,9 +500,6 @@ describe("Sandbox Routes", () => {
     });
 
     it("names the owning plugin on the force-delete leak warning", async () => {
-      // Core's own line about a plugin's adapter carries the plugin under the
-      // same `plugin` key the adapter's own lines do, so an Operator filtering
-      // by plugin sees core's half of the story too.
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
       mockDb.limit.mockResolvedValueOnce([
@@ -531,10 +538,6 @@ describe("Sandbox Routes", () => {
     });
 
     it("reports no owner rather than omitting the key for an unowned backend", async () => {
-      // A backend belonging to no loaded plugin is a real state (the plugin was
-      // dropped from PLATYPUS_PLUGINS). `null` says "no owner"; an absent key
-      // would read as "not asked", and the line would drop out of a filter that
-      // is looking for exactly this case.
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
       mockDb.limit.mockResolvedValueOnce([
@@ -570,8 +573,6 @@ describe("Sandbox Routes", () => {
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
       ]);
-      // Existence check returns a row whose backend is not registered →
-      // destroySandboxRow throws → 502.
       mockDb.limit.mockResolvedValueOnce([
         {
           id: "sbx-1",
@@ -596,7 +597,6 @@ describe("Sandbox Routes", () => {
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
       ]);
-      // Existence check returns empty
       mockDb.limit.mockResolvedValueOnce([]);
 
       const res = await app.request(baseUrl, { method: "DELETE" });
@@ -604,14 +604,13 @@ describe("Sandbox Routes", () => {
     });
   });
 
-  // ADR-0006: Sandbox configuration is org-admin-only and never delegatable.
   describe("authorization (ADR-0006)", () => {
     it("POST / returns 403 for a non-admin workspace owner", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess (owner)
+      ]);
 
       const res = await app.request(baseUrl, {
         method: "POST",
@@ -655,11 +654,10 @@ describe("Sandbox Routes", () => {
 
     it("PUT / lets a non-admin owner change name and userEnv only", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
-      // Existing row: admin-owned backend/config plus an admin env key.
+      ]);
       mockDb.limit.mockResolvedValueOnce([
         {
           id: "sbx-1",
@@ -686,7 +684,6 @@ describe("Sandbox Routes", () => {
 
       const res = await app.request(baseUrl, {
         method: "PUT",
-        // Owner attempts to also change backend — must be ignored, not 500/escalated.
         body: JSON.stringify({
           name: "New",
           backend: "evil-backend",
@@ -695,7 +692,6 @@ describe("Sandbox Routes", () => {
         headers: { "Content-Type": "application/json" },
       });
       expect(res.status).toBe(200);
-      // Only name + userEnv were written.
       const setArg = mockDb.set.mock.calls.at(-1)?.[0];
       expect(setArg).toMatchObject({ name: "New", userEnv: { MY_KEY: "y" } });
       expect(setArg).not.toHaveProperty("backend");
@@ -747,10 +743,10 @@ describe("Sandbox Routes", () => {
 
     const asAdmin = (existing?: unknown) => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
+      ]);
       if (existing) mockDb.limit.mockResolvedValueOnce([existing]);
     };
 
@@ -804,8 +800,6 @@ describe("Sandbox Routes", () => {
   });
 });
 
-// Issue #1068 / ADR-0027: moving a file in or out of the Sandbox without the
-// model.
 describe("Sandbox file transfer", () => {
   const TRANSFER_BACKEND = "test-transfer";
   const BARE_BACKEND = "test-bare";
@@ -841,8 +835,6 @@ describe("Sandbox file transfer", () => {
     userEnv: {},
   });
 
-  // requireOrgAccess, requireWorkspaceAccess, the sandbox row, then the
-  // Workspace owner lookup that builds the adapter's context.
   const mockAccess = (backend = TRANSFER_BACKEND, role = "member") => {
     mockSession();
     mockDb.limit.mockResolvedValueOnce([{ role }]);
@@ -1035,7 +1027,6 @@ describe("Sandbox file transfer", () => {
       },
     );
 
-    // ADR-0027: `..` grants nothing a Workspace user can't already do.
     it("does not reject `..`", async () => {
       mockAccess();
       fsList.mockResolvedValueOnce(listing("x.txt", 1));
@@ -1209,7 +1200,6 @@ describe("Sandbox file transfer", () => {
   });
 
   describe("access", () => {
-    // Refused exactly as GET / refuses them.
     it.each([
       [
         "a User from another Organization",

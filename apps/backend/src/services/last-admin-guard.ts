@@ -4,7 +4,6 @@ import { organization, organizationMember } from "../db/schema.ts";
 import { ConflictError, NotFoundError, ValidationError } from "../errors.ts";
 import { oneRow } from "../db/one-row.ts";
 
-/** How a member stops being an admin: demoted, or removed outright. */
 type AdminLoss = "demote" | "remove";
 
 const SELF_MESSAGE: Record<AdminLoss, string> = {
@@ -17,7 +16,6 @@ const LAST_ADMIN_MESSAGE: Record<AdminLoss, string> = {
   remove: "Cannot remove the last organization admin",
 };
 
-/** A demotion or removal that would cost the Organization an admin. */
 export type AdminLossRequest = {
   orgId: string;
   memberId: string;
@@ -25,11 +23,6 @@ export type AdminLossRequest = {
   loss: AdminLoss;
 };
 
-/**
- * The member a demotion or removal acts on. Throws `NotFoundError` unless it
- * is a member of the Organization, and `ValidationError` when it is the
- * caller themselves.
- */
 export const findLossTarget = async (
   database: typeof db | Tx,
   { orgId, memberId, actorUserId, loss }: AdminLossRequest,
@@ -55,18 +48,11 @@ export const findLossTarget = async (
   return target;
 };
 
-/**
- * The last-admin guard, run first in the transaction that demotes or removes
- * the member. The Organization row is the per-Organization mutex: Postgres
- * rejects `FOR UPDATE` on a `count(*)`, and one row needs no lock order. The
- * target is re-read under it, as a role read earlier may be stale. Throws as
- * {@link findLossTarget}, and `ConflictError` when the target is the
- * Organization's last admin.
- */
 export const requireAdminRemains = async (
   tx: Tx,
   request: AdminLossRequest,
 ) => {
+  // why: Organization row lock is the per-org mutex; Postgres rejects FOR UPDATE on count(*)
   await tx
     .select({ id: organization.id })
     .from(organization)

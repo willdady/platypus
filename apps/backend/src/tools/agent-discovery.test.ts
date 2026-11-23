@@ -31,11 +31,6 @@ const attached = (
   resourceId,
 });
 
-/**
- * One visible row of `type` per scope (this workspace's own, and a Shared one
- * attached here), plus the rows that must never reach this workspace: another
- * workspace's, a Shared one attached only elsewhere, and another org's.
- */
 const seedScoped = (
   type: "agent" | "mcp" | "provider",
   fields: (id: string) => Record<string, unknown> = () => ({}),
@@ -76,8 +71,6 @@ describe("createAgentDiscoveryTools", () => {
 
   describe("listModelProviders", () => {
     it("lists only this workspace's providers and the Shared ones attached here", async () => {
-      // An unattached Shared Provider cannot resolve at Chat-turn time, so
-      // offering it would only produce an Agent that cannot run.
       seedDb(
         seedScoped("provider", () => ({
           modelIds: [{ id: "model-a", passthroughFileTypes: [] }],
@@ -95,9 +88,6 @@ describe("createAgentDiscoveryTools", () => {
     });
 
     it("advertises per-model objects by id, and an aliased model by its alias reference", async () => {
-      // The tool is the agentic counterpart of the Agent model picker, so it
-      // offers what the picker submits — otherwise an agent it creates pins the
-      // concrete id and misses the next repoint (#386, ADR-0017).
       seedDb({
         provider: [
           row("p1", mine, {

@@ -11,20 +11,12 @@ const pendingTriggers = new Map<
     timer: ReturnType<typeof setTimeout>;
     trigger: Trigger;
     eventContext: EventContext;
-    /** How many events this window has folded together, this one included. */
     eventsFolded: number;
   }
 >();
 
 const DEBOUNCE_MS = 5_000;
 
-/**
- * The event context a coalesced replacement delivers: the incoming context,
- * except `changedFields` — when both the incoming and the pending context
- * carry one — is the union of the two, so a trigger that eventually runs
- * sees every field changed across the coalesced window, not just the last
- * event's (see #622).
- */
 const mergedEventContext = (
   pending: EventContext | undefined,
   incoming: EventContext,
@@ -50,15 +42,6 @@ const mergedEventContext = (
   };
 };
 
-/**
- * Schedules `executeFn` for the debounce window `key` names, restarting the
- * window if one is already open.
- *
- * Returns whether this event was folded into an open window rather than
- * opening one — the caller records that as the dispatch decision (#812), which
- * is the only way a coalesced burst is distinguishable after the fact from a
- * single event.
- */
 export function debounceTriggerExecution(
   key: string,
   trigger: Trigger,
@@ -77,8 +60,6 @@ export function debounceTriggerExecution(
   const eventsFolded = (existing?.eventsFolded ?? 0) + 1;
 
   if (existing) {
-    // Identifiers and a count only: `eventData` carries Card titles and bodies,
-    // which are the Operator's users' content and never belong in a log line.
     logger.info(
       { debounceKey: key, triggerId: trigger.id, eventsFolded },
       "Event trigger burst coalesced",

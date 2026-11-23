@@ -56,10 +56,6 @@ describe("Files Routes", () => {
       expect(body.error).toBe("File key required");
     });
 
-    // Each key here carries enough leading segments to satisfy
-    // `parseStorageKey`, so it is the key check — not the org/workspace parse —
-    // that rejects them. `c.req.path` is not percent-decoded, hence the
-    // encoded forms.
     it.each([
       [
         "percent-encoded traversal",
@@ -94,7 +90,6 @@ describe("Files Routes", () => {
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
       expect(res.headers.get("Content-Type")).toBe("image/png");
-      // Super admin should not query DB for membership
       expect(mockDb.limit).not.toHaveBeenCalled();
     });
 
@@ -116,7 +111,6 @@ describe("Files Routes", () => {
 
     it("should return 403 when user is not org member", async () => {
       mockSession();
-      // Membership check returns empty array
       mockDb.limit.mockResolvedValueOnce([]);
 
       const res = await app.request(baseUrl);
@@ -127,7 +121,6 @@ describe("Files Routes", () => {
 
     it("should serve file when user is org admin", async () => {
       mockSession();
-      // Membership check returns org admin role
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
       mockStorageGetStream.mockResolvedValueOnce(
         streamed(Buffer.from("test image data"), "image/png"),
@@ -140,9 +133,7 @@ describe("Files Routes", () => {
 
     it("should return 404 when workspace not found for org member", async () => {
       mockSession();
-      // Membership check returns member role
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      // Workspace lookup returns empty array
       mockDb.limit.mockResolvedValueOnce([]);
 
       const res = await app.request(baseUrl);
@@ -153,9 +144,7 @@ describe("Files Routes", () => {
 
     it("should return 403 when member does not own workspace", async () => {
       mockSession({ id: "user-1", email: "test@example.com", role: "user" });
-      // Membership check returns member role
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      // Workspace lookup returns workspace owned by different user
       mockDb.limit.mockResolvedValueOnce([{ ownerId: "other-user" }]);
 
       const res = await app.request(baseUrl);
@@ -166,9 +155,7 @@ describe("Files Routes", () => {
 
     it("should serve file when member owns workspace", async () => {
       mockSession({ id: "user-1", email: "test@example.com", role: "user" });
-      // Membership check returns member role
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      // Workspace lookup returns workspace owned by user-1
       mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
       mockStorageGetStream.mockResolvedValueOnce(
         streamed(Buffer.from("test image data"), "image/png"),
@@ -231,8 +218,6 @@ describe("Files Routes", () => {
       );
     });
 
-    // The stored media type decides how the browser treats the bytes, so a
-    // browser that sniffs a different type from the content decides instead.
     it("should tell the browser not to sniff a type from the bytes", async () => {
       mockSession({ id: "user-1", email: "test@example.com", role: "user" });
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
@@ -246,9 +231,6 @@ describe("Files Routes", () => {
       expect(res.headers.get("X-Content-Type-Options")).toBe("nosniff");
     });
 
-    // A stored type the browser would run as a document when opened in a tab
-    // is isolated from this origin; `response-headers.ts` has the per-type
-    // rule, this checks the route applies it to what storage returned.
     describe("protective headers", () => {
       const serve = async (key: string, contentType: string, body: string) => {
         mockSession({ id: "user-1", email: "test@example.com", role: "user" });

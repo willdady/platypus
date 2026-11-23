@@ -23,7 +23,6 @@ import { paginationQuerySchema, validate } from "../validate.ts";
 
 const notification = new Hono<{ Variables: Variables }>();
 
-/** List notifications for workspace */
 notification.get(
   "/",
   requireAuth,
@@ -62,7 +61,6 @@ notification.get(
   },
 );
 
-/** Get unread notification count */
 notification.get(
   "/unread-count",
   requireAuth,
@@ -78,7 +76,6 @@ notification.get(
   },
 );
 
-/** Mark a single notification as read */
 notification.post(
   "/:notificationId/read",
   requireAuth,
@@ -99,7 +96,6 @@ notification.post(
   },
 );
 
-/** Mark all workspace notifications as read */
 notification.post(
   "/read-all",
   requireAuth,
@@ -115,7 +111,6 @@ notification.post(
   },
 );
 
-/** Delete a notification */
 notification.delete(
   "/:notificationId",
   requireAuth,

@@ -59,7 +59,6 @@ describe("createArtifactTools", () => {
   const ownVersions = () =>
     versions().filter(({ artifactId }) => artifactId === "artifact-1");
 
-  /** An Artifact with one version, and another Workspace's Artifact beside it. */
   const seedExisting = ({
     content = "# Notes\n\nHello world.",
     title = "Notes",
@@ -175,8 +174,6 @@ describe("createArtifactTools", () => {
     ]);
   });
 
-  // A Trigger run and a Sub-Agent both reach a Tool set through the same
-  // context, so the Chat id the factory is built with is the source either way.
   it.each(["trigger-run-1", "chat-1"])(
     "records the invoking session %s as the source Chat",
     async (sourceChatId) => {
@@ -408,8 +405,6 @@ describe("createArtifactTools", () => {
       expect(ownVersions()[2].content).toBe("third");
     });
 
-    // Two writers must not choose the same next number: the Artifact row is
-    // locked inside the transaction before the latest version is read.
     it("locks the Artifact row before choosing the next version", async () => {
       seedExisting();
       fake.queries.length = 0;
@@ -453,8 +448,6 @@ describe("createArtifactTools", () => {
       expect(ownVersions()).toHaveLength(1);
     });
 
-    // The whole call is atomic: the first edit must not land when a later one
-    // fails, or a retry would apply it a second time.
     it("writes nothing when a later edit fails", async () => {
       seedExisting();
 

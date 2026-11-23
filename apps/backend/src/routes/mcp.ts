@@ -28,9 +28,6 @@ import {
 } from "../services/scoped-resource.ts";
 import type { Variables } from "../server.ts";
 
-// MCP mutations introduce credentials and external reach, so they are
-// org-admin by default and delegatable to the workspace owner via the
-// `mcpSelfManagement` flag (ADR-0006). Reused across every mutating route.
 const requireMcpConfigAccess =
   requireWorkspaceConfigAccess("mcpSelfManagement");
 import {
@@ -43,7 +40,6 @@ import { respond } from "../respond.ts";
 
 const mcp = new Hono<{ Variables: Variables }>();
 
-/** Create a new MCP (org-admin, or owner when delegated — ADR-0006) */
 mcp.post(
   "/",
   requireAuth,
@@ -54,10 +50,6 @@ mcp.post(
   async (c) => {
     const data = c.req.valid("json");
     const scope = workspaceScopeOf(c);
-    // The scope comes from the route, never the body — as it does for Agents
-    // and Skills. `createMcp` overrides any `organizationId`/`workspaceId` the
-    // body carried, so a caller cannot name another Workspace, or mint a
-    // Shared MCP from the Workspace surface (ADR-0006, ADR-0007).
     const row = await createMcp({ kind: "workspace", ctx: scope }, data);
     return respond(
       c,
@@ -68,21 +60,13 @@ mcp.post(
   },
 );
 
-/** List MCPs visible in this workspace (workspace-scoped + org-scoped) */
 mcp.get(
   "/",
   requireAuth,
   requireOrgAccess(),
   requireWorkspaceAccess,
   async (c) => {
-    // Workspace-scoped MCPs plus the Shared (org-scoped) MCPs attached here
-    // (ADR-0007), each tagged with its scope for the frontend.
     const scoped = await listScoped(db, "mcp", workspaceScopeOf(c));
-    // Request credentials are revealed only to a caller who may manage this MCP
-    // (ADR-0006) — the same rule the write routes reject on. The rows still list,
-    // because granting an MCP to an Agent does not require self-management.
-    // A Shared row is configured only by an Org Admin on the Organization
-    // surface (ADR-0007), so the delegation never reveals its credentials.
     const reveal = await workspaceCredentialsVisible(c, "mcp");
     const results = scoped.map(({ row, scope }) =>
       mcpReadModel(row, { reveal: reveal && scope === "workspace", scope }),
@@ -92,7 +76,6 @@ mcp.get(
   },
 );
 
-/** Get a MCP by ID (workspace-scoped or org-scoped) */
 mcp.get(
   "/:mcpId",
   requireAuth,
@@ -101,7 +84,6 @@ mcp.get(
   async (c) => {
     const mcpId = c.req.param("mcpId");
     const found = await requireScoped(db, "mcp", mcpId, workspaceScopeOf(c));
-    // See the list route: redacted unless this caller may manage the MCP.
     const reveal = await workspaceCredentialsVisible(c, "mcp");
     return respond(
       c,
@@ -114,7 +96,6 @@ mcp.get(
   },
 );
 
-/** Update a MCP by ID (org-admin, or owner when delegated — ADR-0006) */
 mcp.put(
   "/:mcpId",
   requireAuth,
@@ -127,9 +108,6 @@ mcp.put(
     const scope = workspaceScopeOf(c);
     const data = c.req.valid("json");
 
-    // A Shared MCP is a single source of truth edited only on the Organization
-    // surface (ADR-0007); `updateMcp` throws NotFound (→404) when the MCP is
-    // not visible here, then Locked (→403) when it is org-scoped.
     const row = await updateMcp({ kind: "workspace", ctx: scope }, mcpId, data);
     return respond(
       c,
@@ -140,7 +118,6 @@ mcp.put(
   },
 );
 
-/** Delete a MCP by ID (org-admin, or owner when delegated — ADR-0006) */
 mcp.delete(
   "/:mcpId",
   requireAuth,
@@ -151,19 +128,11 @@ mcp.delete(
     const mcpId = c.req.param("mcpId");
     const scope = workspaceScopeOf(c);
 
-    // A Shared MCP is deleted only from the Organization surface (ADR-0007):
-    // `deleteMcp` throws NotFound (→404) when the MCP is not visible here, then
-    // Locked (→403) when it is org-scoped. It also scrubs the deleted MCP's id
-    // from any referencing Agent's toolSetIds (#689).
     await deleteMcp({ kind: "workspace", ctx: scope }, mcpId);
     return c.json({ message: "MCP deleted" });
   },
 );
 
-/**
- * Test an unsaved MCP connection (org-admin, or owner when delegated —
- * ADR-0006). Nothing is stored, so the body must name the MCP.
- */
 mcp.post(
   "/test",
   requireAuth,
@@ -180,12 +149,6 @@ mcp.post(
   },
 );
 
-/**
- * Test a stored MCP connection, addressed by its id (org-admin, or owner when
- * delegated — ADR-0006). Read-only, so an attached Shared MCP is resolved
- * through the Scoped-resource authority the same as any other visible row (see
- * mcp-connection.ts's docstring for the full rationale).
- */
 mcp.post(
   "/:mcpId/test",
   requireAuth,
@@ -209,12 +172,6 @@ const oauthAuthorizeQuerySchema = z.strictObject({
   force: z.enum(["true", "false"]).optional(),
 });
 
-/**
- * Initiate OAuth authorization for an MCP (org-admin, or delegated owner).
- * Mutates org-owned OAuth credentials, so the row is resolved with
- * `requireWorkspaceMutable`: an attached Shared MCP is locked (403) rather
- * than reported as not found (see mcp-connection.ts's docstring).
- */
 mcp.post(
   "/:mcpId/oauth/authorize",
   requireAuth,
@@ -250,11 +207,6 @@ mcp.post(
   },
 );
 
-/**
- * Revoke OAuth tokens for an MCP (org-admin, or delegated owner). Mutates
- * org-owned OAuth credentials, so the row is resolved with
- * `requireWorkspaceMutable` — see the authorize route above.
- */
 mcp.post(
   "/:mcpId/oauth/revoke",
   requireAuth,

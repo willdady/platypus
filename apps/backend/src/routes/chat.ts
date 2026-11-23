@@ -46,18 +46,6 @@ import {
 } from "../services/chat-summary.ts";
 import { oneRow } from "../db/one-row.ts";
 
-/**
- * Stored messages as a reader gets them: storage references rewritten to
- * served URLs, and web tool parts normalized — a view over stored data: the
- * Transcript's appearance must not depend on which week it was sent (issue
- * #525), and this is the read-path counterpart to the live stream's
- * normalization in `runs/drive.ts` — no migration, no change to the stored
- * part.
- *
- * `createdAt` is the server's bookkeeping (the Chats Tool set reads it); the
- * Chat response's message contract has never carried it, so it is dropped
- * here rather than widening what a client receives.
- */
 const servedMessages = (messages: StoredChatMessage[], origin: string) =>
   normalizeWebToolParts(
     rewriteStorageUrls(
@@ -66,12 +54,6 @@ const servedMessages = (messages: StoredChatMessage[], origin: string) =>
     ),
   );
 
-/**
- * A Chat row as a reader gets it. The pinned Memories block and previous-turn
- * stamp (ADR-0020), the active leaf (ADR-0026) and the memory extraction
- * cursor are internal — absent from the Chat response schema, never surfaced
- * in the product. The row read by the run sink still carries them.
- */
 const chatResponse = ({
   memorySnapshot: _memorySnapshot,
   lastTurnAt: _lastTurnAt,
@@ -85,19 +67,11 @@ const chatResponse = ({
   ...response
 }: typeof chatTable.$inferSelect) => response;
 
-/**
- * A run moves the leaf onto its own reply as it goes, and a delete or a switch
- * landing mid-run would race it (ADR-0026). Read from the row the run claimed,
- * since the run may be another instance's (#1237). A `running` Chat whose
- * heartbeat is stale holds no run (#1297), so nothing is refused on it.
- */
 const refuseWhileRunning = (chat: Parameters<typeof chatRunIsLive>[0]) => {
   if (chatRunIsLive(chat)) {
     throw new ConflictError(CHAT_BUSY_MESSAGE);
   }
 };
-
-// --- Routes ---
 
 const chat = new Hono<{ Variables: Variables }>();
 
@@ -114,16 +88,12 @@ chat.get(
     const { workspaceId } = workspaceScopeOf(c);
     const { limit, offset, search } = c.req.valid("query");
 
-    // Build search filter using ILIKE on the title. `\` is Postgres's default
-    // LIKE escape, so escaping `%`, `_` and `\` matches them literally.
     const term = search?.trim().replace(/[\\%_]/g, "\\$&");
     const pattern = `%${term}%`;
     const searchFilter = term
       ? sql`${chatTable.title} ILIKE ${pattern}`
       : undefined;
 
-    // A Trigger run's Chat is read by id, never listed (ADR-0044): a Cron
-    // Trigger firing every few minutes would bury the User's own Chats.
     const whereClause = and(
       eq(chatTable.workspaceId, workspaceId),
       isNull(chatTable.triggerRunId),
@@ -177,8 +147,6 @@ chat.get(
 
     const chat = await requireOwned(db, "chat", { id: chatId, workspaceId });
     const { messages, tree } = await loadActivePath(chatId, chat.activeLeafId);
-    // The Chat's Transcript summaries (ADR-0041), newest first, for the
-    // divider at each usable summary's anchor and the composer meter's "—".
     const summaries = await loadChatSummaries(chatId);
     return c.json({
       ...chatResponse(chat),
@@ -198,8 +166,6 @@ chat.post(
   requireWorkspaceOwner,
   validate("json", chatSubmitSchema),
   async (c) => {
-    // An interactive turn includes the Owner's Memories, unless it is in an
-    // A2A Chat whose endpoint leaves them out (see `startChatTurn`).
     return await startChatTurn({
       scope: workspaceScopeOf(c),
       chatId: c.req.param("chatId"),
@@ -220,15 +186,8 @@ chat.post(
     const chatId = c.req.param("chatId");
     const { workspaceId } = workspaceScopeOf(c);
 
-    // Verify the chat belongs to this workspace before signalling cancel.
-    // This is what makes a cross-workspace cancel return 404 rather than
-    // silently no-op — runIds (which equal chat IDs) are otherwise the
-    // only thing the registry sees.
     await requireOwned(db, "chat", { id: chatId, workspaceId });
 
-    // Idempotent: an unknown or already-finished run is a no-op, but we still
-    // respond 200 so flaky clients can safely retry. The run may be another
-    // instance's, so this reaches whichever holds it (#1237).
     await cancelRun(chatId);
     return c.json({ message: "Cancellation requested" }, 200);
   },
@@ -250,8 +209,6 @@ chat.delete(
       .delete(chatTable)
       .where(ownedWhere("chat", { id: chatId, workspaceId }));
 
-    // By prefix, not by the keys the messages reference: files on messages off
-    // the Active path — Alternatives, deleted messages — are stored too.
     await deleteStoredPrefix(
       chatStorageKeyPrefix({ orgId, workspaceId, chatId }),
     );
@@ -280,12 +237,6 @@ chat.delete(
   },
 );
 
-/**
- * `/compact` (issue #1111): a Transcript summary of the whole Active path,
- * taken now with the task model first and the Chat's own model as fallback,
- * steered by the User's instruction (ADR-0041). No message is written; the next
- * turn reads the summary.
- */
 chat.post(
   "/:chatId/compact",
   requireAuth,
@@ -299,7 +250,6 @@ chat.post(
     const { instruction } = c.req.valid("json");
 
     const row = await requireWritableChat(db, { id: chatId, workspaceId });
-    // A summary of a path a run is still extending would miss its reply.
     refuseWhileRunning(row);
 
     const { messages } = await loadActivePath(chatId, row.activeLeafId);

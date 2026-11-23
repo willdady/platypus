@@ -15,16 +15,11 @@ import {
 } from "../services/agent.ts";
 import { ConflictError, LockedError, NotFoundError } from "../errors.ts";
 
-// The write rules (dedupe, sub-agent validation, visibility, avatar cleanup)
-// are unit-tested in services/agent.test.ts; this file covers the adapter:
-// the scope it passes, how it shapes a row, and how it reports a refusal.
-
 const workspaceId = "ws-1";
 const orgId = "org-1";
 const frontendUrl = "http://localhost:3000/";
 const scope = { kind: "workspace", ctx: { orgId, workspaceId } };
 
-// Only the fields the adapter reads or strips; the rest pass through.
 const row = (over: Record<string, unknown> = {}) =>
   ({
     row: { id: "a1", name: "Agent", avatarKey: "avatars/a1.png", ...over },

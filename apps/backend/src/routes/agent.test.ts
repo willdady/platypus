@@ -16,12 +16,6 @@ vi.mock("../services/avatar.ts", async (importOriginal) => ({
   deleteAvatar: vi.fn(),
 }));
 
-/**
- * These tests state fixture rows rather than stubbing queries in call order:
- * `seedDb()` installs the in-memory fake from `fake-db.ts`, which evaluates
- * the `WHERE` each query builds, so a lookup that dropped its Workspace scope
- * reads `ws-2`'s Agent and the test fails.
- */
 describe("Agent Routes", () => {
   beforeEach(() => {
     resetMockDb();
@@ -32,7 +26,6 @@ describe("Agent Routes", () => {
   const workspaceId = "ws-1";
   const baseUrl = `/organizations/${orgId}/workspaces/${workspaceId}/agents`;
 
-  /** This Workspace's own Agent. */
   const workspaceAgent = (over: Store[string][number] = {}) => ({
     id: "agent-1",
     name: "Agent 1",
@@ -46,7 +39,6 @@ describe("Agent Routes", () => {
     ...over,
   });
 
-  /** A Shared Agent of this Organization — org-scoped, at no Workspace. */
   const sharedAgent = (over: Store[string][number] = {}) =>
     workspaceAgent({
       id: "shared-1",
@@ -56,7 +48,6 @@ describe("Agent Routes", () => {
       ...over,
     });
 
-  /** An Agent private to `ws-2`, another Workspace of the same Organization. */
   const otherWorkspaceAgent = () =>
     workspaceAgent({ id: "agent-2", name: "Elsewhere", workspaceId: "ws-2" });
 
@@ -67,10 +58,6 @@ describe("Agent Routes", () => {
     resourceId,
   });
 
-  /**
-   * The caller (`user-1`) is a member of `org-1` at `role`; `owner` owns
-   * `ws-1` and `ws-2`.
-   */
   const world = ({
     role = "member",
     owner = "user-1",
@@ -290,9 +277,6 @@ describe("Agent Routes", () => {
         error:
           string | Array<{ message?: string; path?: Array<string | number> }>;
       };
-      // A schema refusal is an issue array; a write-model refusal is a single
-      // string. One reading of both, so the test names the reason rather than
-      // matching a serialised body.
       const messages =
         typeof body.error === "string"
           ? [body.error]
@@ -334,8 +318,6 @@ describe("Agent Routes", () => {
 
   describe("GET /", () => {
     it("should list workspace and attached org agents tagged with scope", async () => {
-      // Drop the Workspace filter from `listScoped` and `ws-2`'s Agent is
-      // listed; drop the Attachment join and the unattached Shared one is.
       mockSession();
       world({
         rows: {
@@ -352,8 +334,6 @@ describe("Agent Routes", () => {
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
-      // listScoped returns Workspace rows first, then attached org rows; the
-      // frontend regroups by scope, so order is not observable behaviour.
       expect(await res.json()).toEqual({
         results: [
           expect.objectContaining({
@@ -414,8 +394,6 @@ describe("Agent Routes", () => {
       );
     });
 
-    // `agent-2` exists, but in `ws-2`: only the lookup's Workspace filter
-    // keeps it out, and only the Attachment check keeps `shared-2` out.
     it.each([
       ["a missing agent", "nope"],
       ["an org agent that is not attached here", "shared-2"],
@@ -501,8 +479,6 @@ describe("Agent Routes", () => {
       expect(agentOf(fake, "agent-1")?.subAgentIds).toEqual(["shared-1"]);
     });
 
-    // `agent-2` exists in `ws-2`, and `shared-2` is Shared but unattached:
-    // the sub-agent lookup's Workspace filter and Attachment join reject them.
     it.each([
       ["another workspace's agent", "agent-2"],
       ["an unattached Shared agent", "shared-2"],
@@ -530,8 +506,6 @@ describe("Agent Routes", () => {
       },
     );
 
-    // Shared agents are edited only on the Organization surface (ADR-0007),
-    // even by an Org Admin.
     it.each(["member", "admin"] as const)(
       "should lock an attached shared agent for a %s",
       async (role) => {
@@ -562,7 +536,6 @@ describe("Agent Routes", () => {
         workspaceAgent({ avatarKey: "avatar-1" }),
         sharedAgent(),
         sharedAgent({ id: "shared-2", name: "Unattached" }),
-        // Another Workspace's Agent, holding `agent-1` as a sub-agent.
         workspaceAgent({
           id: "agent-2",
           name: "Elsewhere",
@@ -591,7 +564,6 @@ describe("Agent Routes", () => {
 
     it.each([
       ["a shared agent not attached here", "shared-2", 404],
-      // Shared agents are deleted only on the Organization surface (ADR-0007).
       ["an attached shared agent (locked)", "shared-1", 403],
       ["another workspace's agent", "agent-2", 404],
     ])("refuses %s", async (_label, id, status) => {
@@ -607,11 +579,6 @@ describe("Agent Routes", () => {
   });
 
   describe("avatar routes", () => {
-    /**
-     * `agent-1` is this Workspace's own Agent; `shared-1` is a Shared Agent
-     * attached here (visible, but locked on this surface); `agent-2` belongs to
-     * another Workspace of the same org.
-     */
     const avatarWorld = (): FakeDb =>
       world({
         rows: {
@@ -653,7 +620,6 @@ describe("Agent Routes", () => {
         "old",
       );
       expect(keyOf(fake, "agent-1")).toBe("new");
-      // The avatar write's `workspaceScopedWhere` keeps every other row out.
       expect(keyOf(fake, "agent-2")).toBe("theirs");
       expect(keyOf(fake, "shared-1")).toBeUndefined();
     });
@@ -750,11 +716,6 @@ describe("Agent Routes", () => {
   });
 
   describe("pin routes", () => {
-    /**
-     * `agent-1` is this Workspace's own Agent; `shared-1` is a Shared Agent
-     * attached here and in `ws-2`; `shared-2` is a Shared Agent attached
-     * nowhere; `agent-2` belongs to `ws-2`. `owner` owns both Workspaces.
-     */
     const pinWorld = ({
       owner = "user-1",
       role = "member",
@@ -859,7 +820,6 @@ describe("Agent Routes", () => {
       expect(pinned(fake)).toEqual([]);
     });
 
-    // An Org Admin reaches every Workspace, but a pin is the Owner's call.
     it.each(["PUT", "DELETE"] as const)(
       "refuses %s from a non-Owner",
       async (method) => {
@@ -880,7 +840,6 @@ describe("Agent Routes", () => {
     const promote = (id = "agent-1") =>
       app.request(`${baseUrl}/${id}/promote`, { method: "POST" });
 
-    /** A Shared Provider `p1`, and a Skill `s1` private to this Workspace. */
     const references = {
       provider: [
         {
@@ -904,8 +863,6 @@ describe("Agent Routes", () => {
       expect(agentOf(fake, "agent-1")).toMatchObject({ workspaceId });
     });
 
-    // `agent-2` exists, but in `ws-2`: the promote lookup's Workspace filter
-    // is all that keeps it from being re-scoped from here.
     it.each([
       ["does not exist", "nope"],
       ["belongs to another workspace", "agent-2"],
