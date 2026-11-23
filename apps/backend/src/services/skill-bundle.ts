@@ -111,32 +111,73 @@ const storeFiles = async (
 ): Promise<{ prefix: string; rows: SkillFileRow[] }> => {
   const prefix = `${skillStorageKeyPrefix({ orgId, skillId })}${nanoid()}/`;
   const now = new Date();
-  try {
-    const rows = await Promise.all(
-      files.map(async (file) => {
-        const storageKey = `${prefix}${nanoid()}`;
-        await getStorage().put(
-          storageKey,
-          Buffer.from(file.data),
-          SKILL_FILE_CONTENT_TYPE,
-        );
-        return {
-          id: nanoid(),
-          skillId,
-          path: file.path,
-          size: file.size,
-          sha256: file.sha256,
-          isText: file.isText,
-          storageKey,
-          createdAt: now,
-        };
-      }),
-    );
-    return { prefix, rows };
-  } catch (error) {
-    await deleteStoredPrefix(prefix);
-    throw error;
+  // why: settle every write before clearing the prefix, or a straggler re-creates it
+  const settled = await Promise.allSettled(
+    files.map(async (file) => {
+      const storageKey = `${prefix}${nanoid()}`;
+      await getStorage().put(
+        storageKey,
+        Buffer.from(file.data),
+        SKILL_FILE_CONTENT_TYPE,
+      );
+      return {
+        id: nanoid(),
+        skillId,
+        path: file.path,
+        size: file.size,
+        sha256: file.sha256,
+        isText: file.isText,
+        storageKey,
+        createdAt: now,
+      };
+    }),
+  );
+
+  const rows: SkillFileRow[] = [];
+  let failure: { error: unknown } | null = null;
+  for (const result of settled) {
+    if (result.status === "rejected") {
+      failure ??= { error: result.reason };
+    } else {
+      rows.push(result.value);
+    }
   }
+
+  if (failure) {
+    await deleteStoredPrefix(prefix);
+    throw failure.error;
+  }
+  return { prefix, rows };
+};
+
+const readRequiredSkillFile = async (file: SkillFileRow): Promise<Buffer> => {
+  const data = await readStoredSkillFile(file);
+  if (!data) throw new Error(`Skill file missing: ${file.path}`);
+  return data;
+};
+
+export const copySkillFilesTo = async (
+  orgId: string,
+  skillId: string,
+  source: SkillFileRow[],
+): Promise<{
+  prefix: string;
+  rows: SkillFileRow[];
+  needsSandbox: boolean;
+}> => {
+  const files = await Promise.all(
+    source.map(async (file) => ({
+      path: file.path,
+      data: await readRequiredSkillFile(file),
+      size: file.size,
+      sha256: file.sha256,
+      isText: file.isText,
+    })),
+  );
+  return {
+    ...(await storeFiles(orgId, skillId, files)),
+    needsSandbox: bundleNeedsSandbox(files),
+  };
 };
 
 export type GithubInstallOrigin = {
@@ -281,11 +322,10 @@ export const readStoredSkillFile = async (
 
 export async function exportSkillBundle(row: SkillRow): Promise<Uint8Array> {
   const files = await Promise.all(
-    (await listSkillFiles(db, row.id)).map(async (file) => {
-      const data = await readStoredSkillFile(file);
-      if (!data) throw new Error(`Skill file missing: ${file.path}`);
-      return { path: file.path, data };
-    }),
+    (await listSkillFiles(db, row.id)).map(async (file) => ({
+      path: file.path,
+      data: await readRequiredSkillFile(file),
+    })),
   );
   return buildSkillZip({
     fields: fieldsOf(row),
