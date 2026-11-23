@@ -553,7 +553,7 @@ Three things follow from that, and all are worth knowing:
 
 - **Details above the line can come back fuzzier.** A summary keeps the intent,
   the instructions, constraints and preferences you set, your requests (quoted
-  where they are short), the decisions and facts that later steps depend on,
+  in full unless very long), the decisions and facts that later steps depend on,
   what the assistant produced, what sources and tools were used, what was
   corrected or dropped, what is still open, and where the work stands — not
   every word. If something above the line matters to your next question, state
@@ -561,7 +561,7 @@ Three things follow from that, and all are worth knowing:
 - **A request that was answered stops being quoted.** Once the assistant has
   fully answered one of your requests, a later summary drops it and keeps only
   the instructions and preferences it set. A request that is still open stays
-  quoted, so a task you are waiting on survives word for word.
+  quoted in full, shortened only if it is very long.
 - **The line marks roughly where the Chat started growing.** The newest few
   turns are always sent in full, so the summary sits a few turns back rather
   than at the very top of the last exchange.

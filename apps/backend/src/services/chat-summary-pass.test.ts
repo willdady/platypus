@@ -673,12 +673,20 @@ describe("takeTranscriptSummary", () => {
       );
       expect(userRequests).toContain("**Standing instructions.**");
       expect(userRequests).toContain("supersedes or contradicts");
+      expect(userRequests).toContain(
+        "whether they came from the earlier summary or from this conversation",
+      );
       expect(userRequests).toContain("not fully answered stays word for word");
       expect(userRequests).toContain(
         "whether the earlier summary records it as answered or the newer messages answer it",
       );
       expect(userRequests).toContain("is dropped");
-      expect(userRequests).toContain("next pass, not this one");
+      expect(userRequests).toContain(
+        "The verbatim bullet is dropped on the next pass once the instructions it set are listed under Standing instructions",
+      );
+      expect(userRequests).not.toContain(
+        "folded into the standing instructions on the next pass",
+      );
       expect(userRequests).not.toContain(
         "may be shortened to the instructions",
       );
