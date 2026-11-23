@@ -26,7 +26,7 @@ import { ExpandableTextarea } from "@/components/expandable-textarea";
 import { fetcher } from "@/lib/utils";
 import { useBackendUrl } from "@/components/auth-provider";
 import useSWR from "swr";
-import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useScopedList } from "@/hooks/use-scoped-list";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
 import {
   FieldSkeleton,
@@ -131,15 +131,18 @@ export function WorkspaceContextForm({ contextId }: { contextId?: string }) {
 
   // Fetch organizations
   const {
-    data: orgs,
+    data: orgsData,
+    results: orgs,
     error: orgsError,
     mutate: mutateOrgs,
-  } = useScopedSWR<{ results: Organization[] }>("organizations", {});
+  } = useScopedList<Organization>("organizations", {});
 
   // Fetch all contexts to filter out workspaces that already have contexts
-  const { data: allContexts, error: allContextsError } = useScopedSWR<{
-    results: Context[];
-  }>("users/me/contexts", {});
+  const {
+    data: allContextsData,
+    results: allContexts,
+    error: allContextsError,
+  } = useScopedList<Context>("users/me/contexts", {});
 
   // Every workspace across every organization the user belongs to. The API has
   // no user-scoped workspace route, so the per-organization fan-out lives in
@@ -171,7 +174,7 @@ export function WorkspaceContextForm({ contextId }: { contextId?: string }) {
     error: workspacesError,
     mutate: mutateWorkspaces,
   } = useSWR<WorkspaceWithOrg[], unknown>(
-    orgs?.results ?? null,
+    orgsData ? orgs : null,
     fetchOrgWorkspaces,
   );
   const workspaces = workspacesData ?? [];
@@ -187,9 +190,9 @@ export function WorkspaceContextForm({ contextId }: { contextId?: string }) {
   // no fan-out at all (SWR never fetches an empty-array key), so nothing to wait on.
   const workspacesLoading =
     !workspacesLoadError &&
-    (orgs === undefined ||
-      (orgs.results.length > 0 && workspacesData === undefined) ||
-      (allContexts === undefined && !allContextsError));
+    (orgsData === undefined ||
+      (orgs.length > 0 && workspacesData === undefined) ||
+      (allContextsData === undefined && !allContextsError));
   const retryWorkspaces = () => {
     void mutateOrgs();
     void mutateWorkspaces();
@@ -197,9 +200,9 @@ export function WorkspaceContextForm({ contextId }: { contextId?: string }) {
 
   // Filter out workspaces that already have contexts (unless we're editing that context)
   const existingWorkspaceIds = new Set(
-    allContexts?.results
+    allContexts
       .filter((c) => c.workspaceId && c.id !== contextId)
-      .map((c) => c.workspaceId) || [],
+      .map((c) => c.workspaceId),
   );
   const availableWorkspaces = workspaces.filter(
     (w) => !existingWorkspaceIds.has(w.id),
