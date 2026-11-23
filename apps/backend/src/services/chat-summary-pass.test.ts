@@ -180,6 +180,37 @@ describe("takeTranscriptSummary", () => {
     expect(chatPrompts).toHaveLength(0);
   });
 
+  it("skips a task model whose window leaves no room for input after its reply", async () => {
+    seedSummaryTable();
+    const taskPrompts: PromptMessage[][] = [];
+    const chatPrompts: PromptMessage[][] = [];
+    const row = await takeTranscriptSummary({
+      chatId: "chat-1",
+      models: {
+        task: {
+          model: summaryModel(taskPrompts, "The task summary."),
+          modelId: "task-model",
+          // An 8k window against the pass's own 8,192-token reply: the reply
+          // alone fills it, so there is no input budget left to check against.
+          contextWindow: 8_000,
+        },
+        chat: {
+          model: summaryModel(chatPrompts, "The chat summary."),
+          modelId: "chat-model",
+        },
+      },
+      path: sixTurns(),
+      triggeredFromOccupancy: 8_200,
+      previousSummary: undefined,
+      readingSummaryId: undefined,
+    });
+
+    expect(row?.text).toBe("The chat summary.");
+    expect(row?.stats?.modelId).toBe("chat-model");
+    expect(taskPrompts).toHaveLength(0);
+    expect(chatPrompts).toHaveLength(1);
+  });
+
   it("falls back to the Chat's model over the same range when the task model overflows", async () => {
     seedSummaryTable();
     const taskPrompts: PromptMessage[][] = [];

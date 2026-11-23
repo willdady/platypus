@@ -246,9 +246,11 @@ condensed ahead of time** in the meter's place, linking back to Provider
 settings.
 
 The window on a Provider's memory-extraction model also sizes Memory
-extraction: each pass sends at most **half** of it, or about **32k tokens** when
-none is declared. A Chat with more new messages than that is read over several
-passes, one part each run.
+extraction: each pass sends at most **half** of it, and always leaves room for
+the reply it asks for, or about **32k tokens** of input when none is declared. A
+Chat with more new messages than that is read over several passes, one part each
+run. A window no bigger than the reply leaves nothing to send, so that model
+can't run Memory extraction — pick one with room for both.
 
 <Callout type="warning">
   For a Chat turn, a Context window is a **statement of capacity**, not a cap

@@ -30,9 +30,9 @@ A Provider carries:
   inexpensive model with a large context window: a summary can send it most of
   a conversation. If it cannot take that much, the Chat's own model writes the
   summary instead. Give the task model's entry a **Context window**: a summary
-  that would fill more than half of it goes straight to the Chat's model, so a
-  server that silently cuts off an overlong prompt never summarises half a
-  conversation,
+  that would fill more than half of it, or leave no room for the reply, goes
+  straight to the Chat's model, so a server that silently cuts off an overlong
+  prompt never summarises half a conversation,
 - and the models used for memory extraction and embeddings, plus per-model
   settings such as the context window,
 - and the [Job settings](#job-settings) sent with the task model and the memory

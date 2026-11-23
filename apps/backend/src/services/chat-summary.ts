@@ -691,10 +691,11 @@ export type TranscriptSummaryPassInput = {
  * model declares a context window, an input over the job budget of it skips the
  * task model outright: a server that truncates an overlong prompt instead of
  * rejecting it would otherwise write a summary of a cut-off conversation, and
- * no error would trigger the fallback. A summary cannot be trimmed to fit the
- * way memory extraction trims its input, because every covered message is
- * replaced by it. Without a declared window, the model's own error is the
- * only measurement available.
+ * no error would trigger the fallback. The budget leaves room for the reply the
+ * pass requests, so a window the reply alone fills skips it too. A summary
+ * cannot be trimmed to fit the way memory extraction trims its input, because
+ * every covered message is replaced by it. Without a declared window, the
+ * model's own error is the only measurement available.
  *
  * Overflow on the Chat's model retries once with an earlier anchor (one more
  * turn kept verbatim); a second failure is an ordinary failed summary. A
@@ -744,6 +745,17 @@ export const takeTranscriptSummary = async (
     };
   };
 
+  /**
+   * The output cap a call with `entry` requests: its Job settings' cap (or the
+   * pass's own) bounded by the Chat model's declared ceiling, Thinking budget
+   * already included. The input check measures the same value the call sends.
+   */
+  const outputCap = (entry: TranscriptSummaryModel): number =>
+    Math.min(
+      entry.maxOutputTokens ?? TRANSCRIPT_SUMMARY_MAX_OUTPUT_TOKENS,
+      entry.outputCeiling ?? Infinity,
+    );
+
   const attempt = async (
     entry: TranscriptSummaryModel,
     input: SummaryInput,
@@ -773,10 +785,7 @@ export const takeTranscriptSummary = async (
           { role: "user" as const, content: TRANSCRIPT_SUMMARY_REQUEST },
         ],
         ...entry.settings,
-        maxOutputTokens: Math.min(
-          entry.maxOutputTokens ?? TRANSCRIPT_SUMMARY_MAX_OUTPUT_TOKENS,
-          entry.outputCeiling ?? Infinity,
-        ),
+        maxOutputTokens: outputCap(entry),
         abortSignal: signal,
       });
 
@@ -850,7 +859,7 @@ export const takeTranscriptSummary = async (
       (input.priorText?.length ?? 0) +
       JSON.stringify(input.modelMessages).length +
       TRANSCRIPT_SUMMARY_REQUEST.length <=
-      jobInputBudgetChars(entry.contextWindow);
+      jobInputBudgetChars(entry.contextWindow, outputCap(entry));
 
   let summaryInput = await anchorInput(anchorIndex);
 
@@ -860,6 +869,7 @@ export const takeTranscriptSummary = async (
         chatId,
         modelId: taskModel.modelId,
         contextWindow: taskModel.contextWindow,
+        maxOutputTokens: outputCap(taskModel),
         fallbackModelId: chatModel.modelId,
       },
       "Transcript summary skipped the task model: the input exceeds its declared context window",
