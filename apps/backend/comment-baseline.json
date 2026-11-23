@@ -1,6 +1,4 @@
 {
-  "src/registry/contribution-registry.test.ts": 12,
-  "src/registry/contribution-registry.ts": 17,
   "src/routes/sandbox-backends.test.ts": 7,
   "src/routes/sandbox-backends.ts": 13,
   "src/routes/sandbox.test.ts": 46,
@@ -69,6 +67,5 @@
   "src/services/workspace-resource.test.ts": 8,
   "src/services/workspace-resource.ts": 20,
   "src/services/workspace-transfer.test.ts": 11,
-  "src/services/workspace-transfer.ts": 15,
-  "src/tool-gates/index.ts": 45
+  "src/services/workspace-transfer.ts": 15
 }
