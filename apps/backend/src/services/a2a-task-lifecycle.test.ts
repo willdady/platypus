@@ -19,9 +19,10 @@ import {
 } from "../db/schema.ts";
 import type { Tx } from "../index.ts";
 
-const { holder, mockCancelRun } = vi.hoisted(() => ({
+const { holder, mockCancelRun, mockPostWithRetries } = vi.hoisted(() => ({
   holder: { db: undefined as ReturnType<typeof drizzle> | undefined },
   mockCancelRun: vi.fn(),
+  mockPostWithRetries: vi.fn(),
 }));
 vi.mock("../index.ts", () => ({
   get db() {
@@ -32,9 +33,15 @@ vi.mock("./a2a-liveness.ts", () => ({
   taskIsLive: () => Promise.resolve(true),
 }));
 vi.mock("../runs/run-cancel.ts", () => ({ cancelRun: mockCancelRun }));
+vi.mock("./webhook-delivery.ts", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./webhook-delivery.ts")>();
+  mockPostWithRetries.mockImplementation(actual.postWithRetries);
+  return { ...actual, postWithRetries: mockPostWithRetries };
+});
 
 const { cancelTask, endTurnIn, readTask, sweepMissedEnds, turnEnded } =
   await import("./a2a-task-lifecycle.ts");
+const { MAX_PUSHES_PER_TASK, PUSH_LEASE_MS } = await import("./a2a-push.ts");
 
 const HOOK = "http://10.0.0.5/hook";
 
@@ -56,6 +63,7 @@ beforeEach(async () => {
   vi.stubGlobal("fetch", fetchMock);
   mockCancelRun.mockReset();
   mockCancelRun.mockResolvedValue(undefined);
+  mockPostWithRetries.mockClear();
   await pg.exec(`
     DELETE FROM "a2a_push_config";
     DELETE FROM "a2a_task";
@@ -94,6 +102,23 @@ const endRun = (status: "succeeded" | "failed" | "cancelled") =>
     );
     return endTurnIn(tx as unknown as Tx, "chat-1", "msg-1", status);
   });
+
+const configRow = async () => {
+  const [row] = await db().select().from(a2aPushConfigTable);
+  return row;
+};
+
+const expireLease = () =>
+  pg.exec(
+    `UPDATE "a2a_push_config"
+      SET "claimed_at" = now() - make_interval(secs => ${PUSH_LEASE_MS / 1000 + 60})`,
+  );
+
+const awaitPushes = async (claimed: number) => {
+  await vi.waitFor(async () => {
+    expect((await taskRow()).pushCount).toBe(claimed);
+  });
+};
 
 const pushedStates = () =>
   fetchMock.mock.calls.map(
@@ -272,5 +297,110 @@ describe("sweepMissedEnds", () => {
 
     expect(await taskRow()).toMatchObject({ state: null });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("retries a push interrupted after its claim once the lease expires", async () => {
+    await pg.exec(
+      `UPDATE "a2a_task" SET "state" = 'completed', "reply_id" = 'reply-1'`,
+    );
+    fetchMock.mockImplementationOnce(() => new Promise<Response>(() => {}));
+    void sweepMissedEnds();
+    await vi.waitFor(async () => {
+      expect((await configRow()).claimedAt).not.toBeNull();
+    });
+
+    expect((await configRow()).notifiedAt).toBeNull();
+
+    await expireLease();
+    await sweepMissedEnds();
+    await pushesLanded();
+
+    expect((await configRow()).notifiedAt).not.toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("doesn't retry a push the receiving URL refused", async () => {
+    await pg.exec(
+      `UPDATE "a2a_task" SET "state" = 'completed', "reply_id" = 'reply-1'`,
+    );
+    mockPostWithRetries.mockResolvedValueOnce("refused");
+
+    await sweepMissedEnds();
+    await vi.waitFor(async () => {
+      expect((await configRow()).failedAt).not.toBeNull();
+    });
+    expect((await configRow()).notifiedAt).toBeNull();
+
+    await expireLease();
+    await sweepMissedEnds();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(mockPostWithRetries).toHaveBeenCalledOnce();
+  });
+
+  it("retries a push whose attempts got no answer", async () => {
+    await pg.exec(
+      `UPDATE "a2a_task" SET "state" = 'completed', "reply_id" = 'reply-1'`,
+    );
+    mockPostWithRetries
+      .mockResolvedValueOnce("unknown")
+      .mockResolvedValueOnce("delivered");
+
+    await sweepMissedEnds();
+    await vi.waitFor(() => {
+      expect(mockPostWithRetries).toHaveBeenCalledOnce();
+    });
+    expect(await configRow()).toMatchObject({
+      notifiedAt: null,
+      failedAt: null,
+    });
+
+    await expireLease();
+    await sweepMissedEnds();
+    await pushesLanded();
+
+    expect(mockPostWithRetries).toHaveBeenCalledTimes(2);
+  });
+
+  it("never delivers a config whose lease is live", async () => {
+    await pg.exec(`
+      UPDATE "a2a_task" SET "state" = 'completed', "reply_id" = 'reply-1';
+      UPDATE "a2a_push_config" SET "claimed_at" = now();
+    `);
+
+    await sweepMissedEnds();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("delivers a config once when two callers race for it", async () => {
+    await pg.exec(
+      `UPDATE "a2a_task" SET "state" = 'completed', "reply_id" = 'reply-1'`,
+    );
+
+    await Promise.all([sweepMissedEnds(), sweepMissedEnds()]);
+    await pushesLanded();
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("sends a Task no more than its push ceiling while leases expire", async () => {
+    await pg.exec(
+      `UPDATE "a2a_task" SET "state" = 'completed', "reply_id" = 'reply-1'`,
+    );
+    fetchMock.mockImplementation(() => new Promise<Response>(() => {}));
+
+    for (let claimed = 1; claimed <= MAX_PUSHES_PER_TASK; claimed++) {
+      void sweepMissedEnds();
+      await awaitPushes(claimed);
+      await expireLease();
+    }
+    void sweepMissedEnds();
+    await vi.waitFor(async () => {
+      expect((await configRow()).failedAt).not.toBeNull();
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(MAX_PUSHES_PER_TASK);
   });
 });

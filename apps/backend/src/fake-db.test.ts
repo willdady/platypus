@@ -146,6 +146,25 @@ describe("the seeded fake beside the chainable mock", () => {
     expect(before).toEqual([{ id: "r1" }]);
   });
 
+  it("matches a timestamp by value, not by object identity", async () => {
+    seedDb({
+      trigger_run: [
+        {
+          id: "r1",
+          status: "running",
+          startedAt: new Date("2026-01-01T00:00:00.000Z"),
+        },
+      ],
+    });
+    const { triggerRun } = await import("./db/schema.ts");
+
+    const found = await db
+      .select({ id: triggerRun.id })
+      .from(triggerRun)
+      .where(eq(triggerRun.startedAt, new Date("2026-01-01T00:00:00.000Z")));
+    expect(found).toEqual([{ id: "r1" }]);
+  });
+
   it("reads `max()` as the highest value, and as null over no rows", async () => {
     seedDb({
       kanban_column: [

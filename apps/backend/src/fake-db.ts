@@ -232,6 +232,12 @@ const listOf = (values: unknown): unknown[] => {
 const operandOf = (value: unknown, resolve: Resolve): unknown =>
   isColumn(value) ? resolve(refOf(value)) : value;
 
+// why: SQL compares timestamps by value, not by Date object identity
+const sameValue = (left: unknown, right: unknown): boolean =>
+  left instanceof Date && right instanceof Date
+    ? left.getTime() === right.getTime()
+    : left === right;
+
 const satisfies = (resolve: Resolve, condition: Condition): boolean => {
   if (!condition) return true;
   if (!isMarker(condition)) {
@@ -245,9 +251,15 @@ const satisfies = (resolve: Resolve, condition: Condition): boolean => {
     case "or":
       return condition.conditions.some((c) => satisfies(resolve, c));
     case "eq":
-      return resolve(condition.column) === operandOf(condition.value, resolve);
+      return sameValue(
+        resolve(condition.column),
+        operandOf(condition.value, resolve),
+      );
     case "ne":
-      return resolve(condition.column) !== operandOf(condition.value, resolve);
+      return !sameValue(
+        resolve(condition.column),
+        operandOf(condition.value, resolve),
+      );
     case "gt":
       return (
         (resolve(condition.column) as number) >
