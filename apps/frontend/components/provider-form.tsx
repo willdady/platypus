@@ -14,6 +14,7 @@ import { FormTextareaField } from "@/components/form-textarea-field";
 import {
   HEADER_ROW_LABELS,
   KeyValueRowsEditor,
+  duplicateHeaderError,
   recordToRows,
   rowsToRecord,
   type KeyValueRow,
@@ -71,7 +72,10 @@ import {
 } from "@platypus/schemas";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { cn, joinUrl, sortByName } from "@/lib/utils";
-import { toastGuidanceOrError } from "@/lib/apply-write-outcome";
+import {
+  FIX_FORM_ERRORS_MESSAGE,
+  toastGuidanceOrError,
+} from "@/lib/apply-write-outcome";
 import type { FormDraft } from "@/lib/api-write";
 import {
   getModelConfigs,
@@ -578,6 +582,7 @@ function ProviderForm({
     formData,
     setFormData,
     validationErrors,
+    setValidationErrors,
     isSubmitting,
     clearErrors,
     submit,
@@ -817,13 +822,24 @@ function ProviderForm({
     }));
   };
 
+  // rowsToRecord builds an object, so a repeated name would silently drop the
+  // earlier value. Refuse both saving and testing instead.
+  const rejectDuplicateHeader = (): boolean => {
+    const error = duplicateHeaderError(formData.headerRows);
+    if (!error) return false;
+    setValidationErrors((prev) => ({ ...prev, headers: error }));
+    return true;
+  };
+
   /**
    * Tests one card's model with the Provider config exactly as the form holds
    * it — nothing is saved first, so a wrong key or Base URL is reported before
    * it reaches a Chat. The verdict lands back on the same card.
    */
-  const testModel = (index: number, modelId: string) =>
-    runModelTest(index, modelId, buildTestPayload(formData));
+  const testModel = (index: number, modelId: string) => {
+    if (rejectDuplicateHeader()) return;
+    return runModelTest(index, modelId, buildTestPayload(formData));
+  };
 
   /**
    * Removing or renaming an alias silently rewrites every Agent and Chat that
@@ -868,6 +884,10 @@ function ProviderForm({
   };
 
   const handleSubmit = () => {
+    if (rejectDuplicateHeader()) {
+      toast.error(FIX_FORM_ERRORS_MESSAGE);
+      return;
+    }
     if (hasEmbeddingConfigChanged()) {
       setIsEmbeddingChangeDialogOpen(true);
     } else {
