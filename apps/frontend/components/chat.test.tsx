@@ -578,6 +578,27 @@ describe("Chat Artifact panel", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("keeps the composer's draft when the panel opens and closes", () => {
+    harness.turn.messages = [message("a1", "Hello")];
+    renderChat();
+    const currentComposer = () =>
+      screen.getByPlaceholderText<HTMLTextAreaElement>(
+        "What would you like to know?",
+      );
+
+    fireEvent.change(currentComposer(), {
+      target: { value: "half a message" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Open artifact a1" }));
+    expect(currentComposer().value).toBe("half a message");
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Close artifact panel" }),
+    );
+    expect(currentComposer().value).toBe("half a message");
+  });
+
   it("keeps the open Artifact in the URL, so a refresh reopens it", () => {
     harness.turn.messages = [message("a1", "Hello")];
     const first = renderChat();

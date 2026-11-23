@@ -39,12 +39,16 @@ const ARTIFACT_PANEL_ID = "artifact";
  * both minimums, the panel covers the Chat, exactly as it did before the split
  * existed.
  *
- * While a panel is open, the row keeps the same two panels and the same
- * divider in every state, and picks between the split and the overlay by their
- * sizes and the panel's classes. Moving the Artifact panel between tree
- * positions — as a branch that returned it outside the group would — remounts
- * the Viewer, dropping the version and tab the reader picked whenever the
- * window or the row crosses a threshold.
+ * The row keeps one tree shape for every state, panel or no panel: the same
+ * two panels are mounted for as long as this component is, and picking between
+ * the split and the overlay changes only their sizes and the panel's classes.
+ * The divider joins them only while there is a split to move. Moving the Chat
+ * or the panel between tree positions — as a branch that returned one of them
+ * outside the group would — remounts its subtree: the Viewer would drop the
+ * version and tab the reader picked whenever the window or the row crosses a
+ * threshold, and the Chat would drop the composer's draft, its attached files,
+ * the transcript's scroll position and any open inline editor every time the
+ * panel opens or closes.
  */
 export function ChatArtifactSplit({
   panel,
@@ -94,7 +98,20 @@ export function ChatArtifactSplit({
   useLayoutEffect(() => {
     if (!panelOpen) {
       wasSplitting.current = false;
-      return;
+      // The group stays mounted, so its sizes are not back at their defaults
+      // after a close: hand the whole row back to the Chat rather than leave
+      // the closed panel's width empty. Applied twice for the same reason as
+      // the split below — the closed panel's 0% minimum may land in the
+      // primitive's constraints a frame after this effect, and until then the
+      // split's minimum would clamp the panel back to its old width.
+      const reset = () =>
+        groupRef.current?.setLayout({
+          [CHAT_PANEL_ID]: 100,
+          [ARTIFACT_PANEL_ID]: 0,
+        });
+      reset();
+      const frame = requestAnimationFrame(reset);
+      return () => cancelAnimationFrame(frame);
     }
     if (wide && rowWidth <= 0) return;
     if (splitting && !wasSplitting.current) {
@@ -186,40 +203,39 @@ export function ChatArtifactSplit({
 
   return (
     <div ref={rowRef} className={ROW_CLASS}>
-      {panel ? (
-        <ResizablePanelGroup
-          orientation="horizontal"
-          groupRef={groupRef}
-          onLayoutChanged={handleLayoutChanged}
-          className="size-full"
+      <ResizablePanelGroup
+        orientation="horizontal"
+        groupRef={groupRef}
+        onLayoutChanged={handleLayoutChanged}
+        className="size-full"
+      >
+        <ResizablePanel
+          id={CHAT_PANEL_ID}
+          defaultSize={chatPercent}
+          minSize={chatMinPercent}
+          style={{ overflow: "hidden" }}
         >
-          <ResizablePanel
-            id={CHAT_PANEL_ID}
-            defaultSize={chatPercent}
-            minSize={chatMinPercent}
-            style={{ overflow: "hidden" }}
-          >
-            {children}
-          </ResizablePanel>
+          {children}
+        </ResizablePanel>
+        {/* Mounted only while it has a split to move: a hidden divider is
+            still a focusable control, and the overlay has no gap to drag. */}
+        {splitShown && (
           <ResizableHandle
             withHandle
             aria-label="Resize the Artifact panel"
             disableDoubleClick
             onDoubleClick={resetSplit}
-            className={splitShown ? undefined : "hidden"}
           />
-          <ResizablePanel
-            id={ARTIFACT_PANEL_ID}
-            defaultSize={panelPercent}
-            minSize={panelMinPercent}
-            style={{ overflow: "hidden" }}
-          >
-            {aside}
-          </ResizablePanel>
-        </ResizablePanelGroup>
-      ) : (
-        children
-      )}
+        )}
+        <ResizablePanel
+          id={ARTIFACT_PANEL_ID}
+          defaultSize={panelPercent}
+          minSize={panelMinPercent}
+          style={{ overflow: "hidden" }}
+        >
+          {aside}
+        </ResizablePanel>
+      </ResizablePanelGroup>
     </div>
   );
 }

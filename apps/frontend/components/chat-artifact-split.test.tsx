@@ -62,10 +62,17 @@ vi.mock("@/components/ui/resizable", () => ({
   ),
   ResizableHandle: ({
     onDoubleClick,
+    className,
   }: {
     onDoubleClick?: React.DOMAttributes<HTMLButtonElement>["onDoubleClick"];
+    className?: string;
   }) => (
-    <button type="button" data-testid="handle" onDoubleClick={onDoubleClick} />
+    <button
+      type="button"
+      data-testid="handle"
+      className={className}
+      onDoubleClick={onDoubleClick}
+    />
   ),
 }));
 
@@ -191,9 +198,35 @@ describe("the Chat and Artifact panel split", () => {
   it("leaves the Chat whole while no Artifact is open", () => {
     renderSplit({ panel: null });
 
-    expect(screen.queryByTestId("group")).not.toBeInTheDocument();
+    expect(screen.getByTestId("panel-chat")).toHaveAttribute(
+      "data-default-size",
+      "100%",
+    );
+    expect(screen.getByTestId("panel-artifact")).toHaveAttribute(
+      "data-default-size",
+      "0%",
+    );
+    expect(screen.getByTestId("panel-artifact")).toHaveAttribute(
+      "data-min-size",
+      "0%",
+    );
+    expect(screen.queryByTestId("handle")).not.toBeInTheDocument();
     expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
     expect(screen.getByText("Chat")).toBeInTheDocument();
+  });
+
+  it("hands the row back to the Chat when the panel closes", () => {
+    const { rerender } = renderSplit();
+    group.setLayout.mockClear();
+
+    rerender(
+      <ChatArtifactSplit panel={null} fullScreen={false}>
+        <div>Chat</div>
+      </ChatArtifactSplit>,
+    );
+
+    expect(group.setLayout).toHaveBeenCalledWith({ chat: 100, artifact: 0 });
+    expect(screen.queryByTestId("handle")).not.toBeInTheDocument();
   });
 
   it("covers the Chat below lg instead of splitting the row", () => {

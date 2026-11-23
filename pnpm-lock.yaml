@@ -1333,7 +1333,6 @@ packages:
 
   '@daytonaio/sdk@0.230.0':
     resolution: {integrity: sha512-Meb2TahjdXnu/rpSvUNhY4dERTabamoeRfCiz7rnUlz1nxjwGNSj5y3AggsvnDIaaYl8Y+zu7MQsUafXUu6EPw==}
-    deprecated: 'Moved to @daytona/sdk, same API, no breaking changes. Please update: npm uninstall @daytonaio/sdk && npm i @daytona/sdk@0'
 
   '@dnd-kit/accessibility@3.1.1':
     resolution: {integrity: sha512-2P+YgaXF+gRsIihwwY1gCsQSYnu9Zyj2py8kY5fFvUM1qm2WA2u639R6YNVfU4GWr+ZM5mqEsfHZZLoRONbemw==}
