@@ -19,19 +19,6 @@ import {
 } from "../services/artifact.ts";
 import { asToolResult } from "./tool-result.ts";
 
-/**
- * The Agent-facing Artifact surface: create one, rewrite it whole, change it
- * with targeted edits, read one version and list the Workspace's Artifacts.
- * Every tool is scoped to the invoking Workspace, and every write appends one
- * version — nothing overwrites what is already there.
- */
-
-/**
- * What the model is told about external content: the deployment's approved
- * library origins, or that an HTML or SVG Artifact must be self-contained.
- * Stated in the description so a page works the first time instead of having
- * its libraries blocked at view time.
- */
 function approvedOriginsSentence(scriptOrigins: readonly string[]): string {
   if (scriptOrigins.length === 0) {
     return "No external origins are approved here: an HTML or SVG Artifact's scripts, styles and fonts must be inline.";
@@ -42,11 +29,6 @@ function approvedOriginsSentence(scriptOrigins: readonly string[]): string {
   );
 }
 
-/**
- * What a write returns: the id and version the Chat Card reads the Artifact
- * back by, and the title it shows. Content stays in storage rather than in the
- * transcript.
- */
 export function createCreateArtifactTool(
   workspaceId: string,
   sourceChatId: string,
@@ -223,8 +205,6 @@ export function createListArtifactsTool(workspaceId: string) {
     }),
     execute: async ({ query, type, limit }) =>
       asToolResult(async () => {
-        // The first page of the same query the Artifacts page uses; the tool
-        // trims each row to what a model needs to choose one, never content.
         const { results } = await listArtifacts(
           db,
           { workspaceId },

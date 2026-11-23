@@ -11,18 +11,8 @@ import { skillLoadResult } from "../services/skill-sandbox.ts";
 import { normaliseBundlePath } from "../services/skill-bundle-format.ts";
 import type { RowOf } from "../services/scoped-resource.ts";
 
-/** The most `readSkillFile` returns from one file. */
 export const SKILL_FILE_READ_MAX_BYTES = 1024 * 1024;
 
-/**
- * The Skill of this name the model may use, or the `{ error }` it is told
- * instead. The Skill of this name visible here is the workspace-scoped one, or
- * the org-scoped (Shared) one where attached to this workspace (ADR-0007).
- * Resolution is shared with the user-invoked slash command; what is NOT shared
- * is the gate below — `disableModelInvocation` stops the model and only the
- * model (#713). Both Skill Tools pass through it, so a file is readable exactly
- * when its Skill is loadable.
- */
 const resolveForModel = async (
   name: string,
   orgId: string,

@@ -29,35 +29,24 @@ import { createListAgentsTool } from "./agent-discovery.ts";
 import { shareTool } from "./index.ts";
 import { asToolResult } from "./tool-result.ts";
 
-/**
- * The Agent-facing surface over the Kanban modules (`services/kanban-*`): each
- * Tool parses its input, calls the module, and shapes the result. The board's
- * rules — what a label may be, who may be assigned, where a card lands, what
- * event fires — belong to the module and are shared with the HTTP routes, so
- * an Agent cannot write anything a person could not write through the UI.
- */
 export function createKanbanTools(
   workspaceId: string,
   agentId: string,
   orgId: string,
   frontendUrl: string,
 ): Record<string, Tool> {
-  // No board is named: an Agent works across every board in its Workspace.
   const ctx: KanbanContext = {
     orgId,
     workspaceId,
     actor: { agentId },
   };
 
-  /** The board's page in the frontend. */
   const boardUrl = (boardId: string): string =>
     buildResourceUrl(frontendUrl, orgId, workspaceId, `boards/${boardId}`);
 
-  /** A deep link that opens the card on its board. */
   const cardUrl = (boardId: string, cardId: string): string =>
     `${boardUrl(boardId)}?cardId=${cardId}`;
 
-  /** A written card as a Tool returns it: the row, plus a link to it. */
   const withCardUrl = <T extends { id: string }>(result: {
     card: T;
     boardId: string;
@@ -94,7 +83,6 @@ export function createKanbanTools(
       }),
   });
 
-  /** The card fields a write may set, without the create-only ones. */
   const cardFields = {
     body: z.string().optional().describe("The card body/description"),
     labelIds: z.array(z.string()).optional().describe("Label IDs to apply"),
@@ -182,10 +170,7 @@ export function createKanbanTools(
         .describe(
           "Place after this card ID, or null to place at the beginning",
         ),
-      // The wording carries the feature. An agent's useful expectation is the
-      // board it read at the start of the run, which may be minutes old by the
-      // time it moves anything; if the description invites a fresh lookup the
-      // check compares current state against current state and never fires.
+      // why: a lookup made to fill this compares now with now, so the check never fires
       expectedColumnId: z
         .string()
         .optional()
@@ -418,11 +403,6 @@ export function createKanbanTools(
   };
 }
 
-/**
- * The board reads, shared by the Kanban Cards and Kanban Boards Tool sets
- * under the same names — and marked shared, so an Agent granted both gets
- * each once with no collision reported.
- */
 export function createBoardReadTools(scope: KanbanScope, frontendUrl: string) {
   const listBoards = shareTool(
     "kanban.listBoards",
@@ -430,8 +410,6 @@ export function createBoardReadTools(scope: KanbanScope, frontendUrl: string) {
       description: "List all kanban boards in the current workspace.",
       inputSchema: z.object({}),
       execute: async () =>
-        // Trimmed to what the model needs to pick a board; the Workspace and
-        // timestamps it already knows or does not use.
         (await listBoardRows(db, scope)).map(
           ({ id, name, description, labels, createdAt }) => ({
             id,
@@ -463,8 +441,6 @@ export function createBoardReadTools(scope: KanbanScope, frontendUrl: string) {
             `boards/${boardId}`,
           );
 
-          // Summaries rather than whole cards: a board read goes into the
-          // model's context, and `getCard` is there for the rest.
           return {
             board,
             columns: columns.map(({ cards, ...column }) => ({

@@ -12,18 +12,8 @@ import { deleteSkill, upsertSkill } from "../services/skill.ts";
 import { ConflictError, LockedError, NotFoundError } from "../errors.ts";
 import type { ScopeContext } from "../scope.ts";
 
-// Field constraints come from the shared schema so the agent-facing tool can
-// never drift from the bounds the HTTP routes and the web form enforce.
 const skillFields = skillBaseSchema.shape;
 
-/**
- * Reads here resolve at the invoking Workspace's scope — its own Skills plus the
- * Shared ones attached to it (ADR-0007) — so the model sees the same Skills the
- * Operator does. Writes stay Workspace-private: a Shared Skill is a single
- * source of truth edited only on the Organization surface, so `deleteSkill`
- * refuses one, and `upsertSkill` writes this Workspace's own version instead of
- * reaching the Organization's row.
- */
 export function createSkillManagementTools(
   workspaceId: string,
   orgId: string,
@@ -84,13 +74,6 @@ export function createSkillManagementTools(
       body: skillFields.body.describe("The Markdown content of the skill"),
     }),
     execute: async ({ name, description, body }) => {
-      // Writes only ever land on a workspace-scoped row: the conflict target
-      // inside `upsertSkill` is `(workspaceId, name)`, so upserting the name of
-      // an attached Shared Skill creates this Workspace's own version of it
-      // rather than editing the Organization's. `resolveScopedByName` then
-      // prefers that local row, which is what makes the override take effect.
-      // A Shared Skill with bundled files is the exception: `upsertSkill`
-      // refuses to shadow it (LockedError), reported here as `{ error }`.
       let row;
       try {
         row = await upsertSkill(ctx, { name, description, body });
@@ -123,20 +106,10 @@ export function createSkillManagementTools(
         return { error: "Skill not found" };
       }
 
-      // Visible here, but a single source of truth deleted only on the
-      // Organization surface (ADR-0007) — detaching it is the workspace-side
-      // action, and that is an Attachment concern, not a delete. The scope is
-      // already in hand, so refuse in `workspaceMutationLockedMessage`'s words
-      // rather than paying a second resolution to be told the same by the
-      // write model's `LockedError`.
       if (existing.scope === "organization") {
         return { error: workspaceMutationLockedMessage("skill") };
       }
 
-      // The write model re-establishes visibility (→404 here, when a race
-      // removed it), refuses a Skill this Workspace's agents still reference
-      // (→409), then deletes. Those types become the `{ error }` payload a tool
-      // reports instead of throwing into the run.
       try {
         await deleteSkill({ kind: "workspace", ctx }, existing.row.id);
         return { success: true };

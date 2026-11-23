@@ -8,8 +8,6 @@ import {
   convertVolume,
 } from "./math.ts";
 
-// [tool, value, from, to, expected]. Results round to 2 decimal places; a
-// same-unit conversion returns the value untouched (no rounding).
 const cases: [string, Tool, number, string, string, number][] = [
   ["temperature", convertTemperature, 0, "celsius", "fahrenheit", 32],
   ["temperature", convertTemperature, 1, "celsius", "fahrenheit", 33.8],

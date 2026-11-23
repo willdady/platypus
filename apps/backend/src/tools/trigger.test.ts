@@ -2,10 +2,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { z } from "zod";
 import { callTool, resetMockDb, seedDb } from "../test-utils.ts";
 
-// The Trigger rules (config validation, nextRunAt, agent visibility, workspace
-// scoping of reads and writes) are unit-tested in services/trigger.test.ts;
-// here the Trigger module is a seam and this file covers the adapter: which
-// fields it forwards, how it shapes a result, and how it reports a refusal.
 vi.mock("../services/trigger.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../services/trigger.ts")>()),
   createTrigger: vi.fn(),
@@ -266,8 +262,6 @@ describe("createTriggerTools", () => {
       expect(createTrigger).not.toHaveBeenCalled();
     });
 
-    // The AI SDK validates input against this schema before `execute` runs,
-    // so a create missing a create-required field never reaches the module.
     it.each(["name", "agentId", "instruction", "type", "config"] as const)(
       "refuses a create without %s",
       (field) => {
@@ -318,8 +312,6 @@ describe("createTriggerTools", () => {
       expect(updateTrigger).toHaveBeenCalledWith(
         ctx,
         "t1",
-        // Only what the call carried: a patch never rewrites a field it was
-        // not given.
         {
           description: "Runs every day",
           includeMemories: true,
@@ -421,7 +413,6 @@ describe("createTriggerTools", () => {
       ).toEqual({
         error: "Inbound triggers can only be deleted in the UI",
       });
-      // The tool never opts in to reaching Inbound Triggers.
       expect(deleteTrigger).toHaveBeenCalledWith(ctx, "t1", {
         allowInbound: false,
       });
