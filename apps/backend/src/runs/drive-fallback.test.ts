@@ -50,7 +50,6 @@ const apiError = (statusCode: number, message = "provider failed") =>
     isRetryable: statusCode === 429 || statusCode >= 500,
   });
 
-/** A model whose every call rejects with the given error. */
 const failingModel = (error: unknown, onCall?: () => void) =>
   new MockLanguageModelV3({
     doStream: () => {
@@ -114,7 +113,6 @@ describe("driveOnce with a Fallback model", () => {
       from: { providerId: "p1", model: "m1" },
       to: { providerId: "p2", model: "m2" },
     });
-    // The fallback's calls are billed to the fallback.
     expect(outcome[0]?.stats.usageByModel).toEqual([
       expect.objectContaining({ providerId: "p2", model: "m2" }),
     ]);
@@ -204,8 +202,6 @@ describe("driveOnce with a Fallback model", () => {
     expect(outcome[0]?.status).toBe("failed");
     expect(outcome[0]?.error?.message).toMatch(/primary/i);
     expect(outcome[0]?.error?.message).toMatch(/fallback/i);
-    // A failed run that switched still carries the marker: the runs list shows
-    // it and the `trigger_run.failed` payload names the switch.
     expect(outcome[0]?.stats.fallback).toEqual({
       from: { providerId: "p1", model: "m1" },
       to: { providerId: "p2", model: "m2" },
@@ -291,8 +287,6 @@ describe("driveOnce with a Fallback model", () => {
     expect(prompt).toContain("the lookup result");
     expect(prompt).not.toContain("secret plan");
 
-    // A mid-run switch bills both models: the primary's completed step and
-    // the fallback's.
     expect(outcome[0]?.stats.usageByModel).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ providerId: "p1", model: "m1" }),
@@ -364,7 +358,6 @@ describe("driveOnce with a Fallback model", () => {
 
     const { stats } = await driveOnce({
       plan: planOf(primary, {
-        // Two steps in total: the primary takes one, so the fallback has one.
         maxSteps: 2,
         usageModel: { providerId: "p1", model: "m1" },
         tools: {
