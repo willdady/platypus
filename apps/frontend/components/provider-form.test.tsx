@@ -28,6 +28,7 @@ import {
   toastSuccess,
 } from "@/test/form-test-harness";
 import { expectSentBodyToMatchSchema, selectOption } from "@/test/test-utils";
+import { FIX_FORM_ERRORS_MESSAGE } from "@/lib/apply-write-outcome";
 
 // --- Module mocks ------------------------------------------------------------
 
@@ -1261,6 +1262,7 @@ describe("ProviderForm headers", () => {
     save();
 
     expect(fetchMock).not.toHaveBeenCalled();
+    expect(toastError).toHaveBeenCalledWith(FIX_FORM_ERRORS_MESSAGE);
     expect(
       screen.getByText(
         'Duplicate header name "x-trace". Header names are case-insensitive, so each one may appear once.',
@@ -1605,6 +1607,7 @@ describe("ProviderForm Test action", () => {
     fireEvent.click(testButton("gpt-4o"));
 
     expect(fetchMock).not.toHaveBeenCalled();
+    expect(toastError).not.toHaveBeenCalled();
     expect(
       screen.getByText(
         'Duplicate header name "x-trace". Header names are case-insensitive, so each one may appear once.',

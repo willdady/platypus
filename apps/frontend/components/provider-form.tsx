@@ -72,7 +72,10 @@ import {
 } from "@platypus/schemas";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { cn, joinUrl, sortByName } from "@/lib/utils";
-import { toastGuidanceOrError } from "@/lib/apply-write-outcome";
+import {
+  FIX_FORM_ERRORS_MESSAGE,
+  toastGuidanceOrError,
+} from "@/lib/apply-write-outcome";
 import type { FormDraft } from "@/lib/api-write";
 import {
   getModelConfigs,
@@ -881,7 +884,10 @@ function ProviderForm({
   };
 
   const handleSubmit = () => {
-    if (rejectDuplicateHeader()) return;
+    if (rejectDuplicateHeader()) {
+      toast.error(FIX_FORM_ERRORS_MESSAGE);
+      return;
+    }
     if (hasEmbeddingConfigChanged()) {
       setIsEmbeddingChangeDialogOpen(true);
     } else {
