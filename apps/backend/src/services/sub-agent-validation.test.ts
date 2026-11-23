@@ -10,11 +10,6 @@ const agent = (
   organizationId: string | null,
 ): Row => ({ id, workspaceId, organizationId });
 
-/**
- * `agent-2`/`agent-3` are ws-1's own; `shared` is org-1's and attached to ws-1;
- * `loose` is org-1's but unattached; `other-ws` is ws-2's; `foreign` is org-2's
- * and (pathologically) attached to ws-1.
- */
 const world = () =>
   seedDb({
     agent: [

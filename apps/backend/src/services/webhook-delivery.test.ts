@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import crypto from "node:crypto";
 
-/** Typed shape of the fetch options captured by mockFetch spy calls. */
 interface WebhookFetchOptions {
   method: string;
   redirect: string;
@@ -9,7 +8,6 @@ interface WebhookFetchOptions {
   body: string;
 }
 
-/** Pull typed call args from mockFetch.mock.calls[n]. */
 const getFetchCall = (
   calls: Parameters<typeof fetch>[],
   index: number,
@@ -18,7 +16,6 @@ const getFetchCall = (
   return [url as string, opts as WebhookFetchOptions];
 };
 
-// Mock the db and logger before importing the module
 const mockWebhookSelect = vi.fn();
 
 vi.mock("../index.ts", () => ({
@@ -92,7 +89,6 @@ describe("Webhook Delivery Service", () => {
     const created = notificationEvent("notification.created");
     dispatchEvent("org-1", "ws-1", created);
 
-    // Allow the async fire-and-forget to complete
     await vi.advanceTimersByTimeAsync(100);
 
     expect(mockFetch).toHaveBeenCalledOnce();
@@ -101,7 +97,6 @@ describe("Webhook Delivery Service", () => {
     expect(options.method).toBe("POST");
     expect(options.redirect).toBe("manual");
     expect(options.headers["Content-Type"]).toBe("application/json");
-    // Only the dispatching Workspace's webhooks are read.
     expect(mockWebhookSelect).toHaveBeenCalledWith(
       eq(webhookTable.workspaceId, "ws-1"),
     );
@@ -113,7 +108,6 @@ describe("Webhook Delivery Service", () => {
       workspaceId: string;
       data: unknown;
     };
-    // The signed timestamp header is the one carried in the signed body.
     expect(options.headers["X-Webhook-Timestamp"]).toBe(body.timestamp);
     expect(new Date(body.timestamp).toISOString()).toBe(body.timestamp);
     expect(body.event).toBe("notification.created");
@@ -167,9 +161,7 @@ describe("Webhook Delivery Service", () => {
 
     dispatchEvent("org-1", "ws-1", notificationEvent("notification.created"));
 
-    // First attempt fails immediately
     await vi.advanceTimersByTimeAsync(100);
-    // Wait for retry delay (1s)
     await vi.advanceTimersByTimeAsync(1100);
 
     expect(mockFetch).toHaveBeenCalledTimes(2);
@@ -230,13 +222,12 @@ describe("Webhook Delivery Service", () => {
 
     dispatchEvent("org-1", "ws-1", notificationEvent("notification.created"));
 
-    // Advance through all retries: initial + 1s + 2s + 4s
     await vi.advanceTimersByTimeAsync(100);
     await vi.advanceTimersByTimeAsync(1100);
     await vi.advanceTimersByTimeAsync(2100);
     await vi.advanceTimersByTimeAsync(4100);
 
-    expect(mockFetch).toHaveBeenCalledTimes(4); // initial + 3 retries
+    expect(mockFetch).toHaveBeenCalledTimes(4);
     expect(logger.error).toHaveBeenCalledWith(
       expect.objectContaining({ url: "https://example.com/webhook" }),
       "Webhook delivery exhausted all retries",
@@ -265,7 +256,6 @@ describe("Webhook Delivery Service", () => {
     expect(url1).toBe("https://example.com/webhook");
     expect(url2).toBe("https://other.com/webhook");
 
-    // Each webhook should have a different signature (different signing secrets)
     expect(opts1.headers["X-Webhook-Signature"]).not.toBe(
       opts2.headers["X-Webhook-Signature"],
     );
@@ -280,7 +270,6 @@ describe("Webhook Delivery Service", () => {
       signingSecret: "other-secret",
     };
     mockWebhookSelect.mockResolvedValueOnce([sampleWebhook, webhook2]);
-    // First webhook fails, second succeeds
     mockFetch
       .mockRejectedValueOnce(new Error("Network error"))
       .mockResolvedValueOnce({ ok: true } as Response);
@@ -289,7 +278,6 @@ describe("Webhook Delivery Service", () => {
 
     await vi.advanceTimersByTimeAsync(100);
 
-    // Both webhooks should have been attempted
     expect(mockFetch).toHaveBeenCalledTimes(2);
     const [url2] = getFetchCall(mockFetch.mock.calls, 1);
     expect(url2).toBe("https://other.com/webhook");
@@ -306,7 +294,6 @@ describe("Webhook Delivery Service", () => {
 
     await vi.advanceTimersByTimeAsync(8000);
 
-    // A Webhook takes the guard's own private-network setting.
     expect(mockCheckEgress).toHaveBeenCalledWith(
       "https://example.com/webhook",
       { allowPrivateNetworks: undefined },

@@ -1,7 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-// test-utils installs the drizzle-orm mock, so it must be imported before the
-// operators this file asserts on — `eq`/`isNull` are spies only through that
-// mock.
+// why: first, since drizzle-orm's operators are spies only through test-utils' mock
 import { resetMockDb, seedDb, type Row } from "../test-utils.ts";
 import { eq, isNull } from "drizzle-orm";
 import { db } from "../index.ts";
@@ -33,10 +31,6 @@ const agentRow = (
   name = id,
 ): Row => ({ id, name, workspaceId, organizationId });
 
-// Every scoping rule has a row here that it must exclude: another Workspace's
-// row, another Organization's Shared row, a Shared row not attached to ws-1,
-// and a row carrying both scope columns (they are mutually exclusive on write,
-// not by a database constraint — such a row belongs to its Workspace).
 const AGENTS = {
   mine: agentRow("mine", "ws-1", null, "triage"),
   sibling: agentRow("sibling", "ws-2", null, "sibling"),
@@ -58,7 +52,6 @@ const world = (extra: Record<string, Row[]> = {}) =>
     agent: Object.values(AGENTS),
     attachment: [
       attachment("att-shared", "ws-1", "shared"),
-      // An Attachment in ws-1 can never make another Organization's row visible.
       attachment("att-foreign", "ws-1", "foreign"),
       attachment("att-loose-ws2", "ws-2", "loose"),
     ],
@@ -189,9 +182,6 @@ describe("ScopedResource module", () => {
 
       expect(eq).toHaveBeenCalledWith(agentTable.id, "a1");
       expect(eq).toHaveBeenCalledWith(agentTable.organizationId, "org-1");
-      // The part a hand-rolled `eq(organizationId)` write predicate leaves out:
-      // a row carrying both scope columns belongs to its Workspace and must not
-      // be written from the Organization surface (ADR-0007).
       expect(isNull).toHaveBeenCalledWith(agentTable.workspaceId);
     });
 
@@ -256,9 +246,6 @@ describe("ScopedResource module", () => {
     });
 
     it("rejects an inherited Object property name", () => {
-      // The value reaches this guard straight from a query param or request
-      // body, so membership is a real lookup rather than an `in` that would
-      // walk the prototype chain and admit "constructor" as a resource type.
       expect(isScopedResourceType("constructor")).toBe(false);
     });
   });

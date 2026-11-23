@@ -13,11 +13,6 @@ import type { MemberWorkspaceDecision } from "@platypus/schemas";
 import { migratedPglite } from "../db/migrated-pglite.test-fixtures.ts";
 import { ConflictError, NotFoundError, ValidationError } from "../errors.ts";
 
-/**
- * Remove from Org (ADR-0035) against an in-process Postgres built from the
- * shipped migrations: every Workspace the member owns is transferred or
- * deleted with the removal, all of it or none of it.
- */
 const { holder, cancelRun, deleteStoredPrefix } = vi.hoisted(() => ({
   holder: { db: undefined as ReturnType<typeof drizzle> | undefined },
   cancelRun: vi.fn(async (_runId: string) => {}),
@@ -41,10 +36,6 @@ beforeAll(async () => {
 }, 60_000);
 afterAll(() => pg.close());
 
-/**
- * Olive, a member of Org 1, owns `ws-a` and `ws-b` there and `ws-x` in Org 2;
- * Nina is another member of Org 1, Otto a member of Org 2 only.
- */
 beforeEach(async () => {
   vi.clearAllMocks();
   await pg.exec(`
@@ -126,7 +117,6 @@ describe("removeMember", () => {
       { workspaceId: "ws-b", action: "delete" },
     ]);
 
-    // The backend is not registered, so its teardown fails into the ledger.
     expect(
       await rows(`SELECT "workspace_id" FROM "sandbox_teardown_failure"`),
     ).toEqual([{ workspace_id: "ws-b" }]);
@@ -194,7 +184,6 @@ describe("removeMember", () => {
   });
 
   it("changes nothing when a Workspace is created for the member mid-removal", async () => {
-    // Lands after the decisions were checked, before the removal commits.
     const transaction = holder.db!.transaction.bind(holder.db);
     vi.spyOn(holder.db!, "transaction").mockImplementationOnce(
       async (...args) => {
@@ -258,10 +247,6 @@ describe("removeMember", () => {
     expect(await members()).toEqual(allMembers);
   });
 
-  // PGlite runs the two transactions one after the other, so this pins that
-  // the guard and the delete share a transaction (a count taken outside it
-  // lets both removals pass); it cannot prove the `organization` row lock
-  // that serialises them in Postgres.
   it("leaves one admin when two admins remove each other at once", async () => {
     await pg.exec(
       `UPDATE "organization_member" SET "role" = 'admin' WHERE "id" = 'm-new'`,

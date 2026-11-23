@@ -23,7 +23,6 @@ const normalizeBody = (body: string) =>
 
 type NotificationRow = typeof notificationTable.$inferSelect;
 
-/** The source a stored row names, from whichever column is set. */
 export const notificationSource = (row: {
   sourceChatId?: string | null;
   sourceTriggerRunId?: string | null;
@@ -34,7 +33,6 @@ export const notificationSource = (row: {
       ? { kind: "triggerRun", triggerRunId: row.sourceTriggerRunId }
       : null;
 
-/** A row as the API and Webhooks carry it: the source columns as `source`. */
 const toRecord = ({
   sourceChatId,
   sourceTriggerRunId,
@@ -50,14 +48,6 @@ const agentOwnedWhere = (ctx: NotificationContext, id: string) =>
     ctx.agentId ? eq(notificationTable.agentId, ctx.agentId) : undefined,
   );
 
-/**
- * Inserts a Notification Platypus posts itself: no Agent, and no
- * `notification.created` event, so it reaches no Webhook and fires no Event
- * Trigger. A Workspace transfer's notice and a failed Trigger run's use this.
- *
- * Accepts a transaction so a transfer can post its notice atomically with the
- * rest of the switch.
- */
 export const createPlatypusNotification = async (
   database: Database | Tx,
   data: {
@@ -72,8 +62,7 @@ export const createPlatypusNotification = async (
     workspaceId: data.workspaceId,
     agentId: null,
     title: data.title,
-    // Platypus writes the body itself; unlike an Agent's, it is stored
-    // verbatim rather than unescaped.
+    // why: Platypus wrote this body, so it is stored verbatim, not normalized like an Agent's
     body: data.body,
     sourceTriggerRunId: data.sourceTriggerRunId ?? null,
   });
@@ -84,7 +73,6 @@ export const createNotification = async (
   ctx: Required<NotificationContext>,
   data: { title?: string; body: string },
 ) => {
-  // Read from the run, never the caller: an Agent cannot set or spoof it.
   const source = currentRunSource();
   const rows = await database
     .insert(notificationTable)
@@ -104,7 +92,6 @@ export const createNotification = async (
   const record = toRecord(oneRow(rows));
   dispatchEvent(ctx.orgId, ctx.workspaceId, {
     event: "notification.created",
-    // Written with the Agent's id, so it has one; only Platypus posts without.
     data: { ...record, agentId: ctx.agentId },
   });
   return record;
@@ -151,7 +138,6 @@ export const updateNotification = async (
   const record = toRecord(row);
   dispatchEvent(ctx.orgId, ctx.workspaceId, {
     event: "notification.updated",
-    // Matched on the Agent's id, so it has one.
     data: { ...record, agentId: ctx.agentId },
   });
   return record;
@@ -204,12 +190,6 @@ export const markRead = async (
   return true;
 };
 
-/**
- * Marks every Notification in the Workspace the user has not read as read, in
- * one `INSERT … SELECT`: no parameter per Notification, and a read row another
- * call wrote first is skipped rather than raised. The bulk event names only
- * the rows this call inserted, and is not sent when it inserted none.
- */
 export const markAllRead = async (
   database: Database,
   ctx: { orgId: string; workspaceId: string },
@@ -220,8 +200,7 @@ export const markAllRead = async (
     .select(
       database
         .select({
-          // Minted per row by Postgres, as no nanoid can be bound per row
-          // here; the id is opaque, so its shape differing is harmless.
+          // why: INSERT … SELECT cannot bind a nanoid per row; the id is opaque, so its shape is harmless
           id: sql<string>`gen_random_uuid()::text`.as("id"),
           notificationId: notificationTable.id,
           userId: sql<string>`${userId}`.as("user_id"),

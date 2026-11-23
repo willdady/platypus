@@ -39,7 +39,7 @@ describe("sandbox write model", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     resetMockDb();
-    mockDb.limit.mockResolvedValue([current]); // requireOwned
+    mockDb.limit.mockResolvedValue([current]);
     mockDb.returning.mockResolvedValue([current]);
   });
 

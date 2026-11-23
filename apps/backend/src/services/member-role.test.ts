@@ -12,10 +12,6 @@ import { drizzle } from "drizzle-orm/pglite";
 import { migratedPglite } from "../db/migrated-pglite.test-fixtures.ts";
 import { ConflictError, NotFoundError, ValidationError } from "../errors.ts";
 
-/**
- * Role changes against an in-process Postgres built from the shipped
- * migrations, so the last-admin guard is checked against real transactions.
- */
 const { holder } = vi.hoisted(() => ({
   holder: { db: undefined as ReturnType<typeof drizzle> | undefined },
 }));
@@ -34,7 +30,6 @@ beforeAll(async () => {
 }, 60_000);
 afterAll(() => pg.close());
 
-/** Ada and Bea are the two admins of Org 1; Cal is a member. */
 beforeEach(async () => {
   await pg.exec(`
     DELETE FROM "organization";
@@ -130,10 +125,6 @@ describe("changeMemberRole", () => {
     expect(await admins()).toEqual(["m-b"]);
   });
 
-  // PGlite runs the two transactions one after the other, so this pins that
-  // the guard and the write share a transaction (separate statements
-  // interleave and both demotions pass); it cannot prove the `organization`
-  // row lock that serialises them in Postgres.
   it("leaves one admin when two admins demote each other at once", async () => {
     const results = await Promise.allSettled([
       changeMemberRole({

@@ -3,12 +3,6 @@ import type { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { migratedPglite } from "../db/migrated-pglite.test-fixtures.ts";
 
-/**
- * Deleting a User's Workspaces, run for real against an in-process Postgres
- * built from the shipped migrations, then the User row itself: nothing the
- * Workspaces held is left behind. Only the cleanup outside the database
- * (Sandboxes, stored files) is stubbed.
- */
 const { holder, mockPrepare, mockCleanUp } = vi.hoisted(() => {
   const holder: { db?: ReturnType<typeof drizzle> } = {};
   const mockCleanUp = vi.fn();
