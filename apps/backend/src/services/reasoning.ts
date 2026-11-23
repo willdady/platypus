@@ -20,7 +20,6 @@ import {
   type SamplingSettings,
 } from "./sampling-settings.ts";
 
-/** The request-body key each SDK sampling setting goes out under. */
 const SAMPLING_WIRE_KEYS: Record<keyof SamplingSettings, string> = {
   temperature: "temperature",
   topP: "top_p",
@@ -33,7 +32,6 @@ const SAMPLING_WIRE_KEYS: Record<keyof SamplingSettings, string> = {
 const isPlainObject = (value: unknown): value is ReasoningFragment =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-/** `b` over `a`, recursing into plain objects; anything else is replaced. */
 const deepMerge = (
   a: ReasoningFragment,
   b: ReasoningFragment,
@@ -49,21 +47,6 @@ const deepMerge = (
   return merged;
 };
 
-/**
- * The request-body fragment a model's Reasoning map turns a turn's Reasoning
- * controls into (ADR-0040), or undefined when there is nothing to send — no
- * map, or a map whose resolution is empty — so a model without one goes out
- * byte-identical to before.
- *
- * Each control is the stored choice, else the map's default, else nothing. A
- * stored Effort step the map does not declare is never sent: it resolves as
- * though unset, leaving the stored value alone for when the model changes back.
- * Thinking off drops Effort and the budget; a map with no switch is always on.
- *
- * `sampling` is what the Agent or Chat set itself. Its keys are removed from
- * the fragment's top level, because the SDK spreads the fragment after its own
- * sampling fields and the Agent's value must win (#1521 addendum).
- */
 export const resolveReasoning = (
   map: ReasoningMap | undefined,
   choice: ReasoningChoice,
@@ -94,25 +77,12 @@ export const resolveReasoning = (
   for (const key of Object.keys(sampling) as (keyof SamplingSettings)[]) {
     delete body[SAMPLING_WIRE_KEYS[key]];
   }
-  // `reasoning_effort` is the SDK's own top-level field (#1689). It is removed
-  // for the same reason as the sampling keys: a fragment must not override the
-  // turn's resolved Reasoning setting after the SDK has written it.
   delete body.reasoning_effort;
-  // JSON by construction: every fragment was stored as JSON and parsed back.
   return Object.keys(body).length > 0 ? (body as JSONObject) : undefined;
 };
 
-/** The SDK `reasoning` call levels a turn's choice can become (#1689). */
 export type SdkReasoning = "none" | ReasoningEffort;
 
-/**
- * The SDK `reasoning` level a native Provider is sent for a turn's Reasoning
- * controls (#1689), or undefined to send none — the vendor's own default, so a
- * turn with no choice goes out byte-identical to before. Thinking off is
- * `none` whatever the step; Thinking on with no step is the vendor's default.
- * There is no map to declare a budget, and the adapters derive one from the
- * level themselves, so a stored Thinking budget is never sent.
- */
 export const resolveSdkReasoning = (
   choice: ReasoningChoice,
 ): SdkReasoning | undefined =>
@@ -120,7 +90,6 @@ export const resolveSdkReasoning = (
     ? "none"
     : (choice.reasoningEffort ?? undefined);
 
-/** Where a turn's Reasoning controls go on the call, when anywhere. */
 export type ReasoningCallSettings = {
   reasoning?: SdkReasoning;
   providerOptions?: Record<string, JSONObject>;
@@ -131,13 +100,6 @@ type ReasoningProvider = Pick<
   "name" | "providerType" | "apiMode" | "modelIds"
 >;
 
-/**
- * Where a turn's Reasoning controls reach the wire, absent when there is
- * nothing to send. An OpenAI chat-mode Provider sends the Model entry's
- * Reasoning map as a body fragment (ADR-0040); every other Provider is native
- * and takes the SDK's `reasoning` level (#1689) — except OpenRouter, whose
- * adapter ignores that option and reads its own, which has no `max` step.
- */
 export const reasoningCallSettings = (
   provider: ReasoningProvider,
   modelId: ConcreteModelId,
@@ -163,13 +125,6 @@ export const reasoningCallSettings = (
   return { reasoning };
 };
 
-/**
- * Whether `choice` sets a Reasoning control this model offers — the controls
- * the Settings dialog shows for it. A native Provider offers Thinking and
- * Effort (#1689); a Reasoning map offers what it declares (ADR-0040). Effort
- * counts wherever the control is offered, even for a step the map lacks,
- * because that step resolves to the map's default.
- */
 const offeredReasoningSet = (
   provider: ReasoningProvider,
   modelId: ConcreteModelId,
@@ -188,16 +143,6 @@ const offeredReasoningSet = (
   );
 };
 
-/**
- * A job's output cap raised by the Thinking budget its Job settings send, then
- * held to the ceiling the job model declares. On an OpenAI-compatible server
- * thinking counts toward `max_tokens`, so a budget at or above the job's cap
- * would be cut off before any answer is written; on any Provider, asking for
- * more than the Model entry's Max output tokens is rejected outright.
- * Native Providers never send a stored budget (see `resolveSdkReasoning`), and
- * a model declaring no ceiling sends the sum unchanged — only the vendor knows
- * its limit.
- */
 export const jobMaxOutputTokens = (
   provider: ReasoningProvider,
   modelId: ConcreteModelId,
@@ -209,7 +154,6 @@ export const jobMaxOutputTokens = (
   if (budget != null && providerHonoursReasoningMap(provider)) {
     const map = reasoningMapForModel(provider, modelId);
     if (map?.budget) {
-      // Mirrors `resolveReasoning`: Thinking off drops the budget.
       const thinking = map.thinking
         ? (settings?.reasoningThinking ?? map.default?.thinking)
         : true;
@@ -220,21 +164,6 @@ export const jobMaxOutputTokens = (
   return ceiling === undefined ? requestedCap : Math.min(requestedCap, ceiling);
 };
 
-/**
- * The call options one of a Provider's own jobs is sent for its Job settings
- * (ADR-0045): the job's built-in `defaults` with every sampling parameter set
- * laid over them, and the Reasoning controls resolved against the job model's
- * Reasoning map exactly as a turn's are (ADR-0040). The resolved sampling is
- * stripped from the map's fragment, so a fragment's `temperature` beats neither
- * a set value nor the job's default.
- *
- * Reasoning resolves only once a Reasoning control the model offers is set,
- * never for a block of sampling alone: the jobs sent no fragment before Job
- * settings existed, so the map's `always` and `default` fragments a turn would
- * get must not appear because someone set a Temperature — nor because of a
- * value kept from a model that offered a control this one does not, which the
- * Settings dialog no longer shows.
- */
 export const jobCallSettings = (
   provider: ReasoningProvider,
   modelId: ConcreteModelId,

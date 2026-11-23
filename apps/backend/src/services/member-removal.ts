@@ -48,16 +48,6 @@ const requireEachOwnedDecided = (
   }
 };
 
-/**
- * Remove from Org (ADR-0035). Every Workspace the member owns in the
- * Organization is transferred or deleted, as `workspaces` decides, and the
- * membership goes with them in one transaction: if any decision is refused,
- * nothing changes and the member stays. The last-admin guard
- * ({@link requireAdminRemains}) runs in that transaction too. Throws
- * `NotFoundError` unless the member is in the Organization, `ValidationError`
- * when it is the caller or unless `workspaces` decides each owned Workspace
- * exactly once, and `ConflictError` when it is the last admin.
- */
 export const removeMember = async ({
   orgId,
   memberId,
@@ -83,8 +73,6 @@ export const removeMember = async ({
     workspaces,
   );
 
-  // Read before the transaction, while the rows exist; run only after it
-  // commits, so a refused removal tears nothing down.
   const cleanups = await Promise.all(
     workspaces
       .filter(({ action }) => action === "delete")
@@ -94,19 +82,14 @@ export const removeMember = async ({
   );
 
   const transfers = await db.transaction(async (tx) => {
-    // First, so the Organization lock comes before the member-row and
-    // Workspace locks below.
+    // why: first, so the Organization lock is taken before the member-row and Workspace locks
     await requireAdminRemains(tx, request);
-    // Workspace creation holds this row while it adds one for the member, so
-    // with it locked the owned set cannot grow before the removal commits.
     await tx
       .select({ id: organizationMember.id })
       .from(organizationMember)
       .where(eq(organizationMember.id, member.id))
       .for("update");
-    // Locked, so a transfer of one of them already under way finishes first,
-    // and the Workspace it moved drops out of the set rather than being
-    // deleted or transferred again from its new Owner.
+    // why: locked, so an in-flight transfer finishes first and its Workspace drops out of the set
     requireEachOwnedDecided(
       await ownedWorkspaces(tx, orgId, member.userId).for("update"),
       workspaces,

@@ -8,8 +8,6 @@ import {
 import { makeProviderRow } from "./provider-row.test-fixtures.ts";
 import type { ProviderRow } from "./provider-write.ts";
 
-// Qwen-shaped: everything rides in `chat_template_kwargs`, so the deep merge
-// across always / thinking / effort is what this map exercises.
 const QWEN: ReasoningMap = {
   always: { chat_template_kwargs: { preserve_thinking: true } },
   thinking: {
@@ -37,7 +35,6 @@ describe("resolveReasoning", () => {
       resolveReasoning(
         {
           ...QWEN,
-          // a later fragment overrides an earlier one's leaf
           effort: {
             high: {
               chat_template_kwargs: {
@@ -160,6 +157,16 @@ describe("resolveReasoning", () => {
       expect(resolveReasoning(map, {}, {})).toMatchObject({ temperature: 0.6 });
     });
 
+    it("never sends a top-level reasoning_effort, which the SDK writes itself", () => {
+      expect(
+        resolveReasoning(
+          { always: { reasoning_effort: "high", x: 1 } },
+          {},
+          {},
+        ),
+      ).toEqual({ x: 1 });
+    });
+
     it("never strips a key nested under chat_template_kwargs", () => {
       expect(
         resolveReasoning(map, {}, { temperature: 0.2, topP: 0.5 }),
@@ -170,7 +177,6 @@ describe("resolveReasoning", () => {
 
 describe("jobCallSettings", () => {
   const qwen = "qwen3" as ConcreteModelId;
-  // OpenAI chat mode: the path that honours a Reasoning map (ADR-0040).
   const compat = makeProviderRow({
     name: "local",
     modelIds: [{ id: qwen, passthroughFileTypes: [], reasoning: QWEN }],
@@ -253,7 +259,6 @@ describe("jobCallSettings", () => {
   });
 
   describe("a value kept from a model that offered a control this one does not", () => {
-    // Always thinks, so no switch; a turn that chooses nothing gets `high`.
     const r1 = "r1-distill" as ConcreteModelId;
     const both = makeProviderRow({
       name: "local",
@@ -300,7 +305,6 @@ describe("jobCallSettings", () => {
 
 describe("jobMaxOutputTokens", () => {
   const qwen = "qwen3" as ConcreteModelId;
-  /** The compatible Provider, with an optional ceiling on its Model entry. */
   const compatWith = (
     maxOutputTokens?: number,
     providerType: ProviderRow["providerType"] = "OpenAI",

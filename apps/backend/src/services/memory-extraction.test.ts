@@ -14,8 +14,6 @@ vi.mock("./provider.ts", async (importActual) => ({
   openProvider: mockOpenProvider,
 }));
 vi.mock("./embedding.ts", () => ({ generateEmbedding: mockGenerateEmbedding }));
-// The real path read wherever rows are seeded; the chainable-mock tests below
-// stub it, since the mock cannot answer its queries by position.
 vi.mock("./chat-messages.ts", async (importActual) => {
   const actual = await importActual<typeof import("./chat-messages.ts")>();
   return { ...actual, loadActivePath: vi.fn(actual.loadActivePath) };
@@ -58,7 +56,6 @@ const makeChat = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
-/** One `chat_message` row of a chain, `chatId:index` → `chatId:index-1`. */
 const messageRow = (chatId: string, message: Message, index: number) => ({
   chatId,
   id: `${chatId}:${index}`,
@@ -70,10 +67,6 @@ const messageRow = (chatId: string, message: Message, index: number) => ({
   createdAt: new Date(index),
 });
 
-/**
- * Seeds rows as `seedDb` does, storing each Chat's `messages` the way the
- * server does: as a chain of `chat_message` rows whose last is the leaf.
- */
 const seedWithMessages = (store: Record<string, Record<string, unknown>[]>) =>
   seedDb({
     ...store,
@@ -104,20 +97,8 @@ const makeProvider = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
-/**
- * Wires up the chainable mock for the reads processMemoryExtractionBatch makes
- * before its first Chat is processed:
- * 1. workspaces query — terminal `where`
- * 2. each workspace's Provider lookups (extraction, then embedding if set) —
- *    `where().limit(1)`, so the rows are queued on `limit`
- * 3. chats query — `where().orderBy().limit()`, queued on `limit` by the test
- *
- * Queue `providers` in lookup order; the test's own `limit` values follow.
- */
 function setupWhere(workspaces: unknown[], providers: unknown[]) {
-  mockDb.where
-    .mockResolvedValueOnce(workspaces) // 1. workspaces query (terminal)
-    .mockReturnValue(mockDb); // 2+. chained or discarded
+  mockDb.where.mockResolvedValueOnce(workspaces).mockReturnValue(mockDb);
   for (const provider of providers)
     mockDb.limit.mockResolvedValueOnce([provider]);
 }
@@ -146,7 +127,7 @@ describe("processMemoryExtractionBatch", () => {
 
   it("returns early when there are no chats to process", async () => {
     setupWhere([makeWorkspace()], [makeProvider()]);
-    mockDb.limit.mockResolvedValueOnce([]); // chatsToProcess
+    mockDb.limit.mockResolvedValueOnce([]);
 
     await processMemoryExtractionBatch();
 
@@ -169,9 +150,7 @@ describe("processMemoryExtractionBatch", () => {
 
   it("calls the LLM and inserts a new daily summary when none exists", async () => {
     setupWhere([makeWorkspace()], [makeProvider()]);
-    mockDb.limit
-      .mockResolvedValueOnce([makeChat()]) // chatsToProcess
-      .mockResolvedValueOnce([]); // existing summary lookup → none
+    mockDb.limit.mockResolvedValueOnce([makeChat()]).mockResolvedValueOnce([]);
     mockDb.execute.mockResolvedValue({ rowCount: 0 });
 
     mockOpenProvider.mockReturnValue({
@@ -230,7 +209,6 @@ describe("processMemoryExtractionBatch", () => {
     await processMemoryExtractionBatch();
 
     const [statement] = mockDb.execute.mock.calls[0] as [{ values: unknown[] }];
-    // Scoped to this user and Workspace, keeping the newest `maxDailySummaries`.
     expect(statement.values).toEqual(["u1", "ws-1", 5]);
     expect(logger.info).toHaveBeenCalledWith(
       "Pruned 2 old daily summaries for user u1 in workspace ws-1",
@@ -346,7 +324,6 @@ describe("processMemoryExtractionBatch", () => {
     );
   });
   describe("Job settings (ADR-0045)", () => {
-    /** The options the one extraction call was made with. */
     const extractWith = async (provider: Record<string, unknown>) => {
       setupWhere([makeWorkspace()], [makeProvider(provider)]);
       mockDb.limit
@@ -431,10 +408,6 @@ describe("processMemoryExtractionBatch", () => {
   });
 });
 
-/**
- * Which Chats a run picks up, evaluated against seeded rows: the chainable mock
- * above cannot see the `WHERE`, and the selection rule is all `WHERE`.
- */
 describe("processMemoryExtractionBatch chat selection", () => {
   const T0 = new Date("2026-09-01T12:00:00.000Z");
   const minutes = (n: number) => new Date(T0.getTime() + n * 60 * 1000);
@@ -453,7 +426,6 @@ describe("processMemoryExtractionBatch chat selection", () => {
 
   const chatRow = (id: string) => fake.tables.chat.find((c) => c.id === id)!;
 
-  /** The Chat ids whose messages reached the model on this run. */
   const run = async () => {
     mockGenerateText.mockClear();
     await processMemoryExtractionBatch();
@@ -463,10 +435,6 @@ describe("processMemoryExtractionBatch chat selection", () => {
     });
   };
 
-  /**
-   * `exchanges` user/assistant pairs, `id:0` onwards. The first names the Chat,
-   * so a prompt says whose it is.
-   */
   const messagesFor = (id: string, exchanges = 1): Message[] =>
     Array.from({ length: exchanges }, (_, i): Message[] => [
       { role: "user", parts: [{ type: "text", text: `chat:${id} q${i}` }] },
@@ -479,20 +447,17 @@ describe("processMemoryExtractionBatch chat selection", () => {
     ...overrides,
   });
 
-  /** The text between `<tag>` and `</tag>` in the prompt of model call `n`. */
   const section = (tag: string, n = 0) => {
     const { prompt } = mockGenerateText.mock.calls[n][0] as { prompt: string };
     return new RegExp(`<${tag}>\\n([\\s\\S]*?)\\n</${tag}>`).exec(prompt)![1];
   };
 
-  /** `messages` with each text part padded out to `length` characters. */
   const padded = (messages: Message[], length: number): Message[] =>
     messages.map((m) => ({
       ...m,
       parts: m.parts.map((p) => ({ ...p, text: p.text.padEnd(length, "x") })),
     }));
 
-  /** The one Provider, now declaring the extraction model's context window. */
   const declareWindow = (contextWindow: number) => {
     fake.tables.provider[0].modelIds = [
       { id: "gpt-4o-mini", passthroughFileTypes: [], contextWindow },
@@ -571,7 +536,6 @@ describe("processMemoryExtractionBatch chat selection", () => {
     expect((await run()).sort()).toEqual(["extracting", "ui"]);
   });
 
-  // ADR-0044: a run has no User whose preferences a Memory would capture.
   it("reads a Trigger run's Chat only while its Trigger extracts memories", async () => {
     seedChats(
       chat("ui"),
@@ -656,12 +620,10 @@ describe("processMemoryExtractionBatch chat selection", () => {
     vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
     vi.setSystemTime(T0);
     seedChats(chat("hung"), chat("next"));
-    // A provider that never answers, and never reads the signal it is given.
     mockGenerateText.mockImplementationOnce(() => new Promise(() => {}));
 
     const batch = run();
     await vi.advanceTimersByTimeAsync(SUMMARY_TIMEOUT_MS);
-    // The batch settles, so the advisory lock around it is released.
     expect(await batch).toEqual(["hung", "next"]);
     expect(chatRow("hung").memoryExtractionStatus).toBe("failed");
     expect(chatRow("next").memoryExtractionStatus).toBe("completed");
@@ -673,6 +635,22 @@ describe("processMemoryExtractionBatch chat selection", () => {
     expect(first.maxRetries).toBe(1);
   });
 
+  it("fails a pass whose reply has no text, leaving the cursor", async () => {
+    seedChats(
+      chat("blank", {
+        messages: messagesFor("blank", 2),
+        memoryCursorId: "blank:1",
+      }),
+    );
+    mockGenerateText.mockResolvedValueOnce({ text: "  " });
+
+    expect(await run()).toEqual(["blank"]);
+    expect(chatRow("blank")).toMatchObject({
+      memoryExtractionStatus: "failed",
+      memoryCursorId: "blank:1",
+    });
+  });
+
   it("stops before the next Chat once the batch passes its deadline", async () => {
     seedChats(chat("slow"), chat("left"));
     mockGenerateText.mockImplementationOnce(() => {
@@ -681,7 +659,6 @@ describe("processMemoryExtractionBatch chat selection", () => {
     });
 
     expect(await run()).toEqual(["slow"]);
-    // The Chat in flight finished; the one never reached is left for the next.
     expect(chatRow("slow").memoryExtractionStatus).toBe("completed");
     expect(chatRow("left").memoryExtractionStatus).toBe("pending");
   });
@@ -720,7 +697,6 @@ describe("processMemoryExtractionBatch chat selection", () => {
     seedChats(chat("busy"));
     const [, , question, reply] = messagesFor("busy", 2);
     mockGenerateText.mockImplementationOnce(() => {
-      // A Chat turn lands while the model is summarising the Chat.
       fake.tables.chat_message.push(
         messageRow("busy", question, 2),
         messageRow("busy", reply, 3),
@@ -745,7 +721,6 @@ describe("processMemoryExtractionBatch chat selection", () => {
         memoryCursorId: "alt:3",
       }),
     );
-    // The User edits the second question, and the reply lands under the edit.
     fake.tables.chat_message.push(
       { ...messageRow("alt", exchange[0], 4), parentId: "alt:1" },
       messageRow("alt", exchange[1], 5),
@@ -798,8 +773,6 @@ describe("processMemoryExtractionBatch chat selection", () => {
         memoryCursorId: "big:17",
       }),
     );
-    // Half of 16,384 tokens is 8,192, and the same window less the 8,192-token
-    // reply leaves 8,192: a 32,768-character budget.
     declareWindow(16_384);
 
     expect(await run()).toEqual(["big"]);
@@ -807,7 +780,6 @@ describe("processMemoryExtractionBatch chat selection", () => {
     expect(prompt.length).toBeLessThanOrEqual(32_768);
     const context = section("context");
     expect(context.length).toBeLessThanOrEqual(8_192);
-    // The most recent of what came before, as much as fits.
     expect(context.length).toBeGreaterThan(7_000);
     expect(context).toMatch(/assistant: a8x+$/);
     expect(section("new-messages")).toMatch(
@@ -823,13 +795,11 @@ describe("processMemoryExtractionBatch chat selection", () => {
       }),
     );
     const warn = vi.spyOn(logger, "warn");
-    // 8,000 tokens against the 8,192-token reply: the reply alone fills it.
     declareWindow(8_000);
 
     expect(await run()).toEqual([]);
     expect(chatRow("tight")).toMatchObject({
       memoryExtractionStatus: "failed",
-      // Nothing read: the retry covers the same messages.
       memoryCursorId: "tight:1",
     });
     expect(warn).toHaveBeenCalledWith(
@@ -842,9 +812,6 @@ describe("processMemoryExtractionBatch chat selection", () => {
     seedChats(
       chat("reply", { messages: padded(messagesFor("reply", 6), 2_000) }),
     );
-    // Half of 12,288 tokens is 6,144; the same window less the 8,192-token
-    // reply is 4,096. The reply makes the tighter bound: 16,384 characters,
-    // where the half alone would have allowed 24,576.
     declareWindow(12_288);
 
     expect(await run()).toEqual(["reply"]);
@@ -853,7 +820,6 @@ describe("processMemoryExtractionBatch chat selection", () => {
   });
 
   it("budgets 32k tokens when the model declares no context window", async () => {
-    // Two fit in 128,000 characters, three do not.
     seedChats(
       chat("wide", { messages: padded(messagesFor("wide", 2), 60_000) }),
     );
@@ -868,24 +834,20 @@ describe("processMemoryExtractionBatch chat selection", () => {
     seedChats(
       chat("chunk", { messages: padded(messagesFor("chunk", 6), 4_000) }),
     );
-    // A 32,768-character budget: eight 4,000-character messages fit a pass.
     declareWindow(16_384);
 
     const extracted: string[] = [];
     let ticks = 0;
-    // Bounded, so a cursor that stops moving fails rather than hangs.
     while (ticks < 20 && (await run()).length) {
       ticks++;
       for (const line of section("new-messages").split("\n\n")) {
         extracted.push(/[qa]\d+/.exec(line)![0]);
       }
-      // On the last message of the chunk.
       expect(chatRow("chunk").memoryCursorId).toBe(
         `chunk:${extracted.length - 1}`,
       );
     }
 
-    // Each message once, in order.
     expect(ticks).toBeGreaterThan(1);
     expect(ticks).toBeLessThan(20);
     expect(extracted).toEqual(
@@ -923,14 +885,11 @@ describe("processMemoryExtractionBatch chat selection", () => {
 
   it("reads the Active path only, leaving Alternatives and deleted messages out", async () => {
     seedChats(chat("tree"));
-    fake.tables.chat_message.push(
-      // An edit of the first message the User has moved away from.
-      {
-        ...messageRow("tree", exchange[0], 9),
-        parentId: null,
-        parts: [{ type: "text", text: "the edited-away question" }],
-      },
-    );
+    fake.tables.chat_message.push({
+      ...messageRow("tree", exchange[0], 9),
+      parentId: null,
+      parts: [{ type: "text", text: "the edited-away question" }],
+    });
     fake.tables.chat_message[0].parts = [
       { type: "text", text: "chat:tree" },
       { type: "text", text: " kept" },
@@ -950,10 +909,6 @@ describe("processMemoryExtractionBatch chat selection", () => {
   });
 });
 
-/**
- * Which Provider a run may use, against seeded rows: a Shared Provider serves a
- * Workspace's memory only while an Attachment makes it visible there.
- */
 describe("processMemoryExtractionBatch provider visibility", () => {
   const shared = (overrides: Record<string, unknown> = {}) =>
     makeProvider({ organizationId: "org-1", workspaceId: null, ...overrides });

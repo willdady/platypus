@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-// test-utils installs the drizzle-orm mock, so it must be imported before the
-// operators this file uses — `desc` is a marker only through that mock.
+// why: first, since drizzle-orm's operators are spies only through test-utils' mock
 import { resetMockDb, seedDb, type Row } from "../test-utils.ts";
 import { desc } from "drizzle-orm";
 import { db } from "../index.ts";
@@ -17,9 +16,6 @@ import { NotFoundError } from "../errors.ts";
 
 const workspaceId = "ws-1";
 
-// Each table holds a row this Workspace owns and one with the
-// same shape owned elsewhere, so a predicate that dropped its scope column
-// reaches the other tenant's row and the test fails.
 const ROWS = {
   chat: [
     { id: "chat-1", workspaceId, title: "Hello" },
@@ -136,14 +132,10 @@ describe("WorkspaceResource module", () => {
 
   describe("ownedWhere", () => {
     it("throws when an id-bearing type is given no id", () => {
-      // The type system requires `id` here; the cast simulates a caller bug
-      // reaching past it (e.g. an absent route param) at runtime.
       const ref = { workspaceId } as never;
       expect(() => ownedWhere("chat", ref)).toThrow("requires an id");
     });
   });
-
-  // --- Sandbox: one-per-Workspace singleton, addressed by scope alone ---
 
   describe("sandbox", () => {
     it("resolves, updates and deletes the workspace's sandbox by workspaceId alone", async () => {

@@ -6,11 +6,6 @@ import {
   prepareWorkspaceCleanup,
 } from "./workspace-delete.ts";
 
-/**
- * Deletes every Workspace a User owns the way Workspace delete does, so its
- * Sandboxes and stored files go with it. Run before the User row is deleted,
- * whose cascade would otherwise take the Workspace rows and skip the rest.
- */
 export const deleteOwnedWorkspaces = async (userId: string): Promise<void> => {
   const owned = await db
     .select({

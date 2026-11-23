@@ -11,10 +11,6 @@ import type { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { migratedPglite } from "../db/migrated-pglite.test-fixtures.ts";
 
-/**
- * Marking every Notification read, against an in-process Postgres built from
- * the shipped migrations, so the one-read-per-user constraint is the real one.
- */
 const { dispatchEvent } = vi.hoisted(() => ({ dispatchEvent: vi.fn() }));
 vi.mock("./event-dispatch.ts", () => ({ dispatchEvent }));
 
@@ -30,7 +26,6 @@ afterAll(() => pg.close());
 
 const ctx = { orgId: "org-1", workspaceId: "ws-1" };
 
-/** Three Notifications in ws-1 and one in ws-2, none read. */
 beforeEach(async () => {
   dispatchEvent.mockClear();
   await pg.exec(`

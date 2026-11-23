@@ -5,12 +5,6 @@ import { migratedPglite } from "../db/migrated-pglite.test-fixtures.ts";
 import type { Tx } from "../index.ts";
 import { deleteOrganizationRows } from "./organization-delete.ts";
 
-/**
- * Deleting an Organization's rows, run for real against an in-process Postgres
- * built from the shipped migrations, so the delete rests on the foreign keys
- * production actually has: everything under the Organization goes, whichever
- * scope its Agents and Providers live in.
- */
 let pg: PGlite;
 beforeEach(async () => {
   pg = await migratedPglite();
