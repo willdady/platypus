@@ -665,6 +665,18 @@ describe("takeTranscriptSummary", () => {
       );
     });
 
+    it("drops a fully answered carried-in request but keeps an open one word for word", async () => {
+      const { system } = await sentCall();
+      expect(system).toContain("Standing instructions");
+      expect(system).toContain("supersedes or contradicts");
+      expect(system).toContain(
+        "A request fully answered by a newer message is dropped",
+      );
+      expect(system).toContain(
+        "a request carried in from the earlier summary that is not fully answered stays word for word",
+      );
+    });
+
     it("puts a steering instruction above the length guidance, and has no steering line without one", async () => {
       const steered = await sentCall("keep the API decisions");
       expect(steered.system).toContain(
