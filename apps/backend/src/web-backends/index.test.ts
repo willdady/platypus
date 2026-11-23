@@ -62,6 +62,7 @@ const contribution = (
 const buildTools = (
   executors: Partial<WebBackendExecutors>,
   overrides: Partial<WebBackendContribution> = {},
+  signal?: AbortSignal,
 ): Promise<Record<string, Tool>> =>
   composeWebBackend({
     contribution: contribution(executors, overrides),
@@ -69,7 +70,7 @@ const buildTools = (
     pluginName: "@acme/searx",
     resolveHostname: resolvePublic,
     plugin: PLUGIN,
-  }).buildTurnTools(CTX);
+  }).buildTurnTools(CTX, signal);
 
 const search = (tool: Tool, query: string) =>
   callTool(tool, { query }) as Promise<WebSearchToolResult & WebToolError>;
@@ -166,7 +167,7 @@ describe("composeWebBackend — tool construction", () => {
       backend: "searx",
       plugin,
       pluginName: "@acme/searx",
-    }).buildTurnTools(CTX);
+    }).buildTurnTools(CTX, undefined);
 
     expect(createExecutors).toHaveBeenCalledWith(PLUGIN_CTX, plugin);
   });
@@ -200,7 +201,7 @@ describe("composeWebBackend — tool construction", () => {
       backend: "searx",
       pluginName: "@acme/searx",
       plugin: PLUGIN,
-    }).buildTurnTools(CTX);
+    }).buildTurnTools(CTX, undefined);
 
     expect(tools).toEqual({});
     expect(mockLogger.warn).toHaveBeenCalledWith(
@@ -227,7 +228,7 @@ describe("composeWebBackend — tool construction", () => {
       backend: "searx",
       pluginName: "@acme/searx",
       plugin: PLUGIN,
-    }).buildTurnTools(CTX);
+    }).buildTurnTools(CTX, undefined);
 
     expect(tools).toEqual({});
     expect(mockLogger.warn).toHaveBeenCalledWith(
@@ -240,6 +241,62 @@ describe("composeWebBackend — tool construction", () => {
       }),
       expect.stringContaining("createExecutors timed out"),
     );
+  });
+
+  it("serves no tools without calling createExecutors when the turn is already cancelled", async () => {
+    const createExecutors = vi.fn(() => ({
+      web_search: () => ({ query: "q", results: [] }),
+    }));
+    const turn = new AbortController();
+    turn.abort();
+
+    const tools = await composeWebBackend({
+      contribution: contribution({}, { createExecutors }),
+      backend: "searx",
+      pluginName: "@acme/searx",
+      plugin: PLUGIN,
+    }).buildTurnTools(CTX, turn.signal);
+
+    expect(tools).toEqual({});
+    expect(createExecutors).not.toHaveBeenCalled();
+    expect(mockLogger.debug).toHaveBeenCalledWith(
+      expect.objectContaining({
+        plugin: "@acme/searx",
+        backend: "searx",
+        orgId: CTX.orgId,
+        workspaceId: CTX.workspaceId,
+        providerId: CTX.providerId,
+      }),
+      expect.stringContaining("cancelled"),
+    );
+    expect(mockLogger.warn).not.toHaveBeenCalled();
+  });
+
+  it("settles with no tools well before timeoutMs when the turn is cancelled mid-factory", async () => {
+    const turn = new AbortController();
+    const building = composeWebBackend({
+      contribution: contribution(
+        {},
+        {
+          createExecutors: () => new Promise(() => {}),
+          timeoutMs: 60_000,
+        },
+      ),
+      backend: "searx",
+      pluginName: "@acme/searx",
+      plugin: PLUGIN,
+    }).buildTurnTools(CTX, turn.signal);
+
+    const startedAt = Date.now();
+    turn.abort();
+
+    await expect(building).resolves.toEqual({});
+    expect(Date.now() - startedAt).toBeLessThan(1_000);
+    expect(mockLogger.debug).toHaveBeenCalledWith(
+      expect.objectContaining({ backend: "searx", plugin: "@acme/searx" }),
+      expect.stringContaining("cancelled"),
+    );
+    expect(mockLogger.warn).not.toHaveBeenCalled();
   });
 });
 
@@ -895,7 +952,7 @@ describe("composeWebBackend — the contribution is not copied", () => {
 
     expect(registration.backend).toBe("acme.searx");
 
-    const { web_search } = await registration.buildTurnTools(CTX);
+    const { web_search } = await registration.buildTurnTools(CTX, undefined);
     const result = await search(web_search, "q");
     expect(result.results).toEqual([
       { title: "From this", url: "https://example.com/1" },
@@ -1029,7 +1086,7 @@ describe("the signal an executor is handed", () => {
       pluginName: "@acme/searx",
       resolveHostname,
       plugin: PLUGIN,
-    }).buildTurnTools(CTX);
+    }).buildTurnTools(CTX, undefined);
 
     const result = (await callTool(
       tool,
@@ -1089,7 +1146,10 @@ describe("the closer a backend registers", () => {
       backend: "searx",
       pluginName: "@acme/searx",
       plugin: PLUGIN,
-    }).buildTurnTools(ctxWith(() => {}));
+    }).buildTurnTools(
+      ctxWith(() => {}),
+      undefined,
+    );
 
     expect(createExecutors).toHaveBeenCalledWith(PLUGIN_CTX, PLUGIN);
   });
@@ -1111,7 +1171,7 @@ describe("the closer a backend registers", () => {
       backend: "acme.searx",
       pluginName: "@acme/searx",
       plugin: PLUGIN,
-    }).buildTurnTools(ctxWith(register));
+    }).buildTurnTools(ctxWith(register), undefined);
 
     expect(register).toHaveBeenCalledWith(close, {
       plugin: "@acme/searx",
@@ -1140,6 +1200,7 @@ describe("the closer a backend registers", () => {
       ctxWith((close, attribution) => {
         registered.push(() => runCloser(close, attribution));
       }),
+      undefined,
     );
 
     expect(Object.keys(tools)).toEqual(["web_search"]);
@@ -1164,7 +1225,7 @@ describe("the closer a backend registers", () => {
       backend: "searx",
       pluginName: "@acme/searx",
       plugin: PLUGIN,
-    }).buildTurnTools(CTX);
+    }).buildTurnTools(CTX, undefined);
 
     expect(Object.keys(tools)).toContain("web_search");
     expect(mockLogger.warn).not.toHaveBeenCalled();
