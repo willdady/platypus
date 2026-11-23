@@ -1415,6 +1415,31 @@ describe("ProviderForm Test action", () => {
     expect(body).not.toHaveProperty("searchSource");
   });
 
+  it("does not test a Provider with duplicate header names", () => {
+    const fetchMock = stubAcceptedSave(SUCCESS);
+    renderEditForm([{ id: "gpt-4o", passthroughFileTypes: [] }], {
+      headers: { "X-Trace": "first" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Toggle" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add header" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Header 2 name" }), {
+      target: { value: "x-trace" },
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "Header 2 value" }), {
+      target: { value: "second" },
+    });
+
+    fireEvent.click(testButton("gpt-4o"));
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(
+      screen.getByText(
+        'Duplicate header name "x-trace". Header names are case-insensitive, so each one may appear once.',
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("reports a request the API refused as not run, not as a Provider error", async () => {
     // A half-filled form can fail validation before the Provider is contacted.
     stubRejectedSave([{ path: ["apiKey"], message: "API key is required" }]);

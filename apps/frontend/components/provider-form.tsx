@@ -794,20 +794,22 @@ function ProviderForm({
     }));
   };
 
+  // rowsToRecord builds an object, so a repeated name would silently drop the
+  // earlier value. Refuse both saving and testing instead.
+  const rejectDuplicateHeader = (): boolean => {
+    const error = duplicateHeaderError(formData.headerRows);
+    if (!error) return false;
+    setValidationErrors((prev) => ({ ...prev, headers: error }));
+    return true;
+  };
+
   /**
    * Tests one card's model with the Provider config exactly as the form holds
    * it — nothing is saved first, so a wrong key or Base URL is reported before
    * it reaches a Chat. The verdict lands back on the same card.
    */
-  const rejectDuplicateHeaders = (): boolean => {
-    const message = duplicateHeaderError(formData.headerRows);
-    if (!message) return false;
-    setValidationErrors((prev) => ({ ...prev, headers: message }));
-    return true;
-  };
-
   const testModel = (index: number, modelId: string) => {
-    if (rejectDuplicateHeaders()) return;
+    if (rejectDuplicateHeader()) return;
     return runModelTest(index, modelId, buildTestPayload(formData));
   };
 
@@ -854,7 +856,7 @@ function ProviderForm({
   };
 
   const handleSubmit = () => {
-    if (rejectDuplicateHeaders()) return;
+    if (rejectDuplicateHeader()) return;
     if (hasEmbeddingConfigChanged()) {
       setIsEmbeddingChangeDialogOpen(true);
     } else {
