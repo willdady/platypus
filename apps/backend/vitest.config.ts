@@ -5,8 +5,6 @@ export default defineConfig({
     globals: true,
     environment: "node",
     setupFiles: ["./src/test-setup.ts"],
-    // The variables `env.ts` requires, so every module can read them. A test
-    // that cares about one of them stubs its own value.
     env: {
       ALLOWED_ORIGINS: "http://localhost:3000",
       DATABASE_URL: "postgres://postgres:postgres@localhost:5432/platypus",

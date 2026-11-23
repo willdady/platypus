@@ -7,8 +7,6 @@ import {
 
 describe("describeToolInput", () => {
   it("identifies a payload the SDK could not parse as JSON", () => {
-    // Signature A from issue #406: generation stopped mid-string, so the SDK
-    // left the raw text in place instead of a parsed value.
     const raw = '{"path":"notes/todo.md","body":"the first half of a very lon';
 
     expect(
@@ -29,8 +27,6 @@ describe("describeToolInput", () => {
   });
 
   it("tells an empty argument string apart from a literal empty object", () => {
-    // The SDK validates an empty argument string as `{}`, so both land in the
-    // production logs as `Value: {}` — the ambiguity this record exists to end.
     const emitted = describeToolInput({ input: "" });
     const literal = describeToolInput({ input: {} });
 
@@ -58,7 +54,6 @@ describe("describeToolInput", () => {
   });
 
   it("classifies a parsed non-object JSON value by the type it saw", () => {
-    // `123` is valid JSON, so the SDK hands back a number the schema rejects.
     expect(describeToolInput({ input: 123 })).toMatchObject({
       inputType: "number",
       inputKind: "parsed",
@@ -87,8 +82,6 @@ describe("describeToolInput", () => {
 
     expect(record.inputLength).toBe(MAX_TOOL_INPUT_PREFIX + 40);
     expect(record.inputPrefix?.length).toBe(MAX_TOOL_INPUT_PREFIX);
-    // A silently shortened diagnostic is worse than none. 41, not 40: the
-    // ellipsis the cap leaves behind occupies one of the kept characters.
     expect(record.omitted).toBe("[omitted: 41 characters]");
   });
 

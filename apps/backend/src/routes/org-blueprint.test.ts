@@ -30,10 +30,8 @@ describe("Organization Blueprint Routes", () => {
         updatedAt: new Date(),
       };
       mockDb.limit
-        .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
-        .mockResolvedValueOnce([record]); // final read-back
-      // requireOrgAccess where (chain), then requireSharedItems where (resolves
-      // the org-scoped resources that exist).
+        .mockResolvedValueOnce([{ role: "admin" }])
+        .mockResolvedValueOnce([record]);
       mockDb.where
         .mockReturnValueOnce(mockDb)
         .mockResolvedValueOnce([{ id: "agent-1" }]);
@@ -53,8 +51,7 @@ describe("Organization Blueprint Routes", () => {
 
     it("404s when an item is not an org-scoped resource", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
-      // requireSharedItems finds nothing for the requested id → invalid.
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
       mockDb.where.mockReturnValueOnce(mockDb).mockResolvedValueOnce([]);
 
       const res = await app.request(baseUrl, {
@@ -70,8 +67,7 @@ describe("Organization Blueprint Routes", () => {
 
     it("409s on a duplicate blueprint name", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
-      // Empty items → no validation queries; the blueprint insert conflicts.
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
       mockDb.insert.mockImplementationOnce(() => {
         throw dbError("23505");
       });
@@ -86,7 +82,7 @@ describe("Organization Blueprint Routes", () => {
 
     it("403s for a non-admin", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
 
       const res = await app.request(baseUrl, {
         method: "POST",
@@ -96,8 +92,6 @@ describe("Organization Blueprint Routes", () => {
       expect(res.status).toBe(403);
     });
 
-    // ADR-0008 Tier 2: a Blueprint can carry Workspace pointer-settings, but a
-    // Tier 2 provider must be one the blueprint also attaches.
     it("persists Tier 2 settings when the provider is also an attached item", async () => {
       mockSession();
       const record = {
@@ -108,17 +102,16 @@ describe("Organization Blueprint Routes", () => {
         context: "Default context",
       };
       mockDb.limit
-        .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
-        .mockResolvedValueOnce([record]); // final read-back
+        .mockResolvedValueOnce([{ role: "admin" }])
+        .mockResolvedValueOnce([record]);
       mockDb.where
-        .mockReturnValueOnce(mockDb) // requireOrgAccess
-        .mockResolvedValueOnce([{ id: "prov-1" }]); // requireSharedItems (provider)
+        .mockReturnValueOnce(mockDb)
+        .mockResolvedValueOnce([{ id: "prov-1" }]);
 
       const res = await app.request(baseUrl, {
         method: "POST",
         body: JSON.stringify({
           name: "Starter kit",
-          // The Tier 2 provider is attached as a Tier 1 item.
           items: [{ resourceType: "provider", resourceId: "prov-1" }],
           taskModelProviderId: "prov-1",
           context: "Default context",
@@ -133,8 +126,7 @@ describe("Organization Blueprint Routes", () => {
 
     it("400s, naming it, when a Tier 2 provider is not attached by the blueprint", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
-      // Empty items → no item query; the Tier 2 provider is not attached.
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
 
       const res = await app.request(baseUrl, {
         method: "POST",
@@ -152,21 +144,19 @@ describe("Organization Blueprint Routes", () => {
       });
     });
 
-    // Parity with the workspace route: a memory provider must expose the model
-    // its slot needs, so apply never stamps an unusable memory config.
     it("400s, naming it, when the memory embedding provider has no embedding model", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
       mockDb.where
-        .mockReturnValueOnce(mockDb) // requireOrgAccess
-        .mockResolvedValueOnce([{ id: "prov-1" }]) // requireSharedItems (provider attached)
+        .mockReturnValueOnce(mockDb)
+        .mockResolvedValueOnce([{ id: "prov-1" }])
         .mockResolvedValueOnce([
           {
             id: "prov-1",
             memoryExtractionModelId: "m",
             embeddingModelId: null,
           },
-        ]); // requireMemoryProviderCapable
+        ]);
 
       const res = await app.request(baseUrl, {
         method: "POST",
@@ -193,18 +183,18 @@ describe("Organization Blueprint Routes", () => {
         memoryEmbeddingProviderId: "prov-1",
       };
       mockDb.limit
-        .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
-        .mockResolvedValueOnce([record]); // read-back
+        .mockResolvedValueOnce([{ role: "admin" }])
+        .mockResolvedValueOnce([record]);
       mockDb.where
-        .mockReturnValueOnce(mockDb) // requireOrgAccess
-        .mockResolvedValueOnce([{ id: "prov-1" }]) // requireSharedItems
+        .mockReturnValueOnce(mockDb)
+        .mockResolvedValueOnce([{ id: "prov-1" }])
         .mockResolvedValueOnce([
           {
             id: "prov-1",
             memoryExtractionModelId: "m",
             embeddingModelId: "emb-model",
           },
-        ]); // requireMemoryProviderCapable: valid
+        ]);
 
       const res = await app.request(baseUrl, {
         method: "POST",
@@ -226,7 +216,7 @@ describe("Organization Blueprint Routes", () => {
   describe("GET /", () => {
     it("lists blueprints with their items (admin)", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
       const blueprints = [
         { id: "bp-1", organizationId: orgId, name: "Starter kit" },
       ];
@@ -235,9 +225,9 @@ describe("Organization Blueprint Routes", () => {
         { blueprintId: "bp-1", resourceType: "skill", resourceId: "skill-1" },
       ];
       mockDb.where
-        .mockReturnValueOnce(mockDb) // requireOrgAccess
-        .mockResolvedValueOnce(blueprints) // list blueprints
-        .mockResolvedValueOnce(itemRows); // loadItemsByBlueprint
+        .mockReturnValueOnce(mockDb)
+        .mockResolvedValueOnce(blueprints)
+        .mockResolvedValueOnce(itemRows);
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
@@ -262,14 +252,14 @@ describe("Organization Blueprint Routes", () => {
       mockSession();
       const record = { id: "bp-1", organizationId: orgId, name: "Starter kit" };
       mockDb.limit
-        .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
-        .mockResolvedValueOnce([record]); // blueprint by id
+        .mockResolvedValueOnce([{ role: "admin" }])
+        .mockResolvedValueOnce([record]);
       mockDb.where
-        .mockReturnValueOnce(mockDb) // requireOrgAccess
-        .mockReturnValueOnce(mockDb) // blueprint by id (chain to limit)
+        .mockReturnValueOnce(mockDb)
+        .mockReturnValueOnce(mockDb)
         .mockResolvedValueOnce([
           { blueprintId: "bp-1", resourceType: "agent", resourceId: "agent-1" },
-        ]); // loadItemsByBlueprint
+        ]);
 
       const res = await app.request(`${baseUrl}/bp-1`);
       expect(res.status).toBe(200);
@@ -281,8 +271,8 @@ describe("Organization Blueprint Routes", () => {
     it("404s when the blueprint is not in this org", async () => {
       mockSession();
       mockDb.limit
-        .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
-        .mockResolvedValueOnce([]); // blueprint by id: not found
+        .mockResolvedValueOnce([{ role: "admin" }])
+        .mockResolvedValueOnce([]);
 
       const res = await app.request(`${baseUrl}/missing`);
       expect(res.status).toBe(404);
@@ -303,13 +293,13 @@ describe("Organization Blueprint Routes", () => {
         name: "Starter kit v2",
       };
       mockDb.limit
-        .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
-        .mockResolvedValueOnce([{ id: "bp-1" }]) // existing blueprint
-        .mockResolvedValueOnce([record]); // final read-back
+        .mockResolvedValueOnce([{ role: "admin" }])
+        .mockResolvedValueOnce([{ id: "bp-1" }])
+        .mockResolvedValueOnce([record]);
       mockDb.where
-        .mockReturnValueOnce(mockDb) // requireOrgAccess
-        .mockReturnValueOnce(mockDb) // existing check (chain to limit)
-        .mockResolvedValueOnce([{ id: "skill-1" }]); // requireSharedItems
+        .mockReturnValueOnce(mockDb)
+        .mockReturnValueOnce(mockDb)
+        .mockResolvedValueOnce([{ id: "skill-1" }]);
 
       const res = await app.request(`${baseUrl}/bp-1`, {
         method: "PUT",
@@ -321,16 +311,14 @@ describe("Organization Blueprint Routes", () => {
       expect(json.items).toEqual([
         { resourceType: "skill", resourceId: "skill-1" },
       ]);
-      // The old item set is deleted and re-inserted within the transaction;
-      // this never touches existing Attachments on provisioned workspaces.
       expect(mockDb.delete).toHaveBeenCalled();
     });
 
     it("404s when the blueprint does not exist", async () => {
       mockSession();
       mockDb.limit
-        .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
-        .mockResolvedValueOnce([]); // existing check: not found
+        .mockResolvedValueOnce([{ role: "admin" }])
+        .mockResolvedValueOnce([]);
 
       const res = await app.request(`${baseUrl}/missing`, {
         method: "PUT",
@@ -343,12 +331,12 @@ describe("Organization Blueprint Routes", () => {
     it("404s when an item is not org-scoped", async () => {
       mockSession();
       mockDb.limit
-        .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
-        .mockResolvedValueOnce([{ id: "bp-1" }]); // existing blueprint
+        .mockResolvedValueOnce([{ role: "admin" }])
+        .mockResolvedValueOnce([{ id: "bp-1" }]);
       mockDb.where
-        .mockReturnValueOnce(mockDb) // requireOrgAccess
-        .mockReturnValueOnce(mockDb) // existing check
-        .mockResolvedValueOnce([]); // requireSharedItems: none found
+        .mockReturnValueOnce(mockDb)
+        .mockReturnValueOnce(mockDb)
+        .mockResolvedValueOnce([]);
 
       const res = await app.request(`${baseUrl}/bp-1`, {
         method: "PUT",
@@ -364,8 +352,8 @@ describe("Organization Blueprint Routes", () => {
     it("409s when renamed to another blueprint's name", async () => {
       mockSession();
       mockDb.limit
-        .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
-        .mockResolvedValueOnce([{ id: "bp-1" }]); // existing blueprint
+        .mockResolvedValueOnce([{ role: "admin" }])
+        .mockResolvedValueOnce([{ id: "bp-1" }]);
       mockDb.transaction.mockImplementationOnce(() => {
         throw dbError("23505");
       });
@@ -381,8 +369,8 @@ describe("Organization Blueprint Routes", () => {
     it("400s, naming it, when a Tier 2 provider is not attached by the blueprint", async () => {
       mockSession();
       mockDb.limit
-        .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
-        .mockResolvedValueOnce([{ id: "bp-1" }]); // existing blueprint
+        .mockResolvedValueOnce([{ role: "admin" }])
+        .mockResolvedValueOnce([{ id: "bp-1" }]);
 
       const res = await app.request(`${baseUrl}/bp-1`, {
         method: "PUT",
@@ -403,7 +391,7 @@ describe("Organization Blueprint Routes", () => {
 
     it("403s for a non-admin", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
 
       const res = await app.request(`${baseUrl}/bp-1`, {
         method: "PUT",
@@ -418,8 +406,7 @@ describe("Organization Blueprint Routes", () => {
   describe("DELETE /:blueprintId", () => {
     it("deletes a blueprint (admin) when no live invitation references it", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
-      // Deletion guard: no pending invitations reference this blueprint.
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
       mockDb.where.mockReturnValueOnce(mockDb).mockResolvedValueOnce([]);
       mockDb.returning.mockResolvedValueOnce([{ id: "bp-1" }]);
 
@@ -430,37 +417,31 @@ describe("Organization Blueprint Routes", () => {
 
     it("404s when the blueprint does not exist", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
-      mockDb.where.mockReturnValueOnce(mockDb).mockResolvedValueOnce([]); // guard: clear
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
+      mockDb.where.mockReturnValueOnce(mockDb).mockResolvedValueOnce([]);
       mockDb.returning.mockResolvedValueOnce([]);
 
       const res = await app.request(`${baseUrl}/missing`, { method: "DELETE" });
       expect(res.status).toBe(404);
     });
 
-    // ADR-0009: a Blueprint cannot be deleted while a live pending invitation
-    // references it (status = 'pending' AND expiresAt > now()).
     it("409s when a live pending invitation references the blueprint", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
       const future = new Date();
       future.setDate(future.getDate() + 7);
-      // Guard query returns a still-live pending invitation.
       mockDb.where
         .mockReturnValueOnce(mockDb)
         .mockResolvedValueOnce([{ expiresAt: future.toISOString() }]);
 
       const res = await app.request(`${baseUrl}/bp-1`, { method: "DELETE" });
       expect(res.status).toBe(409);
-      // The delete must not run while the guard blocks.
       expect(mockDb.delete).not.toHaveBeenCalled();
     });
 
-    // Expiry is lazy with write-back: a row past expiresAt may still read
-    // 'pending'. The guard excludes it in app code, so deletion proceeds.
     it("allows deletion when the only referencing invitation is lazily-expired", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
       const past = new Date();
       past.setDate(past.getDate() - 1);
       mockDb.where
@@ -489,7 +470,6 @@ describe("Organization Blueprint Routes", () => {
       { resourceType: "agent", resourceId: "agent-1" },
       { resourceType: "skill", resourceId: "skill-1" },
     ];
-    // Tier 2 source row for bp-1 (the apply service reads these settings).
     const tier2Rows = [
       {
         id: "bp-1",
@@ -500,22 +480,18 @@ describe("Organization Blueprint Routes", () => {
       },
     ];
 
-    // The apply service (inside the route's transaction) runs two selects —
-    // Tier 2 settings then items — so the where mocks resolve in that order
-    // after the route's blueprint/workspace org checks.
     it("creates the attachments and stamps Tier 2 settings", async () => {
       mockSession();
       mockDb.limit
-        .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
-        .mockResolvedValueOnce([{ id: "bp-1" }]) // blueprint in org
-        .mockResolvedValueOnce([{ id: "ws-1" }]); // workspace in org
+        .mockResolvedValueOnce([{ role: "admin" }])
+        .mockResolvedValueOnce([{ id: "bp-1" }])
+        .mockResolvedValueOnce([{ id: "ws-1" }]);
       mockDb.where
-        .mockReturnValueOnce(mockDb) // requireOrgAccess
-        .mockReturnValueOnce(mockDb) // blueprint check
-        .mockReturnValueOnce(mockDb) // workspace check
-        .mockResolvedValueOnce(tier2Rows) // service: Tier 2 select
-        .mockResolvedValueOnce(itemRows); // service: items select
-      // Both items newly inserted.
+        .mockReturnValueOnce(mockDb)
+        .mockReturnValueOnce(mockDb)
+        .mockReturnValueOnce(mockDb)
+        .mockResolvedValueOnce(tier2Rows)
+        .mockResolvedValueOnce(itemRows);
       mockDb.returning.mockResolvedValueOnce([
         { id: "att-1" },
         { id: "att-2" },
@@ -533,7 +509,6 @@ describe("Organization Blueprint Routes", () => {
         skipped: 0,
         total: 2,
       });
-      // Tier 2: the workspace is updated with the blueprint's non-null slots.
       const tier2Set = mockDb.set.mock.calls
         .map((c) => c[0] as Record<string, unknown>)
         .find((v) => v.taskModelProviderId !== undefined);
@@ -553,9 +528,8 @@ describe("Organization Blueprint Routes", () => {
         .mockReturnValueOnce(mockDb)
         .mockReturnValueOnce(mockDb)
         .mockReturnValueOnce(mockDb)
-        .mockResolvedValueOnce(tier2Rows) // Tier 2 select
-        .mockResolvedValueOnce(itemRows); // items select
-      // onConflictDoNothing inserts nothing — all rows already present.
+        .mockResolvedValueOnce(tier2Rows)
+        .mockResolvedValueOnce(itemRows);
       mockDb.returning.mockResolvedValueOnce([]);
 
       const res = await app.request(applyUrl, {
@@ -590,8 +564,8 @@ describe("Organization Blueprint Routes", () => {
             memoryEmbeddingProviderId: null,
             context: null,
           },
-        ]) // Tier 2 select: nothing set
-        .mockResolvedValueOnce([]); // items select: no items
+        ])
+        .mockResolvedValueOnce([]);
 
       const res = await app.request(applyUrl, {
         method: "POST",
@@ -611,8 +585,8 @@ describe("Organization Blueprint Routes", () => {
     it("404s when the blueprint is not in this org", async () => {
       mockSession();
       mockDb.limit
-        .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
-        .mockResolvedValueOnce([]); // blueprint not found
+        .mockResolvedValueOnce([{ role: "admin" }])
+        .mockResolvedValueOnce([]);
 
       const res = await app.request(applyUrl, {
         method: "POST",
@@ -625,9 +599,9 @@ describe("Organization Blueprint Routes", () => {
     it("404s when the workspace is not in this org", async () => {
       mockSession();
       mockDb.limit
-        .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
-        .mockResolvedValueOnce([{ id: "bp-1" }]) // blueprint ok
-        .mockResolvedValueOnce([]); // workspace not found
+        .mockResolvedValueOnce([{ role: "admin" }])
+        .mockResolvedValueOnce([{ id: "bp-1" }])
+        .mockResolvedValueOnce([]);
 
       const res = await app.request(applyUrl, {
         method: "POST",

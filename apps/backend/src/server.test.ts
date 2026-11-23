@@ -18,7 +18,6 @@ describe("app error responses", () => {
     mockSession({ id: "user-1", email: "test@example.com" });
     const logError = vi.spyOn(logger, "error");
 
-    // Any route behind sValidator("json") would do; Contexts needs only a session.
     const res = await app.request("/users/me/contexts", {
       method: "POST",
       body: "{not json",
@@ -32,8 +31,6 @@ describe("app error responses", () => {
     expect(logError).not.toHaveBeenCalled();
   });
 
-  // The one body that isn't an error message: the issues array, which the
-  // frontend maps onto form fields. No `success`, no echo of the request.
   it("answers a body that fails its schema with 400 and only the issues", async () => {
     mockSession({ id: "user-1", email: "test@example.com" });
 
@@ -81,8 +78,6 @@ describe("app error responses", () => {
 describe("health and readiness", () => {
   beforeEach(() => {
     resetMockDb();
-    // A drain's stopping gate is terminal in production; a test that stops
-    // the registry must not leave the next one refusing runs.
     runRegistry.resetStopStateForTests();
   });
 
@@ -96,6 +91,22 @@ describe("health and readiness", () => {
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ status: "ok" });
+  });
+
+  it("logs /health at debug, not info, so the health check does not flood the log", async () => {
+    const info = vi.spyOn(logger, "info");
+    const debug = vi.spyOn(logger, "debug");
+
+    await app.request("/health");
+
+    expect(debug).toHaveBeenCalledWith(
+      expect.objectContaining({ path: "/health" }),
+      "Request processed",
+    );
+    expect(info).not.toHaveBeenCalledWith(
+      expect.anything(),
+      "Request processed",
+    );
   });
 
   it("answers /ready 200 when the database answers SELECT 1", async () => {
@@ -141,8 +152,6 @@ describe("auth mount", () => {
     vi.resetModules();
   });
 
-  // A prefix-stripping proxy, or the frontend's internal URL, delivers
-  // `/auth/*`; better-auth routes on the `BACKEND_URL` path (#1810).
   it("hands /auth/* to better-auth under the BACKEND_URL prefix", async () => {
     vi.stubEnv("BETTER_AUTH_URL", "https://chat.example.com/api/");
     vi.resetModules();
@@ -162,8 +171,6 @@ describe("auth mount", () => {
     expect(handled?.search).toBe("?disableRefresh=true");
   });
 
-  // Over a real socket `c.req.raw` is @hono/node-server's lightweight request,
-  // not a Request; using it as a Request init threw on Node 26.13+ (4.2.0).
   it("forwards a POST served by @hono/node-server, body included", async () => {
     vi.stubEnv("BETTER_AUTH_URL", "https://chat.example.com/api/");
     vi.resetModules();

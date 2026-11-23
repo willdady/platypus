@@ -20,13 +20,8 @@ import { backendBaseUrl } from "../base-urls.ts";
 import type { Variables } from "../server.ts";
 import { NotFoundError } from "../errors.ts";
 
-// Org-scoped Agents are Shared resources (ADR-0007): a single source of truth
-// defined once at Organization scope (via Promote) and referenced by Workspaces
-// through an Attachment. They are managed only by Org Admins on the Organization
-// surface, so all mutations are org-admin-only; any member may read them.
 const orgAgent = new Hono<{ Variables: Variables }>();
 
-/** List org-scoped Agents */
 orgAgent.get("/", requireAuth, requireOrgAccess(), async (c) => {
   const { orgId } = orgScopeOf(c);
   const baseUrl = backendBaseUrl();
@@ -36,7 +31,6 @@ orgAgent.get("/", requireAuth, requireOrgAccess(), async (c) => {
   });
 });
 
-/** Get an org-scoped Agent by ID */
 orgAgent.get("/:agentId", requireAuth, requireOrgAccess(), async (c) => {
   const { orgId } = orgScopeOf(c);
   const agentId = c.req.param("agentId");
@@ -45,7 +39,6 @@ orgAgent.get("/:agentId", requireAuth, requireOrgAccess(), async (c) => {
   return c.json(agentResponse(record, "organization", baseUrl));
 });
 
-/** Update an org-scoped Agent by ID (admin only) */
 orgAgent.put(
   "/:agentId",
   requireAuth,
@@ -57,17 +50,12 @@ orgAgent.put(
     const data = c.req.valid("json");
     const baseUrl = backendBaseUrl();
 
-    // `updateAgentRow` throws NotFound (→404) when the Agent is not visible
-    // here; a duplicate name surfaces as a Postgres unique violation, mapped
-    // to 409 by the central onError (ADR-0010).
     const result = await updateAgentRow(
       { kind: "organization", orgId },
       agentId,
       data,
     );
     if ("error" in result) {
-      // A reference that isn't Shared reads as not found here; the message
-      // names each one so nothing is lost by dropping the list.
       if (result.blockers) {
         throw new NotFoundError(
           `${result.error}: ${result.blockers
@@ -81,7 +69,6 @@ orgAgent.put(
   },
 );
 
-/** Upload avatar for an org-scoped Agent (admin only) */
 orgAgent.post(
   "/:agentId/avatar",
   requireAuth,
@@ -98,7 +85,6 @@ orgAgent.post(
   },
 );
 
-/** Delete avatar for an org-scoped Agent (admin only) */
 orgAgent.delete(
   "/:agentId/avatar",
   requireAuth,
@@ -112,7 +98,6 @@ orgAgent.delete(
   },
 );
 
-/** Delete an org-scoped Agent by ID (admin only) */
 orgAgent.delete(
   "/:agentId",
   requireAuth,
@@ -121,9 +106,6 @@ orgAgent.delete(
     const { orgId } = orgScopeOf(c);
     const agentId = c.req.param("agentId");
 
-    // `deleteAgentRow` throws ConflictError (→409, ADR-0007/0008) while an
-    // Attachment or Blueprint still references the Agent, and NotFound (→404)
-    // when it is not visible here.
     await deleteAgentRow({ kind: "organization", orgId }, agentId);
 
     return c.json({ message: "Agent deleted" });

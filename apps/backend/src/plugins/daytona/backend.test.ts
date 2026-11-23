@@ -1,8 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Readable } from "node:stream";
 
-// A fake of the one Daytona sandbox this suite provisions. `exec` decides how a
-// session command answers; everything else records what the adapter asked for.
 const fake = vi.hoisted(() => {
   const state = {
     exists: false,
@@ -117,8 +115,6 @@ const makeBackend = (
   credentials: Partial<DaytonaPluginCredentials> = {},
 ) =>
   createDaytonaSandboxBackend({
-    // Parse as the loader does at boot: the adapter now receives the schema's
-    // output, so an invalid block fails here exactly as it would at startup.
     config: daytonaPluginConfigSchema.parse(config),
     credentials: { apiKey: "dtn_test", ...credentials },
     logger: makeFakePluginLogger(),

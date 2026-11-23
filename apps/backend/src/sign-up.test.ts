@@ -2,13 +2,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import "./test-utils.ts";
 import app from "./server.ts";
 
-/**
- * The one authority the frontend reads to decide whether to offer Sign up
- * (#550, ADR-0019). It takes no session: it discloses nothing an anonymous
- * caller could not learn by attempting to sign up once. How
- * `REQUIRE_INVITATION_TO_SIGN_UP` is parsed is pinned here, at the seam a
- * caller sees, rather than against the module that parses it.
- */
 describe("GET /sign-up", () => {
   afterEach(() => {
     vi.unstubAllEnvs();

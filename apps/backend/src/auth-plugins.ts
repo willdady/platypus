@@ -1,25 +1,9 @@
 import { admin } from "better-auth/plugins";
 
-/**
- * The better-auth plugins this backend runs with, in their own module so the
- * Drizzle auth schema can be checked against them without importing `auth.ts`
- * — which opens a database connection at module load.
- *
- * A plugin contributes columns to the auth tables, and better-auth validates
- * that the Drizzle schema carries them all at startup. `auth-schema.test.ts`
- * asserts the same thing, so adding a plugin here fails the suite until
- * `db/auth-schema.ts` carries its fields.
- */
 const adminPlugin = admin();
 
 export const authPlugins = [adminPlugin] as [typeof adminPlugin];
 
-/**
- * User fields this backend overrides on top of what a plugin declares.
- * better-auth applies `user.additionalFields` after plugin fields, so these
- * win — including in `better-auth generate`, which is why the generated
- * schema keeps `banned` `NOT NULL`. The admin plugin declares it optional.
- */
 export const authUserFieldOverrides = {
   banned: {
     type: "boolean",

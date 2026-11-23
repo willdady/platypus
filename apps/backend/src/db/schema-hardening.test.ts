@@ -5,11 +5,6 @@ import {
   migratedPglite,
 } from "./migrated-pglite.test-fixtures.ts";
 
-/**
- * The schema hardening (#1770), run for real against an in-process Postgres
- * built from the shipped migrations: the pre-hardening rows are seeded, the
- * migration backfills them, and the constraints it adds are then exercised.
- */
 const TAG = "0100_harden_schema";
 
 let pg: PGlite;
@@ -56,8 +51,7 @@ describe("the 0100 backfill", () => {
     ).toEqual([{ tool_set_ids: [], skill_ids: [], sub_agent_ids: [] }]);
   });
 
-  // 0100 backfilled `chat.tags`, a column 0104 later drops. This test stops at
-  // 0100, so it still exercises that historical backfill.
+  // why: stops at 0100, before 0104 drops chat.tags
   it("gives Chat tags an empty array", async () => {
     expect(await rows(`SELECT "tags" FROM "chat" ORDER BY "id"`)).toEqual([
       { tags: [] },

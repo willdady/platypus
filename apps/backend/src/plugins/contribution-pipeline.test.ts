@@ -8,12 +8,6 @@ import {
 } from "./contribution-pipeline.ts";
 import { makeFakePluginLogger } from "../test-utils.ts";
 
-// Every Extension point runs the same seven steps over its slice of a manifest —
-// shape check, id and name checks, namespacing, owner-attributed collision
-// check, attributed registration, bookkeeping. They are tested once here,
-// against a stand-in point, so `loader.test.ts` is left testing what each real
-// point *adds* rather than re-testing this sequence three times.
-
 const PLUGIN: PluginConfigContext = {
   config: { key: "k" },
   credentials: {},
@@ -22,8 +16,6 @@ const PLUGIN: PluginConfigContext = {
 
 type Widget = { id: string; label: string; plugin: PluginConfigContext };
 
-// A point with no extras: the pipeline's behaviour with everything optional
-// left out.
 const makePoint = (
   overrides: Partial<ExtensionPoint<Widget>> = {},
 ): {
@@ -85,8 +77,6 @@ describe("registerContributions", () => {
   });
 
   it("namespaces the id and trims it first", () => {
-    // `acme. my widget ` must never reach a registry or a persisted column, so
-    // the raw id is trimmed before the plugin prefix is composed onto it.
     const { point, registered } = makePoint();
     const ids = run([{ id: "  spaced  ", name: "W" }], {
       point,
@@ -137,9 +127,6 @@ describe("registerContributions", () => {
   ])(
     "aborts (plugin-named) on %s, naming the index",
     (_label, contribution) => {
-      // The checks that run before an id is known carry the array index: on a
-      // plugin contributing several entries it is the only thing an Operator can
-      // use to find the offending one.
       expect(() => run([widget("fine"), contribution])).toThrow(
         'Plugin "acme": every widget must declare a non-empty "id" (at index 1).',
       );
@@ -168,17 +155,12 @@ describe("registerContributions", () => {
   });
 
   it("stops at the first bad entry, leaving the ones ahead of it registered", () => {
-    // Entries validate and register in the same pass, so a good entry ahead of
-    // a bad one is already registered. That is not a leak: the throw aborts
-    // boot, so the half-filled registry never serves a turn.
     const { point, registered } = makePoint();
     expect(() => run([widget("fine"), null], { point })).toThrow();
     expect(registered.map((r) => r.id)).toEqual(["fine"]);
   });
 
   it("runs the point's own validator against the un-namespaced contribution", () => {
-    // The validator is handed the id the plugin author wrote, not the
-    // namespaced one, so its messages read with the id they would recognise.
     const seen: Array<{
       contribution: RawContribution;
       identity: ContributionIdentity;
@@ -217,14 +199,9 @@ describe("registerContributions", () => {
       label: "Widget a",
       plugin: PLUGIN,
     });
-    // The same block every contribution of this plugin is bound to — object
-    // identity IS "one credential block per plugin" (ADR-0013).
     expect(registered[0].registration.plugin).toBe(PLUGIN);
   });
 
-  // The Tool-set point namespaces tool *names* by origin as well as ids (issue
-  // #664), so the loader's origin decision has to reach `prepare` rather than
-  // being re-derived from the plugin name there.
   it.each([true, false])(
     "hands prepare the origin decision (isCore=%s)",
     (isCore) => {
@@ -241,8 +218,6 @@ describe("registerContributions", () => {
   );
 
   it("re-throws a registry collision with plugin attribution", () => {
-    // A registry that rejects the id (an already-registered core built-in, say)
-    // throws without knowing which plugin asked. Attribution is added here.
     const { point } = makePoint({
       register: () => {
         throw new Error("Widget 'a' has already been registered.");

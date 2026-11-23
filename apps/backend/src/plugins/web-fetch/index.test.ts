@@ -17,7 +17,6 @@ describe("@platypus/web-fetch plugin manifest", () => {
   });
 
   it("declares a plugin-level configSchema (ignoreRobotsTxt, deploy-time)", () => {
-    // Defaults to robots.txt-respecting when the Operator supplies nothing.
     expect(plugin.configSchema.parse({})).toEqual({ ignoreRobotsTxt: false });
     expect(plugin.configSchema.parse({ ignoreRobotsTxt: true })).toEqual({
       ignoreRobotsTxt: true,
@@ -25,9 +24,6 @@ describe("@platypus/web-fetch plugin manifest", () => {
   });
 
   it("registers the web-fetch tool set into the core registry when loaded", async () => {
-    // The registry is module-global; vitest isolates modules per file, so this
-    // load doesn't leak into other test files. Exercise the real plugin path:
-    // loader → registerToolSet → getToolSet.
     expect(getToolSets().map((s) => s.id)).not.toContain("web-fetch");
 
     const { plugins: loaded } = await loadPlugins({
@@ -44,8 +40,6 @@ describe("@platypus/web-fetch plugin manifest", () => {
     const set = getToolSet("web-fetch")!;
     expect(set.name).toBe("Web Fetch");
     expect(set.category).toBe("Web");
-    // The loader binds the plugin config into the composed builder; resolving it
-    // (as a Chat turn would) yields the fetchUrl tool.
     const tools = await set.buildTurnTools(
       {
         workspaceId: "w",

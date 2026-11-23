@@ -5,14 +5,12 @@ import app from "../server.ts";
 
 const baseUrl = "/organizations/org-1/a2a/endpoints";
 const createdAt = new Date("2026-09-01T00:00:00.000Z");
-/** When `tok-1`'s current value was issued: the marker a revoke names. */
 const issuedAt = new Date("2026-09-02T00:00:00.000Z");
 const expiresAt = new Date("2099-01-01T00:00:00.000Z");
 const lastRejectedAt = new Date("2026-09-03T00:00:00.000Z");
 const tokenUrl = (path: string, seen: Date | string = issuedAt) =>
   `${baseUrl}${path}?tokenCreatedAt=${seen instanceof Date ? seen.toISOString() : seen}`;
 
-/** `user-1` is the caller, with `role` in `org-1`; `user-2` owns `ws-1`. */
 const seed = (role: "admin" | "member" = "admin") => {
   mockSession();
   return seedDb({
@@ -174,10 +172,6 @@ describe("Org A2A endpoint oversight routes", () => {
     const TOKEN = "pa2a_telegram";
     const OTHER = "pa2a_rovo";
 
-    /**
-     * org-1 admits ep-1's Workspace, whose Owner is a member, and ep-1 has a
-     * second client's token, tok-2: both clients' calls are answered.
-     */
     const seedClients = () => {
       const fake = seed();
       fake.tables.organization[0].a2aGate = "all";
@@ -197,7 +191,6 @@ describe("Org A2A endpoint oversight routes", () => {
       return fake;
     };
 
-    /** A client's `GetTask` for a Task no one has: a live call's answer is -32001. */
     const call = async (token: string) => {
       const res = await app.request("/a2a/ep-1", {
         method: "POST",

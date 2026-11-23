@@ -13,16 +13,6 @@ import {
 } from "../middleware/authorization.ts";
 import type { Variables } from "../server.ts";
 
-/**
- * Org Admin oversight shared by the ways in from outside that carry a bearer
- * token — Inbound Triggers (ADR-0030) and A2A endpoints (ADR-0032).
- */
-
-/**
- * `GET /access` reads the Organization gate and every Workspace's switch;
- * `PUT /access` sets the gate and, with `allowedWorkspaceIds`, every switch in
- * the same write, answering with the access as it now stands.
- */
 export const mountGateAccess = <T>(
   app: Hono<{ Variables: Variables }>,
   get: (orgId: string) => Promise<T>,
@@ -49,10 +39,6 @@ export const mountGateAccess = <T>(
   );
 };
 
-/**
- * The `tokenCreatedAt` an Org Admin's revoke names: when the token they saw
- * was issued, as the list reported it, so one issued since is refused.
- */
 export const tokenCreatedAtQuerySchema = z.strictObject({
   tokenCreatedAt: z.iso.datetime(),
 });

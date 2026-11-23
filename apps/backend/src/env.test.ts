@@ -176,8 +176,6 @@ describe("ARTIFACT_SCRIPT_ORIGINS", () => {
     "https://cdnjs.cloudflare.com/ajax/libs",
     "https://cdnjs.cloudflare.com?x=1",
     "https://user:pass@cdnjs.cloudflare.com",
-    // Not a plain DNS name: each would widen or break the policy if it
-    // reached the CSP source list.
     "https://*.cloudflare.com",
     "https://a.com;",
     "https://'unsafe-eval'",

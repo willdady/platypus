@@ -22,7 +22,7 @@ const baseUrl = "/organizations/org-1/inbound-triggers";
 
 const asRole = (role: "admin" | "member") => {
   mockSession();
-  mockDb.limit.mockResolvedValueOnce([{ role }]); // requireOrgAccess
+  mockDb.limit.mockResolvedValueOnce([{ role }]);
 };
 
 describe("Org Inbound Trigger Routes", () => {

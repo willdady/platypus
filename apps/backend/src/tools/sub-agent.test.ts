@@ -22,10 +22,6 @@ import { runRegistry } from "../runs/run-registry.ts";
 import { orgScope, workspaceScope, type WorkspaceScope } from "../scope.ts";
 import { DEFAULT_AGENT_MAX_STEPS } from "@platypus/schemas";
 
-// A delegated run now goes through the same pipeline a Chat turn does —
-// `streamText` → `toUIMessageStream` → `readUIMessageStream` — so these tests
-// drive a mock *model* and leave that pipeline real. The spy records what
-// reached `streamText` without replacing it.
 const { streamTextSpy } = vi.hoisted(() => ({ streamTextSpy: vi.fn() }));
 
 vi.mock("ai", async () => {
@@ -42,7 +38,6 @@ vi.mock("ai", async () => {
 import { logger } from "../logger.ts";
 import { clearToolGates, registerToolGate } from "../tool-gates/index.ts";
 
-/** A delegate's Tool gate scope (ADR-0033): its own session's, unattended. */
 const GATE_SCOPE = {
   orgId: "org-1",
   workspaceId: "ws-1",
@@ -50,8 +45,6 @@ const GATE_SCOPE = {
   toolSetIds: new Map<string, string>(),
   readOnlyHints: new Map<string, "read-only" | "writes">(),
 };
-
-// --- Model harness -----------------------------------------------------------
 
 const USAGE = {
   inputTokens: {
@@ -65,7 +58,6 @@ const USAGE = {
 
 type StepParts = LanguageModelV3StreamPart[];
 
-/** Wraps a step's parts in the stream-start / finish envelope every step needs. */
 const step = (
   parts: StepParts,
   finish: { unified: "stop" | "length" | "tool-calls"; raw?: string } = {
@@ -82,7 +74,6 @@ const step = (
   },
 ];
 
-/** A model that replays one step's parts per `doStream` call, in order. */
 const modelOf = (...steps: StepParts[]) => {
   let index = 0;
   return new MockLanguageModelV3({
@@ -108,19 +99,12 @@ const toolCall = (id: string, toolName: string, input: string): StepParts => [
   { type: "tool-call", toolCallId: id, toolName, input },
 ];
 
-/** The scope a parent Chat turn would be running under. */
 const parentScope: WorkspaceScope = workspaceScope(
   orgScope({ principal: { kind: "user", userId: "u1", name: "Ada" } }, "org-1"),
   "ws-1",
   true,
 );
 
-/**
- * A delegate's tools as the lazy loader it now takes: they are opened on first
- * invocation, so the option is a thunk rather than a resolved map. Carries no
- * read-only hints — a test that needs one builds `LoadedSubAgentTools`
- * directly.
- */
 const toolsOf =
   (tools: Record<string, Tool>) => (): Promise<LoadedSubAgentTools> =>
     Promise.resolve({
@@ -135,13 +119,6 @@ const baseOptions = {
   loadTools: toolsOf({}),
 };
 
-/**
- * The pre-refactor option shape tests build with: `model`/`maxSteps`/
- * `securityGuardrails`/`sampling`/`maxOutputTokens` as loose named fields.
- * `buildOptions` folds them into the `plan`/`guardrails` shape
- * `createSubAgentDelegate` now takes, so individual test bodies below don't have
- * to restate that shape at every call site.
- */
 type LegacyOptions = Partial<{
   id: string;
   name: string;
@@ -190,16 +167,10 @@ const buildOptions = (
   };
 };
 
-/**
- * The single `delegate` tool a parent gets when ONE sub-agent resolved. Every
- * exercise of a delegated run goes through the dispatcher rather than around
- * it, because the dispatcher is now the only way a model reaches one.
- */
 const delegateToolFor = (
   options: Parameters<typeof createSubAgentDelegate>[0],
 ) => createDelegateTool([createSubAgentDelegate(options)]);
 
-/** Build the delegate tool, run one delegation, collect every yield. */
 const delegate = async (
   options: LegacyOptions = {},
   execOptions: Partial<ToolExecutionOptions<Record<string, unknown>>> = {},
@@ -216,7 +187,6 @@ const delegate = async (
   return { tool, yielded };
 };
 
-/** The arguments the delegated run handed to `streamText`. */
 const streamArgs = (call = 0) =>
   streamTextSpy.mock.calls[call][0] as {
     instructions:
@@ -228,20 +198,16 @@ const streamArgs = (call = 0) =>
     abortSignal: AbortSignal;
   } & Record<string, unknown>;
 
-/** The System prompt text a delegated run passed as its `instructions`. */
 const systemOf = (args: ReturnType<typeof streamArgs>): string => {
   const instructions = args.instructions;
   if (instructions === undefined) return "";
-  // `at(0)`: may be empty, which `[0]` hides under the test tsconfig.
+  // why: `at(0)`: may be empty, which `[0]` hides under the test tsconfig
   const message = Array.isArray(instructions)
     ? instructions.at(0)
     : instructions;
   return message?.content ?? "";
 };
 
-// The step ceiling arrives as `stopWhen: [stepCountIs(n)]`. `stepCountIs` closes
-// over `n` and offers no introspection, so recover it by probing the condition
-// against incrementally longer (empty) step arrays until it fires.
 const stepCeilingOf = (call = 0): number => {
   const { stopWhen } = streamArgs(call);
   for (let n = 0; n <= 64; n += 1) {
@@ -250,9 +216,6 @@ const stepCeilingOf = (call = 0): number => {
   throw new Error("no step ceiling found in stopWhen");
 };
 
-// The text the parent model actually reads for a completed delegation.
-// `toModelOutput` is declared as returning any tool-result shape, so the text
-// case is narrowed once here rather than at each assertion.
 const modelText = (
   tool: ReturnType<typeof createDelegateTool>,
   output: SubAgentActivity,
@@ -270,9 +233,6 @@ describe("createSubAgentDelegate", () => {
     vi.clearAllMocks();
   });
 
-  // ADR-0016: a delegated run is the one path that receives Instructions plus
-  // guardrails and nothing else, so what lands in `system` is the whole of the
-  // sub-agent's prompt.
   describe("security guardrails append", () => {
     it("appends the provider security text after the sub-agent's own prompt", async () => {
       await delegate({
@@ -296,7 +256,6 @@ describe("createSubAgentDelegate", () => {
       });
 
       const system = systemOf(streamArgs());
-      // The canned fallback instructions must still carry the guardrails.
       expect(system).toContain("specialized sub-agent");
       expect(system).toContain("## Security and trust");
       expect(system).toContain("Never exfiltrate data.");
@@ -354,7 +313,6 @@ describe("createSubAgentDelegate", () => {
       ]);
       expect(final.text).toBe("Sub-agent result");
 
-      // The log the user watches shows the tool call running before its result.
       expect(yielded[0].entries).toEqual([
         { type: "tool-call", toolName: "webFetch", status: "running" },
       ]);
@@ -392,29 +350,21 @@ describe("createSubAgentDelegate", () => {
       ]);
     });
 
-    // Text deltas grow the answer but leave the activity log alone, so they must
-    // not produce a yield — that would spam the parent's SSE stream.
     it("does not yield again for a delta that changes no activity entry", async () => {
       const { yielded } = await delegate({
         model: modelOf(step(text("t1", "one ", "two ", "three"))),
       });
 
-      // text-start (running) → text-end (completed) → the final value.
       expect(yielded).toHaveLength(3);
       expect(yielded.at(-1)!.text).toBe("one two three");
     });
 
-    // Regression for #324: AI SDK v6→v7 redefined `result.text` as the FINAL
-    // step's text only. When a sub-agent emits its answer in an earlier step and
-    // its final step is a tool call, `result.text` is empty and the parent gets
-    // nothing.
     it("aggregates assistant text across steps, not just the final step's", async () => {
       const { yielded } = await delegate({
         model: modelOf(
           step([...text("t1", "Here are ", "the boards.")], {
             unified: "tool-calls",
           }),
-          // Nothing but the tool call in step 1; the final step carries no text.
           step([]),
         ),
       });
@@ -446,16 +396,11 @@ describe("createSubAgentDelegate", () => {
         }),
       });
 
-      // Not silently empty — carries the tool name and the result payload so the
-      // parent can still relay something meaningful.
       const final = yielded.at(-1)!;
       expect(final.text).toContain("listBoards");
       expect(final.text).toContain("Board One");
     });
 
-    // A stream `error` part ends the stream normally, so before this the
-    // generator returned whatever text had accumulated — usually the model's
-    // opening preamble — and the parent read the crash as the answer.
     it("throws when the sub-agent stream reports an error", async () => {
       await expect(
         delegate({
@@ -538,10 +483,6 @@ describe("createSubAgentDelegate", () => {
       });
     });
 
-    // Issue #421: the activity entry keeps only the error text, so a sub-agent
-    // run — the least observable surface there is — recorded nothing about the
-    // arguments the model actually emitted. It now goes through the same
-    // instrumentation the Chat path uses, tagged with the sub-agent.
     it("logs what the model emitted for a rejected tool call", async () => {
       const raw = '{"url":"https://example.com/a-page","selecto';
       await delegate({
@@ -557,8 +498,6 @@ describe("createSubAgentDelegate", () => {
         }),
       });
 
-      // The same message the run driver logs, so an Operator greps once and
-      // the sub-agent fields say which run it came from.
       const logged = vi
         .mocked(logger.debug)
         .mock.calls.find((call) => call[1] === "Tool call failed");
@@ -626,9 +565,6 @@ describe("createSubAgentDelegate", () => {
     });
   });
 
-  // The delegated run is a run in its own right: it holds its own registry
-  // entry, its own timers, and its own abort signal — and the parent's
-  // cancellation reaches it through the registry.
   describe("run lifecycle", () => {
     it("generates with its own abort signal rather than the parent's", async () => {
       const parent = new AbortController();
@@ -639,8 +575,6 @@ describe("createSubAgentDelegate", () => {
       expect(abortSignal).not.toBe(parent.signal);
     });
 
-    // A Trigger run is started under bounds an Operator configured; work it
-    // delegates has to run under the same ones, not the process defaults.
     it("registers under the bounds the parent run was started with", async () => {
       const register = vi.spyOn(runRegistry, "register");
       await delegate({
@@ -659,21 +593,13 @@ describe("createSubAgentDelegate", () => {
       register.mockRestore();
     });
 
-    // Issue #496: a delegated run is unattended, so it drives under the same
-    // no-progress stop condition a Trigger run has — a stuck model re-issuing
-    // the same call for the same result is aborted rather than burning compute
-    // up to the step ceiling. An interactive Chat turn leaves that off.
     it("drives the delegated run with the no-progress stop condition", async () => {
       await delegate({});
 
       const { stopWhen } = streamArgs();
-      // Step ceiling (stepCountIs) + the no-progress detector.
       expect(stopWhen).toHaveLength(2);
     });
 
-    // The generator body doesn't start until the consumer pulls, so a parent
-    // cancelled between dispatch and the first tick would never fire the abort
-    // listener and the delegation would run on regardless.
     it("does not start work for a parent that was already cancelled", async () => {
       const parent = new AbortController();
       parent.abort(new Error("Chat run cancelled"));
@@ -738,9 +664,6 @@ describe("createSubAgentDelegate", () => {
     });
   });
 
-  // Issue #442. A token-limit stop is neither an error nor an abort: the stream
-  // ends normally and the partial answer was returned as if it were the whole
-  // finding. The parent has to be told it is looking at a fragment.
   describe("truncated at the output token limit", () => {
     const truncated = () =>
       modelOf(
@@ -755,7 +678,6 @@ describe("createSubAgentDelegate", () => {
       const final = yielded.at(-1)!;
 
       expect(final.truncatedByTokenLimit).toBe(true);
-      // Not a failure: the partial answer is real work and still comes back.
       expect(final.text).toBe("The three stale cards are");
     });
 
@@ -792,8 +714,6 @@ describe("createSubAgentDelegate", () => {
       expect(warned?.[0]).toMatchObject({
         subAgentId: "agent-1",
         subAgentName: "Research Agent",
-        // The provider's own word for the stop, which the unified reason
-        // would otherwise be the only record of.
         rawFinishReason: "max_tokens",
       });
     });
@@ -808,10 +728,6 @@ describe("createSubAgentDelegate", () => {
       expect(modelText(tool, final)).toBe("All done.");
     });
 
-    // A tool call that arrived on a step cut off at the ceiling may be half a
-    // call, so the SDK refuses to execute it and the loop ends there. The
-    // delegation is genuinely truncated: the tool never ran and no later step
-    // recovers the answer.
     it("flags a delegation cut off on a step carrying a tool call", async () => {
       const listCards = vi.fn(() => Promise.resolve([{ id: "c1" }]));
       const { yielded } = await delegate({
@@ -831,19 +747,13 @@ describe("createSubAgentDelegate", () => {
       expect(yielded.at(-1)!).toHaveProperty("truncatedByTokenLimit", true);
     });
 
-    // A cutoff is a fact about the answer, not an activity step, so the log the
-    // user watches must not gain a spurious row (or a spurious yield).
     it("adds no activity entry and no extra yield for the terminal finish", async () => {
       const { yielded } = await delegate({ model: truncated() });
 
-      // text-start yields once; the delta and the finish yield nothing; then
-      // the final value.
       expect(yielded).toHaveLength(3);
       expect(yielded.at(-1)!.entries).toHaveLength(1);
     });
 
-    // A stream that fails after hitting the ceiling is still a failure: the
-    // parent must get a tool error, not a flagged partial answer.
     it("still throws when the stream also reported a failure", async () => {
       await expect(
         delegate({
@@ -861,12 +771,7 @@ describe("createSubAgentDelegate", () => {
     });
   });
 
-  // Issue #540. The other way a delegation comes back unfinished: its loop ran
-  // out of steps while the model was still asking to continue. The card showed
-  // the fragment as though it were the finding, and the parent read it the same
-  // way.
   describe("stopped at the step ceiling", () => {
-    /** A delegate that spends its only allowed step on a tool call. */
     const haltedAtCeiling = (overrides: LegacyOptions = {}) =>
       delegate({
         maxSteps: 1,
@@ -897,9 +802,6 @@ describe("createSubAgentDelegate", () => {
 
       const value = modelText(tool, yielded.at(-1)!);
       expect(value).toContain(SUB_AGENT_STEP_LIMIT_NOTE);
-      // Its own wording, not the output-ceiling note's: the two stops have
-      // different causes and a parent that reads one for the other would
-      // delegate the wrong remedy.
       expect(value).not.toContain(SUB_AGENT_TRUNCATION_NOTE);
     });
 
@@ -928,8 +830,6 @@ describe("createSubAgentDelegate", () => {
       expect(modelText(tool, final)).toBe("All done.");
     });
 
-    // The ceiling was reached but the last allowed step was the answer, so
-    // nothing was cut short.
     it("leaves a delegation whose last allowed step answered unflagged", async () => {
       const { yielded } = await delegate({
         maxSteps: 2,
@@ -953,9 +853,6 @@ describe("createSubAgentDelegate", () => {
     });
   });
 
-  // An Agent must generate with the parameters assigned to it wherever it runs.
-  // Before this, a delegated run passed only model/instructions/tools/stopWhen,
-  // so an Agent's Temperature was inert the moment it was used as a sub-agent.
   describe("sampling parameters", () => {
     it("passes the sub-agent's own sampling parameters to its run", async () => {
       await delegate({ sampling: { temperature: 0.2, topP: 0.9, seed: 42 } });
@@ -983,10 +880,6 @@ describe("createSubAgentDelegate", () => {
       }
     });
 
-    // The ceiling is not a sampling parameter — it comes off the sub-agent's
-    // OWN Provider model entry, not its Agent row (issue #454). Without it a
-    // delegated run truncates one level down, on Bedrock especially, with the
-    // Org Admin's declared ceiling applying only to the parent turn.
     it("passes the sub-agent model's output ceiling to its run", async () => {
       await delegate({ maxOutputTokens: 64000 });
 
@@ -1009,10 +902,6 @@ describe("createSubAgentDelegate", () => {
     });
   });
 
-  // A delegate's tools are opened when it is invoked, not when it is built, so
-  // a parent that never delegates opens none of their MCP connections. Results
-  // arrive already normalized — the Tool session that loads them owns that
-  // (#321 one level down), which is why this wrapper no longer touches them.
   describe("sub-agent tools", () => {
     it("opens its tools on invocation, not when the delegate is built", async () => {
       const loadTools = vi.fn().mockResolvedValue({
@@ -1086,7 +975,6 @@ describe("createDelegateTool — dispatch", () => {
     vi.clearAllMocks();
   });
 
-  /** Two named delegates over the same trivial model, for routing tests. */
   const twoDelegates = () => [
     createSubAgentDelegate(
       buildOptions({ id: "sa-1", name: "Research Agent" }),
@@ -1109,7 +997,6 @@ describe("createDelegateTool — dispatch", () => {
     const tool = createDelegateTool(twoDelegates());
     await dispatch(tool, { subAgent: "Coder", task: "Write a parser" });
 
-    // One delegated run, and its prompt is the task it was given.
     expect(streamTextSpy).toHaveBeenCalledTimes(1);
     expect(systemOf(streamArgs())).toContain('sub-agent named "Coder"');
     expect(streamArgs().prompt).toBe("Write a parser");
@@ -1124,9 +1011,6 @@ describe("createDelegateTool — dispatch", () => {
     );
   });
 
-  // The parent turn survives this: the model gets a tool error it can act on,
-  // and nothing is delegated. Falling through to an arbitrary sub-agent — the
-  // one thing this must never do — would show up as a stream call here.
   it("fails with the valid targets when the sub-agent is unknown", async () => {
     const tool = createDelegateTool(twoDelegates());
 
@@ -1136,8 +1020,6 @@ describe("createDelegateTool — dispatch", () => {
     expect(streamTextSpy).not.toHaveBeenCalled();
   });
 
-  // Under one tool the tool always exists, so a sub-agent that failed to
-  // resolve is refused HERE rather than by its tool being absent.
   it("refuses a sub-agent that failed to resolve, with its recorded reason", async () => {
     const tool = createDelegateTool(
       [twoDelegates()[0]],
@@ -1165,7 +1047,6 @@ describe("createDelegateTools", () => {
     vi.clearAllMocks();
   });
 
-  /** Run the one tool a builder produced against a named sub-agent. */
   const runTool = async (tools: Record<string, Tool>, subAgent: string) => {
     const gen = (
       tools[DELEGATE_TOOL_NAME] as unknown as {
@@ -1175,15 +1056,6 @@ describe("createDelegateTools", () => {
     for await (const _ of gen) void _;
   };
 
-  /**
-   * A `resolvePlan` stub, standing in for the production wiring —
-   * `(subAgent) => resolveGenerationPlan({ agent: subAgent }, scope, queries)`.
-   * Resolution itself (model, step ceiling, output ceiling, sampling, alias
-   * lookup) is `resolveGenerationPlan`'s own contract, unit-tested in
-   * `runs/agent-plan.test.ts`; this suite only has to prove
-   * `createDelegateTools` calls it once per sub-agent, forwards its result
-   * unmodified, and keeps going when it rejects.
-   */
   const workingPlan = () =>
     vi.fn().mockResolvedValue({
       plan: { model: modelOf(step([])), maxSteps: DEFAULT_AGENT_MAX_STEPS },
@@ -1195,8 +1067,6 @@ describe("createDelegateTools", () => {
     expect(result).toEqual({ tools: {}, catalogue: [], failures: [] });
   });
 
-  // The whole point of the dispatcher: the tool count no longer tracks the
-  // sub-agent count.
   it("declares exactly one tool however many sub-agents there are", async () => {
     const subAgents = [
       {
@@ -1225,31 +1095,21 @@ describe("createDelegateTools", () => {
     expect(Object.keys(result.tools)).toEqual([DELEGATE_TOOL_NAME]);
     expect(result.failures).toEqual([]);
     expect(resolvePlan).toHaveBeenCalledTimes(3);
-    // The catalogue is what the prompt advertises: every resolvable sub-agent,
-    // by the name the tool expects back, with its description.
     expect(result.catalogue).toEqual([
       { name: "Research", description: "Looks things up" },
       { name: "Coder", description: undefined },
       { name: "Reviewer", description: undefined },
     ]);
 
-    // Building the delegates opens nothing: each sub-agent's tools are loaded
-    // if and when the parent actually delegates to it.
     expect(loadToolsFn).not.toHaveBeenCalled();
 
     await runTool(result.tools, "Research");
     expect(loadToolsFn).toHaveBeenCalledExactlyOnceWith("sa-1", ["ts1"]);
 
-    // Memoized per delegate: a second delegation in the same turn reuses the
-    // tools — and the connections — the first one opened.
     await runTool(result.tools, "Research");
     expect(loadToolsFn).toHaveBeenCalledTimes(1);
   });
 
-  // `resolvePlan`'s result rides straight through to the sub-agent's run —
-  // this function no longer re-derives any of it (issue #454's output ceiling
-  // included), which is the whole point of routing every caller through the
-  // one resolver.
   it("forwards the resolved plan straight through to the sub-agent's run", async () => {
     const resolvePlan = vi.fn().mockResolvedValue({
       plan: { model: modelOf(step([])), maxSteps: 3, maxOutputTokens: 32000 },
@@ -1295,23 +1155,17 @@ describe("createDelegateTools", () => {
       }),
     );
 
-    // Advertised: only the one that resolved.
     expect(result.catalogue).toEqual([
       { name: "Working", description: undefined },
     ]);
-    // The dropped sub-agent must come back named, so the caller can describe
-    // it as unavailable rather than leave the model to discover the gap.
     expect(result.failures).toEqual([
       { id: "sa-1", name: "Failing", reason: "Model not found" },
     ]);
-    // And the tool refuses it by name, with that same reason.
     await expect(runTool(result.tools, "Failing")).rejects.toThrow(
       /is unavailable this turn: Model not found/,
     );
   });
 
-  // Two sub-agents sharing a name have no unambiguous target between them, so
-  // BOTH are dropped and reported. Previously one silently won.
   it("drops every sub-agent in a name collision rather than picking a winner", async () => {
     const subAgents = [
       { id: "sa-1", name: "Helper" },
@@ -1337,15 +1191,12 @@ describe("createDelegateTools", () => {
       { id: "sa-1", name: "Helper", reason: COLLIDING_SUB_AGENT_NAME_REASON },
       { id: "sa-2", name: "helper ", reason: COLLIDING_SUB_AGENT_NAME_REASON },
     ]);
-    // Neither was built, so neither cost a plan resolution.
     expect(resolvePlan).toHaveBeenCalledTimes(1);
     await expect(runTool(result.tools, "Helper")).rejects.toThrow(
       /another sub-agent assigned to this agent has the same name/,
     );
   });
 
-  // A tool that can only ever error is worth nothing to the model; the prompt's
-  // unavailable section still says what happened.
   it("declares no tool when every sub-agent failed", async () => {
     const result = await createDelegateTools(
       [{ id: "sa-1", name: "Failing" }],
@@ -1358,10 +1209,6 @@ describe("createDelegateTools", () => {
     expect(result.failures).toHaveLength(1);
   });
 
-  // The caller knows about assignments whose row never resolved in the
-  // Workspace before the factory is called. They have no name — reading one off
-  // the row is the boundary crossing that dropped them — so the id the prompt
-  // lists them under is the identifier the tool refuses them by.
   it("refuses a sub-agent the caller already reported as unavailable, by id", async () => {
     const result = await createDelegateTools(
       [{ id: "sa-1", name: "Working" }],
@@ -1375,8 +1222,6 @@ describe("createDelegateTools", () => {
       [{ id: "sub-gone", reason: "not available in this workspace" }],
     );
 
-    // Reported back alongside the factory's own failures, so the caller has one
-    // list to render.
     expect(result.failures).toEqual([
       { id: "sub-gone", reason: "not available in this workspace" },
     ]);

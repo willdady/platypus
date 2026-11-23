@@ -2,11 +2,6 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { readFileSync } from "node:fs";
 import { PGlite } from "@electric-sql/pglite";
 
-/**
- * The memory extraction cursor's starting point (#990), run for real against
- * an in-process Postgres over `chat` and `chat_message` cut down to the
- * columns the migration touches.
- */
 const migration = readFileSync(
   new URL("../../drizzle/0074_chat_memory_cursor.sql", import.meta.url),
   "utf8",
@@ -28,7 +23,6 @@ type Chat = {
   turnAt: string | null;
 };
 
-/** Applies the migration over these Chats, each with one message as its leaf. */
 const migrate = async (chats: Chat[]) => {
   await db.exec(`
     DROP SCHEMA public CASCADE;
@@ -84,7 +78,6 @@ describe("0074 memory cursor backfill", () => {
           processedAt: T(5),
           turnAt: T(5),
         },
-        // No turn since `last_turn_at` began, so nothing says it was read.
         { id: "legacy", status: "completed", processedAt: T(10), turnAt: null },
         {
           id: "turn-since",
