@@ -30,10 +30,6 @@ import {
 
 const mockLogger = vi.mocked(logger);
 
-// What core hands its own `buildTurnTools`. `providerId` is core's alone: it
-// rides the warns so an Operator asked about a User-facing unavailable-search
-// notice (issue #522) can find the Provider row to edit, and it is stripped
-// before the plugin-facing `createExecutors` call.
 const CTX = {
   orgId: "org-1",
   workspaceId: "ws-1",
@@ -42,11 +38,6 @@ const CTX = {
   registerCloser: () => {},
 };
 
-// The plugin-facing subset, fixed by ADR-0014 at `{ orgId, workspaceId, userId }`
-// plus the one capability the context carries. `registerCloser` is required as of
-// API v2, so it is part of the exact shape a backend is handed — matched as any
-// function, because what crosses the seam is core's registrar re-bound to this
-// backend's attribution rather than the one core holds.
 const PLUGIN_CTX = {
   orgId: CTX.orgId,
   workspaceId: CTX.workspaceId,
@@ -54,13 +45,8 @@ const PLUGIN_CTX = {
   registerCloser: expect.any(Function) as unknown,
 };
 
-// The deploy-time block core resolves per plugin and forwards to
-// `createExecutors`. One shared instance, so a test that asserts on the forward
-// can compare identity.
 const PLUGIN = makePluginContext();
 
-// A public address for the injected resolver, so the real egress guard stays in
-// the path (these tests assert core's guarding, not DNS).
 const resolvePublic = () => Promise.resolve(["93.184.216.34"]);
 
 const contribution = (
@@ -115,10 +101,6 @@ describe("web-backend registry", () => {
       plugin: PLUGIN,
     });
 
-  // The store's own contract — miss semantics, duplicate rejection,
-  // prototype-key safety, listing, reset — is covered once in
-  // `registry/contribution-registry.test.ts`. What is left here is what this
-  // instance adds: keying on the composed registration's own discriminator.
   it("keys a composed registration on its own discriminator", () => {
     registerWebBackend(registration("searx"));
     registerWebBackend(registration("brave"));
@@ -156,11 +138,6 @@ describe("composeWebBackend — tool construction", () => {
     expect(Object.keys(tools).sort()).toEqual(["read_url", "web_search"]);
   });
 
-  // The frontend tells a plugin `web_search` from a Provider's own by this marker:
-  // the two share a tool name, and `providerExecuted` is only set by the vendors
-  // that bother (`@openrouter/ai-sdk-provider` does not). The AI SDK carries a
-  // Tool's `metadata` onto the tool call, the UI part, and the stored message, so
-  // this is the seam the rendering depends on — not decoration.
   it("marks both tools as core-built so the frontend can identify them", async () => {
     const tools = await buildTools({
       web_search: () => ({ query: "q", results: [] }),
@@ -191,15 +168,10 @@ describe("composeWebBackend — tool construction", () => {
       pluginName: "@acme/searx",
     }).buildTurnTools(CTX);
 
-    // The narrow shape, not core's: a backend is given the turn's scope and
-    // nothing about which Provider row selected it.
-    // An exact match, so a leaked `providerId` fails here.
     expect(createExecutors).toHaveBeenCalledWith(PLUGIN_CTX, plugin);
   });
 
   it("serves no tools (and warns) when the executor object has no web_search", async () => {
-    // The TS type forbids this, but a third-party JS plugin can still return it:
-    // boot is fail-loud, turn-time resolution degrades gracefully.
     const tools = await buildTools({});
 
     expect(tools).toEqual({});
@@ -207,10 +179,6 @@ describe("composeWebBackend — tool construction", () => {
       {
         plugin: "@acme/searx",
         backend: "searx",
-        // The turn's scope and the Provider row, so an Operator asked about the
-        // User-facing notice (issue #522) can tell which Workspace saw it and
-        // which row to edit — an org-scoped Shared Provider (ADR-0007) serves
-        // many Workspaces, so the Workspace alone names a symptom.
         orgId: CTX.orgId,
         workspaceId: CTX.workspaceId,
         providerId: CTX.providerId,
@@ -252,10 +220,7 @@ describe("composeWebBackend — tool construction", () => {
       contribution: contribution(
         {},
         {
-          createExecutors: () =>
-            new Promise(() => {
-              /* never settles */
-            }),
+          createExecutors: () => new Promise(() => {}),
           timeoutMs: 20,
         },
       ),
@@ -329,8 +294,6 @@ describe("web_search — core-owned caps", () => {
       }),
     });
 
-    // The shared `truncate` spends the last character on the `…` marker, so a
-    // cut string is exactly the cap long — marker included.
     const [only] = (await search(web_search, "q")).results;
     expect(only.title).toBe(`${"t".repeat(MAX_TITLE_CHARS - 1)}…`);
     expect(only.snippet).toBe(`${"s".repeat(MAX_SNIPPET_CHARS - 1)}…`);
@@ -377,8 +340,6 @@ describe("web_search — core-owned caps", () => {
     expect(result.results).toEqual([
       { title: "Good", url: "https://example.com/ok" },
     ]);
-    // `debug`, not `warn`: expected steady state for an upstream that mixes in
-    // unusable results, and the line is per-call and model-triggerable.
     expect(mockLogger.debug).toHaveBeenCalledWith(
       {
         backend: "searx",
@@ -393,9 +354,6 @@ describe("web_search — core-owned caps", () => {
 
   it("counts an entry with no usable URL string apart from an over-length one", async () => {
     const { web_search } = await buildTools({
-      // Cast because the payload is deliberately malformed: the SDK type says a
-      // result carries a `url` string, and the point of this test is that a
-      // third-party JS plugin is under no obligation to honour it.
       web_search: (() => ({
         query: "q",
         results: [
@@ -410,9 +368,6 @@ describe("web_search — core-owned caps", () => {
     expect(result.results).toEqual([
       { title: "Good", url: "https://example.com/ok" },
     ]);
-    // A non-string `url` is a malformed payload, not the routine over-length
-    // noise some upstreams produce — counting them together made a broken
-    // backend indistinguishable from a noisy one.
     expect(mockLogger.debug).toHaveBeenCalledWith(
       {
         backend: "searx",
@@ -442,8 +397,6 @@ describe("web_search — core-owned caps", () => {
     expect(result.results).toEqual([
       { title: "Good", url: "https://example.com/ok" },
     ]);
-    // The two reasons are separately attributed: an unusable scheme is a backend
-    // bug, an over-length URL is routine noise from some upstreams.
     expect(mockLogger.debug).toHaveBeenCalledWith(
       {
         backend: "searx",
@@ -457,9 +410,6 @@ describe("web_search — core-owned caps", () => {
   });
 
   it("does not warn about the scan bound when the result cap is what stopped the loop", async () => {
-    // 500 usable results, well past MAX_SEARCH_RESULT_SCAN — but the first 10
-    // are all usable, so the result cap (not the scan cap) ends the loop and
-    // nothing was actually lost to MAX_SEARCH_RESULT_SCAN.
     const { web_search } = await buildTools({
       web_search: () => ({
         query: "q",
@@ -479,8 +429,6 @@ describe("web_search — core-owned caps", () => {
   });
 
   it("stops scanning past MAX_SEARCH_RESULT_SCAN even when nothing is usable", async () => {
-    // Every entry is unpresentable, so the result cap never trips and only the
-    // scan bound stops the loop — otherwise core parses the whole array.
     const { web_search } = await buildTools({
       web_search: () => ({
         query: "q",
@@ -515,9 +463,6 @@ describe("web_search — core-owned caps", () => {
   });
 
   it("keeps a usable entry whose sibling fields are the wrong type", async () => {
-    // The URL is the only field an entry is dropped over; a non-string title or
-    // snippet is narrowed away rather than coerced, so no `[object Object]` or
-    // stringified number reaches the model.
     const { web_search } = await buildTools({
       web_search: () =>
         ({
@@ -546,8 +491,6 @@ describe("web_search — core-owned caps", () => {
     });
 
     const result = await search(web_search, "q");
-    // The cause is logged, never handed to the model: a backend's error text
-    // routinely embeds a credentialed upstream URL.
     expect(result.error).toBe(
       "The web backend could not complete this web_search request.",
     );
@@ -566,10 +509,7 @@ describe("web_search — core-owned caps", () => {
   it("times out a hanging executor and reports the timeout", async () => {
     const { web_search } = await buildTools(
       {
-        web_search: () =>
-          new Promise(() => {
-            /* never settles */
-          }),
+        web_search: () => new Promise(() => {}),
       },
       { timeoutMs: 20 },
     );
@@ -601,7 +541,6 @@ describe("web_search — core-owned caps", () => {
       }),
       "Web backend executor call",
     );
-    // The query itself is user content: debug only, never on the outcome line.
     expect(mockLogger.warn).not.toHaveBeenCalled();
   });
 });
@@ -628,10 +567,6 @@ describe("read_url — egress guard, capping, slicing", () => {
 
     expect(result.error).toBe(EGRESS_BLOCKED_MESSAGE);
     expect(read_url_executor).not.toHaveBeenCalled();
-    // One record, not two: the refused URL and the policy reason ride the
-    // outcome line rather than a second, differently-shaped warn. The *message*
-    // still names the event, and is byte-identical to `fetchUrl`'s for the same
-    // policy decision, so one log query covers both tools.
     expect(mockLogger.warn).toHaveBeenCalledTimes(1);
     expect(mockLogger.warn).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -647,10 +582,6 @@ describe("read_url — egress guard, capping, slicing", () => {
   });
 
   it("blocks a non-http(s) requested URL, and never echoes it back", async () => {
-    // `readUrlInputSchema.url` is `z.url()`, which accepts
-    // `javascript:` — `new URL()` parses it. The egress guard's scheme check is
-    // the only thing keeping such a URL out of `result.url`, which PR3 renders as
-    // a clickable pill, so the coupling is pinned here rather than left implicit.
     const read_url_executor = vi.fn(() => ({ content: "x", url: "" }));
     const { read_url } = await buildTools({
       web_search: () => ({ query: "q", results: [] }),
@@ -716,9 +647,6 @@ describe("read_url — egress guard, capping, slicing", () => {
       start_index: 0,
     });
 
-    // Two bounds, both applied: the content cap cut the page core holds, and the
-    // per-call clamp served one `MAX_READ_URL_SLICE_CHARS` page of it. There is
-    // more of the capped string left, so this is an ordinary continuation.
     expect(
       result.content.startsWith("x".repeat(MAX_READ_URL_SLICE_CHARS)),
     ).toBe(true);
@@ -727,8 +655,6 @@ describe("read_url — egress guard, capping, slicing", () => {
     expect(mockLogger.warn).toHaveBeenCalledWith(
       expect.objectContaining({
         backend: "searx",
-        // Every other line in this module carries plugin attribution; this one
-        // used to be the exception.
         plugin: "@acme/searx",
         url: "https://example.com/page",
         length: oversized.length,
@@ -741,10 +667,6 @@ describe("read_url — egress guard, capping, slicing", () => {
     const oversized = "x".repeat(MAX_READ_URL_CONTENT_CHARS + 100);
     const { read_url } = await buildTools(page(oversized));
 
-    // Read the last 10 chars core holds: the slice reaches the end of the capped
-    // string, so there is nothing to continue *to* — but the cap did cut, and
-    // `truncated: true` with no `next_start_index` would be an unexplained dead
-    // end without this line.
     const result = await read(read_url, {
       url: "https://example.com/page",
       max_length: 5_000,
@@ -759,9 +681,6 @@ describe("read_url — egress guard, capping, slicing", () => {
   });
 
   it("clamps a fetchUrl-sized max_length to one page instead of rejecting it", async () => {
-    // A model that learned `fetchUrl`'s 1_000_000 ceiling gets a shorter page and
-    // a continuation index — not an AI-SDK input-validation error, which is the
-    // failure mode capping `url` was reverted for.
     const long = "y".repeat(MAX_READ_URL_SLICE_CHARS * 2);
     const { read_url } = await buildTools(page(long));
 
@@ -804,10 +723,6 @@ describe("read_url — egress guard, capping, slicing", () => {
   });
 
   it("reads an over-length requested URL and reports its origin", async () => {
-    // The input schema does not cap `url` (presigned S3 / Azure SAS links run
-    // long), so the request is not itself a bounded fallback. When the backend
-    // also has no usable resolved URL, the origin keeps `result.url` inside
-    // MAX_URL_CHARS while still being a link that works.
     const overlong = `https://example.com/?sig=${"x".repeat(MAX_URL_CHARS)}`;
     const read_url_executor = vi.fn(() => ({ content: "hi", url: "" }));
     const { read_url } = await buildTools({
@@ -816,7 +731,6 @@ describe("read_url — egress guard, capping, slicing", () => {
     });
 
     const result = await read(read_url, { url: overlong });
-    // No AI-SDK input-validation error: the request reached the executor whole.
     expect(read_url_executor).toHaveBeenCalledWith(
       { url: overlong },
       { signal: expect.any(AbortSignal) as unknown },
@@ -848,8 +762,6 @@ describe("read_url — egress guard, capping, slicing", () => {
     });
 
     const result = await read(read_url, { url: "https://example.com/page" });
-    // Sliced bare: `truncate`'s `…` marker would leave an invalid MIME type in a
-    // machine-readable field, unlike a snippet a model reads.
     expect(result.content_type).toBe("x".repeat(MAX_CONTENT_TYPE_CHARS));
     expect(result.content_type).not.toContain("…");
   });
@@ -876,10 +788,7 @@ describe("read_url — egress guard, capping, slicing", () => {
     const { read_url } = await buildTools(
       {
         web_search: () => ({ query: "q", results: [] }),
-        read_url: () =>
-          new Promise(() => {
-            /* never settles */
-          }),
+        read_url: () => new Promise(() => {}),
       },
       { timeoutMs: 20 },
     );
@@ -906,9 +815,6 @@ describe("read_url — egress guard, capping, slicing", () => {
 });
 
 describe("readUrlInputSchema — the fetchUrl-mirroring defaults", () => {
-  // `callTool` invokes `execute` directly, so the tests above never exercise the
-  // schema. ADR-0014 requires this input to mirror `fetchUrl` byte-for-byte, and
-  // the defaults are the half of that contract nothing else covers.
   it("defaults max_length to 5000 and start_index to 0", () => {
     expect(readUrlInputSchema.parse({ url: "https://example.com/" })).toEqual({
       url: "https://example.com/",
@@ -936,11 +842,6 @@ describe("readUrlInputSchema — the fetchUrl-mirroring defaults", () => {
   });
 
   it("does not cap url — MAX_URL_CHARS bounds the output, not the input", () => {
-    // Deliberately uncapped: presigned S3, Azure SAS and some SharePoint/OAuth
-    // URLs legitimately exceed MAX_URL_CHARS, and a schema rejection would
-    // surface as an AI-SDK input-validation error rather than through this
-    // module's graceful `{ error }` contract. `result.url` stays inside the cap
-    // via `presentableReadUrl`'s origin fallback instead.
     const overlong = `https://example.com/${"x".repeat(MAX_URL_CHARS)}`;
     expect(readUrlInputSchema.safeParse({ url: overlong }).success).toBe(true);
     expect(
@@ -949,10 +850,6 @@ describe("readUrlInputSchema — the fetchUrl-mirroring defaults", () => {
   });
 
   it("mirrors fetchUrl's max_length bound; the page bound is enforced in execute", () => {
-    // The per-call page bound is real but *not* a schema rejection: a lower bound
-    // here would fail a `fetchUrl`-shaped request as an AI-SDK input-validation
-    // error, outside this module's `{ error }` contract. `execute` clamps instead
-    // (asserted in the read_url block above).
     expect(MAX_READ_URL_SLICE_CHARS).toBeLessThan(MAX_READ_URL_CONTENT_CHARS);
     expect(
       readUrlInputSchema.safeParse({
@@ -960,14 +857,12 @@ describe("readUrlInputSchema — the fetchUrl-mirroring defaults", () => {
         max_length: MAX_READ_URL_SLICE_CHARS + 1,
       }).success,
     ).toBe(true);
-    // `fetchUrl`'s own ceiling, accepted verbatim…
     expect(
       readUrlInputSchema.safeParse({
         url: "https://example.com/",
         max_length: MAX_READ_URL_CONTENT_CHARS,
       }).success,
     ).toBe(true);
-    // …and one past it, refused by both tools alike.
     expect(
       readUrlInputSchema.safeParse({
         url: "https://example.com/",
@@ -979,9 +874,6 @@ describe("readUrlInputSchema — the fetchUrl-mirroring defaults", () => {
 
 describe("composeWebBackend — the contribution is not copied", () => {
   it("calls createExecutors on the author's own object, so `this` survives", async () => {
-    // A class-instance contribution: `createExecutors` is a prototype method and
-    // reaches sibling state through `this`. Spreading the contribution into a
-    // copy would drop both.
     class AcmeBackend {
       backend = "searx";
       name = "SearXNG";
@@ -996,7 +888,6 @@ describe("composeWebBackend — the contribution is not copied", () => {
 
     const registration = composeWebBackend({
       contribution: new AcmeBackend(),
-      // The loader's namespaced id rides alongside, not over, the contribution.
       backend: "acme.searx",
       pluginName: "@acme/searx",
       plugin: PLUGIN,
@@ -1046,8 +937,6 @@ describe("the signal an executor is handed", () => {
   });
 
   it("runs a single-argument executor written before the signal existed", async () => {
-    // The type half of this is the fixture itself: a one-parameter function is
-    // still assignable to the two-parameter contract, so no `@ts-expect-error`.
     const legacy: WebBackendExecutors = {
       web_search: (input: { query: string }) => ({
         query: input.query,
@@ -1090,8 +979,6 @@ describe("the signal an executor is handed", () => {
     expect(result.error).toBe(
       "The web backend could not complete this web_search request.",
     );
-    // A User pressing stop is not a fault; warning on it would make healthy
-    // traffic the noisiest thing in an Operator's log.
     expect(mockLogger.debug).toHaveBeenCalledWith(
       expect.objectContaining({ tool: "web_search", outcome: "cancelled" }),
       expect.stringContaining("cancelled"),
@@ -1116,8 +1003,6 @@ describe("the signal an executor is handed", () => {
       },
     )) as WebToolError;
 
-    // A backend that ignores its signal would otherwise spend a live upstream
-    // request on a turn nobody will read, so the call is not made at all.
     expect(web_search).not.toHaveBeenCalled();
     expect(result.error).toBe(
       "The web backend could not complete this web_search request.",
@@ -1160,7 +1045,6 @@ describe("the signal an executor is handed", () => {
     expect(result.error).toBe(
       "The web backend could not complete this read_url request.",
     );
-    // A turn nobody is waiting for does not get a DNS lookup spent on it.
     expect(resolveHostname).not.toHaveBeenCalled();
     expect(read_url).not.toHaveBeenCalled();
   });
@@ -1171,9 +1055,7 @@ describe("the signal an executor is handed", () => {
       {
         web_search: (_input, { signal }) => {
           handed = signal;
-          return new Promise(() => {
-            /* never settles, never reads the signal */
-          });
+          return new Promise(() => {});
         },
       },
       { timeoutMs: 20 },
@@ -1183,8 +1065,6 @@ describe("the signal an executor is handed", () => {
     expect(result.error).toBe(
       "The web backend did not respond within 20ms (web_search).",
     );
-    // The signal fired on the deadline too — a cooperating backend's upstream
-    // call now stops on a timeout, where before it was merely abandoned.
     expect(handed?.aborted).toBe(true);
     expect(mockLogger.warn).toHaveBeenCalledWith(
       expect.objectContaining({ tool: "web_search", outcome: "timeout" }),
@@ -1194,7 +1074,6 @@ describe("the signal an executor is handed", () => {
 });
 
 describe("the closer a backend registers", () => {
-  /** A context carrying core's registrar, as a Tool session's would. */
   const ctxWith = (register: CoreCloserRegistrar) => ({
     ...CTX,
     registerCloser: register,
@@ -1212,9 +1091,6 @@ describe("the closer a backend registers", () => {
       plugin: PLUGIN,
     }).buildTurnTools(ctxWith(() => {}));
 
-    // An exact match, not `objectContaining`: deriving this context is a spread
-    // of core's own, so it is the one path a core-only field can ride across the
-    // seam on. A leaked `providerId` fails here.
     expect(createExecutors).toHaveBeenCalledWith(PLUGIN_CTX, PLUGIN);
   });
 
@@ -1237,8 +1113,6 @@ describe("the closer a backend registers", () => {
       plugin: PLUGIN,
     }).buildTurnTools(ctxWith(register));
 
-    // The closer itself passes through unwrapped, so a session still dedupes on
-    // its identity; only the attribution is added.
     expect(register).toHaveBeenCalledWith(close, {
       plugin: "@acme/searx",
       backend: "acme.searx",
@@ -1268,8 +1142,6 @@ describe("the closer a backend registers", () => {
       }),
     );
 
-    // The turn got its tools regardless — the closer runs at teardown, long
-    // after the model has been served.
     expect(Object.keys(tools)).toEqual(["web_search"]);
     await expect(registered[0]()).resolves.toBeUndefined();
     expect(mockLogger.warn).toHaveBeenCalledWith(
@@ -1284,9 +1156,6 @@ describe("the closer a backend registers", () => {
         {},
         {
           createExecutors: (ctx) => {
-            // Unguarded, which is what the v2 contract tells an author to write:
-            // `registerCloser` is required and core always supplies one, so there
-            // is no core left for this call to be a TypeError on.
             ctx.registerCloser(() => {});
             return { web_search: () => ({ query: "q", results: [] }) };
           },
@@ -1301,8 +1170,3 @@ describe("the closer a backend registers", () => {
     expect(mockLogger.warn).not.toHaveBeenCalled();
   });
 });
-
-// `isPresentableUrl` is no longer exported from this module — it lives in
-// `@platypus/schemas`, tested there against both consumers' cases. What this file
-// still pins is the behaviour that depends on it: the search loop dropping
-// non-`http(s)` result URLs, above.
