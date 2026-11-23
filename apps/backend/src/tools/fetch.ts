@@ -25,44 +25,27 @@ async function checkRobotsTxt(
   try {
     const { origin } = new URL(url);
     const robotsUrl = `${origin}/robots.txt`;
-    // A hop into a blocked range only means robots.txt could not be fetched;
-    // the page's own fetch is guarded hop by hop as well.
     const fetched = await guardedFetch(robotsUrl, {
       headers: { "User-Agent": USER_AGENT },
       signal: AbortSignal.timeout(10000),
     });
     if (!fetched.allowed || !fetched.response.ok) {
-      // If robots.txt can't be fetched, assume allowed
       return true;
     }
     const { text } = fetched;
     const robots = robotsParser(robotsUrl, text);
     return robots.isAllowed(url, "PlatypusBot") ?? true;
   } catch {
-    // On error, assume allowed
     return true;
   }
 }
 
 const turndown = new TurndownService({ headingStyle: "atx" });
 
-// The Web Fetch Tool set, parameterised by the plugin's deploy-time config. The
-// `@platypus/web-fetch` manifest resolves `ignoreRobotsTxt` from
-// PLATYPUS_PLUGIN_CONFIG_WEB_FETCH (ADR-0013) and passes it in here, so the flag is a
-// plugin-config value rather than a bare process.env read.
-//
-// Egress is guarded by core, not by this plugin: `checkEgress` is shared with the
-// Web-search backend's `read_url` (ADR-0014), so both tools that fetch a
-// model-supplied URL apply one policy. Its knob is core-level
-// (`EGRESS_ALLOW_PRIVATE_NETWORKS`) rather than a key in this plugin's config
-// namespace, since the policy spans plugins.
 export const createWebFetchTools = (ignoreRobotsTxt: boolean) => ({
   fetchUrl: tool({
     description:
       "Fetch content from a URL on the web. HTML is converted to Markdown to reduce token usage. Supports pagination for large pages.",
-    // Stamped so the Web tool block recognises this as a core-built page read
-    // (issue #525) — the same marker `composeWebBackend` stamps on `read_url`,
-    // reused rather than mirrored for `WEB_BACKEND_TOOL_MARKER`'s own reason.
     metadata: { [WEB_BACKEND_TOOL_MARKER]: true },
     inputSchema: z.object({
       url: z.url().describe("URL to fetch"),
@@ -85,10 +68,6 @@ export const createWebFetchTools = (ignoreRobotsTxt: boolean) => ({
         .describe("Return raw content without markdown conversion"),
     }),
     execute: async ({ url, max_length, start_index, raw }) => {
-      // The URL comes from the model, so it is guarded before anything reaches
-      // the network. This must precede the robots.txt probe below, which fetches
-      // `${origin}/robots.txt` itself — checking afterwards would already have
-      // sent a request to the very host being vetted.
       const egress = await checkEgress(url);
       if (!egress.allowed) {
         logger.warn(
@@ -144,8 +123,6 @@ export const createWebFetchTools = (ignoreRobotsTxt: boolean) => ({
       const truncated = start_index + max_length < content.length;
       const next_start_index = start_index + max_length;
 
-      // The page itself was cut at the download cap: said where a reader would
-      // otherwise take the content as complete.
       const note = truncated
         ? `\n\n[Content truncated. Pass start_index=${next_start_index} to continue reading.]`
         : fetched.truncated

@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import type { Tool } from "ai";
 import type { ToolSetContribution } from "@platypuschat/plugin-sdk";
-// First, so its `db` mock is registered before `./index.ts` pulls in the real one.
 import {
   callTool,
   makePluginContext,
@@ -35,10 +34,6 @@ import {
 } from "../sandbox/index.ts";
 import type { SandboxBackend } from "../sandbox/types.ts";
 
-// The store's own contract — miss semantics, duplicate rejection, prototype-key
-// safety, listing, reset — is covered once in
-// `registry/contribution-registry.test.ts`. What is left here is what this
-// instance adds: the id it keys on, and what registers at import time.
 describe("Tool Set Registry", () => {
   const registeredIds = () => getToolSets().map((s) => s.id);
 
@@ -48,10 +43,6 @@ describe("Tool Set Registry", () => {
     });
 
     it("no longer statically registers the plugin-migrated tool sets", () => {
-      // Every native Tool set now ships as a core plugin loaded via the plugin
-      // loader (ADR-0013): `math-conversions`/`time` → @platypus/tools-basic,
-      // `web-fetch` → @platypus/web-fetch, and the Platypus-domain sets →
-      // @platypus/tools-platform. None register at import time here anymore.
       for (const id of [
         "math-conversions",
         "time",
@@ -69,9 +60,6 @@ describe("Tool Set Registry", () => {
     });
 
     it("still statically registers the sandbox tool set (core sandbox infra)", () => {
-      // The `sandbox` set is the consumer side of the Sandbox-backend extension
-      // point (ADR-0002), not a native Tool set, so it stays a core-internal
-      // static registration — the lone one left in tools/index.ts.
       expect(registeredIds()).toContain(SANDBOX_TOOLSET_ID);
     });
   });
@@ -82,15 +70,11 @@ describe("Tool Set Registry", () => {
       expect(set).toBeDefined();
       expect(set.name).toBe("Sandbox");
       expect(set.category).toBe("Sandbox");
-      // What the registry holds is core's composed builder, never the raw
-      // factory — the same shape a plugin's contribution is stored as.
       expect(typeof set.buildTurnTools).toBe("function");
       expect(set.staticTools).toBeUndefined();
     });
 
     it("returns undefined for an unregistered id", () => {
-      // Chat-turn resolution reads this `undefined` as "not a static tool set,
-      // try MCP", so the miss is a value here rather than an exception.
       expect(getToolSet("nonexistent")).toBeUndefined();
     });
   });
@@ -136,8 +120,6 @@ describe("Tool Set Registry", () => {
   });
 });
 
-// What core owns between a plugin's factory and the model (ADR-0013), and the
-// mirror of `composeWebBackend`'s coverage in `web-backends/index.test.ts`.
 describe("composeToolSet", () => {
   const ctx = {
     orgId: "org-1",
@@ -150,8 +132,6 @@ describe("composeToolSet", () => {
     registerCloser: () => {},
   };
 
-  // Third-party by default, which is the interesting origin: its tool names are
-  // namespaced under the manifest name (issue #664).
   const compose = (
     tools: ToolSetContribution["tools"],
     pluginName = "acme",
@@ -188,10 +168,6 @@ describe("composeToolSet", () => {
     );
   });
 
-  // The Tool-set half of what API v2 settled: `registerCloser` is required and
-  // core supplies one on every turn, so the guarded call a v1 author had to write
-  // is no longer what stands between a factory and its tools. The Web-search side
-  // pins the same property in `web-backends/index.test.ts`.
   it("hands every turn a registrar, so an unguarded call is not a fault", async () => {
     const registration = compose((ctx) => {
       ctx.registerCloser(() => {});
@@ -259,8 +235,6 @@ describe("composeToolSet", () => {
     });
   });
 
-  // #321: a raw Drizzle `Date` fails the next step's prompt validation. The
-  // guarantee used to hold only when the turn supplied an `onActivity` callback.
   it("normalizes every tool's result, with no observability wrapper in play", async () => {
     const createdAt = new Date("2026-08-06T00:00:00.000Z");
     const registration = compose({
@@ -310,8 +284,6 @@ describe("composeToolSet", () => {
       },
     }).buildTurnTools(ctx, undefined, () => {});
 
-    // The registrar the factory meets is core's, re-bound to this Tool set's
-    // attribution, so it is matched as any function rather than by identity.
     expect(tools).toHaveBeenCalledWith(
       { ...ctx, registerCloser: expect.any(Function) as unknown },
       plugin,
@@ -320,8 +292,6 @@ describe("composeToolSet", () => {
 
   it("exposes a static map to the catalogs, and a factory's tools not at all", () => {
     const staticTool = { description: "static" } as unknown as Tool;
-    // Namespaced, because the Tool-set listing screens must show the names the
-    // model will actually call.
     expect(compose({ staticTool }).staticTools).toEqual({
       acme__staticTool: staticTool,
     });
@@ -329,11 +299,6 @@ describe("composeToolSet", () => {
   });
 });
 
-// Issue #664: core assigns `web_search`, `read_url`, `delegate` and `loadSkill`
-// onto the turn's tool map *after* the Tool session, each by plain assignment.
-// A Tool set that contributed one of those names lost it silently. Namespacing a
-// third-party set's tool names removes the reachable case; a core set declaring
-// one is refused at boot.
 describe("composeToolSet tool-name namespacing", () => {
   const ctx = {
     orgId: "org-1",
@@ -390,9 +355,16 @@ describe("composeToolSet tool-name namespacing", () => {
     expect(Object.keys(tools)).toEqual(["convertWeight"]);
   });
 
+  it("does not leave names bare for a third-party set that borrows core's owner name", async () => {
+    const tools = await compose(() => ({ convertWeight: stub("a") }), {
+      pluginName: CORE_BUILTIN_OWNER,
+      isCore: false,
+    }).buildTurnTools(ctx, undefined, () => {});
+
+    expect(tools).not.toHaveProperty("convertWeight");
+  });
+
   it("namespaces on every turn, whether or not anything collides", async () => {
-    // Nothing claimed, nothing contested — the name still changes, so it never
-    // depends on the order an Agent's Tool sets happen to sit in.
     const tools = await compose({ createIssue: stub("a") }).buildTurnTools(
       ctx,
       undefined,
@@ -407,8 +379,6 @@ describe("composeToolSet tool-name namespacing", () => {
       [WEB_SEARCH_TOOL_NAME]: stub("the plugin's own search"),
     }).buildTurnTools(ctx, undefined, () => {});
 
-    // What the Web-search stage would later assign is `web_search`; this is not
-    // it, so the plain assignment has nothing of the Tool set's to overwrite.
     expect(Object.keys(tools)).toEqual(["acme__web_search"]);
   });
 
@@ -446,8 +416,6 @@ describe("composeToolSet tool-name namespacing", () => {
       } catch (error) {
         thrown = (error as Error).message;
       }
-      // The plugin, the Tool set, the tool, the cap, and the actual length —
-      // an author reading only the boot error has everything they need.
       for (const fragment of [
         'Plugin "acme"',
         'tool set "acme.widgets"',
@@ -465,8 +433,6 @@ describe("composeToolSet tool-name namespacing", () => {
         createIssue: stub("b"),
       })).buildTurnTools(ctx, undefined, () => {});
 
-      // Never truncated to fit: two long names from one set could truncate onto
-      // each other and reintroduce the collision invisibly.
       expect(Object.keys(tools)).toEqual(["acme__createIssue"]);
       expect(logger.warn).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -489,10 +455,6 @@ describe("composeToolSet tool-name namespacing", () => {
     });
   });
 
-  // The other half of the name ceiling. The cap says nothing about characters,
-  // and a model provider rejects a tool name carrying anything outside
-  // `[a-zA-Z0-9_-]` — which a plugin can only reach through a quoted key, but
-  // reaches all the same.
   describe("the tool-name character rule", () => {
     it("fails boot for a static name a model provider could not call", () => {
       let thrown = "";
@@ -502,8 +464,6 @@ describe("composeToolSet tool-name namespacing", () => {
         thrown = (error as Error).message;
       }
       expect(thrown).toContain('"has.a.dot"');
-      // A sentence, not the regex: the rule an author has to satisfy has to be
-      // readable by the author.
       expect(thrown).toContain("letters, digits, underscores and hyphens");
       expect(thrown).not.toContain("[a-zA-Z0-9_-]");
     });
@@ -523,8 +483,6 @@ describe("composeToolSet tool-name namespacing", () => {
         }),
         expect.stringContaining("letters, digits, underscores and hyphens"),
       );
-      // `cap` and `length` belong to the cap fault. Reporting them here would
-      // name the wrong reason while the message named the right one.
       expect(logger.warn).not.toHaveBeenCalledWith(
         expect.objectContaining({ cap: MAX_PLUGIN_TOOL_NAME_LENGTH }),
         expect.anything(),
@@ -564,8 +522,6 @@ describe("composeToolSet tool-name namespacing", () => {
       ).not.toThrow();
     });
 
-    // Boot cannot see a factory's names, and core is first-party code under
-    // review — the fault issue #664 reported was a third-party one.
     it("cannot see a core factory's names, and does not pretend to", async () => {
       const registration = compose(
         () => ({ [LOAD_SKILL_TOOL_NAME]: stub("a") }),
@@ -588,9 +544,6 @@ describe("composeToolSet tool-name namespacing", () => {
   });
 });
 
-// The one Tool set core registers itself: it reads the Workspace's sandbox row
-// and builds the registered adapter's tools. Every failure degrades to "no
-// sandbox tools this turn" rather than failing the turn.
 describe("the sandbox tool set", () => {
   const turn = {
     orgId: "org-1",
@@ -682,8 +635,6 @@ describe("the sandbox tool set", () => {
     );
   });
 
-  // Issue #1126. The adapter is built per turn, so whatever it holds open — an
-  // SSH connection — goes with the turn rather than piling up on the host.
   it("closes the turn's adapter when the turn ends", async () => {
     seedDb({ sandbox: [sandboxRow()] });
     const close = vi.fn(() => Promise.resolve());

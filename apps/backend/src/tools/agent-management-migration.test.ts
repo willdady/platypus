@@ -3,10 +3,6 @@ import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-/**
- * Pins the shape of migration 0029_split_agent_management_toolset.sql. The
- * repo has no real-Postgres test infra, so the SQL is checked textually.
- */
 describe("0029 split agent-management migration SQL", () => {
   const __dirname = dirname(fileURLToPath(import.meta.url));
   const sql = readFileSync(

@@ -19,7 +19,6 @@ describe("getCurrentTime", () => {
       timezone: "Australia/Melbourne",
       timestamp: "2025-01-07T14:30:00.000Z",
     });
-    // 01:30 the next day in Melbourne (UTC+11 in January)
     expect(result.formatted).toContain("Wednesday, January 8, 2025");
     expect(result.formatted).toContain("1:30:00 AM");
   });
@@ -27,7 +26,6 @@ describe("getCurrentTime", () => {
 
 describe("convertTimezone", () => {
   it.each([
-    // U+2212 minus from ICU normalised to ASCII.
     ["America/New_York", "2025-01-07T09:30:00-05:00"],
     ["Asia/Kolkata", "2025-01-07T20:00:00+05:30"],
   ])("converts to %s as ISO with an explicit offset", async (tz, iso) => {

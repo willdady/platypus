@@ -37,7 +37,6 @@ describe("createKanbanBoardTools", () => {
     ]);
   });
 
-  /** A Board in this Workspace and one in another, over the fake db. */
   const seedBoards = () =>
     seedDb({
       kanban_board: [
@@ -113,7 +112,6 @@ describe("createKanbanBoardTools", () => {
     });
 
     it("refuses to build without a name", () => {
-      // The AI SDK validates input against this schema before `execute` runs.
       expect(
         (tools.createBoard.inputSchema as z.ZodType).safeParse({ label: "x" })
           .success,
@@ -153,7 +151,6 @@ describe("createKanbanBoardTools", () => {
     });
 
     it("refuses a label colour the routes would refuse", () => {
-      // The AI SDK validates input against this schema before `execute` runs.
       const schema = tools.createBoard.inputSchema as z.ZodType;
       expect(
         schema.safeParse({

@@ -10,7 +10,6 @@ import {
 import app from "../server.ts";
 import { mockNanoid } from "../test-setup.ts";
 
-// Predictable IDs
 mockNanoid.mockReturnValue("test-id-123");
 
 describe("Kanban Routes", () => {
@@ -25,16 +24,6 @@ describe("Kanban Routes", () => {
   const boardId = "board-1";
   const baseUrl = `/organizations/${orgId}/workspaces/${workspaceId}/boards`;
 
-  /**
-   * The Board and Column routes run over `seedDb()`, which interprets each
-   * query's `WHERE`, so these assert the status and body a request gets from
-   * fixture rows rather than which query came back nth. The rules behind them
-   * are the Kanban module's, tested in `services/kanban.boards.test.ts`; here
-   * each status and body pair is pinned once.
-   *
-   * The caller (`user-1`) owns `ws-1` and its `board-1`; `board-b` lives in
-   * `ws-2`, owned by someone else in the same Organization.
-   */
   const boardWorld = (
     over: { owner?: string; cards?: Record<string, unknown>[] } = {},
   ): FakeDb =>
@@ -270,8 +259,6 @@ describe("Kanban Routes", () => {
       expect(await res.json()).toEqual({ error: "Board not found" });
     });
 
-    // The whole body, because the frontend reads this shape
-    // (`kanbanBoardStateSchema`) and it must not drift.
     it("returns the board with its columns and resolved cards", async () => {
       boardWorld({
         cards: [
@@ -302,7 +289,6 @@ describe("Kanban Routes", () => {
       const body = (await res.json()) as {
         columns: { cards: Record<string, unknown>[] }[];
       };
-      // `toEqual` ignores key order, so the order is pinned on its own.
       expect(Object.keys(body.columns[0].cards[0])).toEqual([
         "id",
         "columnId",
@@ -494,13 +480,6 @@ describe("Kanban Routes", () => {
     });
   });
 
-  /**
-   * These state fixture rows rather than counting queries: `seedDb()`
-   * interprets the `WHERE` each query builds, so a Column write that trusts the
-   * `boardId` in the URL reaches the other Workspace's row and the test fails.
-   * The caller owns `ws-1`; `board-b` and its Column live in `ws-2`, which
-   * belongs to someone else in the same Organization.
-   */
   describe("column writes are scoped to the Workspace", () => {
     const world = (): FakeDb =>
       seedDb({
@@ -599,7 +578,6 @@ describe("Kanban Routes", () => {
       ]);
     });
 
-    // The frontend's write helper reads `error`, so the reason reaches the user.
     it("returns 400 with an error when a column is not on the board", async () => {
       boardWorld();
       mockSession();
@@ -619,13 +597,13 @@ describe("Kanban Routes", () => {
   describe("POST /:boardId/columns/:columnId/cards", () => {
     it("should create card", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([{ id: "col-1", boardId: "board-1" }]); // column guard
-      mockDb.limit.mockResolvedValueOnce([{ id: "col-1", name: "To do" }]); // the created entry snapshots its column name
-      mockDb.limit.mockResolvedValueOnce([]); // the history trim's subquery
+      ]);
+      mockDb.limit.mockResolvedValueOnce([{ id: "col-1", boardId: "board-1" }]);
+      mockDb.limit.mockResolvedValueOnce([{ id: "col-1", name: "To do" }]);
+      mockDb.limit.mockResolvedValueOnce([]);
 
       const mockCard = {
         id: "test-id-123",
@@ -652,11 +630,11 @@ describe("Kanban Routes", () => {
   describe("PUT /:boardId/cards/:cardId - board membership", () => {
     it("should return 404 when card does not belong to board", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([]); // card guard — not on this board
+      ]);
+      mockDb.limit.mockResolvedValueOnce([]);
 
       const res = await app.request(
         `${baseUrl}/${boardId}/cards/card-from-other-board`,
@@ -708,26 +686,24 @@ describe("Kanban Routes", () => {
 
     it("should update card", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
+      ]);
       mockDb.limit.mockResolvedValueOnce([
         { id: "card-1", columnId: "col-1", boardId: "board-1" },
-      ]); // card guard
+      ]);
       mockDb.limit.mockResolvedValueOnce([
         { id: "card-1", columnId: "col-1", title: "Card" },
-      ]); // prior row, for the changedFields value-diff
+      ]);
 
-      // Carries its column: a row that omitted it would read as a column
-      // change to the value-diff behind the history entry.
       const mockCard = {
         id: "card-1",
         columnId: "col-1",
         title: "Updated Card",
       };
       mockDb.returning.mockResolvedValueOnce([mockCard]);
-      mockDb.limit.mockResolvedValueOnce([]); // the history trim's subquery
+      mockDb.limit.mockResolvedValueOnce([]);
 
       const res = await app.request(`${baseUrl}/${boardId}/cards/card-1`, {
         method: "PATCH",
@@ -741,11 +717,11 @@ describe("Kanban Routes", () => {
 
     it("should return 404 if card not found", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([]); // card guard — not found
+      ]);
+      mockDb.limit.mockResolvedValueOnce([]);
 
       const res = await app.request(`${baseUrl}/${boardId}/cards/card-1`, {
         method: "PATCH",
@@ -758,24 +734,22 @@ describe("Kanban Routes", () => {
 
     describe("Label validation", () => {
       const mockBoardLabels = (labels: { id: string }[]) => {
-        mockDb.limit.mockResolvedValueOnce([{ labels }]); // board labels lookup
+        mockDb.limit.mockResolvedValueOnce([{ labels }]);
       };
 
       it("should persist valid label IDs unchanged", async () => {
         mockSession();
-        mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+        mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
         mockDb.limit.mockResolvedValueOnce([
           { ownerId: "user-1", organizationId: "org-1" },
-        ]); // requireWorkspaceAccess
+        ]);
         mockDb.limit.mockResolvedValueOnce([
           { id: "card-1", columnId: "col-1", boardId: "board-1" },
-        ]); // card guard
+        ]);
         mockDb.limit.mockResolvedValueOnce([
           { id: "card-1", columnId: "col-1", labelIds: [] },
-        ]); // prior row, for the changedFields value-diff
+        ]);
         mockBoardLabels([{ id: "lbl-a" }, { id: "lbl-b" }]);
-        // Carries the column it stays in and the labels it persisted, so the
-        // value-diff behind the history entry sees only the label change.
         mockDb.returning.mockResolvedValueOnce([
           { id: "card-1", columnId: "col-1", labelIds: ["lbl-b", "lbl-a"] },
         ]);
@@ -786,8 +760,8 @@ describe("Kanban Routes", () => {
               { id: "lbl-b", name: "B" },
             ],
           },
-        ]); // board labels again, for the entry's name snapshot
-        mockDb.limit.mockResolvedValueOnce([]); // the history trim's subquery
+        ]);
+        mockDb.limit.mockResolvedValueOnce([]);
 
         const res = await app.request(`${baseUrl}/${boardId}/cards/card-1`, {
           method: "PATCH",
@@ -803,26 +777,24 @@ describe("Kanban Routes", () => {
 
       it("should drop unknown label IDs and apply the rest of the update", async () => {
         mockSession();
-        mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+        mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
         mockDb.limit.mockResolvedValueOnce([
           { ownerId: "user-1", organizationId: "org-1" },
-        ]); // requireWorkspaceAccess
+        ]);
         mockDb.limit.mockResolvedValueOnce([
           { id: "card-1", columnId: "col-1", boardId: "board-1" },
-        ]); // card guard
+        ]);
         mockDb.limit.mockResolvedValueOnce([
           { id: "card-1", columnId: "col-1", labelIds: [] },
-        ]); // prior row, for the changedFields value-diff
+        ]);
         mockBoardLabels([{ id: "lbl-new" }]);
-        // Carries the column it stays in and the labels it persisted, so the
-        // value-diff behind the history entry sees only the label change.
         mockDb.returning.mockResolvedValueOnce([
           { id: "card-1", columnId: "col-1", labelIds: ["lbl-new"] },
         ]);
         mockDb.limit.mockResolvedValueOnce([
           { labels: [{ id: "lbl-new", name: "New" }] },
-        ]); // board labels again, for the entry's name snapshot
-        mockDb.limit.mockResolvedValueOnce([]); // the history trim's subquery
+        ]);
+        mockDb.limit.mockResolvedValueOnce([]);
 
         const res = await app.request(`${baseUrl}/${boardId}/cards/card-1`, {
           method: "PATCH",
@@ -846,23 +818,21 @@ describe("Kanban Routes", () => {
 
       it("should end with an empty label list when every submitted ID is unknown", async () => {
         mockSession();
-        mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+        mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
         mockDb.limit.mockResolvedValueOnce([
           { ownerId: "user-1", organizationId: "org-1" },
-        ]); // requireWorkspaceAccess
+        ]);
         mockDb.limit.mockResolvedValueOnce([
           { id: "card-1", columnId: "col-1", boardId: "board-1" },
-        ]); // card guard
+        ]);
         mockDb.limit.mockResolvedValueOnce([
           { id: "card-1", columnId: "col-1", labelIds: [] },
-        ]); // prior row, for the changedFields value-diff
+        ]);
         mockBoardLabels([]);
-        // Every submitted label was unknown, so the card ends where it started
-        // and the write changes nothing a history entry would record.
         mockDb.returning.mockResolvedValueOnce([
           { id: "card-1", columnId: "col-1", labelIds: [] },
         ]);
-        mockDb.limit.mockResolvedValueOnce([]); // the history trim's subquery
+        mockDb.limit.mockResolvedValueOnce([]);
 
         const res = await app.request(`${baseUrl}/${boardId}/cards/card-1`, {
           method: "PATCH",
@@ -880,23 +850,22 @@ describe("Kanban Routes", () => {
     describe("Assignee validation", () => {
       it("should return 400 for invalid user assignee", async () => {
         mockSession();
-        mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+        mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
         mockDb.limit.mockResolvedValueOnce([
           { ownerId: "user-1", organizationId: "org-1" },
-        ]); // requireWorkspaceAccess
+        ]);
         mockDb.limit.mockResolvedValueOnce([
           { id: "card-1", columnId: "col-1", boardId: "board-1" },
-        ]); // card guard
+        ]);
         mockDb.limit.mockResolvedValueOnce([
           { id: "card-1", columnId: "col-1" },
-        ]); // prior row, for the changedFields value-diff
-        // assignee validation: org member query then super admin query
-        mockDb.where.mockReturnValueOnce(mockDb); // requireOrgAccess chain
-        mockDb.where.mockReturnValueOnce(mockDb); // requireWorkspaceAccess chain
-        mockDb.where.mockReturnValueOnce(mockDb); // card guard chain
-        mockDb.where.mockReturnValueOnce(mockDb); // currentCardRow chain
-        mockDb.where.mockResolvedValueOnce([]); // org member lookup — not found
-        mockDb.where.mockResolvedValueOnce([]); // super admin lookup — not found
+        ]);
+        mockDb.where.mockReturnValueOnce(mockDb);
+        mockDb.where.mockReturnValueOnce(mockDb);
+        mockDb.where.mockReturnValueOnce(mockDb);
+        mockDb.where.mockReturnValueOnce(mockDb);
+        mockDb.where.mockResolvedValueOnce([]);
+        mockDb.where.mockResolvedValueOnce([]);
 
         const res = await app.request(`${baseUrl}/${boardId}/cards/card-1`, {
           method: "PATCH",
@@ -917,23 +886,21 @@ describe("Kanban Routes", () => {
           email: "admin@example.com",
           role: "admin",
         });
-        // Super admin bypasses requireOrgAccess (no DB query)
         mockDb.limit.mockResolvedValueOnce([
           { ownerId: "admin-user", organizationId: "org-1" },
-        ]); // requireWorkspaceAccess
+        ]);
         mockDb.limit.mockResolvedValueOnce([
           { id: "card-1", columnId: "col-1", boardId: "board-1" },
-        ]); // card guard
+        ]);
         mockDb.limit.mockResolvedValueOnce([
           { id: "card-1", columnId: "col-1" },
-        ]); // prior row, for the changedFields value-diff
-        // assignee validation queries
-        mockDb.where.mockReturnValueOnce(mockDb); // requireWorkspaceAccess chain
-        mockDb.where.mockReturnValueOnce(mockDb); // card guard chain
-        mockDb.where.mockReturnValueOnce(mockDb); // currentCardRow chain
-        mockDb.where.mockResolvedValueOnce([]); // org member lookup — not found
-        mockDb.where.mockResolvedValueOnce([{ id: "admin-user" }]); // super admin lookup — found
-        mockDb.where.mockReturnValueOnce(mockDb); // card update chain
+        ]);
+        mockDb.where.mockReturnValueOnce(mockDb);
+        mockDb.where.mockReturnValueOnce(mockDb);
+        mockDb.where.mockReturnValueOnce(mockDb);
+        mockDb.where.mockResolvedValueOnce([]);
+        mockDb.where.mockResolvedValueOnce([{ id: "admin-user" }]);
+        mockDb.where.mockReturnValueOnce(mockDb);
 
         const mockCard = {
           id: "card-1",
@@ -957,26 +924,21 @@ describe("Kanban Routes", () => {
       });
 
       it("should allow a shared agent attached to this workspace to be assigned", async () => {
-        // The assignee picker offers every Agent visible in the Workspace, which
-        // includes attached Shared Agents — and one can run here, so it can own
-        // a card (ADR-0007).
         mockSession();
-        mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+        mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
         mockDb.limit.mockResolvedValueOnce([
           { ownerId: "user-1", organizationId: "org-1" },
-        ]); // requireWorkspaceAccess
+        ]);
         mockDb.limit.mockResolvedValueOnce([
           { id: "card-1", columnId: "col-1", boardId: "board-1" },
-        ]); // card guard
+        ]);
         mockDb.limit.mockResolvedValueOnce([
           { id: "card-1", columnId: "col-1" },
-        ]); // prior row, for the changedFields value-diff
-        mockDb.where.mockReturnValueOnce(mockDb); // requireOrgAccess chain
-        mockDb.where.mockReturnValueOnce(mockDb); // requireWorkspaceAccess chain
-        mockDb.where.mockReturnValueOnce(mockDb); // card guard chain
-        mockDb.where.mockReturnValueOnce(mockDb); // currentCardRow chain
-        // No user assignees, so the visibility lookup's two queries come first:
-        // workspace-scoped agents, then org-scoped ones joined to an attachment.
+        ]);
+        mockDb.where.mockReturnValueOnce(mockDb);
+        mockDb.where.mockReturnValueOnce(mockDb);
+        mockDb.where.mockReturnValueOnce(mockDb);
+        mockDb.where.mockReturnValueOnce(mockDb);
         mockDb.where.mockResolvedValueOnce([]);
         mockDb.where.mockResolvedValueOnce([
           {
@@ -988,7 +950,7 @@ describe("Kanban Routes", () => {
             attachment: { id: "att-1" },
           },
         ]);
-        mockDb.where.mockReturnValueOnce(mockDb); // card update chain
+        mockDb.where.mockReturnValueOnce(mockDb);
 
         const mockCard = {
           id: "card-1",
@@ -1013,22 +975,22 @@ describe("Kanban Routes", () => {
 
       it("should return 400 for an agent that is not visible in this workspace", async () => {
         mockSession();
-        mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+        mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
         mockDb.limit.mockResolvedValueOnce([
           { ownerId: "user-1", organizationId: "org-1" },
-        ]); // requireWorkspaceAccess
+        ]);
         mockDb.limit.mockResolvedValueOnce([
           { id: "card-1", columnId: "col-1", boardId: "board-1" },
-        ]); // card guard
+        ]);
         mockDb.limit.mockResolvedValueOnce([
           { id: "card-1", columnId: "col-1" },
-        ]); // prior row, for the changedFields value-diff
-        mockDb.where.mockReturnValueOnce(mockDb); // requireOrgAccess chain
-        mockDb.where.mockReturnValueOnce(mockDb); // requireWorkspaceAccess chain
-        mockDb.where.mockReturnValueOnce(mockDb); // card guard chain
-        mockDb.where.mockReturnValueOnce(mockDb); // currentCardRow chain
-        mockDb.where.mockResolvedValueOnce([]); // no workspace-scoped match
-        mockDb.where.mockResolvedValueOnce([]); // no attached org-scoped match
+        ]);
+        mockDb.where.mockReturnValueOnce(mockDb);
+        mockDb.where.mockReturnValueOnce(mockDb);
+        mockDb.where.mockReturnValueOnce(mockDb);
+        mockDb.where.mockReturnValueOnce(mockDb);
+        mockDb.where.mockResolvedValueOnce([]);
+        mockDb.where.mockResolvedValueOnce([]);
 
         const res = await app.request(`${baseUrl}/${boardId}/cards/card-1`, {
           method: "PATCH",
@@ -1041,32 +1003,28 @@ describe("Kanban Routes", () => {
         expect(res.status).toBe(400);
         const body = (await res.json()) as Record<string, unknown>;
         expect(body.error).toBe("Invalid agent assignee");
-        // Both scopes were consulted: after the card guard's two joins
-        // (card → column → board) comes the Attachment join that a
-        // workspace-only lookup never makes.
         expect(mockDb.innerJoin).toHaveBeenCalledTimes(3);
       });
 
       it("should allow org member to be assigned", async () => {
         mockSession();
-        mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+        mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
         mockDb.limit.mockResolvedValueOnce([
           { ownerId: "user-1", organizationId: "org-1" },
-        ]); // requireWorkspaceAccess
+        ]);
         mockDb.limit.mockResolvedValueOnce([
           { id: "card-1", columnId: "col-1", boardId: "board-1" },
-        ]); // card guard
+        ]);
         mockDb.limit.mockResolvedValueOnce([
           { id: "card-1", columnId: "col-1" },
-        ]); // prior row, for the changedFields value-diff
-        // assignee validation queries
-        mockDb.where.mockReturnValueOnce(mockDb); // requireOrgAccess chain
-        mockDb.where.mockReturnValueOnce(mockDb); // requireWorkspaceAccess chain
-        mockDb.where.mockReturnValueOnce(mockDb); // card guard chain
-        mockDb.where.mockReturnValueOnce(mockDb); // currentCardRow chain
-        mockDb.where.mockResolvedValueOnce([{ userId: "user-1" }]); // org member lookup — found
-        mockDb.where.mockResolvedValueOnce([]); // super admin lookup — not found
-        mockDb.where.mockReturnValueOnce(mockDb); // card update chain
+        ]);
+        mockDb.where.mockReturnValueOnce(mockDb);
+        mockDb.where.mockReturnValueOnce(mockDb);
+        mockDb.where.mockReturnValueOnce(mockDb);
+        mockDb.where.mockReturnValueOnce(mockDb);
+        mockDb.where.mockResolvedValueOnce([{ userId: "user-1" }]);
+        mockDb.where.mockResolvedValueOnce([]);
+        mockDb.where.mockReturnValueOnce(mockDb);
 
         const mockCard = {
           id: "card-1",
@@ -1094,20 +1052,20 @@ describe("Kanban Routes", () => {
   describe("POST /:boardId/cards/:cardId/move", () => {
     it("should move card to beginning of column", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
+      ]);
 
       mockDb.limit.mockResolvedValueOnce([
         { id: "card-1", columnId: "col-1", boardId: "board-1" },
-      ]); // card guard
-      mockDb.limit.mockResolvedValueOnce([{ id: "col-2", boardId: "board-1" }]); // target column guard
+      ]);
+      mockDb.limit.mockResolvedValueOnce([{ id: "col-2", boardId: "board-1" }]);
       mockDb.limit.mockResolvedValueOnce([
         { id: "col-1", name: "To do" },
         { id: "col-2", name: "Doing" },
-      ]); // the move's history entry snapshots both column names
-      mockDb.limit.mockResolvedValueOnce([]); // the history trim's subquery
+      ]);
+      mockDb.limit.mockResolvedValueOnce([]);
 
       const existingCards = [
         { id: "card-2", columnId: "col-2", position: 1.0 },
@@ -1127,27 +1085,25 @@ describe("Kanban Routes", () => {
       expect(res.status).toBe(200);
     });
 
-    // ADR-0010: a stale view of the board is a conflict, not a malformed
-    // request, so the UI can tell "re-sync" apart from "you sent nonsense".
     it("should answer 409 when the card has left the expected column", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
+      ]);
 
       mockDb.limit.mockResolvedValueOnce([
         { id: "card-1", columnId: "col-2", boardId: "board-1" },
-      ]); // card guard — already moved on
-      mockDb.limit.mockResolvedValueOnce([{ id: "col-2", boardId: "board-1" }]); // target column guard
+      ]);
+      mockDb.limit.mockResolvedValueOnce([{ id: "col-2", boardId: "board-1" }]);
       mockDb.limit.mockResolvedValueOnce([
         { id: "col-1", name: "To do" },
         { id: "col-2", name: "Doing" },
-      ]); // the move's history entry snapshots both column names
-      mockDb.limit.mockResolvedValueOnce([]); // the history trim's subquery
+      ]);
+      mockDb.limit.mockResolvedValueOnce([]);
 
       mockDb.orderBy.mockResolvedValueOnce([]);
-      mockDb.returning.mockResolvedValueOnce([]); // the predicate matched no row
+      mockDb.returning.mockResolvedValueOnce([]);
 
       const res = await app.request(`${baseUrl}/${boardId}/cards/card-1/move`, {
         method: "POST",
@@ -1164,20 +1120,20 @@ describe("Kanban Routes", () => {
 
     it("should move card after another card", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
+      ]);
 
       mockDb.limit.mockResolvedValueOnce([
         { id: "card-1", columnId: "col-1", boardId: "board-1" },
-      ]); // card guard
-      mockDb.limit.mockResolvedValueOnce([{ id: "col-2", boardId: "board-1" }]); // target column guard
+      ]);
+      mockDb.limit.mockResolvedValueOnce([{ id: "col-2", boardId: "board-1" }]);
       mockDb.limit.mockResolvedValueOnce([
         { id: "col-1", name: "To do" },
         { id: "col-2", name: "Doing" },
-      ]); // the move's history entry snapshots both column names
-      mockDb.limit.mockResolvedValueOnce([]); // the history trim's subquery
+      ]);
+      mockDb.limit.mockResolvedValueOnce([]);
 
       const existingCards = [
         { id: "card-2", columnId: "col-2", position: 1.0 },
@@ -1199,20 +1155,19 @@ describe("Kanban Routes", () => {
 
     it("should trigger rebalancing when gap is too small", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
+      ]);
 
       mockDb.limit.mockResolvedValueOnce([
         { id: "card-1", columnId: "col-1", boardId: "board-1" },
-      ]); // card guard
-      mockDb.limit.mockResolvedValueOnce([{ id: "col-1", boardId: "board-1" }]); // target column guard
+      ]);
+      mockDb.limit.mockResolvedValueOnce([{ id: "col-1", boardId: "board-1" }]);
 
-      // Cards with very small gap between positions 1 and 2
       const existingCards = [
         { id: "card-2", columnId: "col-1", position: 1.0 },
-        { id: "card-3", columnId: "col-1", position: 1.0000001 }, // gap < 0.001
+        { id: "card-3", columnId: "col-1", position: 1.0000001 },
       ];
       mockDb.orderBy.mockResolvedValueOnce(existingCards);
 
@@ -1231,20 +1186,20 @@ describe("Kanban Routes", () => {
 
     it("should return 400 if afterCardId not found in column", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
+      ]);
 
       mockDb.limit.mockResolvedValueOnce([
         { id: "card-1", columnId: "col-1", boardId: "board-1" },
-      ]); // card guard
-      mockDb.limit.mockResolvedValueOnce([{ id: "col-2", boardId: "board-1" }]); // target column guard
+      ]);
+      mockDb.limit.mockResolvedValueOnce([{ id: "col-2", boardId: "board-1" }]);
       mockDb.limit.mockResolvedValueOnce([
         { id: "col-1", name: "To do" },
         { id: "col-2", name: "Doing" },
-      ]); // the move's history entry snapshots both column names
-      mockDb.limit.mockResolvedValueOnce([]); // the history trim's subquery
+      ]);
+      mockDb.limit.mockResolvedValueOnce([]);
 
       const existingCards = [
         { id: "card-2", columnId: "col-2", position: 1.0 },
@@ -1269,11 +1224,11 @@ describe("Kanban Routes", () => {
   describe("DELETE /:boardId/cards/:cardId - board membership", () => {
     it("should return 404 when card does not belong to board", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([]); // card guard — not on this board
+      ]);
+      mockDb.limit.mockResolvedValueOnce([]);
 
       const res = await app.request(
         `${baseUrl}/${boardId}/cards/card-from-other-board`,
@@ -1288,13 +1243,13 @@ describe("Kanban Routes", () => {
   describe("DELETE /:boardId/cards/:cardId", () => {
     it("should delete card", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
+      ]);
       mockDb.limit.mockResolvedValueOnce([
         { id: "card-1", columnId: "col-1", boardId: "board-1" },
-      ]); // card guard
+      ]);
 
       const res = await app.request(`${baseUrl}/${boardId}/cards/card-1`, {
         method: "DELETE",
@@ -1305,11 +1260,11 @@ describe("Kanban Routes", () => {
 
     it("should return 404 if card not found", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([]); // card guard — not found
+      ]);
+      mockDb.limit.mockResolvedValueOnce([]);
 
       const res = await app.request(`${baseUrl}/${boardId}/cards/card-1`, {
         method: "DELETE",
@@ -1348,7 +1303,6 @@ describe("Kanban Routes", () => {
       const body = (await res.json()) as {
         results: { id: string; actorName: string | null }[];
       };
-      // A deleted actor keeps its entry, nameless.
       expect(body.results.map((h) => [h.id, h.actorName])).toEqual([
         ["h2", null],
         ["h3", null],
@@ -1365,12 +1319,10 @@ describe("Kanban Routes", () => {
     });
   });
 
-  // Card comments — shared constants
   const cardId = "card-1";
   const commentId = "comment-1";
   const commentsUrl = `${baseUrl}/${boardId}/cards/${cardId}/comments`;
 
-  // A comment with null attribution avoids user/agent name-resolution queries
   const mockComment = {
     id: commentId,
     cardId,
@@ -1390,11 +1342,11 @@ describe("Kanban Routes", () => {
 
     it("should return 404 if card not found", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([]); // card verification → not found
+      ]);
+      mockDb.limit.mockResolvedValueOnce([]);
 
       const res = await app.request(commentsUrl);
       expect(res.status).toBe(404);
@@ -1402,12 +1354,12 @@ describe("Kanban Routes", () => {
 
     it("should return comments for card with createdByName resolved", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([{ id: cardId }]); // card verification → found
-      mockDb.orderBy.mockResolvedValueOnce([mockComment]); // comments query
+      ]);
+      mockDb.limit.mockResolvedValueOnce([{ id: cardId }]);
+      mockDb.orderBy.mockResolvedValueOnce([mockComment]);
 
       const res = await app.request(commentsUrl);
       expect(res.status).toBe(200);
@@ -1421,12 +1373,12 @@ describe("Kanban Routes", () => {
 
     it("should return empty results when card has no comments", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([{ id: cardId }]); // card found
-      mockDb.orderBy.mockResolvedValueOnce([]); // no comments
+      ]);
+      mockDb.limit.mockResolvedValueOnce([{ id: cardId }]);
+      mockDb.orderBy.mockResolvedValueOnce([]);
 
       const res = await app.request(commentsUrl);
       expect(res.status).toBe(200);
@@ -1449,11 +1401,11 @@ describe("Kanban Routes", () => {
 
     it("should return 404 if card not found", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([]); // card verification → not found
+      ]);
+      mockDb.limit.mockResolvedValueOnce([]);
 
       const res = await app.request(commentsUrl, {
         method: "POST",
@@ -1465,12 +1417,12 @@ describe("Kanban Routes", () => {
 
     it("should create comment and return 201", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([{ id: cardId }]); // card found
-      mockDb.returning.mockResolvedValueOnce([mockComment]); // insert
+      ]);
+      mockDb.limit.mockResolvedValueOnce([{ id: cardId }]);
+      mockDb.returning.mockResolvedValueOnce([mockComment]);
 
       const res = await app.request(commentsUrl, {
         method: "POST",
@@ -1485,10 +1437,10 @@ describe("Kanban Routes", () => {
 
     it("should return 400 if body is empty string", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
+      ]);
 
       const res = await app.request(commentsUrl, {
         method: "POST",
@@ -1500,10 +1452,10 @@ describe("Kanban Routes", () => {
 
     it("should return 400 if body field is missing", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
+      ]);
 
       const res = await app.request(commentsUrl, {
         method: "POST",
@@ -1527,16 +1479,16 @@ describe("Kanban Routes", () => {
 
     it("should update comment and return enriched result", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
+      ]);
       mockDb.limit.mockResolvedValueOnce([
         { ...mockComment, createdByUserId: "user-1" },
-      ]); // ownership check
+      ]);
 
       const updatedComment = { ...mockComment, body: "Updated" };
-      mockDb.returning.mockResolvedValueOnce([updatedComment]); // update
+      mockDb.returning.mockResolvedValueOnce([updatedComment]);
 
       const res = await app.request(`${commentsUrl}/${commentId}`, {
         method: "PATCH",
@@ -1549,11 +1501,11 @@ describe("Kanban Routes", () => {
 
     it("should return 404 if comment not found", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([]); // ownership check - not found
+      ]);
+      mockDb.limit.mockResolvedValueOnce([]);
 
       const res = await app.request(`${commentsUrl}/${commentId}`, {
         method: "PATCH",
@@ -1565,13 +1517,13 @@ describe("Kanban Routes", () => {
 
     it("returns 404 for a comment that belongs to a different card", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
+      ]);
       mockDb.limit.mockResolvedValueOnce([
         { ...mockComment, cardId: "card-2", createdByUserId: "user-1" },
-      ]); // comment lookup — on the same board, but another card
+      ]);
 
       const res = await app.request(`${commentsUrl}/${commentId}`, {
         method: "PATCH",
@@ -1588,13 +1540,13 @@ describe("Kanban Routes", () => {
         email: "other@example.com",
         role: "user",
       });
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "other-user", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
+      ]);
       mockDb.limit.mockResolvedValueOnce([
         { ...mockComment, createdByUserId: "user-1" },
-      ]); // ownership check - owned by different user
+      ]);
 
       const res = await app.request(`${commentsUrl}/${commentId}`, {
         method: "PATCH",
@@ -1613,16 +1565,16 @@ describe("Kanban Routes", () => {
         email: "admin@example.com",
         role: "user",
       });
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess - org admin
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "admin-user", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
+      ]);
       mockDb.limit.mockResolvedValueOnce([
         { ...mockComment, createdByUserId: "user-1" },
-      ]); // ownership check - owned by different user
+      ]);
 
       const updatedComment = { ...mockComment, body: "Admin edit" };
-      mockDb.returning.mockResolvedValueOnce([updatedComment]); // update
+      mockDb.returning.mockResolvedValueOnce([updatedComment]);
 
       const res = await app.request(`${commentsUrl}/${commentId}`, {
         method: "PATCH",
@@ -1644,13 +1596,13 @@ describe("Kanban Routes", () => {
 
     it("should delete comment and return success", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
+      ]);
       mockDb.limit.mockResolvedValueOnce([
         { ...mockComment, createdByUserId: "user-1" },
-      ]); // ownership check
+      ]);
 
       const res = await app.request(`${commentsUrl}/${commentId}`, {
         method: "DELETE",
@@ -1661,11 +1613,11 @@ describe("Kanban Routes", () => {
 
     it("should return 404 if comment not found", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([]); // ownership check - not found
+      ]);
+      mockDb.limit.mockResolvedValueOnce([]);
 
       const res = await app.request(`${commentsUrl}/${commentId}`, {
         method: "DELETE",
@@ -1679,13 +1631,13 @@ describe("Kanban Routes", () => {
         email: "other@example.com",
         role: "user",
       });
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "other-user", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
+      ]);
       mockDb.limit.mockResolvedValueOnce([
         { ...mockComment, createdByUserId: "user-1" },
-      ]); // ownership check
+      ]);
 
       const res = await app.request(`${commentsUrl}/${commentId}`, {
         method: "DELETE",
@@ -1702,13 +1654,13 @@ describe("Kanban Routes", () => {
         email: "admin@example.com",
         role: "user",
       });
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess - org admin
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "admin-user", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
+      ]);
       mockDb.limit.mockResolvedValueOnce([
         { ...mockComment, createdByUserId: "user-1" },
-      ]); // ownership check
+      ]);
 
       const res = await app.request(`${commentsUrl}/${commentId}`, {
         method: "DELETE",

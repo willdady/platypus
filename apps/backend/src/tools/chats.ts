@@ -22,28 +22,9 @@ import {
   decodeDataUrl,
 } from "../storage/file-reference.ts";
 
-/**
- * The **Chats** Tool set (issue #1005): read-only access to the Workspace's
- * Chats and their Transcripts, so an Agent can learn from past conversations
- * rather than only from condensed Memories.
- *
- * Scoping is the Workspace's own. Unlike the app's sidebar (which hides a
- * Trigger run's Chat, ADR-0044), `listChats` includes Trigger-run and
- * A2A-originated Chats on purpose — those are exactly the past conversations
- * an Agent can learn from. A Chat in another Workspace is never listed and
- * reads as not-found, never as a refusal that would confirm it exists.
- *
- * The invoking Chat is left out of `listChats` and refused by
- * `readTranscript`: a Chat reading its own Transcript would send its own
- * messages back to itself. `sessionId` is the Chat's id on a Chat turn and the
- * Trigger run's id on a Trigger run, and a Sub-Agent inherits its parent's
- * session, so the same two comparisons cover every run shape.
- */
-
 const NOT_FOUND = "Chat not found";
 const OWN_TRANSCRIPT = "A Chat cannot read its own Transcript.";
 
-/** How a Chat names its Agent, or its Provider and model when it has none. */
 const attributionSchema = z.object({
   agentName: z.string().optional(),
   providerName: z.string().optional(),
@@ -145,7 +126,6 @@ const readTranscriptInputSchema = z.object({
     ),
 });
 
-/** An opaque page cursor: the Chat it belongs to and the last message read. */
 type Cursor = { chatId: string; afterId: string };
 
 const encodeCursor = (cursor: Cursor): string =>
@@ -170,13 +150,6 @@ const asRecord = (value: unknown): Record<string, unknown> =>
     ? (value as Record<string, unknown>)
     : {};
 
-/**
- * The bytes a File part's URL names, where the backend can tell without a fetch.
- *
- * A stored URL is message content, so its key is untrusted: only a valid key
- * under this Chat's own prefix is looked up, as `inlineFileUrls` does. Anything
- * else reads as an unknown size rather than confirming another Chat's file.
- */
 const fileSize = async (
   url: unknown,
   chatPrefix: string,
@@ -190,19 +163,15 @@ const fileSize = async (
     return null;
   }
   try {
-    // The stream's length, not its bytes: the stream is closed unread.
     const stored = await getStorage().getStream(key);
     if (!stored) return null;
     stored.stream.destroy();
     return stored.contentLength;
   } catch {
-    // A storage miss is not a reason to fail the page: the placeholder still
-    // names the file, and its size is simply unknown.
     return null;
   }
 };
 
-/** The tool name a stored tool part carries. */
 const toolNameOf = (type: string, part: Record<string, unknown>): string =>
   type === "dynamic-tool"
     ? typeof part.toolName === "string"
@@ -210,7 +179,6 @@ const toolNameOf = (type: string, part: Record<string, unknown>): string =>
       : "unknown"
     : type.slice("tool-".length);
 
-/** One stored part as the Transcript reader shows it, or null to omit it. */
 const transcriptPart = async (
   value: unknown,
   chatPrefix: string,
@@ -224,7 +192,6 @@ const transcriptPart = async (
       text: typeof part.text === "string" ? part.text : "",
     };
   }
-  // Reasoning is the model's working, not the conversation.
   if (type === "reasoning") return null;
 
   if (type === "file") {
@@ -251,11 +218,9 @@ const transcriptPart = async (
     };
   }
 
-  // Sources, step boundaries and server status rows are not conversation.
   return null;
 };
 
-/** A Chat's Agent name, or its Provider and model when it has no Agent. */
 const attributionOf = (row: {
   agentName: string | null;
   providerName: string | null;
@@ -278,16 +243,11 @@ export const createChatTools = (
       "List the Chats in this workspace, newest activity first, with an optional Agent, Trigger or time filter. Use readTranscript to read one.",
     inputSchema: listChatsInputSchema,
     execute: async ({ agentId, triggerId, since, limit, offset }) => {
-      // Defaulted here as well as described in the schema: a caller may invoke
-      // `execute` directly, where the schema's parsing never runs.
       const pageSize = limit ?? 20;
       const skip = offset ?? 0;
 
       const where = and(
         eq(chatTable.workspaceId, workspaceId),
-        // The invoking Chat: its own id on a Chat turn, the run's Chat on a
-        // Trigger run. `ne` against a null triggerRunId would be null, so the
-        // null branch is stated rather than assumed.
         ne(chatTable.id, sessionId),
         or(
           isNull(chatTable.triggerRunId),
@@ -320,9 +280,6 @@ export const createChatTools = (
         )
         .leftJoin(triggerTable, eq(triggerTable.id, triggerRunTable.triggerId))
         .where(where)
-        // A never-run Chat has no `lastTurnAt`; Postgres puts a null first
-        // under a plain `DESC`, so the nulls are ordered last explicitly. The
-        // id tie-break keeps offset paging stable across equal timestamps.
         .orderBy(
           sql`${chatTable.lastTurnAt} desc nulls last`,
           desc(chatTable.createdAt),
@@ -370,7 +327,6 @@ export const createChatTools = (
         )
         .limit(1);
 
-      // A Chat in another Workspace reads exactly as one that does not exist.
       if (!row) return { error: NOT_FOUND };
       if (row.id === sessionId || row.triggerRunId === sessionId) {
         return { error: OWN_TRANSCRIPT };
@@ -428,8 +384,6 @@ export const createChatTools = (
         };
         const size = Buffer.byteLength(JSON.stringify(shaped), "utf8");
 
-        // Never cut inside a message: a message over the budget is returned
-        // whole, alone, when the page would otherwise be empty.
         if (page.length > 0 && bytes + size > CHAT_TRANSCRIPT_PAGE_MAX_BYTES) {
           break;
         }

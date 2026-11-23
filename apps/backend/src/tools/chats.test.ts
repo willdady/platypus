@@ -84,7 +84,6 @@ describe("createChatTools", () => {
   });
 
   describe("listChats", () => {
-    /** A Workspace with an Agent chat, an ad-hoc chat, an A2A chat and a Trigger-run chat. */
     const seedChats = () =>
       seedDb({
         chat: [
@@ -316,8 +315,6 @@ describe("createChatTools", () => {
     it("refuses its own Chat from a Sub-Agent, which inherits the parent's session", async () => {
       seedChat({}, [messageRow("chat-1", "u1", null, "user", 1)]);
 
-      // A Sub-Agent's Tool session reopens with the parent's scope, so its
-      // `sessionId` is the Chat it was delegated from.
       const subAgentTools = createTools("chat-1");
 
       expect(
@@ -397,7 +394,6 @@ describe("createChatTools", () => {
         );
         parent = id;
       }
-      // An Alternative under m0 that is not on the Active path.
       messages.push(messageRow("chat-1", "alternative", "m0", "assistant", 99));
       seedChat({ activeLeafId: parent }, messages);
 

@@ -22,7 +22,6 @@ const { mockPrepareChatTurn, mockValidateTurnAttachments, mockCancelRun } =
     mockCancelRun: vi.fn(),
   }));
 
-// Cancel across instances is exercised by run-cancel tests.
 vi.mock("../runs/run-cancel.ts", () => ({ cancelRun: mockCancelRun }));
 
 vi.mock("../services/chat-execution.ts", () => ({
@@ -43,15 +42,11 @@ import {
   resolveMemoryPin,
 } from "../services/memory-retrieval.ts";
 
-// Mock AI SDK
 vi.mock("ai", async () => {
   const actual = await vi.importActual("ai");
   return {
     ...actual,
-    // The drive pipes `stream` through overflow recovery before the mocked
-    // UI conversion below; a fresh one per call.
     streamText: vi.fn(() => ({ stream: new ReadableStream() })),
-    // A fresh stream per call: the drive consumes the one it is handed.
     toUIMessageStream: vi.fn(
       () =>
         new ReadableStream({
@@ -98,7 +93,6 @@ vi.mock("../services/memory-retrieval.ts", () => ({
   resolveMemoryPin: vi.fn().mockReturnValue({ reuse: false }),
 }));
 
-/** A row of `chat_message`, in `chat-1`. */
 const stored = (
   id: string,
   parentId: string | null,
@@ -117,7 +111,6 @@ const stored = (
   ...extra,
 });
 
-/** user-1 as the owner of ws-1, plus whatever the test adds. */
 const seedTenant = (rows: Store = {}, owner = "user-1") =>
   seedDb(
     {
@@ -127,7 +120,6 @@ const seedTenant = (rows: Store = {}, owner = "user-1") =>
       workspace: [{ id: "ws-1", organizationId: "org-1", ownerId: owner }],
       ...rows,
     },
-    // The Chat's primary key is what a turn's claim on a new Chat leans on.
     { unique: { chat: [{ name: "chat_pkey", columns: ["id"] }] } },
   );
 
@@ -139,7 +131,6 @@ describe("Chat Routes", () => {
     mockDb.orderBy.mockReturnValue(mockDb);
     mockDb.limit.mockReturnValue(mockDb);
     mockDb.offset.mockReturnValue(mockDb);
-    // The turn's claim finds the Workspace still has the Owner it acts as.
     mockDb.for.mockResolvedValue([{ id: "ws-1" }]);
   });
 
@@ -155,19 +146,18 @@ describe("Chat Routes", () => {
   describe("GET /", () => {
     it("should list chats", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
+      ]);
 
       const mockChats = [{ id: "chat-1", title: "Chat 1" }];
       mockDb.offset.mockResolvedValueOnce(mockChats);
-      // Skip .where() calls from middleware (orgAccess, workspaceAccess) and paginated query
       mockDb.where
         .mockReturnValueOnce(mockDb)
         .mockReturnValueOnce(mockDb)
         .mockReturnValueOnce(mockDb)
-        .mockResolvedValueOnce([{ totalCount: 1 }]); // count query
+        .mockResolvedValueOnce([{ totalCount: 1 }]);
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
@@ -176,10 +166,10 @@ describe("Chat Routes", () => {
 
     it("rejects an unknown query key instead of silently ignoring it", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
+      ]);
 
       const res = await app.request(`${baseUrl}?tags=typescript`);
       expect(res.status).toBe(400);
@@ -189,10 +179,10 @@ describe("Chat Routes", () => {
 
     it("should return all chats when no filter is provided", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
+      ]);
 
       const mockChats = [
         { id: "chat-1", title: "Chat 1" },
@@ -213,10 +203,10 @@ describe("Chat Routes", () => {
 
     const listChats = async (query: string) => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
+      ]);
       mockDb.offset.mockResolvedValueOnce([]);
       mockDb.where
         .mockReturnValueOnce(mockDb)
@@ -251,7 +241,6 @@ describe("Chat Routes", () => {
             id: "chat-1",
             workspaceId,
             title: "Centering a div",
-            // A row from before tags were dropped: search must ignore it.
             tags: ["typescript"],
           },
           { id: "chat-2", workspaceId, title: "TypeScript tips" },
@@ -346,7 +335,6 @@ describe("Chat Routes", () => {
     });
   });
 
-  // ADR-0044: a Trigger run's Chat is kept for reading by id, not listed.
   describe("Trigger-run Chats", () => {
     const seedRunChat = () =>
       seedTenant({
@@ -367,7 +355,6 @@ describe("Chat Routes", () => {
         ],
       });
 
-    // Search narrows the same query, so it leaves them out too.
     it("are left out of the Chat list", async () => {
       mockSession();
       seedRunChat();
@@ -394,8 +381,6 @@ describe("Chat Routes", () => {
       expect(one).not.toHaveProperty("tags");
     });
 
-    // ADR-0046: the Chat is the run's record, so only reading and cancelling
-    // are open to a User. Every other Chat mutation refuses.
     describe("read-only", () => {
       const runChat = () =>
         seedTenant({
@@ -516,6 +501,8 @@ describe("Chat Routes", () => {
             memoryCursorId: "a1",
             memorySnapshot: "pinned",
             lastTurnAt: new Date(),
+            runHeartbeatAt: new Date(),
+            a2aEndpointId: "ep-1",
           },
         ],
         chat_message: [
@@ -534,7 +521,6 @@ describe("Chat Routes", () => {
         ],
       });
 
-      // Served under a prefix a proxy strips: file URLs carry it (#1810).
       vi.stubEnv("BETTER_AUTH_URL", "https://chat.example.com/api");
       const res = await app.request(`${baseUrl}/chat-1`);
       vi.unstubAllEnvs();
@@ -566,23 +552,18 @@ describe("Chat Routes", () => {
       expect(body).not.toHaveProperty("memoryCursorId");
       expect(body).not.toHaveProperty("memorySnapshot");
       expect(body).not.toHaveProperty("lastTurnAt");
+      expect(body).not.toHaveProperty("runHeartbeatAt");
+      expect(body).not.toHaveProperty("a2aEndpointId");
     });
   });
 
   describe("POST /", () => {
-    // A stream-shaped turn the route can route into streamText without
-    // exercising prepareChatTurn's internals (covered by chat-execution.test.ts).
     const validTurn = {
       stream: { model: {}, tools: {}, system: "", messages: [], maxSteps: 1 },
       resolved: { providerId: "p1", modelId: "m1" },
       dispose: vi.fn().mockResolvedValue(undefined),
     };
 
-    /**
-     * The `ai` mock hands out ONE `Response`, consumed on the way through the
-     * drive — so the second test to reach the drive finds it locked. A test
-     * that needs the run to get that far re-stubs it with one of its own.
-     */
     const freshStream = () => {
       vi.mocked(createUIMessageStreamResponse).mockReturnValueOnce(
         new Response("stream"),
@@ -595,22 +576,15 @@ describe("Chat Routes", () => {
         name: "Test User",
         email: "test@example.com",
       });
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([]); // ADR-0020 row lookup (new chat)
-      mockDb.orderBy.mockResolvedValueOnce([]); // the path it continues: none
+      ]);
+      mockDb.limit.mockResolvedValueOnce([]);
+      mockDb.orderBy.mockResolvedValueOnce([]);
 
-      // ChatSink.onStart upserts the chat row with status=running before
-      // prepareChatTurn runs. Returning a non-empty array skips the insert
-      // fallback path.
       mockDb.returning.mockResolvedValueOnce([{ id: "chat-1" }]);
 
-      // The route under test does not exercise prepareChatTurn's internals —
-      // chat-execution.test.ts covers those against an in-memory queries adapter. Here
-      // we just stub it to a stream-shaped result so the route can wire up
-      // streamText.
       mockPrepareChatTurn.mockResolvedValueOnce({
         stream: {
           model: {},
@@ -644,13 +618,13 @@ describe("Chat Routes", () => {
 
     it("maps a NotFoundError from prepareChatTurn to 404 via the central onError seam", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([]); // ADR-0020 row lookup (new chat)
-      mockDb.orderBy.mockResolvedValueOnce([]); // the path it continues: none
-      mockDb.returning.mockResolvedValueOnce([{ id: "chat-2" }]); // ChatSink.onStart
+      ]);
+      mockDb.limit.mockResolvedValueOnce([]);
+      mockDb.orderBy.mockResolvedValueOnce([]);
+      mockDb.returning.mockResolvedValueOnce([{ id: "chat-2" }]);
 
       mockPrepareChatTurn.mockRejectedValueOnce(
         new NotFoundError("Agent 'agent-1' not found"),
@@ -675,13 +649,13 @@ describe("Chat Routes", () => {
 
     it("maps a ValidationError from prepareChatTurn to 400 via the central onError seam", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([]); // ADR-0020 row lookup (new chat)
-      mockDb.orderBy.mockResolvedValueOnce([]); // the path it continues: none
-      mockDb.returning.mockResolvedValueOnce([{ id: "chat-3" }]); // ChatSink.onStart
+      ]);
+      mockDb.limit.mockResolvedValueOnce([]);
+      mockDb.orderBy.mockResolvedValueOnce([]);
+      mockDb.returning.mockResolvedValueOnce([{ id: "chat-3" }]);
 
       mockPrepareChatTurn.mockRejectedValueOnce(
         new ValidationError("Model id 'bogus' not enabled for provider 'p1'"),
@@ -707,12 +681,12 @@ describe("Chat Routes", () => {
 
     it("maps a FileValidationError from the file gate to 400 with the offending files", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([]); // ADR-0020 row lookup (new chat)
-      mockDb.orderBy.mockResolvedValueOnce([]); // the path it continues: none
+      ]);
+      mockDb.limit.mockResolvedValueOnce([]);
+      mockDb.orderBy.mockResolvedValueOnce([]);
 
       const fileError = new FileValidationError([
         { file: "scan.pdf", reason: "unextractable" },
@@ -744,13 +718,13 @@ describe("Chat Routes", () => {
         name: "Test User",
         email: "test@example.com",
       });
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([]); // ADR-0020 row lookup (no row → new chat)
-      mockDb.orderBy.mockResolvedValueOnce([]); // the path it continues: none
-      mockDb.returning.mockResolvedValueOnce([{ id: "chat-a" }]); // ChatSink.onStart
+      ]);
+      mockDb.limit.mockResolvedValueOnce([]);
+      mockDb.orderBy.mockResolvedValueOnce([]);
+      mockDb.returning.mockResolvedValueOnce([{ id: "chat-a" }]);
 
       vi.mocked(resolveMemoryPin).mockReturnValueOnce({ reuse: false });
       vi.mocked(retrieveRecentSummaries).mockResolvedValueOnce([
@@ -776,10 +750,7 @@ describe("Chat Routes", () => {
       const inputArg = mockPrepareChatTurn.mock.calls[0][0] as {
         memorySnapshot?: string;
       };
-      // The resolved block rides down through RunInput into prepareChatTurn.
       expect(inputArg.memorySnapshot).toBe("pinned-fresh");
-      // The window is anchored to the re-take moment, not a clock read. Its
-      // span is not a call-site argument — the retrieval owns it.
       expect(retrieveRecentSummaries).toHaveBeenCalledWith(
         "user-1",
         "ws-1",
@@ -793,18 +764,16 @@ describe("Chat Routes", () => {
         name: "Test User",
         email: "test@example.com",
       });
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
-      // Row lookup resolves an existing Chat carrying a pin and a previous-turn
-      // stamp.
+      ]);
       mockDb.limit.mockResolvedValueOnce([
         { memorySnapshot: "pinned-block", lastTurnAt: new Date() },
       ]);
-      mockDb.limit.mockResolvedValueOnce([]); // the message id is not taken
-      mockDb.orderBy.mockResolvedValueOnce([]); // the path it continues: none
-      mockDb.returning.mockResolvedValueOnce([{ id: "chat-b" }]); // ChatSink.onStart
+      mockDb.limit.mockResolvedValueOnce([]);
+      mockDb.orderBy.mockResolvedValueOnce([]);
+      mockDb.returning.mockResolvedValueOnce([{ id: "chat-b" }]);
 
       vi.mocked(resolveMemoryPin).mockReturnValueOnce({
         reuse: true,
@@ -828,37 +797,31 @@ describe("Chat Routes", () => {
       const inputArg = mockPrepareChatTurn.mock.calls[0][0] as {
         memorySnapshot?: string;
       };
-      // The existing pin is forwarded verbatim — the prefix stays byte-identical.
       expect(inputArg.memorySnapshot).toBe("pinned-block");
       expect(retrieveRecentSummaries).not.toHaveBeenCalled();
     });
 
-    // A user-invoked Skill (issue #649). Seeded onto the messages that reach
-    // `prepareChatTurn` — the array the run also persists — rather than onto the
-    // converted model messages, which would reach the model and persist nothing.
     it("seeds a loadSkill pair for a message that opens with a slash command", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([]); // ADR-0020 row lookup (new chat)
-      mockDb.orderBy.mockResolvedValueOnce([]); // the path it continues: none
+      ]);
+      mockDb.limit.mockResolvedValueOnce([]);
+      mockDb.orderBy.mockResolvedValueOnce([]);
       mockDb.limit.mockResolvedValueOnce([
         { id: "agent-1", workspaceId, skillIds: ["skill-1"], toolSetIds: [] },
-      ]); // the turn's Agent, for its assigned Skills
+      ]);
       mockDb.limit.mockResolvedValueOnce([
         {
           id: "skill-1",
           workspaceId,
           name: "blog-post",
           body: "Write a blog post.",
-          // User-invocable only, so the model's catalogue excludes it — and the
-          // user invoking it by name must still work (#713).
           disableModelInvocation: true,
         },
-      ]); // the named Skill
-      mockDb.orderBy.mockResolvedValueOnce([]); // its bundled files: none
+      ]);
+      mockDb.orderBy.mockResolvedValueOnce([]);
       mockDb.returning.mockResolvedValueOnce([{ id: "chat-cmd" }]);
       mockPrepareChatTurn.mockResolvedValueOnce(validTurn);
       freshStream();
@@ -887,13 +850,10 @@ describe("Chat Routes", () => {
         }>;
       };
       expect(inputArg.messages).toHaveLength(2);
-      // The user's message still carries the token, so the transcript shows it.
       expect(inputArg.messages[0].parts[0]).toEqual({
         type: "text",
         text: "/blog-post about otters",
       });
-      // Trailing assistant, so the SDK folds the reply into this same message —
-      // one bubble with a loadSkill card above the answer, not two.
       expect(inputArg.messages[1].role).toBe("assistant");
       expect(inputArg.messages[1].parts[0]).toMatchObject({
         type: "tool-loadSkill",
@@ -910,11 +870,10 @@ describe("Chat Routes", () => {
         { ownerId: "user-1", organizationId: "org-1" },
       ]);
       mockDb.limit.mockResolvedValueOnce([]);
-      mockDb.orderBy.mockResolvedValueOnce([]); // the path it continues: none
+      mockDb.orderBy.mockResolvedValueOnce([]);
       mockDb.limit.mockResolvedValueOnce([
         { id: "agent-1", workspaceId, skillIds: ["skill-1"], toolSetIds: [] },
       ]);
-      // No Skill of that name in either scope, and no Attachment either.
       mockDb.limit.mockResolvedValue([]);
       mockDb.returning.mockResolvedValueOnce([{ id: "chat-typo" }]);
       mockPrepareChatTurn.mockResolvedValueOnce(validTurn);
@@ -946,12 +905,11 @@ describe("Chat Routes", () => {
   describe("DELETE /:chatId", () => {
     it("should delete chat", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
+      ]);
 
-      // Mock for fetching chat record before delete (for file cleanup)
       mockDb.limit.mockResolvedValueOnce([{ id: "chat-1", messages: [] }]);
 
       const res = await app.request(`${baseUrl}/chat-1`, {
@@ -966,8 +924,6 @@ describe("Chat Routes", () => {
     describe("stored files", () => {
       useTempDiskStorage();
 
-      // Neither file is on the Chat's Active path: the first is on an
-      // Alternative an edit left behind, the second on a deleted message.
       const orphan = "org-1/ws-1/chat-1/u1-edited/0-aaaaaaaa.png";
       const deleted = "org-1/ws-1/chat-1/u2/0-cccccccc.png";
       const sibling = "org-1/ws-1/chat-10/msg-1/0-bbbbbbbb.png";
@@ -1071,11 +1027,10 @@ describe("Chat Routes", () => {
   describe("POST /:chatId/cancel", () => {
     it("returns 200 when cancelling an existing chat (idempotent on inactive runs)", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
-      // chat row lookup
+      ]);
       mockDb.limit.mockResolvedValueOnce([{ id: "chat-1" }]);
 
       const res = await app.request(`${baseUrl}/chat-1/cancel`, {
@@ -1084,7 +1039,6 @@ describe("Chat Routes", () => {
       expect(res.status).toBe(200);
       const body = (await res.json()) as Record<string, unknown>;
       expect(body.message).toMatch(/cancel/i);
-      // Whichever instance holds the run, not just this one (#1237).
       expect(mockCancelRun).toHaveBeenCalledWith("chat-1");
     });
 
@@ -1110,7 +1064,7 @@ describe("Chat Routes", () => {
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
       ]);
-      mockDb.limit.mockResolvedValueOnce([]); // chat lookup misses
+      mockDb.limit.mockResolvedValueOnce([]);
 
       const res = await app.request(`${baseUrl}/chat-other/cancel`, {
         method: "POST",
@@ -1130,13 +1084,13 @@ describe("Chat Routes", () => {
   describe("PUT /:chatId", () => {
     it("should update chat", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
+      ]);
       mockDb.limit.mockResolvedValueOnce([
         { id: "chat-1", triggerRunId: null },
-      ]); // the Chat is not a Trigger run's
+      ]);
 
       const mockChat = { id: "chat-1", title: "Updated Title" };
       mockDb.returning.mockResolvedValueOnce([mockChat]);
@@ -1155,13 +1109,13 @@ describe("Chat Routes", () => {
 
     it("pins without touching the title", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
+      ]);
       mockDb.limit.mockResolvedValueOnce([
         { id: "chat-1", triggerRunId: null },
-      ]); // the Chat is not a Trigger run's
+      ]);
       mockDb.returning.mockResolvedValueOnce([{ id: "chat-1", title: "Hi" }]);
 
       const res = await app.request(`${baseUrl}/chat-1`, {
@@ -1180,13 +1134,13 @@ describe("Chat Routes", () => {
 
     it("updates a chat with only a title", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
+      ]);
       mockDb.limit.mockResolvedValueOnce([
         { id: "chat-1", triggerRunId: null },
-      ]); // the Chat is not a Trigger run's
+      ]);
       mockDb.returning.mockResolvedValueOnce([
         { id: "chat-1", title: "A new title" },
       ]);
@@ -1214,7 +1168,6 @@ describe("Chat Routes", () => {
       dispose: vi.fn().mockResolvedValue(undefined),
     };
 
-    /** A fresh Response per request: the `ai` mock's one instance locks. */
     const startsTurn = () => {
       vi.mocked(createUIMessageStreamResponse).mockReturnValueOnce(
         new Response("stream"),
@@ -1249,7 +1202,6 @@ describe("Chat Routes", () => {
         }),
         headers: { "Content-Type": "application/json" },
       });
-      // The run outlives the response; let it release the Chat.
       await vi.waitFor(() => expect(runRegistry.has("chat-1")).toBe(false));
       return res;
     };
@@ -1263,7 +1215,6 @@ describe("Chat Routes", () => {
       parts: [{ type: "text", text }],
     });
 
-    /** What the turn was handed to continue. */
     const historyIds = () =>
       (
         mockPrepareChatTurn.mock.calls.at(-1)![0] as {
@@ -1271,7 +1222,6 @@ describe("Chat Routes", () => {
         }
       ).messages.map((m) => m.id);
 
-    /** u1 → a1 → u2 → a2, the Active path ending at a2. */
     const seedChat = (leaf = "a2") =>
       seedTenant({
         chat: [
@@ -1294,9 +1244,6 @@ describe("Chat Routes", () => {
     const rowOf = (fake: ReturnType<typeof seedDb>, id: string) =>
       fake.tables.chat_message.find((row) => row.id === id);
 
-    // Issue #1297: the instance running a turn stamps the Chat's heartbeat.
-    // One that crashed or was redeployed mid-turn stops stamping, and its
-    // Chat is free again a minute later, not once the per-run timeout passes.
     describe("a run lost with its instance", () => {
       const t0 = new Date("2026-08-30T12:00:00.000Z");
       const at = (seconds: number) => new Date(t0.getTime() + seconds * 1000);
@@ -1310,7 +1257,6 @@ describe("Chat Routes", () => {
         vi.useRealTimers();
       });
 
-      /** A Chat whose run last beat at t0, and no process is left to beat. */
       const seedOrphan = () => {
         const fake = seedChat();
         Object.assign(fake.tables.chat[0], {
@@ -1378,10 +1324,7 @@ describe("Chat Routes", () => {
     });
 
     describe("POST /", () => {
-      // Issue #1294: the Owner's turn in an A2A Chat follows the endpoint's
-      // Include Memories, for the Memories block and the Memory tools alike.
       describe("the Owner's turn and the Owner's Memories", () => {
-        /** What the turn was handed about Memories. */
         const memoryInput = () =>
           mockPrepareChatTurn.mock.calls.at(-1)![0] as {
             includeMemories?: boolean;
@@ -1530,8 +1473,6 @@ describe("Chat Routes", () => {
         expect(res.status).toBe(409);
       });
 
-      // The turn is another instance's, so this process's registry has never
-      // heard of it: only the row says the Chat is taken (#1237).
       it("409s a turn while another instance runs one, writing nothing", async () => {
         mockSession();
         const fake = seedChat();
@@ -1599,7 +1540,6 @@ describe("Chat Routes", () => {
         const fake = seedChat();
         startsTurn();
 
-        // An edit of u2: a new message under u2's parent.
         const res = await post({ message: message("u2-edit"), parentId: "a1" });
 
         expect(res.status).toBe(200);
@@ -1628,13 +1568,9 @@ describe("Chat Routes", () => {
         expect(res.status).toBe(200);
         expect(historyIds()).toEqual(["u1", "a1", "u2"]);
         expect(rowOf(fake, "a2")).toMatchObject({ deletedAt: null });
-        // The stubbed stream ends before any reply, so the leaf goes back to
-        // the reply it would have replaced rather than stranding it.
         expect(fake.tables.chat[0].activeLeafId).toBe("a2");
       });
 
-      // Two tabs on one Chat. Tab 1 went on to u2 → a2; tab 2 still shows
-      // u1 → a1 and sends from there.
       it("stores a stale tab's message as an Alternative on the path it held", async () => {
         mockSession();
         const fake = seedChat();
@@ -1652,10 +1588,10 @@ describe("Chat Routes", () => {
       it("stores it there even when that path's last message was deleted in the other tab", async () => {
         mockSession();
         const fake = seedChat();
-        expect((await deleteMessage("a2")).status).toBe(200); // tab 1
+        expect((await deleteMessage("a2")).status).toBe(200);
         startsTurn();
 
-        const res = await post({ message: message("u3"), parentId: "a2" }); // tab 2
+        const res = await post({ message: message("u3"), parentId: "a2" });
 
         expect(res.status).toBe(200);
         expect(historyIds()).toEqual(["u1", "a1", "u2", "u3"]);
@@ -1712,8 +1648,6 @@ describe("Chat Routes", () => {
           }
         ).messages;
         expect(history.map((m) => m.role)).toEqual(["user", "assistant"]);
-        // A new seeded message, not the old reply: the reply it continues
-        // gets a new id and a1 stays as it was.
         expect(history[1].id).not.toBe("a1");
         expect(history[1].parts[0]).toMatchObject({
           type: "tool-loadSkill",
@@ -1731,7 +1665,6 @@ describe("Chat Routes", () => {
         approval: { id: "ap1", requestReason: "Looks risky." },
       };
 
-      /** `seedChat` with a2 stopped to ask about tc1. */
       const seedWaiting = (owner?: string) => {
         const fake = seedChat();
         rowOf(fake, "a2")!.parts = [{ type: "text", text: "a2" }, asked];
@@ -1866,8 +1799,6 @@ describe("Chat Routes", () => {
         expect((await deleteMessage("nope")).status).toBe(404);
       });
 
-      // Read from the row, not this process: the run may be another
-      // instance's (#1237).
       it("409s while a run is in flight", async () => {
         mockSession();
         const fake = seedChat();
@@ -1892,8 +1823,6 @@ describe("Chat Routes", () => {
       });
     });
 
-    // Issue #1111: `/compact` forces a Transcript summary pass (ADR-0041) on
-    // demand, steered by the User's instruction, with no message written.
     describe("POST /:chatId/compact", () => {
       const compact = (body: Record<string, unknown> = {}) =>
         app.request(`${baseUrl}/chat-1/compact`, {
@@ -1902,7 +1831,6 @@ describe("Chat Routes", () => {
           headers: { "Content-Type": "application/json" },
         });
 
-      /** The Chat on a Direct turn's Provider, with `chat_summary` empty. */
       const seedCompactable = () => {
         const fake = seedChat();
         Object.assign(fake.tables.chat[0], { providerId: "p1", modelId: "m1" });
@@ -1941,7 +1869,6 @@ describe("Chat Routes", () => {
         expect(res.status).toBe(201);
         expect(await res.json()).toMatchObject({
           chatId: "chat-1",
-          // Nothing kept verbatim: the next message carries the summary.
           anchorId: "a2",
           coveredIds: ["u1", "a1", "u2", "a2"],
           text: "The summary.",
@@ -2011,10 +1938,6 @@ describe("Chat Routes", () => {
           headers: { "Content-Type": "application/json" },
         });
 
-      /**
-       * u1 → a1 → u2 → a2 → u3 → a3, with u2 edited (u2b → a2b, the Active
-       * path) and a2 regenerated (a2c) in between.
-       */
       const seedAlternatives = () =>
         seedTenant({
           chat: [
@@ -2124,7 +2047,6 @@ describe("Chat Routes", () => {
       it("409s while a run is in flight", async () => {
         mockSession();
         const fake = seedAlternatives();
-        // Another instance's run: nothing in this process's registry.
         fake.tables.chat[0].status = "running";
 
         const res = await switchTo("u2");

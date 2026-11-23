@@ -32,19 +32,10 @@ export function createTriggerTools(
   workspaceId: string,
   orgId: string,
   frontendUrl: string,
-  /** The acting User's effective timezone (`ToolSetContext.timezone`). */
   timezone: string,
 ): Record<string, Tool> {
-  // A trigger may point at any Agent this Workspace can run — its own, or a
-  // Shared one attached to it (ADR-0007), which is exactly what the Chat turn
-  // resolves when the trigger fires.
   const ctx: ScopeContext = { orgId, workspaceId };
 
-  /**
-   * A written Trigger's next run, in UTC and on the wall clock of its own
-   * timezone, so the model can check it against the instant the User asked
-   * for. Empty for a Trigger with no next run.
-   */
   const describeNextRun = (record: {
     type: string;
     config: unknown;
@@ -62,7 +53,6 @@ export function createTriggerTools(
     };
   };
 
-  /** `toToolError`, plus where to find a valid Agent id. */
   const toTriggerToolError = (error: unknown) => {
     const result = toToolError(error);
     return result.error.startsWith("Agent not found")
@@ -76,8 +66,6 @@ export function createTriggerTools(
     inputSchema: z.object({}),
     execute: async () => {
       const scoped = await listScoped(db, "agent", ctx);
-      // Newest first across both scopes — `listScoped` returns the Workspace
-      // rows then the attached Shared ones, so the ordering is applied here.
       const agents = scoped
         .map(({ row }) => row)
         .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
@@ -153,7 +141,6 @@ export function createTriggerTools(
     },
   });
 
-  /** The Trigger config the model may set, per its chosen type. */
   const configField = z
     .object({
       cronExpression: cronTriggerConfigSchema.shape.cronExpression
@@ -189,7 +176,6 @@ export function createTriggerTools(
       "Trigger configuration. For cron type: requires cronExpression. For event type: requires events array.",
     );
 
-  /** The Trigger fields a write may set, minus the create-only ones. */
   const triggerFields = {
     description: z
       .string()
@@ -227,21 +213,14 @@ export function createTriggerTools(
 
   type TriggerConfigField = z.infer<typeof configField>;
 
-  /**
-   * A cron config the model left without a timezone runs in the acting User's
-   * zone, on create and update alike — the tool's own instruction says so.
-   * An event config carries no cron expression and is returned untouched.
-   */
   const withActingTimezone = (config: TriggerConfigField) =>
     config.cronExpression === undefined
       ? config
       : { ...config, timezone: config.timezone ?? timezone };
 
-  /** The service validates the config against the Trigger's effective type. */
   const asTriggerConfig = (config: TriggerConfigField) =>
     withActingTimezone(config) as CronTriggerConfig | EventTriggerConfig;
 
-  /** A written Trigger as a Tool returns it: the row, its next run, and a link. */
   const withTriggerResult = (record: TriggerRow) => {
     const url = buildResourceUrl(
       frontendUrl,
@@ -293,10 +272,6 @@ export function createTriggerTools(
     execute: async (params) => {
       const { label: _label, ...fields } = params;
       try {
-        // The create schema is the one defaults table: parsing here fills the
-        // fields the Tool left out, so the Trigger model is handed a complete
-        // set rather than a second copy of the same defaults. The module then
-        // validates the config against the chosen type.
         const parsed = triggerCreateSchema.safeParse({
           ...fields,
           workspaceId,
@@ -305,8 +280,6 @@ export function createTriggerTools(
         if (!parsed.success) {
           return { error: formatIssues(parsed.error.issues) };
         }
-        // The schema needs a workspace to type its values; the Trigger model
-        // takes the one from `ctx`, which is the only identity it may write to.
         const { workspaceId: _workspaceId, ...createFields } = parsed.data;
         return withTriggerResult(
           await createTriggerService(ctx, createFields, {
@@ -394,7 +367,6 @@ export function createTriggerTools(
           return { error: "Trigger not found" };
         }
       } catch (error) {
-        // An Inbound Trigger is refused here, as on create and edit.
         return toTriggerToolError(error);
       }
 
@@ -409,8 +381,6 @@ export function createTriggerTools(
     createTrigger: createTriggerTool,
     updateTrigger: updateTriggerTool,
     deleteTrigger,
-    // The Time Tool set's own tool under the same name, so an Agent holding
-    // both sees it once.
     getCurrentTime: createGetCurrentTime(timezone),
   };
 }
