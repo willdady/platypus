@@ -1,27 +1,37 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { PgDialect } from "drizzle-orm/pg-core";
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  vi,
+  type Mock,
+} from "vitest";
 import { type SQL } from "drizzle-orm";
+import { mockDb as sharedMockDb, renderSql } from "../test-utils.ts";
+
+type SchedulerDb = {
+  update: Mock<(table: unknown) => unknown>;
+  select: Mock<(...args: unknown[]) => unknown>;
+  execute: Mock<(query: SQL) => Promise<unknown>>;
+  $client: { connect: Mock<() => Promise<unknown>> };
+};
+
+const mockDb = sharedMockDb as unknown as SchedulerDb;
+mockDb.$client = { connect: vi.fn() };
 
 const {
-  mockDb,
   mockFireTrigger,
   mockSendReminders,
   mockSendA2aReminders,
   mockAnnounce,
 } = vi.hoisted(() => ({
-  mockDb: {
-    update: vi.fn<(table: unknown) => unknown>(),
-    select: vi.fn(),
-    execute: vi.fn<(query: SQL) => Promise<unknown>>(),
-    $client: { connect: vi.fn<() => Promise<unknown>>() },
-  },
   mockFireTrigger: vi.fn(),
   mockSendReminders: vi.fn<(now: Date) => Promise<void>>(),
   mockSendA2aReminders: vi.fn<(now: Date) => Promise<void>>(),
   mockAnnounce: vi.fn(),
 }));
 
-vi.mock("../index.ts", () => ({ db: mockDb }));
 vi.mock("../services/trigger-firing.ts", () => ({
   fireTrigger: mockFireTrigger,
 }));
@@ -53,8 +63,6 @@ import {
   triggerRun as triggerRunTable,
   triggerRunEvent as triggerRunEventTable,
 } from "../db/schema.ts";
-
-const dialect = new PgDialect();
 
 type Captured = { table: unknown; set: Record<string, unknown>; where?: SQL };
 
@@ -95,7 +103,7 @@ const captureUpdates = (
 
 const render = (predicate: SQL | undefined) => {
   if (!predicate) throw new Error("No where clause was captured");
-  return dialect.sqlToQuery(predicate);
+  return renderSql(predicate);
 };
 
 type FakeClient = {
@@ -138,7 +146,7 @@ const fakePg = ({ roundTripMs = 0 }: { roundTripMs?: number } = {}) => {
     return Promise.resolve(client);
   });
   mockDb.execute.mockImplementation((query: SQL) => {
-    const { sql: text, params } = dialect.sqlToQuery(query);
+    const { sql: text, params } = renderSql(query);
     const connection = idle[nextIdle++ % idle.length];
     return run(connection, text, params);
   });

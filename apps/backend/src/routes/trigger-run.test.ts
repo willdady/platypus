@@ -1,14 +1,13 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-// why: before drizzle-orm, whose `eq` is a spy only through the mock test-utils installs
 import {
   mockDb,
   mockNoSession,
   mockSession,
+  renderSql,
+  renderedWheres,
   resetMockDb,
 } from "../test-utils.ts";
-import { eq, gt } from "drizzle-orm";
 import {
-  trigger as triggerTable,
   triggerRun as triggerRunTable,
   triggerRunEvent as triggerRunEventTable,
 } from "../db/schema.ts";
@@ -18,6 +17,9 @@ import app from "../server.ts";
 const orgId = "org-1";
 const workspaceId = "ws-1";
 const baseUrl = `/organizations/${orgId}/workspaces/${workspaceId}/trigger-runs`;
+
+const whereOn = (table: string) =>
+  renderedWheres().find((rendered) => rendered.sql.includes(`"${table}"`));
 
 const stubAuthLookups = () => {
   mockSession();
@@ -75,12 +77,16 @@ describe("Trigger runs routes", () => {
       const res = await app.request(`${baseUrl}?triggerId=other-ws-trigger`);
 
       expect(res.status).toBe(200);
-      expect(mockDb.innerJoin).toHaveBeenCalled();
-      expect(eq).toHaveBeenCalledWith(triggerTable.workspaceId, workspaceId);
-      expect(eq).toHaveBeenCalledWith(
-        triggerRunTable.triggerId,
-        "other-ws-trigger",
+      expect(renderSql(mockDb.innerJoin.mock.calls[0][1]).sql).toBe(
+        `"trigger_run"."trigger_id" = "trigger"."id"`,
       );
+      expect(whereOn("trigger_run")?.sql).toBe(
+        `("trigger"."workspace_id" = $1 and "trigger_run"."trigger_id" = $2)`,
+      );
+      expect(whereOn("trigger_run")?.params).toEqual([
+        workspaceId,
+        "other-ws-trigger",
+      ]);
     });
 
     it("filters by status", async () => {
@@ -90,7 +96,10 @@ describe("Trigger runs routes", () => {
       const res = await app.request(`${baseUrl}?status=failed`);
 
       expect(res.status).toBe(200);
-      expect(eq).toHaveBeenCalledWith(triggerRunTable.status, "failed");
+      expect(whereOn("trigger_run")?.sql).toContain(
+        `"trigger_run"."status" = $2`,
+      );
+      expect(whereOn("trigger_run")?.params).toEqual([workspaceId, "failed"]);
     });
 
     it("applies no trigger or status predicate when neither is given", async () => {
@@ -99,19 +108,11 @@ describe("Trigger runs routes", () => {
 
       await app.request(baseUrl);
 
-      expect(eq).not.toHaveBeenCalledWith(
-        triggerRunTable.status,
-        expect.anything(),
+      expect(whereOn("trigger")?.sql).toBe(`"trigger"."workspace_id" = $1`);
+      expect(whereOn("trigger")?.params).toEqual([workspaceId]);
+      expect(renderSql(mockDb.innerJoin.mock.calls[0][1]).sql).toBe(
+        `"trigger_run"."trigger_id" = "trigger"."id"`,
       );
-      expect(eq).toHaveBeenCalledWith(
-        triggerRunTable.triggerId,
-        triggerTable.id,
-      );
-      expect(
-        vi
-          .mocked(eq)
-          .mock.calls.filter((call) => call[0] === triggerRunTable.triggerId),
-      ).toHaveLength(1);
     });
 
     it("defaults to the first 50 runs", async () => {
@@ -214,7 +215,10 @@ describe("GET /:runId", () => {
       ["ev-1", "tool-call"],
       ["ev-2", "text"],
     ]);
-    expect(eq).toHaveBeenCalledWith(triggerRunEventTable.runId, "run-1");
+    expect(whereOn("trigger_run_event")?.sql).toContain(
+      `"trigger_run_event"."run_id" = $1`,
+    );
+    expect(whereOn("trigger_run_event")?.params).toEqual(["run-1"]);
   });
 
   it("scopes the run to this workspace and answers 404 for one it cannot reach", async () => {
@@ -226,7 +230,13 @@ describe("GET /:runId", () => {
     expect(res.status).toBe(404);
     const body = (await res.json()) as { error: string };
     expect(body.error).toBe("Trigger run not found");
-    expect(eq).toHaveBeenCalledWith(triggerTable.workspaceId, workspaceId);
+    expect(whereOn("trigger_run")?.sql).toBe(
+      `("trigger_run"."id" = $1 and "trigger"."workspace_id" = $2)`,
+    );
+    expect(whereOn("trigger_run")?.params).toEqual([
+      "run-elsewhere",
+      workspaceId,
+    ]);
     expect(mockDb.orderBy).not.toHaveBeenCalled();
   });
 
@@ -240,7 +250,10 @@ describe("GET /:runId", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { events: { seq: number }[] };
     expect(body.events.map((e) => e.seq)).toEqual([2]);
-    expect(gt).toHaveBeenCalledWith(triggerRunEventTable.seq, 1);
+    expect(whereOn("trigger_run_event")?.sql).toBe(
+      `("trigger_run_event"."run_id" = $1 and "trigger_run_event"."seq" > $2)`,
+    );
+    expect(whereOn("trigger_run_event")?.params).toEqual(["run-1", 1]);
   });
 
   it("rejects an unreadable `sinceSeq` rather than returning the whole timeline", async () => {
