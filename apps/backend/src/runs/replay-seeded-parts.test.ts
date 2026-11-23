@@ -27,7 +27,6 @@ const user: PlatypusUIMessage = {
   parts: [{ type: "text", text: "/blog-post about otters" }],
 };
 
-/** What `toUIMessageStream` emits for a one-step reply, ids already injected. */
 const modelChunks: Chunk[] = [
   { type: "start", messageId: "msg-seed" },
   { type: "start-step" },
@@ -49,7 +48,6 @@ const through = (
     },
   }).pipeThrough(replaySeededParts(original));
 
-/** The message a downstream consumer folds out of the stream. */
 const fold = async (stream: ReadableStream<Chunk>) => {
   let last: PlatypusUIMessage | undefined;
   for await (const message of readUIMessageStream<PlatypusUIMessage>({
@@ -65,7 +63,6 @@ describe("replaySeededParts", () => {
     const folded = await fold(through([user, seededMessage]));
 
     expect(folded?.id).toBe("msg-seed");
-    // The card comes first, then the reply — one message, in reading order.
     expect(folded?.parts[0]).toMatchObject({
       type: "tool-loadSkill",
       toolCallId: "call-1",

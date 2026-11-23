@@ -18,7 +18,6 @@ import { workspaceScope, orgScope, type WorkspaceScope } from "../scope.ts";
 import type { ParentRunContext, RunStats, RunStatus } from "./types.ts";
 import { DEFAULT_AGENT_MAX_STEPS } from "@platypus/schemas";
 
-/** A delegate's Tool gate scope (ADR-0033): its own session's, unattended. */
 const GATE_SCOPE = {
   orgId: "org-1",
   workspaceId: "ws-1",
@@ -27,14 +26,6 @@ const GATE_SCOPE = {
   readOnlyHints: new Map<string, "read-only" | "writes">(),
 };
 
-/**
- * A parent turn and the delegate tool it advertises, composed the way
- * `prepareChatTurn` composes them.
- *
- * Never composed in a test before this: the per-step stall timer lives in
- * `runs/`, the tool wrapper in `services/`, and the delegate in `tools/`, so
- * "does a long delegation kill the parent?" had no home to be asked in.
- */
 const USAGE = {
   inputTokens: {
     total: 5,
@@ -75,9 +66,7 @@ const parentScope: WorkspaceScope = workspaceScope(
   true,
 );
 
-/** The parent's stall threshold. */
 const PER_STEP_MS = 60;
-/** How long the delegated run takes — several times the parent's threshold. */
 const SUB_AGENT_MS = 250;
 
 describe("a delegated run inside a parent run", () => {
@@ -106,9 +95,6 @@ describe("a delegated run inside a parent run", () => {
     vi.useRealTimers();
   });
 
-  // The acceptance criterion: before this, the only thing keeping the parent
-  // alive across a long delegation was a 30s heartbeat interval started in
-  // `services/` and fed by the sub-agent's own stream yields.
   it("does not trip the parent's per-step stall timeout", async () => {
     const parent = startParent();
 
@@ -159,8 +145,6 @@ describe("a delegated run inside a parent run", () => {
       },
     });
 
-    // Exactly what `prepareChatTurn` hands the model: the one `delegate` tool,
-    // wrapped so its boundaries reach the parent's run lifecycle.
     const wrapped = wrapToolsWithActivity(
       { [DELEGATE_TOOL_NAME]: createDelegateTool([delegate]) },
       parent.onActivity,
@@ -190,12 +174,9 @@ describe("a delegated run inside a parent run", () => {
     expect(outcomes).toEqual([{ status: "succeeded", error: undefined }]);
   });
 
-  // Proves the threshold above is real: the same wait with no tool call in
-  // flight does end the parent run.
   it("still stalls a parent that is idle for the same span", async () => {
     startParent();
 
-    // No drive unwinds the parent here, so it is finished by the abort grace.
     await vi.advanceTimersByTimeAsync(PER_STEP_MS * 2 + ABORT_GRACE_MS);
 
     expect(parentHandle.signal.aborted).toBe(true);
@@ -247,8 +228,6 @@ describe("a delegated run inside a parent run", () => {
       void _;
       if (subRunId) continue;
       subRunId = registerSpy.mock.calls.at(-1)?.[0];
-      // Registered from the first activity update, while the delegation is
-      // still streaming.
       expect(runRegistry.has(subRunId!)).toBe(true);
     }
 
@@ -259,13 +238,6 @@ describe("a delegated run inside a parent run", () => {
     await parent.finish("succeeded");
   });
 });
-/**
- * The observability hole #647 exists to close: a headless run that delegates
- * used to record nothing about the delegate. Composed the way a Trigger run
- * is — the headless drive over a plan whose one tool is `delegate` — so the
- * nesting is tested where it is decided, not by inspecting a recorder the
- * test filled itself.
- */
 describe("a delegated run's Run events", () => {
   const delegateCall = (
     id: string,
@@ -281,7 +253,6 @@ describe("a delegated run's Run events", () => {
     },
   ];
 
-  /** A delegate that runs one `work` tool call, then answers. */
   const workingDelegate = (
     id: string,
     name: string,
@@ -377,9 +348,6 @@ describe("a delegated run's Run events", () => {
       ["Beta", "completed"],
     ]);
 
-    // Each delegate's own work hangs off ITS delegate event — the tool call it
-    // made (its arguments' stretch, then the call) and the text it wrote — and
-    // nothing of any of them is at the root.
     for (const delegate of delegates) {
       const children = events.events.filter(
         (e) => e.parentEventId === delegate.id,
@@ -402,7 +370,6 @@ describe("a delegated run's Run events", () => {
       ["text", null],
     ]);
 
-    // Nothing the delegates saw or said is on the timeline.
     const serialized = JSON.stringify(events.events);
     expect(serialized).not.toContain("Task for");
     expect(serialized).not.toContain("worked");
@@ -410,11 +377,6 @@ describe("a delegated run's Run events", () => {
   });
 });
 
-/**
- * Issue #1634: a run reports the tokens its delegates were billed for, however
- * each delegate ended. Every model call in these fixtures reports `USAGE`
- * (5 in, 2 out), so each figure below is a count of calls.
- */
 describe("a delegated run's Token usage", () => {
   const PARENT = { providerId: "p-parent", model: "big" };
   const CHILD = { providerId: "p-child", model: "small" };
@@ -430,8 +392,6 @@ describe("a delegated run's Token usage", () => {
     },
   ];
 
-  /** A delegate that makes one `work` call per entry of `workMs` (each that
-   *  long), then answers. */
   const delegateOf = (
     name: string,
     parentRun: ParentRunContext,
@@ -485,7 +445,6 @@ describe("a delegated run's Token usage", () => {
     });
   };
 
-  /** Drives a headless parent that delegates to `names` in parallel. */
   const runParent = async (
     names: string[],
     delegateFor: (
@@ -507,7 +466,6 @@ describe("a delegated run's Token usage", () => {
       setDelegateUsage: parent.setDelegateUsage,
     };
     if (cancelAfterMs !== undefined) {
-      // A Chat or Trigger run always holds its Tool session's disposer.
       await parent.adoptOrDispose(() => Promise.resolve());
       setTimeout(() => runRegistry.cancel(parent.handle.runId), cancelAfterMs);
     }
@@ -545,7 +503,6 @@ describe("a delegated run's Token usage", () => {
       delegateOf(name, parentRun, [15]),
     );
 
-    // Parent: 2 calls. Each delegate: 2 calls, merged into one row.
     expect(reported).toMatchObject({
       inputTokens: 30,
       outputTokens: 12,
@@ -554,7 +511,6 @@ describe("a delegated run's Token usage", () => {
         { ...CHILD, inputTokens: 20, outputTokens: 8 },
       ],
     });
-    // The parent's own last call, never a delegate's (ADR-0018).
     expect(reported?.contextOccupancy).toBe(5);
   });
 
@@ -572,8 +528,6 @@ describe("a delegated run's Token usage", () => {
         : delegateOf(name, parentRun, [15]),
     );
 
-    // Parent: 2 calls. Alpha: 2 calls. Slow: 1 completed step, then timed out
-    // in its second step's tool call — a step counts once it has finished.
     expect(reported?.usageByModel).toEqual([
       { ...PARENT, inputTokens: 10, outputTokens: 4 },
       { ...CHILD, inputTokens: 15, outputTokens: 6 },
@@ -587,8 +541,6 @@ describe("a delegated run's Token usage", () => {
       100,
     );
 
-    // The parent's one call never finished its step — the delegate was still
-    // running — so the only usage recorded is the delegate's completed step.
     expect(reported?.usageByModel).toEqual([
       { ...CHILD, inputTokens: 5, outputTokens: 2 },
     ]);

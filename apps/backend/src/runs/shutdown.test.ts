@@ -16,7 +16,6 @@ import { runRegistry } from "./run-registry.ts";
 import { ChatSink } from "./sinks/chat-sink.ts";
 import type { RunStatus } from "./types.ts";
 
-/** A Chat whose turn this process is running, through its real sink. */
 const startChatRun = async () => {
   const fake = seedDb({
     workspace: [{ id: "ws-1", ownerId: "owner-1" }],
@@ -97,8 +96,6 @@ describe("installShutdownHandlers", () => {
 
   beforeEach(() => {
     resetMockDb();
-    // A drain's stopping gate is terminal in production; reopen it between
-    // tests so the next one can register runs again.
     runRegistry.resetStopStateForTests();
   });
 
@@ -116,7 +113,6 @@ describe("installShutdownHandlers", () => {
       const order: string[] = [];
       const exit = vi.fn((code: number) => {
         order.push(`exit ${code}`);
-        // What the process looks like the moment it exits.
         order.push(`chat ${String(fake.tables.chat[0].status)}`);
       });
       uninstall = installShutdownHandlers({
@@ -161,18 +157,13 @@ describe("installShutdownHandlers", () => {
     const order: string[] = [];
     const exit = vi.fn((code: number) => order.push(`exit ${code}`));
     uninstall = installShutdownHandlers({
-      // The scheduler ticks, notification listener and A2A cancel watcher.
       stopBackground: () => order.push("stop background"),
-      // The HTTP listener.
       stopAccepting: () => order.push("stop accepting"),
-      // Idle keep-alive + SSE connections, so `close` is not held by them.
       closeIdleConnections: () => order.push("close idle connections"),
-      // Awaiting the HTTP server's in-flight requests.
       close: () => {
         order.push("close");
         return Promise.resolve();
       },
-      // The Postgres pool, last: everything that needs the db has ended.
       endPool: () => {
         order.push("end pool");
         return Promise.resolve();
@@ -192,7 +183,6 @@ describe("installShutdownHandlers", () => {
       "end pool",
       "exit 0",
     ]);
-    // The runs were ended as cancelled before anything was closed.
     expect(ended).toEqual(["cancelled", "cancelled"]);
   });
 
@@ -207,8 +197,6 @@ describe("installShutdownHandlers", () => {
     uninstall = installShutdownHandlers({ exit, timeoutMs: 2_000 });
 
     process.emit("SIGTERM", "SIGTERM");
-    // A registration racing the drain — a cron tick already in flight — is
-    // refused rather than started and then killed by the exit.
     expect(() => startRun({ runId: "late", onTerminate: () => {} })).toThrow(
       "Server is shutting down",
     );
@@ -230,7 +218,6 @@ describe("installShutdownHandlers", () => {
     await vi.advanceTimersByTimeAsync(8_000);
 
     expect(exit).toHaveBeenCalledWith(1);
-    // The budget was spent waiting for the run; the pool is not reached.
     expect(endPool).not.toHaveBeenCalled();
     runRegistry.unregister("stuck");
   });
@@ -250,8 +237,6 @@ describe("installShutdownHandlers", () => {
     });
 
     process.emit("SIGTERM", "SIGTERM");
-    // Nothing held: whenIdle resolves at once. `close` spends 2s, leaving
-    // enough for `endPool` inside the same 4s budget.
     await vi.advanceTimersByTimeAsync(4_000);
 
     expect(close).toHaveBeenCalledTimes(1);

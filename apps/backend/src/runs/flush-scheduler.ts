@@ -1,19 +1,7 @@
 import { logger } from "../logger.ts";
 
-/** How often a Run's partial state is persisted when nobody overrides it. */
 export const DEFAULT_FLUSH_INTERVAL_MS = 5_000;
 
-/**
- * Coalesces calls to a flush function on a fixed interval.
- *
- * `bump()` schedules a flush within `intervalMs`. Repeated `bump()` calls
- * within the same window collapse to one invocation. `flush()` runs the
- * function immediately and resets the timer. `dispose()` cancels any
- * pending flush; subsequent `bump()` calls are no-ops.
- *
- * Sinks instantiate one of these per Run to bound the rate of partial
- * persistence writes regardless of how often the model produces progress.
- */
 export class FlushScheduler {
   private timer?: ReturnType<typeof setTimeout>;
   private disposed = false;
@@ -38,7 +26,6 @@ export class FlushScheduler {
     }, this.intervalMs);
   }
 
-  /** Run the flush function immediately and reset the timer. */
   async flush(): Promise<void> {
     if (this.disposed) return;
     if (this.timer) {
@@ -49,13 +36,6 @@ export class FlushScheduler {
     await this.inFlight;
   }
 
-  /**
-   * Stop accepting new bumps and wait for any in-flight flush to settle
-   * before returning. Awaiting matters because callers persist a
-   * terminal write immediately after dispose; without the wait, a
-   * stale running-state flush can land after the terminal write and
-   * revert the row.
-   */
   async dispose(): Promise<void> {
     this.disposed = true;
     if (this.timer) {
@@ -70,9 +50,6 @@ export class FlushScheduler {
       try {
         await this.flushFn();
       } catch (error) {
-        // Not rethrown: callers don't await scheduled bumps, so a rejection
-        // here would be unhandled. Logged instead, so a failed periodic flush
-        // still leaves a trace (#1124).
         logger.error({ error }, "Scheduled run flush failed");
       }
     });
