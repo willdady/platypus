@@ -119,60 +119,30 @@ const baseOptions = {
   loadTools: toolsOf({}),
 };
 
-type LegacyOptions = Partial<{
-  id: string;
-  name: string;
-  description: string;
-  instructions: string;
-  model: ReturnType<typeof modelOf>;
-  loadTools: () => Promise<LoadedSubAgentTools>;
-  maxSteps: number;
-  securityGuardrails: string | null;
-  sampling: Partial<
-    Record<
-      | "temperature"
-      | "topP"
-      | "topK"
-      | "seed"
-      | "presencePenalty"
-      | "frequencyPenalty",
-      number
-    >
-  >;
-  maxOutputTokens: number;
-  parentRun: Parameters<typeof createSubAgentDelegate>[0]["parentRun"];
-}>;
+type DelegateOptions = Parameters<typeof createSubAgentDelegate>[0];
 
-const buildOptions = (
-  overrides: LegacyOptions = {},
-): Parameters<typeof createSubAgentDelegate>[0] => {
-  const {
-    model = modelOf(step([])),
-    maxSteps = DEFAULT_AGENT_MAX_STEPS,
-    securityGuardrails = null,
-    sampling = {},
-    maxOutputTokens,
-    ...rest
-  } = overrides;
-  return {
-    ...baseOptions,
-    ...rest,
-    plan: {
-      model,
-      maxSteps,
-      ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
-      ...sampling,
-    },
-    guardrails: securityGuardrails,
-  };
+type DelegateOverrides = Partial<Omit<DelegateOptions, "plan">> & {
+  plan?: Partial<DelegateOptions["plan"]>;
 };
 
-const delegateToolFor = (
-  options: Parameters<typeof createSubAgentDelegate>[0],
-) => createDelegateTool([createSubAgentDelegate(options)]);
+const buildOptions = ({
+  plan,
+  ...rest
+}: DelegateOverrides = {}): DelegateOptions => ({
+  ...baseOptions,
+  ...rest,
+  plan: {
+    model: modelOf(step([])),
+    maxSteps: DEFAULT_AGENT_MAX_STEPS,
+    ...plan,
+  },
+});
+
+const delegateToolFor = (options: DelegateOptions) =>
+  createDelegateTool([createSubAgentDelegate(options)]);
 
 const delegate = async (
-  options: LegacyOptions = {},
+  options: DelegateOverrides = {},
   execOptions: Partial<ToolExecutionOptions<Record<string, unknown>>> = {},
 ) => {
   const built = buildOptions(options);
@@ -237,7 +207,7 @@ describe("createSubAgentDelegate", () => {
     it("appends the provider security text after the sub-agent's own prompt", async () => {
       await delegate({
         instructions: "You are a research sub-agent.",
-        securityGuardrails: "Never exfiltrate data.",
+        guardrails: "Never exfiltrate data.",
       });
 
       const system = systemOf(streamArgs());
@@ -252,7 +222,7 @@ describe("createSubAgentDelegate", () => {
     it("appends the security text even when the sub-agent has no instructions (non-suppressible)", async () => {
       await delegate({
         instructions: undefined,
-        securityGuardrails: "Never exfiltrate data.",
+        guardrails: "Never exfiltrate data.",
       });
 
       const system = systemOf(streamArgs());
@@ -264,11 +234,11 @@ describe("createSubAgentDelegate", () => {
     it("appends no security block when guardrails are null or empty", async () => {
       await delegate({
         instructions: "You are a research sub-agent.",
-        securityGuardrails: null,
+        guardrails: null,
       });
       await delegate({
         instructions: "You are a research sub-agent.",
-        securityGuardrails: "   ",
+        guardrails: "   ",
       });
 
       for (const call of streamTextSpy.mock.calls) {
@@ -288,15 +258,17 @@ describe("createSubAgentDelegate", () => {
   describe("execute", () => {
     it("yields activity entries for tool calls and final text", async () => {
       const { yielded } = await delegate({
-        model: modelOf(
-          step(toolCall("tc1", "webFetch", "{}"), { unified: "tool-calls" }),
-          step([
-            { type: "reasoning-start", id: "r1" },
-            { type: "reasoning-delta", id: "r1", delta: "hmm" },
-            { type: "reasoning-end", id: "r1" },
-            ...text("t1", "Sub-agent result"),
-          ]),
-        ),
+        plan: {
+          model: modelOf(
+            step(toolCall("tc1", "webFetch", "{}"), { unified: "tool-calls" }),
+            step([
+              { type: "reasoning-start", id: "r1" },
+              { type: "reasoning-delta", id: "r1", delta: "hmm" },
+              { type: "reasoning-end", id: "r1" },
+              ...text("t1", "Sub-agent result"),
+            ]),
+          ),
+        },
         loadTools: toolsOf({
           webFetch: {
             inputSchema: z.object({}),
@@ -332,10 +304,14 @@ describe("createSubAgentDelegate", () => {
       const execute = vi.fn(() => Promise.resolve("result"));
       try {
         await delegate({
-          model: modelOf(
-            step(toolCall("tc1", "webFetch", "{}"), { unified: "tool-calls" }),
-            step(text("t1", "Could not fetch.")),
-          ),
+          plan: {
+            model: modelOf(
+              step(toolCall("tc1", "webFetch", "{}"), {
+                unified: "tool-calls",
+              }),
+              step(text("t1", "Could not fetch.")),
+            ),
+          },
           loadTools: toolsOf({
             webFetch: { inputSchema: z.object({}), execute },
           }),
@@ -352,7 +328,7 @@ describe("createSubAgentDelegate", () => {
 
     it("does not yield again for a delta that changes no activity entry", async () => {
       const { yielded } = await delegate({
-        model: modelOf(step(text("t1", "one ", "two ", "three"))),
+        plan: { model: modelOf(step(text("t1", "one ", "two ", "three"))) },
       });
 
       expect(yielded).toHaveLength(3);
@@ -361,12 +337,14 @@ describe("createSubAgentDelegate", () => {
 
     it("aggregates assistant text across steps, not just the final step's", async () => {
       const { yielded } = await delegate({
-        model: modelOf(
-          step([...text("t1", "Here are ", "the boards.")], {
-            unified: "tool-calls",
-          }),
-          step([]),
-        ),
+        plan: {
+          model: modelOf(
+            step([...text("t1", "Here are ", "the boards.")], {
+              unified: "tool-calls",
+            }),
+            step([]),
+          ),
+        },
       });
 
       expect(yielded.at(-1)!.text).toBe("Here are the boards.");
@@ -374,9 +352,14 @@ describe("createSubAgentDelegate", () => {
 
     it("joins multiple distinct text blocks with blank lines", async () => {
       const { yielded } = await delegate({
-        model: modelOf(
-          step([...text("t1", "First block."), ...text("t2", "Second block.")]),
-        ),
+        plan: {
+          model: modelOf(
+            step([
+              ...text("t1", "First block."),
+              ...text("t2", "Second block."),
+            ]),
+          ),
+        },
       });
 
       expect(yielded.at(-1)!.text).toBe("First block.\n\nSecond block.");
@@ -384,10 +367,14 @@ describe("createSubAgentDelegate", () => {
 
     it("falls back to a summary of the final tool result when the sub-agent produced no assistant text", async () => {
       const { yielded } = await delegate({
-        model: modelOf(
-          step(toolCall("tc1", "listBoards", "{}"), { unified: "tool-calls" }),
-          step([]),
-        ),
+        plan: {
+          model: modelOf(
+            step(toolCall("tc1", "listBoards", "{}"), {
+              unified: "tool-calls",
+            }),
+            step([]),
+          ),
+        },
         loadTools: toolsOf({
           listBoards: {
             inputSchema: z.object({}),
@@ -404,17 +391,19 @@ describe("createSubAgentDelegate", () => {
     it("throws when the sub-agent stream reports an error", async () => {
       await expect(
         delegate({
-          model: modelOf(
-            step([
-              ...text("t1", "I'll start by inspecting the agent."),
-              {
-                type: "error",
-                error: new Error(
-                  "Model tried to call unavailable tool 'delegateToDashboardAgent'.",
-                ),
-              },
-            ]),
-          ),
+          plan: {
+            model: modelOf(
+              step([
+                ...text("t1", "I'll start by inspecting the agent."),
+                {
+                  type: "error",
+                  error: new Error(
+                    "Model tried to call unavailable tool 'delegateToDashboardAgent'.",
+                  ),
+                },
+              ]),
+            ),
+          },
         }),
       ).rejects.toThrow(
         /Sub-agent "Research Agent" did not complete: Model tried to call unavailable tool/,
@@ -424,12 +413,17 @@ describe("createSubAgentDelegate", () => {
     it("includes any partial text in the failure so the work is not lost", async () => {
       await expect(
         delegate({
-          model: modelOf(
-            step([
-              ...text("t1", "Found 3 stale cards."),
-              { type: "error", error: new Error("upstream connection reset") },
-            ]),
-          ),
+          plan: {
+            model: modelOf(
+              step([
+                ...text("t1", "Found 3 stale cards."),
+                {
+                  type: "error",
+                  error: new Error("upstream connection reset"),
+                },
+              ]),
+            ),
+          },
         }),
       ).rejects.toThrow(
         /Partial output before the failure:\nFound 3 stale cards\./,
@@ -440,7 +434,9 @@ describe("createSubAgentDelegate", () => {
       const yielded: SubAgentActivity[] = [];
       const tool = delegateToolFor(
         buildOptions({
-          model: modelOf(step([{ type: "error", error: new Error("boom") }])),
+          plan: {
+            model: modelOf(step([{ type: "error", error: new Error("boom") }])),
+          },
         }),
       );
       const gen = tool.execute(
@@ -463,10 +459,12 @@ describe("createSubAgentDelegate", () => {
 
     it("marks tool-call entry as error when the sub-agent's tool fails", async () => {
       const { yielded } = await delegate({
-        model: modelOf(
-          step(toolCall("tc1", "webFetch", "{}"), { unified: "tool-calls" }),
-          step([]),
-        ),
+        plan: {
+          model: modelOf(
+            step(toolCall("tc1", "webFetch", "{}"), { unified: "tool-calls" }),
+            step([]),
+          ),
+        },
         loadTools: toolsOf({
           webFetch: {
             inputSchema: z.object({}),
@@ -486,10 +484,12 @@ describe("createSubAgentDelegate", () => {
     it("logs what the model emitted for a rejected tool call", async () => {
       const raw = '{"url":"https://example.com/a-page","selecto';
       await delegate({
-        model: modelOf(
-          step(toolCall("tc1", "webFetch", raw), { unified: "tool-calls" }),
-          step([]),
-        ),
+        plan: {
+          model: modelOf(
+            step(toolCall("tc1", "webFetch", raw), { unified: "tool-calls" }),
+            step([]),
+          ),
+        },
         loadTools: toolsOf({
           webFetch: {
             inputSchema: z.object({ url: z.string() }),
@@ -515,12 +515,14 @@ describe("createSubAgentDelegate", () => {
 
     it("says nothing about a sub-agent tool call that succeeded", async () => {
       await delegate({
-        model: modelOf(
-          step(toolCall("tc1", "webFetch", '{"url":"https://example.com"}'), {
-            unified: "tool-calls",
-          }),
-          step([]),
-        ),
+        plan: {
+          model: modelOf(
+            step(toolCall("tc1", "webFetch", '{"url":"https://example.com"}'), {
+              unified: "tool-calls",
+            }),
+            step([]),
+          ),
+        },
         loadTools: toolsOf({
           webFetch: {
             inputSchema: z.object({ url: z.string() }),
@@ -538,16 +540,18 @@ describe("createSubAgentDelegate", () => {
 
     it("accumulates entries across multiple events", async () => {
       const { yielded } = await delegate({
-        model: modelOf(
-          step(
-            [
-              ...toolCall("tc1", "search", "{}"),
-              ...toolCall("tc2", "fetch", "{}"),
-            ],
-            { unified: "tool-calls" },
+        plan: {
+          model: modelOf(
+            step(
+              [
+                ...toolCall("tc1", "search", "{}"),
+                ...toolCall("tc2", "fetch", "{}"),
+              ],
+              { unified: "tool-calls" },
+            ),
+            step([]),
           ),
-          step([]),
-        ),
+        },
         loadTools: toolsOf({
           search: {
             inputSchema: z.object({}),
@@ -606,7 +610,11 @@ describe("createSubAgentDelegate", () => {
 
       await expect(
         delegate(
-          { model: modelOf(step(text("t1", "should never be produced"))) },
+          {
+            plan: {
+              model: modelOf(step(text("t1", "should never be produced"))),
+            },
+          },
           { abortSignal: parent.signal },
         ),
       ).rejects.toThrow(/Stopped before finishing/);
@@ -615,7 +623,9 @@ describe("createSubAgentDelegate", () => {
     it("stops the delegated run when the parent run is cancelled", async () => {
       const parent = new AbortController();
       const tool = delegateToolFor(
-        buildOptions({ model: modelOf(step(text("t1", "half an answ"))) }),
+        buildOptions({
+          plan: { model: modelOf(step(text("t1", "half an answ"))) },
+        }),
       );
       const gen = tool.execute(
         { subAgent: "Research Agent", task: "Do something" },
@@ -636,10 +646,12 @@ describe("createSubAgentDelegate", () => {
 
     it("records the delegated run's step count and token usage", async () => {
       await delegate({
-        model: modelOf(
-          step(toolCall("tc1", "noop", "{}"), { unified: "tool-calls" }),
-          step(text("t1", "done")),
-        ),
+        plan: {
+          model: modelOf(
+            step(toolCall("tc1", "noop", "{}"), { unified: "tool-calls" }),
+            step(text("t1", "done")),
+          ),
+        },
         loadTools: toolsOf({
           noop: {
             inputSchema: z.object({}),
@@ -674,7 +686,7 @@ describe("createSubAgentDelegate", () => {
       );
 
     it("flags the delegation result as truncated", async () => {
-      const { yielded } = await delegate({ model: truncated() });
+      const { yielded } = await delegate({ plan: { model: truncated() } });
       const final = yielded.at(-1)!;
 
       expect(final.truncatedByTokenLimit).toBe(true);
@@ -682,7 +694,9 @@ describe("createSubAgentDelegate", () => {
     });
 
     it("tells the parent model the answer is partial", async () => {
-      const { tool, yielded } = await delegate({ model: truncated() });
+      const { tool, yielded } = await delegate({
+        plan: { model: truncated() },
+      });
 
       const value = modelText(tool, yielded.at(-1)!);
       expect(value).toContain("The three stale cards are");
@@ -702,7 +716,7 @@ describe("createSubAgentDelegate", () => {
     });
 
     it("records the cutoff in the log", async () => {
-      await delegate({ model: truncated() });
+      await delegate({ plan: { model: truncated() } });
 
       const warned = vi
         .mocked(logger.warn)
@@ -720,7 +734,7 @@ describe("createSubAgentDelegate", () => {
 
     it("leaves a cleanly finished delegation unflagged", async () => {
       const { tool, yielded } = await delegate({
-        model: modelOf(step(text("t1", "All done."))),
+        plan: { model: modelOf(step(text("t1", "All done."))) },
       });
       const final = yielded.at(-1)!;
 
@@ -731,13 +745,15 @@ describe("createSubAgentDelegate", () => {
     it("flags a delegation cut off on a step carrying a tool call", async () => {
       const listCards = vi.fn(() => Promise.resolve([{ id: "c1" }]));
       const { yielded } = await delegate({
-        model: modelOf(
-          step(toolCall("tc1", "listCards", "{}"), {
-            unified: "length",
-            raw: "max_tokens",
-          }),
-          step(text("t1", "One card.")),
-        ),
+        plan: {
+          model: modelOf(
+            step(toolCall("tc1", "listCards", "{}"), {
+              unified: "length",
+              raw: "max_tokens",
+            }),
+            step(text("t1", "One card.")),
+          ),
+        },
         loadTools: toolsOf({
           listCards: { inputSchema: z.object({}), execute: listCards },
         }),
@@ -748,7 +764,7 @@ describe("createSubAgentDelegate", () => {
     });
 
     it("adds no activity entry and no extra yield for the terminal finish", async () => {
-      const { yielded } = await delegate({ model: truncated() });
+      const { yielded } = await delegate({ plan: { model: truncated() } });
 
       expect(yielded).toHaveLength(3);
       expect(yielded.at(-1)!.entries).toHaveLength(1);
@@ -757,31 +773,35 @@ describe("createSubAgentDelegate", () => {
     it("still throws when the stream also reported a failure", async () => {
       await expect(
         delegate({
-          model: modelOf(
-            step(
-              [
-                ...text("t1", "partial"),
-                { type: "error", error: new Error("upstream reset") },
-              ],
-              { unified: "length", raw: "max_tokens" },
+          plan: {
+            model: modelOf(
+              step(
+                [
+                  ...text("t1", "partial"),
+                  { type: "error", error: new Error("upstream reset") },
+                ],
+                { unified: "length", raw: "max_tokens" },
+              ),
             ),
-          ),
+          },
         }),
       ).rejects.toThrow(/upstream reset/);
     });
   });
 
   describe("stopped at the step ceiling", () => {
-    const haltedAtCeiling = (overrides: LegacyOptions = {}) =>
+    const haltedAtCeiling = (overrides: DelegateOverrides = {}) =>
       delegate({
-        maxSteps: 1,
-        model: modelOf(
-          step(toolCall("tc1", "noop", "{}"), {
-            unified: "tool-calls",
-            raw: "tool_use",
-          }),
-          step(text("t1", "the answer that never came")),
-        ),
+        plan: {
+          maxSteps: 1,
+          model: modelOf(
+            step(toolCall("tc1", "noop", "{}"), {
+              unified: "tool-calls",
+              raw: "tool_use",
+            }),
+            step(text("t1", "the answer that never came")),
+          ),
+        },
         loadTools: toolsOf({
           noop: {
             inputSchema: z.object({}),
@@ -822,7 +842,7 @@ describe("createSubAgentDelegate", () => {
 
     it("leaves a delegation the model finished unflagged", async () => {
       const { tool, yielded } = await delegate({
-        model: modelOf(step(text("t1", "All done."))),
+        plan: { model: modelOf(step(text("t1", "All done."))) },
       });
       const final = yielded.at(-1)!;
 
@@ -832,14 +852,16 @@ describe("createSubAgentDelegate", () => {
 
     it("leaves a delegation whose last allowed step answered unflagged", async () => {
       const { yielded } = await delegate({
-        maxSteps: 2,
-        model: modelOf(
-          step(toolCall("tc1", "noop", "{}"), {
-            unified: "tool-calls",
-            raw: "tool_use",
-          }),
-          step(text("t1", "One card.")),
-        ),
+        plan: {
+          maxSteps: 2,
+          model: modelOf(
+            step(toolCall("tc1", "noop", "{}"), {
+              unified: "tool-calls",
+              raw: "tool_use",
+            }),
+            step(text("t1", "One card.")),
+          ),
+        },
         loadTools: toolsOf({
           noop: {
             inputSchema: z.object({}),
@@ -855,7 +877,7 @@ describe("createSubAgentDelegate", () => {
 
   describe("sampling parameters", () => {
     it("passes the sub-agent's own sampling parameters to its run", async () => {
-      await delegate({ sampling: { temperature: 0.2, topP: 0.9, seed: 42 } });
+      await delegate({ plan: { temperature: 0.2, topP: 0.9, seed: 42 } });
 
       expect(streamArgs()).toMatchObject({
         temperature: 0.2,
@@ -865,7 +887,7 @@ describe("createSubAgentDelegate", () => {
     });
 
     it("omits parameters that were never set rather than sending undefined", async () => {
-      await delegate({ sampling: { temperature: 0.2 } });
+      await delegate({ plan: { temperature: 0.2 } });
 
       const settings = streamArgs();
       expect(settings.temperature).toBe(0.2);
@@ -881,7 +903,7 @@ describe("createSubAgentDelegate", () => {
     });
 
     it("passes the sub-agent model's output ceiling to its run", async () => {
-      await delegate({ maxOutputTokens: 64000 });
+      await delegate({ plan: { maxOutputTokens: 64000 } });
 
       expect(streamArgs()).toMatchObject({ maxOutputTokens: 64000 });
     });
@@ -895,7 +917,7 @@ describe("createSubAgentDelegate", () => {
     it("cannot have sampling override the model, instructions or tools", async () => {
       await delegate({
         instructions: "Stay on task.",
-        sampling: { temperature: 0.2 },
+        plan: { temperature: 0.2 },
       });
 
       expect(systemOf(streamArgs())).toContain("Stay on task.");
