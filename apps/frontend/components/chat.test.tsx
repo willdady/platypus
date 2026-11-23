@@ -533,6 +533,32 @@ describe("Chat Artifact panel", () => {
     } as unknown as PlatypusUIMessage;
   }
 
+  it("keeps the centred Chat column while the panel is closed", () => {
+    harness.turn.messages = [message("a1", "Hello")];
+    renderChat();
+
+    const columns =
+      // eslint-disable-next-line testing-library/no-node-access
+      document.querySelectorAll(".max-w-4xl");
+    expect(columns.length).toBeGreaterThan(0);
+    for (const column of columns) {
+      expect(column).toHaveClass("xl:w-4/5");
+    }
+  });
+
+  it("fills the Chat column while the panel is open", () => {
+    harness.turn.messages = [message("a1", "Hello")];
+    renderChat();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open artifact a1" }));
+
+    expect(
+      screen.getByText("Artifact panel artifact-1 v1"),
+    ).toBeInTheDocument();
+    // eslint-disable-next-line testing-library/no-node-access
+    expect(document.querySelector(".max-w-4xl")).toBeNull();
+  });
+
   it("opens the viewer beside the transcript and closes it", () => {
     harness.turn.messages = [message("a1", "Hello")];
     renderChat();

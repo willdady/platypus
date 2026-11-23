@@ -51,6 +51,7 @@
     "react": "19.3.1",
     "react-day-picker": "^10.0.2",
     "react-dom": "19.3.1",
+    "react-resizable-panels": "^4.24.1",
     "rehype-raw": "^7.0.0",
     "rehype-sanitize": "^6.0.0",
     "remark-breaks": "^4.0.0",
