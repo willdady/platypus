@@ -3,26 +3,6 @@ import { randomBytes } from "node:crypto";
 import { PassThrough } from "node:stream";
 import { SANDBOX_TRANSFER_MAX_BYTES } from "@platypuschat/plugin-sdk";
 
-// ---------------------------------------------------------------------------
-// This suite covers the Docker *transport* only: container/volume lifecycle,
-// the tar builder, idempotent teardown, and that dockerode is driven with the
-// argv it was handed. The five-tool contract those primitives sit under —
-// line counting, truncation flags, the timeout clamp, the unique-`oldString`
-// rule, the find(1) argv and its output parser — belongs to
-// `createPosixSandbox` and is tested once in `src/sandbox/posix.test.ts`.
-// Duplicating any of it here would just give the same rule two homes.
-//
-// The tests still drive the composed backend (`createDockerSandboxBackend`)
-// rather than the transport in isolation, because what reaches dockerode is
-// only interesting once core has resolved the path and built the argv.
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// Mock dockerode. The default export is a class; calling `new Docker()` must
-// return our fake docker handle. We pull state out of `mockState` so tests can
-// configure per-call behaviour.
-// ---------------------------------------------------------------------------
-
 type FakeContainer = {
   inspect: ReturnType<typeof vi.fn>;
   start: ReturnType<typeof vi.fn>;
@@ -43,33 +23,15 @@ type ExecConfig = {
   stdout?: string | Buffer;
   stderr?: string | Buffer;
   exitCode?: number;
-  /** Delay (ms) before stream closes — used to test timeout behaviour. */
   closeDelayMs?: number;
-  /**
-   * Never resolve the daemon's exec-create call. The unbounded daemon call that
-   * runs *before* the per-command timer is armed (issue #921).
-   */
   hangCreate?: boolean;
-  /**
-   * Fires as the exec is started — the window between the last daemon await
-   * resolving and the abort listener being attached (issue #921).
-   */
   onStart?: () => void;
-  /** Delay (ms) before the daemon's exec-start call resolves. */
   startDelayMs?: number;
-  /** Fires as the exec-start call resolves. */
   onStarted?: () => void;
-  /** Reject `exec.inspect()` with this error instead of reporting an exit code. */
   inspectError?: Error;
-  /**
-   * What successive `exec.inspect()` calls report as `ExitCode`, popped
-   * left-to-right; the last one repeats. `null` is the daemon still marking
-   * the exec as running. Overrides `exitCode` when set.
-   */
   inspectExitCodes?: Array<number | null>;
 };
 
-/** A PassThrough stream extended with optional exec configuration attached by the mock. */
 type ExecStream = PassThrough & { __execCfg?: ExecConfig };
 
 type ContainerCreateOpts = {
@@ -96,31 +58,21 @@ type PutArchiveCall = { buffer: Buffer; opts: { path: string } };
 type NetworkConnectCall = { network: string; opts: { Container?: string } };
 
 type MockState = {
-  // Sequence of behaviours for container.inspect() — popped left-to-right.
   containerInspects: Array<() => Promise<{ State: { Running: boolean } }>>;
-  // Sequence for image.inspect().
   imageInspects: Array<() => Promise<{ Id: string }>>;
-  // Sequence for volume.inspect().
   volumeInspects: Array<() => Promise<{ Name: string }>>;
-  // Sequence of exec behaviours, popped on each exec.
   execQueue: ExecConfig[];
-  // Recorded calls.
   createContainerCalls: ContainerCreateOpts[];
   createVolumeCalls: Record<string, unknown>[];
   putArchiveCalls: PutArchiveCall[];
   execCalls: Record<string, unknown>[];
   pullCalls: string[];
-  // What the image pull's progress stream finishes with.
   pullError: Error | null;
-  // Recorded network.connect() calls (additional networks beyond the primary).
   networkConnectCalls: NetworkConnectCall[];
-  // Per-container stop/remove handlers (keyed by container name).
   containerStop: () => Promise<void>;
   containerRemove: () => Promise<void>;
   volumeRemove: () => Promise<void>;
-  // Track last container so tests can assert .start() was called.
   lastContainer: FakeContainer | null;
-  // Track the *existing* container (returned by getContainer before create).
   existingContainer: FakeContainer | null;
 };
 
@@ -132,7 +84,6 @@ function makeFakeContainer(): FakeContainer {
     stdoutPass: PassThrough,
     stderrPass: PassThrough,
   ) => {
-    // Read the most recently configured exec output (set on exec.start()).
     const cfg = (stream as ExecStream).__execCfg;
     process.nextTick(() => {
       if (cfg?.stdout) {
@@ -156,7 +107,6 @@ function makeFakeContainer(): FakeContainer {
     inspect: vi.fn(() => {
       const next = mockState.containerInspects.shift();
       if (!next) {
-        // Default: container running.
         return Promise.resolve({ State: { Running: true } });
       }
       return next();
@@ -170,10 +120,6 @@ function makeFakeContainer(): FakeContainer {
       if (cfg.hangCreate) return new Promise(() => {});
       const stream: ExecStream = new PassThrough();
       stream.__execCfg = cfg;
-      // Production code awaits stream.on("end" | "close" | "error"). Since
-      // nothing actually consumes `stream` itself (demuxStream is mocked to
-      // write to the pass-throughs directly), we manually emit "close" to
-      // unblock the await.
       const closeStream = () => {
         stream.end();
         stream.emit("close");
@@ -235,17 +181,13 @@ vi.mock("dockerode", () => {
         ) => {
           cb(mockState.pullError);
         },
-        demuxStream: () => {
-          // unused at the top level — production code reaches via container.modem
-        },
+        demuxStream: () => {},
       };
     }
 
     getContainer(_name: string) {
-      // Return the existing-container fake if present, else lastContainer (post-create).
       if (mockState.existingContainer) return mockState.existingContainer;
       if (mockState.lastContainer) return mockState.lastContainer;
-      // Fallback for destroy() paths where nothing was ever provisioned in this test.
       const c = makeFakeContainer();
       mockState.lastContainer = c;
       return c;
@@ -276,7 +218,6 @@ vi.mock("dockerode", () => {
       mockState.createContainerCalls.push(opts);
       const c = makeFakeContainer();
       mockState.lastContainer = c;
-      // After creation, getContainer() should return this same container.
       return c;
     }
 
@@ -296,16 +237,12 @@ vi.mock("dockerode", () => {
 
     pull(image: string) {
       mockState.pullCalls.push(image);
-      // The production code only uses the returned stream as a token; the
-      // modem.followProgress mock calls back immediately so the stream is
-      // never actually read.
       return new PassThrough();
     }
   }
   return { default: Docker };
 });
 
-// Import AFTER vi.mock so the adapter binds to our mocked dockerode.
 import {
   createDockerSandboxBackend,
   buildSingleFileTar,
@@ -361,12 +298,10 @@ function resetMockState() {
   };
 }
 
-// Helpers for setting up exec output sequences.
 function queueExec(cfg: ExecConfig = {}) {
   mockState.execQueue.push(cfg);
 }
 
-/** A Docker-style error with an HTTP status code. */
 interface StatusError extends Error {
   statusCode: number;
 }
@@ -377,7 +312,6 @@ function makeStatusError(message: string, statusCode: number): StatusError {
   return err;
 }
 
-/** Configure container.inspect() to reject 404 (no such container). */
 function setContainerMissing() {
   mockState.containerInspects.push(() =>
     Promise.reject(makeStatusError("no such container", 404)),
@@ -396,18 +330,13 @@ function setVolumeMissing() {
   );
 }
 
-/** Configure a fresh provisioning path: every check returns 404 until create. */
 function setupFreshProvision() {
   setContainerMissing();
   setImageMissing();
   setVolumeMissing();
-  // After provisioning, the mkdir -p workspace exec is invoked.
   queueExec({ exitCode: 0 });
 }
 
-// The `PluginLogger` seam core injects on the plugin's deploy-time block. The
-// adapter logs through this rather than core's logger, so any suite asserting on
-// a log line injects one and watches it — watching core's would pass vacuously.
 let pluginLogger: FakePluginLogger;
 
 const withPluginLogger = () => ({
@@ -425,7 +354,6 @@ beforeEach(() => {
 describe("DockerSandboxTransport — provisioning", () => {
   it("provisions a new container when none exists", async () => {
     setupFreshProvision();
-    // Plus an exec for the actual tool call.
     queueExec({ stdout: "hi", exitCode: 0 });
 
     const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
@@ -436,7 +364,6 @@ describe("DockerSandboxTransport — provisioning", () => {
     expect(mockState.createContainerCalls).toHaveLength(1);
     expect(mockState.lastContainer?.start).toHaveBeenCalledTimes(1);
 
-    // First exec on the new container is the mkdir -p /workspace.
     expect(mockState.execCalls[0]).toMatchObject({
       Cmd: ["/bin/sh", "-c", `mkdir -p ${SANDBOX_WORKSPACE_ROOT}`],
     });
@@ -460,22 +387,17 @@ describe("DockerSandboxTransport — provisioning", () => {
       "platypus-sandbox-vol-ws-abc:/workspace",
     ]);
     expect(opts.HostConfig?.PidsLimit).toBe(256);
-    // A killed command's orphans are reparented to PID 1; `sleep infinity`
-    // never reaps them, and their zombies would count against PidsLimit.
     expect(opts.HostConfig?.Init).toBe(true);
     expect(opts.HostConfig?.Memory).toBe(2 * 1024 * 1024 * 1024);
     expect(opts.HostConfig?.MemorySwap).toBe(opts.HostConfig?.Memory);
     expect(opts.HostConfig?.NanoCpus).toBe(2_000_000_000);
     expect(opts.HostConfig?.SecurityOpt).toEqual(["no-new-privileges:true"]);
-    // Default-deny host reachability (ADR-0005): empty config → no reachability.
     expect(opts.HostConfig?.ExtraHosts).toEqual([]);
     expect(opts.HostConfig?.NetworkMode).toBeUndefined();
   });
 
   it("reuses an existing running container without re-creating", async () => {
-    // existingContainer present; its inspect() will resolve Running=true.
     mockState.existingContainer = makeFakeContainer();
-    // First inspect returns running.
     mockState.containerInspects.push(() =>
       Promise.resolve({ State: { Running: true } }),
     );
@@ -487,7 +409,7 @@ describe("DockerSandboxTransport — provisioning", () => {
     expect(mockState.createContainerCalls).toHaveLength(0);
     expect(mockState.createVolumeCalls).toHaveLength(0);
     expect(mockState.pullCalls).toHaveLength(0);
-    expect(mockState.imageInspects).toHaveLength(0); // none consumed
+    expect(mockState.imageInspects).toHaveLength(0);
   });
 
   it("starts an existing stopped container", async () => {
@@ -532,7 +454,6 @@ describe("DockerSandboxTransport — provisioning", () => {
 
   it("in-flight memoisation: concurrent calls share one provisioning", async () => {
     setupFreshProvision();
-    // Two parallel tool calls share the same provisioning. Each needs its own exec slot.
     queueExec({ exitCode: 0 });
     queueExec({ exitCode: 0 });
 
@@ -555,7 +476,6 @@ describe("DockerSandboxTransport — argv safety", () => {
     const malicious = `foo";rm -rf /`;
     await backend.fsRead(ctx, { path: malicious }, callOptions);
 
-    // Find the fsRead exec call — last call (after provisioning mkdir).
     const last = mockState.execCalls.at(-1) as { Cmd: string[] };
     expect(last.Cmd).toEqual([
       "head",
@@ -567,9 +487,6 @@ describe("DockerSandboxTransport — argv safety", () => {
   });
 
   it("fsRead bounds the read output at the cap core asked for", async () => {
-    // `head -c` stops reading at the cap in the container; the stdout cap is
-    // the backstop on this side. Whether a filled buffer counts as truncated
-    // is core's rule, tested in sandbox/posix.test.ts.
     setupFreshProvision();
     queueExec({ stdout: "a".repeat(MAX_READ_BYTES + 5_000), exitCode: 0 });
 
@@ -580,8 +497,6 @@ describe("DockerSandboxTransport — argv safety", () => {
   });
 
   it("fsList hands core's find argv to dockerode unmodified", async () => {
-    // Pre-warm with a running container so the find exec is the only one and
-    // execCalls[0] is unambiguous.
     mockState.existingContainer = makeFakeContainer();
     mockState.containerInspects.push(() =>
       Promise.resolve({ State: { Running: true } }),
@@ -591,9 +506,6 @@ describe("DockerSandboxTransport — argv safety", () => {
     const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
     await backend.fsList(ctx, { glob: "**/*.ts" }, callOptions);
 
-    // What the glob rules *are* is core's business (posix.test.ts). What this
-    // asserts is that the transport adds no shell and re-quotes nothing: the
-    // argv core built arrives at the daemon element for element.
     const call = mockState.execCalls[0] as { Cmd: string[] };
     expect(call.Cmd).toEqual(
       buildFindArgs(SANDBOX_WORKSPACE_ROOT, { glob: "**/*.ts" }),
@@ -666,7 +578,6 @@ describe("DockerSandboxTransport — argv safety", () => {
 
   it("fsWrite create-mode probes with [test, -e, <path>] and throws if exists", async () => {
     setupFreshProvision();
-    // probe — file exists (exit 0).
     queueExec({ exitCode: 0 });
 
     const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
@@ -687,8 +598,6 @@ describe("DockerSandboxTransport — argv safety", () => {
   });
 
   it("fsWrite overwrite mode skips the probe and calls putArchive", async () => {
-    // Pre-warm with an existing running container so we can isolate exec calls
-    // from the fsWrite itself.
     mockState.existingContainer = makeFakeContainer();
     mockState.containerInspects.push(() =>
       Promise.resolve({ State: { Running: true } }),
@@ -704,7 +613,6 @@ describe("DockerSandboxTransport — argv safety", () => {
       },
       callOptions,
     );
-    // No exec calls at all: no probe (overwrite skips), no mkdir (top-level path).
     expect(mockState.execCalls.length).toBe(0);
     expect(mockState.putArchiveCalls).toHaveLength(1);
     expect(mockState.putArchiveCalls[0].opts).toEqual({ path: "/workspace" });
@@ -714,7 +622,7 @@ describe("DockerSandboxTransport — argv safety", () => {
 describe("DockerSandboxTransport — byte transfer", () => {
   it("round-trips a binary payload byte-identical through putArchive and a read", async () => {
     mockState.existingContainer = makeFakeContainer();
-    queueExec({ exitCode: 0 }); // mkdir -p for the nested parent
+    queueExec({ exitCode: 0 });
     const payload = Buffer.concat([
       Buffer.from([0x00, 0xff, 0xfe, 0xc3, 0x28]),
       randomBytes(4096),
@@ -727,8 +635,6 @@ describe("DockerSandboxTransport — byte transfer", () => {
       callOptions,
     );
 
-    // What the daemon would have extracted: the single tar entry's body, sized
-    // by the octal field at 124 and starting after the 512-byte header.
     const tar = mockState.putArchiveCalls[0].buffer;
     const size = Number.parseInt(tar.subarray(124, 135).toString("utf8"), 8);
     queueExec({ stdout: tar.subarray(512, 512 + size), exitCode: 0 });
@@ -755,16 +661,12 @@ describe("DockerSandboxTransport — tar builder", () => {
     const tar = buildSingleFileTar("a/b.txt", content);
 
     expect(tar.length % 512).toBe(0);
-    // ustar magic at offset 257.
     expect(tar.subarray(257, 262).toString("utf8")).toBe("ustar");
 
-    // size field at 124..136 — 11 octal digits + space.
     const sizeField = tar.subarray(124, 136).toString("utf8");
-    // Octal-encoded content length, zero-padded to 11, trailing space.
     const expectedSize = content.length.toString(8).padStart(11, "0") + " ";
     expect(sizeField).toBe(expectedSize);
 
-    // Entry name at offset 0..100, NUL-padded.
     const nameBytes = tar.subarray(0, 100);
     const nul = nameBytes.indexOf(0);
     const name = nameBytes.subarray(0, nul === -1 ? 100 : nul).toString("utf8");
@@ -850,9 +752,6 @@ describe("DockerSandboxTransport — destroy() idempotence", () => {
   });
 });
 
-// Every exec is tagged with a marker in its environment, which its children
-// inherit; ending a command means killing whatever carries its marker.
-/** The marker the transport tagged an exec with, read back off its Env. */
 function execMarker(call: Record<string, unknown>): string {
   const env = (call.Env as string[] | undefined) ?? [];
   const entry = env.find((e) => e.startsWith(`${EXEC_MARKER_VAR}=`));
@@ -860,7 +759,6 @@ function execMarker(call: Record<string, unknown>): string {
   return entry.slice(EXEC_MARKER_VAR.length + 1);
 }
 
-/** The execs sent to kill whatever carries `marker`. */
 function killCallsFor(marker: string): Record<string, unknown>[] {
   return mockState.execCalls.filter((c) =>
     (c.Cmd as string[]).includes(marker),
@@ -870,7 +768,6 @@ function killCallsFor(marker: string): Record<string, unknown>[] {
 describe("DockerSandboxTransport — shellExec output handling", () => {
   it("times out: returns exitCode 124 and destroys the stream", async () => {
     setupFreshProvision();
-    // Long-running exec — close after 200ms; timeout will be 20ms.
     queueExec({ closeDelayMs: 200, exitCode: 0 });
 
     const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
@@ -886,8 +783,6 @@ describe("DockerSandboxTransport — shellExec output handling", () => {
     expect(res.exitCode).toBe(124);
   });
 
-  // Issue #921. The turn is already over; reporting an exit code for a command
-  // that did not finish would put a fabricated result in the transcript.
   it("closes the exec stream and rejects when the turn is cancelled", async () => {
     setupFreshProvision();
     queueExec({ closeDelayMs: 5_000, exitCode: 0 });
@@ -899,15 +794,12 @@ describe("DockerSandboxTransport — shellExec output handling", () => {
       { command: "sleep 300" },
       { signal: controller.signal },
     );
-    // Provisioning's mkdir, then the command's own exec.
     await vi.waitFor(() => expect(mockState.execCalls).toHaveLength(2));
     controller.abort();
 
     await expect(inflight).rejects.toThrow(/cancelled/i);
   });
 
-  // The daemon calls that create and start the exec run before the per-command
-  // timer is armed, so an abort there has nothing else behind it.
   it("stops waiting when the daemon hangs before the command is started", async () => {
     setupFreshProvision();
     queueExec({ hangCreate: true });
@@ -925,9 +817,6 @@ describe("DockerSandboxTransport — shellExec output handling", () => {
     await expect(inflight).rejects.toThrow(/cancelled/i);
   });
 
-  // A listener added to an already-aborted signal never fires, so an abort
-  // landing in that window used to be dropped entirely: the command ran to its
-  // timeout and reported an exit code for a turn that was already over.
   it("catches an abort that lands while the exec is being started", async () => {
     setupFreshProvision();
     const controller = new AbortController();
@@ -965,8 +854,6 @@ describe("DockerSandboxTransport — shellExec output handling", () => {
   });
 });
 
-// Issue #1128. Destroying the attached stream only stops *us* listening; the
-// process in the container runs on, and enough of them exhaust PidsLimit.
 describe("DockerSandboxTransport — ending a command that did not finish", () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -1009,8 +896,6 @@ describe("DockerSandboxTransport — ending a command that did not finish", () =
     );
   });
 
-  // A kill swept before the daemon spawned the command would find nothing,
-  // and the command would then run on untracked.
   it("kills a command whose start lands after the turn is cancelled", async () => {
     setupFreshProvision();
     let commandStarted = false;
@@ -1020,7 +905,7 @@ describe("DockerSandboxTransport — ending a command that did not finish", () =
       startDelayMs: 50,
       onStarted: () => (commandStarted = true),
     });
-    queueExec({ onStart: () => (startedBeforeKill = commandStarted) }); // the kill
+    queueExec({ onStart: () => (startedBeforeKill = commandStarted) });
 
     const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
     const controller = new AbortController();
@@ -1045,7 +930,6 @@ describe("DockerSandboxTransport — ending a command that did not finish", () =
     const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
     await backend.shellExec(ctx, { command: "echo hi" }, callOptions);
 
-    // Provisioning's mkdir and the command — nothing sent to kill either.
     expect(mockState.execCalls).toHaveLength(2);
   });
 
@@ -1067,13 +951,27 @@ describe("DockerSandboxTransport — ending a command that did not finish", () =
     expect(execMarker(first)).not.toBe(execMarker(second));
   });
 
-  // The kill is itself a daemon call; a daemon that hangs on it must not turn
-  // a timed-out command into a hung one.
+  it("keeps its own marker when the command's env names the marker variable", async () => {
+    setupFreshProvision();
+    queueExec({ exitCode: 0 });
+
+    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    await backend.shellExec(
+      ctx,
+      { command: "true", env: { [EXEC_MARKER_VAR]: "spoofed" } },
+      callOptions,
+    );
+
+    const env = mockState.execCalls[1].Env as string[];
+    expect(env.at(-1)).toMatch(new RegExp(`^${EXEC_MARKER_VAR}=`));
+    expect(env.at(-1)).not.toBe(`${EXEC_MARKER_VAR}=spoofed`);
+  });
+
   it("still reports the timeout when the kill cannot be delivered", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     setupFreshProvision();
     queueExec({ closeDelayMs: 600_000, exitCode: 0 });
-    queueExec({ hangCreate: true }); // the kill
+    queueExec({ hangCreate: true });
 
     const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
     const inflight = backend.shellExec(
@@ -1090,8 +988,6 @@ describe("DockerSandboxTransport — ending a command that did not finish", () =
     );
   });
 
-  // `head` on a FIFO with no writer blocks on open forever; nothing above the
-  // transport would ever end it.
   it("gives up on a read that never finishes, and kills it", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     setupFreshProvision();
@@ -1107,8 +1003,6 @@ describe("DockerSandboxTransport — ending a command that did not finish", () =
     expect(killCallsFor(execMarker(read))).toHaveLength(1);
   });
 
-  // A cancelled read used to run on to its timeout: core stopped waiting, but
-  // the transport was never told, so `head` held its PID for the full 30s.
   it("kills a read when the turn is cancelled, without waiting for its timeout", async () => {
     setupFreshProvision();
     queueExec({ closeDelayMs: 3_600_000, exitCode: 0 });
@@ -1143,7 +1037,6 @@ describe("DockerSandboxTransport — exit status", () => {
     ).rejects.toThrow(/daemon gone/);
   });
 
-  // The stream can close a beat before the daemon records the exit code.
   it("waits for the daemon to record the exit code", async () => {
     setupFreshProvision();
     queueExec({ inspectExitCodes: [null, null, 3] });
@@ -1158,8 +1051,6 @@ describe("DockerSandboxTransport — exit status", () => {
     expect(res.exitCode).toBe(3);
   });
 
-  // The stream ended but the daemon still has the exec running — a dropped
-  // connection, say — so the command is ended rather than left behind.
   it("reports an exit code the daemon never records as an error, and kills the command", async () => {
     setupFreshProvision();
     queueExec({ inspectExitCodes: [null] });
@@ -1209,7 +1100,6 @@ describe("DockerSandboxTransport — host reachability (ADR-0005)", () => {
       "secondary",
       "tertiary",
     ]);
-    // Each connect targets a container id via the Container option.
     expect(
       mockState.networkConnectCalls.every((c) => "Container" in c.opts),
     ).toBe(true);
@@ -1232,9 +1122,6 @@ describe("DockerSandboxTransport — host reachability (ADR-0005)", () => {
     expect(mockState.networkConnectCalls).toHaveLength(0);
   });
 
-  // The per-Workspace config schema is now a factory of the plugin's resolved
-  // deploy-time config (ADR-0013): the operator allowlist arrives as
-  // `allowedNetworks`, no longer from process.env.
   describe("dockerSandboxConfigSchema (factory of plugin config)", () => {
     it("defaults to empty arrays for {}", () => {
       const parsed = dockerSandboxConfigSchema(
@@ -1306,11 +1193,6 @@ describe("DockerSandboxTransport — host reachability (ADR-0005)", () => {
 });
 
 describe("DockerSandboxTransport — plugin-injected logger", () => {
-  // Core binds the injected logger to the manifest name before handing it over,
-  // so a line written through it is already attributed — which is why these
-  // assertions check the *fields the call site supplies* and never a `plugin`
-  // key of their own.
-
   it("writes the image-pull line to the injected logger, not core's", async () => {
     setupFreshProvision();
     queueExec({ stdout: "hi", exitCode: 0 });
@@ -1318,12 +1200,10 @@ describe("DockerSandboxTransport — plugin-injected logger", () => {
     await backend.shellExec(ctx, { command: "echo hi" }, callOptions);
 
     expect(mockState.pullCalls).toEqual(["debian:stable-slim"]);
-    // Same fields and message as before the routing change.
     expect(pluginLogger.info).toHaveBeenCalledWith(
       { image: "debian:stable-slim" },
       "Pulling sandbox image",
     );
-    // The whole point: core's logger is no longer the adapter's channel.
     expect(logger.info).not.toHaveBeenCalled();
   });
 
@@ -1338,8 +1218,6 @@ describe("DockerSandboxTransport — plugin-injected logger", () => {
     const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
     await backend.destroy(ctx);
 
-    // All three still fire, at warn, with their original wording — teardown is
-    // best-effort and each step reports independently.
     expect(pluginLogger.warn.mock.calls.map((c) => c[1])).toEqual([
       "sandbox destroy: stop failed (continuing)",
       "sandbox destroy: container remove failed (continuing)",
@@ -1348,8 +1226,6 @@ describe("DockerSandboxTransport — plugin-injected logger", () => {
   });
 
   it("reaches the adapter through the manifest's create()", async () => {
-    // The full contribution path core uses: the loader calls `create` with the
-    // plugin block as its third argument, and the manifest must forward it.
     setupFreshProvision();
     queueExec({ stdout: "hi", exitCode: 0 });
     const contribution = plugin.contributes.sandboxBackends![0];
@@ -1363,17 +1239,9 @@ describe("DockerSandboxTransport — plugin-injected logger", () => {
   });
 
   it("carries the manifest name on its lines when loaded by the real loader", async () => {
-    // End to end through the path production takes — loader → deploy-time block
-    // → `create` → transport — because that is the only thing that proves the
-    // *attribution*. Every other test in this suite supplies its own logger and
-    // so would pass even if the loader bound the wrong name, or none. What an
-    // Operator greps for is `"plugin":"@platypus/docker"`, and this is the test
-    // that fails if that stops being what they get.
     setupFreshProvision();
     queueExec({ stdout: "hi", exitCode: 0 });
 
-    // Stands in for core's logger: records the bindings each child is made with
-    // and merges them into every line that child writes, exactly as pino does.
     const lines: Array<{ bindings: object; fields: object; msg?: string }> = [];
     const baseLogger = {
       child: (bindings: Record<string, unknown>) => {
@@ -1393,8 +1261,6 @@ describe("DockerSandboxTransport — plugin-injected logger", () => {
       },
     };
 
-    // A capturing registrar so this load does not collide with the
-    // module-global sandbox registry other suites in this file seed.
     const captured: SandboxBackendRegistration<unknown, unknown>[] = [];
     await loadPlugins({
       pluginNames: ["@platypus/docker"],
