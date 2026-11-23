@@ -7,7 +7,6 @@ const mcpConfig: ResourceListConfig = {
   entity: "mcps",
   resourceType: "mcp",
   settingsKey: "mcp",
-  delegationFlag: "mcpSelfManagement",
   labels: {
     add: "Add MCP server",
     attach: "Attach shared MCP server",
