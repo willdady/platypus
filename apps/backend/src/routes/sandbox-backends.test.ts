@@ -2,9 +2,9 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { z } from "zod";
 import {
   loadedPluginsFixture,
-  mockDb,
   mockSession,
   resetMockDb,
+  seedDb,
 } from "../test-utils.ts";
 import app from "../server.ts";
 import { registerSandboxBackend } from "../sandbox/index.ts";
@@ -27,14 +27,20 @@ describe("Sandbox backend catalog routes", () => {
   beforeEach(() => {
     resetMockDb();
     vi.clearAllMocks();
-    mockDb.where.mockReturnValue(mockDb);
     setLoadedPlugins(loadedPluginsFixture());
   });
+
+  const world = (role: "admin" | "member") =>
+    seedDb({
+      organization_member: [
+        { id: "m1", userId: "user-1", organizationId: "org-1", role },
+      ],
+    });
 
   describe("GET /", () => {
     it("returns registered backends with id, name, and originating plugin", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
+      world("member");
       setLoadedPlugins(
         loadedPluginsFixture(
           [
@@ -76,7 +82,7 @@ describe("Sandbox backend catalog routes", () => {
   describe("GET /networks", () => {
     it("returns 403 for a non-admin member", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
+      world("member");
 
       const res = await app.request(`${baseUrl}/networks`);
       expect(res.status).toBe(403);
@@ -84,7 +90,7 @@ describe("Sandbox backend catalog routes", () => {
 
     it("lists the allowed Docker networks for an admin", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
+      world("admin");
 
       const res = await app.request(`${baseUrl}/networks`);
       expect(res.status).toBe(200);

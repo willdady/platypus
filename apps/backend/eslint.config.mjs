@@ -33,35 +33,6 @@ const noComments = {
   },
 };
 
-const POSITIONAL_DB_ROUTE_TESTS = [
-  "src/routes/a2a.test.ts",
-  "src/routes/attachment.test.ts",
-  "src/routes/chat.test.ts",
-  "src/routes/context.test.ts",
-  "src/routes/files.test.ts",
-  "src/routes/hooks.test.ts",
-  "src/routes/invitation-link.test.ts",
-  "src/routes/invitation.test.ts",
-  "src/routes/kanban.test.ts",
-  "src/routes/mcp-oauth-callback.test.ts",
-  "src/routes/notification.test.ts",
-  "src/routes/org-blueprint.test.ts",
-  "src/routes/org-inbound-trigger.test.ts",
-  "src/routes/org-skill.test.ts",
-  "src/routes/org-tool.test.ts",
-  "src/routes/plugins.test.ts",
-  "src/routes/sandbox-backends.test.ts",
-  "src/routes/sandbox.test.ts",
-  "src/routes/skill-bundle.test.ts",
-  "src/routes/skill.test.ts",
-  "src/routes/tool.test.ts",
-  "src/routes/trigger-run.test.ts",
-  "src/routes/trigger.test.ts",
-  "src/routes/user-invitation.test.ts",
-  "src/routes/web-backends.test.ts",
-  "src/routes/webhook.test.ts",
-];
-
 const eslintConfig = defineConfig([
   globalIgnores(["drizzle/**", ".turbo/**", "dist/**"]),
 
@@ -77,7 +48,6 @@ const eslintConfig = defineConfig([
 
   {
     files: ["src/routes/**/*.test.ts"],
-    ignores: POSITIONAL_DB_ROUTE_TESTS,
     rules: {
       "no-restricted-syntax": [
         "error",

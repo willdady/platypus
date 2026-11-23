@@ -128,6 +128,12 @@ const isMaxMarker = (value: unknown): value is MaxMarker =>
   "isMax" in value &&
   value.isMax === true;
 
+// why: `count(*)::int` carries no column to resolve, so it counts its bucket like count() does
+const isCountSql = (value: unknown): boolean =>
+  isMarker(value) &&
+  value.op === "sql" &&
+  value.strings.join("?").replace(/\s+/g, "") === "count(*)::int";
+
 const isNested = (value: unknown): value is Record<string, unknown> =>
   !!value &&
   Object.getPrototypeOf(value) === Object.prototype &&
@@ -311,19 +317,20 @@ export const orderOperators = () => ({
 });
 
 const orderMarkerOf = (marker: OrderMarker | Marker): OrderMarker => {
+  if (isColumn(marker)) return { op: "asc", column: refOf(marker) };
   if (!isMarker(marker) || marker.op !== "sql") {
     return marker as OrderMarker;
   }
   const shape = marker.strings.join("?").replace(/\s+/g, "").toLowerCase();
-  const match = /^\?((?:asc|desc))(nulls(?:first|last))?$/.exec(shape);
+  const match = /^\?(?:(asc|desc))?(nulls(?:first|last))?$/.exec(shape);
   const column = marker.values[0];
-  if (!match || !isColumn(column)) {
+  if (!match || (!match[1] && !match[2]) || !isColumn(column)) {
     throw new Error(
       `fake db cannot interpret this order fragment: \`${marker.strings.join("?")}\``,
     );
   }
   return {
-    op: match[1] as "asc" | "desc",
+    op: (match[1] as "asc" | "desc" | undefined) ?? "asc",
     column: refOf(column),
     ...(match[2]
       ? { nulls: match[2].slice("nulls".length) as "first" | "last" }
@@ -416,6 +423,8 @@ export const createFakeDb = (
       const out: Row = {};
       for (const [key, value] of Object.entries(selection)) {
         if (isCountMarker(value)) {
+          out[key] = group.length;
+        } else if (isCountSql(value)) {
           out[key] = group.length;
         } else if (isMaxMarker(value)) {
           const values = group
@@ -568,7 +577,12 @@ export const createFakeDb = (
             );
         }
 
-        if (selection && Object.values(selection).some(isAggregate)) {
+        if (
+          selection &&
+          Object.values(selection).some(
+            (value) => isAggregate(value) || isCountSql(value),
+          )
+        ) {
           return [
             project({}, flatResolver({}), selection, matched.map(resolverFor)),
           ];
@@ -669,44 +683,86 @@ export const createFakeDb = (
 
     const insert = (table: unknown) => {
       const name = nameOf(table);
-      let inserted: Row[] = [];
+      const kept: Row[] = [];
+      let staged: Row[] = [];
+      let written = false;
 
-      const write = (values: Row | Row[]) => {
-        record({ kind: "insert", table: name });
-        inserted = (Array.isArray(values) ? values : [values]).map((row) => ({
-          ...(options.defaults?.[name] ?? {}),
-          ...row,
-        }));
-        for (const row of inserted) {
+      const clashOf = (row: Row): string | undefined => {
+        const resolve = flatResolver(row);
+        for (const constraint of options.unique?.[name] ?? []) {
+          const covers = constraint.where ?? (() => true);
+          if (!covers(row)) continue;
+          const clashes = rowsFor(table).some(
+            (existing) =>
+              covers(existing) &&
+              constraint.columns.every(
+                (column) =>
+                  flatResolver(existing)({ table: name, name: column }) ===
+                  resolve({ table: name, name: column }),
+              ),
+          );
+          if (clashes) return constraint.name;
+        }
+        return undefined;
+      };
+
+      const write = (ignoreConflicts: boolean) => {
+        if (written) return;
+        written = true;
+        for (const row of staged) {
           options.onInsert?.(name, row);
-          for (const constraint of options.unique?.[name] ?? []) {
-            const covers = constraint.where ?? (() => true);
-            if (!covers(row)) continue;
-            const resolve = flatResolver(row);
-            const clashes = rowsFor(table).some(
-              (existing) =>
-                covers(existing) &&
-                constraint.columns.every(
-                  (column) =>
-                    flatResolver(existing)({ table: name, name: column }) ===
-                    resolve({ table: name, name: column }),
-                ),
-            );
-            if (clashes) throw uniqueViolation(constraint.name);
+          const clash = clashOf(row);
+          if (clash) {
+            if (ignoreConflicts) continue;
+            throw uniqueViolation(clash);
           }
           rowsFor(table).push(row);
+          kept.push(row);
         }
       };
 
       return {
         values(values: Row | Row[]) {
-          // why: synchronous, so a unique violation throws inside the caller's try like the driver's
-          write(values);
-          const result = writeResult(inserted);
-          return Object.assign(result, {
-            onConflictDoUpdate: () => result,
-            onConflictDoNothing: () => result,
-          });
+          record({ kind: "insert", table: name });
+          staged = (Array.isArray(values) ? values : [values]).map((row) => ({
+            ...(options.defaults?.[name] ?? {}),
+            ...row,
+          }));
+          const result = {
+            returning(selection?: Record<string, unknown>) {
+              write(false);
+              return Promise.resolve().then(() =>
+                kept.map((row) =>
+                  project(
+                    row,
+                    flatResolver(row),
+                    selection,
+                    kept.map(flatResolver),
+                  ),
+                ),
+              );
+            },
+            then(
+              onFulfilled?: (result: unknown) => unknown,
+              onRejected?: (error: unknown) => unknown,
+            ) {
+              return Promise.resolve()
+                .then(() => {
+                  write(false);
+                  return undefined;
+                })
+                .then(onFulfilled, onRejected);
+            },
+            onConflictDoNothing: () => {
+              write(true);
+              return result;
+            },
+            onConflictDoUpdate: () => {
+              write(false);
+              return result;
+            },
+          };
+          return result;
         },
       };
     };
