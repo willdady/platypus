@@ -22,19 +22,13 @@ import {
 } from "./kanban-shared.ts";
 import { oneRow } from "../db/one-row.ts";
 
-/**
- * The ids of every board in scope, as a subquery. A board or column write puts
- * this — or {@link withinScope} itself — in its own `WHERE`, rather than
- * relying on a guard that ran first: dropping the guard then narrows nothing
- * away, the same rule `ownedWhere` states for Workspace-child resources.
- */
+// why: each write puts scope in its own WHERE, so dropping a guard narrows nothing away
 const boardIdsInScope = (executor: Executor, scope: KanbanScope) =>
   executor
     .select({ id: kanbanBoardTable.id })
     .from(kanbanBoardTable)
     .where(withinScope(scope));
 
-/** One column, matched only while its board is in scope. */
 const columnInScope = (
   executor: Executor,
   scope: KanbanScope,
@@ -45,7 +39,6 @@ const columnInScope = (
     inArray(kanbanColumnTable.boardId, boardIdsInScope(executor, scope)),
   );
 
-/** The position a column appended to the end of a board would take. */
 const nextColumnPosition = (
   executor: Executor,
   boardId: string,
@@ -56,15 +49,8 @@ const nextColumnPosition = (
     eq(kanbanColumnTable.boardId, boardId),
   );
 
-// --- Columns ---
-
 const COLUMN_NAME_CLASH = "A column with this name already exists on the board";
 
-/**
- * Column names are unique per board. The friendly fast path: the board's
- * unique constraint is the backstop for a write that lands between this check
- * and its own, which {@link rethrowAsColumnNameClash} turns into the same conflict.
- */
 const requireUniqueColumnName = async (
   database: Database,
   boardId: string,
@@ -86,18 +72,11 @@ const requireUniqueColumnName = async (
   if (clashes.length > 0) throw new ConflictError(COLUMN_NAME_CLASH);
 };
 
-/** A column write's unique violation as the name clash it is. */
 const rethrowAsColumnNameClash = (error: unknown): never => {
   if (isUniqueViolation(error)) throw new ConflictError(COLUMN_NAME_CLASH);
   throw error;
 };
 
-/**
- * A column addressed through its board: the board must be in scope, and the
- * column on that board. Returns the scope narrowed to that board, for the
- * write's own `WHERE`. The two misses stay distinct, so a caller naming a
- * board it cannot see hears about the board rather than the column.
- */
 const narrowToColumnOnBoard = async (
   database: Database,
   scope: KanbanScope,
@@ -110,7 +89,6 @@ const narrowToColumnOnBoard = async (
   return onBoard;
 };
 
-/** Adds a column to the end of a board. */
 export const createColumn = async (
   database: Database,
   scope: KanbanScope,
@@ -139,7 +117,6 @@ export const createColumn = async (
   return oneRow(rows);
 };
 
-/** Renames a column. Keeping its own name is not a clash. */
 export const renameColumn = async (
   database: Database,
   scope: KanbanScope,
@@ -167,12 +144,6 @@ export const renameColumn = async (
   return row;
 };
 
-/**
- * Deletes a column; its cards go with it by FK cascade.
- *
- * Silent by decision, as with `deleteBoard`: the cascaded cards fire no
- * `card.deleted`.
- */
 export const deleteColumn = async (
   database: Database,
   scope: KanbanScope,
@@ -194,10 +165,6 @@ export const deleteColumn = async (
   if (rows.length === 0) throw new NotFoundError("Column not found");
 };
 
-/**
- * Puts a board's columns in the order given, at positions 1..n. Every id must
- * be on the board; one that is not refuses the whole reorder.
- */
 export const reorderColumns = async (
   database: Database,
   scope: KanbanScope,

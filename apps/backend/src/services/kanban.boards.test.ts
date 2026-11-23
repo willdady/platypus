@@ -6,6 +6,7 @@ vi.mock("./event-dispatch.ts", () => ({
 }));
 
 import type { db } from "../index.ts";
+import { dispatchEvent } from "./event-dispatch.ts";
 import { ConflictError, NotFoundError, ValidationError } from "../errors.ts";
 import {
   createBoard,
@@ -24,14 +25,6 @@ import {
 import type { KanbanScope } from "./kanban-shared.ts";
 
 type Database = typeof db;
-
-/**
- * Board and Column reads and writes through the module's interface, over the
- * seeded fake that interprets each query's `WHERE`. Every scope test stands up
- * two Workspaces, each with a Board and a Column, and aims at the one the
- * caller does not own: a write that forgot its scope reaches the other row and
- * the live `tables` show it.
- */
 
 const scope: KanbanScope = { orgId: "org-1", workspaceId: "ws-1" };
 
@@ -69,21 +62,28 @@ const world = (extra: Store = {}): Store => ({
   ...extra,
 });
 
-/** Seeds the fake and hands back it plus the handle to pass as `database`. */
 const seed = (rows: Store = world(), options = {}) => {
   const fake = seedDb(rows, options);
   return { fake, database: fake.handle as Database };
 };
 
-/** A deep copy of every table, to assert a refused write changed nothing. */
 const snapshot = (fake: FakeDb) => structuredClone(fake.tables);
 
 describe("kanban module — Boards and Columns", () => {
   beforeEach(() => {
     resetMockDb();
+    vi.mocked(dispatchEvent).mockClear();
   });
 
   describe("scope", () => {
+    it("names the Board, not the Column, when the Board is out of scope", async () => {
+      const { database } = seed();
+
+      await expect(
+        renameColumn(database, scope, "board-b", "col-b", { name: "X" }),
+      ).rejects.toThrow("Board not found");
+    });
+
     const foreignWrites: [string, (database: Database) => Promise<unknown>][] =
       [
         [
@@ -118,8 +118,6 @@ describe("kanban module — Boards and Columns", () => {
       },
     );
 
-    // The route addresses a Column through its Board's URL, so a Column on a
-    // different Board of the same Workspace is not found there either.
     it.each([
       [
         "rename",
@@ -206,7 +204,6 @@ describe("kanban module — Boards and Columns", () => {
           columnId: "col-a1",
           labelIds: ["lbl-keep", "lbl-drop"],
         },
-        // Another Board, carrying the same Label id — it must be left alone.
         { id: "card-b", columnId: "col-b", labelIds: ["lbl-drop"] },
       ],
     };
@@ -239,7 +236,6 @@ describe("kanban module — Boards and Columns", () => {
       ]);
     });
 
-    // ADR-0024: a Board-level Label prune is not a Card field write.
     it("writes no Card history when pruning Labels", async () => {
       const { fake, database } = seed(world(cards));
 
@@ -260,6 +256,16 @@ describe("kanban module — Boards and Columns", () => {
       await deleteBoard(database, scope, "board-a");
 
       expect(fake.tables.kanban_board.map((b) => b.id)).toEqual(["board-b"]);
+    });
+
+    it("fires no card.deleted for the Cards it cascades", async () => {
+      const { database } = seed(
+        world({ kanban_card: [{ id: "card-a", columnId: "col-a1" }] }),
+      );
+
+      await deleteBoard(database, scope, "board-a");
+
+      expect(dispatchEvent).not.toHaveBeenCalled();
     });
   });
 
@@ -362,6 +368,16 @@ describe("kanban module — Boards and Columns", () => {
         "col-a2",
         "col-b",
       ]);
+    });
+
+    it("fires no card.deleted for the Cards it cascades", async () => {
+      const { database } = seed(
+        world({ kanban_card: [{ id: "card-a", columnId: "col-a1" }] }),
+      );
+
+      await deleteColumn(database, scope, "board-a", "col-a1");
+
+      expect(dispatchEvent).not.toHaveBeenCalled();
     });
   });
 
@@ -489,7 +505,6 @@ describe("kanban module — Boards and Columns", () => {
         id: "card-1",
         createdByName: "Ada",
         lastEditedByName: null,
-        // An assignee who no longer resolves is left out.
         resolvedAssignees: [
           {
             type: "user",

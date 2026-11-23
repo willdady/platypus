@@ -38,9 +38,6 @@ describe("trigger-breaker", () => {
       ).toEqual({ maxRuns: 5, windowSeconds: 60, suppressedRunsToKeep: 3 });
     });
 
-    // An explicitly-set value that is not a positive integer must not be
-    // replaced by a number the Operator never chose: a limit that enforces
-    // something other than it reads is worse than no limit at all.
     it.each(["banana", "0", "-1", "1.5", "  "])(
       "refuses the value %j rather than defaulting it",
       (raw) => {

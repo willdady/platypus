@@ -19,14 +19,8 @@ import {
 } from "./kanban-shared.ts";
 import { oneRow } from "../db/one-row.ts";
 
-/** A comment row, as the guards return it. */
 export type CommentRow = typeof kanbanCardCommentTable.$inferSelect;
 
-/**
- * The comment — or `NotFoundError` when its card is out of scope. Returns the
- * whole row because every caller needs it: to check who wrote it, or to hand
- * it back.
- */
 export const requireComment = async (
   database: Database,
   scope: KanbanScope,
@@ -66,13 +60,8 @@ export const requireComment = async (
   return row;
 };
 
-/** A comment with the display name of whoever wrote it, user or Agent. */
 export type CommentWithAuthor = CommentRow & { createdByName: string | null };
 
-/**
- * Resolves each comment's author to a name. Comments store only an ID, and the
- * author is a user or an Agent depending on which column is set.
- */
 export const resolveCommentNames = async (
   database: Database,
   comments: CommentRow[],
@@ -112,7 +101,6 @@ export const resolveCommentNames = async (
   }));
 };
 
-/** A card's comments, oldest first. */
 export const listComments = async (
   database: Database,
   scope: KanbanScope,
@@ -127,7 +115,6 @@ export const listComments = async (
     .orderBy(asc(kanbanCardCommentTable.createdAt));
 };
 
-/** Adds a comment to a card, attributed to the actor. */
 export const createComment = async (
   database: Database,
   ctx: KanbanContext,
@@ -152,12 +139,7 @@ export const createComment = async (
   return oneRow(rows);
 };
 
-/**
- * Rewrites a comment's body. It takes the comment rather than an ID because
- * only `requireComment` produces one, which keeps the scope check mandatory.
- * Who may then edit which comment is the surface's own call — the HTTP routes
- * let a moderator edit anyone's.
- */
+// why: takes the row, not an id, so a caller must resolve it through requireComment's scope
 export const updateCommentBody = async (
   database: Database,
   comment: CommentRow,
@@ -174,7 +156,6 @@ export const updateCommentBody = async (
   return row;
 };
 
-/** Deletes a comment the caller has already resolved. */
 export const removeComment = async (
   database: Database,
   comment: CommentRow,

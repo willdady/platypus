@@ -37,18 +37,11 @@ import {
 } from "./kanban-card-history.ts";
 import { oneRow } from "../db/one-row.ts";
 
-/**
- * A written card and the board it is on. The board comes back with it because
- * a card row does not name its board — only its column — and both surfaces
- * need it: to announce the change, and to link to it.
- */
 export type CardResult = { card: CardRow; boardId: string };
 
-/** The fields a card mutation accepts, whichever surface it arrived on. */
 export type CardInput = {
   title?: string;
   body?: string | null;
-  /** A partial edit of the body, resolved against what the card holds now. */
   bodyDiff?: BodyDiff;
   labelIds?: string[];
   assignees?: KanbanCardAssignee[];
@@ -56,33 +49,13 @@ export type CardInput = {
   priority?: KanbanCardPriority;
 };
 
-/**
- * A partial edit of a card's body: an ordered list of search/replace pairs, or
- * a single addition at one end. Offered by the Tool surface so an Agent can
- * amend a long body without resending it.
- */
 export type BodyDiff =
   | { search: string; replace: string }[]
   | { mode: "append" | "prepend"; content: string };
 
-/**
- * Emits a board event. Causation is ambient run context (ADR-0022), read by the
- * dispatcher rather than named by the writer, so the acting Agent is not
- * volunteered here — whether this write re-fires an Event Trigger is decided by
- * the chain of Agents the run established, not by this helper.
- */
 const dispatch = (ctx: KanbanContext, payload: EventTriggerEventPayload) =>
   dispatchEvent(ctx.orgId, ctx.workspaceId, payload);
 
-// --- Change detection ---
-
-/**
- * The card attributes a value-diff considers. Bookkeeping columns
- * (`updatedAt`, the `lastEditedBy*` attribution, `position`) are excluded —
- * every write touches them, so including them would make `changedFields`
- * meaningless. `id`, `createdAt`, and `createdBy*` are left in for
- * completeness but never differ between an old and new row.
- */
 const CHANGED_FIELD_KEYS = [
   "title",
   "body",
@@ -93,15 +66,9 @@ const CHANGED_FIELD_KEYS = [
   "columnId",
 ] as const satisfies readonly (keyof CardRow)[];
 
-/** The set-like fields compared order-insensitively, not by array equality. */
 const SET_LIKE_FIELDS = new Set<string>(["labelIds", "assignees"]);
 
-/** A field's value, reduced to a form where `===`-by-JSON is the right test. */
 const comparableFieldValue = (key: string, value: unknown): unknown => {
-  // A Card with no description stores `null`, but a form bound to an empty
-  // editor sends `""`. They mean the same thing, so they must compare equal —
-  // otherwise saving an unrelated field from an open Card reports a
-  // description edit nobody made.
   if (key === "body" && value === "") return null;
   if (value === undefined || value === null) return value;
   if (key === "labelIds") return [...(value as string[])].sort();
@@ -114,13 +81,6 @@ const comparableFieldValue = (key: string, value: unknown): unknown => {
   return value;
 };
 
-/**
- * The names of the fields whose values actually differ between the pre-write
- * and post-write row — a value-diff, not a report of which input keys were
- * supplied (see #622: an update that echoes a field back unchanged, or an
- * agent that resends `labelIds`/`assignees` in a different order, must not
- * report that field as changed).
- */
 export const changedCardFields = (previous: CardRow, next: CardRow): string[] =>
   CHANGED_FIELD_KEYS.filter((key) => {
     const before = comparableFieldValue(key, previous[key]);
@@ -130,12 +90,6 @@ export const changedCardFields = (previous: CardRow, next: CardRow): string[] =>
       : before !== after;
   });
 
-/**
- * Announces a card write that may have changed its column. Emits
- * `card.moved` (with `previousColumnId`) only when the column actually
- * changed, always followed by `card.updated` — a within-column reorder or
- * a plain field edit emits `card.updated` alone.
- */
 const dispatchCardWrite = (
   ctx: KanbanContext,
   row: CardRow,
@@ -155,9 +109,6 @@ const dispatchCardWrite = (
   });
 };
 
-// --- Label validation ---
-
-/** The board's label IDs, or an empty list if the board has none. */
 const boardLabelIds = async (
   database: Database,
   boardId: string,
@@ -171,11 +122,6 @@ const boardLabelIds = async (
   return (rows[0]?.labels ?? []).map((label: { id: string }) => label.id);
 };
 
-/**
- * Rejects the write when it names a label the board does not have. Used where
- * the labels are chosen fresh (creating a card): there is nothing to
- * self-heal, so an unknown ID is a mistake worth surfacing.
- */
 export const requireKnownLabelIds = async (
   database: Database,
   boardId: string,
@@ -188,12 +134,6 @@ export const requireKnownLabelIds = async (
   }
 };
 
-/**
- * Drops the label IDs the board no longer has, keeping the rest in the order
- * submitted. Used where the labels come back from an existing card: it may be
- * holding a deleted label's ID that the editor never shows, so rejecting would
- * wedge the card while saving self-heals it.
- */
 export const keepKnownLabelIds = async (
   database: Database,
   boardId: string,
@@ -203,15 +143,6 @@ export const keepKnownLabelIds = async (
     ? labelIds
     : filterKnownLabelIds(labelIds, await boardLabelIds(database, boardId));
 
-// --- Assignees ---
-
-/**
- * Rejects assignees that cannot own a card here: a user must be a member of
- * the Organization (or a super admin, who has no membership row), and an Agent
- * must be visible in this Workspace — its own, plus the Shared Agents attached
- * to it (ADR-0007). That is the set the assignee picker offers and the set that
- * can actually run here.
- */
 export const requireValidAssignees = async (
   database: Database,
   assignees: KanbanCardAssignee[] | undefined,
@@ -243,7 +174,6 @@ export const requireValidAssignees = async (
     listScopedByIds(database, "agent", agentIds, scope),
   ]);
 
-  // Super admins may hold no org membership record, so the two sets combine.
   const validUserIds = new Set([
     ...members.map((m) => m.userId),
     ...superAdmins.map((a) => a.id),
@@ -256,9 +186,6 @@ export const requireValidAssignees = async (
   }
 };
 
-// --- Positions ---
-
-/** The position a card appended to the end of a column would take. */
 const nextCardPosition = (
   executor: Executor,
   columnId: string,
@@ -269,12 +196,6 @@ const nextCardPosition = (
     eq(kanbanCardTable.columnId, columnId),
   );
 
-/**
- * Whole positions for a column's existing cards once one more is inserted just
- * after `afterIndex` — the renumbering that reopens the gaps after repeated
- * halving has closed them. The inserted card takes `afterIndex + 2`, the slot
- * this leaves free.
- */
 export const rebalancedPositions = (
   cards: { id: string }[],
   afterIndex: number,
@@ -284,14 +205,6 @@ export const rebalancedPositions = (
     position: (index <= afterIndex ? index + 1 : index + 2) * 1.0,
   }));
 
-/**
- * The slot a card takes when it sits behind `afterCardId` (`null` = the head),
- * plus whether the gap it lands in has been halved so thin that the column
- * must be renumbered first.
- *
- * `otherCards` is the column in ascending position order, without the card
- * being placed.
- */
 export const calculateCardPosition = (
   otherCards: { id: string; position: number }[],
   afterCardId: string | null,
@@ -324,20 +237,11 @@ export const calculateCardPosition = (
   };
 };
 
-/**
- * Where a card lands in a column, rebalancing the column first if the gap it
- * would take has collapsed. `afterCardId` is the card to sit behind: `null`
- * puts it at the head, `undefined` at the end.
- *
- * The single home for the board's ordering arithmetic — moving a card, copying
- * one, and appending one all resolve their position through here.
- */
 export const placeCardInColumn = async (
   executor: Executor,
   input: {
     columnId: string;
     afterCardId: string | null | undefined;
-    /** The card being moved, left out of the ordering it is re-entering. */
     excludeCardId?: string;
   },
 ): Promise<number> => {
@@ -368,13 +272,6 @@ export const placeCardInColumn = async (
   return (result.afterIndex + 2) * 1.0;
 };
 
-// --- Card body ---
-
-/**
- * The card row as it stands before a write — the pre-write side of the
- * `changedFields` value-diff, and (for a `bodyDiff` edit) what the diff
- * applies against.
- */
 const currentCardRow = async (
   database: Executor,
   cardId: string,
@@ -390,11 +287,6 @@ const currentCardRow = async (
   return row;
 };
 
-/**
- * Applies a partial body edit. Search/replace pairs are applied in order and
- * each must match, so a diff written against a stale body fails loudly rather
- * than landing half-applied.
- */
 export const applyBodyDiff = (body: string, diff: BodyDiff): string => {
   if (!Array.isArray(diff)) {
     return diff.mode === "append" ? body + diff.content : diff.content + body;
@@ -412,9 +304,6 @@ export const applyBodyDiff = (body: string, diff: BodyDiff): string => {
   return next;
 };
 
-// --- Card mutations ---
-
-/** The columns a card write sets, from the fields the caller supplied. */
 const cardValues = (input: CardInput, body: string | null | undefined) => ({
   ...(input.title !== undefined && { title: input.title }),
   ...(body !== undefined && { body }),
@@ -426,10 +315,6 @@ const cardValues = (input: CardInput, body: string | null | undefined) => ({
   ...(input.priority !== undefined && { priority: input.priority }),
 });
 
-/**
- * Creates a card at the end of a column. Labels are checked against the board
- * and assignees against the Workspace before anything is written.
- */
 export const createCard = async (
   database: Database,
   ctx: KanbanContext,
@@ -442,8 +327,6 @@ export const createCard = async (
   const position = await nextCardPosition(database, input.columnId);
   const now = new Date();
 
-  // The insert and its history entry share a transaction so the two can never
-  // disagree — the reason the entry is not written from `dispatch()`.
   const card = await database.transaction(async (tx) => {
     const rows = await tx
       .insert(kanbanCardTable)
@@ -474,11 +357,6 @@ export const createCard = async (
   return { card, boardId: column.boardId };
 };
 
-/**
- * Updates a card in place. Unknown label IDs are dropped rather than rejected
- * (the card may be carrying one the board has since deleted); an assignee who
- * cannot work here is rejected.
- */
 export const updateCard = async (
   database: Database,
   ctx: KanbanContext,
@@ -534,19 +412,6 @@ export const updateCard = async (
   return { card: record, boardId: card.boardId };
 };
 
-/**
- * Moves a card within or between columns. Both the card and the target column
- * must be in scope, so a move never carries a card off its board on the HTTP
- * surface or out of the Workspace on the Tool surface.
- *
- * `expectedColumnId` makes the move conditional: it applies only while the card
- * is still in that column, so a caller working from a stale read cannot
- * silently undo a move someone else made in the meantime. It is a predicate on
- * the UPDATE rather than a check against `previous`, because `previous` is read
- * before the transaction opens — comparing against it would catch a stale
- * caller but still let two concurrent writers both pass and the later one win,
- * which is the race worth closing.
- */
 export const moveCard = async (
   database: Database,
   ctx: KanbanContext,
@@ -586,36 +451,18 @@ export const moveCard = async (
       .returning();
 
     const row = rows[0];
-    // Thrown rather than returned so the transaction rolls back:
-    // `placeCardInColumn` may already have renumbered the target column on its
-    // rebalance path, and committing that alongside a move that did not happen
-    // would reorder the board on a refused write.
-    //
-    // The message deliberately does not say where the card is now. Handing the
-    // winning writer's state back to the loser invites an immediate
-    // re-assertion of the stale move; making the caller re-read forces a fresh
-    // look at the board that changed underneath it.
     if (!row) {
       throw new ConflictError(
         "Card is no longer in the expected column; re-read it before moving it",
       );
     }
 
-    // A move only ever touches columnId and position, so the entry is built
-    // from the one comparison rather than a full-row diff — the same reason
-    // the dispatch below computes its `changedFields` by hand. A within-column
-    // reorder changes no tracked field and leaves no entry.
     if (previous.columnId !== row.columnId) {
       await recordCardMoved(tx, ctx, row.id, previous.columnId, row.columnId);
     }
     return row;
   });
 
-  // A move only ever touches columnId and position (bookkeeping, excluded),
-  // so the changedFields diff is this one comparison rather than a
-  // `changedCardFields` call — `previous` here is a narrow `CardRef`
-  // (from `requireCard`), not a full `CardRow`, and doesn't carry the other
-  // fields a general diff would need.
   dispatchCardWrite(
     ctx,
     record,
@@ -626,17 +473,12 @@ export const moveCard = async (
   return { card: record, boardId: column.boardId };
 };
 
-/**
- * Copies a card into a column on the same board, optionally with its comments.
- * The copy is attributed to whoever asked for it, not to the original author.
- */
 export const copyCard = async (
   database: Database,
   ctx: KanbanContext,
   input: {
     cardId: string;
     columnId: string;
-    /** `null`/omitted places the copy at the end of the column. */
     afterCardId?: string | null;
     includeComments?: boolean;
   },
@@ -701,8 +543,6 @@ export const copyCard = async (
       }
     }
 
-    // The copy's history starts at the copy: it is a new Card, and the
-    // source's past is not its own.
     const row = oneRow(rows);
     await recordCardCreated(tx, ctx, row);
 
@@ -716,7 +556,6 @@ export const copyCard = async (
   return { card: record, boardId: source.boardId };
 };
 
-/** Removes an already-resolved card and announces where it had been. */
 const removeCard = async (
   database: Database,
   ctx: KanbanContext,
@@ -734,7 +573,6 @@ const removeCard = async (
   });
 };
 
-/** Deletes a card and announces it. Returns where the card had been. */
 export const deleteCard = async (
   database: Database,
   ctx: KanbanContext,
@@ -745,10 +583,6 @@ export const deleteCard = async (
   return card;
 };
 
-/**
- * Deletes several cards. Every card is resolved before any is removed, so a
- * batch naming one card that is out of scope deletes none of them.
- */
 export const deleteCards = async (
   database: Database,
   ctx: KanbanContext,
@@ -760,7 +594,6 @@ export const deleteCards = async (
       cards.push(await requireCard(database, ctx, cardId));
     } catch (error) {
       if (!(error instanceof NotFoundError)) throw error;
-      // Names the card that failed — a batch caller cannot tell otherwise.
       throw new NotFoundError(`Card not found: ${cardId}`);
     }
   }
@@ -769,33 +602,18 @@ export const deleteCards = async (
   return cards;
 };
 
-/** The label edit a bulk update applies: a replacement, or adds and removes. */
 export type BulkLabelEdit = {
   labelIds?: string[];
   addLabelIds?: string[];
   removeLabelIds?: string[];
 };
 
-/** What a bulk update did, per card, in the order the cards were given. */
 export type BulkUpdateOutcome = {
   cardId: string;
   success: boolean;
   error?: string;
 };
 
-/**
- * Applies one set of values to many cards in a single transaction. Cards that
- * are out of scope are reported per card rather than failing the batch, but a
- * bad assignee or an unreachable target column stops the whole call — those
- * are wrong for every card, not just one.
- *
- * Labels follow the update rule rather than the create rule: unknown IDs are
- * dropped, not rejected. A bulk edit works over cards that already exist, so
- * the same self-healing that saves a single card applies here — and refusing
- * thirty cards over one stale ID none of them can show would be worse.
- *
- * With `columnId`, the cards are appended to that column in the order given.
- */
 export const bulkUpdateCards = async (
   database: Database,
   ctx: KanbanContext,
@@ -822,8 +640,6 @@ export const bulkUpdateCards = async (
       cards.push(await requireCard(database, ctx, cardId));
       outcomes.set(cardId, { cardId, success: true });
     } catch (error) {
-      // Only an out-of-scope card is reported per card; a failed query fails
-      // the batch rather than reading as thirty missing cards.
       if (!(error instanceof NotFoundError)) throw error;
       outcomes.set(cardId, {
         cardId,
@@ -835,8 +651,6 @@ export const bulkUpdateCards = async (
 
   if (cards.length === 0) return input.cardIds.map(outcomeOf);
 
-  // Additive and subtractive label edits build on what each card already
-  // holds, so those rows are read before the write.
   const editsLabels =
     input.labelIds !== undefined ||
     input.addLabelIds !== undefined ||
@@ -855,8 +669,6 @@ export const bulkUpdateCards = async (
     for (const row of rows) currentLabels.set(row.id, row.labelIds);
   }
 
-  // The cards may span boards, so each board's labels are fetched once and
-  // reused for every card on it.
   const knownLabels = new Map<string, string[]>();
   const labelsOf = async (boardId: string): Promise<string[]> => {
     const cached = knownLabels.get(boardId);
@@ -879,10 +691,6 @@ export const bulkUpdateCards = async (
     }[] = [];
 
     for (const [index, card] of cards.entries()) {
-      // The value-diff each card's `card.updated` event carries is computed
-      // against the row as it stood right before this write. `card` (from
-      // `requireCard`) only carries id/columnId/boardId, not the field values
-      // a diff needs, so this is a genuine extra read rather than reuse.
       const previous = await currentCardRow(tx, card.id);
 
       const labelIds = editsLabels
@@ -913,9 +721,6 @@ export const bulkUpdateCards = async (
 
       const row = rows[0];
       if (!row) throw new NotFoundError("Card not found");
-      // Computed here rather than after the transaction: the history entry
-      // needs it inside, and one computation keeps the entry and the event
-      // reporting the same diff.
       const fields = changedCardFields(previous, row);
 
       await recordCardHistory(tx, ctx, {
@@ -937,7 +742,6 @@ export const bulkUpdateCards = async (
   return input.cardIds.map(outcomeOf);
 };
 
-/** The label list a bulk edit asks for, before it is checked against the board. */
 const resolveBulkLabels = (
   edit: BulkLabelEdit,
   current: string[],
@@ -951,9 +755,6 @@ const resolveBulkLabels = (
   return next;
 };
 
-// --- Card reads ---
-
-/** The whole card, with the board it is on — or `NotFoundError` out of scope. */
 export const getCard = async (
   database: Database,
   scope: KanbanScope,

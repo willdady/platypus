@@ -34,40 +34,7 @@ import {
 import { oneRow } from "../db/one-row.ts";
 import { deleteTriggerRunFiles } from "./trigger-run-files.ts";
 
-/** Makes a leaked Inbound Trigger token recognisable; see `generateBearerToken`. */
 const INBOUND_TOKEN_PREFIX = "pit_";
-
-/**
- * The Trigger model: the one place `type`/`config` validation, the Agent
- * visibility check and `nextRunAt` computation happen, and the reads both
- * surfaces share, behind an interface both surfaces call.
- * `routes/trigger.ts` (the UI's HTTP route) and `tools/trigger.ts` (the
- * Agent-facing Tool set) used to each hand-roll this — the Tool's copy
- * imported nothing from `@platypus/schemas`, so it drifted narrower on
- * `filters` and looser on `events` than the real schema allows (#690).
- * Composing the real field-level schemas here (`cronTriggerConfigSchema`,
- * `eventTriggerConfigSchema`) is what actually prevents that drift.
- *
- * Trigger is Workspace-only (the `trigger` table has no `organizationId`
- * column) — no scope union like `services/provider-write.ts`'s. Its reads and
- * delete are thin over `workspace-resource.ts`, so neither caller hand-rolls
- * the Workspace containment predicate.
- *
- * A Trigger's Agent must be usable in the Workspace — Workspace-scoped, or a
- * Shared one attached here (ADR-0007), the same set a run resolves when the
- * Trigger fires — so create and update check it here, not at each caller.
- *
- * `config` update semantics are full-replace only: supplying `config` on an
- * update replaces it wholesale rather than merging. A caller that wants to
- * preserve part of the existing config reads it first and supplies the
- * complete merged object itself — this is what closes the shallow-merge bug
- * where the Tool's update silently wiped a User-set `columnId`/`changedFields`.
- *
- * Failures are the typed errors of ADR-0010 — `routes/trigger.ts` lets them
- * propagate to the central `onError` mapper; `tools/trigger.ts` catches them
- * and translates to its `{success:false, error}` tool-result shape, since a
- * Tool result isn't an HTTP response.
- */
 
 export type TriggerRow = typeof triggerTable.$inferSelect;
 
@@ -85,52 +52,21 @@ type TriggerBaseFields = {
   config: CronTriggerConfig | EventTriggerConfig | InboundTriggerConfig;
 };
 
-/**
- * Who is writing. Only the Workspace Owner, through the UI, may create, edit
- * or delete an Inbound Trigger (ADR-0030): the Agent's Trigger tools must
- * never mint a live credential into a model's context or a Chat transcript,
- * nor stop an integration a caller depends on. Required, so every caller names
- * the surface it writes on rather than inheriting one.
- */
 export type TriggerWriteOptions = { allowInbound: boolean };
 
-/**
- * The fields a create carries. Every field is supplied: the defaults a form or
- * a Tool leaves out live in `triggerCreateSchema`'s Zod defaults, so this model
- * does not hold a second copy of them.
- */
 export type TriggerCreateFields = TriggerBaseFields & {
-  /** Inbound only: `false` creates it with no token. Omitted, one is issued. */
   issueToken?: boolean;
 };
 
-/**
- * The fields an update carries — only the ones actually supplied. `config` is
- * unparsed: its shape depends on the Trigger's effective type, which only the
- * stored row can settle when the update names none, so `updateTrigger`
- * validates it against that type.
- */
 export type TriggerUpdateFields = Partial<Omit<TriggerBaseFields, "config">> & {
   config?: unknown;
 };
 
-/**
- * A Trigger row's `type` and `config`, narrowed together. The table stores
- * `type` as plain text and `config` as jsonb, so the pair is only a
- * discriminated union once something has checked it.
- */
 export type TypedTriggerConfig =
   | { type: "cron"; config: CronTriggerConfig }
   | { type: "event"; config: EventTriggerConfig }
   | { type: "inbound"; config: InboundTriggerConfig };
 
-/**
- * Narrows a stored row's `type` + `config` into {@link TypedTriggerConfig},
- * validated against the real config schemas. A malformed row throws here — the
- * one place it can — rather than surfacing as an `undefined` read wherever a
- * caller assumed the jsonb matched its type. The upgrade's repair migration is
- * the only way such a row can reach this point.
- */
 export const narrowTriggerConfig = (
   row: Pick<TriggerRow, "id" | "type" | "config">,
 ): TypedTriggerConfig => {
@@ -141,7 +77,6 @@ export const narrowTriggerConfig = (
     const parsed = eventTriggerConfigSchema.safeParse(row.config);
     if (parsed.success) return { type: "event", config: parsed.data };
   } else {
-    // The column's CHECK leaves `inbound` as the only other type.
     const parsed = inboundTriggerConfigSchema.safeParse(row.config);
     if (parsed.success) return { type: "inbound", config: parsed.data };
   }
@@ -150,16 +85,8 @@ export const narrowTriggerConfig = (
   );
 };
 
-// The schedule rule has one home, in `utils/cron.ts`: the one-off upgrade
-// step that repairs stranded schedules reads it without this module's db.
 export { nextCronRunAt };
 
-/**
- * Validates a cron config and returns it normalized (Zod defaults applied —
- * e.g. `timezone` filled in as `"UTC"`) alongside its next run time. Returning
- * the parsed, not the raw, config is what guarantees a concrete `timezone`
- * ends up in the stored row regardless of whether the caller supplied one.
- */
 const parseCronConfig = (
   config: unknown,
 ): { config: CronTriggerConfig; nextRunAt: Date } => {
@@ -178,12 +105,6 @@ const parseCronConfig = (
   return { config: parsed.data, nextRunAt };
 };
 
-/**
- * Validates an event config — a non-empty `events` array of real
- * `eventTriggerEventSchema` values, and (if present) `filters` matching the real
- * `eventTriggerFiltersSchema` (`boardId`/`columnId`/`changedFields`) — and
- * returns it normalized, or throws.
- */
 const parseEventConfig = (config: unknown): EventTriggerConfig => {
   const parsed = eventTriggerConfigSchema.safeParse(config);
   if (!parsed.success) {
@@ -194,11 +115,6 @@ const parseEventConfig = (config: unknown): EventTriggerConfig => {
   return parsed.data;
 };
 
-/**
- * Validates an inbound config — at most ten uniquely named string inputs, and
- * a record key, if any, naming a required one — and returns it normalized, or
- * throws with the first problem, since a form has one field to point at.
- */
 const parseInboundConfig = (config: unknown): InboundTriggerConfig => {
   const parsed = inboundTriggerConfigSchema.safeParse(config);
   if (!parsed.success) {
@@ -210,13 +126,10 @@ const parseInboundConfig = (config: unknown): InboundTriggerConfig => {
   return parsed.data;
 };
 
-/** At most this many One-off Triggers that have yet to fire, per Workspace. */
 export const MAX_PENDING_ONE_OFF_TRIGGERS = 50;
 
-/** How long a fired One-off Trigger outlives the end of its run. */
 export const FIRED_ONE_OFF_TTL_DAYS = 7;
 
-/** A One-off Trigger that has not fired yet, enabled or not. */
 const isPendingOneOff = (
   row: Pick<TriggerRow, "id" | "type" | "config" | "firedAt">,
 ): boolean => {
@@ -225,16 +138,12 @@ const isPendingOneOff = (
   return typed.type === "cron" && typed.config.isOneOff === true;
 };
 
-/**
- * Throws `ValidationError` when this Workspace already holds its limit of
- * pending One-off Triggers. Holds the Workspace row until `tx` commits, so
- * concurrent writes count one after the other and cannot land over the limit.
- */
 const requireOneOffRoom = async (tx: Tx, ctx: ScopeContext): Promise<void> => {
   await tx
     .select({ id: workspaceTable.id })
     .from(workspaceTable)
     .where(eq(workspaceTable.id, ctx.workspaceId))
+    // why: serialises concurrent writes, so the pending count can't pass the limit
     .for("update");
   const rows = await listOwned(
     tx,
@@ -249,11 +158,6 @@ const requireOneOffRoom = async (tx: Tx, ctx: ScopeContext): Promise<void> => {
   }
 };
 
-/**
- * Throws `ValidationError` when an update would re-arm a fired One-off
- * Trigger: re-enable it, change its type, or change its schedule. Anything
- * else, such as a rename, is allowed.
- */
 const requireNotReArmed = (
   existing: TriggerRow,
   fields: TriggerUpdateFields,
@@ -284,12 +188,6 @@ const requireNotReArmed = (
 const INBOUND_ONLY_IN_UI =
   "Inbound triggers can only be created, edited and deleted by the Workspace Owner in the Triggers page.";
 
-/**
- * A Trigger row as either surface returns it: without the token's hash or the
- * notice bookkeeping, and with how its token stands. The one
- * projection both surfaces use, so a hash cannot reach a response or a Tool
- * result by a caller forgetting to strip it.
- */
 export const toPublicTrigger = (row: TriggerRow) => {
   const { tokenHash: _tokenHash, tokenNotice: _tokenNotice, ...rest } = row;
   return {
@@ -298,7 +196,6 @@ export const toPublicTrigger = (row: TriggerRow) => {
   };
 };
 
-/** Throws `ValidationError` unless the Agent is usable in this Workspace. */
 const requireUsableAgent = async (
   ctx: ScopeContext,
   agentId: string,
@@ -308,14 +205,6 @@ const requireUsableAgent = async (
   }
 };
 
-/**
- * Creates a new Trigger in this Workspace. Branches on `type`: cron
- * expressions are parsed via `nextCronRunAt` to compute `nextRunAt`;
- * event configs are validated against the real schema. Throws
- * `ValidationError` on an Agent not usable here, an invalid cron
- * expression/timezone, an invalid or empty `events` array, or invalid
- * `filters`.
- */
 export async function createTrigger(
   ctx: ScopeContext,
   fields: TriggerCreateFields,
@@ -339,7 +228,6 @@ export async function createTrigger(
   } else if (fields.type === "event") {
     config = parseEventConfig(fields.config);
   } else {
-    // A new trigger type fails to compile here rather than taking this branch.
     fields.type satisfies "inbound";
     const inbound = parseInboundConfig(fields.config);
     config = inbound;
@@ -373,19 +261,9 @@ export async function createTrigger(
       return tx.insert(triggerTable).values(values).returning();
     }),
   );
-  // The token leaves here once, beside the row, and is never readable again:
-  // only its hash was stored.
   return token ? { ...row, issuedToken: token } : row;
 }
 
-/**
- * Updates a Trigger in this Workspace. Throws `NotFoundError` when it does
- * not exist here — checked before a supplied `agentId`, which throws
- * `ValidationError` when not usable here. `config`, if supplied, replaces the
- * stored value wholesale and is (re)validated against the effective type;
- * `nextRunAt` is recomputed for a cron trigger whose `config`/`type` changed
- * or which is being enabled, and cleared for an event trigger.
- */
 export async function updateTrigger(
   ctx: ScopeContext,
   triggerId: string,
@@ -402,9 +280,6 @@ export async function updateTrigger(
   ) {
     throw new ValidationError(INBOUND_ONLY_IN_UI);
   }
-  // A type change into or out of `inbound` would mint or orphan a credential
-  // as a side effect of an edit, so neither surface offers it: an Inbound
-  // Trigger is created as one, and its token is shown on creation.
   if (
     fields.type !== undefined &&
     fields.type !== existing.type &&
@@ -418,14 +293,11 @@ export async function updateTrigger(
   if (fields.agentId !== undefined) {
     await requireUsableAgent(ctx, fields.agentId);
   }
-  // Only the stored type is read here, not its config: an update that supplies
-  // a new config must be able to repair a row whose stored one is malformed.
   const effectiveType: TriggerType = fields.type ?? existing.type;
 
   const updateData: Partial<TriggerRow> = {
     updatedAt: new Date(),
   };
-  /** Whether the update makes this a pending One-off it was not before. */
   let needsOneOffRoom = false;
   if (fields.agentId !== undefined) updateData.agentId = fields.agentId;
   if (fields.name !== undefined) updateData.name = fields.name;
@@ -443,15 +315,7 @@ export async function updateTrigger(
     updateData.extractMemories = fields.extractMemories;
   if (fields.type !== undefined) updateData.type = fields.type;
 
-  // `config`, when supplied, is set below alongside validation — normalized
-  // (Zod defaults applied), not the raw input.
   if (effectiveType === "event") {
-    // Event triggers don't have nextRunAt. Revalidate when the config changed
-    // *or* when the type did: a change of type re-reads the stored config under
-    // the other shape's schema, so flipping a cron Trigger to `event` without
-    // supplying a config fails loud here rather than storing a cron config under
-    // `type: "event"` — a Trigger that looks configured and can never fire. The
-    // cron branch below guards the mirror case; this is the same guard.
     if (fields.config !== undefined || fields.type !== undefined) {
       const parsed = parseEventConfig(fields.config ?? existing.config);
       if (fields.config !== undefined) {
@@ -460,14 +324,10 @@ export async function updateTrigger(
     }
     updateData.nextRunAt = null;
   } else if (effectiveType === "inbound") {
-    // A new config does not re-issue the token: a changed `tokenExpiryDays`
-    // applies from the next regenerate, so an edit never moves a live expiry.
     if (fields.config !== undefined) {
       updateData.config = parseInboundConfig(fields.config);
     }
   } else {
-    // `effectiveType` is a stored Trigger type, so the database's CHECK leaves
-    // only `cron` here.
     effectiveType satisfies "cron";
     if (fields.config !== undefined || fields.type !== undefined) {
       const effectiveConfigInput = fields.config ?? existing.config;
@@ -479,15 +339,6 @@ export async function updateTrigger(
         updateData.config = parsed.config;
       }
     } else if (fields.enabled === true && !existing.enabled) {
-      // Re-enabling restarts the schedule. Disabling leaves `nextRunAt` at
-      // whatever it was, so by the time a Trigger is switched back on that
-      // value is in the past — and the scheduler's due query is
-      // `nextRunAt <= NOW()`, which reads a stale timestamp as "due" and fires
-      // an off-schedule catch-up run on the very next tick. The run after that
-      // one is scheduled from *its* completion time, so the catch-up and the
-      // first real slot can land a minute apart before the cadence settles.
-      // Recomputing here means an enabled Trigger's first run is always a slot
-      // its own expression actually names.
       updateData.nextRunAt = parseCronConfig(existing.config).nextRunAt;
     }
   }
@@ -507,12 +358,6 @@ export async function updateTrigger(
   return row;
 }
 
-/**
- * This Workspace's Triggers, newest first, each with its newest run's status
- * and start time —
- * only the enabled ones when `enabledOnly` is set. Fired One-off Triggers are
- * left out unless `includeFired` is set.
- */
 export async function listTriggers(
   ctx: ScopeContext,
   {
@@ -537,7 +382,6 @@ export async function listTriggers(
   );
   if (rows.length === 0) return [];
 
-  // Each Trigger's newest run only, however many it keeps.
   const runs = await db
     .selectDistinctOn([triggerRunTable.triggerId], {
       triggerId: triggerRunTable.triggerId,
@@ -563,36 +407,24 @@ export async function listTriggers(
   });
 }
 
-/** A Trigger in this Workspace. Throws `NotFoundError` when not here. */
 export const getTrigger = (
   ctx: ScopeContext,
   triggerId: string,
 ): Promise<TriggerRow> =>
   requireOwned(db, "trigger", { id: triggerId, workspaceId: ctx.workspaceId });
 
-/**
- * Deletes a Trigger in this Workspace; `false` when none was here. An Inbound
- * Trigger only on the Owner's surface: an inbound run's context carries
- * caller-supplied text, and an Agent talked into deleting its own integration
- * would stop it with nothing but a uniform `404` to show for it (ADR-0030).
- * The type is read first, then the row deleted — safe because no edit moves a
- * Trigger's type to or from `inbound`.
- */
 export const deleteTrigger = async (
   ctx: ScopeContext,
   triggerId: string,
   { allowInbound }: TriggerWriteOptions,
 ): Promise<boolean> => {
   const ref = { id: triggerId, workspaceId: ctx.workspaceId };
-  // Read the run ids and delete in one transaction, with the Trigger row
-  // locked: its runs cascade away with it, and their Chat ids are what name the
-  // storage prefixes to clear. The lock keeps a new run from appearing between
-  // the read and the delete, where its files would outlive the row.
   const runIds = await db.transaction(async (tx) => {
     const [existing] = await tx
       .select()
       .from(triggerTable)
       .where(ownedWhere("trigger", ref))
+      // why: a run started between this read and the delete would leave its files behind
       .for("update");
     if (!existing) return null;
     if (!allowInbound && existing.type === "inbound") {
@@ -619,12 +451,6 @@ export const deleteTrigger = async (
   return true;
 };
 
-/**
- * Issues a new token for an Inbound Trigger in this Workspace, invalidating
- * the old one at once, with the lifetime its config names from now. Returns
- * the token — the only time it is readable. Throws `NotFoundError` when the
- * Trigger is not here, `ValidationError` when it is not inbound.
- */
 export async function regenerateTriggerToken(
   ctx: ScopeContext,
   triggerId: string,
@@ -633,8 +459,6 @@ export async function regenerateTriggerToken(
     id: triggerId,
     workspaceId: ctx.workspaceId,
   });
-  // Narrows `type`/`config` together: a pair the upgrade could not repair is
-  // reported here rather than silently read as an empty config.
   const typed = narrowTriggerConfig(existing);
   if (typed.type !== "inbound") {
     throw new ValidationError("Only inbound triggers have a token.");

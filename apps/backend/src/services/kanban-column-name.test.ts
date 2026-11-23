@@ -13,13 +13,7 @@ import { migratedPglite } from "../db/migrated-pglite.test-fixtures.ts";
 import { ConflictError } from "../errors.ts";
 import { mockNanoid } from "../test-setup.ts";
 
-/**
- * Column names stay unique per Board under concurrent writes, against an
- * in-process Postgres built from the shipped migrations, so the database's own
- * constraint is what catches the write the in-app check let through.
- */
 vi.mock("./event-dispatch.ts", () => ({ dispatchEvent: vi.fn() }));
-// Two inserts in flight need two ids.
 mockNanoid.mockImplementation(() => crypto.randomUUID());
 
 const { createColumn, renameColumn } = await import("./kanban-column.ts");

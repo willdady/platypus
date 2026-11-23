@@ -14,9 +14,6 @@ const { mockAnnounce, mockDeletePrefix } = vi.hoisted(() => ({
   mockDeletePrefix: vi.fn<(prefix: string) => Promise<void>>(),
 }));
 
-// The announcement is a delivery detail with its own tests; the lifecycle's
-// contract is *which* rows it hands over, and that it hands over only the ones
-// a write changed.
 vi.mock("./trigger-run-announce.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./trigger-run-announce.ts")>()),
   announceTriggerRunsEnded: mockAnnounce,
@@ -45,14 +42,11 @@ import {
 } from "./trigger-run-lifecycle.ts";
 
 const NOW = new Date("2026-01-01T12:00:00Z");
-// A partial payload: these tests check it is stored as given, not its shape.
 const cardData = { id: "card-1" } as EventTriggerEventPayload["data"];
 
-/** The run's row as the seeded fake has it, after a write. */
 const runRow = (fake: { tables: Record<string, Row[]> }, id = "run-1") =>
   fake.tables.trigger_run.find((run) => run.id === id);
 
-/** The Trigger and its Workspace, as retention needs to read them. */
 const seededWorld = (rows: { runs?: Row[]; events?: Row[] } = {}) =>
   seedDb({
     trigger: [
@@ -67,7 +61,6 @@ const seededWorld = (rows: { runs?: Row[]; events?: Row[] } = {}) =>
     trigger_run_event: rows.events ?? [],
   });
 
-/** Ends `run-1` with `over` folded into a minimal terminal write. */
 const end = (over: Partial<EndTriggerRunInput> = {}) =>
   endTriggerRun({
     runId: "run-1",
@@ -240,8 +233,6 @@ describe("endTriggerRun", () => {
   beforeEach(() => {
     resetMockDb();
     vi.clearAllMocks();
-    // The chainable mock resolves `.returning()` to whatever a test stubs; an
-    // empty page means "no row changed", so nothing is announced.
     mockDb.returning.mockResolvedValue([]);
   });
 
@@ -268,8 +259,6 @@ describe("endTriggerRun", () => {
     expect(setArg.completedAt).toBeInstanceOf(Date);
   });
 
-  // Issue #446 / ADR-0018: an Operator reading the runs page can see a
-  // scheduled Agent heading for the limit only if the figure is recorded.
   it("persists Context occupancy alongside the unchanged token sums", async () => {
     await end({
       stats: {
@@ -297,12 +286,9 @@ describe("endTriggerRun", () => {
     });
 
     const setArg = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
-    // Absent, not 0: a zero would read as a measurement of an empty context.
     expect(setArg.stats).not.toHaveProperty("contextOccupancy");
   });
 
-  // Issue #734. The cached-input breakdown is a spread, the same idiom as
-  // occupancy: absent means the Provider reported no cache detail, never a 0.
   it("persists the cached-input breakdown alongside the unchanged token sums", async () => {
     await end({
       stats: {
@@ -356,8 +342,6 @@ describe("endTriggerRun", () => {
     });
 
     const setArg = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
-    // A real reported write of 0 above was kept — here neither key exists at
-    // all because the Provider never reported a cache detail.
     expect(setArg.stats).not.toHaveProperty("cacheReadTokens");
     expect(setArg.stats).not.toHaveProperty("cacheWriteTokens");
   });
@@ -392,8 +376,6 @@ describe("endTriggerRun", () => {
     expect(setArg.completedAt).toBeInstanceOf(Date);
   });
 
-  // #647: a run cancelled at 40 seconds used to land as a failed run with no
-  // error, indistinguishable from a crash on the detail page.
   it("records a cancelled run as 'cancelled', not 'failed'", async () => {
     await end({ status: "cancelled" });
 
@@ -424,8 +406,6 @@ describe("endTriggerRun", () => {
     expect(setArg.stats).toBeNull();
   });
 
-  // Without this the run lands as a plain 'success' and nothing anywhere says
-  // the answer was cut off at the model's ceiling.
   it("persists the truncation marker on a run that hit the output limit", async () => {
     await end({
       stats: {
@@ -457,9 +437,6 @@ describe("endTriggerRun", () => {
     expect(setArg.stats).not.toHaveProperty("truncatedByTokenLimit");
   });
 
-  // Issue #540. The run history page reads the persisted stats, so a run that
-  // ended at its step ceiling is only distinguishable from one the Agent
-  // finished if the flag is written here.
   it("persists the step-limit marker on a run whose loop was stopped short", async () => {
     await end({
       stats: {
@@ -472,7 +449,6 @@ describe("endTriggerRun", () => {
     });
 
     const setArg = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
-    // Still a success: the run did the work it was allowed to do.
     expect(setArg.status).toBe("success");
     expect(setArg.stats).toEqual({
       steps: 15,
@@ -612,8 +588,6 @@ describe("a run's end", () => {
 
     await end();
 
-    // The run that just ended is the newest, so the budget keeps it and prunes
-    // the row outside the breaker window.
     expect(fake.tables.trigger_run.map((run) => run.id)).toEqual(["run-1"]);
   });
 });
@@ -727,8 +701,6 @@ describe("failAbandonedTriggerRuns", () => {
     });
     expect(runRow(fake, "run-recent")?.status).toBe("running");
     expect(runRow(fake, "run-done")?.status).toBe("success");
-    // No terminal run leaves an open event behind; a finished run's events are
-    // already closed by whoever finished it.
     expect(fake.tables.trigger_run_event).toEqual([
       expect.objectContaining({ id: "ev-1", status: "error" }),
       expect.objectContaining({ id: "ev-2", status: "running" }),
@@ -750,8 +722,6 @@ describe("failAbandonedTriggerRuns", () => {
       ],
     });
 
-    // Past the pending cutoff but not the running one: an accepted call whose
-    // process died between answering and starting it.
     await failAbandonedTriggerRuns({
       runningCutoff: new Date("2026-01-01T09:00:00Z"),
       pendingCutoff: new Date("2026-01-01T10:30:00Z"),
@@ -778,7 +748,6 @@ describe("failAbandonedTriggerRuns", () => {
       runningCutoff: cutoff,
       pendingCutoff: cutoff,
     });
-    // The run's sink finishes after the sweep took it.
     await end({ status: "succeeded" });
 
     expect(runRow(fake, "run-1")).toMatchObject({
@@ -871,11 +840,8 @@ describe("suppression", () => {
   });
 
   it("trims the Trigger's history with the row it just wrote", async () => {
-    // A runaway produces suppressed rows fast; recording one without retention
-    // would let the evidence of the trip fill the table.
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(NOW);
-    // Outside the breaker window, so maxRunsToKeep is what prunes them.
     const old = (n: number) => new Date(NOW.getTime() - n * 60 * 60_000);
     const fake = seedDb({
       trigger: [{ id: "trigger-1", workspaceId: "ws-1", maxRunsToKeep: 2 }],
@@ -953,7 +919,6 @@ describe("suppression", () => {
       eventData: cardData,
     });
 
-    // The row just written and the newest old one; the run is untouched.
     expect(
       fake.tables.trigger_run
         .filter((run) => run.status === "suppressed")
@@ -1013,8 +978,6 @@ describe("suppression", () => {
           entityId: "card-1",
           eventData: { inputs: {} },
         });
-        // Never settled: the caller's transaction has not committed, and the
-        // announcement it owes dies with the rollback.
         throw new Error("the acceptance decision rolled back");
       }),
     ).rejects.toThrow("the acceptance decision rolled back");
@@ -1063,7 +1026,6 @@ describe("cancelPendingTriggerRuns", () => {
     expect(runRow(fake, "run-pending")?.status).toBe("cancelled");
     expect(runRow(fake, "run-running")?.status).toBe("running");
     expect(runRow(fake, "run-elsewhere")?.status).toBe("pending");
-    // Nothing is announced from inside the transaction that wrote it.
     expect(mockAnnounce).not.toHaveBeenCalled();
 
     await triggerRunsEnded(ended);
@@ -1076,11 +1038,6 @@ describe("cancelPendingTriggerRuns", () => {
 });
 
 describe("retainTriggerRuns", () => {
-  /**
-   * The retention queries in call order: the newest normal rows, the normal
-   * rows inside the breaker window, the newest suppressed rows — then one
-   * delete per budget whose result the caller reads through `.returning`.
-   */
   const stubRetention = ({
     newest,
     suppressed,
@@ -1112,10 +1069,6 @@ describe("retainTriggerRuns", () => {
   });
 
   it("keeps every run inside the breaker window, however small maxRunsToKeep is", async () => {
-    // The floor the breaker's count depends on: maxRunsToKeep alone would have
-    // deleted the in-window rows before the count could see them. They are
-    // spared by predicate rather than by id, so the delete cannot grow an id
-    // list with the Trigger's throughput.
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-01T12:00:00Z"));
     vi.stubEnv("TRIGGER_BREAKER_WINDOW_SECONDS", "3600");
@@ -1130,10 +1083,6 @@ describe("retainTriggerRuns", () => {
   });
 
   it("carries no more ids into the delete than maxRunsToKeep", async () => {
-    // The regression this guards: the kept set used to be the union of the
-    // newest page and every row inside the window, so a Trigger firing across
-    // many entities built an unbounded `notInArray` argument on a query that
-    // runs after every run.
     stubRetention({
       newest: [{ id: "newest" }, { id: "newer" }],
       suppressed: [],
@@ -1145,14 +1094,10 @@ describe("retainTriggerRuns", () => {
       "newest",
       "newer",
     ]);
-    // Two selects only — the newest page and the suppressed page. A third
-    // would be the window scan this replaced.
     expect(mockDb.select).toHaveBeenCalledTimes(2);
   });
 
   it("derives the kept window from the configured breaker window", async () => {
-    // The floor is the Operator's window, read at runtime: a test pinned to a
-    // module constant could not cover a value set at deploy time.
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-01T12:00:00Z"));
     vi.stubEnv("TRIGGER_BREAKER_WINDOW_SECONDS", "60");
@@ -1181,9 +1126,6 @@ describe("retainTriggerRuns", () => {
   });
 
   it("never prunes a run still in flight, however old", async () => {
-    // A per-run timeout longer than the breaker window would otherwise delete a
-    // live run's row: its sink would finish nothing, and an Inbound Trigger's
-    // dedup and poll would lose it mid-run.
     stubRetention({ newest: [{ id: "newest" }], suppressed: [] });
 
     await retainTriggerRuns("trigger-1", 1);
@@ -1195,7 +1137,6 @@ describe("retainTriggerRuns", () => {
   });
 
   it("does not prune when the Trigger holds fewer rows than either budget", async () => {
-    // A short page from either budget means it returned every row there is.
     mockDb.limit.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
 
     await retainTriggerRuns("trigger-1", 10);
@@ -1216,8 +1157,6 @@ describe("retainTriggerRuns", () => {
   });
 
   it("deletes the stored files under each pruned run Chat's prefix", async () => {
-    // A run's Chat id is the run id, so each deleted run row names a storage
-    // prefix nothing else reaches once the row is gone.
     stubRetention({
       newest: [{ id: "newest" }],
       suppressed: [],
@@ -1256,8 +1195,6 @@ describe("retainTriggerRuns", () => {
   });
 
   it("logs a failed scope lookup without failing the prune", async () => {
-    // Retention has already committed its delete when the fallback lookup runs.
-    // Losing the scope must cost the files, not the prune.
     stubRetention({
       newest: [{ id: "newest" }],
       suppressed: [],
@@ -1275,12 +1212,6 @@ describe("retainTriggerRuns", () => {
   });
 });
 
-/**
- * The acceptance criteria this feature is measured by are about the shape of
- * the production source, not any one behaviour, so they are pinned by reading
- * it: a status write that appears in a second module is the bug the lifecycle
- * exists to prevent.
- */
 describe("the lifecycle's monopoly", () => {
   const sourceRoot = fileURLToPath(new URL("../", import.meta.url));
 
@@ -1309,11 +1240,6 @@ describe("the lifecycle's monopoly", () => {
   const announce = join(sourceRoot, "services/trigger-run-announce.ts");
 
   it("is the only production module that writes a Trigger run's status", () => {
-    // Every insert names a status, so an insert is a status write. An update
-    // is one only when its `set` carries a status: the sink still writes the
-    // mid-run stats and the unloaded Tool sets. Deletes are not: a row deleted
-    // by cascade with its Trigger, and the bulk history delete a transfer may
-    // make, are exempt.
     const writesStatus = (text: string): boolean => {
       if (/\.insert\(\s*triggerRunTable\b/.test(text)) return true;
       for (const statement of text.matchAll(
@@ -1345,12 +1271,8 @@ describe("the lifecycle's monopoly", () => {
   });
 
   it("defines the pending/running predicate once", () => {
-    // A live run spelled out again — the pair in one array, `inArray`, or SQL —
-    // is the duplication the shared predicate exists to remove.
     const schema = join(sourceRoot, "db/schema.ts");
     const restatements = sources
-      // The column's check constraint names every status the column may hold;
-      // that is the vocabulary, not a reader deciding whether a run is live.
       .filter(({ file }) => file !== lifecycle && file !== schema)
       .filter(({ text }) =>
         /\[\s*["']pending["']\s*,\s*["']running["']\s*\]|['"]pending['"],\s*['"]running['"]/.test(

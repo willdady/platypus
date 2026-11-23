@@ -41,75 +41,25 @@ import type {
   EventTriggerEventPayload,
 } from "@platypus/schemas";
 
-/**
- * Trigger firing: the one place a Trigger row becomes a run.
- *
- * A firing is the whole of what happens when a Trigger goes off — the
- * run-rate breaker, the Agent run under the Trigger timeouts, and the
- * bookkeeping every exit owes the row: `lastRunAt` and run retention. The
- * scheduler and event dispatch decide *when* a Trigger fires; neither knows
- * what firing involves.
- *
- * The bookkeeping used to live beside each caller, on the line after the run,
- * so a run that threw skipped it: a failing Trigger's history grew without
- * bound, and an Event Trigger's `lastRunAt` never moved. It also wrote back the
- * snapshot the run was fired from, which re-enabled a Trigger its Workspace
- * Owner switched off mid-run. Here it runs on every exit, against the row as
- * it is once the run ends.
- */
-
 export type EventContext = {
-  /** The event that fired this run, carried with its declared payload. */
   payload: EventTriggerEventPayload;
-  /**
-   * The single entity the event named, when it named one. Persisted on the run
-   * row so the run-rate breaker can count per entity; absent for events that
-   * name a set instead (bulk `notification.read`), which the breaker exempts.
-   */
   entityId?: string;
 };
 
-/**
- * What an accepted Inbound Trigger call hands the firing (ADR-0030). The call
- * has already been through the breaker and dedup, and its run row written as
- * `pending` under `runId` — the id the caller was given.
- */
 export type InboundContext = {
   runId: string;
-  /** The call's validated inputs, by name: every value a string. */
   inputs: Record<string, string>;
-  /** The declarations they were validated against, for their descriptions. */
   declared: InboundTriggerInput[];
-  /** The record key's value, or the Trigger's own id when none is marked. */
   entityId: string;
 };
 
-/**
- * Why a Trigger is firing: its schedule came due, an event matched it, or an
- * external caller fired it.
- */
 export type FiringCause =
   | { kind: "cron" }
   | ({ kind: "event" } & EventContext)
   | ({ kind: "inbound" } & InboundContext);
 
-/**
- * How a firing ended. `failed` covers a run that threw — a model error, a
- * timeout, a missing Workspace — not one the Drive finished as failed and
- * returned from (the no-progress stop), which reads as `ran`; the run row
- * carries the real status either way.
- */
 export type FiringOutcome = "ran" | "failed" | "suppressed";
 
-/**
- * Fires `trigger` for `cause`. Resolves once the firing and its bookkeeping are
- * done, and never rejects: a run failure is logged here, since there is no
- * HTTP caller to map it for (ADR-0010).
- *
- * `trigger` is the snapshot the caller selected; the run is built from it. The
- * bookkeeping re-reads the row instead, because the Workspace Owner may have
- * edited, disabled or deleted it while the run was in flight.
- */
 export const fireTrigger = async (
   trigger: TriggerRow,
   cause: FiringCause,
@@ -121,13 +71,6 @@ export const fireTrigger = async (
   const inboundContext: InboundContext | undefined =
     cause.kind === "inbound" ? cause : undefined;
 
-  // The breaker is checked when the run would start, not when the event
-  // arrived: the debounce has then folded any burst into one firing, so a
-  // burst cannot manufacture suppressed rows, and the count includes runs that
-  // started during the window. A suppressed firing is not a run, so it stamps
-  // no `lastRunAt`; `suppressTriggerRun` applies retention itself. An inbound
-  // firing was already counted when its call was accepted, since the call's
-  // log line and response owe the verdict before the run starts.
   if (eventContext?.entityId) {
     try {
       if (await shouldSuppressTriggerRun(trigger.id, eventContext.entityId)) {
@@ -172,12 +115,6 @@ export const fireTrigger = async (
   return outcome;
 };
 
-/**
- * The labelled block an inbound run's inputs arrive in, above the Instruction
- * — where an Event Trigger's payload goes. Each value is JSON-encoded, so a
- * multi-line value cannot pass itself off as the next input or as the
- * Instruction. No templating: the Instruction refers to inputs by name.
- */
 export const composeInboundInputs = (
   inputs: Record<string, string>,
   declared: InboundTriggerInput[],
@@ -196,17 +133,9 @@ export const composeInboundInputs = (
   );
 };
 
-/**
- * A run's Chat title: its Trigger's name and when it started, to the minute in
- * UTC. Fixed at the start and never re-titled (ADR-0044).
- */
 const runChatTitle = (name: string, startedAt: Date): string =>
   `${name} · ${startedAt.toISOString().slice(0, 16).replace("T", " ")} UTC`;
 
-/**
- * Runs the Trigger's Agent against its instruction. For event Triggers, the
- * event is prepended to the instruction. Throws when the run does.
- */
 const runTrigger = async (
   trigger: TriggerRow,
   eventContext: EventContext | undefined,
@@ -215,19 +144,6 @@ const runTrigger = async (
   const { id, workspaceId, agentId, instruction } = trigger;
   const runId = inboundContext?.runId ?? nanoid();
 
-  // Workspace is fetched up-front to derive the run scope, joined to its
-  // owner because the scope names the user the run acts on behalf of and that
-  // name lives on the user row. The join is inner: `ownerId` is a non-null FK
-  // under cascade delete, so a Workspace that loads always has an owner. The
-  // runner re-reads the Workspace for system-prompt context — at trigger
-  // volumes the extra round-trip is acceptable.
-  //
-  // The owner's Organization membership is joined too. Removing a member
-  // disables their Triggers, but a firing already selected when that happens,
-  // or any path that starts a run without consulting `enabled`, would still
-  // run as a user who has left. Banning a user disables nothing, so their
-  // Triggers keep being selected. Refuse both here (`ownerMayAct`): a super
-  // admin acts in every Organization without a membership, but not banned.
   const [workspace] = await db
     .select({
       organizationId: workspaceTable.organizationId,
@@ -241,8 +157,6 @@ const runTrigger = async (
     .where(eq(workspaceTable.id, workspaceId))
     .limit(1);
 
-  // No run row inserted yet on either refusal — the firing still owes the
-  // Trigger its bookkeeping, which `fireTrigger` applies on the way out.
   if (!workspace) {
     throw new Error(`Workspace '${workspaceId}' not found for trigger '${id}'`);
   }
@@ -278,16 +192,8 @@ const runTrigger = async (
     runId,
     request: { agentId, search: trigger.search },
     messages,
-    // A headless run carries no Chat identity and so no pin: when it composes
-    // Memories at all it renders the current block, anchored to the moment this
-    // firing resolved (ADR-0020). Stamped once here rather than read inside turn
-    // preparation, so the reference date is an input the run can be replayed
-    // against.
     memoriesReferenceDate: new Date(),
-    // Off unless this Trigger opts in (#645), which is what keeps a firing's
-    // prompt from drifting with interactive-chat activity unrelated to it.
     includeMemories: trigger.includeMemories,
-    // Always on: only a Chat turn withholds the Agent's Memory tools (ADR-0032).
     memoryTools: true,
   };
 
@@ -301,8 +207,7 @@ const runTrigger = async (
         eventType: eventContext?.payload.event,
         eventData: eventContext?.payload.data,
       });
-  // The run keeps its Transcript as a Chat bound to it (ADR-0044), under the
-  // run's own id: the run row first, since the Chat references it.
+  // why: run sink first; the Chat row references the run row
   const sink = compositeSink(
     runSink,
     new ChatSink({
@@ -318,14 +223,6 @@ const runTrigger = async (
     }),
   );
 
-  // What caused this firing, read before the run establishes itself as the
-  // next cause. On a cron both are empty; on an event Trigger they are the
-  // ambient context of the write that dispatched it, which is the one thing a
-  // Trigger loop leaves no other record of (#812).
-  //
-  // Identifiers only. The instruction is deliberately absent: on an event
-  // Trigger it opens with the serialised event payload, so even a short prefix
-  // put Card titles and body text on this line (#812).
   logger.info(
     {
       triggerId: id,
@@ -339,11 +236,6 @@ const runTrigger = async (
     "Starting trigger execution",
   );
 
-  // Everything this run writes is caused by this Trigger, at any delegation
-  // depth — the ambient context a later dispatch reads back to name where the
-  // event came from (ADR-0022). The Agent chain is established deeper, by the
-  // Drive. The run itself is the source a Notification it posts records
-  // (#1229).
   await withOriginatingTrigger(id, () =>
     withRunSource({ kind: "triggerRun", triggerRunId: runId }, () =>
       agentRunner.generate({
@@ -359,18 +251,6 @@ const runTrigger = async (
   );
 };
 
-/**
- * What every firing that got as far as a run owes its Trigger, whatever the
- * run's outcome: `lastRunAt` at completion. The schedule is not written here:
- * the scheduler's claim already wrote a cron Trigger's next run (or disabled a
- * one-off) before the run started. Retention is not here either: the Trigger
- * run lifecycle prunes a Trigger's history when a run or a suppression ends.
- *
- * Reads the row as it is now rather than the snapshot the run was fired from:
- * a Workspace Owner who disables or edits a Trigger mid-run keeps what they
- * set. A row deleted mid-run is simply gone. A failure here is logged and
- * swallowed — the run already happened.
- */
 const recordFiring = async (triggerId: string): Promise<void> => {
   try {
     const [current] = await db

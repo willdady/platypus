@@ -24,27 +24,15 @@ import {
   type KanbanScope,
 } from "./kanban-shared.ts";
 
-/**
- * A Card history entry as stored. The actor mirrors the Card's own
- * `lastEditedBy*` columns, so an entry and the Card can never disagree about
- * who wrote it.
- */
 type CardHistoryRow = typeof kanbanCardHistoryTable.$inferSelect;
 
-/** A history entry with its actor's display name resolved. */
 export type CardHistoryEntry = CardHistoryRow & { actorName: string | null };
 
-/** The attribution columns for a history entry this actor is causing. */
 const historyActor = (actor: KanbanActor) =>
   isAgent(actor)
     ? { actorAgentId: actor.agentId }
     : { actorUserId: actor.userId };
 
-/**
- * The board's Labels by id, for snapshotting names into an entry. A Card can
- * carry a Label id the board has since dropped, in which case the id stands in
- * for the name — an unreadable entry is still better than a missing one.
- */
 const boardLabelNames = async (
   executor: Executor,
   boardId: string,
@@ -60,7 +48,6 @@ const boardLabelNames = async (
   );
 };
 
-/** Column names by id, for the same reason. */
 const columnNames = async (
   executor: Executor,
   columnIds: string[],
@@ -82,15 +69,6 @@ const ref = (id: string, names: Map<string, string>): KanbanCardHistoryRef => ({
   name: names.get(id) ?? id,
 });
 
-/**
- * Turns a value-diff into the changes an entry records. Driven by the field
- * names `changedCardFields` produced, so the history and the `card.updated`
- * event can never disagree about what moved.
- *
- * `body` is the deliberate exception: recorded as having changed, never with
- * its text (ADR-0024). Label and Column values carry the name as it stood
- * here, which is what keeps an entry readable after a rename or a deletion.
- */
 const historyChanges = async (
   executor: Executor,
   boardId: string,
@@ -156,17 +134,10 @@ const historyChanges = async (
   return changes;
 };
 
-/**
- * Drops everything past the cap for one Card, in the caller's transaction.
- * Trimming inline is what makes the bound an invariant rather than something
- * a sweep job eventually restores.
- */
 const trimCardHistory = async (
   executor: Executor,
   cardId: string,
 ): Promise<void> => {
-  // One statement rather than a read then a write: the newest N are chosen by
-  // a subquery, so a write costs no extra round trip to stay within the cap.
   const newest = executor
     .select({ id: kanbanCardHistoryTable.id })
     .from(kanbanCardHistoryTable)
@@ -187,16 +158,6 @@ const trimCardHistory = async (
     );
 };
 
-/**
- * Appends one entry for one write, and trims to the cap — both in the caller's
- * transaction, never from `dispatch()`. `dispatchEvent` returns `void` and is
- * unawaited, so an entry written from there would land outside the transaction
- * and a rolled-back write would still be recorded (ADR-0024).
- *
- * An `updated` write whose diff is empty appends nothing, which is how a
- * within-column reorder — `position` only, and `position` is not a tracked
- * field — leaves no trace.
- */
 const writeHistoryEntry = async (
   executor: Executor,
   ctx: KanbanContext,
@@ -216,7 +177,6 @@ const writeHistoryEntry = async (
   await trimCardHistory(executor, cardId);
 };
 
-/** The entry a Card's creation leaves: it came into existence in a Column. */
 export const recordCardCreated = async (
   executor: Executor,
   ctx: KanbanContext,
@@ -228,7 +188,6 @@ export const recordCardCreated = async (
   ]);
 };
 
-/** The entry a Column change leaves, for a caller that knows only the move. */
 export const recordCardMoved = async (
   executor: Executor,
   ctx: KanbanContext,
@@ -253,7 +212,6 @@ export const recordCardHistory = async (
     boardId: string;
     previous: CardRow;
     next: CardRow;
-    /** What `changedCardFields` found. */
     changedFields: string[];
   },
 ): Promise<void> => {
@@ -270,10 +228,6 @@ export const recordCardHistory = async (
   await writeHistoryEntry(executor, ctx, input.next.id, "updated", changes);
 };
 
-/**
- * A Card's history, newest first. Capped at the same limit the writes trim to,
- * so a caller never has to page and the read is bounded by construction.
- */
 export const listCardHistory = async (
   database: Database,
   scope: KanbanScope,
@@ -316,9 +270,6 @@ export const listCardHistory = async (
       : [];
   const agentMap = new Map(agents.map((a) => [a.id, a.name]));
 
-  // A deleted User or Agent leaves the entry standing with no name — what
-  // changed is still the useful part, and the FK is `set null` for exactly
-  // this reason.
   return rows.map((row) => ({
     ...row,
     actorName: row.actorUserId
