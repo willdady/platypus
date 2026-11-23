@@ -5,19 +5,6 @@ import { lookupA2aEndpoint } from "./a2a-endpoint.ts";
 import type { A2aCaller } from "./a2a-task.ts";
 import type { TaskRow } from "./a2a-task-state.ts";
 
-/**
- * Whether A2A work already under way may go on (ADR-0032). Cutting off access
- * — deleting or regenerating a token, disabling, deleting or revoking an
- * endpoint, closing the Org gate, or the Owner leaving or being banned —
- * refuses new calls at once; this is what work already started is held to,
- * so it stops too.
- */
-
-/**
- * Whether the endpoint is live and still holds the token, with a value issued
- * no later than `issuedBy`. A token regenerated since was issued after, so
- * work done with its old value stops with that value.
- */
 const credentialLive = async (
   endpointId: string,
   tokenId: string,
@@ -38,7 +25,6 @@ const credentialLive = async (
   return !!token && token.tokenCreatedAt.getTime() <= issuedBy.getTime();
 };
 
-/** Whether the call's endpoint and the token value it carried are still live. */
 export const callerIsLive = (caller: A2aCaller): Promise<boolean> =>
   credentialLive(
     caller.endpoint.id,
@@ -46,10 +32,6 @@ export const callerIsLive = (caller: A2aCaller): Promise<boolean> =>
     caller.token.tokenCreatedAt,
   );
 
-/**
- * Whether the endpoint and token that started the Task are still live. A Task
- * whose token or endpoint was deleted has neither.
- */
 export const taskIsLive = async (
   task: Pick<TaskRow, "endpointId" | "tokenId" | "createdAt">,
 ): Promise<boolean> =>

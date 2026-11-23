@@ -69,7 +69,6 @@ describe("A2A tokens", () => {
     });
 
     it("skips a reminder that would fall before the token was created", async () => {
-      // A 30-day token: its 30-day reminder would be the moment of issue.
       const fake = seed([
         token({
           tokenCreatedAt: new Date(NOW.getTime() - DAY),
@@ -131,7 +130,6 @@ describe("A2A tokens", () => {
     it("holds the limit across instances: a recent stamp in the row wins", async () => {
       const fake = seed([token({ lastUsedAt: NOW })]);
 
-      // A fresh process (no memory of the stamp) 30s later.
       await touchA2aToken(
         "tok-1",
         "lastUsedAt",
@@ -152,7 +150,6 @@ describe("A2A tokens", () => {
       );
       expect(tokenTouchCount()).toBe(2);
 
-      // Drops the expired touch, keeps the one still inside the minute.
       await touchA2aToken(
         "tok-2",
         "lastUsedAt",

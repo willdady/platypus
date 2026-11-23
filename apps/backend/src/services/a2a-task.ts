@@ -81,62 +81,26 @@ import { callerIsLive } from "./a2a-liveness.ts";
 import { chatRunIsLive } from "../runs/chat-run-heartbeat.ts";
 import { oneRow } from "../db/one-row.ts";
 
-/**
- * A2A conversations (ADR-0032): `SendMessage` starts a turn in a Chat and
- * answers with the turn's Task, which the client follows with `GetTask`. A
- * running Task's state is read from the Chat's run on every call, and an
- * ended one's from the Task, so any backend instance answers.
- */
-
 export type A2aCaller = {
   endpoint: LiveA2aEndpoint;
-  /** The token the call carried, as the value it carried was issued. */
   token: { id: string; name: string; tokenCreatedAt: Date };
   origin: string;
-  /**
-   * Aborted once the client hangs up, so a caller following a Task lets go
-   * of its follower slot then, not when the Task next changes.
-   */
   signal?: AbortSignal;
 };
 
-/** The namespace of the Chat ids `a2aChatId` derives. Fixed for good. */
+// why: fixed for good; a new namespace re-keys every A2A Chat and breaks retries
 const A2A_CHAT_NAMESPACE = "0b6f4d2e-6a43-4d8e-9c1a-3f0e2b7d5a91";
 
-/**
- * The id of the Chat a token's message opens when it names no context: a
- * UUIDv5 of the token and the client's `messageId`. Two copies of the message
- * sent at once, to any instances, then race for one Chat, and its claim lets
- * only one of them start the turn.
- */
 export const a2aChatId = (tokenId: string, messageId: string): string =>
   uuidv5(JSON.stringify([tokenId, messageId]), A2A_CHAT_NAMESPACE);
 
-/**
- * The id of the Chat a token's client-minted `contextId` names: a UUIDv5 of
- * the token and the client's string. Never the string itself, which is the
- * client's to choose and so could be any Chat's id. Two tokens minting the
- * same string get two Chats, and two copies of a context's first message race
- * for one Chat, as `a2aChatId`'s do.
- */
 export const a2aContextChatId = (tokenId: string, contextId: string): string =>
   uuidv5(JSON.stringify([tokenId, "context", contextId]), A2A_CHAT_NAMESPACE);
 
-/** The longest `contextId` a client may mint. */
 export const MAX_CONTEXT_ID_LENGTH = 128;
 
-/**
- * How long a blocking `SendMessage` waits for its run to end: short of the
- * HTTP timeouts in front of most deployments, a deliberate deviation from
- * A2A 1.0 §3.2.2, which waits for the end (ADR-0032).
- */
 const A2A_BLOCKING_WAIT_MS = 30_000;
 
-/**
- * An inbound A2A part as a UI message part. Data parts reach the Agent as
- * labelled JSON, as Inbound Trigger inputs do. Anything else is refused:
- * nothing is dropped silently.
- */
 const fromA2aPart = (part: Part) => {
   switch (part.content?.$case) {
     case "text":
@@ -155,10 +119,6 @@ const fromA2aPart = (part: Part) => {
   }
 };
 
-/**
- * `params` with the parts at `nullDataParts` (see `readRpcEnvelope`) as data
- * parts holding `null`. Only a part the SDK left without content is one.
- */
 export const withNullDataParts = (
   params: SendMessageRequest,
   nullDataParts: ReadonlySet<number>,
@@ -178,13 +138,8 @@ const findTask = async (where: ReturnType<typeof and>) => {
   return row;
 };
 
-/**
- * Where a turn goes: its Chat, and the client-minted `contextId` its Task
- * carries, null where the context is the Chat id.
- */
 type TurnContext = { chatId: string; contextId: string | null };
 
-/** Makes the Task for a turn's user message, as the calling token's. */
 const insertTask = async (
   executor: Executor,
   caller: A2aCaller,
@@ -210,12 +165,6 @@ const insertTask = async (
   return row;
 };
 
-/**
- * The Task for a retried turn's user message. The call that started the turn
- * made it with the turn's claim, so it is read as it stands: its token and
- * endpoint are never rewritten. Made here only for a message in the token's
- * Chat that has none.
- */
 const taskFor = async (
   caller: A2aCaller,
   context: TurnContext,
@@ -230,7 +179,6 @@ const taskFor = async (
   try {
     return await insertTask(db, caller, context, messageId);
   } catch (error) {
-    // Two retries raced to make it; the other one's is this turn's Task.
     if (!isUniqueViolation(error)) throw error;
     const raced = await findTask(where);
     if (!raced) throw error;
@@ -238,12 +186,6 @@ const taskFor = async (
   }
 };
 
-/**
- * The refusal for a message sent while the Chat's run is still going,
- * carrying that run's Task in its error data so the client can follow it.
- * The spec has no error for a busy context; it answers a Task that cannot
- * take a message with "unsupported operation", so this is answered as that.
- */
 export class A2aChatBusyError extends UnsupportedOperationError {
   readonly taskId?: string;
 
@@ -252,19 +194,11 @@ export class A2aChatBusyError extends UnsupportedOperationError {
       message: CHAT_BUSY_MESSAGE,
       metadata: taskId ? { taskId } : undefined,
     });
-    // The transports pick the wire code by name.
     this.name = "UnsupportedOperationError";
     this.taskId = taskId;
   }
 }
 
-/**
- * `A2aChatBusyError` for the Chat's running turn, naming its Task when this
- * token started that turn. Only ever asked of a Chat the token started, and
- * it only reads: a turn the Owner started in the UI is answered busy with no
- * Task, so the client cannot follow, or cancel, a run it did not start. A
- * turn this token started has its Task from the moment its claim commits.
- */
 const busyError = async (caller: A2aCaller, chatId: string) => {
   const turnId = await currentTurnId(chatId);
   const task = turnId
@@ -276,15 +210,10 @@ const busyError = async (caller: A2aCaller, chatId: string) => {
         ),
       )
     : undefined;
-  // Reading it records its end, should its run have ended as it was found.
   if (task) await readTask(task);
   return new A2aChatBusyError(task?.id);
 };
 
-/**
- * A follower slot for a caller about to follow a Task whose run it did not
- * start, or `A2aAtCapacityError` past the follower cap. Returns its release.
- */
 export const takeFollowerSlot = (caller: A2aCaller): (() => void) => {
   const release = acquireA2aFollowerSlot(caller.token.id);
   if (!release) {
@@ -293,16 +222,6 @@ export const takeFollowerSlot = (caller: A2aCaller): (() => void) => {
   return release;
 };
 
-/**
- * The Task once it ends, as it stands when `deadline` passes, or as it stands
- * when the client hangs up. Refused as not found once the caller's access is
- * cut off, as a new call would be.
- *
- * Waits on the Task's `events` (`a2a-events.ts`), not the database: on the
- * instance running the Task, for its end alone, then reads it once. Where no
- * producer here will say the Task ended, it reads the Task every
- * `a2aFallbackPollMs` as well.
- */
 const waitForTask = async (
   caller: A2aCaller,
   task: TaskRow,
@@ -331,17 +250,6 @@ const waitForTask = async (
   return readTaskAfresh(task);
 };
 
-/**
- * A turn in a new Chat bound to the endpoint's Agent, or in the Chat
- * `contextId` names, and its Task. A `contextId` the client minted opens a
- * new Chat with its first message, and its Tasks carry it back unchanged
- * (A2A 1.0 §3.4.1). The client's `messageId` is the user
- * message's id, so a retry finds the Task it already started and starts
- * nothing. `events` is the call's place in the Task's events
- * (`a2a-events.ts`) when this call started the run, taken before any of them
- * was published; the caller closes it. The run goes on server-side, its
- * events published, whoever follows it.
- */
 const startTurn = async (
   caller: A2aCaller,
   params: SendMessageRequest,
@@ -360,15 +268,11 @@ const startTurn = async (
   }
   const parts = message.parts.map(fromA2aPart);
   const contextId = message.contextId || undefined;
-  // Refused rather than replaced: A2A 1.0 §3.4.1 forbids answering a
-  // client's contextId with another.
   if (contextId && contextId.length > MAX_CONTEXT_ID_LENGTH) {
     throw new RequestMalformedError(
       `A contextId may be at most ${MAX_CONTEXT_ID_LENGTH} characters`,
     );
   }
-  // A Task is one turn and takes no more messages, so a message naming one
-  // never starts a run. It is refused with the spec's error for the case.
   if (message.taskId) {
     const task = await findA2aTask(caller, message.taskId);
     if (contextId && contextId !== taskContextId(task)) {
@@ -381,14 +285,12 @@ const startTurn = async (
       "The Task has ended. Send with its contextId, and no taskId, to continue",
     );
   }
-  // Checked before the run starts, so a refused config starts nothing.
+  // why: checked before the run starts, so a refused config starts nothing
   const push =
     params.configuration?.taskPushNotificationConfig &&
     checkPushConfig(params.configuration.taskPushNotificationConfig);
   const withPush = async (task: TaskRow) => {
     if (!push) return task;
-    // Reading it records its end, should its run have ended as it was made,
-    // so the config's push goes out at once.
     await taskStatus(task);
     await storePushConfig(task, push);
     return task;
@@ -397,12 +299,6 @@ const startTurn = async (
   let context: TurnContext;
   let parentId: string | null = null;
   if (contextId) {
-    // A context Platypus issued is its Chat's id. Any other the client
-    // minted, and it names the Chat `a2aContextChatId` derives, opened by its
-    // first message. Only a Chat this token started is either (ADR-0032): a
-    // contextId naming the Owner's own Chat, another token's or another
-    // endpoint's is the client's own string, so it opens a Chat of its own.
-    // A Chat id is no secret, so it is not a credential.
     const mintedChatId = a2aContextChatId(token.id, contextId);
     const chats = await db
       .select({
@@ -443,17 +339,10 @@ const startTurn = async (
           task: await withPush(await taskFor(caller, context, sent.id)),
         };
       }
-      // Before the slot is taken, so a busy Chat is answered with its Task at
-      // any load. The claim in the run still refuses one that turns busy
-      // after. A Chat whose run died (stale heartbeat, #1297) is not busy:
-      // the claim takes it.
       if (chatRunIsLive(chat)) throw await busyError(caller, chat.id);
       parentId = chat.leafId;
     }
   } else {
-    // A retry of the message that opened a Chat names no context yet: find
-    // it in a Chat this token started. Read from the message, which the run
-    // writes before anything else, so a retry mid-start never runs twice.
     const [opened] = await db
       .select({ chatId: chatMessage.chatId })
       .from(chatMessage)
@@ -491,15 +380,11 @@ const startTurn = async (
     organizationId: endpoint.organizationId,
     ownerUserId: endpoint.ownerId,
   });
-  // Asked only by a call that would start a run: a retry above answers with
-  // its Task at any load. Past the cap, nothing has been written. Taken just
-  // before the `try`, so every way out of it gives the slot back.
+  // why: taken just before the try, so every way out of it gives the slot back
   const release = acquireA2aRunSlot();
   if (!release) throw new A2aAtCapacityError();
   let run: ReadableStream<Uint8Array> | undefined;
-  // Made with the claim, so the Task is this call's from the moment any other
-  // call can see the Chat running, and a Task that cannot be made starts no
-  // run.
+  // why: made with the claim, so no call sees the Chat running without its Task
   let task: TaskRow | undefined;
   try {
     const response = await startChatTurn({
@@ -526,10 +411,8 @@ const startTurn = async (
     });
     run = response.body ?? undefined;
   } catch (error) {
-    // No run is left going, or the one that started has already ended.
     release();
     if (error instanceof ConflictError) {
-      // A copy of this message at another instance started the turn first.
       const started = await findTask(
         and(
           eq(a2aTaskTable.chatId, chatId),
@@ -559,22 +442,10 @@ const startTurn = async (
   }
 };
 
-/** A turn's Task, and the call's events when it started the run. */
 type StartedTurn = { task: TaskRow; events?: A2aTaskSubscription };
 
-/**
- * The turns this instance is starting, by token, context and message. A copy
- * of a message that arrives while its first copy is still starting here waits
- * for that start to settle, then finds its Task as a retry does. A copy at
- * another instance is refused by the claim instead.
- */
 const startingTurns = new Map<string, Promise<unknown>>();
 
-/**
- * A turn in a new Chat bound to the endpoint's Agent, or in the Chat
- * `contextId` names, and its Task (see `startTurn`), started once however
- * many copies of the message arrive at once.
- */
 export const startA2aTurn = async (
   caller: A2aCaller,
   params: SendMessageRequest,
@@ -601,10 +472,6 @@ export const startA2aTurn = async (
   }
 };
 
-/**
- * `SendMessage`: the turn's Task once its run has started, or once it ends if
- * the client asked to block and it ends soon enough.
- */
 export const sendA2aMessage = async (
   caller: A2aCaller,
   params: SendMessageRequest,
@@ -615,10 +482,7 @@ export const sendA2aMessage = async (
     started?.close();
     return readTask(task);
   }
-  // The call that started the run waits on its run slot. A retry waits on a
-  // follower slot, unless its Task has already ended and there is nothing to
-  // wait for; it takes its place in the Task's events first, so an end
-  // published as it reads is not missed.
+  // why: subscribed before the read, so an end published as it reads is not missed
   const events = started ?? a2aTaskEvents.subscribe(task.id);
   try {
     if (started) return await waitForTask(caller, task, deadline, events);
@@ -635,10 +499,6 @@ export const sendA2aMessage = async (
   }
 };
 
-/**
- * Refuses a negative `historyLength`. Any other is served: a Task's history
- * is never returned, so no limit can be exceeded.
- */
 const checkHistoryLength = (historyLength: number | undefined) => {
   if (
     historyLength !== undefined &&
@@ -650,7 +510,6 @@ const checkHistoryLength = (historyLength: number | undefined) => {
   }
 };
 
-/** `GetTask`: one of the calling token's Tasks, read from the database. */
 export const getA2aTask = async (
   caller: A2aCaller,
   params: GetTaskRequest,
@@ -662,15 +521,9 @@ export const getA2aTask = async (
   );
 };
 
-/** How many Tasks a `ListTasks` page holds, unless the client asks. */
 const DEFAULT_PAGE_SIZE = 50;
-/** The most a client may ask for in one page. */
 const MAX_PAGE_SIZE = 100;
 
-/**
- * A page token: the status timestamp and id of the page's last Task, and the
- * token that listed it. Another token's page token is refused, not followed.
- */
 const pageTokenOf = (caller: A2aCaller, task: TaskRow): string =>
   Buffer.from(
     JSON.stringify([caller.token.id, task.statusAt.toISOString(), task.id]),
@@ -693,25 +546,14 @@ const readPageToken = (
       if (!Number.isNaN(date.getTime())) return { at: date, id };
     }
   } catch {
-    // Not one of ours; refused below.
+    throw invalidPageToken();
   }
-  throw new RequestMalformedError("pageToken is not a valid page token");
+  throw invalidPageToken();
 };
 
-/**
- * `ListTasks`: the Tasks the calling token started on this endpoint, newest
- * status first. The same scope as every other Task method: a token reaches
- * only its own Tasks (ADR-0032). A deleted token's Tasks are listed to no one.
- *
- * Each running Task's state is read from its run first, recording any end
- * not yet recorded, so the `status` filter and the order see where it is now.
- * That is one query for them all; then the count, the page, and the page's
- * replies only when `includeArtifacts` asks for them.
- *
- * ponytail: every call reads all of the token's Tasks with no end recorded.
- * Few, unless runs end unrecorded en masse; a sweep that records them is the
- * upgrade.
- */
+const invalidPageToken = () =>
+  new RequestMalformedError("pageToken is not a valid page token");
+
 export const listA2aTasks = async (
   caller: A2aCaller,
   params: ListTasksRequest,
@@ -738,7 +580,6 @@ export const listA2aTasks = async (
     ? readPageToken(caller, params.pageToken)
     : undefined;
 
-  // The token names its endpoint, so it alone scopes the Tasks.
   const mine = eq(a2aTaskTable.tokenId, caller.token.id);
   const unended = await readTaskRows(and(mine, isNull(a2aTaskTable.state)));
   const running = new Map(
@@ -747,8 +588,7 @@ export const listA2aTasks = async (
     ),
   );
 
-  // A state no Task here is in — one we never use, or no run is in — is
-  // matched by nothing, rather than by everything an empty `or` would allow.
+  // why: an empty or() matches everything, so a state no Task is in returns no page here
   const live = [...running]
     .filter(([, status]) => status.state === params.status)
     .map(([id]) => id);
@@ -765,8 +605,6 @@ export const listA2aTasks = async (
           live.length ? inArray(a2aTaskTable.id, live) : undefined,
         )
       : undefined,
-    // Inclusive, as the spec says: a client polling from the last timestamp
-    // it saw still gets the Tasks that share it.
     after ? gte(a2aTaskTable.statusAt, after) : undefined,
   );
 
@@ -795,13 +633,10 @@ export const listA2aTasks = async (
   const page = await Promise.all(
     rows.slice(0, pageSize).map(async (row) => ({
       ...row,
-      // One made since the read above is read now.
       status: running.get(row.id) ?? (await taskStatus(row)),
     })),
   );
   const last = page.at(-1);
-  // Read only for the page's completed Tasks: their text only when asked for,
-  // their stop reason always.
   const replies = await recordedReplies(page, {
     withText: !!params.includeArtifacts,
   });

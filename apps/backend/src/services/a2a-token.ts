@@ -25,35 +25,19 @@ import {
   touchToken,
 } from "./bearer-token.ts";
 
-/**
- * An A2A token's lifecycle (ADR-0032), which follows an Inbound Trigger's
- * (ADR-0030): it expires, the Owner is reminded 30 and 7 days before and told
- * the first time it is used after, and last used and last rejected are written
- * at most once a minute. Each Notification is claimed on the token row before
- * it is sent, so a peer never repeats one and deleting it never brings it back.
- */
-
 export type A2aTokenRow = typeof a2aTokenTable.$inferSelect;
 
 type A2aAuthResult =
   | { ok: true; endpoint: LiveA2aEndpoint; token: A2aTokenRow }
-  /** `404` is the card's answer for an endpoint that isn't live. */
   | (Extract<A2aEndpointLookup, { live: false }> & { ok: false; status: 404 })
   | {
       ok: false;
       status: 401;
       reason: "missing_token" | "bad_token" | "expired_token";
       endpoint: LiveA2aEndpoint;
-      /** The token an expired one names; a missing or wrong one names none. */
       tokenId?: string;
     };
 
-/**
- * Whether a call may reach `endpointId`. An endpoint that isn't live is the
- * card's uniform `404`; on a live one, a missing, wrong or expired token is
- * `401`. Only an expired token names a token, so only it stamps last rejected.
- * Each refusal says why, for the call log.
- */
 export const authenticateA2aCall = async (
   endpointId: string,
   authorization: string | undefined,
@@ -67,7 +51,6 @@ export const authenticateA2aCall = async (
   if (!presented) {
     return { ok: false, status: 401, reason: "missing_token", endpoint };
   }
-  // Matched by hash, as every token is; see `hashBearerToken`.
   const [token] = await db
     .select()
     .from(a2aTokenTable)
@@ -91,19 +74,10 @@ export const authenticateA2aCall = async (
       tokenId: token.id,
     };
   }
-  // Off the response path: a stamp's failure is logged, never the caller's.
   void touchA2aToken(token.id, "lastUsedAt", now);
   return { ok: true, endpoint, token };
 };
 
-// ----------------------------------------------------------------- regenerate
-
-/**
- * Issues a new value for the token, with the lifetime it was issued with. The
- * old value stops working at once, as do the Tasks it started, and the
- * reminder record is cleared. The new value is in this return value and
- * nowhere else.
- */
 export const regenerateA2aToken = async (
   workspaceId: string,
   endpointId: string,
@@ -111,8 +85,6 @@ export const regenerateA2aToken = async (
 ) => {
   const now = new Date();
   const { token, hash } = generateBearerToken(A2A_TOKEN_PREFIX);
-  // One write: the endpoint's Workspace is checked in the WHERE, and the
-  // lifetime is read off the row being replaced.
   const [row] = await db
     .update(a2aTokenTable)
     .set({
@@ -136,21 +108,12 @@ export const regenerateA2aToken = async (
   return { ...toPublicToken(row), token };
 };
 
-// ----------------------------------------------------------------- last used
-
-/** Stamps last used or last rejected; see {@link touchToken}. */
 export const touchA2aToken = (
   tokenId: string,
   column: "lastUsedAt" | "lastRejectedAt",
   now: Date = new Date(),
 ): Promise<void> => touchToken(a2aTokenTable, tokenId, column, now);
 
-// ----------------------------------------------------------------- notices
-
-/**
- * The first call with an expired token tells the Owner, once per token: the
- * client only sees `401`, and nothing else would say a client has stopped.
- */
 const noticeExpiredUse = async (
   endpoint: LiveA2aEndpoint,
   token: A2aTokenRow,
@@ -166,11 +129,6 @@ const noticeExpiredUse = async (
   );
 };
 
-/**
- * Sends each A2A token's expiry reminders as they fall due. Run from the
- * scheduler beside the Inbound Trigger reminders; a token that fails does not
- * hold back the rest.
- */
 export const sendA2aTokenReminders = async (
   now: Date = new Date(),
 ): Promise<void> => {

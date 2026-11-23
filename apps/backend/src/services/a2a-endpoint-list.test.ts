@@ -3,11 +3,6 @@ import type { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { migratedPglite } from "../db/migrated-pglite.test-fixtures.ts";
 
-/**
- * A Workspace's endpoint list counts each endpoint's unexpired tokens in one
- * `LEFT JOIN LATERAL` (#1381): the aggregate, and the endpoint with none, are
- * real SQL here.
- */
 const { holder } = vi.hoisted(() => ({
   holder: { db: undefined as ReturnType<typeof drizzle> | undefined },
 }));
