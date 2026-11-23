@@ -1,4 +1,4 @@
-import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useScopedList } from "@/hooks/use-scoped-list";
 import type { Scope } from "@/lib/api-write";
 
 /**
@@ -7,6 +7,6 @@ import type { Scope } from "@/lib/api-write";
  * this is false, so a slow or failed read never looks like "no Providers".
  */
 export function useHasNoProviders(scope: Scope): boolean {
-  const { data } = useScopedSWR<{ results: unknown[] }>("providers", scope);
-  return data?.results.length === 0;
+  const { data, results } = useScopedList<unknown>("providers", scope);
+  return data !== undefined && results.length === 0;
 }

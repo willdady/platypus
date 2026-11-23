@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { ListError, ListState } from "@/components/list-state";
 import { SwitchGridSkeleton } from "@/components/form-skeleton";
 import Link from "next/link";
-import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useScopedList } from "@/hooks/use-scoped-list";
 import { useEntityForm } from "@/hooks/use-entity-form";
 import type { Blueprint } from "@platypus/schemas";
 import { ArrowDown, ArrowUp, X } from "lucide-react";
@@ -73,11 +73,11 @@ export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
 
   const {
     data: blueprintsData,
+    results: blueprints,
     error: blueprintsError,
     isLoading: blueprintsLoading,
     mutate: mutateBlueprints,
-  } = useScopedSWR<{ results: Blueprint[] }>("blueprints", { orgId });
-  const blueprints = blueprintsData?.results || [];
+  } = useScopedList<Blueprint>("blueprints", { orgId });
   const blueprintsById = new Map(blueprints.map((b) => [b.id, b]));
   const blueprintsFailed = Boolean(blueprintsError && !blueprintsData);
 
