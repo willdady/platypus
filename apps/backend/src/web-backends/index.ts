@@ -357,7 +357,7 @@ export const composeWebBackend = (
   return {
     backend,
     name: contribution.name,
-    buildTurnTools: async (ctx: TurnToolsContext) => {
+    buildTurnTools: async (ctx: TurnToolsContext, signal) => {
       const { providerId, ...coreCtx } = ctx;
 
       const faultCtx = {
@@ -378,8 +378,16 @@ export const composeWebBackend = (
         executors = await withDeadline(
           () => contribution.createExecutors(factoryCtx, plugin),
           timeoutMs,
+          signal,
         );
       } catch (cause) {
+        if (cause instanceof CallerAbortedError) {
+          logger.debug(
+            { ...faultCtx, cause },
+            "Web backend's createExecutors cancelled with the turn; serving no tools this turn",
+          );
+          return {};
+        }
         const timedOut = cause instanceof DeadlineExceededError;
         logger.warn(
           { ...faultCtx, cause },

@@ -980,11 +980,14 @@ describe("loadPlugins — web-search backends", () => {
     });
 
     const pluginCtx = { orgId: "org-1", workspaceId: "ws-1", userId: "user-1" };
-    await calls[0].buildTurnTools({
-      ...pluginCtx,
-      providerId: "provider-1",
-      registerCloser: () => {},
-    });
+    await calls[0].buildTurnTools(
+      {
+        ...pluginCtx,
+        providerId: "provider-1",
+        registerCloser: () => {},
+      },
+      undefined,
+    );
 
     expect(createExecutors).toHaveBeenCalledWith(
       { ...pluginCtx, registerCloser: expect.any(Function) as unknown },
@@ -1534,13 +1537,16 @@ describe("loadPlugins — plugin logger injection", () => {
       () => {},
     );
     sandboxCalls[0].create({}, {});
-    await webCalls[0].buildTurnTools({
-      orgId: "o",
-      workspaceId: "w",
-      userId: "u",
-      providerId: "p",
-      registerCloser: () => {},
-    });
+    await webCalls[0].buildTurnTools(
+      {
+        orgId: "o",
+        workspaceId: "w",
+        userId: "u",
+        providerId: "p",
+        registerCloser: () => {},
+      },
+      undefined,
+    );
   };
 
   it("reaches all three Extension points as one logger bound to the manifest name", async () => {
