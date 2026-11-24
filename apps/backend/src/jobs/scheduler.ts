@@ -221,7 +221,11 @@ export async function reapFiredOneOffTriggers(): Promise<void> {
         workspaceId: triggerTable.workspaceId,
       })
       .from(triggerTable)
-      .leftJoin(workspaceTable, eq(workspaceTable.id, triggerTable.workspaceId))
+      // why: the workspace is NOT NULL, so this narrows nothing; it sources the orgId the run-file scope needs
+      .innerJoin(
+        workspaceTable,
+        eq(workspaceTable.id, triggerTable.workspaceId),
+      )
       .leftJoin(triggerRunTable, eq(triggerRunTable.triggerId, triggerTable.id))
       .where(expired);
     if (expiring.length === 0) return [];
@@ -248,7 +252,7 @@ export async function reapFiredOneOffTriggers(): Promise<void> {
     { scope: TriggerRunScope; runIds: string[] }
   >();
   for (const { runId, orgId, workspaceId } of reaped) {
-    if (!runId || !orgId) continue;
+    if (!runId) continue;
     const key = `${orgId}/${workspaceId}`;
     const group = runsByScope.get(key) ?? {
       scope: { orgId, workspaceId },
