@@ -104,9 +104,11 @@ const makeProvider = (overrides: Record<string, unknown> = {}) => ({
 });
 
 function setupWhere(workspaces: unknown[], providers: unknown[]) {
-  mockDb.where.mockResolvedValueOnce(workspaces).mockReturnValue(mockDb);
-  for (const provider of providers)
-    mockDb.limit.mockResolvedValueOnce([provider]);
+  mockDb.where
+    .mockResolvedValueOnce(workspaces)
+    .mockResolvedValueOnce(providers)
+    .mockResolvedValueOnce([])
+    .mockReturnValue(mockDb);
 }
 
 describe("processMemoryExtractionBatch", () => {
@@ -980,5 +982,70 @@ describe("processMemoryExtractionBatch provider visibility", () => {
 
     expect(mockGenerateText).toHaveBeenCalledTimes(1);
     expect(mockGenerateEmbedding).not.toHaveBeenCalled();
+  });
+
+  it("resolves every Workspace's Providers in a fixed number of queries", async () => {
+    const extractWith = async (workspaceCount: number) => {
+      const ids = Array.from(
+        { length: workspaceCount },
+        (_, index) => `ws-${index + 1}`,
+      );
+      const fake = seedWithMessages({
+        workspace: ids.map((id) =>
+          makeWorkspace({ id, memoryExtractionProviderId: `p-${id}` }),
+        ),
+        provider: ids.map((id) =>
+          makeProvider({ id: `p-${id}`, workspaceId: id }),
+        ),
+        chat: ids.map((id) => makeChat({ id: `chat-${id}`, workspaceId: id })),
+      });
+
+      mockGenerateText.mockClear();
+      await processMemoryExtractionBatch();
+
+      expect(mockGenerateText).toHaveBeenCalledTimes(workspaceCount);
+      return fake.queries.filter(
+        (query) => query.table === "provider" || query.table === "attachment",
+      ).length;
+    };
+
+    expect(await extractWith(1)).toBe(2);
+    expect(await extractWith(3)).toBe(2);
+  });
+
+  it("resolves each Workspace's Provider visibility independently", async () => {
+    const fake = seedWithMessages({
+      workspace: [
+        makeWorkspace({ id: "ws-1", memoryExtractionProviderId: "p-mine" }),
+        makeWorkspace({ id: "ws-2", memoryExtractionProviderId: "p-shared" }),
+        makeWorkspace({ id: "ws-3", memoryExtractionProviderId: "p-detached" }),
+      ],
+      provider: [
+        makeProvider({ id: "p-mine", workspaceId: "ws-1" }),
+        shared({ id: "p-shared" }),
+        shared({ id: "p-detached" }),
+      ],
+      attachment: [
+        {
+          id: "att-p-shared",
+          workspaceId: "ws-2",
+          resourceType: "provider",
+          resourceId: "p-shared",
+        },
+      ],
+      chat: [
+        makeChat({ id: "chat-mine", workspaceId: "ws-1" }),
+        makeChat({ id: "chat-shared", workspaceId: "ws-2" }),
+        makeChat({ id: "chat-detached", workspaceId: "ws-3" }),
+      ],
+    });
+
+    await processMemoryExtractionBatch();
+
+    expect(mockGenerateText).toHaveBeenCalledTimes(2);
+    expect(
+      fake.tables.chat.find((chat) => chat.id === "chat-detached")
+        ?.memoryExtractionStatus,
+    ).toBe("pending");
   });
 });
