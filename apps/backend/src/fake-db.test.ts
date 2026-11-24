@@ -390,6 +390,93 @@ describe("the seeded fake beside the chainable mock", () => {
       updatedAt: "untouched",
     });
   });
+
+  it("skips a row that clashes when the insert ignores conflicts", async () => {
+    const seeded = seedDb(
+      {
+        attachment: [
+          {
+            id: "att-1",
+            workspaceId: "ws-1",
+            resourceType: "agent",
+            resourceId: "agent-1",
+          },
+        ],
+      },
+      {
+        unique: {
+          attachment: [
+            {
+              name: "unique_attachment",
+              columns: ["workspaceId", "resourceType", "resourceId"],
+            },
+          ],
+        },
+      },
+    );
+    const { attachment } = await import("./db/schema.ts");
+
+    const kept = await db
+      .insert(attachment)
+      .values([
+        {
+          id: "att-2",
+          workspaceId: "ws-1",
+          resourceType: "agent",
+          resourceId: "agent-1",
+        },
+        {
+          id: "att-3",
+          workspaceId: "ws-1",
+          resourceType: "agent",
+          resourceId: "agent-2",
+        },
+      ])
+      .onConflictDoNothing()
+      .returning({ id: attachment.id });
+
+    expect(kept).toEqual([{ id: "att-3" }]);
+    expect(seeded.tables.attachment.map((row) => row.id)).toEqual([
+      "att-1",
+      "att-3",
+    ]);
+  });
+
+  it("orders by a bare column ascending, with NULLS FIRST as written", async () => {
+    seedDb({
+      workspace: [
+        { id: "ws-1", name: "Alpha", organizationId: null },
+        { id: "ws-2", name: "Beta", organizationId: "org-1" },
+        { id: "ws-3", name: "Gamma", organizationId: "org-2" },
+      ],
+    });
+
+    const byId = await db
+      .select({ id: workspaceTable.id })
+      .from(workspaceTable)
+      .orderBy(workspaceTable.id);
+    expect(byId).toEqual([{ id: "ws-1" }, { id: "ws-2" }, { id: "ws-3" }]);
+
+    const nullsFirst = await db
+      .select({ id: workspaceTable.id })
+      .from(workspaceTable)
+      .orderBy(sql`${workspaceTable.organizationId} NULLS FIRST`);
+    expect(nullsFirst).toEqual([
+      { id: "ws-1" },
+      { id: "ws-2" },
+      { id: "ws-3" },
+    ]);
+  });
+
+  it("counts a bucket for a `count(*)::int` selection", async () => {
+    seedDb(rows);
+
+    const counted = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(workspaceTable);
+
+    expect(counted).toEqual([{ n: 2 }]);
+  });
 });
 
 describe("the fake's transaction", () => {

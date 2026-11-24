@@ -1,9 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
-  mockDb,
-  mockSession,
   mockNoSession,
+  mockSession,
   resetMockDb,
+  seedDb,
+  type FakeDb,
+  type Row,
+  type Store,
 } from "../test-utils.ts";
 import app from "../server.ts";
 
@@ -18,12 +21,77 @@ describe("Skill Routes", () => {
   beforeEach(() => {
     resetMockDb();
     vi.clearAllMocks();
-    mockDb.where.mockReturnValue(mockDb);
   });
 
   const orgId = "org-1";
   const workspaceId = "ws-1";
   const baseUrl = `/organizations/${orgId}/workspaces/${workspaceId}/skills`;
+
+  const skillDescription = "This is a long enough description for the skill.";
+  const skillBody =
+    "This is a long enough body for the skill to pass the validation requirements.";
+
+  const workspaceSkill = (over: Row = {}): Row => ({
+    id: "skill-1",
+    organizationId: null,
+    workspaceId,
+    name: "my-skill",
+    description: skillDescription,
+    body: skillBody,
+    frontmatter: {},
+    bundleHash: null,
+    installedHash: null,
+    ...over,
+  });
+
+  const sharedSkill = (over: Row = {}): Row =>
+    workspaceSkill({
+      id: "org-skill-1",
+      name: "shared",
+      organizationId: orgId,
+      workspaceId: null,
+      ...over,
+    });
+
+  const attachedHere = (resourceId: string): Row => ({
+    id: `att-${resourceId}`,
+    workspaceId,
+    resourceType: "skill",
+    resourceId,
+  });
+
+  const world = ({
+    role = "member",
+    owner = "user-1",
+    rows = {},
+  }: {
+    role?: "admin" | "member";
+    owner?: string;
+    rows?: Store;
+  } = {}): FakeDb =>
+    seedDb({
+      organization_member: [
+        { id: "m1", userId: "user-1", organizationId: orgId, role },
+      ],
+      workspace: [{ id: workspaceId, organizationId: orgId, ownerId: owner }],
+      ...rows,
+    });
+
+  const send = (
+    method: "POST" | "PUT" | "DELETE",
+    url: string,
+    payload?: unknown,
+  ) =>
+    app.request(url, {
+      method,
+      ...(payload !== undefined && {
+        body: JSON.stringify(payload),
+        headers: { "Content-Type": "application/json" },
+      }),
+    });
+
+  const wrote = (fake: FakeDb, kind: "insert" | "update" | "delete") =>
+    fake.queries.some((query) => query.kind === kind);
 
   describe("POST /", () => {
     it("should return 401 if not authenticated", async () => {
@@ -42,10 +110,7 @@ describe("Skill Routes", () => {
 
     it("should return 403 if user is not workspace owner", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "other-user", organizationId: "org-1" },
-      ]);
+      world({ owner: "other-user" });
 
       const res = await app.request(baseUrl, {
         method: "POST",
@@ -61,19 +126,7 @@ describe("Skill Routes", () => {
 
     it("should create skill if user is editor", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-
-      const mockSkill = {
-        id: "skill-1",
-        name: "new-skill",
-        description: "This is a long enough description for the skill.",
-        body: "This is a long enough body for the skill to pass the validation requirements.",
-        workspaceId,
-      };
-      mockDb.returning.mockResolvedValueOnce([mockSkill]);
+      const fake = world();
 
       const res = await app.request(baseUrl, {
         method: "POST",
@@ -86,16 +139,21 @@ describe("Skill Routes", () => {
       });
 
       expect(res.status).toBe(201);
-      expect(await res.json()).toEqual({ ...mockSkill, scope: "workspace" });
-      expect(mockDb.insert).toHaveBeenCalled();
+      const created = fake.tables.skill.at(-1);
+      expect(await res.json()).toEqual({ ...created, scope: "workspace" });
+      expect(created).toMatchObject({
+        name: "new-skill",
+        description: "This is a long enough description for the skill.",
+        body: "This is a long enough body for the skill to pass the validation requirements.",
+        workspaceId,
+        organizationId: null,
+      });
+      expect(wrote(fake, "insert")).toBe(true);
     });
 
     it("should return 400 if name is not kebab-case", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
+      world();
 
       const res = await app.request(baseUrl, {
         method: "POST",
@@ -114,51 +172,74 @@ describe("Skill Routes", () => {
   describe("GET /", () => {
     it("should list workspace and attached org skills tagged with scope", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-
-      const workspaceSkills = [{ id: "skill-1", name: "skill-1" }];
-      const attachedOrgRows = [
-        { skill: { id: "org-skill-1", name: "org-skill-1" } },
-      ];
-      mockDb.where
-        .mockReturnValueOnce(mockDb)
-        .mockReturnValueOnce(mockDb)
-        .mockResolvedValueOnce(workspaceSkills)
-        .mockResolvedValueOnce(attachedOrgRows);
+      world({
+        rows: {
+          skill: [
+            workspaceSkill({ id: "skill-1", name: "skill-1" }),
+            workspaceSkill({
+              id: "skill-elsewhere",
+              name: "elsewhere",
+              workspaceId: "ws-2",
+            }),
+            sharedSkill({ id: "org-skill-1", name: "org-skill-1" }),
+            sharedSkill({ id: "org-skill-unattached", name: "unattached" }),
+            sharedSkill({
+              id: "org-skill-other-org",
+              name: "foreign",
+              organizationId: "org-2",
+            }),
+          ],
+          attachment: [
+            attachedHere("org-skill-1"),
+            attachedHere("org-skill-other-org"),
+          ],
+        },
+      });
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({
-        results: [
-          { id: "skill-1", name: "skill-1", scope: "workspace" },
-          { id: "org-skill-1", name: "org-skill-1", scope: "organization" },
-        ],
-      });
+      const json = (await res.json()) as { results: Row[] };
+      expect(
+        json.results.map(({ id, name, scope }) => ({ id, name, scope })),
+      ).toEqual([
+        { id: "skill-1", name: "skill-1", scope: "workspace" },
+        {
+          id: "org-skill-1",
+          name: "org-skill-1",
+          scope: "organization",
+        },
+      ]);
     });
   });
 
   describe("GET /:skillId", () => {
     it("returns a workspace skill tagged scope workspace with its agentIds", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([
-        { id: "skill-1", name: "my-skill", workspaceId },
-      ]);
-      mockDb.where
-        .mockReturnValueOnce(mockDb)
-        .mockReturnValueOnce(mockDb)
-        .mockReturnValueOnce(mockDb)
-        .mockResolvedValueOnce([{ id: "agent-1" }]);
+      world({
+        rows: {
+          skill: [
+            workspaceSkill({ id: "skill-1", name: "my-skill" }),
+            workspaceSkill({
+              id: "skill-elsewhere",
+              name: "elsewhere",
+              workspaceId: "ws-2",
+            }),
+          ],
+          agent: [
+            { id: "agent-1", workspaceId, skillIds: ["skill-1"] },
+            { id: "agent-2", workspaceId, skillIds: ["skill-elsewhere"] },
+            {
+              id: "agent-3",
+              workspaceId: "ws-2",
+              skillIds: ["skill-1"],
+            },
+          ],
+        },
+      });
 
       const res = await app.request(`${baseUrl}/skill-1`);
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({
+      expect(await res.json()).toMatchObject({
         id: "skill-1",
         name: "my-skill",
         workspaceId,
@@ -171,14 +252,7 @@ describe("Skill Routes", () => {
 
     it("404s an org skill that is not attached here", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([
-        { id: "org-skill-1", name: "shared", organizationId: orgId },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([]);
+      world({ rows: { skill: [sharedSkill()] } });
 
       const res = await app.request(`${baseUrl}/org-skill-1`);
       expect(res.status).toBe(404);
@@ -194,42 +268,37 @@ describe("Skill Routes", () => {
 
     it("updates a workspace skill if user is editor", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([{ id: "skill-1", workspaceId }]);
+      const fake = world({ rows: { skill: [workspaceSkill()] } });
 
-      const updated = { id: "skill-1", name: "renamed-skill", workspaceId };
-      mockDb.returning.mockResolvedValueOnce([updated]);
-
-      const res = await app.request(`${baseUrl}/skill-1`, {
-        method: "PUT",
-        body: JSON.stringify(updateBody),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await send("PUT", `${baseUrl}/skill-1`, updateBody);
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({ ...updated, scope: "workspace" });
+      expect(await res.json()).toMatchObject({
+        id: "skill-1",
+        name: "renamed-skill",
+        workspaceId,
+        scope: "workspace",
+      });
+      expect(fake.tables.skill[0]).toMatchObject({
+        id: "skill-1",
+        name: "renamed-skill",
+        description: updateBody.description,
+        body: updateBody.body,
+      });
     });
 
     it("locks a shared skill in the workspace (edit on org surface)", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([
-        { id: "org-skill-1", name: "shared", organizationId: orgId },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([{ id: "att-1" }]);
-
-      const res = await app.request(`${baseUrl}/org-skill-1`, {
-        method: "PUT",
-        body: JSON.stringify(updateBody),
-        headers: { "Content-Type": "application/json" },
+      const fake = world({
+        role: "admin",
+        rows: {
+          skill: [sharedSkill()],
+          attachment: [attachedHere("org-skill-1")],
+        },
       });
+
+      const res = await send("PUT", `${baseUrl}/org-skill-1`, updateBody);
       expect(res.status).toBe(403);
-      expect(mockDb.update).not.toHaveBeenCalled();
+      expect(wrote(fake, "update")).toBe(false);
     });
   });
 
@@ -238,7 +307,7 @@ describe("Skill Routes", () => {
 
     it("returns 403 if not org admin", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
+      world({ rows: { skill: [workspaceSkill()] } });
 
       const res = await app.request(promoteUrl, { method: "POST" });
       expect(res.status).toBe(403);
@@ -246,11 +315,10 @@ describe("Skill Routes", () => {
 
     it("returns 404 if the workspace skill does not exist", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([]);
+      world({
+        role: "admin",
+        rows: { skill: [workspaceSkill({ workspaceId: "ws-2" })] },
+      });
 
       const res = await app.request(promoteUrl, { method: "POST" });
       expect(res.status).toBe(404);
@@ -258,42 +326,76 @@ describe("Skill Routes", () => {
 
     it("re-scopes the skill to org and auto-attaches the origin workspace", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([
-        { id: "skill-1", workspaceId, name: "my-skill" },
-      ]);
-      mockDb.returning.mockResolvedValueOnce([
-        { id: "skill-1", organizationId: orgId, workspaceId: null },
-      ]);
+      const fake = world({
+        role: "admin",
+        rows: { skill: [workspaceSkill({ id: "skill-1", name: "my-skill" })] },
+      });
 
       const res = await app.request(promoteUrl, { method: "POST" });
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({
+      expect(await res.json()).toMatchObject({
         id: "skill-1",
         organizationId: orgId,
         workspaceId: null,
         scope: "organization",
       });
-      expect(mockDb.insert).toHaveBeenCalled();
-      expect(mockDb.onConflictDoNothing).toHaveBeenCalled();
+      expect(fake.tables.skill[0]).toMatchObject({
+        id: "skill-1",
+        organizationId: orgId,
+        workspaceId: null,
+      });
+      expect(fake.tables.attachment).toEqual([
+        expect.objectContaining({
+          workspaceId,
+          resourceType: "skill",
+          resourceId: "skill-1",
+        }),
+      ]);
+      expect(wrote(fake, "insert")).toBe(true);
     });
   });
 
   describe("DELETE /:skillId", () => {
     it("should 409 naming the agents that still use the skill", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([{ id: "skill-1", workspaceId }]);
-      mockDb.orderBy.mockResolvedValueOnce([
-        { id: "agent-1", name: "Digest" },
-        { id: "agent-2", name: "Helper" },
-      ]);
+      const fake = world({
+        rows: {
+          skill: [
+            workspaceSkill(),
+            workspaceSkill({
+              id: "skill-elsewhere",
+              name: "elsewhere",
+              workspaceId: "ws-2",
+            }),
+          ],
+          agent: [
+            {
+              id: "agent-2",
+              workspaceId,
+              name: "Helper",
+              skillIds: ["skill-1"],
+            },
+            {
+              id: "agent-1",
+              workspaceId,
+              name: "Digest",
+              skillIds: ["skill-1"],
+            },
+            {
+              id: "agent-3",
+              workspaceId,
+              name: "Other",
+              skillIds: ["skill-elsewhere"],
+            },
+            {
+              id: "agent-4",
+              workspaceId: "ws-2",
+              name: "Elsewhere",
+              skillIds: ["skill-1"],
+            },
+          ],
+        },
+      });
 
       const res = await app.request(`${baseUrl}/skill-1`, {
         method: "DELETE",
@@ -303,56 +405,47 @@ describe("Skill Routes", () => {
         error:
           'Cannot delete: this skill is enabled for 2 agents ("Digest", "Helper"). Turn it off for those agents first.',
       });
-      expect(mockDb.delete).not.toHaveBeenCalled();
+      expect(wrote(fake, "delete")).toBe(false);
     });
 
     it("should delete skill if not referenced", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([{ id: "skill-1", workspaceId }]);
-      mockDb.orderBy.mockResolvedValueOnce([]);
+      const fake = world({ rows: { skill: [workspaceSkill()] } });
 
       const res = await app.request(`${baseUrl}/skill-1`, {
         method: "DELETE",
       });
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ message: "Skill deleted" });
+      expect(fake.tables.skill).toEqual([]);
     });
 
     it("should 404 when deleting a shared skill not attached here", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([]);
+      const fake = world({ role: "admin", rows: { skill: [sharedSkill()] } });
 
       const res = await app.request(`${baseUrl}/org-skill-1`, {
         method: "DELETE",
       });
       expect(res.status).toBe(404);
-      expect(mockDb.delete).not.toHaveBeenCalled();
+      expect(wrote(fake, "delete")).toBe(false);
     });
 
     it("should 403 (locked) when deleting an attached shared skill", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([
-        { id: "org-skill-1", name: "shared", organizationId: orgId },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([{ id: "att-1" }]);
+      const fake = world({
+        role: "admin",
+        rows: {
+          skill: [sharedSkill()],
+          attachment: [attachedHere("org-skill-1")],
+        },
+      });
 
       const res = await app.request(`${baseUrl}/org-skill-1`, {
         method: "DELETE",
       });
       expect(res.status).toBe(403);
-      expect(mockDb.delete).not.toHaveBeenCalled();
+      expect(wrote(fake, "delete")).toBe(false);
     });
   });
 });

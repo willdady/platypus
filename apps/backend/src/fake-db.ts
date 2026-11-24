@@ -550,6 +550,7 @@ type OrderMarker = {
 };
 
 const orderMarkerOf = (value: unknown): OrderMarker => {
+  if (isColumn(value)) return { op: "asc", column: refOf(value) };
   if (value instanceof SQL.Aliased) return orderMarkerOf(value.sql);
   if (!(value instanceof SQL)) {
     throw new Error(
@@ -984,44 +985,79 @@ export const createFakeDb = (
 
     const insert = (table: unknown) => {
       const name = nameOf(table);
-      let inserted: Row[] = [];
+      const kept: Row[] = [];
+      let staged: Row[] = [];
+      let written = false;
 
-      const write = (values: Row | Row[]) => {
-        record({ kind: "insert", table: name });
-        inserted = (Array.isArray(values) ? values : [values]).map((row) => ({
-          ...(options.defaults?.[name] ?? {}),
-          ...row,
-        }));
-        for (const row of inserted) {
+      const clashOf = (row: Row): string | undefined => {
+        const resolve = flatResolver(row);
+        for (const constraint of options.unique?.[name] ?? []) {
+          const covers = constraint.where ?? (() => true);
+          if (!covers(row)) continue;
+          const clashes = rowsFor(table).some(
+            (existing) =>
+              covers(existing) &&
+              constraint.columns.every(
+                (column) =>
+                  flatResolver(existing)({ table: name, name: column }) ===
+                  resolve({ table: name, name: column }),
+              ),
+          );
+          if (clashes) return constraint.name;
+        }
+        return undefined;
+      };
+
+      const write = (ignoreConflicts: boolean) => {
+        if (written) return;
+        written = true;
+        for (const row of staged) {
           options.onInsert?.(name, row);
-          for (const constraint of options.unique?.[name] ?? []) {
-            const covers = constraint.where ?? (() => true);
-            if (!covers(row)) continue;
-            const resolve = flatResolver(row);
-            const clashes = rowsFor(table).some(
-              (existing) =>
-                covers(existing) &&
-                constraint.columns.every(
-                  (column) =>
-                    flatResolver(existing)({ table: name, name: column }) ===
-                    resolve({ table: name, name: column }),
-                ),
-            );
-            if (clashes) throw uniqueViolation(constraint.name);
+          const clash = clashOf(row);
+          if (clash) {
+            if (ignoreConflicts) continue;
+            throw uniqueViolation(clash);
           }
           rowsFor(table).push(row);
+          kept.push(row);
         }
       };
 
       return {
         values(values: Row | Row[]) {
-          // why: synchronous, so a unique violation throws inside the caller's try like the driver's
-          write(values);
-          const result = writeResult(inserted);
-          return Object.assign(result, {
-            onConflictDoUpdate: () => result,
-            onConflictDoNothing: () => result,
-          });
+          record({ kind: "insert", table: name });
+          staged = (Array.isArray(values) ? values : [values]).map((row) => ({
+            ...(options.defaults?.[name] ?? {}),
+            ...row,
+          }));
+          const result = {
+            returning(selection?: Record<string, unknown>) {
+              return Promise.resolve().then(() => {
+                write(false);
+                return writeResult(kept).returning(selection);
+              });
+            },
+            then(
+              onFulfilled?: (result: unknown) => unknown,
+              onRejected?: (error: unknown) => unknown,
+            ) {
+              return Promise.resolve()
+                .then(() => {
+                  write(false);
+                  return undefined;
+                })
+                .then(onFulfilled, onRejected);
+            },
+            onConflictDoNothing: () => {
+              write(true);
+              return result;
+            },
+            onConflictDoUpdate: () => {
+              write(false);
+              return result;
+            },
+          };
+          return result;
         },
       };
     };

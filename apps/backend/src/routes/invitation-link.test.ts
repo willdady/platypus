@@ -1,29 +1,33 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   mockAuth,
-  mockDb,
   mockSession,
   mockNoSession,
   mockCreateUser,
   mockCreateUserAlreadyExists,
   mockSignInEmail,
   resetMockDb,
+  seedDb,
+  type FakeDb,
+  type Row,
+  type Store,
 } from "../test-utils.ts";
+import type { FakeDbOptions, QueryRecord } from "../fake-db.ts";
+import { NotFoundError } from "../errors.ts";
 import app from "../server.ts";
 
 describe("Invitation Link Routes", () => {
   beforeEach(() => {
     resetMockDb();
     vi.clearAllMocks();
-    mockDb.where.mockReturnValue(mockDb);
-    mockDb.innerJoin.mockReturnValue(mockDb);
-    mockDb.for.mockImplementation(((strength: string) =>
-      strength === "share"
-        ? Promise.resolve([{ id: "member-1" }])
-        : mockDb) as never);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   const baseUrl = "/invitation-links";
+  const DAY = 24 * 60 * 60 * 1000;
   const INVALID_LINK_BODY = { error: "This invitation link is not valid" };
   const ACCOUNT_WITHOUT_INVITATION_BODY = {
     error:
@@ -32,28 +36,60 @@ describe("Invitation Link Routes", () => {
       "new one.",
   };
 
-  const futureDate = () => {
-    const d = new Date();
-    d.setDate(d.getDate() + 7);
-    return d.toISOString();
-  };
+  const futureDate = () => new Date(Date.now() + 7 * DAY);
+  const pastDate = () => new Date(Date.now() - DAY);
 
-  const pastDate = () => {
-    const d = new Date();
-    d.setDate(d.getDate() - 1);
-    return d.toISOString();
-  };
+  const invitation = (over: Row = {}): Row => ({
+    id: "inv-1",
+    email: "user@example.com",
+    organizationId: "org-1",
+    status: "pending",
+    token: "tok_valid",
+    workspaceName: null,
+    expiresAt: futureDate(),
+    ...over,
+  });
+
+  const world = (
+    over: Row = {},
+    rows: Store = {},
+    db: FakeDbOptions = {},
+  ): FakeDb =>
+    seedDb(
+      {
+        organization: [{ id: "org-1", name: "Acme" }],
+        invitation: [invitation(over)],
+        ...rows,
+      },
+      db,
+    );
+
+  const inviteeWorld = (
+    over: Row = {},
+    rows: Store = {},
+    db: FakeDbOptions = {},
+  ): FakeDb => world({ email: "invitee@example.com", ...over }, rows, db);
+
+  const acceptRead = (query: QueryRecord) =>
+    query.kind === "select" &&
+    query.table === "invitation" &&
+    query.lock === "update";
+
+  const registerBody = { name: "Robin", password: "at-least-8-chars" };
+
+  const register = (token: string, body: unknown = registerBody) =>
+    app.request(`${baseUrl}/${token}/register`, {
+      method: "POST",
+      body: JSON.stringify(body),
+      headers: { "Content-Type": "application/json" },
+    });
+
+  const accept = (token: string) =>
+    app.request(`${baseUrl}/${token}/accept`, { method: "POST" });
 
   describe("GET /:token", () => {
     it("resolves a valid, pending, unexpired token to the invited email and org name", async () => {
-      mockDb.limit.mockResolvedValueOnce([
-        {
-          email: "user@example.com",
-          status: "pending",
-          expiresAt: futureDate(),
-          organizationName: "Acme",
-        },
-      ]);
+      world();
 
       const res = await app.request(`${baseUrl}/tok_valid`);
 
@@ -65,7 +101,7 @@ describe("Invitation Link Routes", () => {
     });
 
     it("404s with the generic message for a token that does not exist", async () => {
-      mockDb.limit.mockResolvedValueOnce([]);
+      world({ token: "tok_other" });
 
       const res = await app.request(`${baseUrl}/tok_unknown`);
 
@@ -74,14 +110,7 @@ describe("Invitation Link Routes", () => {
     });
 
     it("404s with the same generic message for an invitation that is no longer pending", async () => {
-      mockDb.limit.mockResolvedValueOnce([
-        {
-          email: "user@example.com",
-          status: "accepted",
-          expiresAt: futureDate(),
-          organizationName: "Acme",
-        },
-      ]);
+      world({ token: "tok_accepted", status: "accepted" });
 
       const res = await app.request(`${baseUrl}/tok_accepted`);
 
@@ -90,14 +119,7 @@ describe("Invitation Link Routes", () => {
     });
 
     it("404s with the same generic message for an expired invitation", async () => {
-      mockDb.limit.mockResolvedValueOnce([
-        {
-          email: "user@example.com",
-          status: "pending",
-          expiresAt: pastDate(),
-          organizationName: "Acme",
-        },
-      ]);
+      world({ token: "tok_expired", expiresAt: pastDate() });
 
       const res = await app.request(`${baseUrl}/tok_expired`);
 
@@ -106,27 +128,16 @@ describe("Invitation Link Routes", () => {
     });
 
     it("responds identically for an unknown token, a non-pending invitation, and an expired one", async () => {
-      mockDb.limit.mockResolvedValueOnce([]);
+      seedDb({
+        organization: [{ id: "org-1", name: "Acme" }],
+        invitation: [
+          invitation({ id: "inv-b", token: "tok_b", status: "declined" }),
+          invitation({ id: "inv-c", token: "tok_c", expiresAt: pastDate() }),
+        ],
+      });
+
       const unknown = await app.request(`${baseUrl}/tok_a`);
-
-      mockDb.limit.mockResolvedValueOnce([
-        {
-          email: "user@example.com",
-          status: "declined",
-          expiresAt: futureDate(),
-          organizationName: "Acme",
-        },
-      ]);
       const notPending = await app.request(`${baseUrl}/tok_b`);
-
-      mockDb.limit.mockResolvedValueOnce([
-        {
-          email: "user@example.com",
-          status: "pending",
-          expiresAt: pastDate(),
-          organizationName: "Acme",
-        },
-      ]);
       const expired = await app.request(`${baseUrl}/tok_c`);
 
       const unknownBody = (await unknown.json()) as { error: string };
@@ -143,46 +154,27 @@ describe("Invitation Link Routes", () => {
   });
 
   describe("POST /:token/register", () => {
-    const validInvitationRow = {
-      id: "inv-1",
-      email: "invitee@example.com",
-      organizationId: "org-1",
-      status: "pending",
-      expiresAt: futureDate(),
-      organizationName: "Acme",
-    };
-
     it("creates the account via the admin create-user API, signs in, and accepts through the shared accept path", async () => {
-      mockDb.limit.mockResolvedValueOnce([validInvitationRow]);
       mockCreateUser({
         id: "new-user",
         email: "invitee@example.com",
         name: "Robin",
       });
       mockSignInEmail(["better-auth.session_token=tok; Path=/; HttpOnly"]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ...validInvitationRow, workspaceName: null },
-      ]);
-      mockDb.orderBy.mockResolvedValueOnce([]);
+      const fake = inviteeWorld();
 
-      const res = await app.request(`${baseUrl}/tok_valid/register`, {
-        method: "POST",
-        body: JSON.stringify({ name: "Robin", password: "at-least-8-chars" }),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await register("tok_valid");
 
       expect(res.status).toBe(200);
       expect(res.headers.get("set-cookie")).toContain(
         "better-auth.session_token=tok",
       );
 
-      const provisioned = mockDb.values.mock.calls
-        .map((c) => c[0] as Record<string, unknown>)
-        .find((v) => v.name);
+      const provisioned = fake.tables.workspace.at(-1)!;
       expect(await res.json()).toEqual({
         message: "Invitation accepted",
         organizationId: "org-1",
-        workspaceId: provisioned!.id,
+        workspaceId: provisioned.id,
       });
 
       expect(mockAuth.api.createUser.mock.calls.at(-1)?.[0]).toMatchObject({
@@ -198,27 +190,19 @@ describe("Invitation Link Routes", () => {
     });
 
     it("404s with the generic message for an invalid token", async () => {
-      mockDb.limit.mockResolvedValueOnce([]);
+      inviteeWorld({ token: "tok_other" });
 
-      const res = await app.request(`${baseUrl}/tok_unknown/register`, {
-        method: "POST",
-        body: JSON.stringify({ name: "Robin", password: "at-least-8-chars" }),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await register("tok_unknown");
 
       expect(res.status).toBe(404);
       expect(await res.json()).toEqual(INVALID_LINK_BODY);
     });
 
     it("409s with a sign-in hint when an account already exists for the invited email", async () => {
-      mockDb.limit.mockResolvedValueOnce([validInvitationRow]);
+      inviteeWorld();
       mockCreateUserAlreadyExists();
 
-      const res = await app.request(`${baseUrl}/tok_valid/register`, {
-        method: "POST",
-        body: JSON.stringify({ name: "Robin", password: "at-least-8-chars" }),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await register("tok_valid");
 
       expect(res.status).toBe(409);
       expect(await res.json()).toEqual({
@@ -234,70 +218,78 @@ describe("Invitation Link Routes", () => {
     ])(
       "404s with the generic message and creates no account for %s token",
       async (_label, overrides) => {
-        mockDb.limit.mockResolvedValueOnce([
-          { ...validInvitationRow, ...overrides },
-        ]);
+        const fake = inviteeWorld({ token: "tok_spent", ...overrides });
 
-        const res = await app.request(`${baseUrl}/tok_spent/register`, {
-          method: "POST",
-          body: JSON.stringify({ name: "Robin", password: "at-least-8-chars" }),
-          headers: { "Content-Type": "application/json" },
-        });
+        const res = await register("tok_spent");
 
         expect(res.status).toBe(404);
         expect(await res.json()).toEqual(INVALID_LINK_BODY);
         expect(mockAuth.api.createUser).not.toHaveBeenCalled();
         expect(mockAuth.api.signInEmail).not.toHaveBeenCalled();
+        expect(fake.queries.filter((q) => q.kind !== "select")).toEqual([]);
       },
     );
 
     it("reports the invitation as already processed when it is redeemed between resolution and accept", async () => {
-      mockDb.limit.mockResolvedValueOnce([validInvitationRow]);
       mockCreateUser({
         id: "new-user",
         email: "invitee@example.com",
         name: "Robin",
       });
       mockSignInEmail();
-      mockDb.limit.mockResolvedValueOnce([]);
+      inviteeWorld(
+        {},
+        {},
+        {
+          onQuery: (query) => {
+            // why: the accept read runs in a transaction, so the fake clones its store before it
+            if (acceptRead(query)) {
+              throw new NotFoundError(
+                "Invitation not found or already processed",
+              );
+            }
+          },
+        },
+      );
 
-      const res = await app.request(`${baseUrl}/tok_valid/register`, {
-        method: "POST",
-        body: JSON.stringify({ name: "Robin", password: "at-least-8-chars" }),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await register("tok_valid");
 
       expect(res.status).toBe(410);
       expect(await res.json()).toEqual(ACCOUNT_WITHOUT_INVITATION_BODY);
     });
 
     it("reports the invitation as expired when it lapses between resolution and accept", async () => {
-      mockDb.limit.mockResolvedValueOnce([validInvitationRow]);
       mockCreateUser({
         id: "new-user",
         email: "invitee@example.com",
         name: "Robin",
       });
       mockSignInEmail();
-      mockDb.limit.mockResolvedValueOnce([
-        { ...validInvitationRow, expiresAt: pastDate() },
-      ]);
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+      const fake = inviteeWorld(
+        {},
+        {},
+        {
+          onQuery: (query) => {
+            if (acceptRead(query)) {
+              vi.setSystemTime(new Date(Date.now() + 8 * DAY));
+            }
+          },
+        },
+      );
 
-      const res = await app.request(`${baseUrl}/tok_valid/register`, {
-        method: "POST",
-        body: JSON.stringify({ name: "Robin", password: "at-least-8-chars" }),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await register("tok_valid");
 
       expect(res.status).toBe(410);
       expect(await res.json()).toEqual(ACCOUNT_WITHOUT_INVITATION_BODY);
+      expect(fake.tables.invitation[0].status).toBe("expired");
     });
 
     it("rejects a password shorter than 8 characters before touching the token", async () => {
-      const res = await app.request(`${baseUrl}/tok_valid/register`, {
-        method: "POST",
-        body: JSON.stringify({ name: "Robin", password: "short" }),
-        headers: { "Content-Type": "application/json" },
+      const res = await register("tok_valid", {
+        name: "Robin",
+        password: "short",
       });
 
       expect(res.status).toBe(400);
@@ -305,15 +297,6 @@ describe("Invitation Link Routes", () => {
   });
 
   describe("POST /:token/accept", () => {
-    const validInvitationRow = {
-      id: "inv-1",
-      email: "invitee@example.com",
-      organizationId: "org-1",
-      status: "pending",
-      expiresAt: futureDate(),
-      organizationName: "Acme",
-    };
-
     it("accepts through the shared accept path when the session email matches the invite", async () => {
       mockSession({
         id: "u1",
@@ -321,26 +304,26 @@ describe("Invitation Link Routes", () => {
         name: "Robin",
         role: "user",
       });
-      mockDb.limit.mockResolvedValueOnce([validInvitationRow]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ...validInvitationRow, workspaceName: null },
-      ]);
-      mockDb.orderBy.mockResolvedValueOnce([]);
+      const fake = inviteeWorld(
+        {},
+        { user: [{ id: "u1", email: "invitee@example.com" }] },
+      );
 
-      const res = await app.request(`${baseUrl}/tok_valid/accept`, {
-        method: "POST",
-      });
+      const res = await accept("tok_valid");
 
       expect(res.status).toBe(200);
-      expect(mockDb.set).toHaveBeenCalledWith({ emailVerified: true });
+      expect(fake.tables.user[0].emailVerified).toBe(true);
 
-      const provisioned = mockDb.values.mock.calls
-        .map((c) => c[0] as Record<string, unknown>)
-        .find((v) => v.name);
+      const provisioned = fake.tables.workspace.at(-1)!;
       expect(await res.json()).toEqual({
         message: "Invitation accepted",
         organizationId: "org-1",
-        workspaceId: provisioned!.id,
+        workspaceId: provisioned.id,
+      });
+      expect(provisioned).toMatchObject({
+        organizationId: "org-1",
+        ownerId: "u1",
+        name: "Robin's Workspace",
       });
     });
 
@@ -350,35 +333,31 @@ describe("Invitation Link Routes", () => {
         email: "someone-else@example.com",
         role: "user",
       });
-      mockDb.limit.mockResolvedValueOnce([validInvitationRow]);
+      const fake = inviteeWorld();
 
-      const res = await app.request(`${baseUrl}/tok_valid/accept`, {
-        method: "POST",
-      });
+      const res = await accept("tok_valid");
 
       expect(res.status).toBe(403);
       expect(await res.json()).toEqual({
         error: "This invitation is for a different email address",
       });
+      expect(fake.queries.filter((q) => q.kind !== "select")).toEqual([]);
     });
 
     it("401s when there is no session", async () => {
       mockNoSession();
+      inviteeWorld();
 
-      const res = await app.request(`${baseUrl}/tok_valid/accept`, {
-        method: "POST",
-      });
+      const res = await accept("tok_valid");
 
       expect(res.status).toBe(401);
     });
 
     it("404s with the generic message for an invalid token", async () => {
       mockSession({ id: "u1", email: "invitee@example.com", role: "user" });
-      mockDb.limit.mockResolvedValueOnce([]);
+      inviteeWorld({ token: "tok_other" });
 
-      const res = await app.request(`${baseUrl}/tok_unknown/accept`, {
-        method: "POST",
-      });
+      const res = await accept("tok_unknown");
 
       expect(res.status).toBe(404);
       expect(await res.json()).toEqual(INVALID_LINK_BODY);
@@ -392,28 +371,34 @@ describe("Invitation Link Routes", () => {
       "404s with the generic message and provisions nothing for %s token",
       async (_label, overrides) => {
         mockSession({ id: "u1", email: "invitee@example.com", role: "user" });
-        mockDb.limit.mockResolvedValueOnce([
-          { ...validInvitationRow, ...overrides },
-        ]);
+        const fake = inviteeWorld({ token: "tok_spent", ...overrides });
 
-        const res = await app.request(`${baseUrl}/tok_spent/accept`, {
-          method: "POST",
-        });
+        const res = await accept("tok_spent");
 
         expect(res.status).toBe(404);
         expect(await res.json()).toEqual(INVALID_LINK_BODY);
-        expect(mockDb.transaction).not.toHaveBeenCalled();
+        expect(fake.queries.filter((q) => q.kind !== "select")).toEqual([]);
       },
     );
 
     it("reports the invitation as already processed when it is redeemed between resolution and accept", async () => {
       mockSession({ id: "u1", email: "invitee@example.com", role: "user" });
-      mockDb.limit.mockResolvedValueOnce([validInvitationRow]);
-      mockDb.limit.mockResolvedValueOnce([]);
+      inviteeWorld(
+        {},
+        {},
+        {
+          onQuery: (query) => {
+            // why: the accept read runs in a transaction, so the fake clones its store before it
+            if (acceptRead(query)) {
+              throw new NotFoundError(
+                "Invitation not found or already processed",
+              );
+            }
+          },
+        },
+      );
 
-      const res = await app.request(`${baseUrl}/tok_valid/accept`, {
-        method: "POST",
-      });
+      const res = await accept("tok_valid");
 
       expect(res.status).toBe(404);
       expect(await res.json()).toEqual({
@@ -423,14 +408,21 @@ describe("Invitation Link Routes", () => {
 
     it("reports the invitation as expired when it lapses between resolution and accept", async () => {
       mockSession({ id: "u1", email: "invitee@example.com", role: "user" });
-      mockDb.limit.mockResolvedValueOnce([validInvitationRow]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ...validInvitationRow, expiresAt: pastDate() },
-      ]);
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+      inviteeWorld(
+        {},
+        {},
+        {
+          onQuery: (query) => {
+            if (acceptRead(query)) {
+              vi.setSystemTime(new Date(Date.now() + 8 * DAY));
+            }
+          },
+        },
+      );
 
-      const res = await app.request(`${baseUrl}/tok_valid/accept`, {
-        method: "POST",
-      });
+      const res = await accept("tok_valid");
 
       expect(res.status).toBe(410);
       expect(await res.json()).toEqual({ error: "Invitation has expired" });

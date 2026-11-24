@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
   loadedPluginsFixture,
-  mockDb,
   mockNoSession,
   mockSession,
   resetMockDb,
+  seedDb,
 } from "../test-utils.ts";
 import type { LoadedPlugin } from "../plugins/loader.ts";
 
@@ -46,10 +46,16 @@ describe("Web backend catalog route", () => {
   beforeEach(async () => {
     resetMockDb();
     vi.clearAllMocks();
-    mockDb.where.mockReturnValue(mockDb);
     server = await loadServer();
     server.plugins.setLoadedPlugins(loadedPluginsFixture());
   });
+
+  const world = (role: "admin" | "member" = "member") =>
+    seedDb({
+      organization_member: [
+        { id: "m1", userId: "user-1", organizationId: "org-1", role },
+      ],
+    });
 
   describe("GET /web-backends", () => {
     it("lists a registered backend annotated with the plugin that contributed it", async () => {
@@ -60,7 +66,7 @@ describe("Web backend catalog route", () => {
         buildTurnTools: () => Promise.resolve({}),
       });
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
+      world();
 
       const res = await server.app.request(baseUrl);
       expect(res.status).toBe(200);
@@ -82,7 +88,7 @@ describe("Web backend catalog route", () => {
         buildTurnTools: () => Promise.resolve({}),
       });
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
+      world();
 
       const res = await server.app.request(baseUrl);
       expect(res.status).toBe(200);
@@ -93,7 +99,7 @@ describe("Web backend catalog route", () => {
 
     it("returns an empty list when no backend is registered", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
+      world();
 
       const res = await server.app.request(baseUrl);
       expect(res.status).toBe(200);
@@ -107,7 +113,7 @@ describe("Web backend catalog route", () => {
         buildTurnTools: () => Promise.resolve({}),
       });
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
+      world("member");
 
       const res = await server.app.request(baseUrl);
       expect(res.status).toBe(200);
@@ -121,7 +127,7 @@ describe("Web backend catalog route", () => {
 
     it("rejects a caller with no membership of the org", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([]);
+      seedDb({});
 
       const res = await server.app.request(baseUrl);
       expect(res.status).toBe(403);

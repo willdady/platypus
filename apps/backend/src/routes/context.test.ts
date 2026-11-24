@@ -1,26 +1,20 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
-  dbError,
-  mockDb,
-  mockSession,
+  insertTimestamps,
   mockNoSession,
+  mockSession,
   resetMockDb,
+  seedDb,
+  type FakeDb,
+  type Row,
 } from "../test-utils.ts";
 import app from "../server.ts";
 import { logger } from "../logger.ts";
-
-const uniqueViolation = () =>
-  dbError(
-    "23505",
-    'duplicate key value violates unique constraint "unique_context"',
-  );
 
 describe("Context Routes", () => {
   beforeEach(() => {
     resetMockDb();
     vi.clearAllMocks();
-    mockDb.where.mockReturnValue(mockDb);
-    mockDb.leftJoin.mockReturnValue(mockDb);
   });
 
   afterEach(() => {
@@ -29,45 +23,102 @@ describe("Context Routes", () => {
 
   const baseUrl = "/users/me/contexts";
   const userId = "user-1";
+  const now = new Date("2026-01-01T00:00:00.000Z");
+
+  const contextRow = (over: Row = {}): Row => ({
+    id: "ctx-1",
+    userId,
+    workspaceId: null,
+    content: "Context content",
+    createdAt: now,
+    updatedAt: now,
+    ...over,
+  });
+
+  const uniqueContext = {
+    name: "unique_context",
+    columns: ["userId", "workspaceId"],
+  };
+
+  const world = (contexts: Row[] = []): FakeDb =>
+    seedDb(
+      {
+        organization: [{ id: "org-1", name: "Org One" }],
+        workspace: [
+          {
+            id: "ws-1",
+            name: "My Workspace",
+            organizationId: "org-1",
+            ownerId: userId,
+          },
+          {
+            id: "ws-2",
+            name: "Someone Else's Workspace",
+            organizationId: "org-1",
+            ownerId: "someone-else",
+          },
+          {
+            id: "ws-in-org-2",
+            name: "Elsewhere",
+            organizationId: "org-2",
+            ownerId: "someone-else",
+          },
+        ],
+        organization_member: [
+          { id: "m1", userId, organizationId: "org-1", role: "member" },
+        ],
+        context: contexts,
+      },
+      {
+        unique: { context: [uniqueContext] },
+        defaults: { context: insertTimestamps() },
+      },
+    );
+
+  const post = (body: unknown) =>
+    app.request(baseUrl, {
+      method: "POST",
+      body: JSON.stringify(body),
+      headers: { "Content-Type": "application/json" },
+    });
 
   describe("GET /", () => {
     it("should list all contexts for the authenticated user", async () => {
       mockSession({ id: userId, email: "test@example.com" });
-
-      const now = new Date();
-      const mockContexts = [
+      world([
+        contextRow(),
+        contextRow({
+          id: "ctx-2",
+          workspaceId: "ws-1",
+          content: "Workspace context content",
+        }),
+        contextRow({ id: "ctx-other-user", userId: "user-2" }),
+      ]);
+      const res = await app.request(baseUrl);
+      expect(res.status).toBe(200);
+      const result = (await res.json()) as { results: Row[] };
+      expect(result.results).toEqual([
         {
           id: "ctx-1",
           userId,
           workspaceId: null,
-          content: "Global context content",
-          createdAt: now,
-          updatedAt: now,
+          content: "Context content",
+          createdAt: now.toISOString(),
+          updatedAt: now.toISOString(),
           workspaceName: null,
+          organizationName: null,
         },
         {
           id: "ctx-2",
           userId,
           workspaceId: "ws-1",
           content: "Workspace context content",
-          createdAt: now,
-          updatedAt: now,
+          createdAt: now.toISOString(),
+          updatedAt: now.toISOString(),
           workspaceName: "My Workspace",
+          organizationName: "Org One",
         },
-      ];
-
-      mockDb.orderBy.mockResolvedValueOnce(mockContexts);
-
-      const res = await app.request(baseUrl);
-      expect(res.status).toBe(200);
-      const result = (await res.json()) as Record<string, unknown>;
-      expect(result).toEqual({
-        results: mockContexts.map((ctx) => ({
-          ...ctx,
-          createdAt: ctx.createdAt.toISOString(),
-          updatedAt: ctx.updatedAt.toISOString(),
-        })),
-      });
+      ]);
     });
 
     it("should return 401 if not authenticated", async () => {
@@ -81,33 +132,25 @@ describe("Context Routes", () => {
   describe("GET /:contextId", () => {
     it("should get a specific context by ID", async () => {
       mockSession({ id: userId, email: "test@example.com" });
-
-      const now = new Date();
-      const mockContext = {
-        id: "ctx-1",
-        userId,
-        workspaceId: "ws-1",
-        content: "Context content",
-        createdAt: now,
-        updatedAt: now,
-        workspaceName: "My Workspace",
-      };
-
-      mockDb.limit.mockResolvedValueOnce([mockContext]);
+      world([contextRow({ workspaceId: "ws-1" })]);
 
       const res = await app.request(`${baseUrl}/ctx-1`);
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({
-        ...mockContext,
-        createdAt: mockContext.createdAt.toISOString(),
-        updatedAt: mockContext.updatedAt.toISOString(),
+        id: "ctx-1",
+        userId,
+        workspaceId: "ws-1",
+        content: "Context content",
+        createdAt: now.toISOString(),
+        updatedAt: now.toISOString(),
+        workspaceName: "My Workspace",
+        organizationName: "Org One",
       });
     });
 
     it("should return 404 if context not found", async () => {
       mockSession({ id: userId, email: "test@example.com" });
-
-      mockDb.limit.mockResolvedValueOnce([]);
+      world();
 
       const res = await app.request(`${baseUrl}/ctx-999`);
       expect(res.status).toBe(404);
@@ -116,8 +159,7 @@ describe("Context Routes", () => {
 
     it("should return 404 if context belongs to another user", async () => {
       mockSession({ id: userId, email: "test@example.com" });
-
-      mockDb.limit.mockResolvedValueOnce([]);
+      world([contextRow({ id: "ctx-other-user", userId: "user-2" })]);
 
       const res = await app.request(`${baseUrl}/ctx-other-user`);
       expect(res.status).toBe(404);
@@ -135,101 +177,55 @@ describe("Context Routes", () => {
   describe("POST /", () => {
     it("should create a global context (null workspaceId)", async () => {
       mockSession({ id: userId, email: "test@example.com" });
+      const fake = world();
 
-      const now = new Date();
-      const mockContext = {
-        id: "ctx-new",
+      const res = await post({
+        content: "New global context",
+        workspaceId: null,
+      });
+
+      expect(res.status).toBe(201);
+      const created = fake.tables.context.at(-1)!;
+      expect(created).toMatchObject({
         userId,
         workspaceId: null,
         content: "New global context",
-        createdAt: now,
-        updatedAt: now,
-      };
-
-      mockDb.returning.mockResolvedValueOnce([mockContext]);
-
-      const res = await app.request(baseUrl, {
-        method: "POST",
-        body: JSON.stringify({
-          content: "New global context",
-          workspaceId: null,
-        }),
-        headers: { "Content-Type": "application/json" },
       });
-
-      expect(res.status).toBe(201);
       expect(await res.json()).toEqual({
-        ...mockContext,
-        createdAt: mockContext.createdAt.toISOString(),
-        updatedAt: mockContext.updatedAt.toISOString(),
+        ...created,
+        createdAt: now.toISOString(),
+        updatedAt: now.toISOString(),
       });
-      expect(mockDb.values).toHaveBeenCalledWith(
-        expect.objectContaining({
-          userId,
-          workspaceId: null,
-          content: "New global context",
-        }),
-      );
     });
-
-    const mockWorkspaceReachable = () => {
-      mockDb.limit.mockResolvedValueOnce([{ organizationId: "org-1" }]);
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { id: "ws-1", organizationId: "org-1", ownerId: userId },
-      ]);
-    };
 
     it("should create a workspace context", async () => {
       mockSession({ id: userId, email: "test@example.com" });
-      mockWorkspaceReachable();
+      const fake = world();
 
-      const now = new Date();
-      const mockContext = {
-        id: "ctx-new",
-        userId,
-        workspaceId: "ws-1",
+      const res = await post({
         content: "New workspace context",
-        createdAt: now,
-        updatedAt: now,
-      };
-
-      mockDb.returning.mockResolvedValueOnce([mockContext]);
-
-      const res = await app.request(baseUrl, {
-        method: "POST",
-        body: JSON.stringify({
-          content: "New workspace context",
-          workspaceId: "ws-1",
-        }),
-        headers: { "Content-Type": "application/json" },
+        workspaceId: "ws-1",
       });
 
       expect(res.status).toBe(201);
+      const created = fake.tables.context.at(-1)!;
+      expect(created).toMatchObject({ userId, workspaceId: "ws-1" });
       expect(await res.json()).toEqual({
-        ...mockContext,
-        createdAt: mockContext.createdAt.toISOString(),
-        updatedAt: mockContext.updatedAt.toISOString(),
+        ...created,
+        createdAt: now.toISOString(),
+        updatedAt: now.toISOString(),
       });
-      expect(mockDb.values).toHaveBeenCalledWith(
-        expect.objectContaining({ userId, workspaceId: "ws-1" }),
-      );
     });
 
     it("should return 409 if context already exists for the scope", async () => {
       mockSession({ id: userId, email: "test@example.com" });
-      mockWorkspaceReachable();
+      const fake = world([contextRow({ workspaceId: "ws-1" })]);
 
       const logError = vi.spyOn(logger, "error");
-      mockDb.returning.mockRejectedValueOnce(uniqueViolation());
 
-      const res = await app.request(baseUrl, {
-        method: "POST",
-        body: JSON.stringify({
-          content: "Duplicate context",
-          workspaceId: "ws-1",
-        }),
-        headers: { "Content-Type": "application/json" },
+      const res = await post({
+        content: "Duplicate context",
+        workspaceId: "ws-1",
       });
 
       expect(res.status).toBe(409);
@@ -237,172 +233,131 @@ describe("Context Routes", () => {
         error: "You already have a context for this scope",
       });
       expect(logError).not.toHaveBeenCalled();
+      expect(fake.tables.context).toHaveLength(1);
     });
 
     it("should return 409 for a second global context", async () => {
       mockSession({ id: userId, email: "test@example.com" });
-      mockDb.returning.mockRejectedValueOnce(uniqueViolation());
+      const fake = world([contextRow()]);
 
-      const res = await app.request(baseUrl, {
-        method: "POST",
-        body: JSON.stringify({
-          content: "Another global context",
-          workspaceId: null,
-        }),
-        headers: { "Content-Type": "application/json" },
+      const res = await post({
+        content: "Another global context",
+        workspaceId: null,
       });
 
       expect(res.status).toBe(409);
       expect(await res.json()).toEqual({
         error: "You already have a context for this scope",
       });
+      expect(fake.tables.context).toHaveLength(1);
     });
 
     it("should validate content is required", async () => {
       mockSession({ id: userId, email: "test@example.com" });
+      world();
 
-      const res = await app.request(baseUrl, {
-        method: "POST",
-        body: JSON.stringify({}),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await post({});
 
       expect(res.status).toBe(400);
     });
 
     it("refuses a workspaceId in an organization the caller is not a member of", async () => {
       mockSession({ id: userId, email: "test@example.com" });
-      mockDb.limit.mockResolvedValueOnce([{ organizationId: "org-2" }]);
-      mockDb.limit.mockResolvedValueOnce([]);
+      const fake = world();
 
-      const res = await app.request(baseUrl, {
-        method: "POST",
-        body: JSON.stringify({
-          content: "Planted context",
-          workspaceId: "ws-in-org-2",
-        }),
-        headers: { "Content-Type": "application/json" },
+      const res = await post({
+        content: "Planted context",
+        workspaceId: "ws-in-org-2",
       });
 
       expect(res.status).toBe(404);
       expect(await res.json()).toEqual({ error: "Workspace not found" });
-      expect(mockDb.insert).not.toHaveBeenCalled();
+      expect(fake.queries.some((q) => q.kind === "insert")).toBe(false);
     });
 
     it("refuses a workspaceId owned by another member of the caller's own organization", async () => {
       mockSession({ id: userId, email: "test@example.com" });
-      mockDb.limit.mockResolvedValueOnce([{ organizationId: "org-1" }]);
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { id: "ws-2", organizationId: "org-1", ownerId: "someone-else" },
-      ]);
+      const fake = world();
 
-      const res = await app.request(baseUrl, {
-        method: "POST",
-        body: JSON.stringify({
-          content: "Planted context",
-          workspaceId: "ws-2",
-        }),
-        headers: { "Content-Type": "application/json" },
+      const res = await post({
+        content: "Planted context",
+        workspaceId: "ws-2",
       });
 
       expect(res.status).toBe(404);
-      expect(mockDb.insert).not.toHaveBeenCalled();
+      expect(fake.queries.some((q) => q.kind === "insert")).toBe(false);
     });
 
     it("refuses a workspaceId that does not exist", async () => {
       mockSession({ id: userId, email: "test@example.com" });
-      mockDb.limit.mockResolvedValueOnce([]);
+      const fake = world();
 
-      const res = await app.request(baseUrl, {
-        method: "POST",
-        body: JSON.stringify({
-          content: "Planted context",
-          workspaceId: "ws-nope",
-        }),
-        headers: { "Content-Type": "application/json" },
+      const res = await post({
+        content: "Planted context",
+        workspaceId: "ws-nope",
       });
 
       expect(res.status).toBe(404);
-      expect(mockDb.insert).not.toHaveBeenCalled();
+      expect(fake.queries.some((q) => q.kind === "insert")).toBe(false);
     });
 
     it("makes no workspace check for a global context", async () => {
       mockSession({ id: userId, email: "test@example.com" });
-      mockDb.returning.mockResolvedValueOnce([
-        { id: "ctx-new", userId, workspaceId: null, content: "Global" },
-      ]);
+      const fake = world();
 
-      const res = await app.request(baseUrl, {
-        method: "POST",
-        body: JSON.stringify({ content: "Global", workspaceId: null }),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await post({ content: "Global", workspaceId: null });
 
       expect(res.status).toBe(201);
-      expect(mockDb.limit).not.toHaveBeenCalled();
+      expect(fake.queries.map((q) => q.kind)).toEqual(["insert"]);
     });
 
     it("should return 401 if not authenticated", async () => {
       mockNoSession();
 
-      const res = await app.request(baseUrl, {
-        method: "POST",
-        body: JSON.stringify({
-          content: "New context",
-        }),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await post({ content: "New context" });
 
       expect(res.status).toBe(401);
     });
   });
 
   describe("PUT /:contextId", () => {
+    const put = (body: unknown) =>
+      app.request(`${baseUrl}/ctx-1`, {
+        method: "PUT",
+        body: JSON.stringify(body),
+        headers: { "Content-Type": "application/json" },
+      });
+
     it("should update a context", async () => {
       mockSession({ id: userId, email: "test@example.com" });
+      const fake = world([contextRow({ workspaceId: "ws-1" })]);
 
-      const now = new Date();
-      const updatedContext = {
+      const res = await put({ content: "Updated content" });
+
+      expect(res.status).toBe(200);
+      const updated = fake.tables.context[0];
+      expect(updated).toMatchObject({
         id: "ctx-1",
         userId,
         workspaceId: "ws-1",
         content: "Updated content",
         createdAt: now,
-        updatedAt: now,
-      };
-
-      mockDb.returning.mockResolvedValueOnce([updatedContext]);
-
-      const res = await app.request(`${baseUrl}/ctx-1`, {
-        method: "PUT",
-        body: JSON.stringify({
-          content: "Updated content",
-        }),
-        headers: { "Content-Type": "application/json" },
       });
-
-      expect(res.status).toBe(200);
+      expect(updated.updatedAt).not.toEqual(now);
       expect(await res.json()).toEqual({
-        ...updatedContext,
-        createdAt: updatedContext.createdAt.toISOString(),
-        updatedAt: updatedContext.updatedAt.toISOString(),
+        ...updated,
+        createdAt: now.toISOString(),
+        updatedAt: (updated.updatedAt as Date).toISOString(),
       });
-      expect(mockDb.set).toHaveBeenCalledWith(
-        expect.objectContaining({ content: "Updated content" }),
-      );
     });
 
     it("should return 404 if context not found", async () => {
       mockSession({ id: userId, email: "test@example.com" });
-
-      mockDb.returning.mockResolvedValueOnce([]);
+      world();
 
       const res = await app.request(`${baseUrl}/ctx-999`, {
         method: "PUT",
-        body: JSON.stringify({
-          content: "Updated content",
-        }),
+        body: JSON.stringify({ content: "Updated content" }),
         headers: { "Content-Type": "application/json" },
       });
 
@@ -412,29 +367,28 @@ describe("Context Routes", () => {
 
     it("should return 404 if context belongs to another user", async () => {
       mockSession({ id: userId, email: "test@example.com" });
-
-      mockDb.returning.mockResolvedValueOnce([]);
+      const fake = world([
+        contextRow({ id: "ctx-other-user", userId: "user-2" }),
+      ]);
 
       const res = await app.request(`${baseUrl}/ctx-other-user`, {
         method: "PUT",
-        body: JSON.stringify({
-          content: "Updated content",
-        }),
+        body: JSON.stringify({ content: "Updated content" }),
         headers: { "Content-Type": "application/json" },
       });
 
       expect(res.status).toBe(404);
       expect(await res.json()).toEqual({ error: "Context not found" });
+      expect(fake.tables.context[0]).toMatchObject({
+        content: "Context content",
+      });
     });
 
     it("should validate content is required", async () => {
       mockSession({ id: userId, email: "test@example.com" });
+      world([contextRow({ workspaceId: "ws-1" })]);
 
-      const res = await app.request(`${baseUrl}/ctx-1`, {
-        method: "PUT",
-        body: JSON.stringify({}),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await put({});
 
       expect(res.status).toBe(400);
     });
@@ -442,13 +396,7 @@ describe("Context Routes", () => {
     it("should return 401 if not authenticated", async () => {
       mockNoSession();
 
-      const res = await app.request(`${baseUrl}/ctx-1`, {
-        method: "PUT",
-        body: JSON.stringify({
-          content: "Updated content",
-        }),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await put({ content: "Updated content" });
 
       expect(res.status).toBe(401);
     });
@@ -457,35 +405,25 @@ describe("Context Routes", () => {
   describe("DELETE /:contextId", () => {
     it("should delete a context", async () => {
       mockSession({ id: userId, email: "test@example.com" });
+      const fake = world([
+        contextRow({ workspaceId: "ws-1", content: "Context to delete" }),
+      ]);
 
-      const deletedContext = {
-        id: "ctx-1",
-        userId,
-        workspaceId: "ws-1",
-        content: "Context to delete",
-      };
-
-      mockDb.returning.mockResolvedValueOnce([deletedContext]);
-
-      const res = await app.request(`${baseUrl}/ctx-1`, {
-        method: "DELETE",
-      });
+      const res = await app.request(`${baseUrl}/ctx-1`, { method: "DELETE" });
 
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({
-        message: "Context deleted",
-      });
-      expect(mockDb.delete).toHaveBeenCalled();
+      expect(await res.json()).toEqual({ message: "Context deleted" });
+      expect(fake.tables.context).toEqual([]);
+      expect(
+        fake.queries.filter((q) => q.kind === "delete").map((q) => q.table),
+      ).toEqual(["context"]);
     });
 
     it("should return 404 if context not found", async () => {
       mockSession({ id: userId, email: "test@example.com" });
+      world();
 
-      mockDb.returning.mockResolvedValueOnce([]);
-
-      const res = await app.request(`${baseUrl}/ctx-999`, {
-        method: "DELETE",
-      });
+      const res = await app.request(`${baseUrl}/ctx-999`, { method: "DELETE" });
 
       expect(res.status).toBe(404);
       expect(await res.json()).toEqual({ error: "Context not found" });
@@ -493,8 +431,9 @@ describe("Context Routes", () => {
 
     it("should return 404 if context belongs to another user", async () => {
       mockSession({ id: userId, email: "test@example.com" });
-
-      mockDb.returning.mockResolvedValueOnce([]);
+      const fake = world([
+        contextRow({ id: "ctx-other-user", userId: "user-2" }),
+      ]);
 
       const res = await app.request(`${baseUrl}/ctx-other-user`, {
         method: "DELETE",
@@ -502,14 +441,13 @@ describe("Context Routes", () => {
 
       expect(res.status).toBe(404);
       expect(await res.json()).toEqual({ error: "Context not found" });
+      expect(fake.tables.context.map((c) => c.id)).toEqual(["ctx-other-user"]);
     });
 
     it("should return 401 if not authenticated", async () => {
       mockNoSession();
 
-      const res = await app.request(`${baseUrl}/ctx-1`, {
-        method: "DELETE",
-      });
+      const res = await app.request(`${baseUrl}/ctx-1`, { method: "DELETE" });
 
       expect(res.status).toBe(401);
     });

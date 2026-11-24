@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
   loadedPluginsFixture,
-  mockDb,
   mockNoSession,
   mockSession,
   resetMockDb,
+  seedDb,
 } from "../test-utils.ts";
 import app from "../server.ts";
 import { setLoadedPlugins } from "../plugins/registry.ts";
@@ -37,16 +37,22 @@ describe("Plugins Routes", () => {
   beforeEach(() => {
     resetMockDb();
     vi.clearAllMocks();
-    mockDb.where.mockReturnValue(mockDb);
     setLoadedPlugins(loadedPluginsFixture(LOADED));
   });
 
   const baseUrl = "/organizations/org-1/plugins";
 
+  const world = (role: "admin" | "member") =>
+    seedDb({
+      organization_member: [
+        { id: "m1", userId: "user-1", organizationId: "org-1", role },
+      ],
+    });
+
   describe("GET /plugins", () => {
     it("lets an Org Admin view loaded plugins with versions, origin, and contributions", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
+      world("admin");
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
@@ -98,7 +104,7 @@ describe("Plugins Routes", () => {
 
     it("forbids a non-admin org member — the view is Org-Admin only", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
+      world("member");
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(403);
