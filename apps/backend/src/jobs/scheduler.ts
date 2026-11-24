@@ -304,28 +304,23 @@ export async function recoverStuckChats(): Promise<void> {
 
 const TOKEN_REMINDER_INTERVAL_MS = 60 * 60 * 1000;
 
-let lastTokenReminderSweepAt: number | null = null;
-
-export async function sweepTokenRemindersIfDue(
-  now: number = Date.now(),
-): Promise<void> {
-  if (
-    lastTokenReminderSweepAt !== null &&
-    now - lastTokenReminderSweepAt < TOKEN_REMINDER_INTERVAL_MS
-  ) {
-    return;
-  }
-  await sendInboundTokenReminders(new Date(now));
-  await sendA2aTokenReminders(new Date(now));
-  lastTokenReminderSweepAt = now;
-}
-
-export function resetTokenReminderSweep(): void {
-  lastTokenReminderSweepAt = null;
-}
-
 export function startScheduler(): () => void {
   const intervalMs = env().SCHEDULE_SCHEDULER_INTERVAL_MS;
+  let lastTokenReminderSweepAt: number | null = null;
+
+  async function sweepTokenRemindersIfDue(): Promise<void> {
+    const now = Date.now();
+    if (
+      lastTokenReminderSweepAt !== null &&
+      now - lastTokenReminderSweepAt < TOKEN_REMINDER_INTERVAL_MS
+    ) {
+      return;
+    }
+    await sendInboundTokenReminders(new Date(now));
+    await sendA2aTokenReminders(new Date(now));
+    lastTokenReminderSweepAt = now;
+  }
+
   logger.info(
     `Starting scheduler (interval: ${intervalMs}ms, wall-clock aligned)`,
   );
