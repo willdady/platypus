@@ -623,6 +623,60 @@ const normaliseStore = (rows: Store): Store => {
   return store;
 };
 
+type RowOrigin = { table: string; live: Row; atStart: Row };
+
+const stageStore = (store: Store) => {
+  const staged: Store = {};
+  const origins = new Map<Row, RowOrigin>();
+  for (const [name, rows] of Object.entries(store)) {
+    staged[name] = rows.map((live) => {
+      const copy = structuredClone(live);
+      origins.set(copy, { table: name, live, atStart: structuredClone(live) });
+      return copy;
+    });
+  }
+  return { staged, origins };
+};
+
+const commitStore = (
+  store: Store,
+  staged: Store,
+  origins: Map<Row, RowOrigin>,
+) => {
+  const present = new Set(Object.values(staged).flat());
+  const touched = new Set<string>();
+  const deleted = new Set<Row>();
+  for (const [copy, origin] of origins) {
+    if (!present.has(copy)) {
+      deleted.add(origin.live);
+      touched.add(origin.table);
+      continue;
+    }
+    if (isDeepStrictEqual(copy, origin.atStart)) continue;
+    touched.add(origin.table);
+    for (const [key, value] of Object.entries(copy)) {
+      if (isDeepStrictEqual(value, origin.atStart[key])) continue;
+      origin.live[key] = value;
+    }
+    for (const key of Object.keys(origin.atStart)) {
+      if (key in copy) continue;
+      delete origin.live[key];
+    }
+  }
+  for (const [name, rows] of Object.entries(staged)) {
+    if (rows.some((row) => !origins.has(row))) touched.add(name);
+  }
+  for (const name of touched) {
+    const live = (store[name] ??= []);
+    for (let i = live.length - 1; i >= 0; i--) {
+      if (deleted.has(live[i])) live.splice(i, 1);
+    }
+    for (const row of staged[name] ?? []) {
+      if (!origins.has(row)) live.push(structuredClone(row));
+    }
+  }
+};
+
 export const dbError = (
   code = "08006",
   message = "connection failure",
@@ -1046,16 +1100,10 @@ export const createFakeDb = (
       delete: remove,
       execute,
       async transaction<T>(callback: (tx: unknown) => Promise<T>): Promise<T> {
-        const before = structuredClone(store);
-        const staged = structuredClone(store);
+        // why: replay only the rows it changed, or writes made outside it while it ran are undone
+        const { staged, origins } = stageStore(store);
         const result = await callback(makeHandle(staged));
-        // why: copy back only the tables it wrote, or writes made outside it while it ran are undone
-        for (const [name, rows] of Object.entries(staged)) {
-          if (isDeepStrictEqual(rows, before[name])) continue;
-          store[name] ??= [];
-          store[name].length = 0;
-          store[name].push(...rows);
-        }
+        commitStore(store, staged, origins);
         return result;
       },
     };
