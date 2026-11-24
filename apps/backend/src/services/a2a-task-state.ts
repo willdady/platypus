@@ -1,9 +1,12 @@
 import {
   and,
   asc,
+  desc,
   eq,
   getTableColumns,
   isNull,
+  lt,
+  lte,
   or,
   sql,
   type SQL,
@@ -139,10 +142,10 @@ export type TaskReading = TaskRow & {
   firstReplyId: string | null;
 };
 
-export const readTaskRows = async (
-  where: SQL | undefined,
-): Promise<TaskReading[]> => {
-  // why: the same first-reply rule as firstReply; change them together
+export type TaskRowCursor = { at: Date; id: string };
+
+// why: the same first-reply rule as firstReply; change them together
+const taskReadingQuery = (where: SQL | undefined) => {
   const reply = db
     .select({ id: chatMessage.id })
     .from(chatMessage)
@@ -170,6 +173,36 @@ export const readTaskRows = async (
     .leftJoinLateral(reply, sql`true`)
     .where(where);
 };
+
+export const readTaskRows = async (
+  where: SQL | undefined,
+  { limit }: { limit?: number } = {},
+): Promise<TaskReading[]> => {
+  const query = taskReadingQuery(where);
+  return limit === undefined ? query : query.limit(limit);
+};
+
+// why: newest status first, the order ListTasks pages in
+export const readTaskPage = async (
+  where: SQL | undefined,
+  { after, limit }: { after?: TaskRowCursor; limit: number },
+): Promise<TaskReading[]> =>
+  taskReadingQuery(
+    and(
+      where,
+      after
+        ? or(
+            lt(a2aTaskTable.statusAt, after.at),
+            and(
+              lte(a2aTaskTable.statusAt, after.at),
+              lt(a2aTaskTable.id, after.id),
+            ),
+          )
+        : undefined,
+    ),
+  )
+    .orderBy(desc(a2aTaskTable.statusAt), desc(a2aTaskTable.id))
+    .limit(limit);
 
 export const recordedStatus = (task: TaskRow & { state: A2aTaskEndState }) => ({
   state: STATE_OF_END[task.state],
@@ -203,6 +236,17 @@ export const deriveStatus = (task: TaskReading): DerivedStatus => {
   return {
     unrecordedEnd:
       (task.chatStatus ? END_OF_RUN[task.chatStatus] : undefined) ?? "failed",
+  };
+};
+
+// why: a reader that only lists Tasks reports a derived end without recording it
+export const derivedTaskStatus = (task: TaskReading): TaskStatus => {
+  const derived = deriveStatus(task);
+  if ("status" in derived) return derived.status;
+  return {
+    state: STATE_OF_END[derived.unrecordedEnd],
+    statusAt: task.statusAt,
+    replyId: task.firstReplyId,
   };
 };
 

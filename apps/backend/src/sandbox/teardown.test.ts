@@ -9,7 +9,7 @@ import {
 } from "../test-utils.ts";
 
 import { destroySandboxRow, destroyWorkspaceSandboxes } from "./teardown.ts";
-import { clearSandboxBackends, registerSandboxBackend } from "./index.ts";
+import { registerSandboxBackend } from "./index.ts";
 import type { SandboxBackend } from "./types.ts";
 import { setLoadedPlugins } from "../plugins/registry.ts";
 import { logger } from "../logger.ts";
@@ -21,7 +21,10 @@ type SandboxRow = typeof sandboxTable.$inferSelect;
 const workspaceId = "ws-1";
 const orgId = "org-1";
 const userId = "owner-1";
-const BACKEND = "test-teardown";
+
+// why: the registry keeps every registration, so each case names its own backend
+let seq = 0;
+let backendId: string;
 
 const destroy = vi.fn<SandboxBackend["destroy"]>(() => Promise.resolve());
 const create = vi.fn();
@@ -44,7 +47,7 @@ const stubBackend = (): SandboxBackend => ({
 });
 
 const registerBackend = ({
-  backend = BACKEND,
+  backend = backendId,
   configSchema = z.object({ image: z.string() }),
   credentialsSchema = z.object({ token: z.string() }),
 }: {
@@ -65,7 +68,7 @@ const makeRow = (over: Partial<SandboxRow> = {}): SandboxRow => ({
   id: "sb-1",
   workspaceId,
   name: "Sandbox",
-  backend: BACKEND,
+  backend: backendId,
   config: { image: "node:24" },
   credentials: { token: "secret" },
   adminEnv: {},
@@ -78,7 +81,7 @@ const makeRow = (over: Partial<SandboxRow> = {}): SandboxRow => ({
 beforeEach(() => {
   vi.clearAllMocks();
   resetMockDb();
-  clearSandboxBackends();
+  backendId = `test-teardown-${(seq += 1)}`;
   setLoadedPlugins(loadedPluginsFixture());
   destroy.mockResolvedValue(undefined);
   mockDb.limit.mockResolvedValue([{ orgId, userId }]);
@@ -183,7 +186,7 @@ describe("destroyWorkspaceSandboxes", () => {
     expect(mockDb.values).toHaveBeenCalledWith({
       id: expect.any(String) as unknown,
       workspaceId,
-      backend: BACKEND,
+      backend: backendId,
       config: { image: "node:24" },
       error: "droplet already gone",
     });
@@ -205,7 +208,7 @@ describe("destroyWorkspaceSandboxes", () => {
     registerBackend();
     setLoadedPlugins(
       loadedPluginsFixture([], {
-        sandboxBackends: new Map([[BACKEND, "docker"]]),
+        sandboxBackends: new Map([[backendId, "docker"]]),
       }),
     );
     destroy.mockRejectedValueOnce(new Error("boom"));
@@ -217,7 +220,7 @@ describe("destroyWorkspaceSandboxes", () => {
       expect.objectContaining({
         workspaceId,
         sandboxId: "sb-1",
-        backend: BACKEND,
+        backend: backendId,
         plugin: "docker",
       }),
       expect.stringContaining("Sandbox destroy() failed"),
@@ -273,7 +276,7 @@ describe("destroyWorkspaceSandboxes", () => {
       expect.objectContaining({
         workspaceId,
         sandboxId: "sb-1",
-        backend: BACKEND,
+        backend: backendId,
         err: expect.any(Error) as unknown,
       }),
       "Failed to record sandbox teardown failure",

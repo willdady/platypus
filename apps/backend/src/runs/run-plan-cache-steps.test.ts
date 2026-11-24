@@ -2,9 +2,11 @@ import { describe, it, expect } from "vitest";
 import type { ModelMessage } from "ai";
 import { createOverflowRecovery } from "./context-overflow-recovery.ts";
 import { buildModelInvocation, type RunPlan } from "./run-plan.ts";
+import { TEST_USAGE_MODEL } from "./run-plan.test-fixtures.ts";
 
 const plan = (): RunPlan => ({
   model: "test-model",
+  usageModel: TEST_USAGE_MODEL,
   system: "system prompt",
   tools: {},
   maxSteps: 10,

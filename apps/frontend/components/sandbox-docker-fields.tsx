@@ -42,7 +42,7 @@ function SandboxDockerFields({
     <>
       <Field
         aria-labelledby="sandbox-networks-label"
-        data-invalid={!!errors.networks}
+        data-invalid={!!errors["config.networks"]}
       >
         <FieldTitle id="sandbox-networks-label">Networks</FieldTitle>
         <FieldDescription>
@@ -93,12 +93,14 @@ function SandboxDockerFields({
             ))}
           </div>
         )}
-        {errors.networks && <FieldError>{errors.networks}</FieldError>}
+        {errors["config.networks"] && (
+          <FieldError>{errors["config.networks"]}</FieldError>
+        )}
       </Field>
 
       <Field
         aria-labelledby="sandbox-extra-hosts-label"
-        data-invalid={!!errors.config}
+        data-invalid={!!errors["config.extraHosts"]}
       >
         <FieldTitle id="sandbox-extra-hosts-label">Extra hosts</FieldTitle>
         <FieldDescription>
@@ -116,7 +118,9 @@ function SandboxDockerFields({
           addLabel="Add host"
           mono
         />
-        {errors.config && <FieldError>{errors.config}</FieldError>}
+        {errors["config.extraHosts"] && (
+          <FieldError>{errors["config.extraHosts"]}</FieldError>
+        )}
       </Field>
     </>
   );

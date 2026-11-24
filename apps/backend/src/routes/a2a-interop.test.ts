@@ -80,8 +80,6 @@ vi.mock("../services/notification.ts", () => ({
 
 import app from "../server.ts";
 import { hashBearerToken } from "../services/bearer-token.ts";
-import { resetA2aRunSlots } from "../services/a2a-call.ts";
-import { setA2aFallbackPollMs } from "../services/a2a-events.ts";
 import { runRegistry } from "../runs/run-registry.ts";
 
 const TOKEN = "pa2a_the-right-token";
@@ -236,8 +234,6 @@ describe("A2A endpoints through the @a2a-js/sdk client", () => {
     vi.clearAllMocks();
     model.hold = null;
     model.calls = 0;
-    resetA2aRunSlots();
-    setA2aFallbackPollMs(50);
     push.mockResolvedValue(new Response(null, { status: 200 }));
     vi.stubGlobal("fetch", push);
     seed();
@@ -245,7 +241,6 @@ describe("A2A endpoints through the @a2a-js/sdk client", () => {
 
   afterEach(async () => {
     vi.unstubAllGlobals();
-    setA2aFallbackPollMs();
     const held = runRegistry.heldRuns().map(({ runId }) => runId);
     for (const runId of held) runRegistry.cancel(runId);
     await vi.waitFor(() =>
@@ -295,6 +290,47 @@ describe("A2A endpoints through the @a2a-js/sdk client", () => {
       );
       expect(got.status?.state).toBe(TaskState.TASK_STATE_COMPLETED);
     });
+  });
+
+  it("answers 429 past the run cap, then admits once the run ends", async () => {
+    process.env.A2A_MAX_CONCURRENT_RUNS = "1";
+    try {
+      const client = await connect({ polling: true });
+      const { task, release } = await startHeld(client);
+
+      const busy = await appFetch(BASE_URL, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "SendMessage",
+          params: SendMessageRequest.toJSON(message("msg-b")),
+        }),
+      });
+
+      expect(busy.status).toBe(429);
+      expect(busy.headers.get("Retry-After")).toBe("30");
+      expect(model.calls).toBe(1);
+
+      release();
+      await vi.waitFor(async () => {
+        const got = await client.getTask(
+          GetTaskRequest.fromJSON({ id: task.id }),
+        );
+        expect(got.status?.state).toBe(TaskState.TASK_STATE_COMPLETED);
+      });
+
+      const next = asTask(await client.sendMessage(message("msg-b")));
+      await vi.waitFor(async () => {
+        const got = await client.getTask(
+          GetTaskRequest.fromJSON({ id: next.id }),
+        );
+        expect(got.status?.state).toBe(TaskState.TASK_STATE_COMPLETED);
+      });
+    } finally {
+      delete process.env.A2A_MAX_CONCURRENT_RUNS;
+    }
   });
 
   it("streams a message through the SDK's stream iterator", async () => {

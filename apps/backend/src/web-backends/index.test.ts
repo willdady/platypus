@@ -1,12 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Tool } from "ai";
 import { WEB_BACKEND_TOOL_MARKER } from "@platypus/schemas";
+import { mockLookup } from "../test-setup.ts";
 import { callTool, makePluginContext } from "../test-utils.ts";
 import { EGRESS_BLOCKED_MESSAGE } from "../utils/egress-guard.ts";
 import { logger } from "../logger.ts";
 import { runCloser, type CoreCloserRegistrar } from "../tools/closers.ts";
 import {
-  clearWebBackends,
   composeWebBackend,
   getWebBackend,
   getWebBackends,
@@ -47,8 +47,6 @@ const PLUGIN_CTX = {
 
 const PLUGIN = makePluginContext();
 
-const resolvePublic = () => Promise.resolve(["93.184.216.34"]);
-
 const contribution = (
   executors: Partial<WebBackendExecutors>,
   overrides: Partial<WebBackendContribution> = {},
@@ -62,14 +60,14 @@ const contribution = (
 const buildTools = (
   executors: Partial<WebBackendExecutors>,
   overrides: Partial<WebBackendContribution> = {},
+  signal?: AbortSignal,
 ): Promise<Record<string, Tool>> =>
   composeWebBackend({
     contribution: contribution(executors, overrides),
     backend: "searx",
     pluginName: "@acme/searx",
-    resolveHostname: resolvePublic,
     plugin: PLUGIN,
-  }).buildTurnTools(CTX);
+  }).buildTurnTools(CTX, signal);
 
 const search = (tool: Tool, query: string) =>
   callTool(tool, { query }) as Promise<WebSearchToolResult & WebToolError>;
@@ -86,7 +84,6 @@ const read = (
 
 beforeEach(() => {
   vi.clearAllMocks();
-  clearWebBackends();
 });
 
 describe("web-backend registry", () => {
@@ -109,13 +106,17 @@ describe("web-backend registry", () => {
     expect(found?.backend).toBe("searx");
     expect(found?.name).toBe("SearXNG");
     expect(typeof found?.buildTurnTools).toBe("function");
-    expect(getWebBackends().map((r) => r.backend)).toEqual(["searx", "brave"]);
+    expect(
+      getWebBackends()
+        .map((r) => r.backend)
+        .filter((backend) => backend === "searx" || backend === "brave"),
+    ).toEqual(["searx", "brave"]);
   });
 
   it("refuses a second registration under the same discriminator", () => {
-    registerWebBackend(registration("searx"));
-    expect(() => registerWebBackend(registration("searx"))).toThrow(
-      "Web backend 'searx' has already been registered.",
+    registerWebBackend(registration("duplicate"));
+    expect(() => registerWebBackend(registration("duplicate"))).toThrow(
+      "Web backend 'duplicate' has already been registered.",
     );
   });
 });
@@ -166,7 +167,7 @@ describe("composeWebBackend — tool construction", () => {
       backend: "searx",
       plugin,
       pluginName: "@acme/searx",
-    }).buildTurnTools(CTX);
+    }).buildTurnTools(CTX, undefined);
 
     expect(createExecutors).toHaveBeenCalledWith(PLUGIN_CTX, plugin);
   });
@@ -200,7 +201,7 @@ describe("composeWebBackend — tool construction", () => {
       backend: "searx",
       pluginName: "@acme/searx",
       plugin: PLUGIN,
-    }).buildTurnTools(CTX);
+    }).buildTurnTools(CTX, undefined);
 
     expect(tools).toEqual({});
     expect(mockLogger.warn).toHaveBeenCalledWith(
@@ -227,7 +228,7 @@ describe("composeWebBackend — tool construction", () => {
       backend: "searx",
       pluginName: "@acme/searx",
       plugin: PLUGIN,
-    }).buildTurnTools(CTX);
+    }).buildTurnTools(CTX, undefined);
 
     expect(tools).toEqual({});
     expect(mockLogger.warn).toHaveBeenCalledWith(
@@ -240,6 +241,62 @@ describe("composeWebBackend — tool construction", () => {
       }),
       expect.stringContaining("createExecutors timed out"),
     );
+  });
+
+  it("serves no tools without calling createExecutors when the turn is already cancelled", async () => {
+    const createExecutors = vi.fn(() => ({
+      web_search: () => ({ query: "q", results: [] }),
+    }));
+    const turn = new AbortController();
+    turn.abort();
+
+    const tools = await composeWebBackend({
+      contribution: contribution({}, { createExecutors }),
+      backend: "searx",
+      pluginName: "@acme/searx",
+      plugin: PLUGIN,
+    }).buildTurnTools(CTX, turn.signal);
+
+    expect(tools).toEqual({});
+    expect(createExecutors).not.toHaveBeenCalled();
+    expect(mockLogger.debug).toHaveBeenCalledWith(
+      expect.objectContaining({
+        plugin: "@acme/searx",
+        backend: "searx",
+        orgId: CTX.orgId,
+        workspaceId: CTX.workspaceId,
+        providerId: CTX.providerId,
+      }),
+      expect.stringContaining("cancelled"),
+    );
+    expect(mockLogger.warn).not.toHaveBeenCalled();
+  });
+
+  it("settles with no tools well before timeoutMs when the turn is cancelled mid-factory", async () => {
+    const turn = new AbortController();
+    const building = composeWebBackend({
+      contribution: contribution(
+        {},
+        {
+          createExecutors: () => new Promise(() => {}),
+          timeoutMs: 60_000,
+        },
+      ),
+      backend: "searx",
+      pluginName: "@acme/searx",
+      plugin: PLUGIN,
+    }).buildTurnTools(CTX, turn.signal);
+
+    const startedAt = Date.now();
+    turn.abort();
+
+    await expect(building).resolves.toEqual({});
+    expect(Date.now() - startedAt).toBeLessThan(1_000);
+    expect(mockLogger.debug).toHaveBeenCalledWith(
+      expect.objectContaining({ backend: "searx", plugin: "@acme/searx" }),
+      expect.stringContaining("cancelled"),
+    );
+    expect(mockLogger.warn).not.toHaveBeenCalled();
   });
 });
 
@@ -581,6 +638,34 @@ describe("read_url — egress guard, capping, slicing", () => {
     );
   });
 
+  it("blocks a model-supplied hostname that resolves into a denied range", async () => {
+    const read_url_executor = vi.fn(() => ({
+      content: "internal",
+      url: "http://internal-metadata.test/latest/meta-data",
+    }));
+    const { read_url } = await buildTools({
+      web_search: () => ({ query: "q", results: [] }),
+      read_url: read_url_executor,
+    });
+
+    const result = await read(read_url, {
+      url: "http://internal-metadata.test/latest/meta-data",
+    });
+
+    expect(result.error).toBe(EGRESS_BLOCKED_MESSAGE);
+    expect(read_url_executor).not.toHaveBeenCalled();
+    // why: the shared lookup mock resolves any "internal" host to the metadata service
+    expect(mockLookup).toHaveBeenCalledWith(
+      "internal-metadata.test",
+      expect.anything(),
+    );
+    expect(mockLogger.warn).toHaveBeenCalledTimes(1);
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ tool: "read_url", outcome: "blocked" }),
+      "Blocked a model-supplied URL by network policy",
+    );
+  });
+
   it("blocks a non-http(s) requested URL, and never echoes it back", async () => {
     const read_url_executor = vi.fn(() => ({ content: "x", url: "" }));
     const { read_url } = await buildTools({
@@ -606,6 +691,7 @@ describe("read_url — egress guard, capping, slicing", () => {
     expect(result.content_type).toBe("text/markdown");
     expect(result.truncated).toBe(false);
     expect(result).not.toHaveProperty("next_start_index");
+    expect(mockLookup).toHaveBeenCalledWith("example.com", expect.anything());
   });
 
   it("slices by max_length and emits the fetchUrl continuation hint", async () => {
@@ -895,7 +981,7 @@ describe("composeWebBackend — the contribution is not copied", () => {
 
     expect(registration.backend).toBe("acme.searx");
 
-    const { web_search } = await registration.buildTurnTools(CTX);
+    const { web_search } = await registration.buildTurnTools(CTX, undefined);
     const result = await search(web_search, "q");
     expect(result.results).toEqual([
       { title: "From this", url: "https://example.com/1" },
@@ -1017,7 +1103,6 @@ describe("the signal an executor is handed", () => {
   it("cancels read_url before the egress guard resolves anything", async () => {
     const controller = new AbortController();
     controller.abort();
-    const resolveHostname = vi.fn(resolvePublic);
     const read_url = vi.fn(() => ({ content: "hi", url: "https://ok/" }));
 
     const { read_url: tool } = await composeWebBackend({
@@ -1027,9 +1112,8 @@ describe("the signal an executor is handed", () => {
       }),
       backend: "searx",
       pluginName: "@acme/searx",
-      resolveHostname,
       plugin: PLUGIN,
-    }).buildTurnTools(CTX);
+    }).buildTurnTools(CTX, undefined);
 
     const result = (await callTool(
       tool,
@@ -1045,7 +1129,7 @@ describe("the signal an executor is handed", () => {
     expect(result.error).toBe(
       "The web backend could not complete this read_url request.",
     );
-    expect(resolveHostname).not.toHaveBeenCalled();
+    expect(mockLookup).not.toHaveBeenCalled();
     expect(read_url).not.toHaveBeenCalled();
   });
 
@@ -1089,7 +1173,10 @@ describe("the closer a backend registers", () => {
       backend: "searx",
       pluginName: "@acme/searx",
       plugin: PLUGIN,
-    }).buildTurnTools(ctxWith(() => {}));
+    }).buildTurnTools(
+      ctxWith(() => {}),
+      undefined,
+    );
 
     expect(createExecutors).toHaveBeenCalledWith(PLUGIN_CTX, PLUGIN);
   });
@@ -1111,7 +1198,7 @@ describe("the closer a backend registers", () => {
       backend: "acme.searx",
       pluginName: "@acme/searx",
       plugin: PLUGIN,
-    }).buildTurnTools(ctxWith(register));
+    }).buildTurnTools(ctxWith(register), undefined);
 
     expect(register).toHaveBeenCalledWith(close, {
       plugin: "@acme/searx",
@@ -1140,6 +1227,7 @@ describe("the closer a backend registers", () => {
       ctxWith((close, attribution) => {
         registered.push(() => runCloser(close, attribution));
       }),
+      undefined,
     );
 
     expect(Object.keys(tools)).toEqual(["web_search"]);
@@ -1164,7 +1252,7 @@ describe("the closer a backend registers", () => {
       backend: "searx",
       pluginName: "@acme/searx",
       plugin: PLUGIN,
-    }).buildTurnTools(CTX);
+    }).buildTurnTools(CTX, undefined);
 
     expect(Object.keys(tools)).toContain("web_search");
     expect(mockLogger.warn).not.toHaveBeenCalled();

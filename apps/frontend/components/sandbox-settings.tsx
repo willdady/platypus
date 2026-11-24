@@ -20,7 +20,18 @@ import {
   type Serialized,
 } from "@/lib/api-write";
 import { optionalFetcher } from "@/lib/utils";
-import { retractFieldError, type FormErrors } from "@/lib/form-errors";
+import {
+  retractExactKeys,
+  retractFieldError,
+  type FormErrors,
+} from "@/lib/form-errors";
+import {
+  buildSchemaValues,
+  fieldText,
+  fieldsFromSchema,
+  type BackendJsonSchema,
+  type BackendSchemaSlice,
+} from "@/lib/backend-schema-fields";
 import { Button } from "@/components/ui/button";
 import {
   KeyValueRowsEditor,
@@ -57,13 +68,22 @@ import {
   FormSkeletonSet,
 } from "@/components/form-skeleton";
 import { SandboxDockerFields } from "@/components/sandbox-docker-fields";
+import { SandboxSchemaFields } from "@/components/sandbox-schema-fields";
 import {
   DEFAULT_SSH_PORT,
   SandboxSshFields,
   type SandboxKeyState,
 } from "@/components/sandbox-ssh-fields";
 
-type SandboxBackend = { backend: string; name: string };
+type SandboxBackend = {
+  backend: string;
+  name: string;
+  // The backend's config and credentials schemas as JSON Schema, absent when
+  // it declares no fields. A backend with no bespoke form gets its fields
+  // generated from these.
+  configSchema?: BackendJsonSchema;
+  credentialsSchema?: BackendJsonSchema;
+};
 
 // The docker reference backend exposes host reachability via these two config
 // fields. See ADR-0005. Other backends ignore them.
@@ -99,6 +119,11 @@ export type SandboxFormData = {
   sshHostKey: string;
   sshPrivateKey: string;
   sshPassphrase: string;
+  // Fields generated from a plugin backend's config and credentials schemas
+  // (a backend with no bespoke form). Config seeds from the stored row;
+  // credentials always start blank because GET never returns them.
+  configValues: Record<string, unknown>;
+  credentialsValues: Record<string, unknown>;
 };
 
 const DEFAULT_FORM: SandboxFormData = {
@@ -115,6 +140,8 @@ const DEFAULT_FORM: SandboxFormData = {
   sshHostKey: "",
   sshPrivateKey: "",
   sshPassphrase: "",
+  configValues: {},
+  credentialsValues: {},
 };
 
 /** The fields that travel in the backend's `config`, which share one error key. */
@@ -327,11 +354,53 @@ function SandboxSettings({
   const setConfigField: SetConfigField = useCallback(
     <K extends SandboxConfigField>(field: K, value: SandboxFormData[K]) => {
       setValidationErrors((prev) =>
-        retractFieldError(retractFieldError(prev, "config"), field),
+        retractFieldError(retractFieldError(prev, "credentials"), "config"),
       );
       setFormData((prev) => ({ ...prev, [field]: value }));
     },
     [setValidationErrors, setFormData],
+  );
+
+  // One generated field. Its server error is keyed `config.<key>` or
+  // `credentials.<key>`, so only that key and the slice's own root are
+  // retracted — a sibling field's error stays until that field is edited.
+  const setSchemaValue = useCallback(
+    (slice: BackendSchemaSlice, key: string, value: unknown) => {
+      setValidationErrors((prev) =>
+        retractExactKeys(prev, [slice, `${slice}.${key}`]),
+      );
+      setFormData((prev) => ({
+        ...prev,
+        [slice === "config" ? "configValues" : "credentialsValues"]: {
+          ...(slice === "config" ? prev.configValues : prev.credentialsValues),
+          [key]: value,
+        },
+      }));
+    },
+    [setValidationErrors, setFormData],
+  );
+
+  // Generated values belong to the backend that declared them, so switching
+  // backend drops them rather than carrying one backend's fields into another —
+  // and coming back to the saved backend re-seeds what the row holds. Every
+  // error under either slice goes with them.
+  const selectBackend = useCallback(
+    (backend: string) => {
+      setValidationErrors((prev) =>
+        retractFieldError(
+          retractFieldError(retractFieldError(prev, "backend"), "config"),
+          "credentials",
+        ),
+      );
+      setFormData((prev) => ({
+        ...prev,
+        backend,
+        configValues:
+          data && data.backend === backend ? (data.config ?? {}) : {},
+        credentialsValues: {},
+      }));
+    },
+    [data, setValidationErrors, setFormData],
   );
 
   function seedFrom(record: Serialized<Sandbox>) {
@@ -360,6 +429,9 @@ function SandboxSettings({
       sshUser: config.user ?? "",
       sshRootDir: config.rootDir ?? "",
       sshHostKey: config.hostKey ?? "",
+      // A plugin backend's generated fields seed from whatever config the row
+      // holds; credentials are never returned, so they start blank.
+      configValues: record.config ?? {},
     });
   }
 
@@ -383,6 +455,23 @@ function SandboxSettings({
 
   const isDocker = formData.backend === DOCKER_BACKEND;
   const isSsh = formData.backend === SSH_BACKEND;
+  // Docker and SSH keep their bespoke forms; every other backend renders the
+  // fields its own schemas declare.
+  const isGenerated = !isDocker && !isSsh;
+  const selectedBackend = backends.find(
+    (option) => option.backend === formData.backend,
+  );
+  const configFields = isGenerated
+    ? fieldsFromSchema(selectedBackend?.configSchema, "config")
+    : [];
+  const credentialFields = isGenerated
+    ? fieldsFromSchema(selectedBackend?.credentialsSchema, "credentials")
+    : [];
+  // A stored credential (GET reports only that one exists) can be kept by
+  // leaving the field blank — but not across a backend switch, which starts
+  // the new backend's credentials from scratch.
+  const backendChanged = !!data && data.backend !== formData.backend;
+  const hasStoredCredentials = !!data?.hasCredentials && !backendChanged;
 
   function writeSandbox(
     options: { force?: boolean } = {},
@@ -393,7 +482,8 @@ function SandboxSettings({
       isCreate || !options.force ? sandboxUrl : `${sandboxUrl}?force=true`;
 
     // Backend-specific config. Docker carries host reachability (ADR-0005); SSH
-    // carries the connection target (ADR-0012). Other backends take no config.
+    // carries the connection target (ADR-0012). Every other backend's config
+    // is built from the fields its own schema declared.
     const config = isDocker
       ? {
           networks: formData.networks,
@@ -415,15 +505,28 @@ function SandboxSettings({
               ? { hostKey: formData.sshHostKey.trim() }
               : {}),
           }
-        : {};
+        : buildSchemaValues(
+            selectedBackend?.configSchema,
+            configFields,
+            formData.configValues,
+          );
 
     // The `credentials` slice of the payload (spread below). For SSH (ADR-0012)
     // we only send credentials when a private key was entered: omitting
     // `credentials` preserves the stored value server-side rather than clearing
     // it. The passphrase travels only with a key, so it is never dropped
-    // silently. Other backends send an empty credentials object, as before.
-    const credentialsPayload =
-      isSsh && formData.sshPrivateKey.trim()
+    // silently. A generated backend follows the same rule on an edit: send the
+    // credentials only when a field was filled, or the backend changed and the
+    // stored material no longer applies. Docker sends an empty object, as
+    // before.
+    const credentialsEntered = credentialFields.some((field) => {
+      const value = formData.credentialsValues[field.key];
+      return field.kind === "boolean"
+        ? value !== undefined
+        : fieldText(value ?? "").trim() !== "";
+    });
+    const credentialsPayload = isSsh
+      ? formData.sshPrivateKey.trim()
         ? {
             credentials: {
               privateKey: formData.sshPrivateKey,
@@ -432,9 +535,18 @@ function SandboxSettings({
                 : {}),
             },
           }
-        : isSsh
-          ? {} // omit credentials — preserve stored
-          : { credentials: {} };
+        : {} // omit credentials — preserve stored
+      : isDocker
+        ? { credentials: {} }
+        : isCreate || backendChanged || credentialsEntered
+          ? {
+              credentials: buildSchemaValues(
+                selectedBackend?.credentialsSchema,
+                credentialFields,
+                formData.credentialsValues,
+              ),
+            }
+          : {}; // omit credentials — preserve stored
 
     // Non-admin owners may only change name + userEnv (ADR-0006); everything
     // else is admin-controlled and ignored server-side, so we don't send it.
@@ -611,7 +723,7 @@ function SandboxSettings({
             label="Backend"
             name="backend"
             value={formData.backend}
-            onValueChange={(value) => setField("backend", value)}
+            onValueChange={selectBackend}
             disabled={isSubmitting || !canConfigure}
             placeholder="Select a backend"
             description={
@@ -648,11 +760,41 @@ function SandboxSettings({
             <SandboxSshFields
               formData={formData}
               setConfigField={setConfigField}
+              errors={validationErrors}
               disabled={isSubmitting}
               keyState={keyState}
               onReplaceKey={() => setIsReplacingKey(true)}
             />
           )}
+
+          {/* Every other backend's config and credentials, generated from the
+              schemas it registered — admin-only like the rest of the config. */}
+          {canConfigure && isGenerated && selectedBackend?.configSchema && (
+            <SandboxSchemaFields
+              slice="config"
+              schema={selectedBackend.configSchema}
+              values={formData.configValues}
+              onChange={(key, value) => setSchemaValue("config", key, value)}
+              errors={validationErrors}
+              disabled={isSubmitting}
+            />
+          )}
+
+          {canConfigure &&
+            isGenerated &&
+            selectedBackend?.credentialsSchema && (
+              <SandboxSchemaFields
+                slice="credentials"
+                schema={selectedBackend.credentialsSchema}
+                values={formData.credentialsValues}
+                onChange={(key, value) =>
+                  setSchemaValue("credentials", key, value)
+                }
+                errors={validationErrors}
+                disabled={isSubmitting}
+                hasStoredCredentials={hasStoredCredentials}
+              />
+            )}
 
           {/* Admin-managed env (ADR-0006). */}
           {canConfigure && (

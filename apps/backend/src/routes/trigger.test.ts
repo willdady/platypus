@@ -1,13 +1,16 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { mockNanoid } from "../test-setup.ts";
+import { nanoid } from "nanoid";
 import {
-  mockDb,
   mockNoSession,
   mockSession,
   resetMockDb,
   seedDb,
+  type FakeDb,
   type Row,
+  type Store,
 } from "../test-utils.ts";
+
+vi.mock("nanoid", { spy: true });
 
 const { mockValidateCronExpression } = vi.hoisted(() => ({
   mockValidateCronExpression:
@@ -20,13 +23,19 @@ vi.mock("../utils/cron.ts", () => ({
     mockValidateCronExpression(config.cronExpression, config.timezone),
 }));
 
-mockNanoid.mockReturnValue("trig-new");
+vi.mocked(nanoid).mockReturnValue("trig-new");
 
 import app from "../server.ts";
 
 const orgId = "org-1";
 const workspaceId = "ws-1";
 const baseUrl = `/organizations/${orgId}/workspaces/${workspaceId}/triggers`;
+
+const json = (method: string, body: unknown): RequestInit => ({
+  method,
+  body: JSON.stringify(body),
+  headers: { "Content-Type": "application/json" },
+});
 
 const cronTrigger = {
   id: "trig-1",
@@ -54,29 +63,51 @@ const eventTrigger = {
   config: { events: ["card.created"] },
 };
 
-const stubAuthLookups = () => {
-  mockSession();
-  mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-  mockDb.limit.mockResolvedValueOnce([
-    { ownerId: "user-1", organizationId: "org-1" },
-  ]);
-};
+const agentRow = (over: Row = {}): Row => ({
+  id: "agent-1",
+  organizationId: orgId,
+  workspaceId,
+  ...over,
+});
+
+const world = (rows: Store = {}): FakeDb =>
+  seedDb({
+    organization_member: [
+      {
+        id: "member-1",
+        organizationId: orgId,
+        userId: "user-1",
+        role: "member",
+      },
+    ],
+    workspace: [
+      {
+        id: workspaceId,
+        organizationId: orgId,
+        ownerId: "user-1",
+        name: "Support",
+      },
+    ],
+    agent: [agentRow()],
+    ...rows,
+  });
 
 describe("Trigger Routes", () => {
   beforeEach(() => {
     resetMockDb();
     vi.clearAllMocks();
-    mockDb.where.mockReturnValue(mockDb);
-    mockDb.orderBy.mockReturnValue(mockDb);
-    mockDb.limit.mockReturnValue(mockDb);
-    mockDb.offset.mockReturnValue(mockDb);
   });
 
   describe("GET /", () => {
     it("lists all triggers in the workspace", async () => {
-      stubAuthLookups();
-      mockDb.orderBy.mockResolvedValueOnce([cronTrigger, eventTrigger]);
-      mockDb.orderBy.mockResolvedValueOnce([]);
+      mockSession();
+      world({
+        trigger: [
+          cronTrigger,
+          eventTrigger,
+          { ...cronTrigger, id: "trig-other-ws", workspaceId: "ws-2" },
+        ],
+      });
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
@@ -93,15 +124,18 @@ describe("Trigger Routes", () => {
         firedAt: new Date("2026-01-02"),
       };
       const list = async (query: string) => {
-        stubAuthLookups();
-        mockDb.orderBy.mockResolvedValueOnce([cronTrigger, fired]);
-        mockDb.orderBy.mockResolvedValueOnce([
-          {
-            triggerId: "trig-fired",
-            status: "success",
-            startedAt: new Date("2026-01-02T09:00:00Z"),
-          },
-        ]);
+        mockSession();
+        world({
+          trigger: [cronTrigger, fired],
+          trigger_run: [
+            {
+              id: "run-fired",
+              triggerId: "trig-fired",
+              status: "success",
+              startedAt: new Date("2026-01-02T09:00:00Z"),
+            },
+          ],
+        });
         const res = await app.request(`${baseUrl}${query}`);
         expect(res.status).toBe(200);
         return (
@@ -133,7 +167,8 @@ describe("Trigger Routes", () => {
     });
 
     it("rejects an unknown query key", async () => {
-      stubAuthLookups();
+      mockSession();
+      world();
 
       const res = await app.request(`${baseUrl}?includeFired=true&foo=1`);
 
@@ -141,18 +176,19 @@ describe("Trigger Routes", () => {
     });
 
     it("never returns an Inbound Trigger's token hash", async () => {
-      stubAuthLookups();
-      mockDb.orderBy.mockResolvedValueOnce([
-        {
-          ...cronTrigger,
-          type: "inbound",
-          config: { inputs: [], tokenExpiryDays: 90 },
-          tokenHash: "secret-hash",
-          tokenExpiresAt: new Date("2099-01-01T00:00:00.000Z"),
-          tokenNotice: "expiring_30",
-        },
-      ]);
-      mockDb.orderBy.mockResolvedValueOnce([]);
+      mockSession();
+      world({
+        trigger: [
+          {
+            ...cronTrigger,
+            type: "inbound",
+            config: { inputs: [], tokenExpiryDays: 90 },
+            tokenHash: "secret-hash",
+            tokenExpiresAt: new Date("2099-01-01T00:00:00.000Z"),
+            tokenNotice: "expiring_30",
+          },
+        ],
+      });
 
       const res = await app.request(baseUrl);
       const text = await res.text();
@@ -173,8 +209,8 @@ describe("Trigger Routes", () => {
 
   describe("GET /:triggerId", () => {
     it("returns the trigger when found", async () => {
-      stubAuthLookups();
-      mockDb.limit.mockResolvedValueOnce([cronTrigger]);
+      mockSession();
+      world({ trigger: [cronTrigger] });
 
       const res = await app.request(`${baseUrl}/trig-1`);
       expect(res.status).toBe(200);
@@ -183,8 +219,10 @@ describe("Trigger Routes", () => {
     });
 
     it("returns 404 when not found in this workspace", async () => {
-      stubAuthLookups();
-      mockDb.limit.mockResolvedValueOnce([]);
+      mockSession();
+      world({
+        trigger: [{ ...cronTrigger, id: "trig-missing", workspaceId: "ws-2" }],
+      });
 
       const res = await app.request(`${baseUrl}/trig-missing`);
       expect(res.status).toBe(404);
@@ -206,28 +244,30 @@ describe("Trigger Routes", () => {
     };
 
     it("creates a cron trigger and returns 201", async () => {
-      stubAuthLookups();
-      mockDb.limit.mockResolvedValueOnce([{ id: "agent-1", workspaceId }]);
+      mockSession();
+      const fake = world();
       const nextRun = new Date("2026-02-01T09:00:00Z");
       mockValidateCronExpression.mockReturnValueOnce(nextRun);
-      mockDb.returning.mockResolvedValueOnce([
-        { ...cronTrigger, id: "trig-new", nextRunAt: nextRun },
-      ]);
 
-      const res = await app.request(baseUrl, {
-        method: "POST",
-        body: JSON.stringify(createBody),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await app.request(baseUrl, json("POST", createBody));
       expect(res.status).toBe(201);
       const body = (await res.json()) as { id: string; nextRunAt: string };
       expect(body.id).toBe("trig-new");
       expect(body.nextRunAt).toBe(nextRun.toISOString());
+      expect(fake.tables.trigger).toMatchObject([
+        {
+          id: "trig-new",
+          workspaceId,
+          agentId: "agent-1",
+          type: "cron",
+          nextRunAt: nextRun,
+        },
+      ]);
     });
 
     it("creates an Inbound Trigger with no token when the body opts out", async () => {
-      stubAuthLookups();
-      mockDb.limit.mockResolvedValueOnce([{ id: "agent-1", workspaceId }]);
+      mockSession();
+      const fake = world();
       const inboundBody = {
         ...createBody,
         type: "inbound",
@@ -235,33 +275,19 @@ describe("Trigger Routes", () => {
         issueToken: false,
         config: { inputs: [], tokenExpiryDays: 90 },
       };
-      mockDb.returning.mockResolvedValueOnce([
-        {
-          ...cronTrigger,
-          id: "trig-new",
-          type: "inbound",
-          enabled: false,
-          config: inboundBody.config,
-          tokenHash: null,
-        },
-      ]);
 
-      const res = await app.request(baseUrl, {
-        method: "POST",
-        body: JSON.stringify(inboundBody),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await app.request(baseUrl, json("POST", inboundBody));
       expect(res.status).toBe(201);
       const body = (await res.json()) as Record<string, unknown>;
       expect(body).not.toHaveProperty("token");
       expect(body.tokenStatus).toBe("none");
-      const values = mockDb.values.mock.calls[0][0] as Record<string, unknown>;
+      const values = fake.tables.trigger.at(-1)!;
       expect(values).not.toHaveProperty("tokenHash");
     });
 
     it("creates an event trigger with a full filters shape (columnId, changedFields) and returns 201", async () => {
-      stubAuthLookups();
-      mockDb.limit.mockResolvedValueOnce([{ id: "agent-1", workspaceId }]);
+      mockSession();
+      const fake = world();
       const eventBody = {
         ...createBody,
         type: "event",
@@ -274,67 +300,43 @@ describe("Trigger Routes", () => {
           },
         },
       };
-      mockDb.returning.mockResolvedValueOnce([
-        { ...eventTrigger, id: "trig-new", config: eventBody.config },
-      ]);
 
-      const res = await app.request(baseUrl, {
-        method: "POST",
-        body: JSON.stringify(eventBody),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await app.request(baseUrl, json("POST", eventBody));
       expect(res.status).toBe(201);
       const body = (await res.json()) as { config: unknown };
       expect(body.config).toEqual(eventBody.config);
-      const values = mockDb.values.mock.calls[0][0] as Record<string, unknown>;
+      const values = fake.tables.trigger.at(-1)!;
       expect(values.config).toEqual(eventBody.config);
     });
 
     it("defaults includeMemories and extractMemories off when the create body omits them, and writes them when set", async () => {
-      stubAuthLookups();
-      mockDb.limit.mockResolvedValueOnce([{ id: "agent-1", workspaceId }]);
+      mockSession();
+      const fake = world();
       mockValidateCronExpression.mockReturnValueOnce(
         new Date("2026-02-01T09:00:00Z"),
       );
-      mockDb.returning.mockResolvedValueOnce([cronTrigger]);
 
-      const res = await app.request(baseUrl, {
-        method: "POST",
-        body: JSON.stringify(createBody),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await app.request(baseUrl, json("POST", createBody));
       expect(res.status).toBe(201);
-      const values = mockDb.values.mock.calls[0][0] as Record<string, unknown>;
+      const values = fake.tables.trigger.at(-1)!;
       expect(values.includeMemories).toBe(false);
       expect(values.extractMemories).toBe(false);
 
-      resetMockDb();
-      vi.clearAllMocks();
-      mockDb.where.mockReturnValue(mockDb);
-      mockDb.limit.mockReturnValue(mockDb);
-      stubAuthLookups();
-      mockDb.limit.mockResolvedValueOnce([{ id: "agent-1", workspaceId }]);
+      const optedInFake = world();
       mockValidateCronExpression.mockReturnValueOnce(
         new Date("2026-02-01T09:00:00Z"),
       );
-      mockDb.returning.mockResolvedValueOnce([
-        { ...cronTrigger, includeMemories: true },
-      ]);
 
-      const optedIn = await app.request(baseUrl, {
-        method: "POST",
-        body: JSON.stringify({
+      const optedIn = await app.request(
+        baseUrl,
+        json("POST", {
           ...createBody,
           includeMemories: true,
           extractMemories: true,
         }),
-        headers: { "Content-Type": "application/json" },
-      });
+      );
       expect(optedIn.status).toBe(201);
-      const optedInValues = mockDb.values.mock.calls[0][0] as Record<
-        string,
-        unknown
-      >;
+      const optedInValues = optedInFake.tables.trigger.at(-1)!;
       expect(optedInValues.includeMemories).toBe(true);
       expect(optedInValues.extractMemories).toBe(true);
       const body = (await optedIn.json()) as { includeMemories: boolean };
@@ -342,24 +344,26 @@ describe("Trigger Routes", () => {
     });
 
     it("accepts a Shared agent attached to this workspace", async () => {
-      stubAuthLookups();
-      mockDb.limit
-        .mockResolvedValueOnce([
-          { id: "agent-1", organizationId: orgId, workspaceId: null },
-        ])
-        .mockResolvedValueOnce([{ id: "att-1" }]);
+      mockSession();
+      const fake = world({
+        agent: [agentRow({ organizationId: orgId, workspaceId: null })],
+        attachment: [
+          {
+            id: "att-1",
+            workspaceId,
+            resourceType: "agent",
+            resourceId: "agent-1",
+          },
+        ],
+      });
       const nextRun = new Date("2026-02-01T09:00:00Z");
       mockValidateCronExpression.mockReturnValueOnce(nextRun);
-      mockDb.returning.mockResolvedValueOnce([
-        { ...cronTrigger, id: "trig-shared", nextRunAt: nextRun },
-      ]);
 
-      const res = await app.request(baseUrl, {
-        method: "POST",
-        body: JSON.stringify(createBody),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await app.request(baseUrl, json("POST", createBody));
       expect(res.status).toBe(201);
+      expect(fake.tables.trigger).toMatchObject([
+        { id: "trig-new", agentId: "agent-1", nextRunAt: nextRun },
+      ]);
     });
 
     it.each([
@@ -376,28 +380,24 @@ describe("Trigger Routes", () => {
     ])(
       "validates the config against its own type, refusing %s",
       async (_label, override) => {
-        stubAuthLookups();
+        mockSession();
+        const fake = world();
 
-        const res = await app.request(baseUrl, {
-          method: "POST",
-          body: JSON.stringify({ ...createBody, ...override }),
-          headers: { "Content-Type": "application/json" },
-        });
+        const res = await app.request(
+          baseUrl,
+          json("POST", { ...createBody, ...override }),
+        );
 
         expect(res.status).toBe(400);
-        expect(mockDb.values).not.toHaveBeenCalled();
+        expect(fake.queries.filter((q) => q.kind === "insert")).toEqual([]);
       },
     );
 
     it("rejects creation when the agent is not in the workspace", async () => {
-      stubAuthLookups();
-      mockDb.limit.mockResolvedValueOnce([]);
+      mockSession();
+      world({ agent: [agentRow({ workspaceId: "ws-2" })] });
 
-      const res = await app.request(baseUrl, {
-        method: "POST",
-        body: JSON.stringify(createBody),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await app.request(baseUrl, json("POST", createBody));
       expect(res.status).toBe(400);
       expect(await res.json()).toEqual({
         error: "Agent not found in this workspace",
@@ -407,17 +407,14 @@ describe("Trigger Routes", () => {
 
   describe("PUT /:triggerId", () => {
     it("updates a trigger and recomputes nextRunAt when the cron config changes", async () => {
-      stubAuthLookups();
-      mockDb.limit.mockResolvedValueOnce([cronTrigger]);
+      mockSession();
+      const fake = world({ trigger: [cronTrigger] });
       const nextRun = new Date("2026-02-02T09:00:00Z");
       mockValidateCronExpression.mockReturnValueOnce(nextRun);
-      mockDb.returning.mockResolvedValueOnce([
-        { ...cronTrigger, name: "Updated", nextRunAt: nextRun },
-      ]);
 
-      const res = await app.request(`${baseUrl}/trig-1`, {
-        method: "PATCH",
-        body: JSON.stringify({
+      const res = await app.request(
+        `${baseUrl}/trig-1`,
+        json("PATCH", {
           name: "Updated",
           config: {
             cronExpression: "0 10 * * *",
@@ -425,36 +422,51 @@ describe("Trigger Routes", () => {
             isOneOff: false,
           },
         }),
-        headers: { "Content-Type": "application/json" },
-      });
+      );
       expect(res.status).toBe(200);
       const body = (await res.json()) as { name: string };
       expect(body.name).toBe("Updated");
+      expect(fake.tables.trigger).toMatchObject([
+        {
+          id: "trig-1",
+          name: "Updated",
+          nextRunAt: nextRun,
+          config: {
+            cronExpression: "0 10 * * *",
+            timezone: "UTC",
+            isOneOff: false,
+          },
+        },
+      ]);
     });
 
     it("returns 404 when the trigger doesn't exist in this workspace", async () => {
-      stubAuthLookups();
-      mockDb.limit.mockResolvedValueOnce([]);
-
-      const res = await app.request(`${baseUrl}/trig-missing`, {
-        method: "PATCH",
-        body: JSON.stringify({ name: "x" }),
-        headers: { "Content-Type": "application/json" },
+      mockSession();
+      world({
+        trigger: [{ ...cronTrigger, id: "trig-missing", workspaceId: "ws-2" }],
       });
+
+      const res = await app.request(
+        `${baseUrl}/trig-missing`,
+        json("PATCH", { name: "x" }),
+      );
       expect(res.status).toBe(404);
     });
 
     it("rejects an agent change when the new agent is not in the workspace", async () => {
-      stubAuthLookups();
-      mockDb.limit
-        .mockResolvedValueOnce([cronTrigger])
-        .mockResolvedValueOnce([]);
-
-      const res = await app.request(`${baseUrl}/trig-1`, {
-        method: "PATCH",
-        body: JSON.stringify({ agentId: "agent-other" }),
-        headers: { "Content-Type": "application/json" },
+      mockSession();
+      world({
+        trigger: [cronTrigger],
+        agent: [
+          agentRow(),
+          agentRow({ id: "agent-other", workspaceId: "ws-2" }),
+        ],
       });
+
+      const res = await app.request(
+        `${baseUrl}/trig-1`,
+        json("PATCH", { agentId: "agent-other" }),
+      );
       expect(res.status).toBe(400);
       expect(await res.json()).toEqual({
         error: "Agent not found in this workspace",
@@ -462,21 +474,20 @@ describe("Trigger Routes", () => {
     });
 
     it("returns 404 for a missing trigger before checking the new agent", async () => {
-      stubAuthLookups();
-      mockDb.limit.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+      mockSession();
+      world({ agent: [agentRow({ id: "agent-other", workspaceId: "ws-2" })] });
 
-      const res = await app.request(`${baseUrl}/trig-missing`, {
-        method: "PATCH",
-        body: JSON.stringify({ agentId: "agent-other" }),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await app.request(
+        `${baseUrl}/trig-missing`,
+        json("PATCH", { agentId: "agent-other" }),
+      );
       expect(res.status).toBe(404);
       expect(await res.json()).toEqual({ error: "Trigger not found" });
     });
 
     it("round-trips a columnId/changedFields filter through a config update", async () => {
-      stubAuthLookups();
-      mockDb.limit.mockResolvedValueOnce([eventTrigger]);
+      mockSession();
+      const fake = world({ trigger: [eventTrigger] });
       const newConfig = {
         events: ["card.updated"],
         filters: {
@@ -485,87 +496,77 @@ describe("Trigger Routes", () => {
           changedFields: ["priority"],
         },
       };
-      mockDb.returning.mockResolvedValueOnce([
-        { ...eventTrigger, config: newConfig },
-      ]);
 
-      const res = await app.request(`${baseUrl}/trig-2`, {
-        method: "PATCH",
-        body: JSON.stringify({ config: newConfig }),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await app.request(
+        `${baseUrl}/trig-2`,
+        json("PATCH", { config: newConfig }),
+      );
       expect(res.status).toBe(200);
       const body = (await res.json()) as { config: unknown };
       expect(body.config).toEqual(newConfig);
-      const setArg = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
-      expect(setArg.config).toEqual(newConfig);
+      const stored = fake.tables.trigger.find((row) => row.id === "trig-2")!;
+      expect(stored.config).toEqual(newConfig);
     });
 
     it("clears nextRunAt when switching to event type", async () => {
-      stubAuthLookups();
-      mockDb.limit.mockResolvedValueOnce([cronTrigger]);
-      mockDb.returning.mockResolvedValueOnce([
-        { ...cronTrigger, type: "event", nextRunAt: null },
-      ]);
+      mockSession();
+      const fake = world({
+        trigger: [
+          { ...cronTrigger, nextRunAt: new Date("2026-02-01T09:00:00.000Z") },
+        ],
+      });
 
-      const res = await app.request(`${baseUrl}/trig-1`, {
-        method: "PATCH",
-        body: JSON.stringify({
+      const res = await app.request(
+        `${baseUrl}/trig-1`,
+        json("PATCH", {
           type: "event",
           config: { events: ["card.created"] },
         }),
-        headers: { "Content-Type": "application/json" },
-      });
+      );
       expect(res.status).toBe(200);
-      const setArg = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
-      expect(setArg.nextRunAt).toBeNull();
+      const stored = fake.tables.trigger.find((row) => row.id === "trig-1")!;
+      expect(stored.type).toBe("event");
+      expect(stored.nextRunAt).toBeNull();
     });
 
     it("leaves the settings a toggle does not mention unchanged", async () => {
-      stubAuthLookups();
-      mockDb.limit.mockResolvedValueOnce([
-        {
-          ...cronTrigger,
-          maxRunsToKeep: 10,
-          search: true,
-          includeMemories: true,
-        },
-      ]);
-      mockDb.returning.mockResolvedValueOnce([
-        { ...cronTrigger, enabled: false },
-      ]);
-
-      const res = await app.request(`${baseUrl}/trig-1`, {
-        method: "PATCH",
-        body: JSON.stringify({ enabled: false }),
-        headers: { "Content-Type": "application/json" },
+      mockSession();
+      const fake = world({
+        trigger: [
+          {
+            ...cronTrigger,
+            maxRunsToKeep: 10,
+            search: true,
+            includeMemories: true,
+          },
+        ],
       });
+
+      const res = await app.request(
+        `${baseUrl}/trig-1`,
+        json("PATCH", { enabled: false }),
+      );
       expect(res.status).toBe(200);
-      const setArg = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
-      expect(setArg.enabled).toBe(false);
-      expect(setArg).not.toHaveProperty("maxRunsToKeep");
-      expect(setArg).not.toHaveProperty("search");
-      expect(setArg).not.toHaveProperty("includeMemories");
+      expect(fake.tables.trigger[0]).toMatchObject({
+        enabled: false,
+        maxRunsToKeep: 10,
+        search: true,
+        includeMemories: true,
+        name: "Daily",
+      });
     });
 
     it("round-trips includeMemories through an update", async () => {
-      stubAuthLookups();
-      mockDb.limit.mockResolvedValueOnce([cronTrigger]);
-      mockValidateCronExpression.mockReturnValueOnce(
-        new Date("2026-02-02T09:00:00Z"),
-      );
-      mockDb.returning.mockResolvedValueOnce([
-        { ...cronTrigger, includeMemories: true },
-      ]);
+      mockSession();
+      const fake = world({ trigger: [cronTrigger] });
 
-      const res = await app.request(`${baseUrl}/trig-1`, {
-        method: "PATCH",
-        body: JSON.stringify({ includeMemories: true }),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await app.request(
+        `${baseUrl}/trig-1`,
+        json("PATCH", { includeMemories: true }),
+      );
       expect(res.status).toBe(200);
-      const setArg = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
-      expect(setArg.includeMemories).toBe(true);
+      const stored = fake.tables.trigger.find((row) => row.id === "trig-1")!;
+      expect(stored.includeMemories).toBe(true);
       const body = (await res.json()) as { includeMemories: boolean };
       expect(body.includeMemories).toBe(true);
     });
@@ -574,25 +575,7 @@ describe("Trigger Routes", () => {
   describe("DELETE /:triggerId", () => {
     const deleteWorld = (triggers: Row[] = []) => {
       mockSession();
-      return seedDb({
-        organization_member: [
-          {
-            id: "member-1",
-            organizationId: "org-1",
-            userId: "user-1",
-            role: "member",
-          },
-        ],
-        workspace: [
-          {
-            id: "ws-1",
-            organizationId: "org-1",
-            ownerId: "user-1",
-            name: "Support",
-          },
-        ],
-        trigger: triggers,
-      });
+      return world({ trigger: triggers });
     };
 
     it("deletes the trigger when found", async () => {

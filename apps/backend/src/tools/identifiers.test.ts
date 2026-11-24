@@ -1,10 +1,9 @@
-import { beforeEach, describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import type { z } from "zod";
 import type { InferToolInput } from "ai";
 import { validate, version as uuidVersion } from "uuid";
 import { generateUuid, generateNanoId } from "./identifiers.ts";
 import { callTool } from "../test-utils.ts";
-import { mockNanoid } from "../test-setup.ts";
 
 type UuidInput = InferToolInput<typeof generateUuid>;
 type NanoIdInput = InferToolInput<typeof generateNanoId>;
@@ -59,11 +58,6 @@ describe("generateUuid", () => {
 });
 
 describe("generateNanoId", () => {
-  beforeEach(async () => {
-    const actual = await vi.importActual<typeof import("nanoid")>("nanoid");
-    mockNanoid.mockImplementation(actual.nanoid);
-  });
-
   it("with no arguments returns one 21-character lowercase-alphanumeric id", async () => {
     const result = await callNanoIdTool({});
     expect(result.ids).toHaveLength(1);

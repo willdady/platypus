@@ -2200,6 +2200,14 @@ const BACKEND_CONSTANTS = [
     cost: "A client waits for a push the Task has no pushes left to send.",
   },
   {
+    source: "apps/backend/src/services/a2a-push.ts",
+    name: "PUSH_LEASE_MS",
+    phrase: (ms: number) =>
+      `${NUMBER_WORDS[ms / 60_000] ?? ms / 60_000} minutes`,
+    files: ["building-with-platypus/a2a-endpoints.mdx"],
+    cost: "A client polling instead of pushing waits a different time than the page states for an interrupted push.",
+  },
+  {
     source: "apps/backend/src/runs/run-events.ts",
     name: "RUN_EVENT_CEILING",
     phrase: (count: number) =>

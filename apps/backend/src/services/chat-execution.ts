@@ -346,6 +346,7 @@ const resolveSearchTools = async (
   opened: Pick<OpenedProvider, "searchTools">,
   provider: Pick<ProviderRow, "id">,
   ctx: WithCoreRegistrar<WebBackendContext>,
+  signal: AbortSignal | undefined,
 ): Promise<Record<string, Tool>> => {
   const turnCtx = { ...ctx, providerId: provider.id };
 
@@ -365,7 +366,7 @@ const resolveSearchTools = async (
     );
     return {};
   }
-  return registration.buildTurnTools(turnCtx);
+  return registration.buildTurnTools(turnCtx, signal);
 };
 
 export const prepareChatTurn = async (
@@ -466,16 +467,25 @@ export const prepareChatTurn = async (
         includeMemories,
       ),
       queries.getSandboxEnvKeys(workspaceId),
-      resolveSearchTools(searchResolution, opened, provider, {
-        orgId,
-        workspaceId,
-        userId: user.id,
-        registerCloser,
-      }),
+      resolveSearchTools(
+        searchResolution,
+        opened,
+        provider,
+        {
+          orgId,
+          workspaceId,
+          userId: user.id,
+          registerCloser,
+        },
+        signal,
+      ),
     ]);
 
+    // why: a cancelled turn serves none because it is torn down, not because search was unavailable
     const searchUnavailable =
-      searchResolution.kind !== "none" && Object.keys(searchTools).length === 0;
+      !signal?.aborted &&
+      searchResolution.kind !== "none" &&
+      Object.keys(searchTools).length === 0;
 
     // why: order is precedence: search beats session tools, sub-agent tools beat search
     const tools: Record<string, Tool> = { ...session.tools };

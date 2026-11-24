@@ -21,7 +21,14 @@ import {
   DeadlineExceededError,
   withDeadline,
 } from "../utils/abort-race.ts";
-import { runCloser, type Closer, type CoreCloserRegistrar } from "./closers.ts";
+import {
+  guardedCloser,
+  guardedSessionDispose,
+  runCloser,
+  type Closer,
+  type CoreCloserRegistrar,
+  type NonRejectingCloser,
+} from "./closers.ts";
 import type { ToolGateScope } from "../tool-gates/index.ts";
 import {
   getToolSet,
@@ -200,7 +207,7 @@ export const openToolSession = async (
   const readOnlyToolNames = new Set<string>();
   const readOnlyHints = new Map<string, "read-only" | "writes">();
   const unloadedToolSets: UnloadedToolSet[] = [];
-  const closers: Array<() => Promise<void>> = [];
+  const closers: NonRejectingCloser[] = [];
   const registered = new Set<Closer>();
   let disposed = false;
   const usedMcpSlugs = new Map<string, McpRow>();
@@ -219,7 +226,7 @@ export const openToolSession = async (
       void runCloser(close, attribution);
       return;
     }
-    closers.push(() => runCloser(close, attribution));
+    closers.push(guardedCloser(close, attribution));
   };
 
   const claim = (incoming: Record<string, Tool>, owner: ToolOwner): void => {
@@ -492,16 +499,7 @@ export const openToolSession = async (
   const dispose = async (): Promise<void> => {
     if (disposed) return;
     disposed = true;
-    for (const close of closers) {
-      try {
-        await close();
-      } catch (e) {
-        logger.error(
-          { error: e },
-          "A tool session closer threw past its own guard; dispose continuing",
-        );
-      }
-    }
+    for (const close of closers) await close();
   };
 
   if (agent) {
@@ -538,7 +536,7 @@ export const openToolSession = async (
         unloadedToolSets: [],
       };
     }
-    closers.push(child.dispose);
+    closers.push(guardedSessionDispose(child));
     return child;
   };
 

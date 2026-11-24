@@ -3,7 +3,6 @@ export interface ContributionRegistry<TEntry> {
   get(id: string): TEntry | undefined;
   has(id: string): boolean;
   list(): readonly TEntry[];
-  clear(): void;
 }
 
 export interface ContributionRegistryOptions {
@@ -26,6 +25,5 @@ export const createContributionRegistry = <TEntry>(
     get: (id) => entries.get(id),
     has: (id) => entries.has(id),
     list: () => [...entries.values()],
-    clear: () => entries.clear(),
   };
 };

@@ -102,7 +102,6 @@ import {
 } from "./chat-execution.ts";
 import { NotFoundError, ValidationError } from "../errors.ts";
 import {
-  clearWebBackends,
   composeWebBackend,
   registerWebBackend,
   type WebBackendContribution,
@@ -1585,14 +1584,18 @@ describe("chat-execution", () => {
       const googleSearchTool = () =>
         mockCreateGoogleGenerativeAI.instance.tools.googleSearch;
 
+      let seq = 0;
+      const nextBackend = () => `searx-${(seq += 1)}`;
+
       const register = (
-        backend: string,
         executors: {
           web_search?: () => { query: string; results: [] };
           read_url?: () => { content: string; url: string };
         } = {},
         overrides: Partial<WebBackendContribution> = {},
-      ) =>
+      ): string => {
+        // why: each case names its own backend, because a registration never expires
+        const backend = nextBackend();
         registerWebBackend(
           composeWebBackend({
             contribution: {
@@ -1609,6 +1612,8 @@ describe("chat-execution", () => {
             plugin: makePluginContext(),
           }),
         );
+        return backend;
+      };
 
       const turnFor = (
         provider: ProviderRow,
@@ -1627,13 +1632,6 @@ describe("chat-execution", () => {
           }),
         );
 
-      beforeEach(() => {
-        clearWebBackends();
-      });
-      afterEach(() => {
-        clearWebBackends();
-      });
-
       it("serves the provider's native tool when no web backend is set", async () => {
         const turn = await turnFor(googleProvider);
 
@@ -1641,12 +1639,54 @@ describe("chat-execution", () => {
         expect(turn.stream.tools).not.toHaveProperty("read_url");
       });
 
+      it("hands the turn's abort signal to the web backend's factory", async () => {
+        const createExecutors = vi.fn(() => ({
+          web_search: () => ({ query: "q", results: [] }),
+        }));
+        registerWebBackend(
+          composeWebBackend({
+            contribution: {
+              backend: "searx",
+              name: "SearXNG",
+              createExecutors,
+            },
+            backend: "searx",
+            pluginName: "@acme/searx",
+            plugin: makePluginContext(),
+          }),
+        );
+        const turnAbort = new AbortController();
+        turnAbort.abort();
+
+        const turn = await prepareChatTurn(
+          {
+            ...baseInput,
+            signal: turnAbort.signal,
+            request: {
+              providerId: googleProvider.id,
+              modelId: "gpt-4",
+              search: true,
+            },
+          },
+          createInMemoryChatTurnQueries({
+            workspaces: [baseWorkspace],
+            providers: [{ ...googleProvider, searchSource: "searx" }],
+          }),
+        );
+
+        expect(createExecutors).not.toHaveBeenCalled();
+        expect(turn.stream.tools).not.toHaveProperty("web_search");
+        expect(turn.searchUnavailable).toBe(false);
+      });
+
       it("serves the web backend instead of native search when one is set", async () => {
-        register("searx", { read_url: () => ({ content: "", url: "" }) });
+        const backend = register({
+          read_url: () => ({ content: "", url: "" }),
+        });
 
         const turn = await turnFor({
           ...googleProvider,
-          searchSource: "searx",
+          searchSource: backend,
         });
 
         expect(turn.stream.tools).toHaveProperty("web_search");
@@ -1656,11 +1696,13 @@ describe("chat-execution", () => {
       });
 
       it("gives a Direct turn serving a backend search tool room to answer from it", async () => {
-        register("searx", { read_url: () => ({ content: "", url: "" }) });
+        const backend = register({
+          read_url: () => ({ content: "", url: "" }),
+        });
 
         const turn = await turnFor({
           ...googleProvider,
-          searchSource: "searx",
+          searchSource: backend,
         });
 
         expect(turn.stream.tools).toHaveProperty("web_search");
@@ -1669,11 +1711,11 @@ describe("chat-execution", () => {
       });
 
       it("serves search only, when the backend contributes no read_url", async () => {
-        register("searx");
+        const backend = register();
 
         const turn = await turnFor({
           ...googleProvider,
-          searchSource: "searx",
+          searchSource: backend,
         });
 
         expect(turn.stream.tools).toHaveProperty("web_search");
@@ -1682,10 +1724,11 @@ describe("chat-execution", () => {
 
       it("serves no search tools, and warns, when the stored backend is no longer registered", async () => {
         const warn = vi.spyOn(logger, "warn").mockImplementation(() => {});
+        const backend = nextBackend();
 
         const turn = await turnFor({
           ...googleProvider,
-          searchSource: "searx",
+          searchSource: backend,
         });
 
         expect(turn.stream.tools).not.toHaveProperty("web_search");
@@ -1697,7 +1740,7 @@ describe("chat-execution", () => {
             orgId: "org-1",
             workspaceId: "ws-1",
             providerId: googleProvider.id,
-            searchSource: "searx",
+            searchSource: backend,
           }),
           expect.stringContaining("unregistered web backend"),
         );
@@ -1705,9 +1748,9 @@ describe("chat-execution", () => {
       });
 
       it("gives an OpenAI-compatible chat endpoint search it can honour, not the dead native tool", async () => {
-        register("searx");
+        const backend = register();
 
-        const turn = await turnFor({ ...baseProvider, searchSource: "searx" });
+        const turn = await turnFor({ ...baseProvider, searchSource: backend });
 
         expect(turn.stream.tools).toHaveProperty("web_search");
         expect(
@@ -1716,10 +1759,12 @@ describe("chat-execution", () => {
       });
 
       it("serves nothing when the request did not ask for search", async () => {
-        register("searx", { read_url: () => ({ content: "", url: "" }) });
+        const backend = register({
+          read_url: () => ({ content: "", url: "" }),
+        });
 
         const turn = await turnFor(
-          { ...googleProvider, searchSource: "searx" },
+          { ...googleProvider, searchSource: backend },
           false,
         );
 
@@ -1729,17 +1774,18 @@ describe("chat-execution", () => {
 
       it("closes what a backend registered, once, through the dispose the turn returns", async () => {
         const close = vi.fn().mockResolvedValue(undefined);
+        const backend = nextBackend();
         registerWebBackend(
           composeWebBackend({
             contribution: {
-              backend: "searx",
+              backend,
               name: "SearXNG",
               createExecutors: (ctx) => {
                 ctx.registerCloser(close);
                 return { web_search: () => ({ query: "q", results: [] }) };
               },
             },
-            backend: "searx",
+            backend,
             pluginName: "@acme/searx",
             plugin: makePluginContext(),
           }),
@@ -1747,7 +1793,7 @@ describe("chat-execution", () => {
 
         const turn = await turnFor({
           ...googleProvider,
-          searchSource: "searx",
+          searchSource: backend,
         });
         expect(turn.stream.tools).toHaveProperty("web_search");
         expect(close).not.toHaveBeenCalled();
@@ -1760,10 +1806,12 @@ describe("chat-execution", () => {
       });
 
       it("serves a backend on a trigger-initiated run, not only an interactive one", async () => {
-        register("searx", { read_url: () => ({ content: "", url: "" }) });
+        const backend = register({
+          read_url: () => ({ content: "", url: "" }),
+        });
 
         const turn = await turnFor(
-          { ...googleProvider, searchSource: "searx" },
+          { ...googleProvider, searchSource: backend },
           true,
           "headless",
         );
@@ -1774,7 +1822,10 @@ describe("chat-execution", () => {
       });
 
       describe("reporting a turn that served no search", () => {
-        const searxProvider = { ...googleProvider, searchSource: "searx" };
+        const providerFor = (backend: string) => ({
+          ...googleProvider,
+          searchSource: backend,
+        });
 
         beforeEach(() => {
           vi.spyOn(logger, "warn").mockImplementation(() => {});
@@ -1784,14 +1835,13 @@ describe("chat-execution", () => {
         });
 
         it("flags a stored backend id that is no longer registered", async () => {
-          const turn = await turnFor(searxProvider);
+          const turn = await turnFor(providerFor(nextBackend()));
 
           expect(turn.searchUnavailable).toBe(true);
         });
 
         it("flags a backend whose createExecutors throws", async () => {
-          register(
-            "searx",
+          const backend = register(
             {},
             {
               createExecutors: () => {
@@ -1800,7 +1850,7 @@ describe("chat-execution", () => {
             },
           );
 
-          const turn = await turnFor(searxProvider);
+          const turn = await turnFor(providerFor(backend));
 
           expect(turn.stream.tools).not.toHaveProperty("web_search");
           expect(turn.searchUnavailable).toBe(true);
@@ -1808,8 +1858,7 @@ describe("chat-execution", () => {
 
         it("names the Provider row on the warn from a factory that threw", async () => {
           const warn = vi.mocked(logger.warn);
-          register(
-            "searx",
+          const backend = register(
             {},
             {
               createExecutors: () => {
@@ -1817,12 +1866,13 @@ describe("chat-execution", () => {
               },
             },
           );
+          const provider = providerFor(backend);
 
-          await turnFor(searxProvider);
+          await turnFor(provider);
 
           expect(warn).toHaveBeenCalledWith(
             expect.objectContaining({
-              providerId: searxProvider.id,
+              providerId: provider.id,
               orgId: "org-1",
               workspaceId: "ws-1",
             }),
@@ -1832,8 +1882,7 @@ describe("chat-execution", () => {
 
         it("names the Provider row on the warn from a missing web_search executor", async () => {
           const warn = vi.mocked(logger.warn);
-          register(
-            "searx",
+          const backend = register(
             {},
             {
               createExecutors: () =>
@@ -1842,12 +1891,13 @@ describe("chat-execution", () => {
                 >,
             },
           );
+          const provider = providerFor(backend);
 
-          await turnFor(searxProvider);
+          await turnFor(provider);
 
           expect(warn).toHaveBeenCalledWith(
             expect.objectContaining({
-              providerId: searxProvider.id,
+              providerId: provider.id,
               orgId: "org-1",
               workspaceId: "ws-1",
             }),
@@ -1856,8 +1906,7 @@ describe("chat-execution", () => {
         });
 
         it("flags a backend whose createExecutors outruns its timeout", async () => {
-          register(
-            "searx",
+          const backend = register(
             {},
             {
               timeoutMs: 20,
@@ -1865,15 +1914,14 @@ describe("chat-execution", () => {
             },
           );
 
-          const turn = await turnFor(searxProvider);
+          const turn = await turnFor(providerFor(backend));
 
           expect(turn.stream.tools).not.toHaveProperty("web_search");
           expect(turn.searchUnavailable).toBe(true);
         });
 
         it("flags a backend that returns no web_search executor", async () => {
-          register(
-            "searx",
+          const backend = register(
             {},
             {
               createExecutors: () =>
@@ -1883,16 +1931,18 @@ describe("chat-execution", () => {
             },
           );
 
-          const turn = await turnFor(searxProvider);
+          const turn = await turnFor(providerFor(backend));
 
           expect(turn.stream.tools).not.toHaveProperty("web_search");
           expect(turn.searchUnavailable).toBe(true);
         });
 
         it("says nothing when the backend served its tools", async () => {
-          register("searx", { read_url: () => ({ content: "", url: "" }) });
+          const backend = register({
+            read_url: () => ({ content: "", url: "" }),
+          });
 
-          const turn = await turnFor(searxProvider);
+          const turn = await turnFor(providerFor(backend));
 
           expect(turn.searchUnavailable).toBe(false);
         });
@@ -1905,7 +1955,7 @@ describe("chat-execution", () => {
         });
 
         it("says nothing when the request never asked for search, stale id or not", async () => {
-          const turn = await turnFor(searxProvider, false);
+          const turn = await turnFor(providerFor(nextBackend()), false);
 
           expect(turn.searchUnavailable).toBe(false);
         });
@@ -1918,7 +1968,7 @@ describe("chat-execution", () => {
         });
 
         it("changes neither the system prompt nor the tool set the model sees", async () => {
-          const unavailable = await turnFor(searxProvider);
+          const unavailable = await turnFor(providerFor(nextBackend()));
           const neverAsked = await turnFor(googleProvider, false);
 
           expect(unavailable.searchUnavailable).toBe(true);
@@ -2372,13 +2422,6 @@ describe("chat-execution", () => {
       return { ...baseAgent, toolSetIds: [id] };
     };
 
-    beforeEach(() => {
-      clearWebBackends();
-    });
-    afterEach(() => {
-      clearWebBackends();
-    });
-
     it("keeps a Tool set's web_search and read_url alongside the Web-search backend's", async () => {
       registerWebBackend(
         composeWebBackend({
@@ -2748,17 +2791,18 @@ describe("chat-execution", () => {
 
     it("runs a closer a Web-search backend registered", async () => {
       const close = vi.fn().mockResolvedValue(undefined);
+      const backend = "searx-closer";
       registerWebBackend(
         composeWebBackend({
           contribution: {
-            backend: "searx",
+            backend,
             name: "SearXNG",
             createExecutors: (ctx) => {
               ctx.registerCloser(close);
               return { web_search: () => ({ query: "q", results: [] }) };
             },
           },
-          backend: "searx",
+          backend,
           pluginName: "@acme/searx",
           plugin: makePluginContext(),
         }),
@@ -2778,7 +2822,7 @@ describe("chat-execution", () => {
           {
             ...createInMemoryChatTurnQueries({
               workspaces: [baseWorkspace],
-              providers: [{ ...baseProvider, searchSource: "searx" }],
+              providers: [{ ...baseProvider, searchSource: backend }],
             }),
             getSandboxEnvKeys: () => Promise.reject(boom),
           },
@@ -2786,7 +2830,6 @@ describe("chat-execution", () => {
       ).rejects.toBe(boom);
 
       expect(close).toHaveBeenCalledTimes(1);
-      clearWebBackends();
     });
 
     it("still reports the original failure when there is no session to dispose", async () => {

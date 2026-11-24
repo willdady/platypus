@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { mockLogger, mockNanoid } from "../test-setup.ts";
+import { nanoid } from "nanoid";
+import { mockLogger } from "../test-setup.ts";
 import { resetMockDb, seedDb, type Row, type Store } from "../test-utils.ts";
+
+vi.mock("nanoid", { spy: true });
 
 vi.mock("../utils/cron.ts", () => {
   const validateCronExpression = vi.fn((expr: string) => {
@@ -14,7 +17,7 @@ vi.mock("../utils/cron.ts", () => {
   };
 });
 
-mockNanoid.mockReturnValue("trig-new");
+vi.mocked(nanoid).mockReturnValue("trig-new");
 
 import {
   createTrigger,

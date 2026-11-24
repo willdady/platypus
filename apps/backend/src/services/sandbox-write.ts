@@ -11,15 +11,15 @@ import {
   isUniqueViolation,
   NotFoundError,
   UpstreamError,
-  ValidationError,
+  type ValidationError,
 } from "../errors.ts";
 import { logger } from "../logger.ts";
 import { getSandboxBackendPlugin } from "../plugins/registry.ts";
 import { destroySandboxRow } from "../sandbox/teardown.ts";
 import {
-  envCollisionError,
+  envCollisionFailure,
   sandboxCreateError,
-  sandboxSchemaError,
+  sandboxSchemaFailure,
 } from "../sandbox/validate.ts";
 import { errorMessage } from "../utils/error-message.ts";
 import {
@@ -38,8 +38,8 @@ export type SandboxCreateFields = Omit<
 
 export type SandboxUpdateFields = z.infer<typeof sandboxUpdateSchema>;
 
-const throwIfInvalid = (error: string | null) => {
-  if (error) throw new ValidationError(error);
+const throwIfInvalid = (error: ValidationError | null) => {
+  if (error) throw error;
 };
 
 export async function createSandbox(
@@ -106,7 +106,7 @@ export async function updateSandbox(
   const current = await requireOwned(db, "sandbox", { workspaceId });
 
   if (!options.isAdmin) {
-    throwIfInvalid(envCollisionError(current.adminEnv, fields.userEnv));
+    throwIfInvalid(envCollisionFailure(current.adminEnv, fields.userEnv));
     return requireWritten(
       await updateOwned(
         db,
@@ -121,14 +121,14 @@ export async function updateSandbox(
     );
   }
 
-  throwIfInvalid(sandboxSchemaError(fields.backend, "config", fields.config));
+  throwIfInvalid(sandboxSchemaFailure(fields.backend, "config", fields.config));
   if (fields.credentials !== undefined) {
     throwIfInvalid(
-      sandboxSchemaError(fields.backend, "credentials", fields.credentials),
+      sandboxSchemaFailure(fields.backend, "credentials", fields.credentials),
     );
   }
   throwIfInvalid(
-    envCollisionError(
+    envCollisionFailure(
       fields.adminEnv ?? current.adminEnv,
       fields.userEnv ?? current.userEnv,
     ),

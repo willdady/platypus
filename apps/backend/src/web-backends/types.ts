@@ -57,5 +57,8 @@ export type TurnToolsContext = WithCoreRegistrar<WebBackendContext> & {
 export interface WebBackendRegistration {
   backend: string;
   name: string;
-  buildTurnTools(ctx: TurnToolsContext): Promise<Record<string, Tool>>;
+  buildTurnTools(
+    ctx: TurnToolsContext,
+    signal: AbortSignal | undefined,
+  ): Promise<Record<string, Tool>>;
 }

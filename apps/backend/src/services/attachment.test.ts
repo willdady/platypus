@@ -1,10 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { mockNanoid } from "../test-setup.ts";
+import { nanoid } from "nanoid";
 import { mockDb, resetMockDb, seedDb } from "../test-utils.ts";
 import type { FakeDbOptions } from "../fake-db.ts";
 
 import { attachResource, detachResource } from "./attachment.ts";
 import { ConflictError, NotFoundError, ValidationError } from "../errors.ts";
+
+vi.mock("nanoid", { spy: true });
 
 const WORKSPACE = { kind: "workspace" } as const;
 const ORGANIZATION = { kind: "organization" } as const;
@@ -99,7 +101,7 @@ describe("attachment module", () => {
 
   describe("attachResource", () => {
     it("attaches a Shared resource of the org", async () => {
-      mockNanoid.mockReturnValueOnce("att-new");
+      vi.mocked(nanoid).mockReturnValueOnce("att-new");
       const fake = world();
 
       const row = await attachResource(WORKSPACE, "org-1", target());
