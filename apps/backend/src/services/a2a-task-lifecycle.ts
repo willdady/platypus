@@ -26,6 +26,7 @@ import {
   findTokenTaskReading,
   firstReply,
   readingOf,
+  readTaskRows,
   readWithStatus,
   recordedStatus,
   isTerminal,
@@ -160,28 +161,50 @@ export const turnEnded = async ({
   await pushOwedInChat(chatId);
 };
 
-const MISSED_PUSH_SWEEP_LIMIT = 100;
+const MISSED_SWEEP_LIMIT = 100;
+
+// why: a Task whose Chat row is gone has stopped too, and derives the end a null Chat status gives
+const chatStopped = () =>
+  or(isNull(chatTable.status), ne(chatTable.status, "running"));
+
+// why: a crash can lose a run's end; record it here once its Chat stops, so no reader derives it
+const recordMissedEnds = async (): Promise<void> => {
+  const tasks = await readTaskRows(
+    and(isNull(a2aTaskTable.state), chatStopped()),
+    { limit: MISSED_SWEEP_LIMIT },
+  );
+  for (const task of tasks) await statusOf(task);
+};
+
+const pushMissedEnds = async (): Promise<void> => {
+  const rows = await db
+    .select()
+    .from(a2aTaskTable)
+    .innerJoin(
+      a2aPushConfigTable,
+      eq(a2aPushConfigTable.taskId, a2aTaskTable.id),
+    )
+    .innerJoin(chatTable, eq(chatTable.id, a2aTaskTable.chatId))
+    .where(
+      and(
+        pushPending(),
+        pushLeaseExpired(),
+        or(isNotNull(a2aTaskTable.state), chatStopped()),
+      ),
+    )
+    .limit(MISSED_SWEEP_LIMIT);
+  const tasks = new Map(rows.map(({ a2a_task }) => [a2a_task.id, a2a_task]));
+  for (const task of tasks.values()) void pushEnd(task);
+};
 
 export const sweepMissedEnds = async (): Promise<void> => {
   try {
-    const rows = await db
-      .select()
-      .from(a2aTaskTable)
-      .innerJoin(
-        a2aPushConfigTable,
-        eq(a2aPushConfigTable.taskId, a2aTaskTable.id),
-      )
-      .innerJoin(chatTable, eq(chatTable.id, a2aTaskTable.chatId))
-      .where(
-        and(
-          pushPending(),
-          pushLeaseExpired(),
-          or(isNotNull(a2aTaskTable.state), ne(chatTable.status, "running")),
-        ),
-      )
-      .limit(MISSED_PUSH_SWEEP_LIMIT);
-    const tasks = new Map(rows.map(({ a2a_task }) => [a2a_task.id, a2a_task]));
-    for (const task of tasks.values()) void pushEnd(task);
+    await recordMissedEnds();
+  } catch (error) {
+    logger.error({ error }, "Recording missed A2A Task ends failed");
+  }
+  try {
+    await pushMissedEnds();
   } catch (error) {
     logger.error({ error }, "Sweeping for missed A2A pushes failed");
   }

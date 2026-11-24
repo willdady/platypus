@@ -56,6 +56,7 @@ import {
   stuckTriggerCutoff,
 } from "./scheduler.ts";
 import {
+  a2aTask as a2aTaskTable,
   chat as chatTable,
   trigger as triggerTable,
   triggerRun as triggerRunTable,
@@ -482,6 +483,7 @@ describe("startScheduler", () => {
     let claimed = false;
     tickDb((q) => {
       onQuery(q);
+      if (q.op === "select" && q.table === a2aTaskTable) return [];
       if (q.op === "select" && q.fields) return [{ running: 0 }];
       if (q.op === "select" && q.ordered) return claimed ? [] : [weekly];
       if (q.op === "update" && q.table === triggerTable && !claimed) {

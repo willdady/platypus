@@ -2764,6 +2764,50 @@ describe("POST /a2a/:endpointId — ListTasks", () => {
       ).toBeLessThanOrEqual(1);
     });
 
+    it("filters a moved-on Task in a running Chat by the end it derives", async () => {
+      seedTasks([{ id: "a", minute: 1 }]);
+      for (const task of rows("a2a_task")) task.state = null;
+      Object.assign(rows("chat")[0], {
+        status: "running",
+        activeLeafId: "msg-later",
+      });
+
+      expect(
+        idsOf((await list({ status: "TASK_STATE_COMPLETED" })).body),
+      ).toEqual(["a"]);
+    });
+
+    it("lists a page of unended Tasks without touching the ones beyond it", async () => {
+      const seeded = seedTasks(
+        Array.from({ length: 40 }, (_, i) => ({ id: `u${i}`, minute: i })),
+      );
+      for (const task of rows("a2a_task")) task.state = null;
+      for (const chat of rows("chat")) chat.status = "succeeded";
+
+      const queries = await queriesOf(seeded, async () => {
+        const page = await listA2aTasks(caller, { pageSize: 1 } as never);
+        expect(page.tasks.map((task) => task.id)).toEqual(["u39"]);
+        expect(page.tasks[0].status?.state).toBe(
+          TaskState.TASK_STATE_COMPLETED,
+        );
+      });
+
+      // why: one count and one page read carry the whole call, however many Tasks are unended
+      expect(
+        queries.filter(
+          (query) => query.kind === "select" && query.table === "a2a_task",
+        ),
+      ).toHaveLength(2);
+      expect(
+        queries.filter(
+          (query) => query.kind === "update" && query.table === "a2a_task",
+        ),
+      ).toHaveLength(0);
+      expect(
+        rows("a2a_task").filter((task) => task.state === null),
+      ).toHaveLength(40);
+    });
+
     it("reads the page's replies in one more when artifacts are asked for", async () => {
       const seeded = seedTasks(
         Array.from({ length: 100 }, (_, i) => ({ id: `t${i}`, minute: i })),

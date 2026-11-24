@@ -151,7 +151,8 @@ beforeAll(async () => {
     INSERT INTO "chat" ("id", "workspace_id", "title", "status")
       VALUES ('chat-1', 'ws-1', 'A2A', 'running');
     INSERT INTO "chat_message" ("chat_id", "id", "parent_id", "role", "parts", "created_at")
-      VALUES ('chat-1', 'msg-a', NULL, 'user', '[]', now());
+      VALUES ('chat-1', 'msg-a', NULL, 'user', '[]', now()),
+             ('chat-1', 'msg-b', NULL, 'user', '[]', now());
     UPDATE "chat" SET "active_leaf_id" = 'msg-a' WHERE "id" = 'chat-1';
     INSERT INTO "a2a_task" ("id", "chat_id", "message_id", "endpoint_id", "token_id", "status_at")
       VALUES ('task-1', 'chat-1', 'msg-a', 'ep-1', 'tok-1', now());

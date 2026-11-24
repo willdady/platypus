@@ -263,9 +263,10 @@ to a client's Chat yourself aren't Tasks, so they aren't listed.
 - **Newest first** means the Task's status timestamp: when it ended, or when it
   started if it is still running.
 - **Filters.** `contextId` lists one Chat's Tasks, whether Platypus or the
-  client chose it, `status` the Tasks in one
-  state, and `statusTimestampAfter` the Tasks whose status changed at or after
-  that time, so a client polling from the last timestamp it saw misses none.
+  client chose it, `status` the Tasks in one state, and `statusTimestampAfter`
+  the Tasks whose status changed at or after that time, so a client polling from
+  the last timestamp it saw misses none. An end recovered after a crash reaches
+  `status` on the next scheduler pass, a little later than the rest.
 - **Replies are left out** unless the client sets `includeArtifacts`. With it,
   each Task carries the same artifact `GetTask` answers with.
 
