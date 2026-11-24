@@ -111,7 +111,7 @@ export const startChatTurn = async (params: {
 
   const chatSummaries = await loadChatSummaries(chatId);
 
-  const turnId = turn.message?.id ?? turn.parentId ?? undefined;
+  const turnId = turn.turnId;
   const input: RunInput = {
     runId: chatId,
     turnId,

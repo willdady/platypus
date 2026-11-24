@@ -19,9 +19,12 @@ run.
 `cancelTask` passes the claimed Task's `messageId`, which is the turn id the
 A2A run registered. The sweep for a cancel whose NOTIFY was lost matches each
 held run's turn against the canceled Tasks' turns the same way, in place of its
-cancel-stamp window. A cancel that names no turn, as a User's cancel of a Chat
-does, still stops whatever run this instance holds, because the User means the
-Chat's current run.
+cancel-stamp window. A run registers the user message its turn belongs to: a
+submit its own id, a regenerate the message it answers, and an approvals
+continuation the user message its approved reply answers, so every run of a
+turn is stopped and settled by the turn's id alike. A cancel that names no
+turn, as a User's cancel of a Chat does, still stops whatever run this
+instance holds, because the User means the Chat's current run.
 
 ## Considered Options
 
@@ -39,6 +42,9 @@ Chat's current run.
   finds a cancel while its run has not ended. A regenerate of the canceled turn
   starts after that run's terminal write, so it is spared; only a run that was
   already going when the cancel was claimed is stopped.
+- No run before this change ever cleared `canceledAt`, so the deploy clears the
+  stamp on every settled Task (migration `0108_clear_settled_a2a_canceled_at`)
+  to give the stamp its one meaning from the first sweep onward.
 - A `run_cancel` payload now carries `turnId` in place of `startedBefore`, so an
   instance still sending the old key is ignored as an unknown shape during a
   rolling deploy, as ADR-0049 already accepts for payloads it does not know.

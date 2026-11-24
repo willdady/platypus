@@ -173,7 +173,9 @@ describe("cancelTask", () => {
       state: "canceled",
       canceledAt: null,
     });
-    expect(mockCancelRun).toHaveBeenCalledWith("chat-1", { turnId: "msg-1" });
+    expect(mockCancelRun).toHaveBeenCalledExactlyOnceWith("chat-1", {
+      turnId: "msg-1",
+    });
     expect(pushedStates()).toEqual(["TASK_STATE_CANCELED"]);
   });
 

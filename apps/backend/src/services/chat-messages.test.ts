@@ -139,6 +139,7 @@ describe("chat messages", () => {
         parts: [text("u3")],
       });
       expect(turn.parentId).toBe("a2");
+      expect(turn.turnId).toBe("u3");
     });
 
     it("continues a stale path, not the Chat's current leaf", async () => {
@@ -248,6 +249,7 @@ describe("chat messages", () => {
       expect(turn.messages.map((m) => m.id)).toEqual(["u1", "a1", "u2"]);
       expect(turn.parentId).toBe("u2");
       expect(turn.message).toBeUndefined();
+      expect(turn.turnId).toBe("u2");
     });
 
     const notAReply = "Only a reply still in the Chat can regenerate";
@@ -378,6 +380,8 @@ describe("chat messages", () => {
       expect(turn.messages.at(-1)).toEqual(reply);
       expect(turn.message).toBeUndefined();
       expect(turn.parentId).toBe("a2");
+      // why: the continuation belongs to the turn of the user message the reply answers
+      expect(turn.turnId).toBe("u2");
       expect(turn.answered).toEqual([reply]);
     });
 
