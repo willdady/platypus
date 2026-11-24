@@ -5829,7 +5829,7 @@ describe("POST /a2a/:endpointId — cutting off access stops running work", () =
     release();
 
     await vi.waitFor(() =>
-      expect(rows("a2a_push_config")[0].notifiedAt).toBeInstanceOf(Date),
+      expect(rows("a2a_push_config")[0].failedAt).toBeInstanceOf(Date),
     );
     expect(taskRow(task.id).state).toBe("completed");
     await new Promise((resolve) => setTimeout(resolve, 50));
@@ -5850,7 +5850,7 @@ describe("POST /a2a/:endpointId — cutting off access stops running work", () =
       expect(chatRow(task.contextId)).toMatchObject({ status: "cancelled" }),
     );
     await vi.waitFor(() =>
-      expect(rows("a2a_push_config")[0].notifiedAt).toBeInstanceOf(Date),
+      expect(rows("a2a_push_config")[0].failedAt).toBeInstanceOf(Date),
     );
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(push).not.toHaveBeenCalled();

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, count, eq, isNull, or, sql } from "drizzle-orm";
+import { and, asc, count, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import {
   A2A_CONTENT_TYPE,
   StreamResponse,
@@ -21,7 +21,7 @@ import {
   taskHasEnded,
   type TaskRow,
 } from "./a2a-task-state.ts";
-import { postWithRetries } from "./webhook-delivery.ts";
+import { postWithRetries, type DeliveryOutcome } from "./webhook-delivery.ts";
 import { taskIsLive } from "./a2a-liveness.ts";
 import { env } from "../env.ts";
 import { oneRow } from "../db/one-row.ts";
@@ -31,11 +31,51 @@ type PushConfigRow = typeof a2aPushConfigTable.$inferSelect;
 const configKey = (taskId: string, id: string) =>
   and(eq(a2aPushConfigTable.taskId, taskId), eq(a2aPushConfigTable.id, id));
 
-const pending = (taskId: string) =>
+export const pushPending = () =>
   and(
-    eq(a2aPushConfigTable.taskId, taskId),
     isNull(a2aPushConfigTable.notifiedAt),
+    isNull(a2aPushConfigTable.failedAt),
   );
+
+const pending = (taskId: string) =>
+  and(eq(a2aPushConfigTable.taskId, taskId), pushPending());
+
+export const PUSH_LEASE_MS = 5 * 60 * 1000;
+
+export const pushLeaseExpired = () =>
+  or(
+    isNull(a2aPushConfigTable.claimedAt),
+    lt(a2aPushConfigTable.claimedAt, new Date(Date.now() - PUSH_LEASE_MS)),
+  );
+
+const claimable = (taskId: string) => and(pending(taskId), pushLeaseExpired());
+
+const markSettled = async (
+  configs: PushConfigRow[],
+  settled: { notifiedAt: Date } | { failedAt: Date },
+): Promise<void> => {
+  const [first] = configs;
+  if (!first) return;
+  await db
+    .update(a2aPushConfigTable)
+    .set(settled)
+    .where(
+      and(
+        eq(a2aPushConfigTable.taskId, first.taskId),
+        inArray(
+          a2aPushConfigTable.id,
+          configs.map((config) => config.id),
+        ),
+      ),
+    );
+};
+
+const markDelivered = (configs: PushConfigRow[]) =>
+  markSettled(configs, { notifiedAt: new Date() });
+
+// why: failedAt retires a push Platypus won't deliver, so notifiedAt keeps meaning delivered
+const markFailed = (configs: PushConfigRow[]) =>
+  markSettled(configs, { failedAt: new Date() });
 
 const credentialHeaders = (config: PushConfigRow): Record<string, string> => ({
   ...(config.authentication?.credentials
@@ -52,11 +92,11 @@ export const MAX_CONCURRENT_PUSHES = 8;
 let pushesInFlight = 0;
 const waitingForSlot: (() => void)[] = [];
 
-const withPushSlot = async (send: () => Promise<void>): Promise<void> => {
+const withPushSlot = async <T>(send: () => Promise<T>): Promise<T> => {
   if (pushesInFlight < MAX_CONCURRENT_PUSHES) pushesInFlight++;
   else await new Promise<void>((resolve) => waitingForSlot.push(resolve));
   try {
-    await send();
+    return await send();
   } finally {
     const next = waitingForSlot.shift();
     if (next) next();
@@ -64,23 +104,54 @@ const withPushSlot = async (send: () => Promise<void>): Promise<void> => {
   }
 };
 
-const deliver = (config: PushConfigRow, task: Task) =>
-  withPushSlot(() =>
-    postWithRetries({
-      url: config.url,
-      body: JSON.stringify(
-        StreamResponse.toJSON({ payload: { $case: "task", value: task } }),
-      ),
-      headers: {
-        "Content-Type": A2A_CONTENT_TYPE,
-        ...credentialHeaders(config),
-      },
-      label: "A2A push notification",
-      allowPrivateNetworks: privateNetworksAllowed(),
-    }),
-  );
+const deliver = (config: PushConfigRow, task: Task): Promise<DeliveryOutcome> =>
+  postWithRetries({
+    url: config.url,
+    body: JSON.stringify(
+      StreamResponse.toJSON({ payload: { $case: "task", value: task } }),
+    ),
+    headers: {
+      "Content-Type": A2A_CONTENT_TYPE,
+      ...credentialHeaders(config),
+    },
+    label: "A2A push notification",
+    allowPrivateNetworks: privateNetworksAllowed(),
+  });
 
-const MAX_PUSHES_PER_TASK = 5;
+const reclaim = async (
+  config: PushConfigRow,
+  lease: Date,
+): Promise<boolean> => {
+  const [row] = await db
+    .update(a2aPushConfigTable)
+    .set({ claimedAt: new Date() })
+    .where(
+      and(
+        configKey(config.taskId, config.id),
+        // why: a push queued past its deadline must not race the instance that took it over
+        eq(a2aPushConfigTable.claimedAt, lease),
+        isNull(a2aPushConfigTable.notifiedAt),
+      ),
+    )
+    .returning({ id: a2aPushConfigTable.id });
+  return row !== undefined;
+};
+
+type Delivery = DeliveryOutcome | "lost";
+
+const deliverClaim = async (
+  config: PushConfigRow,
+  task: Task,
+): Promise<Delivery> => {
+  const lease = config.claimedAt;
+  if (!lease) return "lost";
+  return withPushSlot(async () => {
+    if (!(await reclaim(config, lease))) return "lost";
+    return deliver(config, task);
+  });
+};
+
+export const MAX_PUSHES_PER_TASK = 5;
 
 const reservePushes = async (
   taskId: string,
@@ -129,8 +200,8 @@ export const pushRecordedEnd = async (row: TaskRow): Promise<void> => {
     const task = await readRecordedTask({ ...recorded, state: recorded.state });
     const claimed = await db
       .update(a2aPushConfigTable)
-      .set({ notifiedAt: new Date() })
-      .where(pending(row.id))
+      .set({ claimedAt: new Date() })
+      .where(claimable(row.id))
       .returning();
     if (claimed.length === 0) return;
     const current = await taskRowNow(row.id);
@@ -139,6 +210,7 @@ export const pushRecordedEnd = async (row: TaskRow): Promise<void> => {
         { taskId: row.id, dropped: claimed.length },
         "A2A Task's access was cut off; dropping its push notifications",
       );
+      await markFailed(claimed);
       return;
     }
     claimed.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
@@ -149,9 +221,14 @@ export const pushRecordedEnd = async (row: TaskRow): Promise<void> => {
         "A2A Task has sent all its push notifications; dropping the rest",
       );
     }
-    await Promise.all(
-      claimed.slice(0, granted).map((config) => deliver(config, task)),
-    );
+    await Promise.all([
+      markFailed(claimed.slice(granted)),
+      ...claimed.slice(0, granted).map(async (config) => {
+        const delivery = await deliverClaim(config, task);
+        if (delivery === "delivered") await markDelivered([config]);
+        if (delivery === "refused") await markFailed([config]);
+      }),
+    ]);
   } catch (error) {
     logger.error({ error, taskId: row.id }, "A2A push notification failed");
   }
@@ -245,7 +322,10 @@ export const storePushConfig = async (
       )
       .limit(1);
     if (existing) {
-      if (existing.url !== config.url && (ended || existing.notifiedAt)) {
+      if (
+        existing.url !== config.url &&
+        (ended || existing.notifiedAt || existing.failedAt)
+      ) {
         throw urlLocked();
       }
       const [updated] = await tx
@@ -277,7 +357,10 @@ export const storePushConfig = async (
         target: [a2aPushConfigTable.taskId, a2aPushConfigTable.id],
         set: values,
         setWhere: or(
-          isNull(a2aPushConfigTable.notifiedAt),
+          and(
+            isNull(a2aPushConfigTable.notifiedAt),
+            isNull(a2aPushConfigTable.failedAt),
+          ),
           sql`${a2aPushConfigTable.url} = excluded.url`,
         ),
       })
@@ -285,7 +368,7 @@ export const storePushConfig = async (
     if (!inserted) throw urlLocked();
     return inserted;
   });
-  if (!row.notifiedAt) void pushRecordedEnd(task);
+  if (!row.notifiedAt && !row.failedAt) void pushRecordedEnd(task);
   return row;
 };
 
