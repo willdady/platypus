@@ -45,9 +45,8 @@ import { a2aEndpoint } from "./routes/a2a-endpoint.ts";
 import { orgA2a } from "./routes/org-a2a.ts";
 import type { organizationMember } from "./db/schema.ts";
 import { logger } from "./logger.ts";
-import { pingDatabase } from "./ready.ts";
+import { readyRoutes } from "./ready.ts";
 import { mapError } from "./errors.ts";
-import { runRegistry } from "./runs/run-registry.ts";
 import type { OrgScope, WorkspaceScope } from "./scope.ts";
 import { env } from "./env.ts";
 
@@ -114,15 +113,7 @@ app.on(["POST", "GET"], "/auth/*", (c) => {
 });
 
 app.get("/health", (c) => c.json({ status: "ok" }));
-app.get("/ready", async (c) => {
-  if (runRegistry.stopping) {
-    return c.json({ error: "Server is shutting down" }, 503);
-  }
-  const ready = await pingDatabase(db.$client);
-  return ready
-    ? c.json({ status: "ready" })
-    : c.json({ error: "Database unavailable" }, 503);
-});
+app.route("/", readyRoutes({ query: (query) => db.$client.query(query) }));
 app.get("/sign-up", (c) => c.json({ open: !requireInvitationToSignUp() }));
 
 app.route("/hooks", hooks);

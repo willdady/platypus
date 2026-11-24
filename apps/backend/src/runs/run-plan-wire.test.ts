@@ -15,6 +15,7 @@ import {
   REQUEST_LEVEL_CACHE_DIRECTIVE,
   type RunPlan,
 } from "./run-plan.ts";
+import { TEST_USAGE_MODEL } from "./run-plan.test-fixtures.ts";
 import { resolveGenerationPlan } from "./agent-plan.ts";
 import { makeProviderRow } from "../services/provider-row.test-fixtures.ts";
 import type { SamplingSource } from "../services/sampling-settings.ts";
@@ -97,6 +98,7 @@ const GOOGLE_RESPONSE = JSON.stringify({
 
 const planWith = (model: LanguageModel): RunPlan => ({
   model,
+  usageModel: TEST_USAGE_MODEL,
   tools: {},
   maxSteps: 5,
   system: "You are helpful.",

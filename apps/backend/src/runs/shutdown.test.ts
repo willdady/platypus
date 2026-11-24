@@ -12,11 +12,13 @@ import {
   installShutdownHandlers,
 } from "./shutdown.ts";
 import { startRun } from "./run-lifecycle.ts";
-import { runRegistry } from "./run-registry.ts";
+import { RunRegistry } from "./run-registry.ts";
 import { ChatSink } from "./sinks/chat-sink.ts";
 import type { RunStatus } from "./types.ts";
 
-const startChatRun = async () => {
+let registry: RunRegistry;
+
+const startChatRun = async (runs: RunRegistry) => {
   const fake = seedDb({
     workspace: [{ id: "ws-1", ownerId: "owner-1" }],
     chat: [
@@ -40,27 +42,28 @@ const startChatRun = async () => {
   await sink.onStart({ runId: "chat-1", messages: [] });
   startRun({
     runId: "chat-1",
+    registry: runs,
     onTerminate: ({ status }) =>
       sink.onFinish({ runId: "chat-1", status, messages: [], stats: {} }),
   });
   return fake;
 };
 
+beforeEach(() => {
+  registry = new RunRegistry();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 describe("drainRuns", () => {
-  beforeEach(() => {
-    runRegistry.resetStopStateForTests();
-  });
-
-  afterEach(() => {
-    for (const { runId } of runRegistry.heldRuns()) runRegistry.cancel(runId);
-    vi.useRealTimers();
-  });
-
   it("cancels every held run and waits for each to write its end", async () => {
     const ended: RunStatus[] = [];
     for (const runId of ["run-a", "run-b"]) {
       startRun({
         runId,
+        registry,
         onTerminate: async ({ status }) => {
           await new Promise((resolve) => setTimeout(resolve, 20));
           ended.push(status);
@@ -68,26 +71,30 @@ describe("drainRuns", () => {
       });
     }
 
-    expect(await drainRuns(1_000)).toBe(true);
+    expect(await drainRuns(1_000, registry)).toBe(true);
 
     expect(ended).toEqual(["cancelled", "cancelled"]);
-    expect(runRegistry.has("run-a")).toBe(false);
-    expect(runRegistry.has("run-b")).toBe(false);
+    expect(registry.has("run-a")).toBe(false);
+    expect(registry.has("run-b")).toBe(false);
   });
 
   it("gives up after its bound on a run that never ends", async () => {
     vi.useFakeTimers();
-    startRun({ runId: "stuck", onTerminate: () => new Promise(() => {}) });
+    startRun({
+      runId: "stuck",
+      registry,
+      onTerminate: () => new Promise(() => {}),
+    });
 
-    const drained = drainRuns(8_000);
+    const drained = drainRuns(8_000, registry);
     await vi.advanceTimersByTimeAsync(8_000);
 
     expect(await drained).toBe(false);
-    runRegistry.unregister("stuck");
+    expect(registry.stopping).toBe(true);
   });
 
   it("resolves at once with nothing held", async () => {
-    expect(await drainRuns(1_000)).toBe(true);
+    expect(await drainRuns(1_000, registry)).toBe(true);
   });
 });
 
@@ -96,19 +103,16 @@ describe("installShutdownHandlers", () => {
 
   beforeEach(() => {
     resetMockDb();
-    runRegistry.resetStopStateForTests();
   });
 
   afterEach(() => {
     uninstall();
-    for (const { runId } of runRegistry.heldRuns()) runRegistry.cancel(runId);
-    vi.useRealTimers();
   });
 
   it.each(["SIGTERM", "SIGINT"] as const)(
     "on %s, ends the held Chat run as cancelled before exiting",
     async (signal) => {
-      const fake = await startChatRun();
+      const fake = await startChatRun(registry);
       expect(fake.tables.chat[0].status).toBe("running");
       const order: string[] = [];
       const exit = vi.fn((code: number) => {
@@ -116,6 +120,7 @@ describe("installShutdownHandlers", () => {
         order.push(`chat ${String(fake.tables.chat[0].status)}`);
       });
       uninstall = installShutdownHandlers({
+        registry,
         stopAccepting: () => order.push("stop accepting"),
         exit,
         timeoutMs: 1_000,
@@ -129,10 +134,10 @@ describe("installShutdownHandlers", () => {
   );
 
   it("ignores a second signal while draining", async () => {
-    await startChatRun();
+    await startChatRun(registry);
     const exit = vi.fn();
     const stopAccepting = vi.fn();
-    uninstall = installShutdownHandlers({ stopAccepting, exit });
+    uninstall = installShutdownHandlers({ registry, stopAccepting, exit });
 
     process.emit("SIGTERM", "SIGTERM");
     process.emit("SIGTERM", "SIGTERM");
@@ -147,6 +152,7 @@ describe("installShutdownHandlers", () => {
     for (const runId of ["run-a", "run-b"]) {
       startRun({
         runId,
+        registry,
         onTerminate: async ({ status }) => {
           await new Promise((resolve) => setTimeout(resolve, 10));
           ended.push(status);
@@ -157,6 +163,7 @@ describe("installShutdownHandlers", () => {
     const order: string[] = [];
     const exit = vi.fn((code: number) => order.push(`exit ${code}`));
     uninstall = installShutdownHandlers({
+      registry,
       stopBackground: () => order.push("stop background"),
       stopAccepting: () => order.push("stop accepting"),
       closeIdleConnections: () => order.push("close idle connections"),
@@ -189,37 +196,47 @@ describe("installShutdownHandlers", () => {
   it("refuses new runs once the drain has started (503, not a new run)", async () => {
     startRun({
       runId: "held",
+      registry,
       onTerminate: async () => {
         await new Promise((resolve) => setTimeout(resolve, 10));
       },
     });
     const exit = vi.fn();
-    uninstall = installShutdownHandlers({ exit, timeoutMs: 2_000 });
+    uninstall = installShutdownHandlers({ registry, exit, timeoutMs: 2_000 });
 
     process.emit("SIGTERM", "SIGTERM");
-    expect(() => startRun({ runId: "late", onTerminate: () => {} })).toThrow(
-      "Server is shutting down",
-    );
+    expect(() =>
+      startRun({ runId: "late", registry, onTerminate: () => {} }),
+    ).toThrow("Server is shutting down");
 
     await vi.waitFor(() => expect(exit).toHaveBeenCalled());
     expect(exit).toHaveBeenCalledWith(0);
-    expect(runRegistry.has("late")).toBe(false);
-    expect(runRegistry.has("held")).toBe(false);
+    expect(registry.has("late")).toBe(false);
+    expect(registry.has("held")).toBe(false);
   });
 
   it("exits 1 when the drain times out on a run that never ends", async () => {
     vi.useFakeTimers();
-    startRun({ runId: "stuck", onTerminate: () => new Promise(() => {}) });
+    startRun({
+      runId: "stuck",
+      registry,
+      onTerminate: () => new Promise(() => {}),
+    });
     const exit = vi.fn();
     const endPool = vi.fn(() => Promise.resolve());
-    uninstall = installShutdownHandlers({ exit, endPool, timeoutMs: 8_000 });
+    uninstall = installShutdownHandlers({
+      registry,
+      exit,
+      endPool,
+      timeoutMs: 8_000,
+    });
 
     process.emit("SIGTERM", "SIGTERM");
     await vi.advanceTimersByTimeAsync(8_000);
 
     expect(exit).toHaveBeenCalledWith(1);
     expect(endPool).not.toHaveBeenCalled();
-    runRegistry.unregister("stuck");
+    registry.unregister("stuck");
   });
 
   it("still ends the pool when the drain is stopped by a timeout, if budget remains", async () => {
@@ -230,6 +247,7 @@ describe("installShutdownHandlers", () => {
     const endPool = vi.fn(() => Promise.resolve());
     const exit = vi.fn();
     uninstall = installShutdownHandlers({
+      registry,
       close,
       endPool,
       exit,
@@ -248,14 +266,8 @@ describe("installShutdownHandlers", () => {
 describe("installCrashHandlers", () => {
   let uninstall = () => {};
 
-  beforeEach(() => {
-    runRegistry.resetStopStateForTests();
-  });
-
   afterEach(() => {
     uninstall();
-    for (const { runId } of runRegistry.heldRuns()) runRegistry.cancel(runId);
-    vi.useRealTimers();
   });
 
   it("logs a rejection fatal, drains the held runs, and exits 1", async () => {
@@ -263,6 +275,7 @@ describe("installCrashHandlers", () => {
     for (const runId of ["crash-a"]) {
       startRun({
         runId,
+        registry,
         onTerminate: async ({ status }) => {
           await new Promise((resolve) => setTimeout(resolve, 5));
           ended.push(status);
@@ -271,7 +284,7 @@ describe("installCrashHandlers", () => {
     }
     const exit = vi.fn();
     const fatal = vi.spyOn(logger, "fatal").mockImplementation(() => undefined);
-    uninstall = installCrashHandlers({ exit, timeoutMs: 1_000 });
+    uninstall = installCrashHandlers({ registry, exit, timeoutMs: 1_000 });
 
     process.emit("unhandledRejection", new Error("boom"));
     await vi.waitFor(() => expect(exit).toHaveBeenCalled());
@@ -284,9 +297,13 @@ describe("installCrashHandlers", () => {
 
   it("ignores a second crash while the first one drains", async () => {
     vi.useFakeTimers();
-    startRun({ runId: "stuck", onTerminate: () => new Promise(() => {}) });
+    startRun({
+      runId: "stuck",
+      registry,
+      onTerminate: () => new Promise(() => {}),
+    });
     const exit = vi.fn();
-    uninstall = installCrashHandlers({ exit, timeoutMs: 8_000 });
+    uninstall = installCrashHandlers({ registry, exit, timeoutMs: 8_000 });
 
     process.emit("uncaughtException", new Error("boom1"));
     process.emit("uncaughtException", new Error("boom2"));
@@ -294,6 +311,6 @@ describe("installCrashHandlers", () => {
 
     expect(exit).toHaveBeenCalledTimes(1);
     expect(exit).toHaveBeenCalledWith(1);
-    runRegistry.unregister("stuck");
+    registry.unregister("stuck");
   });
 });
