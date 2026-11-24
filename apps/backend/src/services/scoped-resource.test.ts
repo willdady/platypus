@@ -1,14 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-// why: first, since drizzle-orm's operators are spies only through test-utils' mock
-import { resetMockDb, seedDb, type Row } from "../test-utils.ts";
-import { eq, isNull } from "drizzle-orm";
+import { renderSql, resetMockDb, seedDb, type Row } from "../test-utils.ts";
 import { db } from "../index.ts";
-import { agent as agentTable, mcp as mcpTable } from "../db/schema.ts";
 import {
   resolveScoped,
   resolveScopedByName,
   listScoped,
   listScopedByIds,
+  listScopedByIdsForWorkspaces,
   requireScoped,
   requireWorkspaceMutable,
   requireSharedDeletable,
@@ -178,34 +176,39 @@ describe("ScopedResource module", () => {
 
   describe("orgScopedWhere", () => {
     it("matches on id, organization, and no workspace", () => {
-      orgScopedWhere("agent", "a1", "org-1");
+      const rendered = renderSql(orgScopedWhere("agent", "a1", "org-1"));
 
-      expect(eq).toHaveBeenCalledWith(agentTable.id, "a1");
-      expect(eq).toHaveBeenCalledWith(agentTable.organizationId, "org-1");
-      expect(isNull).toHaveBeenCalledWith(agentTable.workspaceId);
+      expect(rendered.sql).toBe(
+        `("agent"."id" = $1 and ("agent"."organization_id" = $2 and "agent"."workspace_id" is null))`,
+      );
+      expect(rendered.params).toEqual(["a1", "org-1"]);
     });
 
     it("resolves the columns of the type it is given", () => {
-      orgScopedWhere("mcp", "m1", "org-1");
+      const rendered = renderSql(orgScopedWhere("mcp", "m1", "org-1"));
 
-      expect(eq).toHaveBeenCalledWith(mcpTable.id, "m1");
-      expect(isNull).toHaveBeenCalledWith(mcpTable.workspaceId);
+      expect(rendered.sql).toContain(`"mcp"."id" = $1`);
+      expect(rendered.sql).toContain(`"mcp"."workspace_id" is null`);
     });
   });
 
   describe("workspaceScopedWhere", () => {
     it("matches on id and workspace — the write-side counterpart to resolveScoped", () => {
-      workspaceScopedWhere("agent", "a1", "ws-1");
+      const rendered = renderSql(workspaceScopedWhere("agent", "a1", "ws-1"));
 
-      expect(eq).toHaveBeenCalledWith(agentTable.id, "a1");
-      expect(eq).toHaveBeenCalledWith(agentTable.workspaceId, "ws-1");
+      expect(rendered.sql).toBe(
+        `("agent"."id" = $1 and "agent"."workspace_id" = $2)`,
+      );
+      expect(rendered.params).toEqual(["a1", "ws-1"]);
     });
 
     it("resolves the columns of the type it is given", () => {
-      workspaceScopedWhere("mcp", "m1", "ws-1");
+      const rendered = renderSql(workspaceScopedWhere("mcp", "m1", "ws-1"));
 
-      expect(eq).toHaveBeenCalledWith(mcpTable.id, "m1");
-      expect(eq).toHaveBeenCalledWith(mcpTable.workspaceId, "ws-1");
+      expect(rendered.sql).toBe(
+        `("mcp"."id" = $1 and "mcp"."workspace_id" = $2)`,
+      );
+      expect(rendered.params).toEqual(["m1", "ws-1"]);
     });
   });
 
@@ -292,6 +295,96 @@ describe("ScopedResource module", () => {
       const select = vi.spyOn(fake.handle as typeof db, "select");
 
       await expect(listScopedByIds(db, "agent", [], ctx)).resolves.toEqual([]);
+      expect(select).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("listScopedByIdsForWorkspaces", () => {
+    beforeEach(() => world());
+
+    it("resolves each Workspace's own rows and the Shared rows attached there", async () => {
+      await expect(
+        listScopedByIdsForWorkspaces(
+          db,
+          "agent",
+          ["mine", "shared", "sibling", "loose", "foreign"],
+          [ctx, { orgId: "org-1", workspaceId: "ws-2" }],
+        ),
+      ).resolves.toEqual(
+        new Map([
+          [
+            "ws-1",
+            new Map([
+              ["mine", { row: AGENTS.mine, scope: "workspace" }],
+              ["shared", { row: AGENTS.shared, scope: "organization" }],
+            ]),
+          ],
+          [
+            "ws-2",
+            new Map([
+              ["sibling", { row: AGENTS.sibling, scope: "workspace" }],
+              ["loose", { row: AGENTS.loose, scope: "organization" }],
+            ]),
+          ],
+        ]),
+      );
+    });
+
+    it("queries a fixed number of tables however many Workspaces it is given", async () => {
+      const fake = world();
+
+      const countReads = async (contexts: (typeof ctx)[]) => {
+        fake.queries.length = 0;
+        await listScopedByIdsForWorkspaces(
+          db,
+          "agent",
+          ["mine", "shared", "sibling", "loose"],
+          contexts,
+        );
+        return fake.queries.filter((q) => q.table === "agent").length;
+      };
+
+      expect(await countReads([ctx])).toBe(2);
+      expect(
+        await countReads([
+          ctx,
+          { orgId: "org-1", workspaceId: "ws-2" },
+          { orgId: "org-1", workspaceId: "ws-3" },
+          { orgId: "org-2", workspaceId: "ws-4" },
+        ]),
+      ).toBe(2);
+    });
+
+    it("gives every Workspace the Shared rows attached to it", async () => {
+      world({
+        attachment: [
+          attachment("att-shared-ws1", "ws-1", "shared"),
+          attachment("att-shared-ws2", "ws-2", "shared"),
+        ],
+      });
+
+      const visible = await listScopedByIdsForWorkspaces(
+        db,
+        "agent",
+        ["shared"],
+        [ctx, { orgId: "org-1", workspaceId: "ws-2" }],
+      );
+
+      for (const workspaceId of ["ws-1", "ws-2"]) {
+        expect(visible.get(workspaceId)?.get("shared")).toEqual({
+          row: AGENTS.shared,
+          scope: "organization",
+        });
+      }
+    });
+
+    it("returns empty maps without querying when given no ids", async () => {
+      const fake = world();
+      const select = vi.spyOn(fake.handle as typeof db, "select");
+
+      await expect(
+        listScopedByIdsForWorkspaces(db, "agent", [], [ctx]),
+      ).resolves.toEqual(new Map([["ws-1", new Map()]]));
       expect(select).not.toHaveBeenCalled();
     });
   });

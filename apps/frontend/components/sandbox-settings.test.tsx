@@ -428,6 +428,22 @@ describe("SandboxSettings save", () => {
       expect(savedSandboxBody(fetchMock)).not.toHaveProperty("credentials");
     });
 
+    it("shows a config rejection beside the field the backend names", async () => {
+      stubRejectedSave(
+        [{ path: ["config", "host"], message: "Host is unreachable" }],
+        400,
+      );
+      await renderSsh();
+
+      save();
+
+      expect(await screen.findByText("Host is unreachable")).toBeVisible();
+      expect(screen.getByLabelText("Host")).toHaveAttribute(
+        "aria-invalid",
+        "true",
+      );
+    });
+
     it("enables the passphrase only while a new key is entered, clearing it with the key", async () => {
       await renderSsh({ ...SSH_SANDBOX, hasCredentials: false });
 
@@ -572,6 +588,203 @@ describe("SandboxSettings backend fields", () => {
   });
 });
 
+describe("SandboxSettings generated backend form", () => {
+  // A plugin backend with no bespoke form: the catalog carries its schemas as
+  // JSON Schema, and the form renders them.
+  const CLOUD_BACKEND = {
+    backend: "test-cloud",
+    name: "Test Cloud",
+    configSchema: {
+      type: "object",
+      properties: {
+        region: { type: "string", title: "Region" },
+        replicas: { type: "integer", default: 2 },
+        warm: { type: "boolean" },
+        tier: { type: "string", enum: ["standard", "fast"] },
+      },
+      required: ["region"],
+    },
+    credentialsSchema: {
+      type: "object",
+      properties: { apiToken: { type: "string", title: "API token" } },
+      required: ["apiToken"],
+    },
+  };
+
+  const CLOUD_SANDBOX = {
+    ...DOCKER_SANDBOX,
+    backend: "test-cloud",
+    config: { region: "us" },
+    hasCredentials: true,
+  };
+
+  const renderCloud = async (sandbox: object | null = null) => {
+    mockReads({
+      sandbox: { data: sandbox },
+      backends: [CLOUD_BACKEND],
+    });
+    await renderSettings();
+  };
+
+  it("creates with config and credentials typed from the schema", async () => {
+    const fetchMock = stubAcceptedSave({});
+    await renderCloud();
+
+    fireEvent.click(screen.getByRole("button", { name: /Configure sandbox/ }));
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Dev box" },
+    });
+    fireEvent.change(screen.getByLabelText("Region"), {
+      target: { value: "eu-west" },
+    });
+    fireEvent.change(screen.getByLabelText("Replicas"), {
+      target: { value: "3" },
+    });
+    fireEvent.click(screen.getByRole("switch", { name: "Warm" }));
+    await selectOption(screen.getByRole("combobox", { name: "Tier" }), "fast");
+    fireEvent.change(screen.getByLabelText("API token"), {
+      target: { value: "tok-123" },
+    });
+    save();
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(savedSandboxBody(fetchMock, sandboxCreateSchema)).toEqual({
+      workspaceId: "ws1",
+      name: "Dev box",
+      backend: "test-cloud",
+      config: { region: "eu-west", replicas: 3, warm: true, tier: "fast" },
+      credentials: { apiToken: "tok-123" },
+      adminEnv: {},
+      userEnv: {},
+    });
+  });
+
+  it("masks credentials and shows a stored one without returning it", async () => {
+    await renderCloud(CLOUD_SANDBOX);
+
+    const token = screen.getByLabelText("API token");
+    expect(token).toHaveAttribute("type", "password");
+    expect(token).toHaveValue("");
+    expect(token).toHaveAttribute("placeholder", "Stored");
+    expect(screen.getByText(/Leave every field blank to keep/)).toBeVisible();
+    expect(screen.getByLabelText("Region")).toHaveValue("us");
+  });
+
+  it("keeps a stored credential when an edit leaves it blank", async () => {
+    const fetchMock = stubAcceptedSave({});
+    await renderCloud(CLOUD_SANDBOX);
+
+    fireEvent.change(screen.getByLabelText("Region"), {
+      target: { value: "eu-west" },
+    });
+    save();
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(savedSandboxBody(fetchMock)).toEqual({
+      name: "Dev box",
+      backend: "test-cloud",
+      config: { region: "eu-west" },
+      adminEnv: {},
+      userEnv: {},
+    });
+  });
+
+  it("sends a replacement credential when one is entered", async () => {
+    const fetchMock = stubAcceptedSave({});
+    await renderCloud(CLOUD_SANDBOX);
+
+    fireEvent.change(screen.getByLabelText("API token"), {
+      target: { value: "tok-456" },
+    });
+    save();
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(savedSandboxBody(fetchMock)).toMatchObject({
+      credentials: { apiToken: "tok-456" },
+    });
+  });
+
+  it("shows a required field's rejection beside the field", async () => {
+    stubRejectedSave(
+      [{ path: ["config", "region"], message: "Region is required" }],
+      400,
+    );
+    await renderCloud();
+
+    fireEvent.click(screen.getByRole("button", { name: /Configure sandbox/ }));
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Dev box" },
+    });
+    fireEvent.change(screen.getByLabelText("API token"), {
+      target: { value: "tok-123" },
+    });
+    save();
+
+    expect(await screen.findByText("Region is required")).toBeVisible();
+    expect(screen.getByLabelText("Region")).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
+
+    fireEvent.change(screen.getByLabelText("Region"), {
+      target: { value: "eu-west" },
+    });
+    expect(screen.queryByText("Region is required")).not.toBeInTheDocument();
+  });
+
+  it("shows a credentials rejection beside the field", async () => {
+    stubRejectedSave(
+      [{ path: ["credentials", "apiToken"], message: "Token was rejected" }],
+      400,
+    );
+    await renderCloud();
+
+    fireEvent.click(screen.getByRole("button", { name: /Configure sandbox/ }));
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Dev box" },
+    });
+    fireEvent.change(screen.getByLabelText("Region"), {
+      target: { value: "eu-west" },
+    });
+    save();
+
+    expect(await screen.findByText("Token was rejected")).toBeVisible();
+    expect(screen.getByLabelText("API token")).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
+  });
+
+  it("restores the saved backend's config when switched back", async () => {
+    mockReads({
+      sandbox: { data: CLOUD_SANDBOX },
+      backends: [CLOUD_BACKEND, { backend: "ssh", name: "SSH" }],
+    });
+    await renderSettings();
+
+    const backend = screen.getByRole("combobox", { name: "Backend" });
+    await selectOption(backend, "SSH");
+    await selectOption(backend, "Test Cloud");
+
+    expect(screen.getByLabelText("Region")).toHaveValue("us");
+  });
+
+  it("drops a backend's generated values when the backend changes", async () => {
+    mockReads({
+      sandbox: { data: CLOUD_SANDBOX },
+      backends: [CLOUD_BACKEND, { backend: "ssh", name: "SSH" }],
+    });
+    await renderSettings();
+
+    await selectOption(
+      screen.getByRole("combobox", { name: "Backend" }),
+      "SSH",
+    );
+    expect(screen.queryByLabelText("Region")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Host")).toHaveValue("");
+  });
+});
+
 describe("SandboxSettings delete", () => {
   const openDelete = async () => {
     fireEvent.click(screen.getByRole("button", { name: /Delete/ }));
@@ -704,7 +917,7 @@ describe("SandboxSettings field wiring", () => {
   // control (and, after the split, whichever component) edits it.
   it("clears the config error when a Docker config field is edited", async () => {
     stubRejectedSave(
-      [{ path: ["config"], message: "Invalid extra host" }],
+      [{ path: ["config", "extraHosts"], message: "Invalid extra host" }],
       400,
     );
     mockReads({ sandbox: { data: DOCKER_SANDBOX }, networks: ["bridge-a"] });
@@ -720,10 +933,13 @@ describe("SandboxSettings field wiring", () => {
     expect(screen.queryByText("Invalid extra host")).not.toBeInTheDocument();
   });
 
-  // `networks` is the one config field whose error is keyed to itself rather
-  // than to `config`, so its own edit has to retract it too.
+  // The network allowlist's error is keyed `config.networks`, so editing it
+  // has to retract that key, not only the slice's root.
   it("clears a network's own error when the allowlist is edited", async () => {
-    stubRejectedSave([{ path: ["networks"], message: "Unknown network" }], 400);
+    stubRejectedSave(
+      [{ path: ["config", "networks"], message: "Unknown network" }],
+      400,
+    );
     mockReads({ sandbox: { data: DOCKER_SANDBOX }, networks: ["bridge-a"] });
     await renderSettings();
 

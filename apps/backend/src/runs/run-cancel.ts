@@ -6,19 +6,20 @@ import type { RunId } from "./types.ts";
 
 const CHANNEL = "run_cancel";
 
+export type CancelRunOptions = { turnId?: string };
+
 export const cancelRun = async (
   runId: RunId,
-  { startedBefore }: { startedBefore?: Date } = {},
+  { turnId }: CancelRunOptions = {},
 ): Promise<void> => {
-  const options = { startedBefore: startedBefore?.getTime() };
-  if (runRegistry.cancel(runId, options)) return;
-  await notify(CHANNEL, JSON.stringify({ runId, ...options }));
+  if (runRegistry.cancel(runId, { turnId })) return;
+  await notify(CHANNEL, JSON.stringify({ runId, turnId }));
 };
 
 const cancelSchema = z
   .object({
     runId: z.string().min(1),
-    startedBefore: z.number().optional(),
+    turnId: z.string().min(1).optional(),
   })
   .strict();
 
@@ -47,5 +48,5 @@ const parseCancel = (payload: string): Cancel | undefined => {
 onNotification(CHANNEL, (payload) => {
   const cancel = parseCancel(payload);
   if (!cancel) return;
-  runRegistry.cancel(cancel.runId, { startedBefore: cancel.startedBefore });
+  runRegistry.cancel(cancel.runId, { turnId: cancel.turnId });
 });

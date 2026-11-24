@@ -161,6 +161,7 @@ export class AgentRunner {
 
     const run = startRun({
       runId: input.runId,
+      turnId: input.turnId,
       timeouts: params.timeouts,
       onTerminate: async ({ status, error, stats }) => {
         try {

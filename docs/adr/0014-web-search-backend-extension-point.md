@@ -60,7 +60,7 @@ Platypus gains a fourth core-owned Extension point — a **Web-search backend** 
 
   The original position, kept because the amendment below has to answer it: ~~The v1 executor contract also carries no `AbortSignal`: the loser of the race is dropped, not cancelled, so a hung upstream call keeps running until its own socket timeout. What is guaranteed is that the **turn** is not pinned open, not that work stops. Adding cancellation is append-only and belongs with the same PR that adds a teardown hook to both Extension points.~~ That pairing is what shipped — the teardown decision below is the same change — and the guarantee it named is unchanged: it is still a race, so a backend that ignores the signal is bounded exactly as before.
 
-  Each executor call now receives `{ signal }` as an appended second argument, and the signal core hands over is the **combination** of the call's deadline and the caller's own abort — so an executor that forwards it stops its upstream work when the User cancels _or_ when the deadline passes. A backend that ignores it keeps the original behaviour exactly: the loser of the race is dropped, not cancelled, and a hung upstream call runs until its own socket timeout. That is why the timeout is still a **race** and not a bare signal — the guarantee that the **turn** is not pinned open cannot rest on a Contribution's cooperation. `createExecutors` itself is called with no caller signal; wiring the prepare phase's abort into the factory is a separate decision.
+  Each executor call now receives `{ signal }` as an appended second argument, and the signal core hands over is the **combination** of the call's deadline and the caller's own abort — so an executor that forwards it stops its upstream work when the User cancels _or_ when the deadline passes. A backend that ignores it keeps the original behaviour exactly: the loser of the race is dropped, not cancelled, and a hung upstream call runs until its own socket timeout. That is why the timeout is still a **race** and not a bare signal — the guarantee that the **turn** is not pinned open cannot rest on a Contribution's cooperation. ~~`createExecutors` itself is called with no caller signal; wiring the prepare phase's abort into the factory is a separate decision.~~ Superseded: core now passes the turn's abort signal to that factory — see _Amendment — `createExecutors` observes the turn's cancellation_ below.
 
   The parameter is appended and optional to read, so an existing single-argument executor is unaffected — append-only within the major (ADR-0013), no `PLUGIN_API_VERSION` bump. The cost, stated: `AbortSignal` is a platform global the SDK does not declare, so a Plugin whose `tsconfig` has `"lib": ["esnext"]` and no `@types/node` fails to compile against the new types until it adds one.
 
@@ -236,3 +236,28 @@ that helper, rather than per caller.
 Unchanged: a `read_url` executor runs inside its plugin, which core cannot
 constrain (ADR-0013), so it keeps the pre-flight check and nothing more.
 Re-resolution (DNS rebinding) also stays a stated limitation for every caller.
+
+## Amendment — `createExecutors` observes the turn's cancellation
+
+Narrows the closing sentence of _The timeout is two additive windows_: "`createExecutors`
+itself is called with no caller signal; wiring the prepare phase's abort into the
+factory is a separate decision." That decision is now taken. Core passes the
+turn's abort signal as `withDeadline`'s caller signal on the `createExecutors`
+call, so a User who presses stop while a slow factory runs gets the turn torn
+down promptly rather than waiting out `timeoutMs`.
+
+What does **not** change is the Plugin-facing contract. `createExecutors` still
+receives no `AbortSignal` — handing it one is an SDK change and stays out of
+scope — and the context it is called with keeps exactly its published shape.
+The signal core threads is core's own: `WebBackendRegistration.buildTurnTools`
+takes it as an appended optional argument beside its `TurnToolsContext`. A field
+on that context was the alternative the issue allowed; the argument keeps every
+context shape fixed, so the plugin-facing `WebBackendContext` is untouched by
+construction.
+
+Cancellation is logged at `debug`, matching the `cancelled` outcome an executor
+call already gets rather than the `warn` a timeout or a throw still earns: a
+stopped turn is the most ordinary way a slow factory ends, not a fault. A
+factory that ignores cancellation is bounded by `timeoutMs` exactly as before,
+so the guarantee that a turn is not pinned open still rests on core's race and
+never on a Contribution's cooperation.

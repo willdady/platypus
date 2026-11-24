@@ -1,35 +1,41 @@
-import { describe, it, expect, beforeAll, vi } from "vitest";
+import { describe, it, expect, beforeAll } from "vitest";
 import type { ToolSetContext } from "@platypuschat/plugin-sdk";
 import {
   CLEARABLE_TOOL_INPUT_FIELDS,
   DEFAULT_MAX_EXTRACTED_TEXT_CHARS,
 } from "@platypus/schemas";
 import { isClearableToolName } from "./tool-result-clearing.ts";
-import { createWebFetchTools } from "../tools/fetch.ts";
 import { createSandboxTools } from "../sandbox/tools.ts";
-import { createLoadSkillTool } from "../tools/skill.ts";
-import { DELEGATE_TOOL_NAME } from "../tools/turn-tool-names.ts";
 import type { SandboxBackend, SandboxContext } from "../sandbox/types.ts";
-
-vi.mock("../index.ts", () => {
-  const query = {
-    from: () => query,
-    where: () => query,
-    limit: () => Promise.resolve([]),
-  };
-  return { db: { select: () => query } };
-});
-vi.mock("../services/event-dispatch.ts", () => ({ dispatchEvent: vi.fn() }));
-vi.mock("../services/sub-agent-validation.ts", () => ({
-  validateSubAgentAssignment: vi.fn(),
-}));
-vi.mock("../storage/index.ts", () => ({ getStorage: vi.fn() }));
-
 import { loadPlugins } from "../plugins/loader.ts";
-import { ALWAYS_ON_PLUGINS } from "../plugins/builtin.ts";
-import { getToolSets, SANDBOX_TOOLSET_ID } from "../tools/index.ts";
+import { ALWAYS_ON_PLUGINS, BUILTIN_PLUGINS } from "../plugins/builtin.ts";
+import { MEMORY_TOOLSET_ID, type ToolSetRegistration } from "../tools/index.ts";
+import type { WebBackendRegistration } from "../web-backends/index.ts";
+import {
+  DELEGATE_TOOL_NAME,
+  SKILL_TOOL_NAMES,
+  WEB_BACKEND_TOOL_NAMES,
+} from "../tools/turn-tool-names.ts";
+import { MEMORY_TOOL_NAMES } from "../tools/memory.ts";
 
-const CORE_PLUGIN_NAMES = ["@platypus/web-fetch"];
+// why: derived from BUILTIN_PLUGINS so a new core plugin's tools are audited without a hand list
+const GATED_CORE_PLUGIN_NAMES = Object.keys(BUILTIN_PLUGINS).filter(
+  (name) => !ALWAYS_ON_PLUGINS.includes(name),
+);
+
+// why: these plugins' schemas require credentials, but materialising their tool sets needs no live row
+const PLUGIN_FIXTURES: Record<string, string> = {
+  PLATYPUS_PLUGIN_CONFIG_EXA: JSON.stringify({
+    credentials: { apiKey: "fixture" },
+  }),
+  PLATYPUS_PLUGIN_CONFIG_DAYTONA: JSON.stringify({
+    credentials: { apiKey: "fixture" },
+  }),
+  PLATYPUS_PLUGIN_CONFIG_DECISION_GATE: JSON.stringify({
+    config: { denyThreshold: 0.5 },
+    credentials: { apiKey: "fixture" },
+  }),
+};
 
 const STUB_CONTEXT: ToolSetContext = {
   workspaceId: "ws-1",
@@ -42,53 +48,67 @@ const STUB_CONTEXT: ToolSetContext = {
   registerCloser: () => {},
 };
 
-let materializedNames: string[] = [];
-
-beforeAll(async () => {
-  await loadPlugins({
-    pluginNames: CORE_PLUGIN_NAMES,
-    alwaysOnPlugins: ALWAYS_ON_PLUGINS,
-  });
-
-  const names = new Set<string>();
-
-  for (const registration of getToolSets()) {
-    if (registration.id === SANDBOX_TOOLSET_ID) continue;
-    const tools = await registration.buildTurnTools(
-      STUB_CONTEXT,
-      undefined,
-      () => {},
-    );
-    Object.keys(tools).forEach((n) => names.add(n));
-  }
-
+const sandboxToolNames = (): string[] => {
   const stubBackend = { fsReadBytes: () => {} } as unknown as SandboxBackend;
   const stubCtx = {} as unknown as SandboxContext;
-  Object.keys(
+  return Object.keys(
     createSandboxTools(stubBackend, stubCtx, {}, () =>
       Promise.resolve({
         passthroughFileTypes: [],
         maxExtractedTextChars: DEFAULT_MAX_EXTRACTED_TEXT_CHARS,
       }),
     ),
-  ).forEach((n) => names.add(n));
+  );
+};
 
-  void createWebFetchTools;
+let materializedNames: string[] = [];
+const failedFactories: string[] = [];
 
-  void createLoadSkillTool;
-  names.add("loadSkill");
-  names.add("readSkillFile");
+beforeAll(async () => {
+  // why: a local registry plus fixtures replace global db mocks; memory needs a live row so its static names are read instead
+  const registrations: ToolSetRegistration[] = [];
+  const webBackends: WebBackendRegistration[] = [];
+  await loadPlugins({
+    pluginNames: GATED_CORE_PLUGIN_NAMES,
+    alwaysOnPlugins: ALWAYS_ON_PLUGINS,
+    register: (_id, registration) => {
+      registrations.push(registration);
+    },
+    registerSandbox: () => {},
+    registerWeb: (registration) => {
+      webBackends.push(registration);
+    },
+    registerGate: () => {},
+    env: PLUGIN_FIXTURES,
+  });
 
+  const names = new Set<string>(sandboxToolNames());
+
+  for (const registration of registrations) {
+    if (registration.id === MEMORY_TOOLSET_ID) continue;
+    const tools = await registration.buildTurnTools(
+      STUB_CONTEXT,
+      undefined,
+      () => {
+        failedFactories.push(registration.id);
+      },
+    );
+    Object.keys(tools).forEach((name) => names.add(name));
+  }
+
+  if (webBackends.length > 0) {
+    for (const name of WEB_BACKEND_TOOL_NAMES) names.add(name);
+  }
+  if (registrations.some(({ id }) => id === MEMORY_TOOLSET_ID)) {
+    for (const name of MEMORY_TOOL_NAMES) names.add(name);
+  }
+  for (const name of SKILL_TOOL_NAMES) names.add(name);
   names.add(DELEGATE_TOOL_NAME);
-
-  names.add("web_search");
-  names.add("read_url");
-
-  names.add("memorySearch");
 
   materializedNames = [...names];
 });
 
+// why: keys are the wire names on purpose — reading them from constants would let a constant rename pass unclassified
 const EXPECTED_CLEARABLE: Record<string, boolean> = {
   web_search: true,
   read_url: true,
@@ -168,18 +188,27 @@ const EXPECTED_CLEARABLE: Record<string, boolean> = {
 };
 
 describe("Tool-result clearing — core tool inventory", () => {
-  it("classifies every core tool name the currently-registered plugins produce", () => {
+  it("materialises every tool set it audits", () => {
+    expect(failedFactories).toEqual([]);
+  });
+
+  it("classifies exactly the core tool names the currently-registered plugins produce", () => {
     const unclassified = materializedNames.filter(
       (name) => !(name in EXPECTED_CLEARABLE),
     );
+    const unseen = Object.keys(EXPECTED_CLEARABLE).filter(
+      (name) => !materializedNames.includes(name),
+    );
 
     expect(
-      unclassified,
-      `Unclassified core tool name(s): ${unclassified.join(", ")}. ` +
+      { unclassified, unseen },
+      `Unclassified core tool name(s): ${unclassified.join(", ") || "none"}. ` +
         `Decide whether each is clearable (large, disposable, read-only) and add it ` +
         `to EXPECTED_CLEARABLE in this test, and to CLEARABLE_TOOL_NAMES in ` +
-        `@platypus/schemas if it should be clearable.`,
-    ).toEqual([]);
+        `@platypus/schemas if it should be clearable. ` +
+        `Classified core tool name(s) no longer produced: ${unseen.join(", ") || "none"}. ` +
+        `A rename must update both the Tool's name and its entry in EXPECTED_CLEARABLE.`,
+    ).toEqual({ unclassified: [], unseen: [] });
   });
 
   it("agrees with isClearableToolName on every classified name", () => {

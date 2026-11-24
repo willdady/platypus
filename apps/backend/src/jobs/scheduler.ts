@@ -221,7 +221,11 @@ export async function reapFiredOneOffTriggers(): Promise<void> {
         workspaceId: triggerTable.workspaceId,
       })
       .from(triggerTable)
-      .leftJoin(workspaceTable, eq(workspaceTable.id, triggerTable.workspaceId))
+      // why: the workspace is NOT NULL, so this narrows nothing; it sources the orgId the run-file scope needs
+      .innerJoin(
+        workspaceTable,
+        eq(workspaceTable.id, triggerTable.workspaceId),
+      )
       .leftJoin(triggerRunTable, eq(triggerRunTable.triggerId, triggerTable.id))
       .where(expired);
     if (expiring.length === 0) return [];
@@ -248,7 +252,7 @@ export async function reapFiredOneOffTriggers(): Promise<void> {
     { scope: TriggerRunScope; runIds: string[] }
   >();
   for (const { runId, orgId, workspaceId } of reaped) {
-    if (!runId || !orgId) continue;
+    if (!runId) continue;
     const key = `${orgId}/${workspaceId}`;
     const group = runsByScope.get(key) ?? {
       scope: { orgId, workspaceId },
@@ -300,28 +304,23 @@ export async function recoverStuckChats(): Promise<void> {
 
 const TOKEN_REMINDER_INTERVAL_MS = 60 * 60 * 1000;
 
-let lastTokenReminderSweepAt: number | null = null;
-
-export async function sweepTokenRemindersIfDue(
-  now: number = Date.now(),
-): Promise<void> {
-  if (
-    lastTokenReminderSweepAt !== null &&
-    now - lastTokenReminderSweepAt < TOKEN_REMINDER_INTERVAL_MS
-  ) {
-    return;
-  }
-  await sendInboundTokenReminders(new Date(now));
-  await sendA2aTokenReminders(new Date(now));
-  lastTokenReminderSweepAt = now;
-}
-
-export function resetTokenReminderSweep(): void {
-  lastTokenReminderSweepAt = null;
-}
-
 export function startScheduler(): () => void {
   const intervalMs = env().SCHEDULE_SCHEDULER_INTERVAL_MS;
+  let lastTokenReminderSweepAt: number | null = null;
+
+  async function sweepTokenRemindersIfDue(): Promise<void> {
+    const now = Date.now();
+    if (
+      lastTokenReminderSweepAt !== null &&
+      now - lastTokenReminderSweepAt < TOKEN_REMINDER_INTERVAL_MS
+    ) {
+      return;
+    }
+    await sendInboundTokenReminders(new Date(now));
+    await sendA2aTokenReminders(new Date(now));
+    lastTokenReminderSweepAt = now;
+  }
+
   logger.info(
     `Starting scheduler (interval: ${intervalMs}ms, wall-clock aligned)`,
   );

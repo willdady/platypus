@@ -22,12 +22,6 @@ export const pinAgent = async (
   agentId: string,
 ): Promise<void> => {
   await requireScoped(db, "agent", agentId, ctx);
-  const [existing] = await db
-    .select({ agentId: pinTable.agentId })
-    .from(pinTable)
-    .where(agentPinWhere(ctx.workspaceId, agentId))
-    .limit(1);
-  if (existing) return;
   await db
     .insert(pinTable)
     .values({ workspaceId: ctx.workspaceId, agentId })
