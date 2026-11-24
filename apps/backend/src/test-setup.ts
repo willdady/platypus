@@ -1,4 +1,6 @@
 import { beforeEach, vi } from "vitest";
+// why: imported here, so the fake db lands before any test file imports a module under test
+import "./test-mocks.ts";
 
 const { mockLogger, mockLookup } = vi.hoisted(() => {
   const child = {

@@ -1,6 +1,4 @@
 import fs from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
 import {
   afterAll,
   afterEach,
@@ -15,7 +13,7 @@ import type { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { strToU8, zipSync, type Zippable } from "fflate";
 import { migratedPglite } from "../db/migrated-pglite.test-fixtures.ts";
-import { resetStorage } from "../storage/index.ts";
+import { useTempDiskStorage } from "../storage/temp-disk.test-fixtures.ts";
 import { ValidationError } from "../errors.ts";
 import type { SkillScope } from "./skill.ts";
 
@@ -38,12 +36,16 @@ const {
 const { replaceSkillBundle, isModified } = await import("./skill-bundle.ts");
 const { updateSkill } = await import("./skill.ts");
 
+useTempDiskStorage();
+
 let pg: PGlite;
 beforeAll(async () => {
   pg = await migratedPglite();
   holder.db = drizzle(pg);
 }, 60_000);
-afterAll(() => pg.close());
+afterAll(async () => {
+  await pg.close();
+});
 
 const ctx = { orgId: "org-1", workspaceId: "ws-1" };
 const wsScope = { kind: "workspace", ctx } as const;
@@ -100,10 +102,6 @@ const refAt = (ref: string, sha: string) =>
   );
 
 beforeEach(async () => {
-  process.env.STORAGE_DISK_PATH = await fs.mkdtemp(
-    path.join(os.tmpdir(), "platypus-skill-github-test-"),
-  );
-  resetStorage();
   delete process.env.GITHUB_TOKEN;
   calls = [];
   routes = new Map();
@@ -130,12 +128,9 @@ beforeEach(async () => {
       ('ws-1', 'org-1', 'u-1', 'Support');
   `);
 });
-afterEach(async () => {
+afterEach(() => {
   vi.unstubAllGlobals();
-  await fs.rm(process.env.STORAGE_DISK_PATH!, { recursive: true, force: true });
-  delete process.env.STORAGE_DISK_PATH;
   delete process.env.GITHUB_TOKEN;
-  resetStorage();
 });
 
 const skillRows = async () =>

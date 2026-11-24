@@ -7,6 +7,7 @@ import { startRun } from "../runs/run-lifecycle.ts";
 import { runRegistry } from "../runs/run-registry.ts";
 import { driveDelegate } from "../runs/drive.ts";
 import type { RunStatus } from "../runs/types.ts";
+import { TEST_USAGE_MODEL } from "../runs/run-plan.test-fixtures.ts";
 import { createSandboxTools } from "./tools.ts";
 import type { SandboxBackend, SandboxContext } from "./types.ts";
 
@@ -95,6 +96,7 @@ const driveAgainst = (
   const drive = driveDelegate({
     plan: {
       model: shellExecModel(),
+      usageModel: TEST_USAGE_MODEL,
       tools: createSandboxTools(backend, ctx, {}, () =>
         Promise.resolve({
           passthroughFileTypes: [],
