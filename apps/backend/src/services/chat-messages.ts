@@ -121,6 +121,8 @@ export type ResolvedTurn = {
   messages: PlatypusUIMessage[];
   message?: PlatypusUIMessage;
   parentId: string | null;
+  // why: the id a cancel names this turn by, the user message the run belongs to
+  turnId?: string;
   answered: PlatypusUIMessage[];
 };
 
@@ -233,6 +235,8 @@ export const resolveTurn = async ({
     return {
       messages: [...earlier.messages, answered],
       parentId: target.id,
+      // why: the id currentTurnId reports while the approved reply is the Chat's leaf
+      turnId: target.parentId ?? undefined,
       answered: [...earlier.answered, answered],
     };
   }
@@ -258,7 +262,11 @@ export const resolveTurn = async ({
       );
     }
     const { messages } = await loadActivePath(chatId, parent.id);
-    return { ...denyUnanswered(messages), parentId: parent.id };
+    return {
+      ...denyUnanswered(messages),
+      parentId: parent.id,
+      turnId: parent.id,
+    };
   }
 
   let message: PlatypusUIMessage | undefined;
@@ -287,6 +295,7 @@ export const resolveTurn = async ({
     messages: [...path.messages, message],
     message,
     parentId,
+    turnId: message.id,
     answered: path.answered,
   };
 };

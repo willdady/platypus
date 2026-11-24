@@ -40,6 +40,7 @@ export type RunLifecycle = {
 
 export const startRun = (params: {
   runId: RunId;
+  turnId?: string;
   log?: Record<string, unknown>;
   timeouts?: RunTimeouts;
   registry?: RunRegistry;
@@ -104,6 +105,7 @@ export const startRun = (params: {
   };
 
   const handle = registry.register(runId, {
+    turnId: params.turnId,
     ...params.timeouts,
     onTimeout: (error) => {
       logger.error(

@@ -183,7 +183,7 @@ describe("two CancelTasks racing on one Task", () => {
     expect(claimed).toHaveLength(1);
     expect(claimed[0]).toMatchObject({ id: "task-a", state: "canceled" });
     expect(mockCancelRun).toHaveBeenCalledExactlyOnceWith("chat-1", {
-      startedBefore: expect.any(Date) as Date,
+      turnId: "msg-a",
     });
     expect(await taskRow()).toMatchObject({ state: "canceled" });
   });

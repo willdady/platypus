@@ -26,6 +26,7 @@ export const describeTimeout = (error: TimeoutError): string =>
     : `The run hit its ${humanizeMs(error.limitMs)} time limit and was stopped. Anything already written is kept above.`;
 
 export type RegisterOptions = {
+  turnId?: string;
   perStepTimeoutMs?: number;
   perRunTimeoutMs?: number;
   onTimeout?: (error: TimeoutError) => void;
@@ -50,6 +51,7 @@ export const DEFAULT_PER_RUN_TIMEOUT_MS = 10 * 60 * 1000;
 
 type Entry = {
   controller: AbortController;
+  turnId?: string;
   perStepTimeoutMs: number;
   stepTimer?: ReturnType<typeof setTimeout>;
   runTimer?: ReturnType<typeof setTimeout>;
@@ -57,11 +59,10 @@ type Entry = {
   finished: boolean;
   holds: number;
   lastActivityAt: number;
-  startedAt: number;
 };
 
 export type CancelOptions = {
-  startedBefore?: number;
+  turnId?: string;
 };
 
 export class RunRegistry {
@@ -94,12 +95,12 @@ export class RunRegistry {
 
     const entry: Entry = {
       controller,
+      turnId: options.turnId,
       perStepTimeoutMs,
       onTimeout: options.onTimeout,
       finished: false,
       holds: 0,
       lastActivityAt: Date.now(),
-      startedAt: Date.now(),
     };
 
     const fireTimeout = (kind: "step" | "run") => {
@@ -173,10 +174,7 @@ export class RunRegistry {
   cancel(runId: RunId, options: CancelOptions = {}): boolean {
     const entry = this.entries.get(runId);
     if (!entry || entry.finished) return false;
-    if (
-      options.startedBefore !== undefined &&
-      entry.startedAt > options.startedBefore
-    ) {
+    if (options.turnId !== undefined && entry.turnId !== options.turnId) {
       return false;
     }
     entry.finished = true;
@@ -212,10 +210,10 @@ export class RunRegistry {
     });
   }
 
-  heldRuns(): { runId: RunId; startedAt: number }[] {
+  heldRuns(): { runId: RunId; turnId?: string }[] {
     return [...this.entries]
       .filter(([, entry]) => !entry.finished)
-      .map(([runId, entry]) => ({ runId, startedAt: entry.startedAt }));
+      .map(([runId, entry]) => ({ runId, turnId: entry.turnId }));
   }
 
   has(runId: RunId): boolean {
