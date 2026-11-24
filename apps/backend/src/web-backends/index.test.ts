@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Tool } from "ai";
 import { WEB_BACKEND_TOOL_MARKER } from "@platypus/schemas";
+import { mockLookup } from "../test-setup.ts";
 import { callTool, makePluginContext } from "../test-utils.ts";
 import { EGRESS_BLOCKED_MESSAGE } from "../utils/egress-guard.ts";
 import { logger } from "../logger.ts";
@@ -47,8 +48,6 @@ const PLUGIN_CTX = {
 
 const PLUGIN = makePluginContext();
 
-const resolvePublic = () => Promise.resolve(["93.184.216.34"]);
-
 const contribution = (
   executors: Partial<WebBackendExecutors>,
   overrides: Partial<WebBackendContribution> = {},
@@ -67,7 +66,6 @@ const buildTools = (
     contribution: contribution(executors, overrides),
     backend: "searx",
     pluginName: "@acme/searx",
-    resolveHostname: resolvePublic,
     plugin: PLUGIN,
   }).buildTurnTools(CTX);
 
@@ -581,6 +579,34 @@ describe("read_url — egress guard, capping, slicing", () => {
     );
   });
 
+  it("blocks a model-supplied hostname that resolves into a denied range", async () => {
+    const read_url_executor = vi.fn(() => ({
+      content: "internal",
+      url: "http://internal-metadata.test/latest/meta-data",
+    }));
+    const { read_url } = await buildTools({
+      web_search: () => ({ query: "q", results: [] }),
+      read_url: read_url_executor,
+    });
+
+    const result = await read(read_url, {
+      url: "http://internal-metadata.test/latest/meta-data",
+    });
+
+    expect(result.error).toBe(EGRESS_BLOCKED_MESSAGE);
+    expect(read_url_executor).not.toHaveBeenCalled();
+    // why: the shared lookup mock resolves any "internal" host to the metadata service
+    expect(mockLookup).toHaveBeenCalledWith(
+      "internal-metadata.test",
+      expect.anything(),
+    );
+    expect(mockLogger.warn).toHaveBeenCalledTimes(1);
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ tool: "read_url", outcome: "blocked" }),
+      "Blocked a model-supplied URL by network policy",
+    );
+  });
+
   it("blocks a non-http(s) requested URL, and never echoes it back", async () => {
     const read_url_executor = vi.fn(() => ({ content: "x", url: "" }));
     const { read_url } = await buildTools({
@@ -606,6 +632,7 @@ describe("read_url — egress guard, capping, slicing", () => {
     expect(result.content_type).toBe("text/markdown");
     expect(result.truncated).toBe(false);
     expect(result).not.toHaveProperty("next_start_index");
+    expect(mockLookup).toHaveBeenCalledWith("example.com", expect.anything());
   });
 
   it("slices by max_length and emits the fetchUrl continuation hint", async () => {
@@ -1017,7 +1044,6 @@ describe("the signal an executor is handed", () => {
   it("cancels read_url before the egress guard resolves anything", async () => {
     const controller = new AbortController();
     controller.abort();
-    const resolveHostname = vi.fn(resolvePublic);
     const read_url = vi.fn(() => ({ content: "hi", url: "https://ok/" }));
 
     const { read_url: tool } = await composeWebBackend({
@@ -1027,7 +1053,6 @@ describe("the signal an executor is handed", () => {
       }),
       backend: "searx",
       pluginName: "@acme/searx",
-      resolveHostname,
       plugin: PLUGIN,
     }).buildTurnTools(CTX);
 
@@ -1045,7 +1070,7 @@ describe("the signal an executor is handed", () => {
     expect(result.error).toBe(
       "The web backend could not complete this read_url request.",
     );
-    expect(resolveHostname).not.toHaveBeenCalled();
+    expect(mockLookup).not.toHaveBeenCalled();
     expect(read_url).not.toHaveBeenCalled();
   });
 
