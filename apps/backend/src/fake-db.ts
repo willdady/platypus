@@ -594,8 +594,17 @@ type UniqueConstraint = {
   where?: (row: Row) => boolean;
 };
 
+type Cascade = {
+  childTable: string;
+  childColumn: string;
+  parentTable: string;
+  parentColumn: string;
+};
+
 export type FakeDbOptions = {
   unique?: Record<string, UniqueConstraint[]>;
+  // why: mirrors an onDelete: "cascade" foreign key in db/schema.ts, which the fake cannot read
+  cascades?: Cascade[];
   onInsert?: (table: string, values: Row) => void;
   defaults?: Record<string, Row>;
   onQuery?: (query: QueryRecord) => void;
@@ -711,11 +720,12 @@ export const createFakeDb = (
   const nameOf = (table: unknown) => tableNameOf(table);
 
   const makeHandle = (store: Store) => {
-    const rowsFor = (table: unknown): Row[] => {
-      const name = nameOf(table);
+    const rowsNamed = (name: string): Row[] => {
       store[name] ??= [];
       return store[name];
     };
+
+    const rowsFor = (table: unknown): Row[] => rowsNamed(nameOf(table));
 
     const project = (
       row: Row,
@@ -1111,16 +1121,46 @@ export const createFakeDb = (
       return builder;
     };
 
+    const deleteRows = (
+      name: string,
+      predicate: (row: Row) => boolean,
+    ): Row[] => {
+      const rows = rowsNamed(name);
+      const removed = rows.filter(predicate);
+      const kept = rows.filter((row) => !removed.includes(row));
+      rows.length = 0;
+      rows.push(...kept);
+      return removed;
+    };
+
+    // why: a deleted parent takes the rows whose foreign key cascades from it, and theirs with them
+    const cascadeFrom = (parent: string, removed: Row[]) => {
+      if (!removed.length) return;
+      for (const cascade of options.cascades ?? []) {
+        if (cascade.parentTable !== parent) continue;
+        const parentKeys = removed.map((row) =>
+          flatResolver(row)({ table: parent, name: cascade.parentColumn }),
+        );
+        const children = deleteRows(cascade.childTable, (row) =>
+          parentKeys.includes(
+            flatResolver(row)({
+              table: cascade.childTable,
+              name: cascade.childColumn,
+            }),
+          ),
+        );
+        cascadeFrom(cascade.childTable, children);
+      }
+    };
+
     const remove = (table: unknown) => ({
       where(condition: Condition) {
-        record({ kind: "delete", table: nameOf(table) });
-        const rows = rowsFor(table);
-        const deleted = rows.filter((row) =>
+        const name = nameOf(table);
+        record({ kind: "delete", table: name });
+        const deleted = deleteRows(name, (row) =>
           satisfies(flatResolver(row), condition),
         );
-        const kept = rows.filter((row) => !deleted.includes(row));
-        rows.length = 0;
-        rows.push(...kept);
+        cascadeFrom(name, deleted);
         return writeResult(deleted);
       },
     });

@@ -419,6 +419,66 @@ describe("the seeded fake beside the chainable mock", () => {
     });
   });
 
+  it("deletes the rows whose foreign key cascades from the deleted row", async () => {
+    const fake = seedDb(
+      {
+        artifact: [
+          { id: "a1", title: "Ours" },
+          { id: "a2", title: "Theirs" },
+        ],
+        artifact_version: [
+          { id: "v1", artifactId: "a1" },
+          { id: "v2", artifactId: "a2" },
+        ],
+        artifact_version_note: [
+          { id: "n1", versionId: "v1" },
+          { id: "n2", versionId: "v2" },
+        ],
+      },
+      {
+        cascades: [
+          {
+            childTable: "artifact_version",
+            childColumn: "artifactId",
+            parentTable: "artifact",
+            parentColumn: "id",
+          },
+          {
+            childTable: "artifact_version_note",
+            childColumn: "versionId",
+            parentTable: "artifact_version",
+            parentColumn: "id",
+          },
+        ],
+      },
+    );
+    const { artifact } = await import("./db/schema.ts");
+
+    await db.delete(artifact).where(eq(artifact.id, "a1"));
+
+    expect(fake.tables.artifact).toEqual([{ id: "a2", title: "Theirs" }]);
+    expect(fake.tables.artifact_version).toEqual([
+      { id: "v2", artifactId: "a2" },
+    ]);
+    expect(fake.tables.artifact_version_note).toEqual([
+      { id: "n2", versionId: "v2" },
+    ]);
+  });
+
+  it("leaves a child row whose foreign key does not cascade", async () => {
+    const fake = seedDb({
+      artifact: [{ id: "a1" }],
+      artifact_version: [{ id: "v1", artifactId: "a1" }],
+    });
+    const { artifact } = await import("./db/schema.ts");
+
+    await db.delete(artifact).where(eq(artifact.id, "a1"));
+
+    expect(fake.tables.artifact_version).toEqual([
+      { id: "v1", artifactId: "a1" },
+    ]);
+  });
+
   it("scrubs an id out of only the jsonb arrays that contain it", async () => {
     const seeded = seedDb({
       agent: [
