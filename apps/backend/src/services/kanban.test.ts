@@ -1,12 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { asDb, createMockDb, type MockDb } from "../test-utils.ts";
+import {
+  asDb,
+  createMockDb,
+  renderedWheres,
+  type MockDb,
+} from "../test-utils.ts";
 
 vi.mock("./event-dispatch.ts", () => ({
   dispatchEvent: vi.fn(),
 }));
 
-import { eq } from "drizzle-orm";
-import { kanbanCard as kanbanCardTable } from "../db/schema.ts";
 import { ConflictError, NotFoundError, ValidationError } from "../errors.ts";
 import { dispatchEvent } from "./event-dispatch.ts";
 import {
@@ -578,7 +581,6 @@ describe("kanban module", () => {
     });
 
     it("constrains the update to the expected column", async () => {
-      vi.mocked(eq).mockClear();
       db.limit
         .mockResolvedValueOnce([
           { id: "card-1", columnId: "col-old", boardId: "board-1" },
@@ -600,14 +602,13 @@ describe("kanban module", () => {
         expectedColumnId: "col-old",
       });
 
-      expect(vi.mocked(eq)).toHaveBeenCalledWith(
-        kanbanCardTable.columnId,
-        "col-old",
-      );
+      expect(renderedWheres(db)).toContainEqual({
+        sql: `("kanban_card"."id" = $1 and "kanban_card"."column_id" = $2)`,
+        params: ["card-1", "col-old"],
+      });
     });
 
     it("leaves the update unconditional when no column is expected", async () => {
-      vi.mocked(eq).mockClear();
       db.limit
         .mockResolvedValueOnce([
           { id: "card-1", columnId: "col-old", boardId: "board-1" },
@@ -628,10 +629,18 @@ describe("kanban module", () => {
         afterCardId: null,
       });
 
-      expect(vi.mocked(eq)).not.toHaveBeenCalledWith(
-        kanbanCardTable.columnId,
-        "col-old",
-      );
+      const rendered = renderedWheres(db);
+      expect(rendered).toContainEqual({
+        sql: `"kanban_card"."id" = $1`,
+        params: ["card-1"],
+      });
+      expect(
+        rendered.some(
+          (query) =>
+            query.sql.includes(`"kanban_card"."id" =`) &&
+            query.sql.includes(`"kanban_card"."column_id" =`),
+        ),
+      ).toBe(false);
     });
 
     it("refuses the move when the card has left the expected column", async () => {

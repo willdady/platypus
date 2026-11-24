@@ -1,4 +1,5 @@
 import { vi, type Mock } from "vitest";
+import { PgDialect } from "drizzle-orm/pg-core";
 import { getStorage } from "./storage/index.ts";
 import {
   createFakeDb,
@@ -204,6 +205,22 @@ export const insertTimestamps = () => ({
   updatedAt: new Date("2026-01-01T00:00:00.000Z"),
 });
 
+const dialect = new PgDialect();
+
+export const renderSql = (
+  query: unknown,
+): { sql: string; params: unknown[] } => {
+  const { sql, params } = dialect.sqlToQuery(
+    query as Parameters<typeof dialect.sqlToQuery>[0],
+  );
+  return { sql, params };
+};
+
+export const renderedWheres = (
+  db: MockDb = mockDb,
+): { sql: string; params: unknown[] }[] =>
+  db.where.mock.calls.map(([predicate]) => renderSql(predicate));
+
 export const resetMockDb = () => {
   fakeRef.current = null;
   installBuilderMethods(mockDb);
@@ -212,43 +229,6 @@ export const resetMockDb = () => {
 vi.mock("./index.ts", () => ({
   db: dbHandle,
 }));
-
-vi.mock("drizzle-orm", async () => {
-  const actual = await vi.importActual("drizzle-orm");
-  // why: dynamic: this factory runs before test-utils' own imports are evaluated
-  const { markerOperators, orderOperators, sqlMarker } =
-    await import("./fake-db.ts");
-  const markers = markerOperators();
-  const order = orderOperators();
-  const sqlMock = Object.assign(
-    vi.fn((strings: TemplateStringsArray, ...values: unknown[]) =>
-      sqlMarker(strings, values),
-    ),
-    {
-      raw: vi.fn((query: string) => ({ getSQL: () => ({ query }) })),
-    },
-  );
-  return {
-    ...actual,
-    eq: vi.fn(markers.eq),
-    and: vi.fn(markers.and),
-    or: vi.fn(markers.or),
-    inArray: vi.fn(markers.inArray),
-    notInArray: vi.fn(markers.notInArray),
-    ne: vi.fn(markers.ne),
-    gt: vi.fn(markers.gt),
-    gte: vi.fn(markers.gte),
-    lt: vi.fn(markers.lt),
-    lte: vi.fn(markers.lte),
-    asc: vi.fn(order.asc),
-    count: vi.fn(markers.count),
-    max: vi.fn(markers.max),
-    desc: vi.fn(order.desc),
-    isNull: vi.fn(markers.isNull),
-    isNotNull: vi.fn(markers.isNotNull),
-    sql: sqlMock,
-  };
-});
 
 vi.mock("./auth.ts", () => ({
   auth: mockAuth,
