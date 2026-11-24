@@ -193,15 +193,15 @@ Add an entry to `contributes.sandboxBackends`. A
 - **`create`** — returns your adapter, given the validated per-Workspace config
   and credentials, plus the Plugin's shared deploy-time block.
 
-<Callout type="warning">
-  **Both schemas must accept `{}`.** The **Workspace settings → Sandbox** form
-  has fields only for the Docker and SSH backends; for yours it saves an empty
-  `config` and `credentials`. A schema with a required field makes every save
-  fail with a 400. Put what your backend needs — region, endpoint, API token —
-  in your Plugin's [deploy-time config and
-  credentials](/extending/plugin-api-and-config#deploy-time-config-and-credentials)
-  and read them in `create`. That block is shared by every Workspace on the
-  deployment.
+<Callout type="info">
+  **Your backend's fields appear in the settings form automatically.** The
+  **Workspace settings → Sandbox** form renders a field for each property your
+  schemas declare — strings, numbers, booleans and string enums, with every
+  `credentialsSchema` string masked. A property listed in `required` must be
+  filled in, a Zod default is the field's starting value, and a saved credential
+  shows as stored rather than being sent back to the browser. Keep the fields to
+  those types: an array or a nested object gets no widget, so a required one
+  would block every save. Docker and SSH keep their own tailored forms.
 </Callout>
 
 Then list your Plugin in `PLATYPUS_PLUGINS`. List membership **is** the enable
