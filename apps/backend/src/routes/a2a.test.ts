@@ -461,7 +461,7 @@ describe("POST /a2a/:endpointId — the token", () => {
   });
 
   it("lets a live token in and stamps last used", async () => {
-    const fake = seed({ tokens: [token()] });
+    const fake = seed({ tokens: [token({ id: "tok-live-stamps" })] });
 
     const res = await call(`Bearer ${TOKEN}`);
 
@@ -496,7 +496,12 @@ describe("POST /a2a/:endpointId — the token", () => {
 
   it("is 401 for an expired token, stamps last rejected and tells the Owner once", async () => {
     const fake = seed({
-      tokens: [token({ tokenExpiresAt: new Date(NOW.getTime() - DAY) })],
+      tokens: [
+        token({
+          id: "tok-live-stamps",
+          tokenExpiresAt: new Date(NOW.getTime() - DAY),
+        }),
+      ],
     });
 
     expect((await call(`Bearer ${TOKEN}`)).status).toBe(401);
@@ -834,7 +839,7 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
   });
 
   it("stamps the token's last used on a SendMessage", async () => {
-    seedConversation();
+    seedConversation({}, { tokenId: "tok-send-stamps" });
 
     await send({ messageId: "msg-a" });
 
@@ -842,7 +847,7 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
   });
 
   it("is 401 for an expired token on SendMessage, and starts nothing", async () => {
-    seedConversation();
+    seedConversation({}, { tokenId: "tok-send-stamps" });
     rows("a2a_token")[0].tokenExpiresAt = new Date(Date.now() - 1000);
 
     const res = await send({ messageId: "msg-a" });

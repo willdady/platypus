@@ -76,6 +76,7 @@ export const touchToken = async (
   }
   lastTouched.delete(key);
   lastTouched.set(key, now.getTime());
+  // why: pruning has no behavioural footprint, so nothing observes its loss; #2140 dropped the size seam that did
   for (const [staleKey, at] of lastTouched) {
     if (now.getTime() - at < TOUCH_INTERVAL_MS) break;
     lastTouched.delete(staleKey);
