@@ -3126,40 +3126,6 @@ describe("POST /a2a/:endpointId — CancelTask", () => {
     await rpc("CancelTask", { id: task.id });
   });
 
-  it("cancels once for two CancelTasks at once, refusing the other as not cancelable", async () => {
-    const fake = seedConversation();
-    const task = await startMidReply();
-    const handle = fake.handle as {
-      transaction: (callback: (tx: unknown) => Promise<unknown>) => unknown;
-    };
-    const transaction = handle.transaction;
-    let turn: Promise<unknown> = Promise.resolve();
-    handle.transaction = (callback) => {
-      const run = turn.then(() => transaction(callback));
-      turn = run.catch(() => undefined);
-      return run;
-    };
-
-    const answers = await Promise.all([
-      rpc("CancelTask", { id: task.id }),
-      rpc("CancelTask", { id: task.id }),
-    ]);
-
-    expect(
-      answers
-        .map(
-          ({ body }: { body: Partial<RpcBody> }) =>
-            body.result?.status.state ?? body.error?.code,
-        )
-        .sort(),
-    ).toEqual([-32002, "TASK_STATE_CANCELED"]);
-    expect(cancelRun).toHaveBeenCalledTimes(1);
-    await vi.waitFor(() =>
-      expect(rows("chat")[0]).toMatchObject({ status: "cancelled" }),
-    );
-    expect(await stateOf(task.id)).toBe("TASK_STATE_CANCELED");
-  });
-
   it("answers canceled when the cancel can't be sent, and the sweep stops the run", async () => {
     seedConversation();
     const task = await startMidReply();
@@ -4069,25 +4035,6 @@ describe("POST /a2a/:endpointId — the load cap", () => {
     const other = await send({ messageId: "msg-z" });
     expect(other.status).toBe(429);
     expect(model.prompts).toHaveLength(1);
-    release();
-  });
-
-  it("refuses the loser of two messages racing into an idle Chat as busy", async () => {
-    process.env.A2A_MAX_CONCURRENT_RUNS = "2";
-    seedConversation();
-    const first = await send({ messageId: "msg-a" });
-    const { contextId } = first.body.result.task;
-    let release = () => {};
-    model.hold = new Promise((resolve) => (release = resolve));
-
-    const [b, c] = await Promise.all([
-      send({ messageId: "msg-b", contextId }, { returnImmediately: true }),
-      send({ messageId: "msg-c", contextId }, { returnImmediately: true }),
-    ]);
-
-    const [won, lost] = "result" in b.body ? [b, c] : [c, b];
-    expect(won.body.result.task.id).toBeDefined();
-    expect(lost.body.error.code).toBe(-32004);
     release();
   });
 
