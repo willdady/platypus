@@ -238,14 +238,19 @@ describe("/hooks/triggers", () => {
     });
 
     it.each([
-      ["a wrong token", "pit_wrong", {}],
-      ["no token", null, {}],
-      ["an expired token", TOKEN, { tokenExpiresAt: new Date(Date.now() - 1) }],
+      ["a wrong token", "pit_wrong", "trig-wrong-token", {}],
+      ["no token", null, "trig-no-token", {}],
+      [
+        "an expired token",
+        TOKEN,
+        "trig-expired-token",
+        { tokenExpiresAt: new Date(Date.now() - 1) },
+      ],
     ])(
       "stamps last rejected on a real Inbound Trigger called with %s",
-      async (_case, token, over) => {
-        const fake = seed({ triggers: [inbound(over)] });
-        await fire("trig-1", { token });
+      async (_case, token, id, over) => {
+        const fake = seed({ triggers: [inbound({ id, ...over })] });
+        await fire(id, { token });
         await new Promise((resolve) => setTimeout(resolve, 0));
         expect(fake.tables.trigger[0].lastRejectedAt).toBeInstanceOf(Date);
         expect(fake.tables.trigger[0].lastUsedAt).toBeNull();
@@ -277,9 +282,11 @@ describe("/hooks/triggers", () => {
       const earlier = new Date(Date.now() - DAY);
 
       for (const token of [null, "pit_wrong"]) {
-        const fake = seed({ triggers: [inbound({ lastRejectedAt: earlier })] });
+        const fake = seed({
+          triggers: [inbound({ id: "trig-413", lastRejectedAt: earlier })],
+        });
 
-        const res = await fire("trig-1", {
+        const res = await fire("trig-413", {
           token,
           body: JSON.stringify({ inputs: { issueKey: "x".repeat(100) } }),
         });
@@ -331,10 +338,11 @@ describe("/hooks/triggers", () => {
       process.env.TRIGGER_BREAKER_MAX_RUNS = "1";
       try {
         const fake = seed({
+          triggers: [inbound({ id: "trig-suppressed" })],
           runs: [
             {
               id: "run-done",
-              triggerId: "trig-1",
+              triggerId: "trig-suppressed",
               entityId: "PLAT-42",
               status: "success",
               startedAt: new Date(Date.now() - 60_000),
@@ -343,7 +351,7 @@ describe("/hooks/triggers", () => {
         });
         vi.mocked(nanoid).mockReturnValueOnce("run-suppressed");
 
-        const res = await fire("trig-1");
+        const res = await fire("trig-suppressed");
 
         expect(res.status).toBe(202);
         expect(await res.json()).toEqual({
@@ -410,10 +418,10 @@ describe("/hooks/triggers", () => {
       process.env.INBOUND_TRIGGER_MAX_CONCURRENT_RUNS = "1";
       holdRun();
       vi.mocked(nanoid).mockReturnValueOnce("run-1");
-      const fake = seed();
+      const fake = seed({ triggers: [inbound({ id: "trig-rate-limited" })] });
 
-      expect((await fire("trig-1")).status).toBe(202);
-      const res = await fire("trig-1", {
+      expect((await fire("trig-rate-limited")).status).toBe(202);
+      const res = await fire("trig-rate-limited", {
         body: JSON.stringify({ inputs: { issueKey: "PLAT-7" } }),
       });
 

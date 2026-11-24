@@ -4,6 +4,7 @@ import {
   flushAsyncWork,
   resetMockDb,
   seedDb,
+  type FakeDb,
   type Row,
 } from "../test-utils.ts";
 import { mockLogger } from "../test-setup.ts";
@@ -42,7 +43,6 @@ import type { InboundTarget } from "./inbound-trigger.ts";
 import type { InboundTriggerConfig } from "@platypus/schemas";
 
 type InboundTriggerModule = typeof import("./inbound-trigger.ts");
-type BearerTokenModule = typeof import("./bearer-token.ts");
 type ErrorsModule = typeof import("../errors.ts");
 
 let ConflictError: ErrorsModule["ConflictError"];
@@ -57,8 +57,6 @@ let sendInboundTokenReminders: InboundTriggerModule["sendInboundTokenReminders"]
 let setInboundTriggerAccess: InboundTriggerModule["setInboundTriggerAccess"];
 let touchInboundTrigger: InboundTriggerModule["touchInboundTrigger"];
 let validateInboundBody: InboundTriggerModule["validateInboundBody"];
-let resetTokenTouches: BearerTokenModule["resetTokenTouches"];
-let tokenTouchCount: BearerTokenModule["tokenTouchCount"];
 
 const NOW = new Date("2026-09-29T12:00:00.000Z");
 const DAY = 24 * 60 * 60 * 1000;
@@ -92,6 +90,11 @@ const inboundTrigger = (over: Row = {}): Row => ({
   createdAt: new Date(NOW.getTime() - 10 * DAY),
   ...over,
 });
+
+const writes = (fake: FakeDb) =>
+  fake.queries.filter(
+    ({ kind, table }) => kind === "update" && table === "trigger",
+  ).length;
 
 const seed = ({
   trigger = [inboundTrigger()],
@@ -155,10 +158,7 @@ describe("inbound triggers", () => {
       touchInboundTrigger,
       validateInboundBody,
     } = await import("./inbound-trigger.ts"));
-    ({ resetTokenTouches, tokenTouchCount } =
-      await import("./bearer-token.ts"));
     ({ ConflictError, NotFoundError } = await import("../errors.ts"));
-    resetTokenTouches();
     mockDeletePrefix.mockResolvedValue(undefined);
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(NOW);
@@ -752,6 +752,7 @@ describe("inbound triggers", () => {
 
       await touchInboundTrigger("trig-1", "lastUsedAt", NOW);
       expect(fake.tables.trigger[0].lastUsedAt).toEqual(NOW);
+      expect(writes(fake)).toBe(1);
 
       const soon = new Date(NOW.getTime() + 30_000);
       await touchInboundTrigger("trig-1", "lastUsedAt", soon);
@@ -759,30 +760,49 @@ describe("inbound triggers", () => {
 
       await touchInboundTrigger("trig-1", "lastRejectedAt", soon);
       expect(fake.tables.trigger[0].lastRejectedAt).toEqual(soon);
+      expect(writes(fake)).toBe(2);
 
       const later = new Date(NOW.getTime() + 61_000);
       await touchInboundTrigger("trig-1", "lastUsedAt", later);
       expect(fake.tables.trigger[0].lastUsedAt).toEqual(later);
+      expect(writes(fake)).toBe(3);
     });
 
-    it("forgets touches older than a minute, so memory stays bounded", async () => {
-      seed();
+    it("forgets touches older than a minute, so a Trigger is written again", async () => {
+      const fake = seed({
+        trigger: [
+          inboundTrigger({ id: "trig-a" }),
+          inboundTrigger({ id: "trig-b" }),
+          inboundTrigger({ id: "trig-c" }),
+        ],
+      });
+      const ids = ["trig-a", "trig-b", "trig-c"];
+      const half = new Date(NOW.getTime() + 30_000);
+      const after = new Date(NOW.getTime() + 61_000);
 
-      await touchInboundTrigger("trig-1", "lastUsedAt", NOW);
-      await touchInboundTrigger("trig-1", "lastRejectedAt", NOW);
-      await touchInboundTrigger(
-        "trig-2",
-        "lastUsedAt",
-        new Date(NOW.getTime() + 30_000),
-      );
-      expect(tokenTouchCount()).toBe(3);
+      for (const id of ids) await touchInboundTrigger(id, "lastUsedAt", NOW);
+      expect(fake.tables.trigger.map((row) => row.lastUsedAt)).toEqual([
+        NOW,
+        NOW,
+        NOW,
+      ]);
+      expect(writes(fake)).toBe(3);
 
-      await touchInboundTrigger(
-        "trig-3",
-        "lastUsedAt",
-        new Date(NOW.getTime() + 61_000),
-      );
-      expect(tokenTouchCount()).toBe(2);
+      for (const id of ids) await touchInboundTrigger(id, "lastUsedAt", half);
+      expect(fake.tables.trigger.map((row) => row.lastUsedAt)).toEqual([
+        NOW,
+        NOW,
+        NOW,
+      ]);
+      expect(writes(fake)).toBe(3);
+
+      for (const id of ids) await touchInboundTrigger(id, "lastUsedAt", after);
+      expect(fake.tables.trigger.map((row) => row.lastUsedAt)).toEqual([
+        after,
+        after,
+        after,
+      ]);
+      expect(writes(fake)).toBe(6);
     });
   });
 

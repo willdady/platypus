@@ -62,10 +62,6 @@ export const revokedTokenFields = () => ({
 const TOUCH_INTERVAL_MS = 60_000;
 const lastTouched = new Map<string, number>();
 
-export const resetTokenTouches = (): void => lastTouched.clear();
-
-export const tokenTouchCount = (): number => lastTouched.size;
-
 export const touchToken = async (
   table: TokenTable,
   id: string,
@@ -80,6 +76,7 @@ export const touchToken = async (
   }
   lastTouched.delete(key);
   lastTouched.set(key, now.getTime());
+  // why: pruning has no behavioural footprint, so nothing observes its loss; #2140 dropped the size seam that did
   for (const [staleKey, at] of lastTouched) {
     if (now.getTime() - at < TOUCH_INTERVAL_MS) break;
     lastTouched.delete(staleKey);

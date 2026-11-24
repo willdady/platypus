@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { resetMockDb, seedDb, type Row } from "../test-utils.ts";
+import { resetMockDb, seedDb, type FakeDb, type Row } from "../test-utils.ts";
 
 vi.mock("./notification.ts", () => ({
   createNotification: vi.fn(() => Promise.resolve({ id: "notification-1" })),
@@ -7,7 +7,6 @@ vi.mock("./notification.ts", () => ({
 
 import { createNotification } from "./notification.ts";
 import { sendA2aTokenReminders, touchA2aToken } from "./a2a-token.ts";
-import { resetTokenTouches, tokenTouchCount } from "./bearer-token.ts";
 
 const NOW = new Date("2026-10-04T12:00:00.000Z");
 const DAY = 24 * 60 * 60 * 1000;
@@ -25,6 +24,9 @@ const token = (over: Row = {}): Row => ({
   createdAt: new Date(NOW.getTime() - 70 * DAY),
   ...over,
 });
+
+const writes = (fake: FakeDb) =>
+  fake.queries.filter(({ kind }) => kind === "update").length;
 
 const seed = (tokens: Row[] = [token()]) =>
   seedDb({
@@ -46,7 +48,6 @@ describe("A2A tokens", () => {
   beforeEach(() => {
     resetMockDb();
     vi.clearAllMocks();
-    resetTokenTouches();
   });
 
   describe("expiry reminders", () => {
@@ -122,16 +123,18 @@ describe("A2A tokens", () => {
       expect(fake.tables.a2a_token[0].lastUsedAt).toEqual(NOW);
       expect(fake.tables.a2a_token[0].lastRejectedAt).toEqual(later);
       expect(fake.tables.a2a_token[1].lastUsedAt).toEqual(later);
+      expect(writes(fake)).toBe(3);
 
       await touchA2aToken("tok-1", "lastUsedAt", nextMinute);
       expect(fake.tables.a2a_token[0].lastUsedAt).toEqual(nextMinute);
+      expect(writes(fake)).toBe(4);
     });
 
     it("holds the limit across instances: a recent stamp in the row wins", async () => {
-      const fake = seed([token({ lastUsedAt: NOW })]);
+      const fake = seed([token({ id: "tok-row", lastUsedAt: NOW })]);
 
       await touchA2aToken(
-        "tok-1",
+        "tok-row",
         "lastUsedAt",
         new Date(NOW.getTime() + 30_000),
       );
@@ -139,23 +142,39 @@ describe("A2A tokens", () => {
       expect(fake.tables.a2a_token[0].lastUsedAt).toEqual(NOW);
     });
 
-    it("forgets touches older than a minute, so memory stays bounded", async () => {
-      seed([token(), token({ id: "tok-2" })]);
+    it("forgets touches older than a minute, so a token is written again", async () => {
+      const fake = seed([
+        token({ id: "tok-a" }),
+        token({ id: "tok-b" }),
+        token({ id: "tok-c" }),
+      ]);
+      const ids = ["tok-a", "tok-b", "tok-c"];
+      const half = new Date(NOW.getTime() + 30_000);
+      const after = new Date(NOW.getTime() + 61_000);
 
-      await touchA2aToken("tok-1", "lastUsedAt", NOW);
-      await touchA2aToken(
-        "tok-1",
-        "lastRejectedAt",
-        new Date(NOW.getTime() + 30_000),
-      );
-      expect(tokenTouchCount()).toBe(2);
+      for (const id of ids) await touchA2aToken(id, "lastUsedAt", NOW);
+      expect(fake.tables.a2a_token.map((row) => row.lastUsedAt)).toEqual([
+        NOW,
+        NOW,
+        NOW,
+      ]);
+      expect(writes(fake)).toBe(3);
 
-      await touchA2aToken(
-        "tok-2",
-        "lastUsedAt",
-        new Date(NOW.getTime() + 61_000),
-      );
-      expect(tokenTouchCount()).toBe(2);
+      for (const id of ids) await touchA2aToken(id, "lastUsedAt", half);
+      expect(fake.tables.a2a_token.map((row) => row.lastUsedAt)).toEqual([
+        NOW,
+        NOW,
+        NOW,
+      ]);
+      expect(writes(fake)).toBe(3);
+
+      for (const id of ids) await touchA2aToken(id, "lastUsedAt", after);
+      expect(fake.tables.a2a_token.map((row) => row.lastUsedAt)).toEqual([
+        after,
+        after,
+        after,
+      ]);
+      expect(writes(fake)).toBe(6);
     });
   });
 });

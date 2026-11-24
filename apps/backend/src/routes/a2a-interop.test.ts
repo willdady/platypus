@@ -79,10 +79,7 @@ vi.mock("../services/notification.ts", () => ({
 }));
 
 import app from "../server.ts";
-import {
-  hashBearerToken,
-  resetTokenTouches,
-} from "../services/bearer-token.ts";
+import { hashBearerToken } from "../services/bearer-token.ts";
 import { runRegistry } from "../runs/run-registry.ts";
 
 const TOKEN = "pa2a_the-right-token";
@@ -237,7 +234,6 @@ describe("A2A endpoints through the @a2a-js/sdk client", () => {
     vi.clearAllMocks();
     model.hold = null;
     model.calls = 0;
-    resetTokenTouches();
     push.mockResolvedValue(new Response(null, { status: 200 }));
     vi.stubGlobal("fetch", push);
     seed();
