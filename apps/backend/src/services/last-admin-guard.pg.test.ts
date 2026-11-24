@@ -1,9 +1,21 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import pg from "pg";
 import {
   createScratchPostgres,
   type ScratchPostgres,
 } from "../db/postgres.test-fixtures.ts";
+
+// why: test-setup installs the fake db; this test needs the real pool
+vi.unmock("../index.ts");
+vi.unmock("../auth.ts");
 
 type Outcome = "blocked" | "ran" | "failed";
 type MemberRoleService = typeof import("./member-role.ts");
