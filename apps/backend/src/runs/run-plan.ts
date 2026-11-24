@@ -40,7 +40,7 @@ export const BEDROCK_CACHE_POINT = {
 
 export type RunPlan = {
   model: LanguageModel;
-  usageModel?: UsageModel;
+  usageModel: UsageModel;
   tools: Record<string, Tool>;
   system?: string;
   maxSteps: number;

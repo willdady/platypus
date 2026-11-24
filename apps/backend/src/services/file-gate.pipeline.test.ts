@@ -1,21 +1,18 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { DEFAULT_MAX_EXTRACTED_TEXT_CHARS } from "@platypus/schemas";
-import { promises as fs } from "node:fs";
-import * as os from "node:os";
-import * as path from "node:path";
 import type { PlatypusUIMessage } from "../types.ts";
 import {
   extractFiles,
   inlineFileUrls,
   rewriteStorageUrls,
 } from "../storage/utils.ts";
-import { resetStorage } from "../storage/index.ts";
 import { assertFilePartsSupported, normalizeFileParts } from "./file-gate.ts";
 import { resetExtractedTextCache } from "./file-extraction.ts";
 import {
   buildTestDocx,
   buildTestPdf,
 } from "./file-extraction.test-fixtures.ts";
+import { useTempDiskStorage } from "../storage/temp-disk.test-fixtures.ts";
 
 const PDF_TYPE = "application/pdf";
 const DOCX_TYPE =
@@ -49,21 +46,10 @@ const textOf = (message: PlatypusUIMessage, index: number) =>
 const cap = { maxExtractedTextChars: DEFAULT_MAX_EXTRACTED_TEXT_CHARS };
 
 describe("attachment pipeline (gate → store → inline → normalize)", () => {
-  let tempDir: string;
+  useTempDiskStorage();
 
-  beforeEach(async () => {
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "file-gate-pipeline-"));
-    process.env.STORAGE_DISK_PATH = tempDir;
-    process.env.STORAGE_BACKEND = "disk";
-    resetStorage();
+  beforeEach(() => {
     resetExtractedTextCache();
-  });
-
-  afterEach(async () => {
-    await fs.rm(tempDir, { recursive: true, force: true });
-    delete process.env.STORAGE_DISK_PATH;
-    delete process.env.STORAGE_BACKEND;
-    resetStorage();
   });
 
   const roundTrip = async (message: PlatypusUIMessage) => {

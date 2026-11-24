@@ -1,10 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import { nanoid } from "nanoid";
 import { asDb, mockDb, resetMockDb } from "../test-utils.ts";
-import { mockNanoid } from "../test-setup.ts";
 import { attachment as attachmentTable } from "../db/schema.ts";
 import { promoteScoped } from "./promote.ts";
 import { workspaceScopedWhere } from "./scoped-resource.ts";
 import { NotFoundError } from "../errors.ts";
+
+vi.mock("nanoid", { spy: true });
 
 describe("promoteScoped module", () => {
   beforeEach(() => {
@@ -26,7 +28,7 @@ describe("promoteScoped module", () => {
   });
 
   it("re-scopes the resource and auto-attaches the origin workspace", async () => {
-    mockNanoid.mockReturnValueOnce("attach-1");
+    vi.mocked(nanoid).mockReturnValueOnce("attach-1");
     mockDb.limit.mockResolvedValueOnce([{ id: "s1", workspaceId: "ws-1" }]);
     mockDb.returning.mockResolvedValueOnce([
       { id: "s1", organizationId: "org-1", workspaceId: null },
