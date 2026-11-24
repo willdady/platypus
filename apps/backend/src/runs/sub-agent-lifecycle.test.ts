@@ -17,6 +17,7 @@ import { DELEGATE_TOOL_NAME } from "../tools/turn-tool-names.ts";
 import { workspaceScope, orgScope, type WorkspaceScope } from "../scope.ts";
 import type { ParentRunContext, RunStats, RunStatus } from "./types.ts";
 import { DEFAULT_AGENT_MAX_STEPS } from "@platypus/schemas";
+import { TEST_USAGE_MODEL } from "./run-plan.test-fixtures.ts";
 
 const GATE_SCOPE = {
   orgId: "org-1",
@@ -122,6 +123,7 @@ describe("a delegated run inside a parent run", () => {
             { type: "text-end", id: "t1" },
           ]),
         ),
+        usageModel: TEST_USAGE_MODEL,
         maxSteps: DEFAULT_AGENT_MAX_STEPS,
       },
       loadTools: () =>
@@ -199,6 +201,7 @@ describe("a delegated run inside a parent run", () => {
             { type: "text-end", id: "t1" },
           ]),
         ),
+        usageModel: TEST_USAGE_MODEL,
         maxSteps: DEFAULT_AGENT_MAX_STEPS,
       },
       loadTools: () =>
@@ -282,6 +285,7 @@ describe("a delegated run's Run events", () => {
             { type: "text-end", id: "t1" },
           ]),
         ),
+        usageModel: TEST_USAGE_MODEL,
         maxSteps: DEFAULT_AGENT_MAX_STEPS,
       },
       loadTools: () =>
@@ -333,6 +337,7 @@ describe("a delegated run's Run events", () => {
           { [DELEGATE_TOOL_NAME]: tool },
           parent.onActivity,
         ),
+        usageModel: TEST_USAGE_MODEL,
         maxSteps: 3,
       },
       run: parent,

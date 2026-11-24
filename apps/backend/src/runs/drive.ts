@@ -419,7 +419,7 @@ const fallbackSwitchFor = ({
   fallback: FallbackTurn | undefined;
   run: RunLifecycle;
   outcome: ModelLoopOutcome;
-  from: UsageModel | undefined;
+  from: UsageModel;
   stepsUsed: number;
   maxSteps: number;
 }): SwitchDecision | null => {
@@ -429,7 +429,6 @@ const fallbackSwitchFor = ({
   const error = outcome.failureError ?? outcome.rejection?.error;
   if (!isProviderUnavailableError(error)) return null;
   const to = fallback.plan.usageModel;
-  if (!from || !to) return null;
   return {
     modelSwitch: {
       from: { providerId: from.providerId, model: from.model },

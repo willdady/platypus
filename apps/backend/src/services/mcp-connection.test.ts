@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { eq, type SQL } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { mockDb, resetMockDb, asDb, seedDb } from "../test-utils.ts";
-import { markerOperators } from "../fake-db.ts";
 import { createMCPClient, auth as mcpAuth } from "@ai-sdk/mcp";
 import { mcp as mcpTable } from "../db/schema.ts";
 import type { McpRecord } from "./mcp-oauth-provider.ts";
@@ -487,10 +486,7 @@ describe("mcp-connection", () => {
           },
           {
             force: true,
-            clearTokensWhere: markerOperators().eq(
-              mcpTable.id,
-              "mcp-1",
-            ) as unknown as SQL,
+            clearTokensWhere: eq(mcpTable.id, "mcp-1"),
             userId: "user-1",
           },
         );

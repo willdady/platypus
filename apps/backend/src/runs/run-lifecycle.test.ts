@@ -1,12 +1,15 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { ABORT_GRACE_MS, startRun } from "./run-lifecycle.ts";
-import { runRegistry } from "./run-registry.ts";
+import { RunRegistry } from "./run-registry.ts";
 import type { RunStatus } from "./types.ts";
 
-const recordedRun = (runId: string) => {
+let registry: RunRegistry;
+
+const recordedRun = (runs: RunRegistry, runId: string) => {
   const outcomes: RunStatus[] = [];
   const run = startRun({
     runId,
+    registry: runs,
     onTerminate: ({ status }) => {
       outcomes.push(status);
     },
@@ -16,6 +19,7 @@ const recordedRun = (runId: string) => {
 
 beforeEach(() => {
   vi.useFakeTimers();
+  registry = new RunRegistry();
 });
 
 afterEach(() => {
@@ -24,9 +28,9 @@ afterEach(() => {
 
 describe("a run whose work never unwinds", () => {
   it("still terminates as cancelled once the abort grace passes", async () => {
-    const { run, outcomes } = recordedRun("lifecycle-cancel");
+    const { run, outcomes } = recordedRun(registry, "lifecycle-cancel");
 
-    expect(runRegistry.cancel("lifecycle-cancel")).toBe(true);
+    expect(registry.cancel("lifecycle-cancel")).toBe(true);
     await vi.advanceTimersByTimeAsync(ABORT_GRACE_MS);
 
     expect(outcomes).toEqual(["cancelled"]);
@@ -34,22 +38,22 @@ describe("a run whose work never unwinds", () => {
   });
 
   it("holds the runId through the grace, then releases it", async () => {
-    recordedRun("lifecycle-release");
+    recordedRun(registry, "lifecycle-release");
 
-    runRegistry.cancel("lifecycle-release");
+    registry.cancel("lifecycle-release");
     await vi.advanceTimersByTimeAsync(ABORT_GRACE_MS - 1);
-    expect(() => recordedRun("lifecycle-release")).toThrow();
+    expect(() => recordedRun(registry, "lifecycle-release")).toThrow();
 
     await vi.advanceTimersByTimeAsync(1);
-    expect(runRegistry.has("lifecycle-release")).toBe(false);
-    expect(() => recordedRun("lifecycle-release")).not.toThrow();
-    runRegistry.unregister("lifecycle-release");
+    expect(registry.has("lifecycle-release")).toBe(false);
+    expect(() => recordedRun(registry, "lifecycle-release")).not.toThrow();
+    registry.unregister("lifecycle-release");
   });
 
   it("terminates once, not twice, when the work unwinds afterwards", async () => {
-    const { run, outcomes } = recordedRun("lifecycle-once");
+    const { run, outcomes } = recordedRun(registry, "lifecycle-once");
 
-    runRegistry.cancel("lifecycle-once");
+    registry.cancel("lifecycle-once");
     await vi.advanceTimersByTimeAsync(ABORT_GRACE_MS);
     await run.finish("succeeded");
 
@@ -59,15 +63,15 @@ describe("a run whose work never unwinds", () => {
 
 describe("a run whose work unwinds within the grace", () => {
   it("is finished by its own work, and frees the runId then", async () => {
-    const { run, outcomes } = recordedRun("lifecycle-settle");
+    const { run, outcomes } = recordedRun(registry, "lifecycle-settle");
 
-    runRegistry.cancel("lifecycle-settle");
+    registry.cancel("lifecycle-settle");
     expect(outcomes).toEqual([]);
-    expect(runRegistry.has("lifecycle-settle")).toBe(true);
+    expect(registry.has("lifecycle-settle")).toBe(true);
 
     await run.finish("cancelled");
     expect(outcomes).toEqual(["cancelled"]);
-    expect(runRegistry.has("lifecycle-settle")).toBe(false);
+    expect(registry.has("lifecycle-settle")).toBe(false);
 
     await vi.advanceTimersByTimeAsync(ABORT_GRACE_MS);
     expect(outcomes).toEqual(["cancelled"]);
@@ -76,10 +80,10 @@ describe("a run whose work unwinds within the grace", () => {
 
 describe("a run stopped before its turn is adopted", () => {
   it("is finished at once, with the turn disposed first", async () => {
-    const { run, outcomes } = recordedRun("lifecycle-adopt");
+    const { run, outcomes } = recordedRun(registry, "lifecycle-adopt");
     const order: string[] = [];
 
-    runRegistry.cancel("lifecycle-adopt");
+    registry.cancel("lifecycle-adopt");
     const adopted = await run.adoptOrDispose(() => {
       order.push(`dispose (${outcomes.length} outcomes)`);
       return Promise.resolve();
@@ -88,11 +92,11 @@ describe("a run stopped before its turn is adopted", () => {
     expect(adopted).toBe(false);
     expect(order).toEqual(["dispose (0 outcomes)"]);
     expect(outcomes).toEqual(["cancelled"]);
-    expect(runRegistry.has("lifecycle-adopt")).toBe(false);
+    expect(registry.has("lifecycle-adopt")).toBe(false);
   });
 
   it("disposes a turn adopted after the run finished, and refuses it", async () => {
-    const { run } = recordedRun("lifecycle-late");
+    const { run } = recordedRun(registry, "lifecycle-late");
     await run.finish("succeeded");
     const dispose = vi.fn(() => Promise.resolve());
 
@@ -102,18 +106,14 @@ describe("a run stopped before its turn is adopted", () => {
 });
 
 describe("a run stopped while the process is stopping", () => {
-  afterEach(() => {
-    runRegistry.resetStopStateForTests();
-  });
-
   it("is finished at once, without waiting out the grace", async () => {
-    const { outcomes } = recordedRun("lifecycle-stopping");
-    runRegistry.beginStop();
+    const { outcomes } = recordedRun(registry, "lifecycle-stopping");
+    registry.beginStop();
 
-    runRegistry.cancel("lifecycle-stopping");
+    registry.cancel("lifecycle-stopping");
     await vi.advanceTimersByTimeAsync(0);
 
     expect(outcomes).toEqual(["cancelled"]);
-    expect(runRegistry.has("lifecycle-stopping")).toBe(false);
+    expect(registry.has("lifecycle-stopping")).toBe(false);
   });
 });
