@@ -34,6 +34,7 @@ const {
   importSkillBundle,
   replaceSkillBundle,
   exportSkillBundle,
+  listSkillFiles,
   rehashSkill,
 } = await import("./skill-bundle.ts");
 const { deleteSkill, updateSkill, upsertSkill } = await import("./skill.ts");
@@ -218,6 +219,17 @@ const rowCounts = async () => {
   );
   return { skills: skills.rows[0].n, files: files.rows[0].n };
 };
+
+const fileRowsOf = async (skillId: string) =>
+  listSkillFiles((await import("../index.ts")).db, skillId);
+
+const bytesOf = async (storageKey: string) =>
+  (await getStorage().get(storageKey))!.data;
+
+const attachShared = (skillId: string) =>
+  pg.exec(
+    `INSERT INTO "attachment" ("id", "workspace_id", "resource_type", "resource_id") VALUES ('a-1', 'ws-1', 'skill', '${skillId}')`,
+  );
 
 const read = (skillId: string, name: string, filePath: string) =>
   callTool(createReadSkillFileTool("org-1", "ws-1", [skillId]), {
@@ -437,25 +449,99 @@ describe("Skill writes outside the bundle", () => {
     });
   });
 
-  it("upsertSkill refuses the name of a Shared bundled Skill", async () => {
-    const row = await importSkillBundle(orgScope, pdfZip());
-    await pg.exec(
-      `INSERT INTO "attachment" ("id", "workspace_id", "resource_type", "resource_id") VALUES ('a-1', 'ws-1', 'skill', '${row.id}')`,
-    );
-    const tools = createSkillManagementTools(
-      "ws-1",
-      "org-1",
-      "http://localhost:3000",
+  it("upsertSkill creates a Workspace version of a Shared bundled Skill, copying its files", async () => {
+    const shared = await importSkillBundle(orgScope, pdfZip());
+    await attachShared(shared.id);
+    const sharedFiles = await fileRowsOf(shared.id);
+    const sharedBytes = new Map(
+      await Promise.all(
+        sharedFiles.map(
+          async (file) => [file.path, await bytesOf(file.storageKey)] as const,
+        ),
+      ),
     );
 
-    expect(
-      await callTool(tools.upsertSkill, {
-        name: "pdf",
-        description: "d",
-        body: "b",
-      }),
-    ).toEqual({ error: expect.stringContaining("bundled files") as unknown });
+    const copy = await upsertSkill(ctx, {
+      name: "pdf",
+      description: "This Workspace's pdf",
+      body: "New body",
+    });
+
+    expect(copy).toMatchObject({
+      name: "pdf",
+      workspaceId: "ws-1",
+      description: "This Workspace's pdf",
+      body: "New body",
+      needsSandbox: true,
+    });
+    expect(copy.id).not.toBe(shared.id);
+
+    const copiedFiles = await fileRowsOf(copy.id);
+    expect(copiedFiles.map((f) => f.path)).toEqual(
+      sharedFiles.map((f) => f.path),
+    );
+    for (const file of copiedFiles) {
+      expect(file.storageKey.startsWith(skillPrefix(copy.id))).toBe(true);
+      expect(file.storageKey).not.toBe(
+        sharedFiles.find((s) => s.path === file.path)!.storageKey,
+      );
+      expect(await bytesOf(file.storageKey)).toEqual(
+        sharedBytes.get(file.path),
+      );
+    }
+
+    const reparsed = parseSkillZip(await exportSkillBundle(copy));
+    expect(bundleHash(reparsed)).toBe(copy.bundleHash);
+    expect(copy.bundleHash).not.toBe(shared.bundleHash);
+
+    expect(await fileRowsOf(shared.id)).toEqual(sharedFiles);
+    for (const file of sharedFiles) {
+      expect(await bytesOf(file.storageKey)).toEqual(
+        sharedBytes.get(file.path),
+      );
+    }
+  });
+
+  it("upsertSkill over a Shared bundled Skill again updates the Workspace version in place", async () => {
+    const shared = await importSkillBundle(orgScope, pdfZip());
+    await attachShared(shared.id);
+
+    const first = await upsertSkill(ctx, {
+      name: "pdf",
+      description: "First",
+      body: "First body",
+    });
+    const again = await upsertSkill(ctx, {
+      name: "pdf",
+      description: "Second",
+      body: "Second body",
+    });
+
+    expect(again.id).toBe(first.id);
+    expect(again.description).toBe("Second");
+    expect(await rowCounts()).toEqual({ skills: 2, files: 14 });
+    expect(await fileRowsOf(first.id)).toHaveLength(7);
+  });
+
+  it("upsertSkill leaves no Workspace row or files when copying a Shared bundle fails", async () => {
+    const shared = await importSkillBundle(orgScope, pdfZip());
+    await attachShared(shared.id);
+    const storage = getStorage();
+    const put = storage.put.bind(storage);
+    let writes = 0;
+    vi.spyOn(storage, "put").mockImplementation(async (...args) => {
+      writes++;
+      if (writes === 2) throw new Error("disk full");
+      return put(...args);
+    });
+
+    await expect(
+      upsertSkill(ctx, { name: "pdf", description: "d", body: "b" }),
+    ).rejects.toThrow("disk full");
+
     expect(await rowCounts()).toEqual({ skills: 1, files: 7 });
+    expect(await storedUnder("org-1/skills/")).toHaveLength(7);
+    expect(await storedUnder(skillPrefix(shared.id))).toHaveLength(7);
   });
 
   it("upsertSkill on the Workspace's own bundled Skill rehashes and keeps the files", async () => {

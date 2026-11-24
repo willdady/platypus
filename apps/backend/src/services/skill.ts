@@ -2,10 +2,14 @@ import type { z } from "zod";
 import { and, eq, inArray, notInArray, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { db } from "../index.ts";
-import { skill as skillTable, agent as agentTable } from "../db/schema.ts";
+import {
+  skill as skillTable,
+  skillFile as skillFileTable,
+  agent as agentTable,
+} from "../db/schema.ts";
 import type { skillCreateSchema, skillUpdateSchema } from "@platypus/schemas";
 import type { ScopeContext } from "../scope.ts";
-import { ConflictError, LockedError, NotFoundError } from "../errors.ts";
+import { ConflictError, NotFoundError } from "../errors.ts";
 import { skillStorageKeyPrefix } from "../storage/keys.ts";
 import { deleteStoredPrefix } from "../storage/utils.ts";
 import { scrubDeletedAgentReference } from "./agent-references.ts";
@@ -18,6 +22,7 @@ import {
 } from "./scoped-resource.ts";
 import { bundleHash } from "./skill-bundle-format.ts";
 import {
+  copySkillFilesTo,
   fieldsOf,
   listSkillFiles,
   rehashSkill,
@@ -146,41 +151,55 @@ export async function upsertSkill(
   fields: { name: string; description: string; body: string },
 ): Promise<SkillRow> {
   const existing = await resolveScopedByName(db, "skill", fields.name, ctx);
-  if (
-    existing?.scope === "organization" &&
-    (await listSkillFiles(db, existing.row.id)).length > 0
-  ) {
-    throw new LockedError(
-      `Skill '${fields.name}' is a shared skill with bundled files, and a workspace version of it can't be created yet`,
-    );
-  }
+  const sharedFiles =
+    existing?.scope === "organization"
+      ? await listSkillFiles(db, existing.row.id)
+      : [];
 
   const now = new Date();
-  return db.transaction(async (tx) => {
-    const row = oneRow(
-      await tx
-        .insert(skillTable)
-        .values({
-          id: nanoid(),
-          workspaceId: ctx.workspaceId,
-          name: fields.name,
-          description: fields.description,
-          body: fields.body,
-          createdAt: now,
-          updatedAt: now,
-        })
-        .onConflictDoUpdate({
-          target: [skillTable.workspaceId, skillTable.name],
-          set: {
+  const id = nanoid();
+  const copied =
+    sharedFiles.length > 0
+      ? await copySkillFilesTo(ctx.orgId, id, sharedFiles)
+      : null;
+
+  try {
+    const row = await db.transaction(async (tx) => {
+      const upserted = oneRow(
+        await tx
+          .insert(skillTable)
+          .values({
+            id,
+            workspaceId: ctx.workspaceId,
+            name: fields.name,
             description: fields.description,
             body: fields.body,
+            ...(copied && { needsSandbox: copied.needsSandbox }),
+            createdAt: now,
             updatedAt: now,
-          },
-        })
-        .returning(),
-    );
-    return rehashSkill(tx, row);
-  });
+          })
+          .onConflictDoUpdate({
+            target: [skillTable.workspaceId, skillTable.name],
+            set: {
+              description: fields.description,
+              body: fields.body,
+              updatedAt: now,
+            },
+          })
+          .returning(),
+      );
+      if (copied && upserted.id === id) {
+        await tx.insert(skillFileTable).values(copied.rows);
+      }
+      return rehashSkill(tx, upserted);
+    });
+    // why: a racing Workspace row won the name, so the copies belong to nobody
+    if (copied && row.id !== id) await deleteStoredPrefix(copied.prefix);
+    return row;
+  } catch (error) {
+    if (copied) await deleteStoredPrefix(copied.prefix);
+    throw error;
+  }
 }
 
 export async function deleteSkill(
