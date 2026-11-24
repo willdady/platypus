@@ -1,9 +1,6 @@
-import { afterEach, beforeEach, vi, type Mock } from "vitest";
-import { promises as fs } from "node:fs";
-import * as os from "node:os";
-import * as path from "node:path";
+import { vi, type Mock } from "vitest";
 import { PgDialect } from "drizzle-orm/pg-core";
-import { getStorage, resetStorage } from "./storage/index.ts";
+import { getStorage } from "./storage/index.ts";
 import {
   createFakeDb,
   type FakeDb,
@@ -362,19 +359,7 @@ export const notificationEvent = (
   },
 });
 
-export const useTempDiskStorage = () => {
-  let dir: string;
-  beforeEach(async () => {
-    dir = await fs.mkdtemp(path.join(os.tmpdir(), "platypus-storage-test-"));
-    process.env.STORAGE_DISK_PATH = dir;
-    resetStorage();
-  });
-  afterEach(async () => {
-    delete process.env.STORAGE_DISK_PATH;
-    resetStorage();
-    await fs.rm(dir, { recursive: true, force: true });
-  });
-};
+export { useTempDiskStorage } from "./storage/temp-disk.test-fixtures.ts";
 
 export const putStoredFiles = (keys: string[]) =>
   Promise.all(
