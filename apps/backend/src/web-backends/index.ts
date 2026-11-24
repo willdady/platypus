@@ -102,14 +102,12 @@ export interface ComposeWebBackendOptions {
   backend: string;
   plugin: PluginConfigContext;
   pluginName: string;
-  resolveHostname?: (hostname: string) => Promise<string[]>;
 }
 
 export const composeWebBackend = (
   options: ComposeWebBackendOptions,
 ): WebBackendRegistration => {
-  const { contribution, backend, plugin, pluginName, resolveHostname } =
-    options;
+  const { contribution, backend, plugin, pluginName } = options;
   const timeoutMs = contribution.timeoutMs ?? DEFAULT_WEB_TIMEOUT_MS;
 
   const logCall = (
@@ -287,7 +285,7 @@ export const composeWebBackend = (
           );
         }
 
-        const egress = await checkEgress(url, { resolve: resolveHostname });
+        const egress = await checkEgress(url);
         if (!egress.allowed) {
           logCall("read_url", "blocked", startedAt, {
             url,
@@ -359,7 +357,7 @@ export const composeWebBackend = (
   return {
     backend,
     name: contribution.name,
-    buildTurnTools: async (ctx: TurnToolsContext) => {
+    buildTurnTools: async (ctx: TurnToolsContext, signal) => {
       const { providerId, ...coreCtx } = ctx;
 
       const faultCtx = {
@@ -380,8 +378,16 @@ export const composeWebBackend = (
         executors = await withDeadline(
           () => contribution.createExecutors(factoryCtx, plugin),
           timeoutMs,
+          signal,
         );
       } catch (cause) {
+        if (cause instanceof CallerAbortedError) {
+          logger.debug(
+            { ...faultCtx, cause },
+            "Web backend's createExecutors cancelled with the turn; serving no tools this turn",
+          );
+          return {};
+        }
         const timedOut = cause instanceof DeadlineExceededError;
         logger.warn(
           { ...faultCtx, cause },

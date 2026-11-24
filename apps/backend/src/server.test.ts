@@ -1,8 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { dbError, mockDb, mockSession, resetMockDb } from "./test-utils.ts";
 import app from "./server.ts";
+import { db } from "./index.ts";
 import { logger } from "./logger.ts";
-import { runRegistry } from "./runs/run-registry.ts";
+import { readyRoutes } from "./ready.ts";
+import { RunRegistry } from "./runs/run-registry.ts";
 
 describe("app error responses", () => {
   beforeEach(() => {
@@ -76,13 +78,14 @@ describe("app error responses", () => {
 });
 
 describe("health and readiness", () => {
+  let registry: RunRegistry;
+
   beforeEach(() => {
     resetMockDb();
-    runRegistry.resetStopStateForTests();
+    registry = new RunRegistry();
   });
 
   afterEach(() => {
-    runRegistry.resetStopStateForTests();
     vi.restoreAllMocks();
   });
 
@@ -134,11 +137,11 @@ describe("health and readiness", () => {
   });
 
   it("answers /ready 503 once shutdown has started, without a db call", async () => {
-    runRegistry.beginStop();
+    registry.beginStop();
     const query = vi.fn();
     Object.assign(mockDb, { $client: { query } });
 
-    const res = await app.request("/ready");
+    const res = await readyRoutes(db.$client, registry).request("/ready");
 
     expect(res.status).toBe(503);
     expect(await res.json()).toEqual({ error: "Server is shutting down" });

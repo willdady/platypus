@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import { nanoid } from "nanoid";
 import {
   mockDb,
   mockSession,
@@ -8,9 +9,8 @@ import {
   type FakeDb,
 } from "../test-utils.ts";
 import app from "../server.ts";
-import { mockNanoid } from "../test-setup.ts";
 
-mockNanoid.mockReturnValue("test-id-123");
+vi.mock("nanoid", { spy: true });
 
 describe("Kanban Routes", () => {
   beforeEach(() => {
@@ -109,6 +109,7 @@ describe("Kanban Routes", () => {
     });
 
     it("creates the board with its default columns", async () => {
+      vi.mocked(nanoid).mockReturnValueOnce("board-new");
       const fake = boardWorld();
       mockSession();
 
@@ -119,13 +120,13 @@ describe("Kanban Routes", () => {
 
       expect(res.status).toBe(201);
       expect(await res.json()).toMatchObject({
-        id: "test-id-123",
+        id: "board-new",
         name: "New Board",
         workspaceId,
       });
       expect(
         fake.tables.kanban_column
-          .filter((col) => col.boardId === "test-id-123")
+          .filter((col) => col.boardId === "board-new")
           .map((col) => col.name),
       ).toEqual(["To Do", "In Progress", "Done"]);
     });
@@ -373,6 +374,7 @@ describe("Kanban Routes", () => {
     });
 
     it("creates the column at the end of the board", async () => {
+      vi.mocked(nanoid).mockReturnValueOnce("col-new");
       boardWorld();
       mockSession();
 
@@ -383,7 +385,7 @@ describe("Kanban Routes", () => {
 
       expect(res.status).toBe(201);
       expect(await res.json()).toMatchObject({
-        id: "test-id-123",
+        id: "col-new",
         boardId,
         name: "New Column",
         position: 3,
