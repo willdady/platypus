@@ -29,7 +29,7 @@ vi.mock("../services/chat-execution.ts", () => ({
   drizzleChatTurnQueries: {},
 }));
 
-import { createUIMessageStreamResponse, generateText } from "ai";
+import { generateText } from "ai";
 import app from "../server.ts";
 import { runRegistry } from "../runs/run-registry.ts";
 import { recoverStuckChats } from "../jobs/scheduler.ts";
@@ -54,9 +54,8 @@ vi.mock("ai", async () => {
           },
         }),
     ),
-    createUIMessageStreamResponse: vi
-      .fn()
-      .mockReturnValue(new Response("stream")),
+    // why: a stream body is consumed once, so a shared Response leaves later turns locked
+    createUIMessageStreamResponse: vi.fn(() => new Response("stream")),
     generateText: vi.fn().mockResolvedValue({
       output: { title: "Generated Title" },
     }),
@@ -566,12 +565,6 @@ describe("Chat Routes", () => {
       dispose: vi.fn().mockResolvedValue(undefined),
     };
 
-    const freshStream = () => {
-      vi.mocked(createUIMessageStreamResponse).mockReturnValueOnce(
-        new Response("stream"),
-      );
-    };
-
     it("should start a chat stream", async () => {
       mockSession({
         id: "user-1",
@@ -779,7 +772,6 @@ describe("Chat Routes", () => {
         ],
       });
       mockPrepareChatTurn.mockResolvedValue(validTurn);
-      freshStream();
 
       const res = await app.request(`${baseUrl}/chat-cmd/turns`, {
         method: "POST",
@@ -832,7 +824,6 @@ describe("Chat Routes", () => {
         ],
       });
       mockPrepareChatTurn.mockResolvedValue(validTurn);
-      freshStream();
 
       const res = await app.request(`${baseUrl}/chat-typo/turns`, {
         method: "POST",
@@ -1133,9 +1124,6 @@ describe("Chat Routes", () => {
     };
 
     const startsTurn = () => {
-      vi.mocked(createUIMessageStreamResponse).mockReturnValueOnce(
-        new Response("stream"),
-      );
       mockPrepareChatTurn.mockResolvedValue(validTurn);
     };
 
