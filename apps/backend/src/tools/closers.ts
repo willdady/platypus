@@ -3,6 +3,16 @@ import { logger } from "../logger.ts";
 
 export type Closer = () => Promise<void> | void;
 
+const NON_REJECTING: unique symbol = Symbol("platypus.nonRejectingCloser");
+
+// why: a session's dispose awaits its queue uncaught, so a queued closer must already swallow its own failure
+export type NonRejectingCloser = (() => Promise<void>) & {
+  readonly [NON_REJECTING]: true;
+};
+
+const markNonRejecting = (close: () => Promise<void>): NonRejectingCloser =>
+  Object.assign(close, { [NON_REJECTING]: true as const });
+
 // why: onTerminate awaits dispose before the run's terminal write, so a hung closer delays it
 export const CLOSER_TIMEOUT_MS = 5_000;
 
@@ -39,6 +49,15 @@ export const runCloser = async (
     if (timer !== undefined) clearTimeout(timer);
   }
 };
+
+export const guardedCloser = (
+  close: Closer,
+  attribution?: Record<string, unknown>,
+): NonRejectingCloser => markNonRejecting(() => runCloser(close, attribution));
+
+export const guardedSessionDispose = (session: {
+  dispose: () => Promise<void>;
+}): NonRejectingCloser => markNonRejecting(() => session.dispose());
 
 export type CoreCloserRegistrar = (
   close: Closer,
