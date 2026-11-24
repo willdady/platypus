@@ -2,11 +2,17 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { asDb, resetMockDb, mockDb, seedDb, type Row } from "../test-utils.ts";
-import { inArray, lte, notInArray } from "drizzle-orm";
+import {
+  asDb,
+  renderSql,
+  renderedWheres,
+  resetMockDb,
+  mockDb,
+  seedDb,
+  type Row,
+} from "../test-utils.ts";
 import { db, type Tx } from "../index.ts";
 import { mockLogger, mockNanoid } from "../test-setup.ts";
-import { triggerRun as triggerRunTable } from "../db/schema.ts";
 import type { EventTriggerEventPayload } from "@platypus/schemas";
 
 const { mockAnnounce, mockDeletePrefix } = vi.hoisted(() => ({
@@ -82,17 +88,14 @@ describe("the live-status predicate", () => {
   });
 
   it("spells a live run as the same two statuses for a reader", () => {
-    liveTriggerRun();
-    notLiveTriggerRun();
-
-    expect(vi.mocked(inArray)).toHaveBeenCalledWith(triggerRunTable.status, [
-      "pending",
-      "running",
-    ]);
-    expect(vi.mocked(notInArray)).toHaveBeenCalledWith(triggerRunTable.status, [
-      "pending",
-      "running",
-    ]);
+    expect(renderSql(liveTriggerRun())).toEqual({
+      sql: `"trigger_run"."status" in ($1, $2)`,
+      params: ["pending", "running"],
+    });
+    expect(renderSql(notLiveTriggerRun())).toEqual({
+      sql: `"trigger_run"."status" not in ($1, $2)`,
+      params: ["pending", "running"],
+    });
   });
 });
 
@@ -1057,6 +1060,18 @@ describe("retainTriggerRuns", () => {
       .mockResolvedValueOnce(deletedSuppressed);
   };
 
+  const deleteWhere = () => {
+    const predicate = renderedWheres()
+      .filter(
+        (query) =>
+          query.sql.includes(`"trigger_run"."started_at" <=`) ||
+          query.sql.includes(`"trigger_run"."id" not in`),
+      )
+      .at(-1);
+    if (!predicate) throw new Error("no delete predicate was captured");
+    return predicate;
+  };
+
   beforeEach(() => {
     resetMockDb();
     vi.clearAllMocks();
@@ -1076,10 +1091,8 @@ describe("retainTriggerRuns", () => {
 
     await retainTriggerRuns("trigger-1", 1);
 
-    expect(vi.mocked(lte)).toHaveBeenCalledWith(
-      triggerRunTable.startedAt,
-      new Date("2026-01-01T11:00:00Z"),
-    );
+    expect(deleteWhere().sql).toContain(`"trigger_run"."started_at" <=`);
+    expect(deleteWhere().params).toContain("2026-01-01T11:00:00.000Z");
   });
 
   it("carries no more ids into the delete than maxRunsToKeep", async () => {
@@ -1090,10 +1103,12 @@ describe("retainTriggerRuns", () => {
 
     await retainTriggerRuns("trigger-1", 2);
 
-    expect(vi.mocked(notInArray)).toHaveBeenCalledWith(triggerRunTable.id, [
-      "newest",
-      "newer",
-    ]);
+    expect(deleteWhere().sql).toMatch(
+      /"trigger_run"\."id" not in \(\$\d+, \$\d+\)/,
+    );
+    expect(deleteWhere().params).toEqual(
+      expect.arrayContaining(["newest", "newer"]),
+    );
     expect(mockDb.select).toHaveBeenCalledTimes(2);
   });
 
@@ -1105,10 +1120,8 @@ describe("retainTriggerRuns", () => {
 
     await retainTriggerRuns("trigger-1", 1);
 
-    expect(vi.mocked(lte)).toHaveBeenCalledWith(
-      triggerRunTable.startedAt,
-      new Date("2026-01-01T11:59:00Z"),
-    );
+    expect(deleteWhere().sql).toContain(`"trigger_run"."started_at" <=`);
+    expect(deleteWhere().params).toContain("2026-01-01T11:59:00.000Z");
   });
 
   it("budgets suppressed rows separately from maxRunsToKeep", async () => {
@@ -1120,9 +1133,12 @@ describe("retainTriggerRuns", () => {
 
     await retainTriggerRuns("trigger-1", 1);
 
-    expect(vi.mocked(notInArray)).toHaveBeenCalledWith(triggerRunTable.id, [
-      "suppressed-newest",
-    ]);
+    expect(deleteWhere()).toEqual({
+      sql:
+        `("trigger_run"."trigger_id" = $1 and ` +
+        `"trigger_run"."status" = $2 and "trigger_run"."id" not in ($3))`,
+      params: ["trigger-1", "suppressed", "suppressed-newest"],
+    });
   });
 
   it("never prunes a run still in flight, however old", async () => {
@@ -1130,10 +1146,10 @@ describe("retainTriggerRuns", () => {
 
     await retainTriggerRuns("trigger-1", 1);
 
-    expect(vi.mocked(notInArray)).toHaveBeenCalledWith(triggerRunTable.status, [
-      "pending",
-      "running",
-    ]);
+    expect(deleteWhere().sql).toContain(`"trigger_run"."status" not in`);
+    expect(deleteWhere().params).toEqual(
+      expect.arrayContaining(["pending", "running"]),
+    );
   });
 
   it("does not prune when the Trigger holds fewer rows than either budget", async () => {
@@ -1151,9 +1167,12 @@ describe("retainTriggerRuns", () => {
 
     await retainTriggerRuns("trigger-1", 0);
 
-    expect(vi.mocked(notInArray)).toHaveBeenCalledWith(triggerRunTable.id, [
-      "suppressed-newest",
-    ]);
+    expect(deleteWhere()).toEqual({
+      sql:
+        `("trigger_run"."trigger_id" = $1 and ` +
+        `"trigger_run"."status" = $2 and "trigger_run"."id" not in ($3))`,
+      params: ["trigger-1", "suppressed", "suppressed-newest"],
+    });
   });
 
   it("deletes the stored files under each pruned run Chat's prefix", async () => {

@@ -221,6 +221,53 @@ describe("the seeded fake beside the chainable mock", () => {
     expect(onBoard).toEqual([{ id: "k1" }]);
   });
 
+  it("reads `IS DISTINCT FROM`, a lowercased comparison and a negated containment", async () => {
+    seedDb({
+      agent: [
+        { id: "a1", name: "Alpha", skillIds: ["s1"] },
+        { id: "a2", name: "Beta", skillIds: ["s2"] },
+      ],
+    });
+    const { agent } = await import("./db/schema.ts");
+    const { sql } = await import("drizzle-orm");
+
+    const distinct = await db
+      .select({ id: agent.id })
+      .from(agent)
+      .where(sql`${agent.name} IS DISTINCT FROM ${"Alpha"}`);
+    expect(distinct).toEqual([{ id: "a2" }]);
+
+    const lower = await db
+      .select({ id: agent.id })
+      .from(agent)
+      .where(sql`lower(${agent.name}) = ${"alpha"}`);
+    expect(lower).toEqual([{ id: "a1" }]);
+
+    const without = await db
+      .select({ id: agent.id })
+      .from(agent)
+      .where(sql`NOT ${agent.skillIds} @> ${JSON.stringify(["s1"])}::jsonb`);
+    expect(without).toEqual([{ id: "a2" }]);
+  });
+
+  it("orders by a raw `desc nulls last` fragment", async () => {
+    seedDb({
+      workspace: [
+        { id: "ws-1", name: "Alpha", organizationId: "org-1" },
+        { id: "ws-2", name: "Beta", organizationId: null },
+        { id: "ws-3", name: "Gamma", organizationId: "org-2" },
+      ],
+    });
+    const { sql } = await import("drizzle-orm");
+
+    const ordered = await db
+      .select({ id: workspaceTable.id })
+      .from(workspaceTable)
+      .orderBy(sql`${workspaceTable.organizationId} desc nulls last`);
+
+    expect(ordered).toEqual([{ id: "ws-3" }, { id: "ws-1" }, { id: "ws-2" }]);
+  });
+
   it("runs a lateral subquery once per outer row, with that row in scope", async () => {
     seedDb({
       ...rows,

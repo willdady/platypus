@@ -1,35 +1,16 @@
 import { isDeepStrictEqual } from "node:util";
 import { vi, type Mock } from "vitest";
+import { Param, SQL, StringChunk } from "drizzle-orm";
 import { DrizzleQueryError } from "drizzle-orm/errors";
 
 export type Row = Record<string, unknown>;
 
 export type ColumnRef = { table: string; name: string };
 
-export type Marker =
-  | {
-      op: "eq" | "ne" | "gt" | "gte" | "lt" | "lte";
-      column: ColumnRef;
-      value: unknown;
-    }
-  | { op: "isNull" | "isNotNull"; column: ColumnRef }
-  | { op: "inArray" | "notInArray"; column: ColumnRef; values: unknown[] }
-  | { op: "and" | "or"; conditions: Condition[] }
-  | { op: "sql"; strings: readonly string[]; values: unknown[] };
-
-export type Condition = Marker | undefined | null;
-
-export type CountMarker = {
-  isCount: true;
-  aliased?: true;
-  as: (alias: string) => CountMarker;
-};
-
-export type MaxMarker = { isMax: true; column: ColumnRef };
+export type Condition = SQL | SQL.Aliased | undefined | null;
 
 type Resolve = (ref: ColumnRef) => unknown;
 
-// why: read directly: this module is loaded inside the drizzle-orm mock, so must not import it
 const TABLE_NAME = Symbol.for("drizzle:Name");
 
 const tableNameOf = (table: unknown): string => {
@@ -59,83 +40,124 @@ const refOf = (column: unknown): ColumnRef => {
   return { table: tableNameOf(col.table), name: col.name };
 };
 
-export const markerOperators = () => ({
-  eq: (column: unknown, value: unknown) =>
-    ({ op: "eq", column: refOf(column), value }) as Marker,
-  ne: (column: unknown, value: unknown) =>
-    ({ op: "ne", column: refOf(column), value }) as Marker,
-  gt: (column: unknown, value: unknown) =>
-    ({ op: "gt", column: refOf(column), value }) as Marker,
-  gte: (column: unknown, value: unknown) =>
-    ({ op: "gte", column: refOf(column), value }) as Marker,
-  lt: (column: unknown, value: unknown) =>
-    ({ op: "lt", column: refOf(column), value }) as Marker,
-  lte: (column: unknown, value: unknown) =>
-    ({ op: "lte", column: refOf(column), value }) as Marker,
-  isNull: (column: unknown) =>
-    ({ op: "isNull", column: refOf(column) }) as Marker,
-  isNotNull: (column: unknown) =>
-    ({ op: "isNotNull", column: refOf(column) }) as Marker,
-  inArray: (column: unknown, values: unknown[]) =>
-    ({ op: "inArray", column: refOf(column), values }) as Marker,
-  notInArray: (column: unknown, values: unknown[]) =>
-    ({ op: "notInArray", column: refOf(column), values }) as Marker,
-  and: (...conditions: Condition[]) =>
-    ({ op: "and", conditions: conditions.filter(Boolean) }) as Marker,
-  or: (...conditions: Condition[]) =>
-    ({ op: "or", conditions: conditions.filter(Boolean) }) as Marker,
-  count: () => countMarker(),
-  max: (column: unknown): MaxMarker => ({ isMax: true, column: refOf(column) }),
-});
+type SqlToken =
+  | { kind: "column"; column: ColumnRef }
+  | { kind: "value"; value: unknown }
+  | { kind: "text"; text: string }
+  | { kind: "list"; items: SqlToken[] };
 
-const countMarker = (aliased?: true): CountMarker => ({
-  isCount: true,
-  ...(aliased && { aliased }),
-  as: () => countMarker(true),
-});
-
-export const sqlMarker = (
-  strings: readonly string[],
-  values: unknown[],
-): Marker & {
-  getSQL: () => { query: string };
-  mapWith: () => unknown;
-  as: () => Marker;
-} => {
-  const marker = Object.assign(
-    { op: "sql" as const, strings, values },
-    {
-      getSQL: () => ({ query: strings.join("?") }),
-      mapWith: () => undefined,
-      as: () => marker,
-    },
-  );
-  return marker;
+const tokensOf = (chunk: unknown): SqlToken[] => {
+  if (chunk === undefined) return [];
+  if (chunk instanceof StringChunk) {
+    const text = chunk.value.join("");
+    return text === "" ? [] : [{ kind: "text", text }];
+  }
+  if (chunk instanceof SQL.Aliased) return tokensOf(chunk.sql);
+  if (chunk instanceof SQL) return chunk.queryChunks.flatMap(tokensOf);
+  if (chunk instanceof Param) return [{ kind: "value", value: chunk.value }];
+  if (isColumn(chunk)) return [{ kind: "column", column: refOf(chunk) }];
+  if (Array.isArray(chunk))
+    return [{ kind: "list", items: chunk.flatMap(tokensOf) }];
+  return [{ kind: "value", value: chunk }];
 };
 
-const isMarker = (value: unknown): value is Marker =>
-  !!value && typeof value === "object" && "op" in value;
+const sourceOf = (tokens: SqlToken[]): string =>
+  tokens
+    .map((token) =>
+      token.kind === "text" ? token.text : token.kind === "list" ? "(…)" : "?",
+    )
+    .join("");
 
-const isCountMarker = (value: unknown): value is CountMarker =>
-  !!value &&
-  typeof value === "object" &&
-  "isCount" in value &&
-  value.isCount === true;
+const shapeOf = (tokens: SqlToken[]): string =>
+  sourceOf(tokens).replace(/\s+/g, " ").trim().toLowerCase();
 
-const isMaxMarker = (value: unknown): value is MaxMarker =>
-  !!value &&
-  typeof value === "object" &&
-  "isMax" in value &&
-  value.isMax === true;
+type Lexeme =
+  | { type: "column"; column: ColumnRef }
+  | { type: "value"; value: unknown }
+  | { type: "list"; items: Lexeme[] }
+  | { type: "keyword"; word: string }
+  | { type: "operator"; op: string }
+  | { type: "open" }
+  | { type: "close" }
+  | { type: "comma" };
 
-const isNested = (value: unknown): value is Record<string, unknown> =>
-  !!value &&
-  Object.getPrototypeOf(value) === Object.prototype &&
-  !isMarker(value) &&
-  !isAggregate(value);
+const OPERATORS = ["@>", "<>", "!=", "<=", ">=", "::", "=", "<", ">"];
 
-const isAggregate = (value: unknown): boolean =>
-  isCountMarker(value) || isMaxMarker(value);
+const lexText = (text: string): Lexeme[] => {
+  const lexemes: Lexeme[] = [];
+  let index = 0;
+  while (index < text.length) {
+    const char = text[index];
+    if (/\s/.test(char)) {
+      index++;
+      continue;
+    }
+    if (char === "(") {
+      lexemes.push({ type: "open" });
+      index++;
+      continue;
+    }
+    if (char === ")") {
+      lexemes.push({ type: "close" });
+      index++;
+      continue;
+    }
+    if (char === ",") {
+      lexemes.push({ type: "comma" });
+      index++;
+      continue;
+    }
+    const operator = OPERATORS.find((candidate) =>
+      text.startsWith(candidate, index),
+    );
+    if (operator) {
+      lexemes.push({ type: "operator", op: operator });
+      index += operator.length;
+      continue;
+    }
+    const word = /^[A-Za-z_][A-Za-z0-9_$]*/.exec(text.slice(index));
+    if (word) {
+      lexemes.push({ type: "keyword", word: word[0].toLowerCase() });
+      index += word[0].length;
+      continue;
+    }
+    const number = /^\d+(?:\.\d+)?/.exec(text.slice(index));
+    if (number) {
+      lexemes.push({ type: "value", value: Number(number[0]) });
+      index += number[0].length;
+      continue;
+    }
+    throw new Error(`fake db cannot read the SQL fragment \`${text}\``);
+  }
+  return lexemes;
+};
+
+const lexemesOf = (tokens: SqlToken[]): Lexeme[] =>
+  tokens.flatMap((token) => {
+    switch (token.kind) {
+      case "column":
+        return [{ type: "column", column: token.column }];
+      case "value":
+        return [{ type: "value", value: token.value }];
+      case "list": {
+        const items = lexemesOf(token.items);
+        return [
+          {
+            type: "list",
+            items: items.flatMap((item, index) =>
+              index === 0 ? [item] : [{ type: "comma" }, item],
+            ),
+          },
+        ];
+      }
+      case "text":
+        return lexText(token.text);
+    }
+  });
+
+type Test = (resolve: Resolve) => boolean;
+
+type Operand = (resolve: Resolve) => unknown;
 
 const escapeRegex = (text: string): string =>
   text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -157,128 +179,352 @@ const likeMatches = (value: string, pattern: string): boolean => {
   return new RegExp(`^${source}$`, "is").test(value);
 };
 
-const matchesSql = (
-  marker: Marker & { op: "sql" },
-  resolve: Resolve,
+const numberish = (value: unknown): number | string | null | undefined =>
+  value instanceof Date
+    ? value.getTime()
+    : (value as number | string | null | undefined);
+
+const compare = (
+  op: "=" | "<>" | ">" | ">=" | "<" | "<=",
+  left: unknown,
+  right: unknown,
 ): boolean => {
-  const shape = marker.strings.join("?").replace(/\s+/g, "");
-  const [left, right] = marker.values;
-  if (shape === "lower(?)=?") {
-    const value = resolve(refOf(left));
-    return typeof value === "string" && value.toLowerCase() === right;
+  const a = numberish(left);
+  const b = numberish(right);
+  switch (op) {
+    case "=":
+      return a === b;
+    case "<>":
+      return a !== b;
+    case ">":
+      return a != null && b != null && a > b;
+    case ">=":
+      return a != null && b != null && a >= b;
+    case "<":
+      return a != null && b != null && a < b;
+    case "<=":
+      return a != null && b != null && a <= b;
   }
-  if (shape === "?ILIKE?") {
-    const value = resolve(refOf(left));
-    return typeof value === "string" && likeMatches(value, right as string);
-  }
-  if (shape === "?>=?") {
-    const value = resolve(refOf(left));
-    return value != null && (value as string) >= (right as string);
-  }
-  if (shape === "true") {
-    return true;
-  }
-  if (shape === "?ISDISTINCTFROM?") {
-    return (resolve(refOf(left)) ?? null) !== (resolve(refOf(right)) ?? null);
-  }
-  if (shape === "?@>?::jsonb") {
-    const value = resolve(refOf(left));
-    const wanted = JSON.parse(right as string) as unknown[];
-    return Array.isArray(value) && wanted.every((v) => value.includes(v));
-  }
-  throw new Error(
-    `fake db cannot interpret this SQL fragment: \`${marker.strings.join("?")}\``,
-  );
 };
 
-const sqlValue = (
-  marker: Marker & { op: "sql" },
-  resolve: Resolve,
-): unknown => {
-  const shape = marker.strings.join("?").replace(/\s+/g, "");
-  if (shape === "?::timestamp+(?-?)") {
-    const [start, later, earlier] = marker.values;
-    const end = resolve(refOf(later)) as Date;
-    const begin = resolve(refOf(earlier)) as Date;
-    return new Date(
-      Date.parse(start as string) + end.getTime() - begin.getTime(),
-    );
-  }
-  if (shape === "?-?") {
-    const [column, element] = marker.values;
-    const value = resolve(refOf(column)) as unknown[];
-    return value.filter((v) => v !== element);
-  }
-  throw new Error(
-    `fake db cannot compute this SQL value: \`${marker.strings.join("?")}\``,
-  );
+const containsJson = (value: unknown, wanted: unknown): boolean => {
+  const list =
+    typeof wanted === "string" ? (JSON.parse(wanted) as unknown) : wanted;
+  const items = Array.isArray(list) ? list : [list];
+  return Array.isArray(value) && items.every((item) => value.includes(item));
 };
-
-const SUBQUERY = Symbol("fake-db:subquery");
-
-const LATERAL = Symbol("fake-db:lateral");
 
 const listOf = (values: unknown): unknown[] => {
   if (Array.isArray(values)) return values;
   const run = (values as Record<symbol, unknown> | null)?.[SUBQUERY];
   if (typeof run !== "function") {
     throw new Error(
-      "fake db was handed an inArray list that is neither an array nor a select",
+      "fake db was handed an in / inArray list that is neither an array nor a select",
     );
   }
   return (run as () => Row[])().map((row) => Object.values(row)[0]);
 };
 
-const operandOf = (value: unknown, resolve: Resolve): unknown =>
-  isColumn(value) ? resolve(refOf(value)) : value;
+class ExpressionParser {
+  private lexemes: Lexeme[];
+  private index: number;
+  private source: string;
 
-const satisfies = (resolve: Resolve, condition: Condition): boolean => {
-  if (!condition) return true;
-  if (!isMarker(condition)) {
+  constructor(lexemes: Lexeme[], source: string) {
+    this.lexemes = lexemes;
+    this.index = 0;
+    this.source = source;
+  }
+
+  parse(): Test {
+    const test = this.parseOr();
+    if (this.peek()) this.unsupported();
+    return test;
+  }
+
+  parseOperand(): Operand {
+    const operand = this.parseAtom();
+    while (this.acceptOperator("::")) {
+      const type = this.take();
+      if (type?.type !== "keyword") this.unsupported();
+      if (this.peek()?.type === "open") this.skipParentheses();
+    }
+    return operand;
+  }
+
+  private parseOr(): Test {
+    let test = this.parseAnd();
+    while (this.acceptKeyword("or")) {
+      const left = test;
+      const right = this.parseAnd();
+      test = (resolve) => left(resolve) || right(resolve);
+    }
+    return test;
+  }
+
+  private parseAnd(): Test {
+    let test = this.parseCondition();
+    while (this.acceptKeyword("and")) {
+      const left = test;
+      const right = this.parseCondition();
+      test = (resolve) => left(resolve) && right(resolve);
+    }
+    return test;
+  }
+
+  private parseCondition(): Test {
+    if (this.acceptKeyword("not")) {
+      const inner = this.parseCondition();
+      return (resolve) => !inner(resolve);
+    }
+    if (this.acceptKeyword("true")) return () => true;
+    if (this.acceptKeyword("false")) return () => false;
+    if (this.peek()?.type === "open") {
+      this.index++;
+      const test = this.parseOr();
+      if (this.take()?.type !== "close") this.unsupported();
+      return test;
+    }
+    return this.parseComparison();
+  }
+
+  private parseComparison(): Test {
+    const left = this.parseOperand();
+    for (const op of ["=", "<>", "!=", ">", ">=", "<", "<="] as const) {
+      if (!this.acceptOperator(op)) continue;
+      const right = this.parseOperand();
+      const comparison = op === "!=" ? "<>" : op;
+      return (resolve) => compare(comparison, left(resolve), right(resolve));
+    }
+    if (this.acceptOperator("@>")) {
+      const right = this.parseOperand();
+      return (resolve) => containsJson(left(resolve), right(resolve));
+    }
+    if (this.acceptKeyword("is")) {
+      const negated = this.acceptKeyword("not");
+      if (this.acceptKeyword("null")) {
+        return (resolve) =>
+          negated ? left(resolve) != null : left(resolve) == null;
+      }
+      if (this.acceptKeyword("distinct")) {
+        this.expectKeyword("from");
+        const right = this.parseOperand();
+        const distinct = (resolve: Resolve) =>
+          (left(resolve) ?? null) !== (right(resolve) ?? null);
+        return negated ? (resolve) => !distinct(resolve) : distinct;
+      }
+      this.unsupported();
+    }
+    const negated = this.acceptKeyword("not");
+    if (this.acceptKeyword("in")) {
+      const right = this.parseOperand();
+      return (resolve) => {
+        const found = listOf(right(resolve)).includes(left(resolve));
+        return negated ? !found : found;
+      };
+    }
+    if (this.acceptKeyword("ilike")) {
+      const right = this.parseOperand();
+      return (resolve) => {
+        const [value, pattern] = [left(resolve), right(resolve)];
+        const found =
+          typeof value === "string" &&
+          typeof pattern === "string" &&
+          likeMatches(value, pattern);
+        return negated ? !found : found;
+      };
+    }
+    if (negated) this.unsupported();
+    return this.unsupported();
+  }
+
+  private parseAtom(): Operand {
+    const lexeme = this.take();
+    if (!lexeme) this.unsupported();
+    switch (lexeme.type) {
+      case "column":
+        return (resolve) => resolve(lexeme.column);
+      case "value":
+        return () => lexeme.value;
+      case "list": {
+        const items = this.parseOperandList(lexeme.items);
+        return (resolve) => items.map((item) => item(resolve));
+      }
+      case "open": {
+        const operand = this.parseOperand();
+        if (this.take()?.type !== "close") this.unsupported();
+        return operand;
+      }
+      case "keyword": {
+        if (lexeme.word === "null") return () => null;
+        if (lexeme.word === "true") return () => true;
+        if (lexeme.word === "false") return () => false;
+        if (this.peek()?.type === "open") return this.parseCall(lexeme.word);
+        return this.unsupported();
+      }
+      default:
+        return this.unsupported();
+    }
+  }
+
+  private parseCall(name: string): Operand {
+    if (this.take()?.type !== "open") this.unsupported();
+    const args: Operand[] = [];
+    if (this.peek()?.type !== "close") {
+      args.push(this.parseOperand());
+      while (this.peek()?.type === "comma") {
+        this.index++;
+        args.push(this.parseOperand());
+      }
+    }
+    if (this.take()?.type !== "close") this.unsupported();
+    if (name === "lower") {
+      return (resolve) => {
+        const [value] = args;
+        const resolved = value(resolve);
+        return typeof resolved === "string" ? resolved.toLowerCase() : resolved;
+      };
+    }
+    return this.unsupported();
+  }
+
+  private parseOperandList(items: Lexeme[]): Operand[] {
+    const parser = new ExpressionParser(items, this.source);
+    const operands = [parser.parseOperand()];
+    while (parser.peek()?.type === "comma") {
+      parser.index++;
+      operands.push(parser.parseOperand());
+    }
+    if (parser.peek()) this.unsupported();
+    return operands;
+  }
+
+  private skipParentheses(): void {
+    let depth = 0;
+    for (;;) {
+      const lexeme = this.take();
+      if (!lexeme) this.unsupported();
+      if (lexeme.type === "open") depth++;
+      if (lexeme.type === "close" && --depth === 0) return;
+    }
+  }
+
+  private peek(): Lexeme | undefined {
+    return this.lexemes[this.index];
+  }
+
+  private take(): Lexeme | undefined {
+    return this.lexemes[this.index++];
+  }
+
+  private acceptKeyword(word: string): boolean {
+    const lexeme = this.peek();
+    if (lexeme?.type !== "keyword" || lexeme.word !== word) return false;
+    this.index++;
+    return true;
+  }
+
+  private acceptOperator(op: string): boolean {
+    const lexeme = this.peek();
+    if (lexeme?.type !== "operator" || lexeme.op !== op) return false;
+    this.index++;
+    return true;
+  }
+
+  private expectKeyword(word: string): void {
+    if (!this.acceptKeyword(word)) this.unsupported();
+  }
+
+  private unsupported(): never {
     throw new Error(
-      "fake db received a condition it cannot read — mock `drizzle-orm` with `markerOperators()`",
+      `fake db cannot interpret this SQL fragment: \`${this.source}\``,
     );
   }
-  switch (condition.op) {
-    case "and":
-      return condition.conditions.every((c) => satisfies(resolve, c));
-    case "or":
-      return condition.conditions.some((c) => satisfies(resolve, c));
-    case "eq":
-      return resolve(condition.column) === operandOf(condition.value, resolve);
-    case "ne":
-      return resolve(condition.column) !== operandOf(condition.value, resolve);
-    case "gt":
-      return (
-        (resolve(condition.column) as number) >
-        (operandOf(condition.value, resolve) as number)
-      );
-    case "gte":
-      return (
-        (resolve(condition.column) as number) >=
-        (operandOf(condition.value, resolve) as number)
-      );
-    case "lt":
-      return (
-        (resolve(condition.column) as number) <
-        (operandOf(condition.value, resolve) as number)
-      );
-    case "lte":
-      return (
-        (resolve(condition.column) as number) <=
-        (operandOf(condition.value, resolve) as number)
-      );
-    case "isNull":
-      return resolve(condition.column) == null;
-    case "isNotNull":
-      return resolve(condition.column) != null;
-    case "inArray":
-      return listOf(condition.values).includes(resolve(condition.column));
-    case "notInArray":
-      return !listOf(condition.values).includes(resolve(condition.column));
-    case "sql":
-      return matchesSql(condition, resolve);
+}
+
+const conditionOf = (condition: unknown): Test => {
+  if (condition == null) return () => true;
+  if (condition instanceof SQL.Aliased) return conditionOf(condition.sql);
+  if (!(condition instanceof SQL)) {
+    throw new Error(
+      "fake db received a condition it cannot read — pass a drizzle-orm predicate",
+    );
   }
+  const tokens = tokensOf(condition);
+  return new ExpressionParser(lexemesOf(tokens), sourceOf(tokens)).parse();
+};
+
+const satisfies = (resolve: Resolve, condition: Condition): boolean =>
+  conditionOf(condition)(resolve);
+
+const SUBQUERY = Symbol("fake-db:subquery");
+
+const LATERAL = Symbol("fake-db:lateral");
+
+type Aggregate =
+  | { kind: "count"; aliased: boolean }
+  | { kind: "max"; column: ColumnRef; aliased: boolean };
+
+const aggregateOf = (value: unknown): Aggregate | null => {
+  const aliased = value instanceof SQL.Aliased;
+  const sql = aliased ? value.sql : value;
+  if (!(sql instanceof SQL)) return null;
+  const tokens = tokensOf(sql);
+  const shape = shapeOf(tokens);
+  if (/^count\((\*|\?|distinct \?)\)(::int)?$/.test(shape)) {
+    return { kind: "count", aliased };
+  }
+  const column = tokens.find((token) => token.kind === "column");
+  if (column?.kind === "column" && /^max\(\?\)(::\w+)?$/.test(shape)) {
+    return { kind: "max", column: column.column, aliased };
+  }
+  return null;
+};
+
+const isNested = (value: unknown): value is Record<string, unknown> =>
+  !!value && Object.getPrototypeOf(value) === Object.prototype;
+
+const textAt = (tokens: SqlToken[], index: number): string => {
+  const token = tokens[index];
+  return token.kind === "text" ? token.text : "";
+};
+
+const sqlValueOf = (value: unknown, resolve: Resolve): unknown => {
+  const sql = value instanceof SQL.Aliased ? value.sql : value;
+  if (!(sql instanceof SQL)) return value;
+  const tokens = tokensOf(sql);
+  if (
+    tokens.length === 6 &&
+    tokens[0]?.kind === "value" &&
+    /^\s*::timestamp\s*\+\s*\(\s*$/i.test(textAt(tokens, 1)) &&
+    tokens[2]?.kind === "column" &&
+    /^\s*-\s*$/.test(textAt(tokens, 3)) &&
+    tokens[4]?.kind === "column" &&
+    /^\s*\)\s*$/.test(textAt(tokens, 5))
+  ) {
+    const start = tokens[0].value as string;
+    const end = resolve(tokens[2].column) as Date;
+    const begin = resolve(tokens[4].column) as Date;
+    return new Date(Date.parse(start) + end.getTime() - begin.getTime());
+  }
+  if (
+    tokens.length === 3 &&
+    tokens[0]?.kind === "column" &&
+    /^\s*-\s*$/.test(textAt(tokens, 1)) &&
+    tokens[2]?.kind === "value"
+  ) {
+    const current = resolve(tokens[0].column);
+    if (!Array.isArray(current)) {
+      throw new Error(
+        `fake db cannot subtract from a value that is not an array: \`${sourceOf(tokens)}\``,
+      );
+    }
+    const element = tokens[2].value;
+    return current.filter((item) => item !== element);
+  }
+  throw new Error(
+    `fake db cannot compute this SQL value: \`${sourceOf(tokens)}\``,
+  );
 };
 
 const flatResolver =
@@ -303,30 +549,40 @@ type OrderMarker = {
   nulls?: "first" | "last";
 };
 
-export const orderOperators = () => ({
-  asc: (column: unknown) =>
-    ({ op: "asc", column: refOf(column) }) as OrderMarker,
-  desc: (column: unknown) =>
-    ({ op: "desc", column: refOf(column) }) as OrderMarker,
-});
-
-const orderMarkerOf = (marker: OrderMarker | Marker): OrderMarker => {
-  if (!isMarker(marker) || marker.op !== "sql") {
-    return marker as OrderMarker;
-  }
-  const shape = marker.strings.join("?").replace(/\s+/g, "").toLowerCase();
-  const match = /^\?((?:asc|desc))(nulls(?:first|last))?$/.exec(shape);
-  const column = marker.values[0];
-  if (!match || !isColumn(column)) {
+const orderMarkerOf = (value: unknown): OrderMarker => {
+  if (value instanceof SQL.Aliased) return orderMarkerOf(value.sql);
+  if (!(value instanceof SQL)) {
     throw new Error(
-      `fake db cannot interpret this order fragment: \`${marker.strings.join("?")}\``,
+      "fake db received an order it cannot read — pass a drizzle-orm ordering",
     );
   }
+  const tokens = tokensOf(value);
+  const column: SqlToken | undefined = tokens.find(
+    (token) => token.kind === "column",
+  );
+  const text = tokens
+    .filter((token) => token.kind === "text")
+    .map((token) => token.text)
+    .join(" ");
+  const match = /^\s*(?:(asc)|(desc))?(?:\s+nulls\s+(first|last))?\s*$/i.exec(
+    text,
+  );
+  if (
+    !match ||
+    text.trim() === "" ||
+    !column ||
+    tokens.some((token) => token.kind !== "text" && token.kind !== "column")
+  ) {
+    throw new Error(
+      `fake db cannot interpret this order fragment: \`${sourceOf(tokens)}\``,
+    );
+  }
+  const groups = match.slice(1) as (string | undefined)[];
   return {
-    op: match[1] as "asc" | "desc",
-    column: refOf(column),
-    ...(match[2]
-      ? { nulls: match[2].slice("nulls".length) as "first" | "last" }
+    op: groups[1] ? "desc" : "asc",
+    column: column.column,
+    ...(groups[2]
+      ? { nulls: groups[2].toLowerCase() as "first" | "last" }
       : {}),
   };
 };
@@ -415,11 +671,12 @@ export const createFakeDb = (
       if (!selection) return { ...row };
       const out: Row = {};
       for (const [key, value] of Object.entries(selection)) {
-        if (isCountMarker(value)) {
+        const aggregate = aggregateOf(value);
+        if (aggregate?.kind === "count") {
           out[key] = group.length;
-        } else if (isMaxMarker(value)) {
+        } else if (aggregate?.kind === "max") {
           const values = group
-            .map((r) => r(value.column))
+            .map((r) => r(aggregate.column))
             .filter((v) => v != null) as number[];
           out[key] = values.length ? Math.max(...values) : null;
         } else if (isColumn(value)) {
@@ -568,7 +825,10 @@ export const createFakeDb = (
             );
         }
 
-        if (selection && Object.values(selection).some(isAggregate)) {
+        if (
+          selection &&
+          Object.values(selection).some((value) => aggregateOf(value))
+        ) {
           return [
             project({}, flatResolver({}), selection, matched.map(resolverFor)),
           ];
@@ -608,7 +868,8 @@ export const createFakeDb = (
         },
         as(alias: string) {
           for (const [key, value] of Object.entries(selection ?? {})) {
-            if (isCountMarker(value) && !value.aliased) {
+            const aggregate = aggregateOf(value);
+            if (aggregate?.kind === "count" && !aggregate.aliased) {
               throw new Error(
                 `subquery "${alias}" selects "${key}" as count() without .as(…)`,
               );
@@ -627,7 +888,7 @@ export const createFakeDb = (
           condition = c;
           return builder;
         },
-        orderBy(...markers: (OrderMarker | Marker)[]) {
+        orderBy(...markers: unknown[]) {
           order = markers.filter(Boolean).map(orderMarkerOf);
           return builder;
         },
@@ -736,9 +997,7 @@ export const createFakeDb = (
           const values = Object.fromEntries(
             Object.entries(patch).map(([key, value]) => [
               key,
-              isMarker(value) && value.op === "sql"
-                ? sqlValue(value, resolve)
-                : value,
+              sqlValueOf(value, resolve),
             ]),
           );
           Object.assign(row, values);

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { mockDb, resetMockDb } from "../test-utils.ts";
+import { mockDb, renderedWheres, resetMockDb } from "../test-utils.ts";
 
 import { createMcp, updateMcp, deleteMcp } from "./mcp-write.ts";
 import type { McpCreateFields, McpUpdateFields } from "./mcp-write.ts";
@@ -19,12 +19,10 @@ const updateFields = (): McpUpdateFields => createFields();
 
 const expectToolSetScrub = (mcpId: string) => {
   expect(mockDb.update).toHaveBeenCalledWith(agentTable);
-  expect(mockDb.where).toHaveBeenLastCalledWith(
-    expect.objectContaining({
-      op: "sql",
-      values: [agentTable.toolSetIds, JSON.stringify([mcpId])],
-    }),
-  );
+  expect(renderedWheres().at(-1)).toEqual({
+    sql: `"agent"."tool_set_ids" @> $1::jsonb`,
+    params: [JSON.stringify([mcpId])],
+  });
 };
 
 describe("mcp write model", () => {
