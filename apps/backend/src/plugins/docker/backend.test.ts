@@ -245,9 +245,7 @@ vi.mock("dockerode", () => {
 
 import {
   createDockerSandboxBackend,
-  buildSingleFileTar,
   dockerSandboxConfigSchema,
-  EXEC_MARKER_VAR,
   type DockerSandboxConfig,
 } from "./backend.ts";
 import { logger } from "../../logger.ts";
@@ -638,6 +636,16 @@ describe("DockerSandboxTransport — argv safety", () => {
   });
 });
 
+function tarEntryName(tar: Buffer): string {
+  const nameBytes = tar.subarray(0, 100);
+  const nul = nameBytes.indexOf(0);
+  return nameBytes.subarray(0, nul === -1 ? 100 : nul).toString("utf8");
+}
+
+function tarEntrySize(tar: Buffer): number {
+  return Number.parseInt(tar.subarray(124, 136).toString("utf8"), 8);
+}
+
 describe("DockerSandboxTransport — byte transfer", () => {
   it("round-trips a binary payload byte-identical through putArchive and a read", async () => {
     mockState.existingContainer = makeFakeContainer();
@@ -655,7 +663,7 @@ describe("DockerSandboxTransport — byte transfer", () => {
     );
 
     const tar = mockState.putArchiveCalls[0].buffer;
-    const size = Number.parseInt(tar.subarray(124, 135).toString("utf8"), 8);
+    const size = tarEntrySize(tar);
     queueExec({ stdout: tar.subarray(512, 512 + size), exitCode: 0 });
 
     const read = await backend.fsReadBytes!(
@@ -674,38 +682,68 @@ describe("DockerSandboxTransport — byte transfer", () => {
   });
 });
 
-describe("DockerSandboxTransport — tar builder", () => {
-  it("buildSingleFileTar produces a parseable ustar archive", () => {
-    const content = Buffer.from("hello world", "utf8");
-    const tar = buildSingleFileTar("a/b.txt", content);
+describe("DockerSandboxTransport — archive handed to putArchive", () => {
+  function makeTarBackend() {
+    mockState.existingContainer = makeFakeContainer();
+    queueExec({ exitCode: 0 });
+    return makeBackend();
+  }
+
+  async function writeAndCaptureTar(
+    backend: ReturnType<typeof makeTarBackend>,
+    path: string,
+    content: string,
+  ): Promise<Buffer> {
+    await backend.fsWrite(
+      ctx,
+      { path, content, mode: "overwrite" },
+      callOptions,
+    );
+    const archive = mockState.putArchiveCalls.at(-1);
+    if (!archive) throw new Error("fsWrite handed no archive to putArchive");
+    return archive.buffer;
+  }
+
+  it("writes the file's bytes as a parseable ustar entry", async () => {
+    const content = "hello world";
+    const tar = await writeAndCaptureTar(makeTarBackend(), "a/b.txt", content);
 
     expect(tar.length % 512).toBe(0);
     expect(tar.subarray(257, 262).toString("utf8")).toBe("ustar");
 
     const sizeField = tar.subarray(124, 136).toString("utf8");
-    const expectedSize = content.length.toString(8).padStart(11, "0") + " ";
+    const expectedSize =
+      Buffer.byteLength(content).toString(8).padStart(11, "0") + " ";
     expect(sizeField).toBe(expectedSize);
-
-    const nameBytes = tar.subarray(0, 100);
-    const nul = nameBytes.indexOf(0);
-    const name = nameBytes.subarray(0, nul === -1 ? 100 : nul).toString("utf8");
-    expect(name).toBe("a/b.txt");
+    expect(tarEntrySize(tar)).toBe(Buffer.byteLength(content));
   });
 
-  it("buildSingleFileTar strips leading slashes from entry name", () => {
-    const tar = buildSingleFileTar("/leading", Buffer.from("x"));
-    const nameBytes = tar.subarray(0, 100);
-    const nul = nameBytes.indexOf(0);
-    expect(nameBytes.subarray(0, nul).toString("utf8")).toBe("leading");
+  it("names the entry after the file alone, never the parent path", async () => {
+    const backend = makeTarBackend();
+
+    expect(
+      tarEntryName(await writeAndCaptureTar(backend, "a/b.txt", "x")),
+    ).toBe("b.txt");
   });
 
-  it("buildSingleFileTar refuses an entry name over the 100-byte ustar field", () => {
-    expect(() =>
-      buildSingleFileTar("a".repeat(100), Buffer.from("x")),
-    ).not.toThrow();
-    expect(() => buildSingleFileTar("a".repeat(101), Buffer.from("x"))).toThrow(
-      /too long/,
+  it("refuses an entry name over the 100-byte ustar field", async () => {
+    const backend = makeTarBackend();
+
+    await backend.fsWrite(
+      ctx,
+      { path: "a".repeat(100), content: "x", mode: "overwrite" },
+      callOptions,
     );
+    expect(mockState.putArchiveCalls).toHaveLength(1);
+
+    await expect(
+      backend.fsWrite(
+        ctx,
+        { path: "a".repeat(101), content: "x", mode: "overwrite" },
+        callOptions,
+      ),
+    ).rejects.toThrow(/too long/);
+    expect(mockState.putArchiveCalls).toHaveLength(1);
   });
 });
 
@@ -773,9 +811,9 @@ describe("DockerSandboxTransport — destroy() idempotence", () => {
 
 function execMarker(call: Record<string, unknown>): string {
   const env = (call.Env as string[] | undefined) ?? [];
-  const entry = env.find((e) => e.startsWith(`${EXEC_MARKER_VAR}=`));
+  const entry = env.find((e) => e.startsWith("PLATYPUS_EXEC_ID="));
   if (!entry) throw new Error("exec carries no marker");
-  return entry.slice(EXEC_MARKER_VAR.length + 1);
+  return entry.slice("PLATYPUS_EXEC_ID=".length);
 }
 
 function killCallsFor(marker: string): Record<string, unknown>[] {
@@ -977,13 +1015,13 @@ describe("DockerSandboxTransport — ending a command that did not finish", () =
     const backend = makeBackend();
     await backend.shellExec(
       ctx,
-      { command: "true", env: { [EXEC_MARKER_VAR]: "spoofed" } },
+      { command: "true", env: { PLATYPUS_EXEC_ID: "spoofed" } },
       callOptions,
     );
 
     const env = mockState.execCalls[1].Env as string[];
-    expect(env.at(-1)).toMatch(new RegExp(`^${EXEC_MARKER_VAR}=`));
-    expect(env.at(-1)).not.toBe(`${EXEC_MARKER_VAR}=spoofed`);
+    expect(env.at(-1)).toMatch(/^PLATYPUS_EXEC_ID=/);
+    expect(env.at(-1)).not.toBe("PLATYPUS_EXEC_ID=spoofed");
   });
 
   it("still reports the timeout when the kill cannot be delivered", async () => {
