@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { nanoid } from "nanoid";
 import {
   chatSchema,
   TRIGGER_NAME_MAX_LENGTH,
@@ -29,7 +30,9 @@ vi.mock("./webhook-delivery.ts", () => ({
   deliverWebhook: mockDeliverWebhook,
 }));
 
-import { mockLogger, mockNanoid } from "../test-setup.ts";
+vi.mock("nanoid", { spy: true });
+
+import { mockLogger } from "../test-setup.ts";
 
 import { composeInboundInputs, fireTrigger } from "./trigger-firing.ts";
 import type { TriggerRow } from "./trigger.ts";
@@ -189,7 +192,7 @@ describe("fireTrigger", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(NOW);
     process.env.FRONTEND_URL = "http://localhost:3000";
-    mockNanoid.mockReturnValue("run-new");
+    vi.mocked(nanoid).mockReturnValue("run-new");
   });
 
   afterEach(() => {

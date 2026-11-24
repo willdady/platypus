@@ -27,13 +27,8 @@ const MAX_DELTA_CHARS = 1_500;
 const LOG_TTL_MS = 10 * 60_000;
 
 const FALLBACK_POLL_MS = 15_000;
-let fallbackPollMs = FALLBACK_POLL_MS;
 
-export const a2aFallbackPollMs = (): number => fallbackPollMs;
-
-export const setA2aFallbackPollMs = (ms?: number): void => {
-  fallbackPollMs = ms ?? FALLBACK_POLL_MS;
-};
+export const a2aFallbackPollMs = (): number => FALLBACK_POLL_MS;
 
 type TaskLog = {
   subscriptions: Set<A2aTaskSubscription>;

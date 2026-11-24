@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { mockNanoid } from "../test-setup.ts";
+import { nanoid } from "nanoid";
 import { resetMockDb, seedDb, type Row } from "../test-utils.ts";
+
+vi.mock("nanoid", { spy: true });
 
 vi.mock("./sub-agent-validation.ts", () => ({
   validateSubAgentAssignment: vi.fn(),
@@ -105,7 +107,7 @@ describe("agent module", () => {
 
   describe("createAgent", () => {
     it("inserts a workspace-scoped agent under a generated id, deduping id arrays", async () => {
-      mockNanoid.mockReturnValueOnce("new-agent");
+      vi.mocked(nanoid).mockReturnValueOnce("new-agent");
       const fake = world();
 
       const result = await createAgent(ctx, {

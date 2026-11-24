@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { mockLogger } from "../test-setup.ts";
-import { mockDb, resetMockDb } from "../test-utils.ts";
+import { mockDb, renderSql, resetMockDb } from "../test-utils.ts";
 import type { ProviderUpdateData } from "@platypus/schemas";
 
 import {
@@ -19,12 +19,10 @@ describe("nullifyEmbeddingsForProvider", () => {
     await nullifyEmbeddingsForProvider("p1");
 
     expect(mockDb.execute).toHaveBeenCalledTimes(1);
-    const [statement] = mockDb.execute.mock.calls[0] as [
-      { strings: string[]; values: unknown[] },
-    ];
-    expect(statement.values).toEqual(["p1"]);
-    expect(statement.strings.join("?")).toMatch(
-      /UPDATE memory_daily_summary\s+SET embedding = NULL.*memory_embedding_provider_id = \?/s,
+    const rendered = renderSql(mockDb.execute.mock.calls[0][0]);
+    expect(rendered.params).toEqual(["p1"]);
+    expect(rendered.sql).toMatch(
+      /UPDATE memory_daily_summary\s+SET embedding = NULL.*memory_embedding_provider_id = \$1/s,
     );
     expect(mockLogger.info).toHaveBeenCalledWith(
       { providerId: "p1", rowCount: 3 },

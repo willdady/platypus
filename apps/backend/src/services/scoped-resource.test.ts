@@ -1,9 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-// why: first, since drizzle-orm's operators are spies only through test-utils' mock
-import { resetMockDb, seedDb, type Row } from "../test-utils.ts";
-import { eq, isNull } from "drizzle-orm";
+import { renderSql, resetMockDb, seedDb, type Row } from "../test-utils.ts";
 import { db } from "../index.ts";
-import { agent as agentTable, mcp as mcpTable } from "../db/schema.ts";
 import {
   resolveScoped,
   resolveScopedByName,
@@ -178,34 +175,39 @@ describe("ScopedResource module", () => {
 
   describe("orgScopedWhere", () => {
     it("matches on id, organization, and no workspace", () => {
-      orgScopedWhere("agent", "a1", "org-1");
+      const rendered = renderSql(orgScopedWhere("agent", "a1", "org-1"));
 
-      expect(eq).toHaveBeenCalledWith(agentTable.id, "a1");
-      expect(eq).toHaveBeenCalledWith(agentTable.organizationId, "org-1");
-      expect(isNull).toHaveBeenCalledWith(agentTable.workspaceId);
+      expect(rendered.sql).toBe(
+        `("agent"."id" = $1 and ("agent"."organization_id" = $2 and "agent"."workspace_id" is null))`,
+      );
+      expect(rendered.params).toEqual(["a1", "org-1"]);
     });
 
     it("resolves the columns of the type it is given", () => {
-      orgScopedWhere("mcp", "m1", "org-1");
+      const rendered = renderSql(orgScopedWhere("mcp", "m1", "org-1"));
 
-      expect(eq).toHaveBeenCalledWith(mcpTable.id, "m1");
-      expect(isNull).toHaveBeenCalledWith(mcpTable.workspaceId);
+      expect(rendered.sql).toContain(`"mcp"."id" = $1`);
+      expect(rendered.sql).toContain(`"mcp"."workspace_id" is null`);
     });
   });
 
   describe("workspaceScopedWhere", () => {
     it("matches on id and workspace — the write-side counterpart to resolveScoped", () => {
-      workspaceScopedWhere("agent", "a1", "ws-1");
+      const rendered = renderSql(workspaceScopedWhere("agent", "a1", "ws-1"));
 
-      expect(eq).toHaveBeenCalledWith(agentTable.id, "a1");
-      expect(eq).toHaveBeenCalledWith(agentTable.workspaceId, "ws-1");
+      expect(rendered.sql).toBe(
+        `("agent"."id" = $1 and "agent"."workspace_id" = $2)`,
+      );
+      expect(rendered.params).toEqual(["a1", "ws-1"]);
     });
 
     it("resolves the columns of the type it is given", () => {
-      workspaceScopedWhere("mcp", "m1", "ws-1");
+      const rendered = renderSql(workspaceScopedWhere("mcp", "m1", "ws-1"));
 
-      expect(eq).toHaveBeenCalledWith(mcpTable.id, "m1");
-      expect(eq).toHaveBeenCalledWith(mcpTable.workspaceId, "ws-1");
+      expect(rendered.sql).toBe(
+        `("mcp"."id" = $1 and "mcp"."workspace_id" = $2)`,
+      );
+      expect(rendered.params).toEqual(["m1", "ws-1"]);
     });
   });
 

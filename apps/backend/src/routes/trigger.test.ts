@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { mockNanoid } from "../test-setup.ts";
+import { nanoid } from "nanoid";
 import {
   mockDb,
   mockNoSession,
@@ -8,6 +8,8 @@ import {
   seedDb,
   type Row,
 } from "../test-utils.ts";
+
+vi.mock("nanoid", { spy: true });
 
 const { mockValidateCronExpression } = vi.hoisted(() => ({
   mockValidateCronExpression:
@@ -20,7 +22,7 @@ vi.mock("../utils/cron.ts", () => ({
     mockValidateCronExpression(config.cronExpression, config.timezone),
 }));
 
-mockNanoid.mockReturnValue("trig-new");
+vi.mocked(nanoid).mockReturnValue("trig-new");
 
 import app from "../server.ts";
 
