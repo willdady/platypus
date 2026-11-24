@@ -28,10 +28,7 @@ import {
   WEB_SEARCH_TOOL_NAME,
 } from "./turn-tool-names.ts";
 import { z } from "zod";
-import {
-  clearSandboxBackends,
-  registerSandboxBackend,
-} from "../sandbox/index.ts";
+import { registerSandboxBackend } from "../sandbox/index.ts";
 import type { SandboxBackend } from "../sandbox/types.ts";
 
 describe("Tool Set Registry", () => {
@@ -558,10 +555,14 @@ describe("the sandbox tool set", () => {
   const shellExec = vi.fn();
   const create = vi.fn(() => ({ shellExec }) as unknown as SandboxBackend);
 
+  // why: the registry keeps every registration, so each case names its own backend
+  let seq = 0;
+  let backendId: string;
+
   const sandboxRow = (over: Record<string, unknown> = {}) => ({
     id: "sb-1",
     workspaceId: "ws-1",
-    backend: "test-backend",
+    backend: backendId,
     config: { image: "node" },
     credentials: { token: "secret" },
     userEnv: {},
@@ -575,9 +576,9 @@ describe("the sandbox tool set", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     resetMockDb();
-    clearSandboxBackends();
+    backendId = `test-backend-${(seq += 1)}`;
     registerSandboxBackend({
-      backend: "test-backend",
+      backend: backendId,
       name: "Test",
       configSchema: z.object({ image: z.string() }),
       credentialsSchema: z.object({ token: z.string() }),

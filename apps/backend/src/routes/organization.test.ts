@@ -13,10 +13,7 @@ import { mockLogger } from "../test-setup.ts";
 import { getStorage } from "../storage/index.ts";
 import app from "../server.ts";
 import { z } from "zod";
-import {
-  clearSandboxBackends,
-  registerSandboxBackend,
-} from "../sandbox/index.ts";
+import { registerSandboxBackend } from "../sandbox/index.ts";
 import type { SandboxBackend } from "../sandbox/types.ts";
 
 describe("Organization Routes", () => {
@@ -343,13 +340,15 @@ describe("Organization Routes", () => {
     });
 
     describe("Sandbox teardown", () => {
-      const BACKEND = "test-org-teardown";
+      // why: the registry keeps every registration, so each case names its own backend
+      let seq = 0;
+      let backendId: string;
       const destroy = vi.fn<SandboxBackend["destroy"]>();
 
       beforeEach(() => {
-        clearSandboxBackends();
+        backendId = `test-org-teardown-${(seq += 1)}`;
         registerSandboxBackend({
-          backend: BACKEND,
+          backend: backendId,
           name: "Test",
           configSchema: z.object({}),
           credentialsSchema: z.object({}),
@@ -357,7 +356,11 @@ describe("Organization Routes", () => {
         });
       });
 
-      const sandbox = (id: string, workspaceId: string, backend = BACKEND) => ({
+      const sandbox = (
+        id: string,
+        workspaceId: string,
+        backend = backendId,
+      ) => ({
         id,
         workspaceId,
         backend,
@@ -424,7 +427,7 @@ describe("Organization Routes", () => {
           expect.arrayContaining([
             expect.objectContaining({
               workspaceId: "ws-1",
-              backend: BACKEND,
+              backend: backendId,
               error: "container already gone",
             }),
             expect.objectContaining({
