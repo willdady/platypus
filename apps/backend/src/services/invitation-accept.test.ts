@@ -1,5 +1,4 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
-vi.unmock("drizzle-orm"); // why: these tests run real Drizzle against PGlite
 import type { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { migratedPglite } from "../db/migrated-pglite.test-fixtures.ts";

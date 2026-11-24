@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import {
   extractFiles,
   rewriteStorageUrls,
@@ -9,10 +9,10 @@ import { mockLogger } from "../test-setup.ts";
 import { canonicalStorageKeyFromUrl } from "./file-reference.ts";
 import type { PlatypusUIMessage } from "../types.ts";
 import type { FileUIPart } from "ai";
-import { getStorage, resetStorage } from "./index.ts";
+import { getStorage } from "./index.ts";
+import { useTempDiskStorage } from "./temp-disk.test-fixtures.ts";
 import { promises as fs } from "node:fs";
 import * as path from "node:path";
-import * as os from "node:os";
 
 function createMessageWithFile(
   messageId: string,
@@ -43,21 +43,7 @@ async function countPngFiles(root: string): Promise<number> {
 const CONTEXT = { orgId: "org-1", workspaceId: "ws-1", chatId: "chat-1" };
 
 describe("Storage Utils", () => {
-  let tempDir: string;
-
-  beforeEach(async () => {
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "storage-test-"));
-    process.env.STORAGE_DISK_PATH = tempDir;
-    process.env.STORAGE_BACKEND = "disk";
-    resetStorage();
-  });
-
-  afterEach(async () => {
-    await fs.rm(tempDir, { recursive: true, force: true });
-    delete process.env.STORAGE_DISK_PATH;
-    delete process.env.STORAGE_BACKEND;
-    resetStorage();
-  });
+  const storage = useTempDiskStorage();
 
   describe("extractFiles", () => {
     it("should extract data URLs and replace with storage URLs", async () => {
@@ -106,7 +92,7 @@ describe("Storage Utils", () => {
         expect(url).toMatch(/^storage:\/\//);
         const key = canonicalStorageKeyFromUrl(url)!;
         expect(key).toMatch(keyPattern);
-        expect(await fs.readFile(path.join(tempDir, key), "utf8")).toBe(
+        expect(await fs.readFile(path.join(storage.dir, key), "utf8")).toBe(
           content,
         );
       },
@@ -142,7 +128,7 @@ describe("Storage Utils", () => {
 
       await extractFiles(messages, CONTEXT);
 
-      const files = await fs.readdir(tempDir, { recursive: true });
+      const files = await fs.readdir(storage.dir, { recursive: true });
       expect(files.length).toBeGreaterThan(0);
 
       const allFiles = files.flat();
@@ -309,7 +295,7 @@ describe("Storage Utils", () => {
 
       const storeOfSize = async (size: number) => {
         await getStorage().put(key, Buffer.from("x"), "image/png");
-        await fs.truncate(path.join(tempDir, key), size);
+        await fs.truncate(path.join(storage.dir, key), size);
       };
 
       it("should leave a file over the cap un-inlined and warn", async () => {
@@ -338,7 +324,7 @@ describe("Storage Utils", () => {
     });
 
     it("should not inline a file reached by traversing out of the storage root", async () => {
-      const secretPath = path.join(tempDir, "..", "outside-secret.txt");
+      const secretPath = path.join(storage.dir, "..", "outside-secret.txt");
       await fs.writeFile(secretPath, "SUPER_SECRET_VALUE");
       await fs.writeFile(
         `${secretPath}.meta`,
@@ -362,7 +348,11 @@ describe("Storage Utils", () => {
     });
 
     it("should not inline a traversal key arriving in the HTTP URL form", async () => {
-      const secretPath = path.join(tempDir, "..", "outside-secret-http.txt");
+      const secretPath = path.join(
+        storage.dir,
+        "..",
+        "outside-secret-http.txt",
+      );
       await fs.writeFile(secretPath, "SUPER_SECRET_VALUE");
       await fs.writeFile(
         `${secretPath}.meta`,
@@ -466,7 +456,9 @@ describe("Storage Utils", () => {
       });
 
       expect((processed[0].parts[0] as FileUIPart).url).toBe(htmlDataUrl);
-      const stored = (await fs.readdir(tempDir, { recursive: true })).flat();
+      const stored = (
+        await fs.readdir(storage.dir, { recursive: true })
+      ).flat();
       expect(stored.filter((f) => !String(f).endsWith(".meta"))).toHaveLength(
         0,
       );
@@ -492,7 +484,7 @@ describe("Storage Utils", () => {
       expect((processed[0].parts[0] as FileUIPart).url).toMatch(
         /^storage:\/\/org-1\/ws-1\/chat-1\/msg-1\/0-[a-f0-9]{8}\.png$/,
       );
-      expect(await countPngFiles(tempDir)).toBe(1);
+      expect(await countPngFiles(storage.dir)).toBe(1);
     });
 
     it("should store an unnamed binary type as .bin", async () => {
@@ -547,7 +539,7 @@ describe("Storage Utils", () => {
       expect((processed[0].parts[0] as FileUIPart).url).toBe(
         createPngDataUrl(),
       );
-      expect(await countPngFiles(tempDir)).toBe(0);
+      expect(await countPngFiles(storage.dir)).toBe(0);
     });
 
     it("should store a file under a well-formed message id", async () => {

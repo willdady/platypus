@@ -1,8 +1,7 @@
-import { afterEach, beforeEach, vi, type Mock } from "vitest";
-import { promises as fs } from "node:fs";
-import * as os from "node:os";
-import * as path from "node:path";
-import { getStorage, resetStorage } from "./storage/index.ts";
+import { vi, type Mock } from "vitest";
+import { PgDialect } from "drizzle-orm/pg-core";
+import { getStorage } from "./storage/index.ts";
+import { mockDb, type MockDb } from "./test-mocks.ts";
 
 export type { FakeDb, Row, Store } from "./fake-db.ts";
 export { dbError } from "./fake-db.ts";
@@ -86,6 +85,22 @@ export const insertTimestamps = () => ({
   createdAt: new Date("2026-01-01T00:00:00.000Z"),
   updatedAt: new Date("2026-01-01T00:00:00.000Z"),
 });
+
+const dialect = new PgDialect();
+
+export const renderSql = (
+  query: unknown,
+): { sql: string; params: unknown[] } => {
+  const { sql, params } = dialect.sqlToQuery(
+    query as Parameters<typeof dialect.sqlToQuery>[0],
+  );
+  return { sql, params };
+};
+
+export const renderedWheres = (
+  db: MockDb = mockDb,
+): { sql: string; params: unknown[] }[] =>
+  db.where.mock.calls.map(([predicate]) => renderSql(predicate));
 
 export const loadedPluginsFixture = (
   plugins: LoadedPlugin[] = [],
@@ -175,19 +190,7 @@ export const notificationEvent = (
   },
 });
 
-export const useTempDiskStorage = () => {
-  let dir: string;
-  beforeEach(async () => {
-    dir = await fs.mkdtemp(path.join(os.tmpdir(), "platypus-storage-test-"));
-    process.env.STORAGE_DISK_PATH = dir;
-    resetStorage();
-  });
-  afterEach(async () => {
-    delete process.env.STORAGE_DISK_PATH;
-    resetStorage();
-    await fs.rm(dir, { recursive: true, force: true });
-  });
-};
+export { useTempDiskStorage } from "./storage/temp-disk.test-fixtures.ts";
 
 export const putStoredFiles = (keys: string[]) =>
   Promise.all(

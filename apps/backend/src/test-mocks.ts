@@ -180,44 +180,6 @@ vi.mock("./index.ts", () => ({
   db: dbHandle,
 }));
 
-// why: tests that run real Drizzle against PGlite unmock this module themselves
-vi.mock("drizzle-orm", async () => {
-  const actual = await vi.importActual("drizzle-orm");
-  // why: dynamic: this factory runs before the module's own imports are evaluated
-  const { markerOperators, orderOperators, sqlMarker } =
-    await import("./fake-db.ts");
-  const markers = markerOperators();
-  const order = orderOperators();
-  const sqlMock = Object.assign(
-    vi.fn((strings: TemplateStringsArray, ...values: unknown[]) =>
-      sqlMarker(strings, values),
-    ),
-    {
-      raw: vi.fn((query: string) => ({ getSQL: () => ({ query }) })),
-    },
-  );
-  return {
-    ...actual,
-    eq: vi.fn(markers.eq),
-    and: vi.fn(markers.and),
-    or: vi.fn(markers.or),
-    inArray: vi.fn(markers.inArray),
-    notInArray: vi.fn(markers.notInArray),
-    ne: vi.fn(markers.ne),
-    gt: vi.fn(markers.gt),
-    gte: vi.fn(markers.gte),
-    lt: vi.fn(markers.lt),
-    lte: vi.fn(markers.lte),
-    asc: vi.fn(order.asc),
-    count: vi.fn(markers.count),
-    max: vi.fn(markers.max),
-    desc: vi.fn(order.desc),
-    isNull: vi.fn(markers.isNull),
-    isNotNull: vi.fn(markers.isNotNull),
-    sql: sqlMock,
-  };
-});
-
 vi.mock("./auth.ts", () => ({
   auth: mockAuth,
 }));

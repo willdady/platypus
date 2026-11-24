@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { mockDb, resetMockDb } from "../test-utils.ts";
-import { agent as agentTable } from "../db/schema.ts";
+import { resetMockDb, seedDb } from "../test-utils.ts";
 import { scrubDeletedAgentReference } from "./agent-references.ts";
 
 describe("scrubDeletedAgentReference", () => {
@@ -16,21 +15,23 @@ describe("scrubDeletedAgentReference", () => {
   ] as const)(
     "removes the id from %s on only the agents holding it",
     async (field, id) => {
-      await scrubDeletedAgentReference(mockDb as never, field, id);
-
-      expect(mockDb.update).toHaveBeenCalledWith(agentTable);
-      const patch = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
-      expect(Object.keys(patch).sort()).toEqual([field, "updatedAt"].sort());
-      expect(patch[field]).toMatchObject({
-        op: "sql",
-        values: [agentTable[field], id],
+      const fake = seedDb({
+        agent: [
+          { id: "holds", [field]: ["kept", id], updatedAt: "untouched" },
+          { id: "lacks", [field]: ["kept"], updatedAt: "untouched" },
+        ],
       });
-      expect(mockDb.where).toHaveBeenCalledWith(
-        expect.objectContaining({
-          op: "sql",
-          values: [agentTable[field], JSON.stringify([id])],
-        }),
-      );
+
+      await scrubDeletedAgentReference(fake.handle as never, field, id);
+
+      const [holds, lacks] = fake.tables.agent;
+      expect(holds[field]).toEqual(["kept"]);
+      expect(holds.updatedAt).toBeInstanceOf(Date);
+      expect(lacks).toEqual({
+        id: "lacks",
+        [field]: ["kept"],
+        updatedAt: "untouched",
+      });
     },
   );
 });

@@ -9,18 +9,16 @@ import {
   beforeEach,
   vi,
 } from "vitest";
-vi.unmock("drizzle-orm"); // why: these tests run real Drizzle against PGlite
 import type { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { strToU8, zipSync } from "fflate";
 import { migratedPglite } from "../db/migrated-pglite.test-fixtures.ts";
-import os from "node:os";
-import { afterEach } from "vitest";
 import type { Tool } from "ai";
 import { z } from "zod";
 import type { SandboxBackend } from "@platypuschat/plugin-sdk";
-import { getStorage, resetStorage } from "../storage/index.ts";
+import { getStorage } from "../storage/index.ts";
 import { mockNanoid } from "../test-setup.ts";
+import { useTempDiskStorage } from "../storage/temp-disk.test-fixtures.ts";
 import { NotFoundError, ValidationError } from "../errors.ts";
 
 const { holder } = vi.hoisted(() => ({
@@ -116,6 +114,8 @@ const fakeSandbox = (): SandboxBackend => {
   };
 };
 
+useTempDiskStorage();
+
 let pg: PGlite;
 beforeAll(async () => {
   const actual = await vi.importActual<typeof import("nanoid")>("nanoid");
@@ -130,18 +130,8 @@ beforeAll(async () => {
     create: fakeSandbox,
   });
 }, 60_000);
-afterAll(() => pg.close());
-
-beforeEach(async () => {
-  process.env.STORAGE_DISK_PATH = await fs.mkdtemp(
-    path.join(os.tmpdir(), "platypus-skill-bundle-test-"),
-  );
-  resetStorage();
-});
-afterEach(async () => {
-  await fs.rm(process.env.STORAGE_DISK_PATH!, { recursive: true, force: true });
-  delete process.env.STORAGE_DISK_PATH;
-  resetStorage();
+afterAll(async () => {
+  await pg.close();
 });
 
 const callTool = async (tool: Tool, input: unknown): Promise<unknown> =>
