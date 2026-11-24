@@ -256,12 +256,6 @@ Sandbox](#skills-in-a-sandbox).
 The same rules apply as for `loadSkill`: the Agent can read files only from
 Skills attached to it, and not from a Skill marked **User-invocable only**.
 
-<Callout type="info">
-  An Agent that manages your Skills can't create a Workspace version of a Shared
-  Skill that has bundled files: the new version would have none of the files.
-  Ask an Org Admin to change the Shared Skill instead.
-</Callout>
-
 ## Skills in a Sandbox
 
 When an Agent with the **Sandbox** Tool set loads a Skill that has bundled
@@ -381,6 +375,10 @@ A Skill lives at exactly one scope:
   can edit the Skill itself. An Org Admin gets a three-dot menu on the card:
   **Edit in org settings** opens the Skill where it is edited, and **Detach**
   removes it from this Workspace without deleting it.
+
+An Agent that manages your Skills creates your Workspace's own version when it
+writes a Skill with the same name as a Shared Skill. Any bundled files come
+with it, and later changes to the Shared Skill don't reach your version.
 
 An Org Admin can turn a Workspace Skill into a Shared one with **Promote to
 organization** in the Skill's menu — see [Promote](/concepts/sharing#promote).

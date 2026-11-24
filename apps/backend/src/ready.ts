@@ -1,4 +1,6 @@
+import { Hono } from "hono";
 import { logger } from "./logger.ts";
+import { runRegistry, type RunRegistry } from "./runs/run-registry.ts";
 
 export const DB_PING_TIMEOUT_MS = 2_000;
 
@@ -26,4 +28,21 @@ export const pingDatabase = async (
     logger.warn({ error }, "Readiness check: database did not answer");
     return false;
   }
+};
+
+export const readyRoutes = (
+  pool: Pingable,
+  registry: RunRegistry = runRegistry,
+): Hono => {
+  const app = new Hono();
+  app.get("/ready", async (c) => {
+    if (registry.stopping) {
+      return c.json({ error: "Server is shutting down" }, 503);
+    }
+    const ready = await pingDatabase(pool);
+    return ready
+      ? c.json({ status: "ready" })
+      : c.json({ error: "Database unavailable" }, 503);
+  });
+  return app;
 };

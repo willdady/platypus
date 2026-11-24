@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { nanoid } from "nanoid";
 import { resetMockDb, seedDb, type Row } from "../test-utils.ts";
-import { mockLogger, mockNanoid } from "../test-setup.ts";
+import { mockLogger } from "../test-setup.ts";
+
+vi.mock("nanoid", { spy: true });
 
 const { mockDeletePrefix } = vi.hoisted(() => ({
   mockDeletePrefix: vi.fn<(prefix: string) => Promise<void>>(),
@@ -332,7 +335,7 @@ describe("inbound triggers", () => {
 
   describe("acceptInboundCall", () => {
     it("writes the run row as pending before firing it, under the record key's value", async () => {
-      mockNanoid.mockReturnValueOnce("run-1");
+      vi.mocked(nanoid).mockReturnValueOnce("run-1");
       const fake = seed();
 
       const result = await acceptInboundCall(
@@ -448,7 +451,7 @@ describe("inbound triggers", () => {
           },
         ],
       });
-      mockNanoid.mockReturnValueOnce("run-new");
+      vi.mocked(nanoid).mockReturnValueOnce("run-new");
 
       const result = await acceptInboundCall(
         target(),
@@ -470,7 +473,7 @@ describe("inbound triggers", () => {
           startedAt: new Date(NOW.getTime() - 60_000),
         });
         const fake = seed({ runs: [done("r1"), done("r2")] });
-        mockNanoid.mockReturnValueOnce("run-suppressed");
+        vi.mocked(nanoid).mockReturnValueOnce("run-suppressed");
 
         const tripped = await acceptInboundCall(
           target(),
@@ -496,7 +499,7 @@ describe("inbound triggers", () => {
           }),
         ]);
 
-        mockNanoid.mockReturnValueOnce("run-other-record");
+        vi.mocked(nanoid).mockReturnValueOnce("run-other-record");
         const other = await acceptInboundCall(
           target(),
           config,
@@ -535,7 +538,7 @@ describe("inbound triggers", () => {
             },
           ],
         });
-        mockNanoid.mockReturnValueOnce("run-suppressed");
+        vi.mocked(nanoid).mockReturnValueOnce("run-suppressed");
 
         await acceptInboundCall(
           target(),
@@ -601,7 +604,7 @@ describe("inbound triggers", () => {
       vi.mocked(fireTrigger).mockImplementationOnce(
         () => new Promise(() => {}),
       );
-      mockNanoid.mockReturnValueOnce("run-holding");
+      vi.mocked(nanoid).mockReturnValueOnce("run-holding");
       await acceptInboundCall(target(), config, { issueKey: "HOLD" }, one);
       expect(activeInboundRunCount()).toBe(1);
     };
@@ -641,7 +644,7 @@ describe("inbound triggers", () => {
           ],
         });
         await holdTheOnlySlot();
-        mockNanoid.mockReturnValueOnce("run-suppressed");
+        vi.mocked(nanoid).mockReturnValueOnce("run-suppressed");
 
         expect(
           await acceptInboundCall(

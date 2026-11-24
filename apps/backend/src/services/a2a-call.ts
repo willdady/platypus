@@ -56,10 +56,6 @@ export const acquireA2aRunSlot = (): (() => void) | null => {
   return () => void heldSlots.delete(slot);
 };
 
-export const activeA2aRunCount = (): number => heldSlots.size;
-
-export const resetA2aRunSlots = (): void => heldSlots.clear();
-
 export const A2A_MAX_STREAMS_PER_TOKEN = 10;
 
 const heldFollowers = new Map<symbol, string>();
@@ -85,13 +81,6 @@ export const acquireA2aFollowerSlot = (
     if (left > 0) followersByToken.set(tokenId, left);
     else followersByToken.delete(tokenId);
   };
-};
-
-export const activeA2aFollowerCount = (): number => heldFollowers.size;
-
-export const resetA2aFollowerSlots = (): void => {
-  heldFollowers.clear();
-  followersByToken.clear();
 };
 
 export type A2aCallOutcome = "ok" | "rejected" | "rate_limited";
