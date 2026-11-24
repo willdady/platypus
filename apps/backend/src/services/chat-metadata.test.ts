@@ -1,8 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { mockDb, resetMockDb } from "../test-utils.ts";
+import { mockDb, renderedWheres, resetMockDb } from "../test-utils.ts";
 import { logger } from "../logger.ts";
-import { and, eq } from "drizzle-orm";
-import { chat as chatTable, provider as providerTable } from "../db/schema.ts";
 import { UNTITLED_CHAT_TITLE, type ConcreteModelId } from "@platypus/schemas";
 
 const { mockGenerateText, mockLanguageModel, mockLoadActivePath } = vi.hoisted(
@@ -114,16 +112,17 @@ describe("generateChatMetadata", () => {
     const setArg = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
     expect(setArg.title).toBe("Centering a div");
     expect(setArg).not.toHaveProperty("tags");
-    expect(mockDb.where).toHaveBeenCalledWith(
-      and(eq(chatTable.id, "chat-1"), eq(chatTable.workspaceId, "ws-1")),
-    );
-    expect(mockDb.where).toHaveBeenLastCalledWith(
-      and(
-        eq(chatTable.id, "chat-1"),
-        eq(chatTable.workspaceId, "ws-1"),
-        eq(chatTable.title, UNTITLED_CHAT_TITLE),
-      ),
-    );
+    const wheres = renderedWheres();
+    expect(wheres[0]).toEqual({
+      sql: `("chat"."id" = $1 and "chat"."workspace_id" = $2)`,
+      params: ["chat-1", "ws-1"],
+    });
+    expect(wheres.at(-1)).toEqual({
+      sql:
+        `("chat"."id" = $1 and "chat"."workspace_id" = $2 and ` +
+        `"chat"."title" = $3)`,
+      params: ["chat-1", "ws-1", UNTITLED_CHAT_TITLE],
+    });
   });
 
   it("sends the task model's Job settings, and none without them", async () => {
@@ -358,8 +357,14 @@ describe("generateChatMetadata", () => {
 
     const result = await generateChatMetadata(params);
     expect(result).not.toBeNull();
-    expect(eq).toHaveBeenCalledWith(providerTable.id, "override-provider");
-    expect(eq).not.toHaveBeenCalledWith(providerTable.id, "p1");
+    expect(openProvider).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "override-provider" }),
+      { sessionId: "chat-1" },
+    );
+    expect(openProvider).not.toHaveBeenCalledWith(
+      expect.objectContaining({ id: "p1" }),
+      expect.anything(),
+    );
   });
 
   it("skips (returns null) when the chat is already titled", async () => {

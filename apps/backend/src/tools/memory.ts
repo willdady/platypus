@@ -12,6 +12,16 @@ import { pointerSettingModelId } from "../services/model-capability.ts";
 import { logger } from "../logger.ts";
 import { errorMessage } from "../utils/error-message.ts";
 
+export const MEMORY_GET_TOOL_NAME = "memoryGet";
+
+export const MEMORY_SEARCH_TOOL_NAME = "memorySearch";
+
+// why: memorySearch exists only with an embedding Provider configured, so building the Tool set cannot reveal the full inventory
+export const MEMORY_TOOL_NAMES: readonly string[] = [
+  MEMORY_SEARCH_TOOL_NAME,
+  MEMORY_GET_TOOL_NAME,
+];
+
 const loadEmbeddingConfig = async (workspaceId: string) => {
   const [ws] = await db
     .select({
@@ -81,7 +91,7 @@ export const createMemoryTools = async (
     },
   });
 
-  if (!embedding) return { memoryGet };
+  if (!embedding) return { [MEMORY_GET_TOOL_NAME]: memoryGet };
 
   const memorySearch = tool({
     description:
@@ -140,5 +150,8 @@ export const createMemoryTools = async (
     },
   });
 
-  return { memorySearch, memoryGet };
+  return {
+    [MEMORY_SEARCH_TOOL_NAME]: memorySearch,
+    [MEMORY_GET_TOOL_NAME]: memoryGet,
+  };
 };

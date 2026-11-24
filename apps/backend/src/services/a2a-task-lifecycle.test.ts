@@ -13,6 +13,7 @@ import { drizzle } from "drizzle-orm/pglite";
 import { eq, sql } from "drizzle-orm";
 import { TaskState } from "@a2a-js/sdk";
 import { migratedPglite } from "../db/migrated-pglite.test-fixtures.ts";
+import { seedA2aWorkspace } from "./a2a.test-fixtures.ts";
 import {
   a2aPushConfig as a2aPushConfigTable,
   a2aTask as a2aTaskTable,
@@ -49,7 +50,13 @@ let pg: PGlite;
 const fetchMock = vi.fn();
 beforeAll(async () => {
   pg = await migratedPglite();
-  await pg.exec("SET session_replication_role = replica");
+  await seedA2aWorkspace(pg);
+  await pg.exec(`
+    INSERT INTO "a2a_endpoint" ("id", "workspace_id", "agent_id", "name", "description")
+      VALUES ('ep-1', 'ws-1', 'agent-1', 'Helper', 'Helps');
+    INSERT INTO "a2a_token" ("id", "endpoint_id", "name", "token_hash", "token_created_at", "token_expires_at")
+      VALUES ('tok-1', 'ep-1', 'Client', 'h', now(), now() + interval '30 days');
+  `);
   holder.db = drizzle(pg);
 }, 60_000);
 afterAll(() => pg.close());
@@ -67,13 +74,13 @@ beforeEach(async () => {
   await pg.exec(`
     DELETE FROM "a2a_push_config";
     DELETE FROM "a2a_task";
-    DELETE FROM "chat_message";
     DELETE FROM "chat";
-    INSERT INTO "chat" ("id", "workspace_id", "title", "status", "active_leaf_id")
-      VALUES ('chat-1', 'ws-1', 'A2A', 'running', 'reply-1');
+    INSERT INTO "chat" ("id", "workspace_id", "title", "status")
+      VALUES ('chat-1', 'ws-1', 'A2A', 'running');
     INSERT INTO "chat_message" ("chat_id", "id", "parent_id", "role", "parts", "created_at")
       VALUES ('chat-1', 'msg-1', NULL, 'user', '[]', now() - interval '1 minute'),
              ('chat-1', 'reply-1', 'msg-1', 'assistant', '[{"type":"text","text":"Hi"}]', now());
+    UPDATE "chat" SET "active_leaf_id" = 'reply-1' WHERE "id" = 'chat-1';
     INSERT INTO "a2a_task" ("id", "chat_id", "message_id", "endpoint_id", "token_id", "state", "reply_id", "status_at")
       VALUES ('task-1', 'chat-1', 'msg-1', 'ep-1', 'tok-1', NULL, NULL, now());
     INSERT INTO "a2a_push_config" ("id", "task_id", "url")
