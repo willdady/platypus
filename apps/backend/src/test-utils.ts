@@ -88,6 +88,9 @@ export const insertTimestamps = () => ({
 
 const dialect = new PgDialect();
 
+export const flushAsyncWork = (): Promise<void> =>
+  new Promise((resolve) => setImmediate(resolve));
+
 export const renderSql = (
   query: unknown,
 ): { sql: string; params: unknown[] } => {
