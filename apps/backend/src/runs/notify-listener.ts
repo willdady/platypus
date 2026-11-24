@@ -1,13 +1,18 @@
 import type { PoolClient } from "pg";
 import { db } from "../index.ts";
 import { logger } from "../logger.ts";
+import { withDeadline } from "../utils/abort-race.ts";
 
-const RECONNECT_MS = 5_000;
+export const RECONNECT_MS = 5_000;
+export const HEARTBEAT_MS = 30_000;
+export const HEARTBEAT_TIMEOUT_MS = 5_000;
 
 const handlers = new Map<string, (payload: string) => void>();
 
 let client: PoolClient | undefined;
 let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+let heartbeatTimer: ReturnType<typeof setInterval> | undefined;
+let heartbeatAbort: AbortController | undefined;
 let stopped = false;
 
 export const onNotification = (
@@ -26,15 +31,42 @@ export const notify = async (
 
 export const startNotificationListener = (): (() => void) => {
   stopped = false;
+  stopHeartbeat();
   void listen();
   return () => {
     stopped = true;
     if (reconnectTimer) clearTimeout(reconnectTimer);
     reconnectTimer = undefined;
+    stopHeartbeat();
     const held = client;
     client = undefined;
     held?.release();
   };
+};
+
+const stopHeartbeat = (): void => {
+  if (heartbeatTimer) clearInterval(heartbeatTimer);
+  heartbeatTimer = undefined;
+  heartbeatAbort?.abort();
+  heartbeatAbort = undefined;
+};
+
+const heartbeat = async (
+  connection: PoolClient,
+  signal: AbortSignal,
+  reconnect: (err: unknown) => void,
+): Promise<void> => {
+  try {
+    await withDeadline(
+      () => connection.query("SELECT 1"),
+      HEARTBEAT_TIMEOUT_MS,
+      signal,
+    );
+  } catch (err) {
+    // why: stopping aborts the heartbeat; that must not look like a dead socket
+    if (signal.aborted) return;
+    reconnect(err);
+  }
 };
 
 const listen = async (): Promise<void> => {
@@ -44,6 +76,7 @@ const listen = async (): Promise<void> => {
   const reconnect = (err: unknown) => {
     if (lost || stopped) return;
     lost = true;
+    stopHeartbeat();
     logger.error({ err }, "Notification listener lost its connection");
     client?.release(err instanceof Error ? err : true);
     client = undefined;
@@ -63,6 +96,14 @@ const listen = async (): Promise<void> => {
       if (!payload) return;
       handlers.get(channel)?.(payload);
     });
+    // why: a half-open socket raises no error, so a failed heartbeat is the only signal
+    const connection = client;
+    const abort = new AbortController();
+    heartbeatAbort = abort;
+    heartbeatTimer = setInterval(
+      () => void heartbeat(connection, abort.signal, reconnect),
+      HEARTBEAT_MS,
+    );
     for (const channel of handlers.keys()) {
       await client.query(`LISTEN ${channel}`);
     }

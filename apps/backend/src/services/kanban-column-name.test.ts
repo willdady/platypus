@@ -11,10 +11,8 @@ import type { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { migratedPglite } from "../db/migrated-pglite.test-fixtures.ts";
 import { ConflictError } from "../errors.ts";
-import { mockNanoid } from "../test-setup.ts";
 
 vi.mock("./event-dispatch.ts", () => ({ dispatchEvent: vi.fn() }));
-mockNanoid.mockImplementation(() => crypto.randomUUID());
 
 const { createColumn, renameColumn } = await import("./kanban-column.ts");
 
