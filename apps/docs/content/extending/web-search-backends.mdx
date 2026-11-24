@@ -129,8 +129,11 @@ It fires for either of two reasons, and you do not need to tell them apart:
 - the person in the Chat pressed stop, or their run was cancelled;
 - your own `timeoutMs` deadline passed.
 
-`createExecutors` gets no signal: past its `timeoutMs` core stops waiting, but
-the factory runs on.
+`createExecutors` itself gets no signal, but a cancelled turn stops core waiting
+on it: press stop while the factory is still running and the turn serves no web
+tools rather than waiting out its `timeoutMs`. Past its `timeoutMs` core stops
+waiting too. Either way the factory is abandoned, not cancelled, so it runs on —
+register a closer for anything it opens.
 
 <Callout type="warning">
   **Ignoring the signal is allowed, and it costs you a request you are no longer

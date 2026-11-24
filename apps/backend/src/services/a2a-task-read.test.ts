@@ -12,6 +12,7 @@ import { drizzle } from "drizzle-orm/pglite";
 import { and, desc, eq, isNull } from "drizzle-orm";
 import { TaskState } from "@a2a-js/sdk";
 import { migratedPglite } from "../db/migrated-pglite.test-fixtures.ts";
+import { seedA2aWorkspace } from "./a2a.test-fixtures.ts";
 import { a2aTask as a2aTaskTable } from "../db/schema.ts";
 
 const { holder } = vi.hoisted(() => ({
@@ -36,7 +37,13 @@ const caller = {
 let pg: PGlite;
 beforeAll(async () => {
   pg = await migratedPglite();
-  await pg.exec("SET session_replication_role = replica");
+  await seedA2aWorkspace(pg);
+  await pg.exec(`
+    INSERT INTO "a2a_endpoint" ("id", "workspace_id", "agent_id", "name", "description")
+      VALUES ('ep-1', 'ws-1', 'agent-1', 'Helper', 'Helps');
+    INSERT INTO "a2a_token" ("id", "endpoint_id", "name", "token_hash", "token_created_at", "token_expires_at")
+      VALUES ('tok-1', 'ep-1', 'Client', 'h', now(), now() + interval '30 days');
+  `);
   holder.db = drizzle(pg);
 }, 60_000);
 afterAll(() => pg.close());
@@ -44,11 +51,10 @@ afterAll(() => pg.close());
 beforeEach(async () => {
   await pg.exec(`
     DELETE FROM "a2a_task";
-    DELETE FROM "chat_message";
     DELETE FROM "chat";
-    INSERT INTO "chat" ("id", "workspace_id", "title", "status", "active_leaf_id")
-      VALUES ('chat-1', 'ws-1', 'Running', 'running', 'reply-1'),
-             ('chat-2', 'ws-1', 'Done', 'succeeded', 'reply-2');
+    INSERT INTO "chat" ("id", "workspace_id", "title", "status")
+      VALUES ('chat-1', 'ws-1', 'Running', 'running'),
+             ('chat-2', 'ws-1', 'Done', 'succeeded');
     INSERT INTO "chat_message" ("chat_id", "id", "parent_id", "role", "parts", "created_at", "deleted_at")
       VALUES ('chat-1', 'msg-1', NULL, 'user', '[]', now() - interval '3 minutes', NULL),
              ('chat-1', 'gone-1', 'msg-1', 'assistant', '[]', now() - interval '2 minutes', now()),
@@ -56,6 +62,8 @@ beforeEach(async () => {
              ('chat-1', 'later-1', 'msg-1', 'assistant', '[]', now(), NULL),
              ('chat-2', 'msg-2', NULL, 'user', '[]', now(), NULL),
              ('chat-2', 'reply-2', 'msg-2', 'assistant', '[{"type":"text","text":"Done"}]', now(), NULL);
+    UPDATE "chat" SET "active_leaf_id" = 'reply-1' WHERE "id" = 'chat-1';
+    UPDATE "chat" SET "active_leaf_id" = 'reply-2' WHERE "id" = 'chat-2';
     INSERT INTO "a2a_task" ("id", "chat_id", "message_id", "endpoint_id", "token_id", "state", "reply_id", "status_at")
       VALUES ('task-1', 'chat-1', 'msg-1', 'ep-1', 'tok-1', NULL, NULL, now() - interval '1 minute'),
              ('task-2', 'chat-2', 'msg-2', 'ep-1', 'tok-1', 'completed', 'reply-2', now());

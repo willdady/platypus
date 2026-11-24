@@ -1,15 +1,12 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
   loadedPluginsFixture,
-  mockDb,
   mockNoSession,
   mockSession,
   resetMockDb,
+  seedDb,
 } from "../test-utils.ts";
-import app from "../server.ts";
-import { setLoadedPlugins } from "../plugins/registry.ts";
 import type { LoadedPlugin } from "../plugins/loader.ts";
-import { clearWebBackends, registerWebBackend } from "../web-backends/index.ts";
 
 const LOADED: LoadedPlugin[] = [
   {
@@ -30,32 +27,48 @@ const LOADED_RESULT = loadedPluginsFixture(LOADED, {
 
 const baseUrl = "/organizations/org-1/web-backends";
 
+// why: each case needs a server whose Web backend registry was never touched
+const loadServer = async () => {
+  vi.resetModules();
+  const [{ default: app }, backends, plugins] = await Promise.all([
+    import("../server.ts"),
+    import("../web-backends/index.ts"),
+    import("../plugins/registry.ts"),
+  ]);
+  return { app, registerWebBackend: backends.registerWebBackend, plugins };
+};
+
+type Server = Awaited<ReturnType<typeof loadServer>>;
+
 describe("Web backend catalog route", () => {
-  beforeEach(() => {
+  let server: Server;
+
+  beforeEach(async () => {
     resetMockDb();
     vi.clearAllMocks();
-    mockDb.where.mockReturnValue(mockDb);
-    clearWebBackends();
-    setLoadedPlugins(loadedPluginsFixture());
+    server = await loadServer();
+    server.plugins.setLoadedPlugins(loadedPluginsFixture());
   });
 
-  afterEach(() => {
-    clearWebBackends();
-    setLoadedPlugins(loadedPluginsFixture());
-  });
+  const world = (role: "admin" | "member" = "member") =>
+    seedDb({
+      organization_member: [
+        { id: "m1", userId: "user-1", organizationId: "org-1", role },
+      ],
+    });
 
   describe("GET /web-backends", () => {
     it("lists a registered backend annotated with the plugin that contributed it", async () => {
-      setLoadedPlugins(LOADED_RESULT);
-      registerWebBackend({
+      server.plugins.setLoadedPlugins(LOADED_RESULT);
+      server.registerWebBackend({
         backend: "acme-search.searx",
         name: "SearXNG",
         buildTurnTools: () => Promise.resolve({}),
       });
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
+      world();
 
-      const res = await app.request(baseUrl);
+      const res = await server.app.request(baseUrl);
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({
         results: [
@@ -69,15 +82,15 @@ describe("Web backend catalog route", () => {
     });
 
     it("annotates a backend belonging to no loaded plugin as null", async () => {
-      registerWebBackend({
+      server.registerWebBackend({
         backend: "orphan",
         name: "Orphan",
         buildTurnTools: () => Promise.resolve({}),
       });
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
+      world();
 
-      const res = await app.request(baseUrl);
+      const res = await server.app.request(baseUrl);
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({
         results: [{ backend: "orphan", name: "Orphan", plugin: null }],
@@ -86,43 +99,43 @@ describe("Web backend catalog route", () => {
 
     it("returns an empty list when no backend is registered", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
+      world();
 
-      const res = await app.request(baseUrl);
+      const res = await server.app.request(baseUrl);
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ results: [] });
     });
 
     it("is readable by a non-admin org member", async () => {
-      registerWebBackend({
+      server.registerWebBackend({
         backend: "searx",
         name: "SearXNG",
         buildTurnTools: () => Promise.resolve({}),
       });
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
+      world("member");
 
-      const res = await app.request(baseUrl);
+      const res = await server.app.request(baseUrl);
       expect(res.status).toBe(200);
     });
 
     it("requires authentication", async () => {
       mockNoSession();
-      const res = await app.request(baseUrl);
+      const res = await server.app.request(baseUrl);
       expect(res.status).toBe(401);
     });
 
     it("rejects a caller with no membership of the org", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([]);
+      seedDb({});
 
-      const res = await app.request(baseUrl);
+      const res = await server.app.request(baseUrl);
       expect(res.status).toBe(403);
     });
 
     it("exposes no mutation", async () => {
       for (const method of ["POST", "PUT", "PATCH", "DELETE"] as const) {
-        const res = await app.request(baseUrl, { method });
+        const res = await server.app.request(baseUrl, { method });
         expect(res.status).toBe(404);
       }
     });

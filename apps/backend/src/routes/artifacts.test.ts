@@ -43,8 +43,17 @@ describe("Artifact Routes", () => {
     user: [{ id: "user-1", name: "Ada", image: null }],
   });
 
-  const world = (owner = "user-1") =>
-    seedDb({
+  const artifactCascades = [
+    {
+      childTable: "artifact_version",
+      childColumn: "artifactId",
+      parentTable: "artifact",
+      parentColumn: "id",
+    },
+  ];
+
+  const world = (owner = "user-1") => {
+    const rows = {
       ...baseWorld(owner),
       artifact: [
         {
@@ -94,7 +103,9 @@ describe("Artifact Routes", () => {
           createdAt: new Date("2026-01-01T00:00:00.000Z"),
         },
       ],
-    });
+    };
+    return seedDb(rows, { cascades: artifactCascades });
+  };
 
   it("returns 401 when not authenticated", async () => {
     mockNoSession();
@@ -614,6 +625,9 @@ describe("Artifact Routes", () => {
       expect(fake.tables.artifact.map((row) => row.id)).toEqual(["artifact-2"]);
       expect(fake.tables.artifact_version.map((row) => row.id)).toEqual([
         "v-theirs",
+      ]);
+      expect(fake.queries.filter((query) => query.kind === "delete")).toEqual([
+        { kind: "delete", table: "artifact" },
       ]);
     });
 

@@ -1,11 +1,16 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { z } from "zod";
 import {
+  insertTimestamps,
   loadedPluginsFixture,
-  mockDb,
   mockSession,
   resetMockDb,
+  seedDb,
+  type FakeDb,
+  type Row,
+  type Store,
 } from "../test-utils.ts";
+import type { FakeDbOptions } from "../fake-db.ts";
 import app from "../server.ts";
 import {
   registerSandboxBackend,
@@ -37,16 +42,72 @@ registerSandboxBackend({
   },
 });
 
+const orgId = "org-1";
+const workspaceId = "ws-1";
+const baseUrl = `/organizations/${orgId}/workspaces/${workspaceId}/sandbox`;
+
+const sandboxRow = (over: Row = {}): Row => ({
+  id: "sbx-1",
+  workspaceId,
+  name: "Local Docker",
+  backend: "docker",
+  config: {},
+  credentials: {},
+  adminEnv: {},
+  userEnv: {},
+  ...insertTimestamps(),
+  ...over,
+});
+
+const uniqueSandboxWorkspace = {
+  name: "unique_sandbox_workspace_id",
+  columns: ["workspaceId"],
+};
+
+// why: every world seeds an org-2 membership and workspace, so a lookup missing its scope fails
+const world = (
+  role: "admin" | "member" = "member",
+  rows: Store = {},
+  options: FakeDbOptions = {},
+): FakeDb =>
+  seedDb(
+    {
+      organization_member: [
+        { id: "m2", userId: "user-1", organizationId: "org-2", role: "member" },
+        { id: "m1", userId: "user-1", organizationId: orgId, role },
+        { id: "m3", userId: "user-2", organizationId: "org-2", role: "admin" },
+      ],
+      workspace: [
+        { id: workspaceId, organizationId: orgId, ownerId: "user-1" },
+        { id: "ws-2", organizationId: orgId, ownerId: "user-2" },
+        { id: "ws-other", organizationId: "org-2", ownerId: "user-2" },
+      ],
+      ...rows,
+    },
+    {
+      unique: { sandbox: [uniqueSandboxWorkspace], ...options.unique },
+      defaults: { sandbox: insertTimestamps(), ...options.defaults },
+      ...(options.onQuery && { onQuery: options.onQuery }),
+      ...(options.onInsert && { onInsert: options.onInsert }),
+    },
+  );
+
+const FIELDS_BACKEND = "test-fields";
+registerSandboxBackend({
+  backend: FIELDS_BACKEND,
+  name: "Test Fields",
+  configSchema: z.object({ region: z.string().min(1) }).strict(),
+  credentialsSchema: z.object({ apiToken: z.string().min(1) }).strict(),
+  create: () => {
+    throw new Error("not used in this test");
+  },
+});
+
 describe("Sandbox Routes", () => {
   beforeEach(() => {
     resetMockDb();
     vi.clearAllMocks();
-    mockDb.where.mockReturnValue(mockDb);
   });
-
-  const orgId = "org-1";
-  const workspaceId = "ws-1";
-  const baseUrl = `/organizations/${orgId}/workspaces/${workspaceId}/sandbox`;
 
   const validBody = {
     workspaceId,
@@ -59,21 +120,7 @@ describe("Sandbox Routes", () => {
   describe("POST /", () => {
     it("creates a sandbox and returns 201 with credentials stripped", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-
-      mockDb.returning.mockResolvedValueOnce([
-        {
-          id: "sbx-1",
-          workspaceId,
-          name: "Local Docker",
-          backend: "docker",
-          config: { image: "debian:stable-slim" },
-          credentials: { token: "secret-123" },
-        },
-      ]);
+      const fake = world("admin");
 
       const res = await app.request(baseUrl, {
         method: "POST",
@@ -85,16 +132,23 @@ describe("Sandbox Routes", () => {
       const body = (await res.json()) as Record<string, unknown>;
       expect(body).not.toHaveProperty("credentials");
       expect(body.hasCredentials).toBe(true);
-      expect(body.id).toBe("sbx-1");
+      expect(body.id).toBe(fake.tables.sandbox[0].id);
       expect(body.backend).toBe("docker");
+      expect(fake.tables.sandbox).toEqual([
+        expect.objectContaining({
+          id: body.id,
+          workspaceId,
+          name: "Local Docker",
+          backend: "docker",
+          config: { image: "debian:stable-slim" },
+          credentials: { token: "secret-123" },
+        }),
+      ]);
     });
 
     it("returns 400 when credentials fail the backend's schema", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
+      const fake = world("admin");
 
       const res = await app.request(baseUrl, {
         method: "POST",
@@ -109,17 +163,44 @@ describe("Sandbox Routes", () => {
       });
 
       expect(res.status).toBe(400);
-      const body = (await res.json()) as Record<string, unknown>;
-      expect(body.error).toMatch(/Invalid sandbox credentials/);
+      const body = (await res.json()) as {
+        error: Array<{ path: Array<string | number>; message: string }>;
+      };
+      expect(body.error).toContainEqual(
+        expect.objectContaining({ path: ["credentials", "privateKey"] }),
+      );
+      expect(fake.queries.filter((q) => q.kind === "insert")).toHaveLength(0);
+    });
+
+    it("stores a generated backend's required config and credentials", async () => {
+      mockSession();
+      const fake = world("admin");
+
+      const res = await app.request(baseUrl, {
+        method: "POST",
+        body: JSON.stringify({
+          workspaceId,
+          name: "Cloud box",
+          backend: FIELDS_BACKEND,
+          config: { region: "eu" },
+          credentials: { apiToken: "tok" },
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(201);
+      expect(fake.tables.sandbox).toEqual([
+        expect.objectContaining({
+          backend: FIELDS_BACKEND,
+          config: { region: "eu" },
+          credentials: { apiToken: "tok" },
+        }),
+      ]);
     });
 
     it("returns 409 when a sandbox already exists for the workspace", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.returning.mockRejectedValueOnce({ code: "23505" });
+      const fake = world("admin", { sandbox: [sandboxRow()] });
 
       const res = await app.request(baseUrl, {
         method: "POST",
@@ -130,28 +211,23 @@ describe("Sandbox Routes", () => {
       expect(res.status).toBe(409);
       const body = (await res.json()) as Record<string, unknown>;
       expect(body.error).toBe("Sandbox already configured for this workspace");
+      expect(fake.tables.sandbox).toHaveLength(1);
+      expect(fake.tables.sandbox[0]).toMatchObject({ id: "sbx-1" });
     });
   });
 
   describe("GET /", () => {
+    // why: ws-2 has a Sandbox too, so a lookup that drops the workspace filter answers with it
+    const boxes = (over: Row = {}) => [
+      sandboxRow({ id: "sbx-other", workspaceId: "ws-2", name: "Other box" }),
+      sandboxRow(over),
+    ];
+
     it("returns the sandbox with credentials stripped", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([
-        {
-          id: "sbx-1",
-          workspaceId,
-          name: "Local Docker",
-          backend: "docker",
-          config: {},
-          credentials: { token: "secret-123" },
-          adminEnv: {},
-          userEnv: {},
-        },
-      ]);
+      world("member", {
+        sandbox: boxes({ credentials: { token: "secret-123" } }),
+      });
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
@@ -165,26 +241,18 @@ describe("Sandbox Routes", () => {
       ["member", { privateKey: "PRIVATE-KEY", passphrase: "PASSPHRASE" }, true],
       ["admin", {}, false],
       ["member", {}, false],
-    ])(
+    ] as const)(
       "tells a %s whether credentials are stored (%j → %s), never what they are",
       async (role, credentials, hasCredentials) => {
         mockSession();
-        mockDb.limit.mockResolvedValueOnce([{ role }]);
-        mockDb.limit.mockResolvedValueOnce([
-          { ownerId: "user-1", organizationId: "org-1" },
-        ]);
-        mockDb.limit.mockResolvedValueOnce([
-          {
-            id: "sbx-1",
-            workspaceId,
+        world(role, {
+          sandbox: boxes({
             name: "SSH host",
             backend: "ssh",
             config: { host: "ssh.example.com", user: "platypus" },
             credentials,
-            adminEnv: {},
-            userEnv: {},
-          },
-        ]);
+          }),
+        });
 
         const res = await app.request(baseUrl);
         expect(res.status).toBe(200);
@@ -199,24 +267,15 @@ describe("Sandbox Routes", () => {
     it.each([
       ["admin", { ADMIN_KEY: "secret" }],
       ["member", { ADMIN_KEY: "" }],
-    ])("shows a %s adminEnv as %j", async (role, adminEnv) => {
+    ] as const)("shows a %s adminEnv as %j", async (role, adminEnv) => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([
-        {
-          id: "sbx-1",
-          workspaceId,
+      world(role, {
+        sandbox: boxes({
           name: "SSH host",
           backend: "ssh",
-          config: {},
-          credentials: {},
           adminEnv: { ADMIN_KEY: "secret" },
-          userEnv: {},
-        },
-      ]);
+        }),
+      });
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
@@ -225,11 +284,9 @@ describe("Sandbox Routes", () => {
 
     it("returns 404 when no sandbox is configured", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([]);
+      world("member", {
+        sandbox: [sandboxRow({ id: "sbx-other", workspaceId: "ws-2" })],
+      });
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(404);
@@ -237,32 +294,12 @@ describe("Sandbox Routes", () => {
   });
 
   describe("PUT /", () => {
+    const updatesOf = (fake: FakeDb) =>
+      fake.queries.filter((q) => q.kind === "update");
+
     it("updates the sandbox when the backend is unchanged", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([
-        {
-          id: "sbx-1",
-          workspaceId,
-          backend: "docker",
-          config: {},
-          credentials: {},
-        },
-      ]);
-
-      mockDb.returning.mockResolvedValueOnce([
-        {
-          id: "sbx-1",
-          workspaceId,
-          name: "Renamed",
-          backend: "docker",
-          config: {},
-          credentials: { token: "rotated" },
-        },
-      ]);
+      const fake = world("admin", { sandbox: [sandboxRow()] });
 
       const res = await app.request(baseUrl, {
         method: "PUT",
@@ -280,14 +317,19 @@ describe("Sandbox Routes", () => {
       expect(body).not.toHaveProperty("credentials");
       expect(body.hasCredentials).toBe(true);
       expect(body.name).toBe("Renamed");
+      expect(fake.tables.sandbox).toEqual([
+        expect.objectContaining({
+          id: "sbx-1",
+          name: "Renamed",
+          backend: "docker",
+          credentials: { token: "rotated" },
+        }),
+      ]);
     });
 
     it("rejects an unknown query key", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
+      const fake = world("admin", { sandbox: [sandboxRow()] });
 
       const res = await app.request(`${baseUrl}?foo=1`, {
         method: "PUT",
@@ -301,24 +343,15 @@ describe("Sandbox Routes", () => {
       });
 
       expect(res.status).toBe(400);
-      expect(mockDb.update).not.toHaveBeenCalled();
+      expect(updatesOf(fake)).toHaveLength(0);
+      expect(fake.tables.sandbox[0]).toMatchObject({ name: "Local Docker" });
     });
 
     it("returns 502 when changing backend and the previous adapter's destroy() fails", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([
-        {
-          id: "sbx-1",
-          workspaceId,
-          backend: "no-such-backend",
-          config: {},
-          credentials: {},
-        },
-      ]);
+      const fake = world("admin", {
+        sandbox: [sandboxRow({ backend: "no-such-backend" })],
+      });
 
       const res = await app.request(baseUrl, {
         method: "PUT",
@@ -334,35 +367,17 @@ describe("Sandbox Routes", () => {
       expect(res.status).toBe(502);
       const body = (await res.json()) as Record<string, unknown>;
       expect(body.error).toMatch(/force=true/);
-      expect(mockDb.update).not.toHaveBeenCalled();
+      expect(updatesOf(fake)).toHaveLength(0);
+      expect(fake.tables.sandbox[0]).toMatchObject({
+        backend: "no-such-backend",
+      });
     });
 
     it("skips destroy() and switches backend when ?force=true", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([
-        {
-          id: "sbx-1",
-          workspaceId,
-          backend: "no-such-backend",
-          config: {},
-          credentials: {},
-        },
-      ]);
-
-      mockDb.returning.mockResolvedValueOnce([
-        {
-          id: "sbx-1",
-          workspaceId,
-          name: "Switched",
-          backend: "another-backend",
-          config: {},
-          credentials: {},
-        },
-      ]);
+      const fake = world("admin", {
+        sandbox: [sandboxRow({ backend: "no-such-backend" })],
+      });
 
       const res = await app.request(`${baseUrl}?force=true`, {
         method: "PUT",
@@ -376,33 +391,17 @@ describe("Sandbox Routes", () => {
       });
 
       expect(res.status).toBe(200);
+      expect(fake.tables.sandbox[0]).toMatchObject({
+        name: "Switched",
+        backend: "another-backend",
+      });
     });
 
     it("attributes the force-change leak warning to the outgoing backend's plugin", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([
-        {
-          id: "sbx-1",
-          workspaceId,
-          backend: ANNOTATED_BACKEND,
-          config: {},
-          credentials: {},
-        },
-      ]);
-      mockDb.returning.mockResolvedValueOnce([
-        {
-          id: "sbx-1",
-          workspaceId,
-          name: "Switched",
-          backend: CREDS_BACKEND,
-          config: {},
-          credentials: {},
-        },
-      ]);
+      const fake = world("admin", {
+        sandbox: [sandboxRow({ backend: ANNOTATED_BACKEND })],
+      });
       setLoadedPlugins(
         loadedPluginsFixture([], {
           sandboxBackends: new Map([
@@ -436,16 +435,15 @@ describe("Sandbox Routes", () => {
         expect.objectContaining({ plugin: "@platypus/incoming" }),
         expect.anything(),
       );
+      expect(fake.tables.sandbox[0]).toMatchObject({ backend: CREDS_BACKEND });
       warn.mockRestore();
     });
 
     it("returns 404 when no sandbox is configured", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([]);
+      const fake = world("admin", {
+        sandbox: [sandboxRow({ id: "sbx-other", workspaceId: "ws-2" })],
+      });
 
       const res = await app.request(baseUrl, {
         method: "PUT",
@@ -459,61 +457,41 @@ describe("Sandbox Routes", () => {
       });
 
       expect(res.status).toBe(404);
+      expect(updatesOf(fake)).toHaveLength(0);
     });
   });
 
   describe("DELETE /", () => {
+    const deletesOf = (fake: FakeDb) =>
+      fake.queries.filter((q) => q.kind === "delete");
+
     it("force-deletes the sandbox without invoking destroy()", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([
-        {
-          id: "sbx-1",
-          workspaceId,
-          backend: "docker",
-          config: {},
-          credentials: {},
-        },
-      ]);
+      const fake = world("admin", { sandbox: [sandboxRow()] });
 
       const res = await app.request(`${baseUrl}?force=true`, {
         method: "DELETE",
       });
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ message: "Sandbox deleted" });
+      expect(fake.tables.sandbox).toHaveLength(0);
+      expect(deletesOf(fake)).toEqual([{ kind: "delete", table: "sandbox" }]);
     });
 
     it("rejects an unknown query key", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
+      const fake = world("admin", { sandbox: [sandboxRow()] });
 
       const res = await app.request(`${baseUrl}?foo=1`, { method: "DELETE" });
 
       expect(res.status).toBe(400);
-      expect(mockDb.delete).not.toHaveBeenCalled();
+      expect(deletesOf(fake)).toHaveLength(0);
+      expect(fake.tables.sandbox).toHaveLength(1);
     });
 
     it("names the owning plugin on the force-delete leak warning", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([
-        {
-          id: "sbx-1",
-          workspaceId,
-          backend: ANNOTATED_BACKEND,
-          config: {},
-          credentials: {},
-        },
-      ]);
+      world("admin", { sandbox: [sandboxRow({ backend: ANNOTATED_BACKEND })] });
       setLoadedPlugins(
         loadedPluginsFixture([], {
           sandboxBackends: new Map([[ANNOTATED_BACKEND, "@platypus/test"]]),
@@ -539,19 +517,9 @@ describe("Sandbox Routes", () => {
 
     it("reports no owner rather than omitting the key for an unowned backend", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([
-        {
-          id: "sbx-1",
-          workspaceId,
-          backend: "no-such-backend",
-          config: {},
-          credentials: {},
-        },
-      ]);
+      world("admin", {
+        sandbox: [sandboxRow({ backend: "no-such-backend" })],
+      });
       setLoadedPlugins(loadedPluginsFixture());
       const warn = vi.spyOn(logger, "warn").mockImplementation(() => {});
 
@@ -569,35 +537,26 @@ describe("Sandbox Routes", () => {
 
     it("returns 502 when destroy() fails and preserves the row", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([
-        {
-          id: "sbx-1",
-          workspaceId,
-          backend: "no-such-backend",
-          config: {},
-          credentials: {},
-        },
-      ]);
+      const fake = world("admin", {
+        sandbox: [sandboxRow({ backend: "no-such-backend" })],
+      });
 
       const res = await app.request(baseUrl, { method: "DELETE" });
       expect(res.status).toBe(502);
       const body = (await res.json()) as Record<string, unknown>;
       expect(body.error).toMatch(/no-such-backend/);
       expect(body.error).toMatch(/force=true/);
-      expect(mockDb.delete).not.toHaveBeenCalled();
+      expect(deletesOf(fake)).toHaveLength(0);
+      expect(fake.tables.sandbox).toEqual([
+        expect.objectContaining({ id: "sbx-1", backend: "no-such-backend" }),
+      ]);
     });
 
     it("returns 404 when no sandbox is configured", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([]);
+      world("admin", {
+        sandbox: [sandboxRow({ id: "sbx-other", workspaceId: "ws-2" })],
+      });
 
       const res = await app.request(baseUrl, { method: "DELETE" });
       expect(res.status).toBe(404);
@@ -607,10 +566,7 @@ describe("Sandbox Routes", () => {
   describe("authorization (ADR-0006)", () => {
     it("POST / returns 403 for a non-admin workspace owner", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
+      const fake = world("member");
 
       const res = await app.request(baseUrl, {
         method: "POST",
@@ -618,25 +574,22 @@ describe("Sandbox Routes", () => {
         headers: { "Content-Type": "application/json" },
       });
       expect(res.status).toBe(403);
+      expect(fake.queries.filter((q) => q.kind === "insert")).toHaveLength(0);
     });
 
     it("DELETE / returns 403 for a non-admin workspace owner", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
+      const fake = world("member", { sandbox: [sandboxRow()] });
 
       const res = await app.request(baseUrl, { method: "DELETE" });
       expect(res.status).toBe(403);
+      expect(fake.queries.filter((q) => q.kind === "delete")).toHaveLength(0);
+      expect(fake.tables.sandbox).toHaveLength(1);
     });
 
     it("POST / rejects userEnv keys that collide with adminEnv (400)", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
+      const fake = world("admin");
 
       const res = await app.request(baseUrl, {
         method: "POST",
@@ -650,37 +603,20 @@ describe("Sandbox Routes", () => {
       expect(res.status).toBe(400);
       const body = (await res.json()) as Record<string, unknown>;
       expect(body.error).toMatch(/SHARED/);
+      expect(fake.queries.filter((q) => q.kind === "insert")).toHaveLength(0);
     });
 
     it("PUT / lets a non-admin owner change name and userEnv only", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([
-        {
-          id: "sbx-1",
-          workspaceId,
-          name: "Old",
-          backend: "docker",
-          config: { networks: ["shared"] },
-          adminEnv: { ADMIN_KEY: "x" },
-          userEnv: {},
-        },
-      ]);
-      mockDb.returning.mockResolvedValueOnce([
-        {
-          id: "sbx-1",
-          workspaceId,
-          name: "New",
-          backend: "docker",
-          config: { networks: ["shared"] },
-          credentials: {},
-          adminEnv: { ADMIN_KEY: "x" },
-          userEnv: { MY_KEY: "y" },
-        },
-      ]);
+      const fake = world("member", {
+        sandbox: [
+          sandboxRow({
+            name: "Old",
+            config: { networks: ["shared"] },
+            adminEnv: { ADMIN_KEY: "x" },
+          }),
+        ],
+      });
 
       const res = await app.request(baseUrl, {
         method: "PUT",
@@ -692,28 +628,26 @@ describe("Sandbox Routes", () => {
         headers: { "Content-Type": "application/json" },
       });
       expect(res.status).toBe(200);
-      const setArg = mockDb.set.mock.calls.at(-1)?.[0];
-      expect(setArg).toMatchObject({ name: "New", userEnv: { MY_KEY: "y" } });
-      expect(setArg).not.toHaveProperty("backend");
-      expect(setArg).not.toHaveProperty("config");
+      expect(fake.tables.sandbox).toEqual([
+        expect.objectContaining({
+          name: "New",
+          userEnv: { MY_KEY: "y" },
+          backend: "docker",
+          config: { networks: ["shared"] },
+        }),
+      ]);
     });
 
     it("PUT / rejects a non-admin owner's userEnv that collides with stored adminEnv (400)", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([
-        {
-          id: "sbx-1",
-          workspaceId,
-          name: "Old",
-          backend: "docker",
-          adminEnv: { ADMIN_KEY: "x" },
-          userEnv: {},
-        },
-      ]);
+      const fake = world("member", {
+        sandbox: [
+          sandboxRow({
+            name: "Old",
+            adminEnv: { ADMIN_KEY: "x" },
+          }),
+        ],
+      });
 
       const res = await app.request(baseUrl, {
         method: "PUT",
@@ -727,27 +661,20 @@ describe("Sandbox Routes", () => {
       expect(res.status).toBe(400);
       const body = (await res.json()) as Record<string, unknown>;
       expect(body.error).toMatch(/ADMIN_KEY/);
+      expect(fake.tables.sandbox[0]).toMatchObject({ userEnv: {} });
     });
   });
 
   describe("admin input validation", () => {
-    const stored = {
-      id: "sbx-1",
-      workspaceId,
+    const stored = sandboxRow({
       name: "Creds backend",
       backend: CREDS_BACKEND,
-      config: {},
       adminEnv: { ADMIN_KEY: "x" },
-      userEnv: {},
-    };
+    });
 
-    const asAdmin = (existing?: unknown) => {
+    const asAdmin = (existing?: Row): FakeDb => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      if (existing) mockDb.limit.mockResolvedValueOnce([existing]);
+      return world("admin", existing ? { sandbox: [existing] } : {});
     };
 
     const send = (method: "POST" | "PUT", body: unknown) =>
@@ -762,28 +689,22 @@ describe("Sandbox Routes", () => {
         "POST: config failing the backend's schema",
         "POST",
         { config: { unexpected: true }, credentials: { privateKey: "k" } },
-        /^Invalid sandbox config: /,
+        ["config"],
       ],
       [
         "PUT: config failing the backend's schema",
         "PUT",
         { config: { unexpected: true } },
-        /^Invalid sandbox config: /,
+        ["config"],
       ],
       [
         "PUT: credentials failing the backend's schema",
         "PUT",
         { config: {}, credentials: {} },
-        /^Invalid sandbox credentials: /,
+        ["credentials", "privateKey"],
       ],
-      [
-        "PUT: userEnv colliding with the stored adminEnv",
-        "PUT",
-        { config: {}, userEnv: { ADMIN_KEY: "y" } },
-        /ADMIN_KEY/,
-      ],
-    ] as const)("rejects %s (400)", async (_label, method, over, error) => {
-      asAdmin(method === "PUT" ? stored : undefined);
+    ] as const)("rejects %s (400)", async (_label, method, over, path) => {
+      const fake = asAdmin(method === "PUT" ? stored : undefined);
 
       const res = await send(method, {
         ...(method === "POST" ? { workspaceId } : {}),
@@ -793,9 +714,56 @@ describe("Sandbox Routes", () => {
       });
 
       expect(res.status).toBe(400);
-      expect(((await res.json()) as { error: string }).error).toMatch(error);
-      expect(mockDb.insert).not.toHaveBeenCalled();
-      expect(mockDb.update).not.toHaveBeenCalled();
+      const body = (await res.json()) as {
+        error: Array<{ path: Array<string | number>; message: string }>;
+      };
+      expect(body.error).toContainEqual(
+        expect.objectContaining({ path: [...path] }),
+      );
+      expect(
+        fake.queries.filter((q) => q.kind === "insert" || q.kind === "update"),
+      ).toHaveLength(0);
+    });
+
+    it("rejects a userEnv colliding with the stored adminEnv (400)", async () => {
+      const fake = asAdmin(stored);
+
+      const res = await send("PUT", {
+        name: "Creds backend",
+        backend: CREDS_BACKEND,
+        config: {},
+        userEnv: { ADMIN_KEY: "y" },
+      });
+
+      expect(res.status).toBe(400);
+      expect(((await res.json()) as { error: string }).error).toMatch(
+        /ADMIN_KEY/,
+      );
+      expect(fake.queries.filter((q) => q.kind === "update")).toHaveLength(0);
+    });
+
+    it("stores a generated backend's updated config and credentials", async () => {
+      const fake = asAdmin(
+        sandboxRow({
+          name: "Cloud box",
+          backend: FIELDS_BACKEND,
+          config: { region: "us" },
+          credentials: { apiToken: "old" },
+        }),
+      );
+
+      const res = await send("PUT", {
+        name: "Cloud box",
+        backend: FIELDS_BACKEND,
+        config: { region: "eu" },
+        credentials: { apiToken: "new" },
+      });
+
+      expect(res.status).toBe(200);
+      expect(fake.tables.sandbox[0]).toMatchObject({
+        config: { region: "eu" },
+        credentials: { apiToken: "new" },
+      });
     });
   });
 });
@@ -822,27 +790,28 @@ describe("Sandbox file transfer", () => {
     create: () => ({ fsList }) as unknown as SandboxBackend,
   });
 
-  const fileUrl = `/organizations/org-1/workspaces/ws-1/sandbox/file`;
+  const fileUrl = `${baseUrl}/file`;
 
-  const row = (backend = TRANSFER_BACKEND) => ({
-    id: "sbx-1",
-    workspaceId: "ws-1",
-    name: "Box",
-    backend,
-    config: {},
-    credentials: {},
-    adminEnv: {},
-    userEnv: {},
-  });
+  const row = (backend = TRANSFER_BACKEND) =>
+    sandboxRow({ name: "Box", backend });
 
-  const mockAccess = (backend = TRANSFER_BACKEND, role = "member") => {
+  const mockAccess = (
+    backend = TRANSFER_BACKEND,
+    role: "admin" | "member" = "member",
+  ) => {
     mockSession();
-    mockDb.limit.mockResolvedValueOnce([{ role }]);
-    mockDb.limit.mockResolvedValueOnce([
-      { ownerId: "user-1", organizationId: "org-1" },
-    ]);
-    mockDb.limit.mockResolvedValueOnce([row(backend)]);
-    mockDb.limit.mockResolvedValueOnce([{ orgId: "org-1", userId: "user-1" }]);
+    // why: ws-2 has a Box too, so a lookup that drops the workspace filter opens it instead
+    return world(role, {
+      sandbox: [
+        sandboxRow({
+          id: "sbx-other",
+          workspaceId: "ws-2",
+          name: "Other box",
+          backend,
+        }),
+        row(backend),
+      ],
+    });
   };
 
   const listing = (path: string, size: number, type = "file") => ({
@@ -853,7 +822,6 @@ describe("Sandbox file transfer", () => {
   beforeEach(() => {
     resetMockDb();
     vi.clearAllMocks();
-    mockDb.where.mockReturnValue(mockDb);
     fsList.mockReset();
     fsReadBytes.mockReset();
     fsWriteBytes.mockReset();
@@ -865,11 +833,7 @@ describe("Sandbox file transfer", () => {
       [BARE_BACKEND, { upload: false, download: false }],
     ])("%s → %j", async (backend, transfer) => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([row(backend)]);
+      world("member", { sandbox: [row(backend)] });
 
       const res = await app.request(
         `/organizations/org-1/workspaces/ws-1/sandbox`,
@@ -883,8 +847,10 @@ describe("Sandbox file transfer", () => {
     it("serves the bytes as an attachment that never renders inline", async () => {
       mockAccess();
       const bytes = new Uint8Array([0x3c, 0x68, 0x31, 0x3e, 0x00, 0xff]);
-      fsList.mockResolvedValueOnce(listing("page.html", bytes.length));
-      fsReadBytes.mockResolvedValueOnce(bytes);
+      fsList.mockImplementationOnce(() =>
+        Promise.resolve(listing("page.html", bytes.length)),
+      );
+      fsReadBytes.mockImplementationOnce(() => Promise.resolve(bytes));
 
       const res = await app.request(`${fileUrl}?path=site/page.html`);
 
@@ -912,8 +878,12 @@ describe("Sandbox file transfer", () => {
 
     it("encodes a filename that is not plain ASCII", async () => {
       mockAccess();
-      fsList.mockResolvedValueOnce(listing('ré"sumé.pdf', 1));
-      fsReadBytes.mockResolvedValueOnce(new Uint8Array([1]));
+      fsList.mockImplementationOnce(() =>
+        Promise.resolve(listing('ré"sumé.pdf', 1)),
+      );
+      fsReadBytes.mockImplementationOnce(() =>
+        Promise.resolve(new Uint8Array([1])),
+      );
 
       const res = await app.request(
         `${fileUrl}?path=${encodeURIComponent('ré"sumé.pdf')}`,
@@ -926,11 +896,11 @@ describe("Sandbox file transfer", () => {
 
     it("serves a file of exactly the bound", async () => {
       mockAccess();
-      fsList.mockResolvedValueOnce(
-        listing("big.bin", SANDBOX_TRANSFER_MAX_BYTES),
+      fsList.mockImplementationOnce(() =>
+        Promise.resolve(listing("big.bin", SANDBOX_TRANSFER_MAX_BYTES)),
       );
-      fsReadBytes.mockResolvedValueOnce(
-        new Uint8Array(SANDBOX_TRANSFER_MAX_BYTES),
+      fsReadBytes.mockImplementationOnce(() =>
+        Promise.resolve(new Uint8Array(SANDBOX_TRANSFER_MAX_BYTES)),
       );
 
       const res = await app.request(`${fileUrl}?path=big.bin`);
@@ -943,8 +913,8 @@ describe("Sandbox file transfer", () => {
 
     it("answers 413 for a file one byte over the bound, without reading it", async () => {
       mockAccess();
-      fsList.mockResolvedValueOnce(
-        listing("big.bin", SANDBOX_TRANSFER_MAX_BYTES + 1),
+      fsList.mockImplementationOnce(() =>
+        Promise.resolve(listing("big.bin", SANDBOX_TRANSFER_MAX_BYTES + 1)),
       );
 
       const res = await app.request(`${fileUrl}?path=big.bin`);
@@ -972,8 +942,12 @@ describe("Sandbox file transfer", () => {
     it("answers 404 when the parent directory is missing", async () => {
       mockAccess();
       fsList
-        .mockRejectedValueOnce(new Error("fs.list: No such file or directory"))
-        .mockResolvedValueOnce({ entries: [], truncated: false });
+        .mockImplementationOnce(() =>
+          Promise.reject(new Error("fs.list: No such file or directory")),
+        )
+        .mockImplementationOnce(() =>
+          Promise.resolve({ entries: [], truncated: false }),
+        );
 
       const res = await app.request(`${fileUrl}?path=missing/x.txt`);
 
@@ -984,8 +958,12 @@ describe("Sandbox file transfer", () => {
     it("fails rather than 404s when listing an existing directory fails", async () => {
       mockAccess();
       fsList
-        .mockRejectedValueOnce(new Error("fs.list: timed out"))
-        .mockResolvedValueOnce(listing("out", 0, "dir"));
+        .mockImplementationOnce(() =>
+          Promise.reject(new Error("fs.list: timed out")),
+        )
+        .mockImplementationOnce(() =>
+          Promise.resolve(listing("out", 0, "dir")),
+        );
 
       const res = await app.request(`${fileUrl}?path=out/x.txt`);
 
@@ -995,11 +973,9 @@ describe("Sandbox file transfer", () => {
 
     it("answers 404 when the Workspace has no Sandbox", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([]);
+      world("member", {
+        sandbox: [sandboxRow({ id: "sbx-other", workspaceId: "ws-2" })],
+      });
 
       const res = await app.request(`${fileUrl}?path=a.txt`);
       expect(res.status).toBe(404);
@@ -1029,8 +1005,10 @@ describe("Sandbox file transfer", () => {
 
     it("does not reject `..`", async () => {
       mockAccess();
-      fsList.mockResolvedValueOnce(listing("x.txt", 1));
-      fsReadBytes.mockResolvedValueOnce(new Uint8Array([1]));
+      fsList.mockImplementationOnce(() => Promise.resolve(listing("x.txt", 1)));
+      fsReadBytes.mockImplementationOnce(() =>
+        Promise.resolve(new Uint8Array([1])),
+      );
 
       const res = await app.request(`${fileUrl}?path=../x.txt`);
 
@@ -1059,7 +1037,9 @@ describe("Sandbox file transfer", () => {
 
     it("writes the raw bytes when the path is free", async () => {
       mockAccess();
-      fsList.mockResolvedValueOnce({ entries: [], truncated: false });
+      fsList.mockImplementationOnce(() =>
+        Promise.resolve({ entries: [], truncated: false }),
+      );
       const bytes = new Uint8Array([0, 1, 2, 0xff, 0xfe]);
 
       const res = await upload("in/data.bin", bytes);
@@ -1082,7 +1062,9 @@ describe("Sandbox file transfer", () => {
 
     it("probes the workspace root for a top-level path", async () => {
       mockAccess();
-      fsList.mockResolvedValueOnce({ entries: [], truncated: false });
+      fsList.mockImplementationOnce(() =>
+        Promise.resolve({ entries: [], truncated: false }),
+      );
 
       await upload("data.bin", new Uint8Array([1]));
 
@@ -1092,9 +1074,15 @@ describe("Sandbox file transfer", () => {
     it("writes when the parent directory does not exist yet", async () => {
       mockAccess();
       fsList
-        .mockRejectedValueOnce(new Error("fs.list: No such file"))
-        .mockRejectedValueOnce(new Error("fs.list: No such file"))
-        .mockResolvedValueOnce({ entries: [], truncated: false });
+        .mockImplementationOnce(() =>
+          Promise.reject(new Error("fs.list: No such file")),
+        )
+        .mockImplementationOnce(() =>
+          Promise.reject(new Error("fs.list: No such file")),
+        )
+        .mockImplementationOnce(() =>
+          Promise.resolve({ entries: [], truncated: false }),
+        );
 
       const res = await upload("new/dir/data.bin", new Uint8Array([1]));
 
@@ -1105,8 +1093,10 @@ describe("Sandbox file transfer", () => {
     it("fails without writing when the probe fails on an existing directory", async () => {
       mockAccess();
       fsList
-        .mockRejectedValueOnce(new Error("fs.list: timed out"))
-        .mockResolvedValueOnce(listing("in", 0, "dir"));
+        .mockImplementationOnce(() =>
+          Promise.reject(new Error("fs.list: timed out")),
+        )
+        .mockImplementationOnce(() => Promise.resolve(listing("in", 0, "dir")));
 
       const res = await upload("in/data.bin", new Uint8Array([1]));
 
@@ -1116,7 +1106,9 @@ describe("Sandbox file transfer", () => {
 
     it("answers 409 without writing when the path is taken", async () => {
       mockAccess();
-      fsList.mockResolvedValueOnce(listing("data.bin", 3));
+      fsList.mockImplementationOnce(() =>
+        Promise.resolve(listing("data.bin", 3)),
+      );
 
       const res = await upload("in/data.bin", new Uint8Array([1]));
 
@@ -1188,11 +1180,9 @@ describe("Sandbox file transfer", () => {
 
     it("answers 404 when the Workspace has no Sandbox", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([]);
+      world("member", {
+        sandbox: [sandboxRow({ id: "sbx-other", workspaceId: "ws-2" })],
+      });
 
       const res = await upload("a.bin", new Uint8Array([1]));
       expect(res.status).toBe(404);
@@ -1203,21 +1193,30 @@ describe("Sandbox file transfer", () => {
     it.each([
       [
         "a User from another Organization",
-        () => mockDb.limit.mockResolvedValueOnce([]),
+        () =>
+          world("member", {
+            organization_member: [
+              {
+                id: "m-out",
+                userId: "user-1",
+                organizationId: "org-2",
+                role: "admin",
+              },
+            ],
+          }),
       ],
       [
         "a non-owner, non-admin member",
-        () => {
-          mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-          mockDb.limit.mockResolvedValueOnce([
-            { ownerId: "user-2", organizationId: "org-1" },
-          ]);
-        },
+        () =>
+          world("member", {
+            workspace: [
+              { id: workspaceId, organizationId: orgId, ownerId: "user-2" },
+            ],
+          }),
       ],
     ])("refuses %s", async (_, arrange) => {
       const statusOf = async (url: string, init?: RequestInit) => {
         resetMockDb();
-        mockDb.where.mockReturnValue(mockDb);
         mockSession();
         arrange();
         return (await app.request(url, init)).status;

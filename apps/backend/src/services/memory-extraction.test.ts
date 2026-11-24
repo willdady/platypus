@@ -1,5 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mockDb, resetMockDb, seedDb, type FakeDb } from "../test-utils.ts";
+import {
+  dbError,
+  renderSql,
+  resetMockDb,
+  seedDb,
+  type FakeDb,
+} from "../test-utils.ts";
+import type { FakeDbOptions } from "../fake-db.ts";
 
 const { mockGenerateText, mockOpenProvider, mockGenerateEmbedding } =
   vi.hoisted(() => ({
@@ -14,20 +21,13 @@ vi.mock("./provider.ts", async (importActual) => ({
   openProvider: mockOpenProvider,
 }));
 vi.mock("./embedding.ts", () => ({ generateEmbedding: mockGenerateEmbedding }));
-vi.mock("./chat-messages.ts", async (importActual) => {
-  const actual = await importActual<typeof import("./chat-messages.ts")>();
-  return { ...actual, loadActivePath: vi.fn(actual.loadActivePath) };
-});
 
 import {
   BATCH_DEADLINE_MS,
   processMemoryExtractionBatch,
   SUMMARY_TIMEOUT_MS,
 } from "./memory-extraction.ts";
-import { loadActivePath } from "./chat-messages.ts";
 import { logger } from "../logger.ts";
-import { eq } from "drizzle-orm";
-import { memoryDailySummary as memoryDailySummaryTable } from "../db/schema.ts";
 
 const makeWorkspace = (overrides: Record<string, unknown> = {}) => ({
   id: "ws-1",
@@ -67,23 +67,29 @@ const messageRow = (chatId: string, message: Message, index: number) => ({
   createdAt: new Date(index),
 });
 
-const seedWithMessages = (store: Record<string, Record<string, unknown>[]>) =>
-  seedDb({
-    ...store,
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- a table no test seeded or wrote is absent
-    chat: (store.chat ?? []).map(({ messages, ...chat }) => ({
-      ...chat,
-      activeLeafId: (messages as Message[]).length
-        ? `${chat.id as string}:${(messages as Message[]).length - 1}`
-        : null,
-    })),
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- a table no test seeded or wrote is absent
-    chat_message: (store.chat ?? []).flatMap((chat) =>
-      (chat.messages as Message[]).map((message, index) =>
-        messageRow(chat.id as string, message, index),
+const seedWithMessages = (
+  store: Record<string, Record<string, unknown>[]>,
+  options: FakeDbOptions = {},
+) =>
+  seedDb(
+    {
+      ...store,
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- a table no test seeded or wrote is absent
+      chat: (store.chat ?? []).map(({ messages, ...chat }) => ({
+        ...chat,
+        activeLeafId: (messages as Message[]).length
+          ? `${chat.id as string}:${(messages as Message[]).length - 1}`
+          : null,
+      })),
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- a table no test seeded or wrote is absent
+      chat_message: (store.chat ?? []).flatMap((chat) =>
+        (chat.messages as Message[]).map((message, index) =>
+          messageRow(chat.id as string, message, index),
+        ),
       ),
-    ),
-  });
+    },
+    options,
+  );
 
 const makeProvider = (overrides: Record<string, unknown> = {}) => ({
   id: "p-extract",
@@ -97,165 +103,196 @@ const makeProvider = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
-function setupWhere(workspaces: unknown[], providers: unknown[]) {
-  mockDb.where.mockResolvedValueOnce(workspaces).mockReturnValue(mockDb);
-  for (const provider of providers)
-    mockDb.limit.mockResolvedValueOnce([provider]);
-}
-
 describe("processMemoryExtractionBatch", () => {
+  const T0 = new Date("2026-09-01T12:00:00.000Z");
+  const TODAY = "2026-09-01";
+
+  let fake: FakeDb;
+
+  const chatRow = (id: string) => {
+    const row = fake.tables.chat.find((c) => c.id === id);
+    if (!row) throw new Error(`Chat '${id}' was not seeded`);
+    return row;
+  };
+
+  const summaryRows = () => fake.tables.memory_daily_summary;
+
+  const seedExtracting = (
+    overrides: {
+      workspace?: Record<string, unknown>;
+      providers?: Record<string, unknown>[];
+      chat?: Record<string, unknown>;
+    } = {},
+    options: FakeDbOptions = {},
+  ) =>
+    seedWithMessages(
+      {
+        workspace: [makeWorkspace(overrides.workspace)],
+        provider: overrides.providers ?? [makeProvider()],
+        chat: [makeChat(overrides.chat)],
+      },
+      options,
+    );
+
   beforeEach(() => {
     resetMockDb();
     vi.clearAllMocks();
-    vi.mocked(loadActivePath).mockResolvedValue({
-      messages: exchange as never,
-      tree: [],
-    });
-  });
-
-  afterEach(() => {
-    vi.mocked(loadActivePath).mockReset();
-  });
-
-  it("returns early when no workspaces have memory extraction enabled", async () => {
-    mockDb.where.mockResolvedValueOnce([]);
-
-    await processMemoryExtractionBatch();
-
-    expect(mockGenerateText).not.toHaveBeenCalled();
-  });
-
-  it("returns early when there are no chats to process", async () => {
-    setupWhere([makeWorkspace()], [makeProvider()]);
-    mockDb.limit.mockResolvedValueOnce([]);
-
-    await processMemoryExtractionBatch();
-
-    expect(mockGenerateText).not.toHaveBeenCalled();
-  });
-
-  it("marks a chat completed without a model call when nothing is new", async () => {
-    const provider = makeProvider();
-    setupWhere([makeWorkspace()], [provider]);
-    mockDb.limit.mockResolvedValueOnce([makeChat()]);
-    vi.mocked(loadActivePath).mockResolvedValueOnce({ messages: [], tree: [] });
-
-    await processMemoryExtractionBatch();
-
-    expect(mockGenerateText).not.toHaveBeenCalled();
-    expect(mockDb.set).toHaveBeenLastCalledWith(
-      expect.objectContaining({ memoryExtractionStatus: "completed" }),
-    );
-  });
-
-  it("calls the LLM and inserts a new daily summary when none exists", async () => {
-    setupWhere([makeWorkspace()], [makeProvider()]);
-    mockDb.limit.mockResolvedValueOnce([makeChat()]).mockResolvedValueOnce([]);
-    mockDb.execute.mockResolvedValue({ rowCount: 0 });
-
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(T0);
     mockOpenProvider.mockReturnValue({
       languageModel: vi.fn(() => ({ id: "model" })),
     });
     mockGenerateText.mockResolvedValue({ text: "Updated summary" });
+    mockGenerateEmbedding.mockResolvedValue([0.1]);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("ignores a workspace with memory extraction turned off", async () => {
+    fake = seedExtracting({ workspace: { memoryExtractionProviderId: null } });
+
+    await processMemoryExtractionBatch();
+
+    expect(mockGenerateText).not.toHaveBeenCalled();
+    expect(chatRow("chat-1").lastMemoryProcessedAt).toBeNull();
+  });
+
+  it("returns early when there are no chats to process", async () => {
+    seedWithMessages({
+      workspace: [makeWorkspace()],
+      provider: [makeProvider()],
+    });
+
+    await processMemoryExtractionBatch();
+
+    expect(mockGenerateText).not.toHaveBeenCalled();
+  });
+
+  it("completes a chat without a model call when its cursor already covers the active path", async () => {
+    fake = seedWithMessages({
+      workspace: [makeWorkspace()],
+      provider: [makeProvider()],
+      chat: [makeChat({ memoryCursorId: "chat-1:1" })],
+    });
+    chatRow("chat-1").activeLeafId = "chat-1:0";
+
+    await processMemoryExtractionBatch();
+
+    expect(mockGenerateText).not.toHaveBeenCalled();
+    expect(chatRow("chat-1")).toMatchObject({
+      memoryExtractionStatus: "completed",
+      memoryCursorId: "chat-1:0",
+    });
+  });
+
+  it("calls the model and inserts a new daily summary when none exists", async () => {
+    fake = seedExtracting();
 
     await processMemoryExtractionBatch();
 
     expect(mockGenerateText).toHaveBeenCalledTimes(1);
-    expect(mockDb.insert).toHaveBeenCalled();
-    expect(mockDb.values).toHaveBeenCalledWith(
+    expect(summaryRows()).toEqual([
       expect.objectContaining({
         userId: "u1",
         workspaceId: "ws-1",
+        summaryDate: TODAY,
         summary: "Updated summary",
         embedding: null,
       }),
-    );
+    ]);
+    expect(chatRow("chat-1")).toMatchObject({
+      memoryExtractionStatus: "completed",
+      memoryCursorId: "chat-1:1",
+    });
   });
 
-  it("updates an existing summary instead of inserting", async () => {
-    setupWhere([makeWorkspace()], [makeProvider()]);
-    mockDb.limit
-      .mockResolvedValueOnce([makeChat()])
-      .mockResolvedValueOnce([{ id: "existing-1", summary: "Old summary" }]);
-    mockDb.execute.mockResolvedValue({ rowCount: 0 });
-
-    mockOpenProvider.mockReturnValue({
-      languageModel: vi.fn(() => ({ id: "model" })),
+  it("updates today's existing summary instead of adding another", async () => {
+    fake = seedWithMessages({
+      workspace: [makeWorkspace()],
+      provider: [makeProvider()],
+      chat: [makeChat()],
+      memory_daily_summary: [
+        {
+          id: "existing-1",
+          userId: "u1",
+          workspaceId: "ws-1",
+          summaryDate: TODAY,
+          summary: "Old summary",
+          embedding: null,
+        },
+      ],
     });
-    mockGenerateText.mockResolvedValue({ text: "Updated summary" });
 
     await processMemoryExtractionBatch();
 
-    expect(mockDb.insert).not.toHaveBeenCalled();
-    expect(mockDb.set).toHaveBeenCalledWith({
-      summary: "Updated summary",
-      embedding: null,
-      updatedAt: expect.any(Date) as unknown,
-    });
-    expect(mockDb.where).toHaveBeenCalledWith(
-      eq(memoryDailySummaryTable.id, "existing-1"),
-    );
+    expect(summaryRows()).toEqual([
+      expect.objectContaining({
+        id: "existing-1",
+        summary: "Updated summary",
+        embedding: null,
+        updatedAt: expect.any(Date) as unknown,
+      }),
+    ]);
   });
 
-  it("logs how many old summaries it pruned past the workspace's cap", async () => {
-    setupWhere([makeWorkspace({ maxDailySummaries: 5 })], [makeProvider()]);
-    mockDb.limit.mockResolvedValueOnce([makeChat()]).mockResolvedValueOnce([]);
-    mockDb.execute.mockResolvedValue({ rowCount: 2 });
-    mockOpenProvider.mockReturnValue({
-      languageModel: vi.fn(() => ({ id: "model" })),
-    });
-    mockGenerateText.mockResolvedValue({ text: "Updated summary" });
+  it("prunes the user's summaries in the workspace past the cap, newest kept", async () => {
+    fake = seedExtracting({ workspace: { maxDailySummaries: 5 } });
+    fake.execute.mockResolvedValue({ rowCount: 2 });
 
     await processMemoryExtractionBatch();
 
-    const [statement] = mockDb.execute.mock.calls[0] as [{ values: unknown[] }];
-    expect(statement.values).toEqual(["u1", "ws-1", 5]);
+    const { sql: query, params } = renderSql(fake.execute.mock.calls[0][0]);
+    expect(params).toEqual(["u1", "ws-1", 5]);
+    expect(query).toMatch(/user_id = \$1\s+AND workspace_id = \$2/);
+    expect(query).toMatch(/ORDER BY summary_date DESC\s+OFFSET \$3/);
     expect(logger.info).toHaveBeenCalledWith(
       "Pruned 2 old daily summaries for user u1 in workspace ws-1",
     );
   });
 
-  it("still saves the summary, without an embedding, when embedding fails", async () => {
-    const workspace = makeWorkspace({ memoryEmbeddingProviderId: "p-embed" });
-    setupWhere(
-      [workspace],
-      [
+  it("saves the summary without an embedding when embedding generation fails", async () => {
+    fake = seedExtracting({
+      workspace: { memoryEmbeddingProviderId: "p-embed" },
+      providers: [
         makeProvider(),
         makeProvider({ id: "p-embed", embeddingModelId: "embed-model" }),
       ],
-    );
-    mockDb.limit.mockResolvedValueOnce([makeChat()]).mockResolvedValueOnce([]);
-    mockDb.execute.mockResolvedValue({ rowCount: 0 });
-    mockOpenProvider.mockReturnValue({
-      languageModel: vi.fn(() => ({ id: "model" })),
     });
-    mockGenerateText.mockResolvedValue({ text: "Updated summary" });
-    mockGenerateEmbedding.mockRejectedValue(new Error("embed down"));
+    mockGenerateEmbedding.mockRejectedValueOnce(new Error("embed down"));
 
     await processMemoryExtractionBatch();
 
-    expect(mockDb.values).toHaveBeenCalledWith(
+    expect(summaryRows()).toEqual([
       expect.objectContaining({ summary: "Updated summary", embedding: null }),
-    );
+    ]);
     expect(logger.error).toHaveBeenCalledWith(
       expect.objectContaining({ chatId: "chat-1" }),
       "Failed to generate embedding for daily summary: embed down",
     );
-    expect(mockDb.set).toHaveBeenLastCalledWith(
-      expect.objectContaining({ memoryExtractionStatus: "completed" }),
-    );
+    expect(chatRow("chat-1").memoryExtractionStatus).toBe("completed");
   });
 
-  it("marks the chat failed and carries on when processing it throws", async () => {
-    setupWhere([makeWorkspace()], [makeProvider()]);
-    mockDb.limit.mockResolvedValueOnce([makeChat()]);
-    vi.mocked(loadActivePath).mockRejectedValueOnce(new Error("db hiccup"));
+  it("marks the chat failed when reading its messages throws", async () => {
+    fake = seedWithMessages(
+      {
+        workspace: [makeWorkspace()],
+        provider: [makeProvider()],
+        chat: [makeChat()],
+      },
+      {
+        onQuery: (query) => {
+          if (query.table === "chat_message") {
+            throw dbError("08006", "db hiccup");
+          }
+        },
+      },
+    );
 
     await expect(processMemoryExtractionBatch()).resolves.toBeUndefined();
 
-    expect(mockDb.set).toHaveBeenLastCalledWith(
-      expect.objectContaining({ memoryExtractionStatus: "failed" }),
-    );
+    expect(chatRow("chat-1").memoryExtractionStatus).toBe("failed");
     expect(logger.error).toHaveBeenCalledWith(
       expect.objectContaining({ chatId: "chat-1" }),
       "Error processing chat for memory extraction",
@@ -263,8 +300,15 @@ describe("processMemoryExtractionBatch", () => {
   });
 
   it("logs and rethrows when the batch itself fails", async () => {
-    const boom = new Error("db down");
-    mockDb.where.mockRejectedValueOnce(boom);
+    const boom = dbError("08006", "db down");
+    seedWithMessages(
+      { workspace: [makeWorkspace()] },
+      {
+        onQuery: (query) => {
+          if (query.table === "workspace") throw boom;
+        },
+      },
+    );
 
     await expect(processMemoryExtractionBatch()).rejects.toBe(boom);
     expect(logger.error).toHaveBeenCalledWith(
@@ -274,38 +318,26 @@ describe("processMemoryExtractionBatch", () => {
   });
 
   it("marks the chat as failed when the LLM call throws", async () => {
-    setupWhere([makeWorkspace()], [makeProvider()]);
-    mockDb.limit.mockResolvedValueOnce([makeChat()]).mockResolvedValueOnce([]);
-
-    mockOpenProvider.mockReturnValue({
-      languageModel: vi.fn(() => ({ id: "model" })),
-    });
-    mockGenerateText.mockRejectedValue(new Error("LLM down"));
+    fake = seedExtracting();
+    mockGenerateText.mockRejectedValueOnce(new Error("LLM down"));
 
     await processMemoryExtractionBatch();
 
-    expect(mockDb.insert).not.toHaveBeenCalled();
-    expect(mockDb.set).toHaveBeenCalledWith(
-      expect.objectContaining({ memoryExtractionStatus: "failed" }),
-    );
+    expect(summaryRows()).toEqual([]);
+    expect(chatRow("chat-1").memoryExtractionStatus).toBe("failed");
   });
 
   it("generates an embedding when an embedding provider is configured", async () => {
-    const workspace = makeWorkspace({ memoryEmbeddingProviderId: "p-embed" });
     const extractionProvider = makeProvider();
     const embeddingProvider = makeProvider({
       id: "p-embed",
       embeddingModelId: "text-embedding-3-small",
     });
-
-    setupWhere([workspace], [extractionProvider, embeddingProvider]);
-    mockDb.limit.mockResolvedValueOnce([makeChat()]).mockResolvedValueOnce([]);
-    mockDb.execute.mockResolvedValue({ rowCount: 0 });
-
-    mockOpenProvider.mockReturnValue({
-      languageModel: vi.fn(() => ({ id: "model" })),
+    fake = seedWithMessages({
+      workspace: [makeWorkspace({ memoryEmbeddingProviderId: "p-embed" })],
+      provider: [extractionProvider, embeddingProvider],
+      chat: [makeChat()],
     });
-    mockGenerateText.mockResolvedValue({ text: "Updated summary" });
     mockGenerateEmbedding.mockResolvedValue([0.1, 0.2, 0.3]);
 
     await processMemoryExtractionBatch();
@@ -319,21 +351,14 @@ describe("processMemoryExtractionBatch", () => {
     expect(mockOpenProvider).toHaveBeenCalledWith(extractionProvider, {
       sessionId: "chat-1",
     });
-    expect(mockDb.values).toHaveBeenCalledWith(
+    expect(summaryRows()).toEqual([
       expect.objectContaining({ embedding: [0.1, 0.2, 0.3] }),
-    );
+    ]);
   });
+
   describe("Job settings (ADR-0045)", () => {
     const extractWith = async (provider: Record<string, unknown>) => {
-      setupWhere([makeWorkspace()], [makeProvider(provider)]);
-      mockDb.limit
-        .mockResolvedValueOnce([makeChat()])
-        .mockResolvedValueOnce([]);
-      mockDb.execute.mockResolvedValue({ rowCount: 0 });
-      mockOpenProvider.mockReturnValue({
-        languageModel: vi.fn(() => ({ id: "model" })),
-      });
-      mockGenerateText.mockResolvedValue({ text: "Updated summary" });
+      seedExtracting({ providers: [makeProvider(provider)] });
       await processMemoryExtractionBatch();
       expect(mockGenerateText).toHaveBeenCalledTimes(1);
       const [options] = mockGenerateText.mock.calls[0] as [
@@ -971,5 +996,70 @@ describe("processMemoryExtractionBatch provider visibility", () => {
 
     expect(mockGenerateText).toHaveBeenCalledTimes(1);
     expect(mockGenerateEmbedding).not.toHaveBeenCalled();
+  });
+
+  it("resolves every Workspace's Providers in a fixed number of queries", async () => {
+    const extractWith = async (workspaceCount: number) => {
+      const ids = Array.from(
+        { length: workspaceCount },
+        (_, index) => `ws-${index + 1}`,
+      );
+      const fake = seedWithMessages({
+        workspace: ids.map((id) =>
+          makeWorkspace({ id, memoryExtractionProviderId: `p-${id}` }),
+        ),
+        provider: ids.map((id) =>
+          makeProvider({ id: `p-${id}`, workspaceId: id }),
+        ),
+        chat: ids.map((id) => makeChat({ id: `chat-${id}`, workspaceId: id })),
+      });
+
+      mockGenerateText.mockClear();
+      await processMemoryExtractionBatch();
+
+      expect(mockGenerateText).toHaveBeenCalledTimes(workspaceCount);
+      return fake.queries.filter(
+        (query) => query.table === "provider" || query.table === "attachment",
+      ).length;
+    };
+
+    expect(await extractWith(1)).toBe(2);
+    expect(await extractWith(3)).toBe(2);
+  });
+
+  it("resolves each Workspace's Provider visibility independently", async () => {
+    const fake = seedWithMessages({
+      workspace: [
+        makeWorkspace({ id: "ws-1", memoryExtractionProviderId: "p-mine" }),
+        makeWorkspace({ id: "ws-2", memoryExtractionProviderId: "p-shared" }),
+        makeWorkspace({ id: "ws-3", memoryExtractionProviderId: "p-detached" }),
+      ],
+      provider: [
+        makeProvider({ id: "p-mine", workspaceId: "ws-1" }),
+        shared({ id: "p-shared" }),
+        shared({ id: "p-detached" }),
+      ],
+      attachment: [
+        {
+          id: "att-p-shared",
+          workspaceId: "ws-2",
+          resourceType: "provider",
+          resourceId: "p-shared",
+        },
+      ],
+      chat: [
+        makeChat({ id: "chat-mine", workspaceId: "ws-1" }),
+        makeChat({ id: "chat-shared", workspaceId: "ws-2" }),
+        makeChat({ id: "chat-detached", workspaceId: "ws-3" }),
+      ],
+    });
+
+    await processMemoryExtractionBatch();
+
+    expect(mockGenerateText).toHaveBeenCalledTimes(2);
+    expect(
+      fake.tables.chat.find((chat) => chat.id === "chat-detached")
+        ?.memoryExtractionStatus,
+    ).toBe("pending");
   });
 });

@@ -1,11 +1,14 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   dbError,
-  mockDb,
   mockSession,
   resetMockDb,
   seedDb,
+  type FakeDb,
+  type Row,
+  type Store,
 } from "../test-utils.ts";
+import type { FakeDbOptions } from "../fake-db.ts";
 import app from "../server.ts";
 import { logger } from "../logger.ts";
 
@@ -13,8 +16,6 @@ describe("Invitation Routes", () => {
   beforeEach(() => {
     resetMockDb();
     vi.clearAllMocks();
-    mockDb.where.mockReturnValue(mockDb);
-    mockDb.innerJoin.mockReturnValue(mockDb);
   });
 
   afterEach(() => {
@@ -23,73 +24,80 @@ describe("Invitation Routes", () => {
 
   const orgId = "org-1";
   const baseUrl = `/organizations/${orgId}/invitations`;
+  const DAY = 24 * 60 * 60 * 1000;
+
+  const post = (body: unknown) =>
+    app.request(baseUrl, {
+      method: "POST",
+      body: JSON.stringify(body),
+      headers: { "Content-Type": "application/json" },
+    });
+
+  const adminSession = () =>
+    mockSession({ id: "user-1", email: "admin@example.com", role: "user" });
+
+  const membership = (role: "admin" | "member" = "admin"): Row => ({
+    id: "m1",
+    userId: "user-1",
+    organizationId: orgId,
+    role,
+  });
+
+  const world = (
+    role: "admin" | "member" = "admin",
+    rows: Store = {},
+    db: FakeDbOptions = {},
+  ): FakeDb => seedDb({ organization_member: [membership(role)], ...rows }, db);
+
+  const inserts = (fake: FakeDb) =>
+    fake.queries.filter((query) => query.kind === "insert");
 
   describe("POST /", () => {
     it("should create invitation if org admin", async () => {
-      mockSession({ id: "admin-1", email: "admin@example.com", role: "user" });
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      mockDb.limit.mockResolvedValueOnce([]);
+      adminSession();
+      const fake = world();
 
-      const mockInvitation = {
-        id: "inv-1",
-        email: "user@example.com",
-        workspaceId: "ws-1",
-      };
-      mockDb.returning.mockResolvedValueOnce([mockInvitation]);
-
-      const res = await app.request(baseUrl, {
-        method: "POST",
-        body: JSON.stringify({
-          email: "user@example.com",
-        }),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await post({ email: "user@example.com" });
 
       expect(res.status).toBe(201);
-      expect(await res.json()).toEqual({ ...mockInvitation, blueprintIds: [] });
+      const created = fake.tables.invitation.at(-1)!;
+      expect(created).toMatchObject({
+        email: "user@example.com",
+        organizationId: orgId,
+        status: "pending",
+      });
+      expect(await res.json()).toEqual({
+        ...created,
+        expiresAt: (created.expiresAt as Date).toISOString(),
+        blueprintIds: [],
+      });
     });
 
     it("normalizes a mixed-case invitation email before persistence", async () => {
-      mockSession({ id: "admin-1", email: "admin@example.com", role: "user" });
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      mockDb.returning.mockResolvedValueOnce([
-        { id: "inv-1", email: "user@example.com" },
-      ]);
+      adminSession();
+      const fake = world();
 
-      const res = await app.request(baseUrl, {
-        method: "POST",
-        body: JSON.stringify({
-          email: "User@Example.COM",
-        }),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await post({ email: "User@Example.COM" });
 
       expect(res.status).toBe(201);
-      const insertedValues = mockDb.values.mock.calls.find(
-        ([value]) =>
-          typeof value === "object" &&
-          value !== null &&
-          "organizationId" in value,
-      )?.[0];
-      expect(insertedValues).toMatchObject({ email: "user@example.com" });
+      expect(fake.tables.invitation.at(-1)).toMatchObject({
+        email: "user@example.com",
+      });
       expect(await res.json()).toMatchObject({ email: "user@example.com" });
     });
 
     it("persists an ordered set of blueprints", async () => {
-      mockSession({ id: "admin-1", email: "admin@example.com", role: "user" });
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      mockDb.where
-        .mockReturnValueOnce(mockDb)
-        .mockResolvedValueOnce([{ id: "bp-1" }, { id: "bp-2" }]);
-      mockDb.returning.mockResolvedValueOnce([{ id: "inv-1" }]);
+      adminSession();
+      const fake = world("admin", {
+        blueprint: [
+          { id: "bp-1", organizationId: orgId, name: "BP 1" },
+          { id: "bp-2", organizationId: orgId, name: "BP 2" },
+        ],
+      });
 
-      const res = await app.request(baseUrl, {
-        method: "POST",
-        body: JSON.stringify({
-          email: "user@example.com",
-          blueprintIds: ["bp-1", "bp-2", "bp-1"],
-        }),
-        headers: { "Content-Type": "application/json" },
+      const res = await post({
+        email: "user@example.com",
+        blueprintIds: ["bp-1", "bp-2", "bp-1"],
       });
 
       expect(res.status).toBe(201);
@@ -97,78 +105,80 @@ describe("Invitation Routes", () => {
         ((await res.json()) as { blueprintIds: string[] }).blueprintIds,
       ).toEqual(["bp-1", "bp-2"]);
 
-      const junctionInsert = mockDb.values.mock.calls
-        .map((c) => c[0])
-        .find(
-          (v): v is { blueprintId: string; position: number }[] =>
-            Array.isArray(v) &&
-            (v as { blueprintId?: unknown }[])[0]?.blueprintId !== undefined,
-        );
-      expect(junctionInsert).toEqual([
+      expect(fake.tables.invitation_blueprint).toEqual([
         expect.objectContaining({ blueprintId: "bp-1", position: 0 }),
         expect.objectContaining({ blueprintId: "bp-2", position: 1 }),
       ]);
     });
 
     it("404s when a blueprint is not in this organization", async () => {
-      mockSession({ id: "admin-1", email: "admin@example.com", role: "user" });
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      mockDb.where
-        .mockReturnValueOnce(mockDb)
-        .mockResolvedValueOnce([{ id: "bp-1" }]);
+      adminSession();
+      const fake = world("admin", {
+        blueprint: [
+          { id: "bp-1", organizationId: orgId, name: "BP 1" },
+          { id: "bp-2", organizationId: "org-2", name: "BP 2" },
+        ],
+      });
 
-      const res = await app.request(baseUrl, {
-        method: "POST",
-        body: JSON.stringify({
-          email: "user@example.com",
-          blueprintIds: ["bp-1", "bp-2"],
-        }),
-        headers: { "Content-Type": "application/json" },
+      const res = await post({
+        email: "user@example.com",
+        blueprintIds: ["bp-1", "bp-2"],
       });
 
       expect(res.status).toBe(404);
       expect(await res.json()).toEqual({
         error: "Blueprints not found in this organization: bp-2",
       });
+      expect(inserts(fake)).toEqual([]);
     });
 
     it("should persist an optional workspaceName", async () => {
-      mockSession({ id: "admin-1", email: "admin@example.com", role: "user" });
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      mockDb.returning.mockResolvedValueOnce([{ id: "inv-1" }]);
+      adminSession();
+      const fake = world();
 
-      const res = await app.request(baseUrl, {
-        method: "POST",
-        body: JSON.stringify({
-          email: "user@example.com",
-          workspaceName: "Contractor Sandbox",
-        }),
-        headers: { "Content-Type": "application/json" },
+      const res = await post({
+        email: "user@example.com",
+        workspaceName: "Contractor Sandbox",
       });
 
       expect(res.status).toBe(201);
-      const insertedValues = mockDb.values.mock.calls.at(-1)?.[0];
-      expect(insertedValues).toMatchObject({
+      expect(fake.tables.invitation.at(-1)).toMatchObject({
         email: "user@example.com",
         workspaceName: "Contractor Sandbox",
       });
     });
 
     it("409s with the central error envelope on a duplicate org+email invitation", async () => {
-      mockSession({ id: "admin-1", email: "admin@example.com", role: "user" });
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      mockDb.returning.mockRejectedValueOnce(
-        dbError(
-          "23505",
-          'duplicate key value violates unique constraint "unique_invitation_org_email"',
-        ),
+      adminSession();
+      const fake = world(
+        "admin",
+        {
+          invitation: [
+            {
+              id: "inv-old",
+              email: "user@example.com",
+              organizationId: orgId,
+              invitedBy: "user-1",
+              token: "old-token",
+              status: "pending",
+              expiresAt: new Date(Date.now() + DAY),
+            },
+          ],
+        },
+        {
+          unique: {
+            invitation: [
+              {
+                name: "unique_invitation_org_email",
+                columns: ["organizationId", "email"],
+                where: (row) => row.status === "pending",
+              },
+            ],
+          },
+        },
       );
 
-      const res = await app.request(baseUrl, {
-        method: "POST",
-        body: JSON.stringify({ email: "user@example.com" }),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await post({ email: "user@example.com" });
 
       expect(res.status).toBe(409);
       expect(await res.json()).toEqual({
@@ -176,21 +186,24 @@ describe("Invitation Routes", () => {
           "A pending invitation already exists for this user and organization",
         files: undefined,
       });
+      expect(fake.tables.invitation).toHaveLength(1);
     });
 
     it("logs an unexpected failure once, as the 500 it answers", async () => {
-      mockSession({ id: "admin-1", email: "admin@example.com", role: "user" });
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      mockDb.returning.mockRejectedValueOnce(
-        dbError("08006", "connection reset"),
+      adminSession();
+      world(
+        "admin",
+        {},
+        {
+          onInsert: (table) => {
+            if (table === "invitation")
+              throw dbError("08006", "connection reset");
+          },
+        },
       );
       const logError = vi.spyOn(logger, "error");
 
-      const res = await app.request(baseUrl, {
-        method: "POST",
-        body: JSON.stringify({ email: "user@example.com" }),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await post({ email: "user@example.com" });
 
       expect(res.status).toBe(500);
       expect(logError).toHaveBeenCalledTimes(1);
@@ -249,12 +262,7 @@ describe("Invitation Routes", () => {
           },
         );
 
-      const reinvite = () =>
-        app.request(baseUrl, {
-          method: "POST",
-          body: JSON.stringify({ email: "user@example.com" }),
-          headers: { "Content-Type": "application/json" },
-        });
+      const reinvite = () => post({ email: "user@example.com" });
 
       const past = new Date(Date.now() - 24 * 60 * 60 * 1000);
       const future = new Date(Date.now() + 24 * 60 * 60 * 1000);
@@ -322,82 +330,87 @@ describe("Invitation Routes", () => {
     });
 
     it("mints a token when creating an invitation", async () => {
-      mockSession({ id: "admin-1", email: "admin@example.com", role: "user" });
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      mockDb.returning.mockResolvedValueOnce([{ id: "inv-1" }]);
+      adminSession();
+      const fake = world();
 
-      const res = await app.request(baseUrl, {
-        method: "POST",
-        body: JSON.stringify({ email: "user@example.com" }),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await post({ email: "user@example.com" });
 
       expect(res.status).toBe(201);
-      const insertedValues = mockDb.values.mock.calls.find(
-        ([value]) =>
-          typeof value === "object" &&
-          value !== null &&
-          "organizationId" in value,
-      )?.[0] as { token?: string } | undefined;
-      expect(typeof insertedValues?.token).toBe("string");
-      expect(insertedValues?.token).toHaveLength(21);
+      const inserted = fake.tables.invitation.at(-1)!;
+      expect(typeof inserted.token).toBe("string");
+      expect(inserted.token).toHaveLength(21);
     });
 
     it("should return 400 if inviting self", async () => {
-      mockSession({ id: "admin-1", email: "admin@example.com", role: "user" });
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
+      adminSession();
+      const fake = world();
 
-      const res = await app.request(baseUrl, {
-        method: "POST",
-        body: JSON.stringify({
-          email: "Admin@Example.COM",
-        }),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await post({ email: "Admin@Example.COM" });
 
       expect(res.status).toBe(400);
       expect(await res.json()).toEqual({
         error: "You cannot invite yourself",
       });
+      expect(inserts(fake)).toEqual([]);
     });
 
     it("returns 403 for a non-admin member", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
+      const fake = world("member");
 
-      const res = await app.request(baseUrl, {
-        method: "POST",
-        body: JSON.stringify({ email: "user@example.com" }),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await post({ email: "user@example.com" });
 
       expect(res.status).toBe(403);
-      expect(mockDb.insert).not.toHaveBeenCalled();
+      expect(inserts(fake)).toEqual([]);
     });
   });
 
   describe("GET /", () => {
     it("should list invitations, each with its ordered blueprint set", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-
-      const mockInvitations = [
-        { id: "inv-1", email: "a@example.com", workspaceName: "WS 1" },
-        { id: "inv-2", email: "b@example.com", workspaceName: "WS 2" },
-      ];
-      mockDb.where
-        .mockReturnValueOnce(mockDb)
-        .mockResolvedValueOnce(mockInvitations);
-      mockDb.orderBy.mockResolvedValueOnce([
-        { invitationId: "inv-1", blueprintId: "bp-1" },
-        { invitationId: "inv-1", blueprintId: "bp-2" },
-      ]);
+      world("admin", {
+        invitation: [
+          {
+            id: "inv-1",
+            email: "a@example.com",
+            organizationId: orgId,
+            workspaceName: "WS 1",
+          },
+          {
+            id: "inv-2",
+            email: "b@example.com",
+            organizationId: orgId,
+            workspaceName: "WS 2",
+          },
+          {
+            id: "inv-other",
+            email: "c@example.com",
+            organizationId: "org-2",
+            workspaceName: "WS 3",
+          },
+        ],
+        invitation_blueprint: [
+          {
+            id: "ib-1",
+            invitationId: "inv-1",
+            blueprintId: "bp-1",
+            position: 0,
+          },
+          {
+            id: "ib-2",
+            invitationId: "inv-1",
+            blueprintId: "bp-2",
+            position: 1,
+          },
+        ],
+      });
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
       const json = (await res.json()) as {
-        results: { blueprintIds: string[] }[];
+        results: { id: string; blueprintIds: string[] }[];
       };
+      expect(json.results.map((r) => r.id)).toEqual(["inv-1", "inv-2"]);
       expect(json.results[0].blueprintIds).toEqual(["bp-1", "bp-2"]);
       expect(json.results[1].blueprintIds).toEqual([]);
     });

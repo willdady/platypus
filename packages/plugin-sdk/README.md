@@ -203,7 +203,8 @@ export const plugin: PlatypusPlugin<Config> = {
         // Optional; core defaults to 30_000 and caps at 120_000. It bounds
         // `createExecutors` as well as each executor call, so budget for any lazy
         // work the factory does — a factory that outruns it, or throws, serves no
-        // web tools that turn (warn-logged, never fatal).
+        // web tools that turn (warn-logged, never fatal). Cancelling the turn also
+        // abandons it at once, logged at debug rather than warn.
         timeoutMs: 5_000,
         createExecutors: (ctx, plugin) => {
           const pool = createPool(plugin.config.endpoint);

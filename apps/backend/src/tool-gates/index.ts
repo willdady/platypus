@@ -49,8 +49,6 @@ export const registerToolGate = (registration: ToolGateRegistration): void => {
 export const getToolGates = (): readonly ToolGateRegistration[] =>
   TOOL_GATES.list();
 
-export const clearToolGates = (): void => TOOL_GATES.clear();
-
 export type ToolGateScope = {
   orgId: string;
   workspaceId: string;

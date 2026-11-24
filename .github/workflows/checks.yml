@@ -40,6 +40,22 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    # why: the .pg tests prove the last-admin Organization row lock with two
+    # connections contending for it, which single-connection PGlite cannot show
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: platypus
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -63,6 +79,12 @@ jobs:
 
       - name: Test frontend with coverage
         run: pnpm exec turbo run test:coverage --filter=@platypus/frontend
+
+      # why: these need a real Postgres and are excluded from `pnpm test`
+      - name: Prove the last-admin Organization row lock
+        run: pnpm --filter @platypus/backend test:pg
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/platypus
 
   # Source-level type gate (`tsc --noEmit`). ESLint does not surface type errors,
   # so without this a strict-tsconfig violation can land on main unnoticed

@@ -142,6 +142,9 @@ chore(tests): add missing test coverage
 > so the fix still lands as your work.
 
 1. Ensure your code passes all tests (`pnpm test`) and is formatted (`pnpm format`; CI runs `pnpm format:check`).
+   `pnpm test` needs no database. The tests that need a real Postgres run separately —
+   `pnpm --filter @platypus/backend test:pg` — against a server it may create a scratch
+   database on (the local dev container counts), and CI supplies one.
 2. Write clear, descriptive commit messages in English, following the conventions above.
 3. Update the docs in `apps/docs/content` in the same PR, not a follow-up one.
    If you changed an `.example.env`, a user-facing limit or enum in

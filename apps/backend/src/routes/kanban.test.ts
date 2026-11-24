@@ -1,22 +1,22 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import { nanoid } from "nanoid";
 import {
-  mockDb,
   mockSession,
   mockNoSession,
   resetMockDb,
   seedDb,
   type FakeDb,
+  type Row,
+  type Store,
 } from "../test-utils.ts";
 import app from "../server.ts";
-import { mockNanoid } from "../test-setup.ts";
 
-mockNanoid.mockReturnValue("test-id-123");
+vi.mock("nanoid", { spy: true });
 
 describe("Kanban Routes", () => {
   beforeEach(() => {
     resetMockDb();
     vi.clearAllMocks();
-    mockDb.where.mockReturnValue(mockDb);
   });
 
   const orgId = "org-1";
@@ -25,10 +25,17 @@ describe("Kanban Routes", () => {
   const baseUrl = `/organizations/${orgId}/workspaces/${workspaceId}/boards`;
 
   const boardWorld = (
-    over: { owner?: string; cards?: Record<string, unknown>[] } = {},
+    over: {
+      owner?: string;
+      cards?: Row[];
+      labels?: Row[];
+      members?: Row[];
+      users?: Row[];
+      tables?: Store;
+    } = {},
   ): FakeDb =>
     seedDb({
-      organization_member: [
+      organization_member: over.members ?? [
         { id: "m1", userId: "user-1", organizationId: orgId, role: "member" },
       ],
       workspace: [
@@ -45,7 +52,9 @@ describe("Kanban Routes", () => {
           workspaceId,
           name: "Mine",
           description: null,
-          labels: [{ id: "label-1", name: "Bug", color: "#ef4444" }],
+          labels: over.labels ?? [
+            { id: "label-1", name: "Bug", color: "#ef4444" },
+          ],
           createdAt: new Date("2026-01-01T00:00:00.000Z"),
           updatedAt: new Date("2026-01-01T00:00:00.000Z"),
         },
@@ -65,8 +74,21 @@ describe("Kanban Routes", () => {
         { id: "col-b", boardId: "board-b", name: "To Do", position: 1 },
       ],
       kanban_card: over.cards ?? [],
-      user: [{ id: "user-1", name: "Ada", image: null }],
+      user: over.users ?? [{ id: "user-1", name: "Ada", image: null }],
+      ...over.tables,
     });
+
+  const cardRow = (over: Row = {}): Row => ({
+    id: "card-1",
+    columnId: "col-1",
+    title: "Card",
+    body: null,
+    labelIds: [],
+    assignees: [],
+    priority: "none",
+    position: 1,
+    ...over,
+  });
 
   const json = (method: string, body: unknown) => ({
     method,
@@ -109,6 +131,7 @@ describe("Kanban Routes", () => {
     });
 
     it("creates the board with its default columns", async () => {
+      vi.mocked(nanoid).mockReturnValueOnce("board-new");
       const fake = boardWorld();
       mockSession();
 
@@ -119,13 +142,13 @@ describe("Kanban Routes", () => {
 
       expect(res.status).toBe(201);
       expect(await res.json()).toMatchObject({
-        id: "test-id-123",
+        id: "board-new",
         name: "New Board",
         workspaceId,
       });
       expect(
         fake.tables.kanban_column
-          .filter((col) => col.boardId === "test-id-123")
+          .filter((col) => col.boardId === "board-new")
           .map((col) => col.name),
       ).toEqual(["To Do", "In Progress", "Done"]);
     });
@@ -373,6 +396,7 @@ describe("Kanban Routes", () => {
     });
 
     it("creates the column at the end of the board", async () => {
+      vi.mocked(nanoid).mockReturnValueOnce("col-new");
       boardWorld();
       mockSession();
 
@@ -383,7 +407,7 @@ describe("Kanban Routes", () => {
 
       expect(res.status).toBe(201);
       expect(await res.json()).toMatchObject({
-        id: "test-id-123",
+        id: "col-new",
         boardId,
         name: "New Column",
         position: 3,
@@ -597,13 +621,20 @@ describe("Kanban Routes", () => {
   describe("POST /:boardId/columns/:columnId/cards", () => {
     it("should create card", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([{ id: "col-1", boardId: "board-1" }]);
-      mockDb.limit.mockResolvedValueOnce([{ id: "col-1", name: "To do" }]);
-      mockDb.limit.mockResolvedValueOnce([]);
+      vi.mocked(nanoid).mockReturnValueOnce("test-id-123");
+      const fake = boardWorld({
+        cards: [
+          {
+            id: "card-existing",
+            columnId: "col-1",
+            title: "Existing",
+            labelIds: [],
+            assignees: [],
+            priority: "none",
+            position: 1,
+          },
+        ],
+      });
 
       const mockCard = {
         id: "test-id-123",
@@ -611,7 +642,6 @@ describe("Kanban Routes", () => {
         title: "New Card",
         position: 2.0,
       };
-      mockDb.returning.mockResolvedValueOnce([mockCard]);
 
       const res = await app.request(
         `${baseUrl}/${boardId}/columns/col-1/cards`,
@@ -623,18 +653,17 @@ describe("Kanban Routes", () => {
       );
 
       expect(res.status).toBe(201);
-      expect(await res.json()).toEqual(mockCard);
+      expect(await res.json()).toMatchObject(mockCard);
+      expect(fake.tables.kanban_card).toContainEqual(
+        expect.objectContaining(mockCard),
+      );
     });
   });
 
   describe("PUT /:boardId/cards/:cardId - board membership", () => {
     it("should return 404 when card does not belong to board", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([]);
+      boardWorld();
 
       const res = await app.request(
         `${baseUrl}/${boardId}/cards/card-from-other-board`,
@@ -686,24 +715,26 @@ describe("Kanban Routes", () => {
 
     it("should update card", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([
-        { id: "card-1", columnId: "col-1", boardId: "board-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([
-        { id: "card-1", columnId: "col-1", title: "Card" },
-      ]);
+      const fake = boardWorld({
+        cards: [
+          {
+            id: "card-1",
+            columnId: "col-1",
+            title: "Card",
+            body: null,
+            labelIds: [],
+            assignees: [],
+            priority: "none",
+            position: 1,
+          },
+        ],
+      });
 
       const mockCard = {
         id: "card-1",
         columnId: "col-1",
         title: "Updated Card",
       };
-      mockDb.returning.mockResolvedValueOnce([mockCard]);
-      mockDb.limit.mockResolvedValueOnce([]);
 
       const res = await app.request(`${baseUrl}/${boardId}/cards/card-1`, {
         method: "PATCH",
@@ -712,16 +743,13 @@ describe("Kanban Routes", () => {
       });
 
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual(mockCard);
+      expect(await res.json()).toMatchObject(mockCard);
+      expect(fake.tables.kanban_card[0]).toMatchObject(mockCard);
     });
 
     it("should return 404 if card not found", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([]);
+      boardWorld();
 
       const res = await app.request(`${baseUrl}/${boardId}/cards/card-1`, {
         method: "PATCH",
@@ -733,35 +761,15 @@ describe("Kanban Routes", () => {
     });
 
     describe("Label validation", () => {
-      const mockBoardLabels = (labels: { id: string }[]) => {
-        mockDb.limit.mockResolvedValueOnce([{ labels }]);
-      };
-
       it("should persist valid label IDs unchanged", async () => {
         mockSession();
-        mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-        mockDb.limit.mockResolvedValueOnce([
-          { ownerId: "user-1", organizationId: "org-1" },
-        ]);
-        mockDb.limit.mockResolvedValueOnce([
-          { id: "card-1", columnId: "col-1", boardId: "board-1" },
-        ]);
-        mockDb.limit.mockResolvedValueOnce([
-          { id: "card-1", columnId: "col-1", labelIds: [] },
-        ]);
-        mockBoardLabels([{ id: "lbl-a" }, { id: "lbl-b" }]);
-        mockDb.returning.mockResolvedValueOnce([
-          { id: "card-1", columnId: "col-1", labelIds: ["lbl-b", "lbl-a"] },
-        ]);
-        mockDb.limit.mockResolvedValueOnce([
-          {
-            labels: [
-              { id: "lbl-a", name: "A" },
-              { id: "lbl-b", name: "B" },
-            ],
-          },
-        ]);
-        mockDb.limit.mockResolvedValueOnce([]);
+        const fake = boardWorld({
+          cards: [cardRow()],
+          labels: [
+            { id: "lbl-a", name: "A" },
+            { id: "lbl-b", name: "B" },
+          ],
+        });
 
         const res = await app.request(`${baseUrl}/${boardId}/cards/card-1`, {
           method: "PATCH",
@@ -770,31 +778,17 @@ describe("Kanban Routes", () => {
         });
 
         expect(res.status).toBe(200);
-        expect(mockDb.set).toHaveBeenCalledWith(
-          expect.objectContaining({ labelIds: ["lbl-b", "lbl-a"] }),
-        );
+        expect(fake.tables.kanban_card[0]).toMatchObject({
+          labelIds: ["lbl-b", "lbl-a"],
+        });
       });
 
       it("should drop unknown label IDs and apply the rest of the update", async () => {
         mockSession();
-        mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-        mockDb.limit.mockResolvedValueOnce([
-          { ownerId: "user-1", organizationId: "org-1" },
-        ]);
-        mockDb.limit.mockResolvedValueOnce([
-          { id: "card-1", columnId: "col-1", boardId: "board-1" },
-        ]);
-        mockDb.limit.mockResolvedValueOnce([
-          { id: "card-1", columnId: "col-1", labelIds: [] },
-        ]);
-        mockBoardLabels([{ id: "lbl-new" }]);
-        mockDb.returning.mockResolvedValueOnce([
-          { id: "card-1", columnId: "col-1", labelIds: ["lbl-new"] },
-        ]);
-        mockDb.limit.mockResolvedValueOnce([
-          { labels: [{ id: "lbl-new", name: "New" }] },
-        ]);
-        mockDb.limit.mockResolvedValueOnce([]);
+        const fake = boardWorld({
+          cards: [cardRow()],
+          labels: [{ id: "lbl-new", name: "New" }],
+        });
 
         const res = await app.request(`${baseUrl}/${boardId}/cards/card-1`, {
           method: "PATCH",
@@ -807,32 +801,19 @@ describe("Kanban Routes", () => {
         });
 
         expect(res.status).toBe(200);
-        expect(mockDb.set).toHaveBeenCalledWith(
-          expect.objectContaining({
-            title: "Retitled",
-            priority: "high",
-            labelIds: ["lbl-new"],
-          }),
-        );
+        expect(fake.tables.kanban_card[0]).toMatchObject({
+          title: "Retitled",
+          priority: "high",
+          labelIds: ["lbl-new"],
+        });
       });
 
       it("should end with an empty label list when every submitted ID is unknown", async () => {
         mockSession();
-        mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-        mockDb.limit.mockResolvedValueOnce([
-          { ownerId: "user-1", organizationId: "org-1" },
-        ]);
-        mockDb.limit.mockResolvedValueOnce([
-          { id: "card-1", columnId: "col-1", boardId: "board-1" },
-        ]);
-        mockDb.limit.mockResolvedValueOnce([
-          { id: "card-1", columnId: "col-1", labelIds: [] },
-        ]);
-        mockBoardLabels([]);
-        mockDb.returning.mockResolvedValueOnce([
-          { id: "card-1", columnId: "col-1", labelIds: [] },
-        ]);
-        mockDb.limit.mockResolvedValueOnce([]);
+        const fake = boardWorld({
+          cards: [cardRow()],
+          labels: [],
+        });
 
         const res = await app.request(`${baseUrl}/${boardId}/cards/card-1`, {
           method: "PATCH",
@@ -841,31 +822,14 @@ describe("Kanban Routes", () => {
         });
 
         expect(res.status).toBe(200);
-        expect(mockDb.set).toHaveBeenCalledWith(
-          expect.objectContaining({ labelIds: [] }),
-        );
+        expect(fake.tables.kanban_card[0]).toMatchObject({ labelIds: [] });
       });
     });
 
     describe("Assignee validation", () => {
       it("should return 400 for invalid user assignee", async () => {
         mockSession();
-        mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-        mockDb.limit.mockResolvedValueOnce([
-          { ownerId: "user-1", organizationId: "org-1" },
-        ]);
-        mockDb.limit.mockResolvedValueOnce([
-          { id: "card-1", columnId: "col-1", boardId: "board-1" },
-        ]);
-        mockDb.limit.mockResolvedValueOnce([
-          { id: "card-1", columnId: "col-1" },
-        ]);
-        mockDb.where.mockReturnValueOnce(mockDb);
-        mockDb.where.mockReturnValueOnce(mockDb);
-        mockDb.where.mockReturnValueOnce(mockDb);
-        mockDb.where.mockReturnValueOnce(mockDb);
-        mockDb.where.mockResolvedValueOnce([]);
-        mockDb.where.mockResolvedValueOnce([]);
+        boardWorld({ cards: [cardRow()] });
 
         const res = await app.request(`${baseUrl}/${boardId}/cards/card-1`, {
           method: "PATCH",
@@ -886,29 +850,14 @@ describe("Kanban Routes", () => {
           email: "admin@example.com",
           role: "admin",
         });
-        mockDb.limit.mockResolvedValueOnce([
-          { ownerId: "admin-user", organizationId: "org-1" },
-        ]);
-        mockDb.limit.mockResolvedValueOnce([
-          { id: "card-1", columnId: "col-1", boardId: "board-1" },
-        ]);
-        mockDb.limit.mockResolvedValueOnce([
-          { id: "card-1", columnId: "col-1" },
-        ]);
-        mockDb.where.mockReturnValueOnce(mockDb);
-        mockDb.where.mockReturnValueOnce(mockDb);
-        mockDb.where.mockReturnValueOnce(mockDb);
-        mockDb.where.mockResolvedValueOnce([]);
-        mockDb.where.mockResolvedValueOnce([{ id: "admin-user" }]);
-        mockDb.where.mockReturnValueOnce(mockDb);
-
-        const mockCard = {
-          id: "card-1",
-          columnId: "col-1",
-          title: "Test",
-          assignees: [{ type: "user", id: "admin-user" }],
-        };
-        mockDb.returning.mockResolvedValueOnce([mockCard]);
+        const fake = boardWorld({
+          owner: "admin-user",
+          members: [],
+          cards: [cardRow()],
+          users: [
+            { id: "admin-user", name: "Admin", image: null, role: "admin" },
+          ],
+        });
 
         const res = await app.request(`${baseUrl}/${boardId}/cards/card-1`, {
           method: "PATCH",
@@ -921,44 +870,34 @@ describe("Kanban Routes", () => {
         expect(res.status).toBe(200);
         const body = (await res.json()) as Record<string, unknown>;
         expect(body.assignees).toEqual([{ type: "user", id: "admin-user" }]);
+        expect(fake.tables.kanban_card[0]).toMatchObject({
+          assignees: [{ type: "user", id: "admin-user" }],
+        });
       });
 
       it("should allow a shared agent attached to this workspace to be assigned", async () => {
         mockSession();
-        mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-        mockDb.limit.mockResolvedValueOnce([
-          { ownerId: "user-1", organizationId: "org-1" },
-        ]);
-        mockDb.limit.mockResolvedValueOnce([
-          { id: "card-1", columnId: "col-1", boardId: "board-1" },
-        ]);
-        mockDb.limit.mockResolvedValueOnce([
-          { id: "card-1", columnId: "col-1" },
-        ]);
-        mockDb.where.mockReturnValueOnce(mockDb);
-        mockDb.where.mockReturnValueOnce(mockDb);
-        mockDb.where.mockReturnValueOnce(mockDb);
-        mockDb.where.mockReturnValueOnce(mockDb);
-        mockDb.where.mockResolvedValueOnce([]);
-        mockDb.where.mockResolvedValueOnce([
-          {
-            agent: {
-              id: "shared-agent",
-              organizationId: "org-1",
-              workspaceId: null,
-            },
-            attachment: { id: "att-1" },
+        const fake = boardWorld({
+          cards: [cardRow()],
+          tables: {
+            agent: [
+              {
+                id: "shared-agent",
+                organizationId: orgId,
+                workspaceId: null,
+                name: "Shared Agent",
+              },
+            ],
+            attachment: [
+              {
+                id: "att-1",
+                workspaceId,
+                resourceType: "agent",
+                resourceId: "shared-agent",
+              },
+            ],
           },
-        ]);
-        mockDb.where.mockReturnValueOnce(mockDb);
-
-        const mockCard = {
-          id: "card-1",
-          columnId: "col-1",
-          title: "Test",
-          assignees: [{ type: "agent", id: "shared-agent" }],
-        };
-        mockDb.returning.mockResolvedValueOnce([mockCard]);
+        });
 
         const res = await app.request(`${baseUrl}/${boardId}/cards/card-1`, {
           method: "PATCH",
@@ -971,26 +910,26 @@ describe("Kanban Routes", () => {
         expect(res.status).toBe(200);
         const body = (await res.json()) as Record<string, unknown>;
         expect(body.assignees).toEqual([{ type: "agent", id: "shared-agent" }]);
+        expect(fake.tables.kanban_card[0]).toMatchObject({
+          assignees: [{ type: "agent", id: "shared-agent" }],
+        });
       });
 
       it("should return 400 for an agent that is not visible in this workspace", async () => {
         mockSession();
-        mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-        mockDb.limit.mockResolvedValueOnce([
-          { ownerId: "user-1", organizationId: "org-1" },
-        ]);
-        mockDb.limit.mockResolvedValueOnce([
-          { id: "card-1", columnId: "col-1", boardId: "board-1" },
-        ]);
-        mockDb.limit.mockResolvedValueOnce([
-          { id: "card-1", columnId: "col-1" },
-        ]);
-        mockDb.where.mockReturnValueOnce(mockDb);
-        mockDb.where.mockReturnValueOnce(mockDb);
-        mockDb.where.mockReturnValueOnce(mockDb);
-        mockDb.where.mockReturnValueOnce(mockDb);
-        mockDb.where.mockResolvedValueOnce([]);
-        mockDb.where.mockResolvedValueOnce([]);
+        const fake = boardWorld({
+          cards: [cardRow()],
+          tables: {
+            agent: [
+              {
+                id: "someone-elses-agent",
+                organizationId: "org-2",
+                workspaceId: null,
+                name: "Other Agent",
+              },
+            ],
+          },
+        });
 
         const res = await app.request(`${baseUrl}/${boardId}/cards/card-1`, {
           method: "PATCH",
@@ -1003,36 +942,15 @@ describe("Kanban Routes", () => {
         expect(res.status).toBe(400);
         const body = (await res.json()) as Record<string, unknown>;
         expect(body.error).toBe("Invalid agent assignee");
-        expect(mockDb.innerJoin).toHaveBeenCalledTimes(3);
+        expect(fake.queries).toContainEqual({
+          kind: "select",
+          table: "agent",
+        });
       });
 
       it("should allow org member to be assigned", async () => {
         mockSession();
-        mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-        mockDb.limit.mockResolvedValueOnce([
-          { ownerId: "user-1", organizationId: "org-1" },
-        ]);
-        mockDb.limit.mockResolvedValueOnce([
-          { id: "card-1", columnId: "col-1", boardId: "board-1" },
-        ]);
-        mockDb.limit.mockResolvedValueOnce([
-          { id: "card-1", columnId: "col-1" },
-        ]);
-        mockDb.where.mockReturnValueOnce(mockDb);
-        mockDb.where.mockReturnValueOnce(mockDb);
-        mockDb.where.mockReturnValueOnce(mockDb);
-        mockDb.where.mockReturnValueOnce(mockDb);
-        mockDb.where.mockResolvedValueOnce([{ userId: "user-1" }]);
-        mockDb.where.mockResolvedValueOnce([]);
-        mockDb.where.mockReturnValueOnce(mockDb);
-
-        const mockCard = {
-          id: "card-1",
-          columnId: "col-1",
-          title: "Test",
-          assignees: [{ type: "user", id: "user-1" }],
-        };
-        mockDb.returning.mockResolvedValueOnce([mockCard]);
+        const fake = boardWorld({ cards: [cardRow()] });
 
         const res = await app.request(`${baseUrl}/${boardId}/cards/card-1`, {
           method: "PATCH",
@@ -1045,6 +963,9 @@ describe("Kanban Routes", () => {
         expect(res.status).toBe(200);
         const body = (await res.json()) as Record<string, unknown>;
         expect(body.assignees).toEqual([{ type: "user", id: "user-1" }]);
+        expect(fake.tables.kanban_card[0]).toMatchObject({
+          assignees: [{ type: "user", id: "user-1" }],
+        });
       });
     });
   });
@@ -1052,29 +973,13 @@ describe("Kanban Routes", () => {
   describe("POST /:boardId/cards/:cardId/move", () => {
     it("should move card to beginning of column", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-
-      mockDb.limit.mockResolvedValueOnce([
-        { id: "card-1", columnId: "col-1", boardId: "board-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([{ id: "col-2", boardId: "board-1" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { id: "col-1", name: "To do" },
-        { id: "col-2", name: "Doing" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([]);
-
-      const existingCards = [
-        { id: "card-2", columnId: "col-2", position: 1.0 },
-        { id: "card-3", columnId: "col-2", position: 2.0 },
-      ];
-      mockDb.orderBy.mockResolvedValueOnce(existingCards);
-
-      const updatedCard = { id: "card-1", columnId: "col-2", position: 0.5 };
-      mockDb.returning.mockResolvedValueOnce([updatedCard]);
+      const fake = boardWorld({
+        cards: [
+          cardRow(),
+          cardRow({ id: "card-2", columnId: "col-2", position: 1.0 }),
+          cardRow({ id: "card-3", columnId: "col-2", position: 2.0 }),
+        ],
+      });
 
       const res = await app.request(`${baseUrl}/${boardId}/cards/card-1/move`, {
         method: "POST",
@@ -1083,27 +988,23 @@ describe("Kanban Routes", () => {
       });
 
       expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({
+        id: "card-1",
+        columnId: "col-2",
+        position: 0.5,
+      });
+      expect(fake.tables.kanban_card).toContainEqual(
+        expect.objectContaining({
+          id: "card-1",
+          columnId: "col-2",
+          position: 0.5,
+        }),
+      );
     });
 
     it("should answer 409 when the card has left the expected column", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-
-      mockDb.limit.mockResolvedValueOnce([
-        { id: "card-1", columnId: "col-2", boardId: "board-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([{ id: "col-2", boardId: "board-1" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { id: "col-1", name: "To do" },
-        { id: "col-2", name: "Doing" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([]);
-
-      mockDb.orderBy.mockResolvedValueOnce([]);
-      mockDb.returning.mockResolvedValueOnce([]);
+      boardWorld({ cards: [cardRow({ columnId: "col-2" })] });
 
       const res = await app.request(`${baseUrl}/${boardId}/cards/card-1/move`, {
         method: "POST",
@@ -1120,29 +1021,13 @@ describe("Kanban Routes", () => {
 
     it("should move card after another card", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-
-      mockDb.limit.mockResolvedValueOnce([
-        { id: "card-1", columnId: "col-1", boardId: "board-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([{ id: "col-2", boardId: "board-1" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { id: "col-1", name: "To do" },
-        { id: "col-2", name: "Doing" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([]);
-
-      const existingCards = [
-        { id: "card-2", columnId: "col-2", position: 1.0 },
-        { id: "card-3", columnId: "col-2", position: 2.0 },
-      ];
-      mockDb.orderBy.mockResolvedValueOnce(existingCards);
-
-      const updatedCard = { id: "card-1", columnId: "col-2", position: 1.5 };
-      mockDb.returning.mockResolvedValueOnce([updatedCard]);
+      const fake = boardWorld({
+        cards: [
+          cardRow(),
+          cardRow({ id: "card-2", columnId: "col-2", position: 1.0 }),
+          cardRow({ id: "card-3", columnId: "col-2", position: 2.0 }),
+        ],
+      });
 
       const res = await app.request(`${baseUrl}/${boardId}/cards/card-1/move`, {
         method: "POST",
@@ -1151,28 +1036,29 @@ describe("Kanban Routes", () => {
       });
 
       expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({
+        id: "card-1",
+        columnId: "col-2",
+        position: 1.5,
+      });
+      expect(fake.tables.kanban_card).toContainEqual(
+        expect.objectContaining({
+          id: "card-1",
+          columnId: "col-2",
+          position: 1.5,
+        }),
+      );
     });
 
     it("should trigger rebalancing when gap is too small", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-
-      mockDb.limit.mockResolvedValueOnce([
-        { id: "card-1", columnId: "col-1", boardId: "board-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([{ id: "col-1", boardId: "board-1" }]);
-
-      const existingCards = [
-        { id: "card-2", columnId: "col-1", position: 1.0 },
-        { id: "card-3", columnId: "col-1", position: 1.0000001 },
-      ];
-      mockDb.orderBy.mockResolvedValueOnce(existingCards);
-
-      const updatedCard = { id: "card-1", columnId: "col-1", position: 2.0 };
-      mockDb.returning.mockResolvedValueOnce([updatedCard]);
+      const fake = boardWorld({
+        cards: [
+          cardRow(),
+          cardRow({ id: "card-2", columnId: "col-1", position: 1.0 }),
+          cardRow({ id: "card-3", columnId: "col-1", position: 1.0000001 }),
+        ],
+      });
 
       const res = await app.request(`${baseUrl}/${boardId}/cards/card-1/move`, {
         method: "POST",
@@ -1181,30 +1067,24 @@ describe("Kanban Routes", () => {
       });
 
       expect(res.status).toBe(200);
-      expect(mockDb.transaction).toHaveBeenCalled();
+      expect(await res.json()).toMatchObject({
+        id: "card-1",
+        columnId: "col-1",
+        position: 2.0,
+      });
+      expect(fake.tables.kanban_card).toContainEqual(
+        expect.objectContaining({ id: "card-3", position: 3.0 }),
+      );
     });
 
     it("should return 400 if afterCardId not found in column", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-
-      mockDb.limit.mockResolvedValueOnce([
-        { id: "card-1", columnId: "col-1", boardId: "board-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([{ id: "col-2", boardId: "board-1" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { id: "col-1", name: "To do" },
-        { id: "col-2", name: "Doing" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([]);
-
-      const existingCards = [
-        { id: "card-2", columnId: "col-2", position: 1.0 },
-      ];
-      mockDb.orderBy.mockResolvedValueOnce(existingCards);
+      boardWorld({
+        cards: [
+          cardRow(),
+          cardRow({ id: "card-2", columnId: "col-2", position: 1.0 }),
+        ],
+      });
 
       const res = await app.request(`${baseUrl}/${boardId}/cards/card-1/move`, {
         method: "POST",
@@ -1224,11 +1104,15 @@ describe("Kanban Routes", () => {
   describe("DELETE /:boardId/cards/:cardId - board membership", () => {
     it("should return 404 when card does not belong to board", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([]);
+      boardWorld({
+        cards: [
+          cardRow({
+            id: "card-from-other-board",
+            columnId: "col-b",
+            title: "Theirs",
+          }),
+        ],
+      });
 
       const res = await app.request(
         `${baseUrl}/${boardId}/cards/card-from-other-board`,
@@ -1243,28 +1127,19 @@ describe("Kanban Routes", () => {
   describe("DELETE /:boardId/cards/:cardId", () => {
     it("should delete card", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([
-        { id: "card-1", columnId: "col-1", boardId: "board-1" },
-      ]);
+      const fake = boardWorld({ cards: [cardRow()] });
 
       const res = await app.request(`${baseUrl}/${boardId}/cards/card-1`, {
         method: "DELETE",
       });
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ message: "Card deleted" });
+      expect(fake.tables.kanban_card).toHaveLength(0);
     });
 
     it("should return 404 if card not found", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([]);
+      boardWorld();
 
       const res = await app.request(`${baseUrl}/${boardId}/cards/card-1`, {
         method: "DELETE",
@@ -1323,15 +1198,16 @@ describe("Kanban Routes", () => {
   const commentId = "comment-1";
   const commentsUrl = `${baseUrl}/${boardId}/cards/${cardId}/comments`;
 
-  const mockComment = {
+  const commentRow = (over: Row = {}): Row => ({
     id: commentId,
     cardId,
     body: "Test comment",
     createdByUserId: null,
     createdByAgentId: null,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  };
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+    ...over,
+  });
 
   describe("GET /:boardId/cards/:cardId/comments", () => {
     it("should return 401 if not authenticated", async () => {
@@ -1342,11 +1218,7 @@ describe("Kanban Routes", () => {
 
     it("should return 404 if card not found", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([]);
+      boardWorld();
 
       const res = await app.request(commentsUrl);
       expect(res.status).toBe(404);
@@ -1354,12 +1226,10 @@ describe("Kanban Routes", () => {
 
     it("should return comments for card with createdByName resolved", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([{ id: cardId }]);
-      mockDb.orderBy.mockResolvedValueOnce([mockComment]);
+      boardWorld({
+        cards: [cardRow()],
+        tables: { kanban_card_comment: [commentRow()] },
+      });
 
       const res = await app.request(commentsUrl);
       expect(res.status).toBe(200);
@@ -1373,12 +1243,7 @@ describe("Kanban Routes", () => {
 
     it("should return empty results when card has no comments", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([{ id: cardId }]);
-      mockDb.orderBy.mockResolvedValueOnce([]);
+      boardWorld({ cards: [cardRow()] });
 
       const res = await app.request(commentsUrl);
       expect(res.status).toBe(200);
@@ -1401,11 +1266,7 @@ describe("Kanban Routes", () => {
 
     it("should return 404 if card not found", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([]);
+      boardWorld();
 
       const res = await app.request(commentsUrl, {
         method: "POST",
@@ -1417,12 +1278,8 @@ describe("Kanban Routes", () => {
 
     it("should create comment and return 201", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([{ id: cardId }]);
-      mockDb.returning.mockResolvedValueOnce([mockComment]);
+      vi.mocked(nanoid).mockReturnValueOnce("test-id-123");
+      const fake = boardWorld({ cards: [cardRow()] });
 
       const res = await app.request(commentsUrl, {
         method: "POST",
@@ -1432,15 +1289,20 @@ describe("Kanban Routes", () => {
       expect(res.status).toBe(201);
       const body = (await res.json()) as Record<string, unknown>;
       expect(body.body).toBe("Test comment");
-      expect(body.id).toBe(commentId);
+      expect(body.id).toBe("test-id-123");
+      expect(fake.tables.kanban_card_comment).toContainEqual(
+        expect.objectContaining({
+          id: "test-id-123",
+          cardId,
+          body: "Test comment",
+          createdByUserId: "user-1",
+        }),
+      );
     });
 
     it("should return 400 if body is empty string", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
+      boardWorld({ cards: [cardRow()] });
 
       const res = await app.request(commentsUrl, {
         method: "POST",
@@ -1452,10 +1314,7 @@ describe("Kanban Routes", () => {
 
     it("should return 400 if body field is missing", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
+      boardWorld({ cards: [cardRow()] });
 
       const res = await app.request(commentsUrl, {
         method: "POST",
@@ -1479,16 +1338,12 @@ describe("Kanban Routes", () => {
 
     it("should update comment and return enriched result", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ...mockComment, createdByUserId: "user-1" },
-      ]);
-
-      const updatedComment = { ...mockComment, body: "Updated" };
-      mockDb.returning.mockResolvedValueOnce([updatedComment]);
+      const fake = boardWorld({
+        cards: [cardRow()],
+        tables: {
+          kanban_card_comment: [commentRow({ createdByUserId: "user-1" })],
+        },
+      });
 
       const res = await app.request(`${commentsUrl}/${commentId}`, {
         method: "PATCH",
@@ -1497,15 +1352,14 @@ describe("Kanban Routes", () => {
       });
       expect(res.status).toBe(200);
       expect(((await res.json()) as { body: string }).body).toBe("Updated");
+      expect(fake.tables.kanban_card_comment[0]).toMatchObject({
+        body: "Updated",
+      });
     });
 
     it("should return 404 if comment not found", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([]);
+      boardWorld({ cards: [cardRow()] });
 
       const res = await app.request(`${commentsUrl}/${commentId}`, {
         method: "PATCH",
@@ -1517,13 +1371,14 @@ describe("Kanban Routes", () => {
 
     it("returns 404 for a comment that belongs to a different card", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ...mockComment, cardId: "card-2", createdByUserId: "user-1" },
-      ]);
+      const fake = boardWorld({
+        cards: [cardRow(), cardRow({ id: "card-2" })],
+        tables: {
+          kanban_card_comment: [
+            commentRow({ cardId: "card-2", createdByUserId: "user-1" }),
+          ],
+        },
+      });
 
       const res = await app.request(`${commentsUrl}/${commentId}`, {
         method: "PATCH",
@@ -1531,7 +1386,13 @@ describe("Kanban Routes", () => {
         headers: { "Content-Type": "application/json" },
       });
       expect(res.status).toBe(404);
-      expect(mockDb.update).not.toHaveBeenCalled();
+      expect(fake.queries).not.toContainEqual({
+        kind: "update",
+        table: "kanban_card_comment",
+      });
+      expect(fake.tables.kanban_card_comment[0]).toMatchObject({
+        body: "Test comment",
+      });
     });
 
     it("should return 403 if user does not own comment", async () => {
@@ -1540,13 +1401,27 @@ describe("Kanban Routes", () => {
         email: "other@example.com",
         role: "user",
       });
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "other-user", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ...mockComment, createdByUserId: "user-1" },
-      ]);
+      boardWorld({
+        owner: "other-user",
+        members: [
+          {
+            id: "m1",
+            userId: "user-1",
+            organizationId: orgId,
+            role: "member",
+          },
+          {
+            id: "m2",
+            userId: "other-user",
+            organizationId: orgId,
+            role: "member",
+          },
+        ],
+        cards: [cardRow()],
+        tables: {
+          kanban_card_comment: [commentRow({ createdByUserId: "user-1" })],
+        },
+      });
 
       const res = await app.request(`${commentsUrl}/${commentId}`, {
         method: "PATCH",
@@ -1565,16 +1440,21 @@ describe("Kanban Routes", () => {
         email: "admin@example.com",
         role: "user",
       });
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "admin-user", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ...mockComment, createdByUserId: "user-1" },
-      ]);
-
-      const updatedComment = { ...mockComment, body: "Admin edit" };
-      mockDb.returning.mockResolvedValueOnce([updatedComment]);
+      const fake = boardWorld({
+        owner: "admin-user",
+        members: [
+          {
+            id: "m1",
+            userId: "admin-user",
+            organizationId: orgId,
+            role: "admin",
+          },
+        ],
+        cards: [cardRow()],
+        tables: {
+          kanban_card_comment: [commentRow({ createdByUserId: "user-1" })],
+        },
+      });
 
       const res = await app.request(`${commentsUrl}/${commentId}`, {
         method: "PATCH",
@@ -1582,6 +1462,9 @@ describe("Kanban Routes", () => {
         headers: { "Content-Type": "application/json" },
       });
       expect(res.status).toBe(200);
+      expect(fake.tables.kanban_card_comment[0]).toMatchObject({
+        body: "Admin edit",
+      });
     });
   });
 
@@ -1596,28 +1479,24 @@ describe("Kanban Routes", () => {
 
     it("should delete comment and return success", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ...mockComment, createdByUserId: "user-1" },
-      ]);
+      const fake = boardWorld({
+        cards: [cardRow()],
+        tables: {
+          kanban_card_comment: [commentRow({ createdByUserId: "user-1" })],
+        },
+      });
 
       const res = await app.request(`${commentsUrl}/${commentId}`, {
         method: "DELETE",
       });
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ message: "Comment deleted" });
+      expect(fake.tables.kanban_card_comment).toHaveLength(0);
     });
 
     it("should return 404 if comment not found", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([]);
+      boardWorld({ cards: [cardRow()] });
 
       const res = await app.request(`${commentsUrl}/${commentId}`, {
         method: "DELETE",
@@ -1631,13 +1510,27 @@ describe("Kanban Routes", () => {
         email: "other@example.com",
         role: "user",
       });
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "other-user", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ...mockComment, createdByUserId: "user-1" },
-      ]);
+      boardWorld({
+        owner: "other-user",
+        members: [
+          {
+            id: "m1",
+            userId: "user-1",
+            organizationId: orgId,
+            role: "member",
+          },
+          {
+            id: "m2",
+            userId: "other-user",
+            organizationId: orgId,
+            role: "member",
+          },
+        ],
+        cards: [cardRow()],
+        tables: {
+          kanban_card_comment: [commentRow({ createdByUserId: "user-1" })],
+        },
+      });
 
       const res = await app.request(`${commentsUrl}/${commentId}`, {
         method: "DELETE",
@@ -1654,19 +1547,28 @@ describe("Kanban Routes", () => {
         email: "admin@example.com",
         role: "user",
       });
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "admin-user", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ...mockComment, createdByUserId: "user-1" },
-      ]);
+      const fake = boardWorld({
+        owner: "admin-user",
+        members: [
+          {
+            id: "m1",
+            userId: "admin-user",
+            organizationId: orgId,
+            role: "admin",
+          },
+        ],
+        cards: [cardRow()],
+        tables: {
+          kanban_card_comment: [commentRow({ createdByUserId: "user-1" })],
+        },
+      });
 
       const res = await app.request(`${commentsUrl}/${commentId}`, {
         method: "DELETE",
       });
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ message: "Comment deleted" });
+      expect(fake.tables.kanban_card_comment).toHaveLength(0);
     });
   });
 });

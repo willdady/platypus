@@ -245,9 +245,8 @@ vi.mock("dockerode", () => {
 
 import {
   createDockerSandboxBackend,
-  buildSingleFileTar,
   dockerSandboxConfigSchema,
-  EXEC_MARKER_VAR,
+  type DockerSandboxConfig,
 } from "./backend.ts";
 import { logger } from "../../logger.ts";
 import { plugin } from "./index.ts";
@@ -266,6 +265,7 @@ import {
 } from "../../sandbox/index.ts";
 import { buildFindArgs } from "../../sandbox/posix.ts";
 import type {
+  SandboxBackend,
   SandboxBackendRegistration,
   SandboxContext,
 } from "../../sandbox/types.ts";
@@ -345,10 +345,27 @@ const withPluginLogger = () => ({
   logger: pluginLogger,
 });
 
+const makeBackend = (
+  config: DockerSandboxConfig = { networks: [], extraHosts: [] },
+): SandboxBackend => createDockerSandboxBackend(config, {}, withPluginLogger());
+
 beforeEach(() => {
   resetMockState();
   vi.clearAllMocks();
   pluginLogger = makeFakePluginLogger();
+});
+
+describe("createDockerSandboxBackend — config", () => {
+  it("takes a config the schema has already parsed, with both arrays present", () => {
+    // why: core only ever passes the schema's output, so a bare {} must not compile
+    // @ts-expect-error — networks and extraHosts are required, not defaulted
+    const bare: DockerSandboxConfig = {};
+    const parsed: DockerSandboxConfig = dockerSandboxConfigSchema(
+      makePluginContext({ config: { allowedNetworks: [] } }),
+    ).parse(bare);
+
+    expect(parsed).toEqual({ networks: [], extraHosts: [] });
+  });
 });
 
 describe("DockerSandboxTransport — provisioning", () => {
@@ -356,7 +373,7 @@ describe("DockerSandboxTransport — provisioning", () => {
     setupFreshProvision();
     queueExec({ stdout: "hi", exitCode: 0 });
 
-    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    const backend = makeBackend();
     await backend.shellExec(ctx, { command: "echo hi" }, callOptions);
 
     expect(mockState.pullCalls).toEqual(["debian:stable-slim"]);
@@ -373,7 +390,7 @@ describe("DockerSandboxTransport — provisioning", () => {
     setupFreshProvision();
     queueExec({ exitCode: 0 });
 
-    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    const backend = makeBackend();
     await backend.shellExec(ctx, { command: "true" }, callOptions);
 
     const opts = mockState.createContainerCalls[0];
@@ -403,7 +420,7 @@ describe("DockerSandboxTransport — provisioning", () => {
     );
     queueExec({ stdout: "ok", exitCode: 0 });
 
-    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    const backend = makeBackend();
     await backend.shellExec(ctx, { command: "true" }, callOptions);
 
     expect(mockState.createContainerCalls).toHaveLength(0);
@@ -419,7 +436,7 @@ describe("DockerSandboxTransport — provisioning", () => {
     );
     queueExec({ exitCode: 0 });
 
-    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    const backend = makeBackend();
     await backend.shellExec(ctx, { command: "true" }, callOptions);
 
     expect(mockState.existingContainer.start).toHaveBeenCalledTimes(1);
@@ -431,7 +448,7 @@ describe("DockerSandboxTransport — provisioning", () => {
       Promise.reject(makeStatusError("daemon unavailable", 500)),
     );
 
-    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    const backend = makeBackend();
 
     await expect(
       backend.shellExec(ctx, { command: "true" }, callOptions),
@@ -444,7 +461,7 @@ describe("DockerSandboxTransport — provisioning", () => {
     setImageMissing();
     mockState.pullError = new Error("pull access denied");
 
-    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    const backend = makeBackend();
 
     await expect(
       backend.shellExec(ctx, { command: "true" }, callOptions),
@@ -457,7 +474,7 @@ describe("DockerSandboxTransport — provisioning", () => {
     queueExec({ exitCode: 0 });
     queueExec({ exitCode: 0 });
 
-    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    const backend = makeBackend();
     await Promise.all([
       backend.shellExec(ctx, { command: "a" }, callOptions),
       backend.shellExec(ctx, { command: "b" }, callOptions),
@@ -472,7 +489,7 @@ describe("DockerSandboxTransport — argv safety", () => {
     setupFreshProvision();
     queueExec({ stdout: "data", exitCode: 0 });
 
-    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    const backend = makeBackend();
     const malicious = `foo";rm -rf /`;
     await backend.fsRead(ctx, { path: malicious }, callOptions);
 
@@ -490,7 +507,7 @@ describe("DockerSandboxTransport — argv safety", () => {
     setupFreshProvision();
     queueExec({ stdout: "a".repeat(MAX_READ_BYTES + 5_000), exitCode: 0 });
 
-    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    const backend = makeBackend();
     const res = await backend.fsRead(ctx, { path: "big.txt" }, callOptions);
 
     expect(res.content).toHaveLength(MAX_READ_BYTES);
@@ -503,7 +520,7 @@ describe("DockerSandboxTransport — argv safety", () => {
     );
     queueExec({ stdout: "", exitCode: 0 });
 
-    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    const backend = makeBackend();
     await backend.fsList(ctx, { glob: "**/*.ts" }, callOptions);
 
     const call = mockState.execCalls[0] as { Cmd: string[] };
@@ -525,7 +542,7 @@ describe("DockerSandboxTransport — argv safety", () => {
       setupFreshProvision();
       queueExec({ stderr, exitCode: 1 });
 
-      const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+      const backend = makeBackend();
 
       await expect(
         backend.fsRead(ctx, { path: "nope" }, callOptions),
@@ -537,7 +554,7 @@ describe("DockerSandboxTransport — argv safety", () => {
     mockState.existingContainer = makeFakeContainer();
     queueExec({ exitCode: 0 });
 
-    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    const backend = makeBackend();
     await backend.fsWrite(
       ctx,
       {
@@ -560,7 +577,7 @@ describe("DockerSandboxTransport — argv safety", () => {
     mockState.existingContainer = makeFakeContainer();
     queueExec({ exitCode: 1 });
 
-    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    const backend = makeBackend();
 
     await expect(
       backend.fsWrite(
@@ -580,7 +597,7 @@ describe("DockerSandboxTransport — argv safety", () => {
     setupFreshProvision();
     queueExec({ exitCode: 0 });
 
-    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    const backend = makeBackend();
     await expect(
       backend.fsWrite(
         ctx,
@@ -603,7 +620,7 @@ describe("DockerSandboxTransport — argv safety", () => {
       Promise.resolve({ State: { Running: true } }),
     );
 
-    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    const backend = makeBackend();
     await backend.fsWrite(
       ctx,
       {
@@ -619,6 +636,16 @@ describe("DockerSandboxTransport — argv safety", () => {
   });
 });
 
+function tarEntryName(tar: Buffer): string {
+  const nameBytes = tar.subarray(0, 100);
+  const nul = nameBytes.indexOf(0);
+  return nameBytes.subarray(0, nul === -1 ? 100 : nul).toString("utf8");
+}
+
+function tarEntrySize(tar: Buffer): number {
+  return Number.parseInt(tar.subarray(124, 136).toString("utf8"), 8);
+}
+
 describe("DockerSandboxTransport — byte transfer", () => {
   it("round-trips a binary payload byte-identical through putArchive and a read", async () => {
     mockState.existingContainer = makeFakeContainer();
@@ -628,7 +655,7 @@ describe("DockerSandboxTransport — byte transfer", () => {
       randomBytes(4096),
     ]);
 
-    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    const backend = makeBackend();
     await backend.fsWriteBytes!(
       ctx,
       { path: "bin/blob", bytes: new Uint8Array(payload) },
@@ -636,7 +663,7 @@ describe("DockerSandboxTransport — byte transfer", () => {
     );
 
     const tar = mockState.putArchiveCalls[0].buffer;
-    const size = Number.parseInt(tar.subarray(124, 135).toString("utf8"), 8);
+    const size = tarEntrySize(tar);
     queueExec({ stdout: tar.subarray(512, 512 + size), exitCode: 0 });
 
     const read = await backend.fsReadBytes!(
@@ -655,38 +682,68 @@ describe("DockerSandboxTransport — byte transfer", () => {
   });
 });
 
-describe("DockerSandboxTransport — tar builder", () => {
-  it("buildSingleFileTar produces a parseable ustar archive", () => {
-    const content = Buffer.from("hello world", "utf8");
-    const tar = buildSingleFileTar("a/b.txt", content);
+describe("DockerSandboxTransport — archive handed to putArchive", () => {
+  function makeTarBackend() {
+    mockState.existingContainer = makeFakeContainer();
+    queueExec({ exitCode: 0 });
+    return makeBackend();
+  }
+
+  async function writeAndCaptureTar(
+    backend: ReturnType<typeof makeTarBackend>,
+    path: string,
+    content: string,
+  ): Promise<Buffer> {
+    await backend.fsWrite(
+      ctx,
+      { path, content, mode: "overwrite" },
+      callOptions,
+    );
+    const archive = mockState.putArchiveCalls.at(-1);
+    if (!archive) throw new Error("fsWrite handed no archive to putArchive");
+    return archive.buffer;
+  }
+
+  it("writes the file's bytes as a parseable ustar entry", async () => {
+    const content = "hello world";
+    const tar = await writeAndCaptureTar(makeTarBackend(), "a/b.txt", content);
 
     expect(tar.length % 512).toBe(0);
     expect(tar.subarray(257, 262).toString("utf8")).toBe("ustar");
 
     const sizeField = tar.subarray(124, 136).toString("utf8");
-    const expectedSize = content.length.toString(8).padStart(11, "0") + " ";
+    const expectedSize =
+      Buffer.byteLength(content).toString(8).padStart(11, "0") + " ";
     expect(sizeField).toBe(expectedSize);
-
-    const nameBytes = tar.subarray(0, 100);
-    const nul = nameBytes.indexOf(0);
-    const name = nameBytes.subarray(0, nul === -1 ? 100 : nul).toString("utf8");
-    expect(name).toBe("a/b.txt");
+    expect(tarEntrySize(tar)).toBe(Buffer.byteLength(content));
   });
 
-  it("buildSingleFileTar strips leading slashes from entry name", () => {
-    const tar = buildSingleFileTar("/leading", Buffer.from("x"));
-    const nameBytes = tar.subarray(0, 100);
-    const nul = nameBytes.indexOf(0);
-    expect(nameBytes.subarray(0, nul).toString("utf8")).toBe("leading");
+  it("names the entry after the file alone, never the parent path", async () => {
+    const backend = makeTarBackend();
+
+    expect(
+      tarEntryName(await writeAndCaptureTar(backend, "a/b.txt", "x")),
+    ).toBe("b.txt");
   });
 
-  it("buildSingleFileTar refuses an entry name over the 100-byte ustar field", () => {
-    expect(() =>
-      buildSingleFileTar("a".repeat(100), Buffer.from("x")),
-    ).not.toThrow();
-    expect(() => buildSingleFileTar("a".repeat(101), Buffer.from("x"))).toThrow(
-      /too long/,
+  it("refuses an entry name over the 100-byte ustar field", async () => {
+    const backend = makeTarBackend();
+
+    await backend.fsWrite(
+      ctx,
+      { path: "a".repeat(100), content: "x", mode: "overwrite" },
+      callOptions,
     );
+    expect(mockState.putArchiveCalls).toHaveLength(1);
+
+    await expect(
+      backend.fsWrite(
+        ctx,
+        { path: "a".repeat(101), content: "x", mode: "overwrite" },
+        callOptions,
+      ),
+    ).rejects.toThrow(/too long/);
+    expect(mockState.putArchiveCalls).toHaveLength(1);
   });
 });
 
@@ -696,7 +753,7 @@ describe("DockerSandboxTransport — destroy() idempotence", () => {
     mockState.containerStop = () =>
       Promise.reject(makeStatusError("no such container", 404));
 
-    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    const backend = makeBackend();
     await expect(backend.destroy(ctx)).resolves.toBeUndefined();
     expect(pluginLogger.warn).not.toHaveBeenCalled();
   });
@@ -706,7 +763,7 @@ describe("DockerSandboxTransport — destroy() idempotence", () => {
     mockState.containerStop = () =>
       Promise.reject(makeStatusError("already stopped", 304));
 
-    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    const backend = makeBackend();
     await expect(backend.destroy(ctx)).resolves.toBeUndefined();
     expect(pluginLogger.warn).not.toHaveBeenCalled();
   });
@@ -718,7 +775,7 @@ describe("DockerSandboxTransport — destroy() idempotence", () => {
     mockState.volumeRemove = () =>
       Promise.reject(makeStatusError("not found", 404));
 
-    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    const backend = makeBackend();
     await expect(backend.destroy(ctx)).resolves.toBeUndefined();
     expect(pluginLogger.warn).not.toHaveBeenCalled();
   });
@@ -738,7 +795,7 @@ describe("DockerSandboxTransport — destroy() idempotence", () => {
       return Promise.resolve(undefined);
     };
 
-    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    const backend = makeBackend();
     await backend.destroy(ctx);
 
     expect(pluginLogger.warn).toHaveBeenCalledTimes(1);
@@ -754,9 +811,9 @@ describe("DockerSandboxTransport — destroy() idempotence", () => {
 
 function execMarker(call: Record<string, unknown>): string {
   const env = (call.Env as string[] | undefined) ?? [];
-  const entry = env.find((e) => e.startsWith(`${EXEC_MARKER_VAR}=`));
+  const entry = env.find((e) => e.startsWith("PLATYPUS_EXEC_ID="));
   if (!entry) throw new Error("exec carries no marker");
-  return entry.slice(EXEC_MARKER_VAR.length + 1);
+  return entry.slice("PLATYPUS_EXEC_ID=".length);
 }
 
 function killCallsFor(marker: string): Record<string, unknown>[] {
@@ -770,7 +827,7 @@ describe("DockerSandboxTransport — shellExec output handling", () => {
     setupFreshProvision();
     queueExec({ closeDelayMs: 200, exitCode: 0 });
 
-    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    const backend = makeBackend();
     const res = await backend.shellExec(
       ctx,
       {
@@ -787,7 +844,7 @@ describe("DockerSandboxTransport — shellExec output handling", () => {
     setupFreshProvision();
     queueExec({ closeDelayMs: 5_000, exitCode: 0 });
 
-    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    const backend = makeBackend();
     const controller = new AbortController();
     const inflight = backend.shellExec(
       ctx,
@@ -804,7 +861,7 @@ describe("DockerSandboxTransport — shellExec output handling", () => {
     setupFreshProvision();
     queueExec({ hangCreate: true });
 
-    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    const backend = makeBackend();
     const controller = new AbortController();
     const inflight = backend.shellExec(
       ctx,
@@ -826,7 +883,7 @@ describe("DockerSandboxTransport — shellExec output handling", () => {
       onStart: () => controller.abort(),
     });
 
-    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    const backend = makeBackend();
 
     await expect(
       backend.shellExec(
@@ -842,7 +899,7 @@ describe("DockerSandboxTransport — shellExec output handling", () => {
     const huge = "a".repeat(MAX_SHELL_OUTPUT_BYTES + 5_000);
     queueExec({ stdout: huge, exitCode: 0 });
 
-    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    const backend = makeBackend();
     const res = await backend.shellExec(ctx, { command: "yes" }, callOptions);
 
     expect(res.stdout.startsWith("a".repeat(SHELL_OUTPUT_HEAD_BYTES))).toBe(
@@ -863,7 +920,7 @@ describe("DockerSandboxTransport — ending a command that did not finish", () =
     setupFreshProvision();
     queueExec({ closeDelayMs: 5_000, exitCode: 0 });
 
-    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    const backend = makeBackend();
     const res = await backend.shellExec(
       ctx,
       { command: "sleep infinity", timeoutMs: 20 },
@@ -879,7 +936,7 @@ describe("DockerSandboxTransport — ending a command that did not finish", () =
     setupFreshProvision();
     queueExec({ closeDelayMs: 5_000, exitCode: 0 });
 
-    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    const backend = makeBackend();
     const controller = new AbortController();
     const inflight = backend.shellExec(
       ctx,
@@ -907,7 +964,7 @@ describe("DockerSandboxTransport — ending a command that did not finish", () =
     });
     queueExec({ onStart: () => (startedBeforeKill = commandStarted) });
 
-    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    const backend = makeBackend();
     const controller = new AbortController();
     const inflight = backend.shellExec(
       ctx,
@@ -927,7 +984,7 @@ describe("DockerSandboxTransport — ending a command that did not finish", () =
     setupFreshProvision();
     queueExec({ stdout: "hi", exitCode: 0 });
 
-    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    const backend = makeBackend();
     await backend.shellExec(ctx, { command: "echo hi" }, callOptions);
 
     expect(mockState.execCalls).toHaveLength(2);
@@ -938,7 +995,7 @@ describe("DockerSandboxTransport — ending a command that did not finish", () =
     queueExec({ exitCode: 0 });
     queueExec({ exitCode: 0 });
 
-    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    const backend = makeBackend();
     await backend.shellExec(
       ctx,
       { command: "true", env: { FOO: "bar" } },
@@ -955,16 +1012,16 @@ describe("DockerSandboxTransport — ending a command that did not finish", () =
     setupFreshProvision();
     queueExec({ exitCode: 0 });
 
-    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    const backend = makeBackend();
     await backend.shellExec(
       ctx,
-      { command: "true", env: { [EXEC_MARKER_VAR]: "spoofed" } },
+      { command: "true", env: { PLATYPUS_EXEC_ID: "spoofed" } },
       callOptions,
     );
 
     const env = mockState.execCalls[1].Env as string[];
-    expect(env.at(-1)).toMatch(new RegExp(`^${EXEC_MARKER_VAR}=`));
-    expect(env.at(-1)).not.toBe(`${EXEC_MARKER_VAR}=spoofed`);
+    expect(env.at(-1)).toMatch(/^PLATYPUS_EXEC_ID=/);
+    expect(env.at(-1)).not.toBe("PLATYPUS_EXEC_ID=spoofed");
   });
 
   it("still reports the timeout when the kill cannot be delivered", async () => {
@@ -973,7 +1030,7 @@ describe("DockerSandboxTransport — ending a command that did not finish", () =
     queueExec({ closeDelayMs: 600_000, exitCode: 0 });
     queueExec({ hangCreate: true });
 
-    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    const backend = makeBackend();
     const inflight = backend.shellExec(
       ctx,
       { command: "sleep infinity", timeoutMs: 20 },
@@ -993,7 +1050,7 @@ describe("DockerSandboxTransport — ending a command that did not finish", () =
     setupFreshProvision();
     queueExec({ closeDelayMs: 3_600_000, exitCode: 0 });
 
-    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    const backend = makeBackend();
     const inflight = backend.fsRead(ctx, { path: "fifo" }, callOptions);
     const settled = expect(inflight).rejects.toThrow(/timed out/);
     await vi.advanceTimersByTimeAsync(120_000);
@@ -1007,7 +1064,7 @@ describe("DockerSandboxTransport — ending a command that did not finish", () =
     setupFreshProvision();
     queueExec({ closeDelayMs: 3_600_000, exitCode: 0 });
 
-    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    const backend = makeBackend();
     const controller = new AbortController();
     const inflight = backend.fsRead(
       ctx,
@@ -1030,7 +1087,7 @@ describe("DockerSandboxTransport — exit status", () => {
     setupFreshProvision();
     queueExec({ stdout: "hi", inspectError: new Error("daemon gone") });
 
-    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    const backend = makeBackend();
 
     await expect(
       backend.shellExec(ctx, { command: "false" }, callOptions),
@@ -1041,7 +1098,7 @@ describe("DockerSandboxTransport — exit status", () => {
     setupFreshProvision();
     queueExec({ inspectExitCodes: [null, null, 3] });
 
-    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    const backend = makeBackend();
     const res = await backend.shellExec(
       ctx,
       { command: "exit 3" },
@@ -1055,7 +1112,7 @@ describe("DockerSandboxTransport — exit status", () => {
     setupFreshProvision();
     queueExec({ inspectExitCodes: [null] });
 
-    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    const backend = makeBackend();
 
     await expect(
       backend.shellExec(ctx, { command: "true" }, callOptions),
@@ -1070,11 +1127,10 @@ describe("DockerSandboxTransport — host reachability (ADR-0005)", () => {
     setupFreshProvision();
     queueExec({ exitCode: 0 });
 
-    const backend = createDockerSandboxBackend(
-      { extraHosts: ["host.docker.internal:host-gateway"] },
-      {},
-      withPluginLogger(),
-    );
+    const backend = makeBackend({
+      networks: [],
+      extraHosts: ["host.docker.internal:host-gateway"],
+    });
     await backend.shellExec(ctx, { command: "true" }, callOptions);
 
     expect(mockState.createContainerCalls[0].HostConfig?.ExtraHosts).toEqual([
@@ -1086,11 +1142,10 @@ describe("DockerSandboxTransport — host reachability (ADR-0005)", () => {
     setupFreshProvision();
     queueExec({ exitCode: 0 });
 
-    const backend = createDockerSandboxBackend(
-      { networks: ["primary", "secondary", "tertiary"] },
-      {},
-      withPluginLogger(),
-    );
+    const backend = makeBackend({
+      networks: ["primary", "secondary", "tertiary"],
+      extraHosts: [],
+    });
     await backend.shellExec(ctx, { command: "true" }, callOptions);
 
     expect(mockState.createContainerCalls[0].HostConfig?.NetworkMode).toBe(
@@ -1109,11 +1164,7 @@ describe("DockerSandboxTransport — host reachability (ADR-0005)", () => {
     setupFreshProvision();
     queueExec({ exitCode: 0 });
 
-    const backend = createDockerSandboxBackend(
-      { networks: ["only"] },
-      {},
-      withPluginLogger(),
-    );
+    const backend = makeBackend({ networks: ["only"], extraHosts: [] });
     await backend.shellExec(ctx, { command: "true" }, callOptions);
 
     expect(mockState.createContainerCalls[0].HostConfig?.NetworkMode).toBe(
@@ -1196,7 +1247,7 @@ describe("DockerSandboxTransport — plugin-injected logger", () => {
   it("writes the image-pull line to the injected logger, not core's", async () => {
     setupFreshProvision();
     queueExec({ stdout: "hi", exitCode: 0 });
-    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    const backend = makeBackend();
     await backend.shellExec(ctx, { command: "echo hi" }, callOptions);
 
     expect(mockState.pullCalls).toEqual(["debian:stable-slim"]);
@@ -1215,7 +1266,7 @@ describe("DockerSandboxTransport — plugin-injected logger", () => {
       Promise.reject(makeStatusError("internal", 500));
     mockState.volumeRemove = () =>
       Promise.reject(makeStatusError("internal", 500));
-    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    const backend = makeBackend();
     await backend.destroy(ctx);
 
     expect(pluginLogger.warn.mock.calls.map((c) => c[1])).toEqual([
@@ -1229,7 +1280,11 @@ describe("DockerSandboxTransport — plugin-injected logger", () => {
     setupFreshProvision();
     queueExec({ stdout: "hi", exitCode: 0 });
     const contribution = plugin.contributes.sandboxBackends![0];
-    const backend = contribution.create({}, {}, withPluginLogger());
+    const backend = contribution.create(
+      { networks: [], extraHosts: [] },
+      {},
+      withPluginLogger(),
+    );
     await backend.shellExec(ctx, { command: "echo hi" }, callOptions);
 
     expect(pluginLogger.info).toHaveBeenCalledWith(
@@ -1268,7 +1323,7 @@ describe("DockerSandboxTransport — plugin-injected logger", () => {
       baseLogger,
     });
 
-    const backend = captured[0].create({}, {});
+    const backend = captured[0].create({ networks: [], extraHosts: [] }, {});
     await backend.shellExec(ctx, { command: "echo hi" }, callOptions);
 
     expect(lines).toContainEqual({
