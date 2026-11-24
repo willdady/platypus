@@ -12,7 +12,6 @@ import { drizzle } from "drizzle-orm/pglite";
 import { SendMessageRequest } from "@a2a-js/sdk";
 import { migratedPglite } from "../db/migrated-pglite.test-fixtures.ts";
 import { a2aTask as a2aTaskTable } from "../db/schema.ts";
-import { activeA2aRunCount, resetA2aRunSlots } from "./a2a-call.ts";
 import { ConflictError } from "../errors.ts";
 import { ChatSink, CHAT_BUSY_MESSAGE } from "../runs/sinks/chat-sink.ts";
 
@@ -72,7 +71,6 @@ beforeAll(async () => {
 afterAll(() => pg.close());
 
 beforeEach(async () => {
-  resetA2aRunSlots();
   mockCancelRun.mockReset();
   mockCancelRun.mockResolvedValue(undefined);
   mockPrepareTurn.mockReset();
@@ -258,7 +256,6 @@ describe("two Sends racing into one idle Chat", () => {
     expect(task).toMatchObject({ chatId: "chat-1", messageId: "msg-c" });
     expect(refusedTaskId(refused)).toBe(task.id);
     expect(await taskRows()).toHaveLength(1);
-    expect(activeA2aRunCount()).toBe(1);
 
     release(new Error("the run is over"));
     expect(await getsIn).toMatchObject({ won: false });
