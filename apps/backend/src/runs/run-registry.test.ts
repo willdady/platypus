@@ -86,34 +86,42 @@ describe("RunRegistry", () => {
     });
   });
 
-  describe("a cancel decided at a moment", () => {
-    it("stops a run that started before it", () => {
-      const handle = registry.register("run-1");
-      const decidedAt = Date.now() + 1;
+  describe("a cancel for a turn", () => {
+    it("stops the run of that turn", () => {
+      const handle = registry.register("run-1", { turnId: "msg-a" });
 
-      expect(registry.cancel("run-1", { startedBefore: decidedAt })).toBe(true);
+      expect(registry.cancel("run-1", { turnId: "msg-a" })).toBe(true);
       expect(handle.signal.aborted).toBe(true);
     });
 
-    it("spares a run that started after it, under the same id", () => {
-      const decidedAt = Date.now();
-      vi.advanceTimersByTime(10);
+    it("spares a run for another turn under the same id", () => {
+      const handle = registry.register("run-1", { turnId: "msg-b" });
+
+      expect(registry.cancel("run-1", { turnId: "msg-a" })).toBe(false);
+      expect(handle.signal.aborted).toBe(false);
+    });
+
+    it("spares a run that names no turn, since it cannot be the turn asked for", () => {
       const handle = registry.register("run-1");
 
-      expect(registry.cancel("run-1", { startedBefore: decidedAt })).toBe(
-        false,
-      );
+      expect(registry.cancel("run-1", { turnId: "msg-a" })).toBe(false);
       expect(handle.signal.aborted).toBe(false);
+    });
+
+    it("stops a run when the cancel names no turn", () => {
+      const handle = registry.register("run-1", { turnId: "msg-a" });
+
+      expect(registry.cancel("run-1")).toBe(true);
+      expect(handle.signal.aborted).toBe(true);
     });
   });
 
-  it("lists the runs it holds, with when each started", () => {
-    const startedAt = Date.now();
-    registry.register("run-1");
-    registry.register("run-2");
+  it("lists the runs it holds, with the turn each is for", () => {
+    registry.register("run-1", { turnId: "msg-a" });
+    registry.register("run-2", { turnId: "msg-b" });
     registry.cancel("run-2");
 
-    expect(registry.heldRuns()).toEqual([{ runId: "run-1", startedAt }]);
+    expect(registry.heldRuns()).toEqual([{ runId: "run-1", turnId: "msg-a" }]);
   });
 
   it("cancel is idempotent", () => {

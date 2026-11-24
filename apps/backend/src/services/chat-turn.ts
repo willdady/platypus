@@ -111,8 +111,10 @@ export const startChatTurn = async (params: {
 
   const chatSummaries = await loadChatSummaries(chatId);
 
+  const turnId = turn.turnId;
   const input: RunInput = {
     runId: chatId,
+    turnId,
     request,
     messages,
     chatSummaries,
@@ -122,7 +124,6 @@ export const startChatTurn = async (params: {
     memoryTools: includeMemories,
   };
 
-  const turnId = turn.message?.id ?? turn.parentId;
   const a2a = isA2aChat(existingChat[0] ?? newChat);
   const sink = new ChatSink({
     orgId: scope.orgId,

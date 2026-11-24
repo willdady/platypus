@@ -2906,7 +2906,7 @@ describe("POST /a2a/:endpointId — CancelTask", () => {
       status: { state: "TASK_STATE_CANCELED" },
     });
     expect(cancelRun).toHaveBeenCalledWith(task.contextId, {
-      startedBefore: expect.any(Date) as unknown,
+      turnId: "msg-a",
     });
     await vi.waitFor(() =>
       expect(rows("chat")[0]).toMatchObject({ status: "cancelled" }),
@@ -2922,7 +2922,7 @@ describe("POST /a2a/:endpointId — CancelTask", () => {
 
     expect(res.body.result.status.state).toBe("TASK_STATE_CANCELED");
     expect(cancelRun).toHaveBeenCalledWith("chat-1", {
-      startedBefore: expect.any(Date) as unknown,
+      turnId: "msg-a",
     });
     expect(rows("a2a_task")[0]).toMatchObject({
       state: "canceled",
@@ -3098,6 +3098,138 @@ describe("POST /a2a/:endpointId — CancelTask", () => {
 
     expect(rows("chat")[0]).toMatchObject({ status: "running" });
     expect(await stateOf(next.id)).toMatch(/SUBMITTED|WORKING/);
+  });
+
+  it("stops the canceled turn's run however old the cancel's stamp is", async () => {
+    seedConversation();
+    const task = await startMidReply();
+    const [claimed] = rows("a2a_task");
+    claimed.state = "canceled";
+    claimed.canceledAt = HOUR_AGO;
+
+    await stopCanceledA2aRuns();
+
+    await vi.waitFor(() =>
+      expect(rows("chat")[0]).toMatchObject({ status: "cancelled" }),
+    );
+    expect(await stateOf(task.id)).toBe("TASK_STATE_CANCELED");
+  });
+
+  it("spares a regenerated reply of a canceled turn, once its run has settled the cancel", async () => {
+    seedConversation();
+    const task = await startMidReply();
+    await rpc("CancelTask", { id: task.id });
+    await vi.waitFor(() =>
+      expect(rows("chat")[0]).toMatchObject({ status: "cancelled" }),
+    );
+    expect(rows("a2a_task")[0]).toMatchObject({
+      state: "canceled",
+      canceledAt: null,
+    });
+    const reply = rows("chat_message").find((m) => m.role === "assistant")!;
+
+    model.holdMidReply = new Promise(() => {});
+    await startChatTurn({
+      scope: {
+        principal: { kind: "user", userId: "owner-1", name: "Olive Owner" },
+        orgId: "org-1",
+        workspaceId: "ws-1",
+        isWorkspaceOwner: true,
+      },
+      chatId: task.contextId,
+      request: {
+        trigger: "regenerate-message",
+        messageId: reply.id as string,
+        agentId: "agent-1",
+      },
+      includeMemories: false,
+      origin: "http://localhost",
+    });
+    await vi.waitFor(() => expect(model.prompts).toHaveLength(2));
+
+    await stopCanceledA2aRuns();
+
+    expect(rows("chat")[0]).toMatchObject({ status: "running" });
+    await cancelRun(task.contextId);
+    await vi.waitFor(() =>
+      expect(rows("chat")[0]).toMatchObject({ status: "cancelled" }),
+    );
+  });
+
+  it("stops an approvals continuation in the canceled turn's pre-reply window, and its end clears the stamp", async () => {
+    const asked = {
+      type: "tool-wipe",
+      toolCallId: "tc1",
+      state: "approval-requested",
+      input: { path: "/data" },
+      approval: { id: "ap1", requestReason: "Looks risky." },
+    };
+    seedConversation({
+      chat: [
+        {
+          id: "chat-1",
+          workspaceId: "ws-1",
+          agentId: "agent-1",
+          title: "Approvals",
+          status: "succeeded",
+          activeLeafId: "reply-a",
+          a2aTokenId: "tok-1",
+          a2aEndpointId: "ep-1",
+        },
+      ],
+      chat_message: [
+        message("msg-a", null, "user", "Where is my order?"),
+        {
+          ...message("reply-a", "msg-a", "assistant", "Hello"),
+          parts: [{ type: "text", text: "Hello" }, asked],
+        },
+      ],
+      a2a_task: [
+        {
+          id: "task-1",
+          chatId: "chat-1",
+          messageId: "msg-a",
+          endpointId: "ep-1",
+          tokenId: "tok-1",
+          state: null,
+          canceledAt: null,
+          replyId: null,
+          statusAt: HOUR_AGO,
+          createdAt: HOUR_AGO,
+        },
+      ],
+    });
+    model.holdMidReply = new Promise(() => {});
+    await startChatTurn({
+      scope: {
+        principal: { kind: "user", userId: "owner-1", name: "Olive Owner" },
+        orgId: "org-1",
+        workspaceId: "ws-1",
+        isWorkspaceOwner: true,
+      },
+      chatId: "chat-1",
+      request: {
+        trigger: "respond-to-approvals",
+        messageId: "reply-a",
+        responses: [{ approvalId: "ap1", approved: false }],
+        agentId: "agent-1",
+      },
+      includeMemories: false,
+      origin: "http://localhost",
+    });
+    await vi.waitFor(() => expect(model.prompts).toHaveLength(1));
+
+    const res = await rpc("CancelTask", { id: "task-1" });
+
+    expect(res.body.result.status.state).toBe("TASK_STATE_CANCELED");
+    expect(cancelRun).toHaveBeenCalledWith("chat-1", { turnId: "msg-a" });
+    await vi.waitFor(() =>
+      expect(rows("chat")[0]).toMatchObject({ status: "cancelled" }),
+    );
+    expect(rows("a2a_task")[0]).toMatchObject({
+      state: "canceled",
+      canceledAt: null,
+    });
   });
 
   it("reads nothing at a sweep while this instance holds no run", async () => {
@@ -5760,7 +5892,7 @@ describe("POST /a2a/:endpointId — cutting off access stops running work", () =
       await cutOff();
 
       expect(cancelRun).toHaveBeenCalledWith(task.contextId, {
-        startedBefore: expect.any(Date) as unknown,
+        turnId: "msg-a",
       });
       expect(taskRow(task.id)).toMatchObject({ state: "canceled" });
       await vi.waitFor(() =>

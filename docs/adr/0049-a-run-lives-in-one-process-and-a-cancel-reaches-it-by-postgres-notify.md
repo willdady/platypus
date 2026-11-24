@@ -25,3 +25,12 @@ write, such as a field from a newer version during a rolling deploy, is logged
 and dropped rather than half-read. A payload that does not parse never throws,
 because the handler runs on the shared listener connection, and one bad
 notification must not take the channel down for every other cancel.
+
+## Amended by ADR-0052
+
+The claim that a cancel carries the moment it was decided, and so stops only a
+run claimed before then, is withdrawn. A cancel now carries the turn it means
+to stop, and the sweep over canceled Tasks matches turns rather than clock
+stamps, so instances never compare clocks to choose a run. The rest of this ADR
+stands: one process holds the run, the cancel reaches it by `NOTIFY` at most
+once, and the payload is read strictly.

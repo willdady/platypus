@@ -169,8 +169,13 @@ describe("cancelTask", () => {
 
     expect(claimed).toMatchObject({ id: "task-1", state: "canceled" });
     expect(ended).toBeUndefined();
-    expect(await taskRow()).toMatchObject({ state: "canceled" });
-    expect(mockCancelRun).toHaveBeenCalledOnce();
+    expect(await taskRow()).toMatchObject({
+      state: "canceled",
+      canceledAt: null,
+    });
+    expect(mockCancelRun).toHaveBeenCalledExactlyOnceWith("chat-1", {
+      turnId: "msg-1",
+    });
     expect(pushedStates()).toEqual(["TASK_STATE_CANCELED"]);
   });
 
