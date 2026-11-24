@@ -11,6 +11,7 @@ import { driveChat, driveDelegate, driveOnce } from "./drive.ts";
 import { CONTEXT_OVERFLOW_MESSAGE } from "./stream-error.ts";
 import { TOOL_RESULT_TOO_LARGE } from "./context-overflow-recovery.ts";
 import type { RunStatus } from "./types.ts";
+import { TEST_USAGE_MODEL } from "./run-plan.test-fixtures.ts";
 
 const USAGE = {
   inputTokens: {
@@ -87,6 +88,7 @@ const scriptedModel = (...script: Reply[]) => {
 
 const planOf = (model: MockLanguageModelV3) => ({
   model,
+  usageModel: TEST_USAGE_MODEL,
   maxSteps: 5,
   tools: {
     readBig: {

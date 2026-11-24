@@ -6,9 +6,6 @@ import {
   resetMockDb,
 } from "../test-utils.ts";
 import app from "../server.ts";
-import { mockNanoid } from "../test-setup.ts";
-
-mockNanoid.mockReturnValue("test-id-123");
 
 describe("Notification Routes", () => {
   beforeEach(() => {

@@ -77,10 +77,6 @@ export class RunRegistry {
     return this.stopRequested;
   }
 
-  resetStopStateForTests(): void {
-    this.stopRequested = false;
-  }
-
   register(runId: RunId, options: RegisterOptions = {}): RunHandle {
     if (this.stopping) {
       throw new ServiceUnavailableError("Server is shutting down");

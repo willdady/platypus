@@ -19,6 +19,7 @@ import {
 import type { SubAgentActivity } from "@platypus/schemas";
 import { DELEGATE_TOOL_NAME } from "./turn-tool-names.ts";
 import { runRegistry } from "../runs/run-registry.ts";
+import { TEST_USAGE_MODEL } from "../runs/run-plan.test-fixtures.ts";
 import { orgScope, workspaceScope, type WorkspaceScope } from "../scope.ts";
 import { DEFAULT_AGENT_MAX_STEPS } from "@platypus/schemas";
 
@@ -162,6 +163,7 @@ const buildOptions = (
     ...rest,
     plan: {
       model,
+      usageModel: TEST_USAGE_MODEL,
       maxSteps,
       ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
       ...sampling,

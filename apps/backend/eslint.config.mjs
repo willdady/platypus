@@ -100,6 +100,7 @@ const eslintConfig = defineConfig([
       "**/*.test.ts",
       "**/*.test-fixtures.ts",
       "src/test-utils.ts",
+      "src/test-mocks.ts",
       "src/fake-db.ts",
       "src/test-setup.ts",
       "vitest.config.ts",

@@ -15,6 +15,7 @@ import type {
 import { startRun } from "./run-lifecycle.ts";
 import { driveChat, driveDelegate, driveOnce } from "./drive.ts";
 import type { RunPlan } from "./run-plan.ts";
+import { TEST_USAGE_MODEL } from "./run-plan.test-fixtures.ts";
 import { RunEventRecorder } from "./run-events.ts";
 import type { RunStatus } from "./types.ts";
 import type { PlatypusUIMessage } from "../types.ts";
@@ -144,6 +145,7 @@ const planWith = (
   gateScope: ToolGateScope | undefined = SCOPE,
 ): RunPlan => ({
   model,
+  usageModel: TEST_USAGE_MODEL,
   maxSteps: 12,
   gateScope,
   tools: {
@@ -365,6 +367,7 @@ describe("an MCP tool", () => {
     await driveOnce({
       plan: {
         model,
+        usageModel: TEST_USAGE_MODEL,
         maxSteps: 4,
         gateScope: SCOPE,
         tools: {
@@ -939,6 +942,7 @@ describe("a Tool gate's result stage", () => {
     const drive = driveChat({
       plan: {
         model,
+        usageModel: TEST_USAGE_MODEL,
         maxSteps: 4,
         gateScope: { ...SCOPE, attended: true },
         tools: { [DELEGATE_TOOL_NAME]: createDelegateTool([delegate]) },
@@ -1028,6 +1032,7 @@ describe("a Tool gate's result stage", () => {
     const drive = driveChat({
       plan: {
         model,
+        usageModel: TEST_USAGE_MODEL,
         maxSteps: 4,
         gateScope: { ...SCOPE, attended: true },
         tools: { [DELEGATE_TOOL_NAME]: createDelegateTool([delegate]) },

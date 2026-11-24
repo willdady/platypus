@@ -1,8 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import { nanoid } from "nanoid";
 import { mockSession, resetMockDb, seedDb, type Row } from "../test-utils.ts";
-import { mockNanoid } from "../test-setup.ts";
 import { hashBearerToken } from "../services/bearer-token.ts";
 import app from "../server.ts";
+
+vi.mock("nanoid", { spy: true });
 
 const baseUrl = "/organizations/org-1/workspaces/ws-1/a2a-endpoints";
 const createdAt = new Date("2026-09-01T00:00:00.000Z");
@@ -168,7 +170,7 @@ describe("A2A endpoint routes", () => {
     });
 
     it("creates an endpoint under a minted id, defaulting name and description to the Agent's", async () => {
-      mockNanoid.mockReturnValueOnce("minted-endpoint-id-0001");
+      vi.mocked(nanoid).mockReturnValueOnce("minted-endpoint-id-0001");
       const fake = seed({ endpoints: [] });
 
       const res = await send("", "POST", { agentId: "agent-1" });
@@ -303,7 +305,7 @@ describe("A2A endpoint routes", () => {
     });
 
     it("issues a named token, shown once and stored only as its hash", async () => {
-      mockNanoid.mockReturnValueOnce("tok-1");
+      vi.mocked(nanoid).mockReturnValueOnce("tok-1");
       const fake = seed();
 
       const res = await send("/ep-1/tokens", "POST", {

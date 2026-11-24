@@ -1639,6 +1639,46 @@ describe("chat-execution", () => {
         expect(turn.stream.tools).not.toHaveProperty("read_url");
       });
 
+      it("hands the turn's abort signal to the web backend's factory", async () => {
+        const createExecutors = vi.fn(() => ({
+          web_search: () => ({ query: "q", results: [] }),
+        }));
+        registerWebBackend(
+          composeWebBackend({
+            contribution: {
+              backend: "searx",
+              name: "SearXNG",
+              createExecutors,
+            },
+            backend: "searx",
+            pluginName: "@acme/searx",
+            plugin: makePluginContext(),
+          }),
+        );
+        const turnAbort = new AbortController();
+        turnAbort.abort();
+
+        const turn = await prepareChatTurn(
+          {
+            ...baseInput,
+            signal: turnAbort.signal,
+            request: {
+              providerId: googleProvider.id,
+              modelId: "gpt-4",
+              search: true,
+            },
+          },
+          createInMemoryChatTurnQueries({
+            workspaces: [baseWorkspace],
+            providers: [{ ...googleProvider, searchSource: "searx" }],
+          }),
+        );
+
+        expect(createExecutors).not.toHaveBeenCalled();
+        expect(turn.stream.tools).not.toHaveProperty("web_search");
+        expect(turn.searchUnavailable).toBe(false);
+      });
+
       it("serves the web backend instead of native search when one is set", async () => {
         const backend = register({
           read_url: () => ({ content: "", url: "" }),
