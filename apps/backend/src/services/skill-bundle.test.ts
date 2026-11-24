@@ -17,7 +17,6 @@ import type { Tool } from "ai";
 import { z } from "zod";
 import type { SandboxBackend } from "@platypuschat/plugin-sdk";
 import { getStorage } from "../storage/index.ts";
-import { mockNanoid } from "../test-setup.ts";
 import { useTempDiskStorage } from "../storage/temp-disk.test-fixtures.ts";
 import { NotFoundError, ValidationError } from "../errors.ts";
 
@@ -119,8 +118,6 @@ useTempDiskStorage();
 
 let pg: PGlite;
 beforeAll(async () => {
-  const actual = await vi.importActual<typeof import("nanoid")>("nanoid");
-  mockNanoid.mockImplementation(actual.nanoid);
   pg = await migratedPglite();
   holder.db = drizzle(pg);
   registerSandboxBackend({

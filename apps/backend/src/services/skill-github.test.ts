@@ -13,7 +13,6 @@ import type { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { strToU8, zipSync, type Zippable } from "fflate";
 import { migratedPglite } from "../db/migrated-pglite.test-fixtures.ts";
-import { mockNanoid } from "../test-setup.ts";
 import { useTempDiskStorage } from "../storage/temp-disk.test-fixtures.ts";
 import { ValidationError } from "../errors.ts";
 import type { SkillScope } from "./skill.ts";
@@ -41,8 +40,6 @@ useTempDiskStorage();
 
 let pg: PGlite;
 beforeAll(async () => {
-  const actual = await vi.importActual<typeof import("nanoid")>("nanoid");
-  mockNanoid.mockImplementation(actual.nanoid);
   pg = await migratedPglite();
   holder.db = drizzle(pg);
 }, 60_000);

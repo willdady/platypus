@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { nanoid } from "nanoid";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -12,8 +13,10 @@ import {
   type Row,
 } from "../test-utils.ts";
 import { db, type Tx } from "../index.ts";
-import { mockLogger, mockNanoid } from "../test-setup.ts";
+import { mockLogger } from "../test-setup.ts";
 import type { EventTriggerEventPayload } from "@platypus/schemas";
+
+vi.mock("nanoid", { spy: true });
 
 const { mockAnnounce, mockDeletePrefix } = vi.hoisted(() => ({
   mockAnnounce: vi.fn(),
@@ -790,7 +793,7 @@ describe("suppression", () => {
   beforeEach(() => {
     resetMockDb();
     vi.clearAllMocks();
-    mockNanoid.mockReturnValue("run-suppressed");
+    vi.mocked(nanoid).mockReturnValue("run-suppressed");
     mockDeletePrefix.mockResolvedValue(undefined);
   });
 
