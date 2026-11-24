@@ -352,9 +352,8 @@ registered.
 - **A run lost to a server crash** ends `failed` within a couple of minutes, once
   Platypus notices it has gone quiet, and that is pushed like any other end. A
   run stopped by a server shutting down cleanly ends `canceled`. An end that
-  a crash kept from being pushed is pushed within about a minute. A crash in
-  the middle of a push loses that push, so read the Task with `GetTask` if one
-  never arrives.
+  a crash kept from being pushed is pushed within about a minute. A push a crash
+  interrupts part-way through is sent again after about five minutes.
 - **Your credentials come back to you.** A request carries the
   `authentication` the client registered as an `Authorization` header (for
   example `Authorization: Bearer <credentials>`), and its `token`, if any, as
@@ -371,15 +370,18 @@ registered.
   `https` URL is accepted when it is registered; one that leads somewhere not
   allowed is skipped when the Task ends, so check your URL is reachable from
   the internet.
-- **Each registration is pushed at most once.** Once a Task has ended, a config
-  can't be pointed at a different URL: registering its `id` with a new `url` is
-  refused.
+- **Each registration's end is pushed until it lands or Platypus gives up.** A
+  push cut short by a crash or restart, or one whose attempts never get an
+  answer, is retried, so a receiving URL may see the same Task twice. One the
+  receiving URL refuses, or the network policy blocks, is not retried. Once a
+  Task has ended, a config can't be pointed at a different URL: registering its
+  `id` with a new `url` is refused.
 - **Up to 5 URLs per Task.** Registering a URL that is already on the Task,
   without naming its `id`, replaces it rather than adding a second. So does
   registering an `id` the Task already has, even when two registrations of it
   arrive at once.
 - **At most 5 pushes per Task**, counting pushes to URLs you have since
-  deleted.
+  deleted and retries of an interrupted delivery.
 - **Credentials aren't read back.** `GetTaskPushNotificationConfig` and
   `ListTaskPushNotificationConfigs` return the `authentication` scheme, but
   never its credentials or the `token`. Keep your own copy.
@@ -389,8 +391,9 @@ registered.
   conversation. Use an `https` URL you control, and check the credentials before
   trusting the body. A retry after a timeout can deliver the same Task twice, so
   handle a repeat of a Task id you've already seen. A push a server restart
-  interrupts mid-delivery isn't sent again, so a client that must not miss an
-  end should still poll `GetTask` now and then.
+  interrupts mid-delivery is sent again after about five minutes, though one the
+  receiving URL refuses isn't retried, so a client that must not miss an end
+  should still poll `GetTask` now and then.
 </Callout>
 
 ## Memories

@@ -142,13 +142,7 @@ import {
   hashBearerToken,
   resetTokenTouches,
 } from "../services/bearer-token.ts";
-import {
-  A2A_MAX_STREAMS_PER_TOKEN,
-  activeA2aFollowerCount,
-  activeA2aRunCount,
-  resetA2aFollowerSlots,
-  resetA2aRunSlots,
-} from "../services/a2a-call.ts";
+import { A2A_MAX_STREAMS_PER_TOKEN } from "../services/a2a-call.ts";
 import { mockLogger } from "../test-setup.ts";
 import { processMemoryExtractionBatch } from "../services/memory-extraction.ts";
 import { cancelRun } from "../runs/run-cancel.ts";
@@ -181,8 +175,8 @@ import { TaskState } from "@a2a-js/sdk";
 import type { QueryRecord } from "../fake-db.ts";
 import {
   A2aTaskEventBus,
+  a2aFallbackPollMs,
   a2aTaskEvents,
-  setA2aFallbackPollMs,
   type SequencedA2aTaskEvent,
 } from "../services/a2a-events.ts";
 import { MAX_CONCURRENT_PUSHES } from "../services/a2a-push.ts";
@@ -243,9 +237,7 @@ afterEach(async () => {
   for (const events of producing) events.close();
 });
 
-beforeEach(() => setA2aFallbackPollMs(50));
-afterEach(() => setA2aFallbackPollMs());
-afterEach(() => {
+beforeEach(() => {
   model.finishReason = null;
 });
 
@@ -464,7 +456,6 @@ describe("POST /a2a/:endpointId — the token", () => {
     resetMockDb();
     vi.clearAllMocks();
     resetTokenTouches();
-    resetA2aRunSlots();
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(NOW);
   });
@@ -748,6 +739,29 @@ const moveOn = async (contextId: string) => {
 const stateOf = async (taskId: string) =>
   (await rpc("GetTask", { id: taskId })).body.result.status.state;
 
+const advanceUntil = async <T>(work: Promise<T>): Promise<T> => {
+  const state = { settled: false };
+  const guarded = work.finally(() => {
+    state.settled = true;
+  });
+  for (let i = 0; i < 10 && !state.settled; i++) {
+    await vi.advanceTimersByTimeAsync(a2aFallbackPollMs());
+  }
+  if (!state.settled) {
+    throw new Error("the A2A fallback poll did not settle the work");
+  }
+  return guarded;
+};
+
+const withFakeTimers = async <T>(fn: () => Promise<T>): Promise<T> => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    return await fn();
+  } finally {
+    vi.useRealTimers();
+  }
+};
+
 const HOUR_AGO = new Date(Date.now() - 60 * 60 * 1000);
 
 const message = (
@@ -812,7 +826,10 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
     model.prompts = [];
     model.toolNames = [];
     resetTokenTouches();
-    resetA2aRunSlots();
+  });
+
+  afterEach(() => {
+    delete process.env.A2A_MAX_CONCURRENT_RUNS;
   });
 
   it("stamps the token's last used on a SendMessage", async () => {
@@ -2041,6 +2058,7 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
   });
 
   it("starts no run, and frees the slot, when the Task cannot be made", async () => {
+    process.env.A2A_MAX_CONCURRENT_RUNS = "1";
     let failing = true;
     seedConversation(
       {},
@@ -2055,7 +2073,6 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
     const res = await send({ messageId: "msg-a" });
 
     expect(res.body.error.code).toBe(-32603);
-    expect(activeA2aRunCount()).toBe(0);
     expect(model.prompts).toHaveLength(0);
     expect(rows("chat")).toHaveLength(0);
     expect(rows("chat_message")).toHaveLength(0);
@@ -2507,7 +2524,6 @@ describe("POST /a2a/:endpointId — ListTasks", () => {
     model.prompts = [];
     model.toolNames = [];
     resetTokenTouches();
-    resetA2aRunSlots();
   });
 
   it("lists only the Tasks the calling token started", async () => {
@@ -2876,7 +2892,6 @@ describe("POST /a2a/:endpointId — CancelTask", () => {
     model.prompts = [];
     model.toolNames = [];
     resetTokenTouches();
-    resetA2aRunSlots();
   });
 
   it("stops a running Task's run and answers with the Task, canceled", async () => {
@@ -3268,7 +3283,6 @@ describe("POST /a2a/:endpointId — push notifications", () => {
     model.prompts = [];
     model.toolNames = [];
     resetTokenTouches();
-    resetA2aRunSlots();
     push.mockResolvedValue(new Response(null, { status: 200 }));
     vi.stubGlobal("fetch", push);
   });
@@ -3990,7 +4004,6 @@ describe("POST /a2a/:endpointId — the load cap", () => {
     model.prompts = [];
     model.toolNames = [];
     resetTokenTouches();
-    resetA2aRunSlots();
     process.env.A2A_MAX_CONCURRENT_RUNS = "1";
   });
 
@@ -4049,7 +4062,8 @@ describe("POST /a2a/:endpointId — the load cap", () => {
     expect(res.status).toBe(200);
     expect(res.body.error.code).toBe(-32004);
     expect(res.body.error.data[0].metadata).toEqual({ taskId });
-    expect(activeA2aRunCount()).toBe(1);
+    const other = await send({ messageId: "msg-z" });
+    expect(other.status).toBe(429);
     expect(model.prompts).toHaveLength(1);
     release();
   });
@@ -4070,7 +4084,6 @@ describe("POST /a2a/:endpointId — the load cap", () => {
     const [won, lost] = "result" in b.body ? [b, c] : [c, b];
     expect(won.body.result.task.id).toBeDefined();
     expect(lost.body.error.code).toBe(-32004);
-    expect(activeA2aRunCount()).toBe(1);
     release();
   });
 
@@ -4109,10 +4122,13 @@ describe("POST /a2a/:endpointId — the load cap", () => {
       expect(got.body.result.status.state).toBe("TASK_STATE_COMPLETED");
     });
 
-    await vi.waitFor(() => expect(activeA2aRunCount()).toBe(0));
-    const next = await send({ messageId: "msg-b" });
+    const next = await vi.waitFor(async () => {
+      const res = await send({ messageId: "msg-b" });
+      if (res.status === 429) throw new Error("the run slot is still held");
+      expect(res.status).toBe(200);
+      return res;
+    });
 
-    expect(next.status).toBe(200);
     expect(next.body.result.task.status.state).toBe("TASK_STATE_COMPLETED");
   });
 
@@ -4210,7 +4226,6 @@ describe("POST /a2a/:endpointId — the body cap", () => {
     model.prompts = [];
     model.toolNames = [];
     resetTokenTouches();
-    resetA2aRunSlots();
     process.env.A2A_MAX_BODY_BYTES = "64";
   });
 
@@ -4328,7 +4343,6 @@ describe("the A2A call log", () => {
     model.prompts = [];
     model.toolNames = [];
     resetTokenTouches();
-    resetA2aRunSlots();
   });
 
   afterEach(() => {
@@ -5247,21 +5261,23 @@ describe("POST /a2a/:endpointId — streaming", () => {
       ],
     });
 
-    const res = await open("SubscribeToTask", { id: "task-1" });
-    rows("chat_message").push({
-      chatId: "chat-1",
-      id: "reply-1",
-      parentId: "msg-a",
-      role: "assistant",
-      parts: [{ type: "text", text: "On its way" }],
-      deletedAt: null,
-      createdAt: new Date(),
+    const events = await withFakeTimers(async () => {
+      const res = await open("SubscribeToTask", { id: "task-1" });
+      rows("chat_message").push({
+        chatId: "chat-1",
+        id: "reply-1",
+        parentId: "msg-a",
+        role: "assistant",
+        parts: [{ type: "text", text: "On its way" }],
+        deletedAt: null,
+        createdAt: new Date(),
+      });
+      Object.assign(rows("chat")[0], {
+        status: "succeeded",
+        activeLeafId: "reply-1",
+      });
+      return advanceUntil(eventsOf(res));
     });
-    Object.assign(rows("chat")[0], {
-      status: "succeeded",
-      activeLeafId: "reply-1",
-    });
-    const events = await eventsOf(res);
 
     expect(events[0].task).toMatchObject({
       id: "task-1",
@@ -5298,9 +5314,11 @@ describe("POST /a2a/:endpointId — streaming", () => {
     seedRunElsewhere();
     vi.mocked(cancelRun).mockResolvedValueOnce();
 
-    const res = await open("SubscribeToTask", { id: "task-1" });
-    await rpc("CancelTask", { id: "task-1" });
-    const events = await eventsOf(res);
+    const events = await withFakeTimers(async () => {
+      const res = await open("SubscribeToTask", { id: "task-1" });
+      await rpc("CancelTask", { id: "task-1" });
+      return advanceUntil(eventsOf(res));
+    });
 
     expect(events[0].task!.status.state).toBe("TASK_STATE_SUBMITTED");
     expect(events.at(-1)!.statusUpdate).toMatchObject({
@@ -5341,22 +5359,28 @@ describe("POST /a2a/:endpointId — streaming", () => {
 
   it("sends a follower working once its run has saved a step, then the end", async () => {
     seedRunElsewhere();
-    const res = await open("SubscribeToTask", { id: "task-1" });
+    const events = await withFakeTimers(async () => {
+      const res = await open("SubscribeToTask", { id: "task-1" });
 
-    rows("chat_message").push({
-      chatId: "chat-1",
-      id: "reply-1",
-      parentId: "msg-a",
-      role: "assistant",
-      parts: [{ type: "text", text: "Let me look" }],
-      deletedAt: null,
-      createdAt: new Date(),
+      rows("chat_message").push({
+        chatId: "chat-1",
+        id: "reply-1",
+        parentId: "msg-a",
+        role: "assistant",
+        parts: [{ type: "text", text: "Let me look" }],
+        deletedAt: null,
+        createdAt: new Date(),
+      });
+      rows("chat")[0].activeLeafId = "reply-1";
+      const reading = eventsOf(res);
+      await vi.advanceTimersByTimeAsync(a2aFallbackPollMs());
+      Object.assign(rows("chat")[0], { status: "succeeded" });
+      rows("chat_message").at(-1)!.parts = [
+        { type: "text", text: "On its way" },
+      ];
+      await vi.advanceTimersByTimeAsync(a2aFallbackPollMs());
+      return reading;
     });
-    rows("chat")[0].activeLeafId = "reply-1";
-    await new Promise((resolve) => setTimeout(resolve, 150));
-    Object.assign(rows("chat")[0], { status: "succeeded" });
-    rows("chat_message").at(-1)!.parts = [{ type: "text", text: "On its way" }];
-    const events = await eventsOf(res);
 
     expect(events[0].task!.status.state).toBe("TASK_STATE_SUBMITTED");
     expect(
@@ -5371,14 +5395,16 @@ describe("POST /a2a/:endpointId — streaming", () => {
 
   it("ends a stream that fails after its first event with an error event, and no detail", async () => {
     const fake = seedRunElsewhere();
-    const res = await open("SubscribeToTask", { id: "task-1" });
 
     const handle = fake.handle as { select: (...args: unknown[]) => unknown };
     const select = handle.select;
-    handle.select = () => {
-      throw dbError("08006", "connection to 10.0.0.5 lost");
-    };
-    const body = await res.text();
+    const body = await withFakeTimers(async () => {
+      const res = await open("SubscribeToTask", { id: "task-1" });
+      handle.select = () => {
+        throw dbError("08006", "connection to 10.0.0.5 lost");
+      };
+      return advanceUntil(res.text());
+    });
     handle.select = select;
 
     const frames = body
@@ -5426,16 +5452,21 @@ describe("POST /a2a/:endpointId — streaming", () => {
     const fake = seedRunElsewhere();
     const reads = () =>
       fake.queries.filter((query) => query.table === "a2a_task").length;
-    const res = await open("SubscribeToTask", { id: "task-1" });
-    const opened = reads();
-    await vi.waitFor(() => expect(reads()).toBeGreaterThan(opened + 1));
+    await withFakeTimers(async () => {
+      const res = await open("SubscribeToTask", { id: "task-1" });
+      const opened = reads();
+      await vi.advanceTimersByTimeAsync(a2aFallbackPollMs());
+      await vi.advanceTimersByTimeAsync(a2aFallbackPollMs());
+      expect(reads()).toBeGreaterThan(opened + 1);
 
-    await res.body!.cancel();
-    await new Promise((resolve) => setTimeout(resolve, 60));
-    const hungUp = reads();
-    await new Promise((resolve) => setTimeout(resolve, 250));
+      await res.body!.cancel();
+      await vi.advanceTimersByTimeAsync(0);
+      const hungUp = reads();
+      await vi.advanceTimersByTimeAsync(a2aFallbackPollMs());
+      await vi.advanceTimersByTimeAsync(a2aFallbackPollMs());
 
-    expect(reads()).toBe(hungUp);
+      expect(reads()).toBe(hungUp);
+    });
   });
 });
 
@@ -5485,7 +5516,6 @@ describe("POST /a2a/:endpointId — a token reaches only what it started", () =>
     model.prompts = [];
     model.toolNames = [];
     resetTokenTouches();
-    resetA2aRunSlots();
   });
 
   describe.each([
@@ -5681,7 +5711,6 @@ describe("POST /a2a/:endpointId — cutting off access stops running work", () =
     model.prompts = [];
     model.toolNames = [];
     resetTokenTouches();
-    resetA2aRunSlots();
     push.mockResolvedValue(new Response(null, { status: 200 }));
     vi.stubGlobal("fetch", push);
   });
@@ -5844,7 +5873,7 @@ describe("POST /a2a/:endpointId — cutting off access stops running work", () =
     release();
 
     await vi.waitFor(() =>
-      expect(rows("a2a_push_config")[0].notifiedAt).toBeInstanceOf(Date),
+      expect(rows("a2a_push_config")[0].failedAt).toBeInstanceOf(Date),
     );
     expect(taskRow(task.id).state).toBe("completed");
     await new Promise((resolve) => setTimeout(resolve, 50));
@@ -5865,7 +5894,7 @@ describe("POST /a2a/:endpointId — cutting off access stops running work", () =
       expect(chatRow(task.contextId)).toMatchObject({ status: "cancelled" }),
     );
     await vi.waitFor(() =>
-      expect(rows("a2a_push_config")[0].notifiedAt).toBeInstanceOf(Date),
+      expect(rows("a2a_push_config")[0].failedAt).toBeInstanceOf(Date),
     );
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(push).not.toHaveBeenCalled();
@@ -6041,6 +6070,17 @@ describe("POST /a2a/:endpointId — the follower cap", () => {
     expect(res.headers.get("Retry-After")).toBe("30");
   };
 
+  const eventuallyCovers = (
+    id = "task-2",
+    token = SECOND_TOKEN,
+    endpointId = "ep-2",
+  ) =>
+    vi.waitFor(async () => {
+      const res = await subscribe(id, token, endpointId);
+      expect(res.status).toBe(200);
+      return res;
+    });
+
   beforeEach(() => {
     resetMockDb();
     vi.clearAllMocks();
@@ -6052,8 +6092,6 @@ describe("POST /a2a/:endpointId — the follower cap", () => {
     model.prompts = [];
     model.toolNames = [];
     resetTokenTouches();
-    resetA2aRunSlots();
-    resetA2aFollowerSlots();
     process.env.A2A_MAX_CONCURRENT_STREAMS = "1";
   });
 
@@ -6071,8 +6109,6 @@ describe("POST /a2a/:endpointId — the follower cap", () => {
 
     expectTooMany(res);
     expect(await res.json()).toEqual({ error: "Too Many Requests" });
-    expect(activeA2aFollowerCount()).toBe(1);
-    expect(activeA2aRunCount()).toBe(0);
     await held.body!.cancel();
   });
 
@@ -6082,30 +6118,37 @@ describe("POST /a2a/:endpointId — the follower cap", () => {
 
     await held.body!.cancel();
 
-    await vi.waitFor(() => expect(activeA2aFollowerCount()).toBe(0));
-    const next = await subscribe();
+    const next = await eventuallyCovers("task-1", TOKEN, "ep-1");
     expect(next.headers.get("content-type")).toContain("text/event-stream");
     await next.body!.cancel();
   });
 
   it("frees the slot when the Task ends", async () => {
     seedFollowable();
-    const held = await subscribe();
+    const body = await withFakeTimers(async () => {
+      const held = await subscribe();
+      endTask1();
+      return advanceUntil(held.text());
+    });
 
-    endTask1();
-    await held.text();
-
-    expect(activeA2aFollowerCount()).toBe(0);
+    expect(body).toContain("TASK_STATE_COMPLETED");
+    const next = await eventuallyCovers();
+    expect(next.headers.get("content-type")).toContain("text/event-stream");
+    await next.body!.cancel();
   });
 
   it("frees the slot when the stream ends in an error", async () => {
     seedFollowable();
-    const held = await subscribe();
+    const body = await withFakeTimers(async () => {
+      const held = await subscribe();
+      tables.a2a_token = rows("a2a_token").filter((t) => t.id !== "tok-1");
+      return advanceUntil(held.text());
+    });
 
-    tables.a2a_token = rows("a2a_token").filter((t) => t.id !== "tok-1");
-    expect(await held.text()).toContain("event: error");
-
-    expect(activeA2aFollowerCount()).toBe(0);
+    expect(body).toContain("event: error");
+    const next = await eventuallyCovers();
+    expect(next.headers.get("content-type")).toContain("text/event-stream");
+    await next.body!.cancel();
   });
 
   it("holds each token to its share of the pool", async () => {
@@ -6149,38 +6192,49 @@ describe("POST /a2a/:endpointId — the follower cap", () => {
 
   it("frees a blocking SendMessage's slot when its Task ends", async () => {
     seedFollowable();
-    const waiting = post("SendMessage", message("msg-a"));
-    await vi.waitFor(() => expect(activeA2aFollowerCount()).toBe(1));
-
-    endTask1();
-    const res = await waiting;
+    const res = await withFakeTimers(async () => {
+      const waiting = Promise.resolve(post("SendMessage", message("msg-a")));
+      await vi.advanceTimersByTimeAsync(0);
+      const probe = await subscribe("task-2", SECOND_TOKEN, "ep-2");
+      expectTooMany(probe);
+      endTask1();
+      return advanceUntil(waiting);
+    });
 
     expect(((await res.json()) as RpcBody).result.task.status.state).toBe(
       "TASK_STATE_COMPLETED",
     );
-    expect(activeA2aFollowerCount()).toBe(0);
+    const next = await eventuallyCovers();
+    await next.body!.cancel();
   });
 
   it("frees a blocking SendMessage's slot when the client hangs up", async () => {
     seedFollowable();
-    const hangUp = new AbortController();
-    const waiting = Promise.resolve(
-      post("SendMessage", message("msg-a"), { signal: hangUp.signal }),
-    ).catch(() => undefined);
-    await vi.waitFor(() => expect(activeA2aFollowerCount()).toBe(1));
+    await withFakeTimers(async () => {
+      const hangUp = new AbortController();
+      const waiting = Promise.resolve(
+        post("SendMessage", message("msg-a"), { signal: hangUp.signal }),
+      ).catch(() => undefined);
+      await vi.advanceTimersByTimeAsync(0);
+      const probe = await subscribe("task-2", SECOND_TOKEN, "ep-2");
+      expectTooMany(probe);
 
-    hangUp.abort();
-    await waiting;
+      hangUp.abort();
+      await waiting;
+    });
 
-    await vi.waitFor(() => expect(activeA2aFollowerCount()).toBe(0));
+    const next = await eventuallyCovers();
+    await next.body!.cancel();
   });
 
   it("still answers a retry of a Task that has ended at the cap", async () => {
     seedFollowable();
-    const held = await subscribe();
-    endTask1();
-    await held.text();
-    const again = await subscribe("task-2", SECOND_TOKEN, "ep-2");
+    const again = await withFakeTimers(async () => {
+      const held = await subscribe();
+      endTask1();
+      await advanceUntil(held.text());
+      return subscribe("task-2", SECOND_TOKEN, "ep-2");
+    });
 
     const res = await post("SendMessage", message("msg-a"));
 
@@ -6201,12 +6255,10 @@ describe("POST /a2a/:endpointId — the follower cap", () => {
     const started = await post("SendStreamingMessage", message("msg-b"));
 
     expect(started.headers.get("content-type")).toContain("text/event-stream");
-    expect(activeA2aRunCount()).toBe(1);
-    expect(activeA2aFollowerCount()).toBe(1);
+    const second = await post("SendMessage", message("msg-c"));
+    expectTooMany(second);
     await held.body!.cancel();
-    await vi.waitFor(() => expect(activeA2aFollowerCount()).toBe(0));
-    const next = await subscribe();
-    expect(next.headers.get("content-type")).toContain("text/event-stream");
+    const next = await eventuallyCovers();
     release();
     await started.text();
     await next.body!.cancel();

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { mockDb, resetMockDb } from "../test-utils.ts";
-import { and, desc, eq, type SQL } from "drizzle-orm";
+import { mockDb, renderSql, resetMockDb } from "../test-utils.ts";
+import { desc } from "drizzle-orm";
 import { memoryDailySummary as memoryDailySummaryTable } from "../db/schema.ts";
 
 import {
@@ -42,16 +42,13 @@ describe("retrieveRecentSummaries", () => {
       summary: memoryDailySummaryTable.summary,
     });
     expect(mockDb.from).toHaveBeenCalledWith(memoryDailySummaryTable);
-    expect(mockDb.where).toHaveBeenCalledWith(
-      and(
-        eq(memoryDailySummaryTable.userId, "u1"),
-        eq(memoryDailySummaryTable.workspaceId, "ws-1"),
-        expect.objectContaining({
-          op: "sql",
-          values: [memoryDailySummaryTable.summaryDate, "2026-05-01"],
-        }) as unknown as SQL,
-      ),
-    );
+    expect(renderSql(mockDb.where.mock.calls[0][0])).toEqual({
+      sql:
+        `("memory_daily_summary"."user_id" = $1 and ` +
+        `"memory_daily_summary"."workspace_id" = $2 and ` +
+        `"memory_daily_summary"."summary_date" >= $3)`,
+      params: ["u1", "ws-1", "2026-05-01"],
+    });
     expect(mockDb.orderBy).toHaveBeenCalledWith(
       desc(memoryDailySummaryTable.summaryDate),
     );

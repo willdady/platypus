@@ -1,5 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mockDb, resetMockDb, seedDb, type FakeDb } from "../test-utils.ts";
+import {
+  mockDb,
+  renderSql,
+  resetMockDb,
+  seedDb,
+  type FakeDb,
+} from "../test-utils.ts";
 
 const { mockGenerateText, mockOpenProvider, mockGenerateEmbedding } =
   vi.hoisted(() => ({
@@ -208,8 +214,11 @@ describe("processMemoryExtractionBatch", () => {
 
     await processMemoryExtractionBatch();
 
-    const [statement] = mockDb.execute.mock.calls[0] as [{ values: unknown[] }];
-    expect(statement.values).toEqual(["u1", "ws-1", 5]);
+    expect(renderSql(mockDb.execute.mock.calls[0][0]).params).toEqual([
+      "u1",
+      "ws-1",
+      5,
+    ]);
     expect(logger.info).toHaveBeenCalledWith(
       "Pruned 2 old daily summaries for user u1 in workspace ws-1",
     );

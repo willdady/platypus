@@ -35,7 +35,7 @@ import {
   type TaskRow,
   type TaskStatus,
 } from "./a2a-task-state.ts";
-import { pushRecordedEnd } from "./a2a-push.ts";
+import { pushLeaseExpired, pushPending, pushRecordedEnd } from "./a2a-push.ts";
 
 const writeEnd = async (
   executor: Executor,
@@ -135,12 +135,7 @@ const pushOwedInChat = async (chatId: string): Promise<void> => {
         a2aPushConfigTable,
         eq(a2aPushConfigTable.taskId, a2aTaskTable.id),
       )
-      .where(
-        and(
-          eq(a2aTaskTable.chatId, chatId),
-          isNull(a2aPushConfigTable.notifiedAt),
-        ),
-      );
+      .where(and(eq(a2aTaskTable.chatId, chatId), pushPending()));
     await Promise.all(tasks.map(pushEnd));
   } catch (error) {
     logger.error({ error, chatId }, "A2A push notification failed");
@@ -192,7 +187,8 @@ const pushMissedEnds = async (): Promise<void> => {
     .innerJoin(chatTable, eq(chatTable.id, a2aTaskTable.chatId))
     .where(
       and(
-        isNull(a2aPushConfigTable.notifiedAt),
+        pushPending(),
+        pushLeaseExpired(),
         or(isNotNull(a2aTaskTable.state), chatStopped()),
       ),
     )

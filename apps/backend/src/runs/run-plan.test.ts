@@ -13,14 +13,13 @@ import {
 import { ANSWER_STEP_INSTRUCTION } from "./answer-step.ts";
 import { logger } from "../logger.ts";
 import { createOverflowRecovery } from "./context-overflow-recovery.ts";
-
-const BASE_PLAN: Omit<RunPlan, "model" | "tools" | "maxSteps"> = {};
+import { TEST_USAGE_MODEL } from "./run-plan.test-fixtures.ts";
 
 const planOf = (overrides: Partial<RunPlan> = {}): RunPlan => ({
   model: {} as RunPlan["model"],
   tools: {},
   maxSteps: 5,
-  ...BASE_PLAN,
+  usageModel: TEST_USAGE_MODEL,
   ...overrides,
 });
 

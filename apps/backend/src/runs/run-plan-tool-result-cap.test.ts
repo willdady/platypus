@@ -4,6 +4,7 @@ import type { LanguageModelV3CallOptions } from "@ai-sdk/provider";
 import { MockLanguageModelV3 } from "ai/test";
 import { createOverflowRecovery } from "./context-overflow-recovery.ts";
 import { buildModelInvocation } from "./run-plan.ts";
+import { TEST_USAGE_MODEL } from "./run-plan.test-fixtures.ts";
 import {
   capToolResult,
   MAX_TOOL_RESULT_CHARS,
@@ -87,7 +88,12 @@ describe("tool result size cap", () => {
     };
     const result = await generateText({
       ...buildModelInvocation(
-        { model: twoToolModel(prompts), tools, maxSteps: 5 },
+        {
+          model: twoToolModel(prompts),
+          usageModel: TEST_USAGE_MODEL,
+          tools,
+          maxSteps: 5,
+        },
         {
           abortSignal: new AbortController().signal,
           overflowRecovery: createOverflowRecovery(),
@@ -127,7 +133,12 @@ describe("tool result size cap", () => {
     };
     await generateText({
       ...buildModelInvocation(
-        { model: twoToolModel(prompts), tools, maxSteps: 5 },
+        {
+          model: twoToolModel(prompts),
+          usageModel: TEST_USAGE_MODEL,
+          tools,
+          maxSteps: 5,
+        },
         {
           abortSignal: new AbortController().signal,
           overflowRecovery: createOverflowRecovery(),
