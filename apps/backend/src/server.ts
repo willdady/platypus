@@ -178,7 +178,7 @@ app.onError((error, c) => {
   if (mapped) {
     return c.json(
       {
-        error: mapped.message,
+        error: mapped.issues ?? mapped.message,
         ...(mapped.files && { files: mapped.files }),
       },
       mapped.status,

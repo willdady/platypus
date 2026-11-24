@@ -1,10 +1,12 @@
 import { Readable } from "node:stream";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
-  mockDb,
   mockSession,
   mockNoSession,
   resetMockDb,
+  seedDb,
+  type FakeDb,
+  type Row,
 } from "../test-utils.ts";
 import app from "../server.ts";
 import { getStorage } from "../storage/index.ts";
@@ -32,7 +34,6 @@ describe("Files Routes", () => {
   beforeEach(() => {
     resetMockDb();
     vi.clearAllMocks();
-    mockDb.where.mockReturnValue(mockDb);
     (getStorage as ReturnType<typeof vi.fn>).mockReturnValue(mockStorage);
     mockStorageGet.mockReset();
     mockStorageGetStream.mockReset();
@@ -40,6 +41,45 @@ describe("Files Routes", () => {
 
   const fileKey = "org-1/ws-1/chat-1/msg-1/0-abc12345.png";
   const baseUrl = `/files/${fileKey}`;
+
+  const world = (
+    options: {
+      role?: "admin" | "member" | null;
+      workspace?: Row | null;
+    } = {},
+  ): FakeDb => {
+    const { role = "member", workspace } = options;
+    return seedDb({
+      organization_member: [
+        ...(role === null
+          ? []
+          : [
+              {
+                id: "m1",
+                userId: "user-1",
+                organizationId: "org-1",
+                role,
+              },
+            ]),
+        {
+          id: "m-other-org",
+          userId: "user-1",
+          organizationId: "org-2",
+          role: "admin",
+        },
+      ],
+      workspace:
+        workspace === null
+          ? []
+          : [
+              workspace ?? {
+                id: "ws-1",
+                organizationId: "org-1",
+                ownerId: "user-1",
+              },
+            ],
+    });
+  };
 
   describe("GET /files/*", () => {
     it("should return 401 when not authenticated", async () => {
@@ -83,14 +123,15 @@ describe("Files Routes", () => {
 
     it("should bypass access checks and serve file for super admin", async () => {
       mockSession({ id: "user-1", email: "admin@example.com", role: "admin" });
-      mockStorageGetStream.mockResolvedValueOnce(
+      const fake = world();
+      mockStorageGetStream.mockResolvedValue(
         streamed(Buffer.from("test image data"), "image/png"),
       );
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
       expect(res.headers.get("Content-Type")).toBe("image/png");
-      expect(mockDb.limit).not.toHaveBeenCalled();
+      expect(fake.queries).toEqual([]);
     });
 
     it.each(["org-1/skills/s-1/u-1/f-1", "org-1/SKILLS/s-1/u-1/f-1"])(
@@ -111,7 +152,7 @@ describe("Files Routes", () => {
 
     it("should return 403 when user is not org member", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([]);
+      world({ role: null });
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(403);
@@ -121,8 +162,8 @@ describe("Files Routes", () => {
 
     it("should serve file when user is org admin", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      mockStorageGetStream.mockResolvedValueOnce(
+      world({ role: "admin" });
+      mockStorageGetStream.mockResolvedValue(
         streamed(Buffer.from("test image data"), "image/png"),
       );
 
@@ -133,8 +174,7 @@ describe("Files Routes", () => {
 
     it("should return 404 when workspace not found for org member", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([]);
+      world({ workspace: null });
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(404);
@@ -144,8 +184,13 @@ describe("Files Routes", () => {
 
     it("should return 403 when member does not own workspace", async () => {
       mockSession({ id: "user-1", email: "test@example.com", role: "user" });
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "other-user" }]);
+      world({
+        workspace: {
+          id: "ws-1",
+          organizationId: "org-1",
+          ownerId: "other-user",
+        },
+      });
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(403);
@@ -155,9 +200,8 @@ describe("Files Routes", () => {
 
     it("should serve file when member owns workspace", async () => {
       mockSession({ id: "user-1", email: "test@example.com", role: "user" });
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
-      mockStorageGetStream.mockResolvedValueOnce(
+      world();
+      mockStorageGetStream.mockResolvedValue(
         streamed(Buffer.from("test image data"), "image/png"),
       );
 
@@ -167,7 +211,8 @@ describe("Files Routes", () => {
 
     it("should serve the body from getStream, never get", async () => {
       mockSession({ id: "user-1", email: "admin@example.com", role: "admin" });
-      mockStorageGetStream.mockResolvedValueOnce(
+      world();
+      mockStorageGetStream.mockResolvedValue(
         streamed(Buffer.from("test image data"), "image/png"),
       );
 
@@ -180,9 +225,8 @@ describe("Files Routes", () => {
 
     it("should return 404 when storage returns null", async () => {
       mockSession({ id: "user-1", email: "test@example.com", role: "user" });
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
-      mockStorageGetStream.mockResolvedValueOnce(null);
+      world();
+      mockStorageGetStream.mockResolvedValue(null);
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(404);
@@ -192,9 +236,8 @@ describe("Files Routes", () => {
 
     it("should return correct Content-Type header", async () => {
       mockSession({ id: "user-1", email: "test@example.com", role: "user" });
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
-      mockStorageGetStream.mockResolvedValueOnce(
+      world();
+      mockStorageGetStream.mockResolvedValue(
         streamed(Buffer.from("test image data"), "image/png"),
       );
 
@@ -205,9 +248,8 @@ describe("Files Routes", () => {
 
     it("should return immutable Cache-Control header", async () => {
       mockSession({ id: "user-1", email: "test@example.com", role: "user" });
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
-      mockStorageGetStream.mockResolvedValueOnce(
+      world();
+      mockStorageGetStream.mockResolvedValue(
         streamed(Buffer.from("test image data"), "image/png"),
       );
 
@@ -220,9 +262,8 @@ describe("Files Routes", () => {
 
     it("should tell the browser not to sniff a type from the bytes", async () => {
       mockSession({ id: "user-1", email: "test@example.com", role: "user" });
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
-      mockStorageGetStream.mockResolvedValueOnce(
+      world();
+      mockStorageGetStream.mockResolvedValue(
         streamed(Buffer.from("test image data"), "image/png"),
       );
 
@@ -234,9 +275,8 @@ describe("Files Routes", () => {
     describe("protective headers", () => {
       const serve = async (key: string, contentType: string, body: string) => {
         mockSession({ id: "user-1", email: "test@example.com", role: "user" });
-        mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-        mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
-        mockStorageGetStream.mockResolvedValueOnce(
+        world();
+        mockStorageGetStream.mockResolvedValue(
           streamed(Buffer.from(body), contentType),
         );
         const res = await app.request(`/files/org-1/ws-1/chat-1/msg-1/${key}`);

@@ -550,6 +550,7 @@ type OrderMarker = {
 };
 
 const orderMarkerOf = (value: unknown): OrderMarker => {
+  if (isColumn(value)) return { op: "asc", column: refOf(value) };
   if (value instanceof SQL.Aliased) return orderMarkerOf(value.sql);
   if (!(value instanceof SQL)) {
     throw new Error(
@@ -593,8 +594,17 @@ type UniqueConstraint = {
   where?: (row: Row) => boolean;
 };
 
+type Cascade = {
+  childTable: string;
+  childColumn: string;
+  parentTable: string;
+  parentColumn: string;
+};
+
 export type FakeDbOptions = {
   unique?: Record<string, UniqueConstraint[]>;
+  // why: mirrors an onDelete: "cascade" foreign key in db/schema.ts, which the fake cannot read
+  cascades?: Cascade[];
   onInsert?: (table: string, values: Row) => void;
   defaults?: Record<string, Row>;
   onQuery?: (query: QueryRecord) => void;
@@ -621,6 +631,60 @@ const normaliseStore = (rows: Store): Store => {
     store[name] = value.map((row) => ({ ...row }));
   }
   return store;
+};
+
+type RowOrigin = { table: string; live: Row; atStart: Row };
+
+const stageStore = (store: Store) => {
+  const staged: Store = {};
+  const origins = new Map<Row, RowOrigin>();
+  for (const [name, rows] of Object.entries(store)) {
+    staged[name] = rows.map((live) => {
+      const copy = structuredClone(live);
+      origins.set(copy, { table: name, live, atStart: structuredClone(live) });
+      return copy;
+    });
+  }
+  return { staged, origins };
+};
+
+const commitStore = (
+  store: Store,
+  staged: Store,
+  origins: Map<Row, RowOrigin>,
+) => {
+  const present = new Set(Object.values(staged).flat());
+  const touched = new Set<string>();
+  const deleted = new Set<Row>();
+  for (const [copy, origin] of origins) {
+    if (!present.has(copy)) {
+      deleted.add(origin.live);
+      touched.add(origin.table);
+      continue;
+    }
+    if (isDeepStrictEqual(copy, origin.atStart)) continue;
+    touched.add(origin.table);
+    for (const [key, value] of Object.entries(copy)) {
+      if (isDeepStrictEqual(value, origin.atStart[key])) continue;
+      origin.live[key] = value;
+    }
+    for (const key of Object.keys(origin.atStart)) {
+      if (key in copy) continue;
+      delete origin.live[key];
+    }
+  }
+  for (const [name, rows] of Object.entries(staged)) {
+    if (rows.some((row) => !origins.has(row))) touched.add(name);
+  }
+  for (const name of touched) {
+    const live = (store[name] ??= []);
+    for (let i = live.length - 1; i >= 0; i--) {
+      if (deleted.has(live[i])) live.splice(i, 1);
+    }
+    for (const row of staged[name] ?? []) {
+      if (!origins.has(row)) live.push(structuredClone(row));
+    }
+  }
 };
 
 export const dbError = (
@@ -656,11 +720,12 @@ export const createFakeDb = (
   const nameOf = (table: unknown) => tableNameOf(table);
 
   const makeHandle = (store: Store) => {
-    const rowsFor = (table: unknown): Row[] => {
-      const name = nameOf(table);
+    const rowsNamed = (name: string): Row[] => {
       store[name] ??= [];
       return store[name];
     };
+
+    const rowsFor = (table: unknown): Row[] => rowsNamed(nameOf(table));
 
     const project = (
       row: Row,
@@ -930,44 +995,79 @@ export const createFakeDb = (
 
     const insert = (table: unknown) => {
       const name = nameOf(table);
-      let inserted: Row[] = [];
+      const kept: Row[] = [];
+      let staged: Row[] = [];
+      let written = false;
 
-      const write = (values: Row | Row[]) => {
-        record({ kind: "insert", table: name });
-        inserted = (Array.isArray(values) ? values : [values]).map((row) => ({
-          ...(options.defaults?.[name] ?? {}),
-          ...row,
-        }));
-        for (const row of inserted) {
+      const clashOf = (row: Row): string | undefined => {
+        const resolve = flatResolver(row);
+        for (const constraint of options.unique?.[name] ?? []) {
+          const covers = constraint.where ?? (() => true);
+          if (!covers(row)) continue;
+          const clashes = rowsFor(table).some(
+            (existing) =>
+              covers(existing) &&
+              constraint.columns.every(
+                (column) =>
+                  flatResolver(existing)({ table: name, name: column }) ===
+                  resolve({ table: name, name: column }),
+              ),
+          );
+          if (clashes) return constraint.name;
+        }
+        return undefined;
+      };
+
+      const write = (ignoreConflicts: boolean) => {
+        if (written) return;
+        written = true;
+        for (const row of staged) {
           options.onInsert?.(name, row);
-          for (const constraint of options.unique?.[name] ?? []) {
-            const covers = constraint.where ?? (() => true);
-            if (!covers(row)) continue;
-            const resolve = flatResolver(row);
-            const clashes = rowsFor(table).some(
-              (existing) =>
-                covers(existing) &&
-                constraint.columns.every(
-                  (column) =>
-                    flatResolver(existing)({ table: name, name: column }) ===
-                    resolve({ table: name, name: column }),
-                ),
-            );
-            if (clashes) throw uniqueViolation(constraint.name);
+          const clash = clashOf(row);
+          if (clash) {
+            if (ignoreConflicts) continue;
+            throw uniqueViolation(clash);
           }
           rowsFor(table).push(row);
+          kept.push(row);
         }
       };
 
       return {
         values(values: Row | Row[]) {
-          // why: synchronous, so a unique violation throws inside the caller's try like the driver's
-          write(values);
-          const result = writeResult(inserted);
-          return Object.assign(result, {
-            onConflictDoUpdate: () => result,
-            onConflictDoNothing: () => result,
-          });
+          record({ kind: "insert", table: name });
+          staged = (Array.isArray(values) ? values : [values]).map((row) => ({
+            ...(options.defaults?.[name] ?? {}),
+            ...row,
+          }));
+          const result = {
+            returning(selection?: Record<string, unknown>) {
+              return Promise.resolve().then(() => {
+                write(false);
+                return writeResult(kept).returning(selection);
+              });
+            },
+            then(
+              onFulfilled?: (result: unknown) => unknown,
+              onRejected?: (error: unknown) => unknown,
+            ) {
+              return Promise.resolve()
+                .then(() => {
+                  write(false);
+                  return undefined;
+                })
+                .then(onFulfilled, onRejected);
+            },
+            onConflictDoNothing: () => {
+              write(true);
+              return result;
+            },
+            onConflictDoUpdate: () => {
+              write(false);
+              return result;
+            },
+          };
+          return result;
         },
       };
     };
@@ -1021,16 +1121,46 @@ export const createFakeDb = (
       return builder;
     };
 
+    const deleteRows = (
+      name: string,
+      predicate: (row: Row) => boolean,
+    ): Row[] => {
+      const rows = rowsNamed(name);
+      const removed = rows.filter(predicate);
+      const kept = rows.filter((row) => !removed.includes(row));
+      rows.length = 0;
+      rows.push(...kept);
+      return removed;
+    };
+
+    // why: a deleted parent takes the rows whose foreign key cascades from it, and theirs with them
+    const cascadeFrom = (parent: string, removed: Row[]) => {
+      if (!removed.length) return;
+      for (const cascade of options.cascades ?? []) {
+        if (cascade.parentTable !== parent) continue;
+        const parentKeys = removed.map((row) =>
+          flatResolver(row)({ table: parent, name: cascade.parentColumn }),
+        );
+        const children = deleteRows(cascade.childTable, (row) =>
+          parentKeys.includes(
+            flatResolver(row)({
+              table: cascade.childTable,
+              name: cascade.childColumn,
+            }),
+          ),
+        );
+        cascadeFrom(cascade.childTable, children);
+      }
+    };
+
     const remove = (table: unknown) => ({
       where(condition: Condition) {
-        record({ kind: "delete", table: nameOf(table) });
-        const rows = rowsFor(table);
-        const deleted = rows.filter((row) =>
+        const name = nameOf(table);
+        record({ kind: "delete", table: name });
+        const deleted = deleteRows(name, (row) =>
           satisfies(flatResolver(row), condition),
         );
-        const kept = rows.filter((row) => !deleted.includes(row));
-        rows.length = 0;
-        rows.push(...kept);
+        cascadeFrom(name, deleted);
         return writeResult(deleted);
       },
     });
@@ -1046,16 +1176,10 @@ export const createFakeDb = (
       delete: remove,
       execute,
       async transaction<T>(callback: (tx: unknown) => Promise<T>): Promise<T> {
-        const before = structuredClone(store);
-        const staged = structuredClone(store);
+        // why: replay only the rows it changed, or writes made outside it while it ran are undone
+        const { staged, origins } = stageStore(store);
         const result = await callback(makeHandle(staged));
-        // why: copy back only the tables it wrote, or writes made outside it while it ran are undone
-        for (const [name, rows] of Object.entries(staged)) {
-          if (isDeepStrictEqual(rows, before[name])) continue;
-          store[name] ??= [];
-          store[name].length = 0;
-          store[name].push(...rows);
-        }
+        commitStore(store, staged, origins);
         return result;
       },
     };

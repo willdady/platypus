@@ -1,5 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { mockDb, mockSession, resetMockDb } from "../test-utils.ts";
+import {
+  mockSession,
+  resetMockDb,
+  seedDb,
+  type FakeDb,
+  type Row,
+} from "../test-utils.ts";
 import { webhookEventSchema } from "@platypus/schemas";
 import app from "../server.ts";
 
@@ -31,47 +37,61 @@ describe("Webhook Routes", () => {
     resetMockDb();
     vi.clearAllMocks();
     mockCheckEgress.mockResolvedValue({ allowed: true });
-    mockDb.where.mockReturnValue(mockDb);
   });
 
   const orgId = "org-1";
   const workspaceId = "ws-1";
   const baseUrl = `/organizations/${orgId}/workspaces/${workspaceId}/webhooks`;
 
-  describe("GET /", () => {
-    it("should return list of webhooks", async () => {
-      mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
+  const webhookRow = (over: Row = {}): Row => ({
+    id: "wh-1",
+    workspaceId,
+    name: "My Webhook",
+    url: "https://example.com/webhook",
+    signingSecret: "secret",
+    headers: { Authorization: "Bearer real-token" },
+    enabled: true,
+    events: ["notification.created"],
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+    ...over,
+  });
 
-      const mockWebhooks = [
+  const world = (rows: { webhook?: Row[] } = {}): FakeDb =>
+    seedDb({
+      organization_member: [
+        { id: "m1", userId: "user-1", organizationId: orgId, role: "member" },
+      ],
+      workspace: [
         {
-          id: "wh-1",
-          workspaceId,
-          name: "My Webhook",
-          url: "https://example.com/webhook",
-          signingSecret: "secret",
-          headers: null,
-          enabled: true,
-          events: ["notification.created"],
+          id: workspaceId,
+          name: "Support",
+          organizationId: orgId,
+          ownerId: "user-1",
         },
-        {
+        { id: "ws-2", name: "Billing", organizationId: orgId, ownerId: "u-2" },
+      ],
+      webhook: rows.webhook ?? [
+        webhookRow(),
+        webhookRow({
           id: "wh-2",
-          workspaceId,
           name: "Second Webhook",
           url: "https://example.com/webhook2",
           signingSecret: "secret2",
           headers: null,
           enabled: false,
           events: ["notification.created", "notification.updated"],
-        },
-      ];
-      mockDb.where
-        .mockReturnValueOnce(mockDb)
-        .mockReturnValueOnce(mockDb)
-        .mockResolvedValueOnce(mockWebhooks);
+        }),
+        webhookRow({ id: "wh-elsewhere", workspaceId: "ws-2" }),
+      ],
+    });
+
+  const idsOf = (fake: FakeDb) => fake.tables.webhook.map((w) => w.id);
+
+  describe("GET /", () => {
+    it("should return list of webhooks", async () => {
+      mockSession();
+      world();
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
@@ -83,15 +103,7 @@ describe("Webhook Routes", () => {
 
     it("should return empty results when no webhooks exist", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-
-      mockDb.where
-        .mockReturnValueOnce(mockDb)
-        .mockReturnValueOnce(mockDb)
-        .mockResolvedValueOnce([]);
+      world({ webhook: [] });
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
@@ -103,30 +115,7 @@ describe("Webhook Routes", () => {
   describe("POST /", () => {
     it("should create webhook and return 201", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-
-      const mockWebhook = {
-        id: "wh-1",
-        workspaceId,
-        name: "My Webhook",
-        url: "https://example.com/webhook",
-        signingSecret: "secret",
-        headers: null,
-        enabled: true,
-        events: [
-          "notification.created",
-          "notification.updated",
-          "notification.read",
-          "notification.dismissed",
-          "card.created",
-          "card.updated",
-          "card.deleted",
-        ],
-      };
-      mockDb.returning.mockResolvedValueOnce([mockWebhook]);
+      const fake = world();
 
       const res = await app.request(baseUrl, {
         method: "POST",
@@ -141,15 +130,17 @@ describe("Webhook Routes", () => {
       const data = (await res.json()) as { url: string; name: string };
       expect(data.url).toBe("https://example.com/webhook");
       expect(data.name).toBe("My Webhook");
+      expect(fake.tables.webhook.at(-1)).toMatchObject({
+        workspaceId,
+        name: "My Webhook",
+        url: "https://example.com/webhook",
+        enabled: true,
+      });
     });
 
     it("subscribes to every event when events is omitted", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.returning.mockResolvedValueOnce([{ id: "wh-1" }]);
+      const fake = world();
 
       const res = await app.request(baseUrl, {
         method: "POST",
@@ -161,18 +152,15 @@ describe("Webhook Routes", () => {
       });
 
       expect(res.status).toBe(201);
-      expect(mockDb.values).toHaveBeenCalledWith(
-        expect.objectContaining({ events: webhookEventSchema.options }),
+      expect(fake.tables.webhook.at(-1)?.events).toEqual(
+        webhookEventSchema.options,
       );
     });
 
     it("should reject a URL the network policy blocks", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockCheckEgress.mockResolvedValueOnce(blocked);
+      const fake = world();
+      mockCheckEgress.mockResolvedValue(blocked);
 
       const res = await app.request(baseUrl, {
         method: "POST",
@@ -188,28 +176,14 @@ describe("Webhook Routes", () => {
       expect(data.error).toBe(
         "This URL can't be reached from this deployment, or isn't permitted by its network policy.",
       );
-      expect(mockDb.insert).not.toHaveBeenCalled();
+      expect(fake.queries.some((q) => q.kind === "insert")).toBe(false);
     });
   });
 
   describe("GET /:webhookId", () => {
     it("should return a single webhook", async () => {
       mockSession();
-      mockDb.limit
-        .mockResolvedValueOnce([{ role: "member" }])
-        .mockResolvedValueOnce([{ ownerId: "user-1", organizationId: "org-1" }])
-        .mockResolvedValueOnce([
-          {
-            id: "wh-1",
-            workspaceId,
-            name: "My Webhook",
-            url: "https://example.com/webhook",
-            signingSecret: "secret",
-            headers: { Authorization: "Bearer real-token" },
-            enabled: true,
-            events: ["notification.created"],
-          },
-        ]);
+      world();
 
       const res = await app.request(`${baseUrl}/wh-1`);
       expect(res.status).toBe(200);
@@ -223,10 +197,7 @@ describe("Webhook Routes", () => {
 
     it("should return 404 for non-existent webhook", async () => {
       mockSession();
-      mockDb.limit
-        .mockResolvedValueOnce([{ role: "member" }])
-        .mockResolvedValueOnce([{ ownerId: "user-1", organizationId: "org-1" }])
-        .mockResolvedValueOnce([]);
+      world();
 
       const res = await app.request(`${baseUrl}/nonexistent`);
       expect(res.status).toBe(404);
@@ -236,23 +207,7 @@ describe("Webhook Routes", () => {
   describe("PATCH /:webhookId", () => {
     it("should update webhook", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-
-      mockDb.returning.mockResolvedValueOnce([
-        {
-          id: "wh-1",
-          workspaceId,
-          name: "Updated Webhook",
-          url: "https://new-url.com/webhook",
-          signingSecret: "secret",
-          headers: { "X-Custom": "value" },
-          enabled: false,
-          events: ["notification.created"],
-        },
-      ]);
+      const fake = world();
 
       const res = await app.request(`${baseUrl}/wh-1`, {
         method: "PATCH",
@@ -268,16 +223,17 @@ describe("Webhook Routes", () => {
       const data = (await res.json()) as { name: string; url: string };
       expect(data.name).toBe("Updated Webhook");
       expect(data.url).toBe("https://new-url.com/webhook");
+      expect(fake.tables.webhook[0]).toMatchObject({
+        name: "Updated Webhook",
+        url: "https://new-url.com/webhook",
+        enabled: false,
+      });
+      expect(fake.tables.webhook[1].name).toBe("Second Webhook");
     });
 
     it("should return 404 for non-existent webhook", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-
-      mockDb.returning.mockResolvedValueOnce([]);
+      const fake = world();
 
       const res = await app.request(`${baseUrl}/nonexistent`, {
         method: "PATCH",
@@ -288,15 +244,13 @@ describe("Webhook Routes", () => {
       });
 
       expect(res.status).toBe(404);
+      expect(idsOf(fake)).toEqual(["wh-1", "wh-2", "wh-elsewhere"]);
     });
 
     it("should reject a URL the network policy blocks", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockCheckEgress.mockResolvedValueOnce(blocked);
+      const fake = world();
+      mockCheckEgress.mockResolvedValue(blocked);
 
       const res = await app.request(`${baseUrl}/wh-1`, {
         method: "PATCH",
@@ -305,19 +259,15 @@ describe("Webhook Routes", () => {
       });
 
       expect(res.status).toBe(400);
-      expect(mockDb.update).not.toHaveBeenCalled();
+      expect(fake.queries.some((q) => q.kind === "update")).toBe(false);
+      expect(fake.tables.webhook[0].url).toBe("https://example.com/webhook");
     });
   });
 
   describe("DELETE /:webhookId", () => {
     it("should delete webhook", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-
-      mockDb.returning.mockResolvedValueOnce([{ id: "wh-1" }]);
+      const fake = world();
 
       const res = await app.request(`${baseUrl}/wh-1`, {
         method: "DELETE",
@@ -325,52 +275,27 @@ describe("Webhook Routes", () => {
 
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ message: "Webhook deleted" });
+      expect(idsOf(fake)).toEqual(["wh-2", "wh-elsewhere"]);
     });
 
     it("should return 404 for non-existent webhook", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-
-      mockDb.returning.mockResolvedValueOnce([]);
+      const fake = world();
 
       const res = await app.request(`${baseUrl}/nonexistent`, {
         method: "DELETE",
       });
 
       expect(res.status).toBe(404);
+      expect(idsOf(fake)).toEqual(["wh-1", "wh-2", "wh-elsewhere"]);
     });
   });
 
   describe("POST /:webhookId/regenerate-secret", () => {
     it("should regenerate signing secret and return full record", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-
-      const newWebhook = {
-        id: "wh-1",
-        workspaceId,
-        name: "My Webhook",
-        url: "https://example.com/webhook",
-        signingSecret: "new-secret",
-        headers: null,
-        enabled: true,
-        events: [
-          "notification.created",
-          "notification.updated",
-          "notification.read",
-          "notification.dismissed",
-          "card.created",
-          "card.updated",
-          "card.deleted",
-        ],
-      };
-      mockDb.returning.mockResolvedValueOnce([newWebhook]);
+      const fake = world();
+      const regenerated = Buffer.from("a".repeat(32)).toString("hex");
 
       const res = await app.request(`${baseUrl}/wh-1/regenerate-secret`, {
         method: "POST",
@@ -378,17 +303,14 @@ describe("Webhook Routes", () => {
 
       expect(res.status).toBe(200);
       const data = (await res.json()) as { signingSecret: string };
-      expect(data.signingSecret).toBe("new-secret");
+      expect(data.signingSecret).toBe(regenerated);
+      expect(fake.tables.webhook[0].signingSecret).toBe(regenerated);
+      expect(fake.tables.webhook[1].signingSecret).toBe("secret2");
     });
 
     it("should return 404 for non-existent webhook", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-
-      mockDb.returning.mockResolvedValueOnce([]);
+      const fake = world();
 
       const res = await app.request(
         `${baseUrl}/nonexistent/regenerate-secret`,
@@ -398,6 +320,7 @@ describe("Webhook Routes", () => {
       );
 
       expect(res.status).toBe(404);
+      expect(fake.tables.webhook[0].signingSecret).toBe("secret");
     });
   });
 });

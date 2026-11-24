@@ -13,7 +13,11 @@ import {
   ne,
   sql,
 } from "drizzle-orm";
-import { workspace as workspaceTable } from "./db/schema.ts";
+import {
+  kanbanColumn as kanbanColumnTable,
+  workspace as workspaceTable,
+} from "./db/schema.ts";
+import { isUniqueViolation } from "./errors.ts";
 
 describe("the seeded fake beside the chainable mock", () => {
   beforeEach(() => {
@@ -369,6 +373,112 @@ describe("the seeded fake beside the chainable mock", () => {
     ]);
   });
 
+  describe("an insert that clashes with a declared key", () => {
+    const columnRows = {
+      kanban_column: [{ id: "c1", boardId: "b1", name: "Todo", position: 1 }],
+    };
+
+    const seeded = () =>
+      seedDb(columnRows, {
+        unique: {
+          kanban_column: [{ name: "kanban_column_pkey", columns: ["id"] }],
+        },
+      });
+
+    it("skips the clashing rows under `onConflictDoNothing`, keeping the rest", async () => {
+      const fake = seeded();
+
+      await db
+        .insert(kanbanColumnTable)
+        .values([
+          { id: "c1", boardId: "b1", name: "Again", position: 1 },
+          { id: "c2", boardId: "b1", name: "Doing", position: 2 },
+        ])
+        .onConflictDoNothing();
+
+      expect(fake.tables.kanban_column).toEqual([
+        { id: "c1", boardId: "b1", name: "Todo", position: 1 },
+        { id: "c2", boardId: "b1", name: "Doing", position: 2 },
+      ]);
+    });
+
+    it("throws on a plain insert", async () => {
+      const fake = seeded();
+
+      let failure: unknown;
+      try {
+        await db
+          .insert(kanbanColumnTable)
+          .values({ id: "c1", boardId: "b1", name: "Again", position: 1 });
+      } catch (error) {
+        failure = error;
+      }
+
+      expect(isUniqueViolation(failure)).toBe(true);
+      expect(fake.tables.kanban_column).toEqual(columnRows.kanban_column);
+    });
+  });
+
+  it("deletes the rows whose foreign key cascades from the deleted row", async () => {
+    const fake = seedDb(
+      {
+        artifact: [
+          { id: "a1", title: "Ours" },
+          { id: "a2", title: "Theirs" },
+        ],
+        artifact_version: [
+          { id: "v1", artifactId: "a1" },
+          { id: "v2", artifactId: "a2" },
+        ],
+        artifact_version_note: [
+          { id: "n1", versionId: "v1" },
+          { id: "n2", versionId: "v2" },
+        ],
+      },
+      {
+        cascades: [
+          {
+            childTable: "artifact_version",
+            childColumn: "artifactId",
+            parentTable: "artifact",
+            parentColumn: "id",
+          },
+          {
+            childTable: "artifact_version_note",
+            childColumn: "versionId",
+            parentTable: "artifact_version",
+            parentColumn: "id",
+          },
+        ],
+      },
+    );
+    const { artifact } = await import("./db/schema.ts");
+
+    await db.delete(artifact).where(eq(artifact.id, "a1"));
+
+    expect(fake.tables.artifact).toEqual([{ id: "a2", title: "Theirs" }]);
+    expect(fake.tables.artifact_version).toEqual([
+      { id: "v2", artifactId: "a2" },
+    ]);
+    expect(fake.tables.artifact_version_note).toEqual([
+      { id: "n2", versionId: "v2" },
+    ]);
+  });
+
+  it("leaves a child row whose foreign key does not cascade", async () => {
+    const fake = seedDb({
+      artifact: [{ id: "a1" }],
+      artifact_version: [{ id: "v1", artifactId: "a1" }],
+    });
+    const { artifact } = await import("./db/schema.ts");
+
+    await db.delete(artifact).where(eq(artifact.id, "a1"));
+
+    expect(fake.tables.artifact_version).toEqual([
+      { id: "v1", artifactId: "a1" },
+    ]);
+  });
+
   it("scrubs an id out of only the jsonb arrays that contain it", async () => {
     const seeded = seedDb({
       agent: [
@@ -388,6 +498,221 @@ describe("the seeded fake beside the chainable mock", () => {
       id: "a2",
       subAgentIds: ["kept"],
       updatedAt: "untouched",
+    });
+  });
+
+  it("skips a row that clashes when the insert ignores conflicts", async () => {
+    const seeded = seedDb(
+      {
+        attachment: [
+          {
+            id: "att-1",
+            workspaceId: "ws-1",
+            resourceType: "agent",
+            resourceId: "agent-1",
+          },
+        ],
+      },
+      {
+        unique: {
+          attachment: [
+            {
+              name: "unique_attachment",
+              columns: ["workspaceId", "resourceType", "resourceId"],
+            },
+          ],
+        },
+      },
+    );
+    const { attachment } = await import("./db/schema.ts");
+
+    const kept = await db
+      .insert(attachment)
+      .values([
+        {
+          id: "att-2",
+          workspaceId: "ws-1",
+          resourceType: "agent",
+          resourceId: "agent-1",
+        },
+        {
+          id: "att-3",
+          workspaceId: "ws-1",
+          resourceType: "agent",
+          resourceId: "agent-2",
+        },
+      ])
+      .onConflictDoNothing()
+      .returning({ id: attachment.id });
+
+    expect(kept).toEqual([{ id: "att-3" }]);
+    expect(seeded.tables.attachment.map((row) => row.id)).toEqual([
+      "att-1",
+      "att-3",
+    ]);
+  });
+
+  it("orders by a bare column ascending, with NULLS FIRST as written", async () => {
+    seedDb({
+      workspace: [
+        { id: "ws-1", name: "Alpha", organizationId: null },
+        { id: "ws-2", name: "Beta", organizationId: "org-1" },
+        { id: "ws-3", name: "Gamma", organizationId: "org-2" },
+      ],
+    });
+
+    const byId = await db
+      .select({ id: workspaceTable.id })
+      .from(workspaceTable)
+      .orderBy(workspaceTable.id);
+    expect(byId).toEqual([{ id: "ws-1" }, { id: "ws-2" }, { id: "ws-3" }]);
+
+    const nullsFirst = await db
+      .select({ id: workspaceTable.id })
+      .from(workspaceTable)
+      .orderBy(sql`${workspaceTable.organizationId} NULLS FIRST`);
+    expect(nullsFirst).toEqual([
+      { id: "ws-1" },
+      { id: "ws-2" },
+      { id: "ws-3" },
+    ]);
+  });
+
+  it("counts a bucket for a `count(*)::int` selection", async () => {
+    seedDb(rows);
+
+    const counted = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(workspaceTable);
+
+    expect(counted).toEqual([{ n: 2 }]);
+  });
+});
+
+describe("the fake's transaction", () => {
+  const workspaceRow = (
+    over: Partial<typeof workspaceTable.$inferInsert> = {},
+  ) => ({
+    id: "ws-1",
+    name: "One",
+    organizationId: "org-1",
+    ownerId: "user-1",
+    ...over,
+  });
+
+  const hold = () => {
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    return { held, release: () => release() };
+  };
+
+  beforeEach(() => {
+    resetMockDb();
+    vi.clearAllMocks();
+  });
+
+  it("keeps a row inserted outside it to a table it also inserted into", async () => {
+    const seeded = seedDb({ workspace: [] });
+    const gate = hold();
+
+    const transaction = db.transaction(async (tx) => {
+      await tx
+        .insert(workspaceTable)
+        .values(workspaceRow({ id: "inside", name: "Inside" }));
+      await gate.held;
+    });
+
+    await db
+      .insert(workspaceTable)
+      .values(workspaceRow({ id: "outside", name: "Outside" }));
+    gate.release();
+    await transaction;
+
+    expect(seeded.tables.workspace).toEqual([
+      workspaceRow({ id: "outside", name: "Outside" }),
+      workspaceRow({ id: "inside", name: "Inside" }),
+    ]);
+  });
+
+  it("keeps an update made outside it to another row of a table it updated", async () => {
+    const seeded = seedDb({
+      workspace: [
+        { id: "ws-1", name: "One", organizationId: "org-1" },
+        { id: "ws-2", name: "Two", organizationId: "org-1" },
+      ],
+    });
+    const gate = hold();
+
+    const transaction = db.transaction(async (tx) => {
+      await tx
+        .update(workspaceTable)
+        .set({ name: "Two inside" })
+        .where(eq(workspaceTable.id, "ws-2"));
+      await gate.held;
+    });
+
+    await db
+      .update(workspaceTable)
+      .set({ name: "One outside" })
+      .where(eq(workspaceTable.id, "ws-1"));
+    gate.release();
+    await transaction;
+
+    expect(seeded.tables.workspace).toEqual([
+      { id: "ws-1", name: "One outside", organizationId: "org-1" },
+      { id: "ws-2", name: "Two inside", organizationId: "org-1" },
+    ]);
+  });
+
+  it("keeps a row inserted outside it to a table it deleted from", async () => {
+    const seeded = seedDb({
+      workspace: [
+        { id: "gone", name: "Gone", organizationId: "org-1" },
+        { id: "kept", name: "Kept", organizationId: "org-1" },
+      ],
+    });
+    const gate = hold();
+
+    const transaction = db.transaction(async (tx) => {
+      await tx.delete(workspaceTable).where(eq(workspaceTable.id, "gone"));
+      await gate.held;
+    });
+
+    await db
+      .insert(workspaceTable)
+      .values(workspaceRow({ id: "outside", name: "Outside" }));
+    gate.release();
+    await transaction;
+
+    expect(seeded.tables.workspace).toEqual([
+      { id: "kept", name: "Kept", organizationId: "org-1" },
+      workspaceRow({ id: "outside", name: "Outside" }),
+    ]);
+  });
+
+  it("leaves every table untouched when the callback throws", async () => {
+    const seeded = seedDb({
+      workspace: [{ id: "ws-1", name: "One", organizationId: "org-1" }],
+    });
+
+    await expect(
+      db.transaction(async (tx) => {
+        await tx
+          .insert(workspaceTable)
+          .values(workspaceRow({ id: "ws-2", name: "Two" }));
+        await tx
+          .update(workspaceTable)
+          .set({ name: "Renamed" })
+          .where(eq(workspaceTable.id, "ws-1"));
+        await tx.delete(workspaceTable).where(eq(workspaceTable.id, "ws-1"));
+        throw new Error("rollback");
+      }),
+    ).rejects.toThrow("rollback");
+
+    expect(seeded.tables).toEqual({
+      workspace: [{ id: "ws-1", name: "One", organizationId: "org-1" }],
     });
   });
 });

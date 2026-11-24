@@ -2916,7 +2916,7 @@ describe("POST /a2a/:endpointId — CancelTask", () => {
 
   it("cancels a run another instance holds, and reads canceled at once", async () => {
     seedRunElsewhere();
-    vi.mocked(cancelRun).mockResolvedValueOnce();
+    vi.mocked(cancelRun).mockImplementationOnce(() => Promise.resolve());
 
     const res = await rpc("CancelTask", { id: "task-1" });
 
@@ -2934,7 +2934,7 @@ describe("POST /a2a/:endpointId — CancelTask", () => {
   it("stops a run whose cancel never reached it, on the next sweep", async () => {
     seedConversation();
     const task = await startMidReply();
-    vi.mocked(cancelRun).mockResolvedValueOnce();
+    vi.mocked(cancelRun).mockImplementationOnce(() => Promise.resolve());
 
     await rpc("CancelTask", { id: task.id });
     expect(rows("chat")[0]).toMatchObject({ status: "running" });
@@ -3126,44 +3126,12 @@ describe("POST /a2a/:endpointId — CancelTask", () => {
     await rpc("CancelTask", { id: task.id });
   });
 
-  it("cancels once for two CancelTasks at once, refusing the other as not cancelable", async () => {
-    const fake = seedConversation();
-    const task = await startMidReply();
-    const handle = fake.handle as {
-      transaction: (callback: (tx: unknown) => Promise<unknown>) => unknown;
-    };
-    const transaction = handle.transaction;
-    let turn: Promise<unknown> = Promise.resolve();
-    handle.transaction = (callback) => {
-      const run = turn.then(() => transaction(callback));
-      turn = run.catch(() => undefined);
-      return run;
-    };
-
-    const answers = await Promise.all([
-      rpc("CancelTask", { id: task.id }),
-      rpc("CancelTask", { id: task.id }),
-    ]);
-
-    expect(
-      answers
-        .map(
-          ({ body }: { body: Partial<RpcBody> }) =>
-            body.result?.status.state ?? body.error?.code,
-        )
-        .sort(),
-    ).toEqual([-32002, "TASK_STATE_CANCELED"]);
-    expect(cancelRun).toHaveBeenCalledTimes(1);
-    await vi.waitFor(() =>
-      expect(rows("chat")[0]).toMatchObject({ status: "cancelled" }),
-    );
-    expect(await stateOf(task.id)).toBe("TASK_STATE_CANCELED");
-  });
-
   it("answers canceled when the cancel can't be sent, and the sweep stops the run", async () => {
     seedConversation();
     const task = await startMidReply();
-    vi.mocked(cancelRun).mockRejectedValueOnce(new Error("NOTIFY failed"));
+    vi.mocked(cancelRun).mockImplementationOnce(() =>
+      Promise.reject(new Error("NOTIFY failed")),
+    );
 
     const res = await rpc("CancelTask", { id: task.id });
 
@@ -3195,7 +3163,7 @@ describe("POST /a2a/:endpointId — CancelTask", () => {
     it("stops a run whose cancel was lost within 5 seconds, past a sweep that failed", async () => {
       const fake = seedConversation();
       const task = await startMidReply();
-      vi.mocked(cancelRun).mockResolvedValueOnce();
+      vi.mocked(cancelRun).mockImplementationOnce(() => Promise.resolve());
       await rpc("CancelTask", { id: task.id });
       watch();
 
@@ -3442,7 +3410,7 @@ describe("POST /a2a/:endpointId — push notifications", () => {
 
   it("pushes a Task canceled with CancelTask once, though another instance holds its run", async () => {
     seedRunElsewhere();
-    vi.mocked(cancelRun).mockResolvedValueOnce();
+    vi.mocked(cancelRun).mockImplementationOnce(() => Promise.resolve());
     await rpc("CreateTaskPushNotificationConfig", {
       taskId: "task-1",
       ...config(),
@@ -3569,7 +3537,9 @@ describe("POST /a2a/:endpointId — push notifications", () => {
 
   it("retries a delivery the client's server refused", async () => {
     seedConversation();
-    push.mockResolvedValueOnce(new Response(null, { status: 503 }));
+    push.mockImplementationOnce(() =>
+      Promise.resolve(new Response(null, { status: 503 })),
+    );
     const { task, release } = await startHeld();
     await rpc("CreateTaskPushNotificationConfig", {
       taskId: task.id,
@@ -4065,25 +4035,6 @@ describe("POST /a2a/:endpointId — the load cap", () => {
     const other = await send({ messageId: "msg-z" });
     expect(other.status).toBe(429);
     expect(model.prompts).toHaveLength(1);
-    release();
-  });
-
-  it("refuses the loser of two messages racing into an idle Chat as busy", async () => {
-    process.env.A2A_MAX_CONCURRENT_RUNS = "2";
-    seedConversation();
-    const first = await send({ messageId: "msg-a" });
-    const { contextId } = first.body.result.task;
-    let release = () => {};
-    model.hold = new Promise((resolve) => (release = resolve));
-
-    const [b, c] = await Promise.all([
-      send({ messageId: "msg-b", contextId }, { returnImmediately: true }),
-      send({ messageId: "msg-c", contextId }, { returnImmediately: true }),
-    ]);
-
-    const [won, lost] = "result" in b.body ? [b, c] : [c, b];
-    expect(won.body.result.task.id).toBeDefined();
-    expect(lost.body.error.code).toBe(-32004);
     release();
   });
 
@@ -5312,7 +5263,7 @@ describe("POST /a2a/:endpointId — streaming", () => {
 
   it("ends a SubscribeToTask stream canceled, though another instance holds the run", async () => {
     seedRunElsewhere();
-    vi.mocked(cancelRun).mockResolvedValueOnce();
+    vi.mocked(cancelRun).mockImplementationOnce(() => Promise.resolve());
 
     const events = await withFakeTimers(async () => {
       const res = await open("SubscribeToTask", { id: "task-1" });

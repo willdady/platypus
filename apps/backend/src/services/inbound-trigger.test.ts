@@ -1,6 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { nanoid } from "nanoid";
-import { resetMockDb, seedDb, type Row } from "../test-utils.ts";
+import {
+  flushAsyncWork,
+  resetMockDb,
+  seedDb,
+  type Row,
+} from "../test-utils.ts";
 import { mockLogger } from "../test-setup.ts";
 
 vi.mock("nanoid", { spy: true });
@@ -32,26 +37,28 @@ import {
   bearerTokenStatus,
   dueReminder,
   hashBearerToken,
-  resetTokenTouches,
-  tokenTouchCount,
 } from "./bearer-token.ts";
-import { ConflictError, NotFoundError } from "../errors.ts";
-import {
-  acceptInboundCall,
-  activeInboundRunCount,
-  authenticateInboundCall,
-  getInboundTriggerAccess,
-  listOrgInboundTriggers,
-  logInboundCall,
-  resetInboundRunSlots,
-  revokeInboundTriggerToken,
-  sendInboundTokenReminders,
-  setInboundTriggerAccess,
-  touchInboundTrigger,
-  validateInboundBody,
-  type InboundTarget,
-} from "./inbound-trigger.ts";
+import type { InboundTarget } from "./inbound-trigger.ts";
 import type { InboundTriggerConfig } from "@platypus/schemas";
+
+type InboundTriggerModule = typeof import("./inbound-trigger.ts");
+type BearerTokenModule = typeof import("./bearer-token.ts");
+type ErrorsModule = typeof import("../errors.ts");
+
+let ConflictError: ErrorsModule["ConflictError"];
+let NotFoundError: ErrorsModule["NotFoundError"];
+let acceptInboundCall: InboundTriggerModule["acceptInboundCall"];
+let authenticateInboundCall: InboundTriggerModule["authenticateInboundCall"];
+let getInboundTriggerAccess: InboundTriggerModule["getInboundTriggerAccess"];
+let listOrgInboundTriggers: InboundTriggerModule["listOrgInboundTriggers"];
+let logInboundCall: InboundTriggerModule["logInboundCall"];
+let revokeInboundTriggerToken: InboundTriggerModule["revokeInboundTriggerToken"];
+let sendInboundTokenReminders: InboundTriggerModule["sendInboundTokenReminders"];
+let setInboundTriggerAccess: InboundTriggerModule["setInboundTriggerAccess"];
+let touchInboundTrigger: InboundTriggerModule["touchInboundTrigger"];
+let validateInboundBody: InboundTriggerModule["validateInboundBody"];
+let resetTokenTouches: BearerTokenModule["resetTokenTouches"];
+let tokenTouchCount: BearerTokenModule["tokenTouchCount"];
 
 const NOW = new Date("2026-09-29T12:00:00.000Z");
 const DAY = 24 * 60 * 60 * 1000;
@@ -132,10 +139,25 @@ const target = (over: Row = {}): InboundTarget => ({
 const settings = { maxConcurrentRuns: 5, maxBodyBytes: 65536 };
 
 describe("inbound triggers", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     resetMockDb();
     vi.clearAllMocks();
-    resetInboundRunSlots();
+    vi.resetModules();
+    ({
+      acceptInboundCall,
+      authenticateInboundCall,
+      getInboundTriggerAccess,
+      listOrgInboundTriggers,
+      logInboundCall,
+      revokeInboundTriggerToken,
+      sendInboundTokenReminders,
+      setInboundTriggerAccess,
+      touchInboundTrigger,
+      validateInboundBody,
+    } = await import("./inbound-trigger.ts"));
+    ({ resetTokenTouches, tokenTouchCount } =
+      await import("./bearer-token.ts"));
+    ({ ConflictError, NotFoundError } = await import("../errors.ts"));
     resetTokenTouches();
     mockDeletePrefix.mockResolvedValue(undefined);
     vi.useFakeTimers({ toFake: ["Date"] });
@@ -396,7 +418,7 @@ describe("inbound triggers", () => {
         { issueKey: "A" },
         settings,
       );
-      await new Promise((resolve) => setImmediate(resolve));
+      await flushAsyncWork();
 
       expect(fake.execute).toHaveBeenCalledTimes(1);
 
@@ -429,7 +451,6 @@ describe("inbound triggers", () => {
       expect(result).toEqual({ outcome: "deduplicated", runId: "run-active" });
       expect(fake.tables.trigger_run).toHaveLength(1);
       expect(fireTrigger).not.toHaveBeenCalled();
-      expect(activeInboundRunCount()).toBe(0);
     });
 
     it("does not deduplicate against a finished run, or another record's", async () => {
@@ -590,11 +611,36 @@ describe("inbound triggers", () => {
       expect(fake.tables.trigger_run).toHaveLength(1);
 
       finish();
-      await vi.waitFor(() => expect(activeInboundRunCount()).toBe(0));
+      await flushAsyncWork();
       expect(
         (await acceptInboundCall(target(), config, { issueKey: "B" }, one))
           .outcome,
       ).toBe("accepted");
+    });
+
+    it("frees the slot when a run fails", async () => {
+      let finish: () => void = () => {};
+      vi.mocked(fireTrigger).mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finish = () => resolve("failed");
+          }),
+      );
+      const fake = seed();
+      const one = { ...settings, maxConcurrentRuns: 1 };
+
+      await acceptInboundCall(target(), config, { issueKey: "A" }, one);
+      expect(
+        await acceptInboundCall(target(), config, { issueKey: "B" }, one),
+      ).toEqual({ outcome: "rate_limited" });
+
+      finish();
+      await flushAsyncWork();
+      expect(
+        (await acceptInboundCall(target(), config, { issueKey: "B" }, one))
+          .outcome,
+      ).toBe("accepted");
+      expect(fake.tables.trigger_run).toHaveLength(2);
     });
   });
 
@@ -606,7 +652,6 @@ describe("inbound triggers", () => {
       );
       vi.mocked(nanoid).mockReturnValueOnce("run-holding");
       await acceptInboundCall(target(), config, { issueKey: "HOLD" }, one);
-      expect(activeInboundRunCount()).toBe(1);
     };
 
     it("still returns a record's active run, since a deduplicated call starts none", async () => {
@@ -626,7 +671,10 @@ describe("inbound triggers", () => {
       expect(
         await acceptInboundCall(target(), config, { issueKey: "PLAT-42" }, one),
       ).toEqual({ outcome: "deduplicated", runId: "run-active" });
-      expect(activeInboundRunCount()).toBe(1);
+      expect(
+        (await acceptInboundCall(target(), config, { issueKey: "PLAT-7" }, one))
+          .outcome,
+      ).toBe("rate_limited");
     });
 
     it("still records a breaker trip, since a suppressed call starts no run", async () => {
@@ -654,13 +702,23 @@ describe("inbound triggers", () => {
             one,
           ),
         ).toEqual({ outcome: "suppressed", runId: "run-suppressed" });
-        expect(activeInboundRunCount()).toBe(1);
+        expect(
+          (
+            await acceptInboundCall(
+              target(),
+              config,
+              { issueKey: "PLAT-7" },
+              one,
+            )
+          ).outcome,
+        ).toBe("rate_limited");
       } finally {
         delete process.env.TRIGGER_BREAKER_MAX_RUNS;
       }
     });
 
     it("gives the slot back when writing the pending row fails", async () => {
+      let failedOnce = false;
       seedDb(
         {
           trigger: [inboundTrigger()],
@@ -670,7 +728,10 @@ describe("inbound triggers", () => {
         },
         {
           onInsert: (table) => {
-            if (table === "trigger_run") throw new Error("insert failed");
+            if (table === "trigger_run" && !failedOnce) {
+              failedOnce = true;
+              throw new Error("insert failed");
+            }
           },
         },
       );
@@ -678,7 +739,10 @@ describe("inbound triggers", () => {
       await expect(
         acceptInboundCall(target(), config, { issueKey: "A" }, one),
       ).rejects.toThrow("insert failed");
-      expect(activeInboundRunCount()).toBe(0);
+      expect(
+        (await acceptInboundCall(target(), config, { issueKey: "A" }, one))
+          .outcome,
+      ).toBe("accepted");
     });
   });
 

@@ -14,6 +14,7 @@ import {
 } from "@platypus/schemas";
 import {
   composeToolSet,
+  CORE_PLUGIN_CONTEXT,
   getToolSets,
   getToolSet,
   hasToolSet,
@@ -22,6 +23,7 @@ import {
 } from "./index.ts";
 import { CORE_BUILTIN_OWNER } from "../plugins/registry.ts";
 import { logger } from "../logger.ts";
+import { mockLogger } from "../test-setup.ts";
 import {
   LOAD_SKILL_TOOL_NAME,
   RESERVED_TURN_TOOL_NAMES,
@@ -691,5 +693,33 @@ describe("the sandbox tool set", () => {
       expect.objectContaining({ sandboxId: "sb-1", plugin: null }),
       message,
     );
+  });
+});
+
+type ChildBindings = { plugin?: string };
+const coreChildBindings = (
+  mockLogger.child.mock.calls as unknown as [ChildBindings][]
+).map(([bindings]) => bindings);
+
+describe("the sandbox tool set's plugin context", () => {
+  it("holds its logger as a plain value, not an accessor", () => {
+    expect(
+      Object.getOwnPropertyDescriptor(CORE_PLUGIN_CONTEXT, "logger"),
+    ).not.toHaveProperty("get");
+  });
+
+  it("binds its logger to core at load", () => {
+    expect(
+      coreChildBindings.filter(({ plugin }) => plugin === CORE_BUILTIN_OWNER),
+    ).toHaveLength(1);
+  });
+
+  it("does not build a new child logger on every read", () => {
+    mockLogger.child.mockClear();
+
+    void CORE_PLUGIN_CONTEXT.logger;
+    void CORE_PLUGIN_CONTEXT.logger;
+
+    expect(mockLogger.child).not.toHaveBeenCalled();
   });
 });

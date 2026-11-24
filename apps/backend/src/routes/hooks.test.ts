@@ -1,12 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { nanoid } from "nanoid";
-import {
-  dbError,
-  mockDb,
-  resetMockDb,
-  seedDb,
-  type Row,
-} from "../test-utils.ts";
+import { dbError, resetMockDb, seedDb, type Row } from "../test-utils.ts";
 import { mockLogger } from "../test-setup.ts";
 
 vi.mock("nanoid", { spy: true });
@@ -18,13 +12,10 @@ vi.mock("../services/notification.ts", () => ({
   createNotification: vi.fn(() => Promise.resolve({ id: "notification-1" })),
 }));
 
-import app from "../server.ts";
 import { fireTrigger } from "../services/trigger-firing.ts";
-import {
-  hashBearerToken,
-  resetTokenTouches,
-} from "../services/bearer-token.ts";
-import { resetInboundRunSlots } from "../services/inbound-trigger.ts";
+import { hashBearerToken } from "../services/bearer-token.ts";
+
+let app: (typeof import("../server.ts"))["default"];
 
 const TOKEN = "pit_the-right-token";
 const DAY = 24 * 60 * 60 * 1000;
@@ -106,12 +97,16 @@ const callLogLines = () =>
     .filter(([, message]) => message === "Inbound trigger call")
     .map(([fields]) => fields as Record<string, unknown>);
 
+const holdRun = () => {
+  vi.mocked(fireTrigger).mockImplementationOnce(() => new Promise(() => {}));
+};
+
 describe("/hooks/triggers", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     resetMockDb();
     vi.clearAllMocks();
-    resetInboundRunSlots();
-    resetTokenTouches();
+    vi.resetModules();
+    ({ default: app } = await import("../server.ts"));
   });
 
   afterEach(() => {
@@ -300,9 +295,16 @@ describe("/hooks/triggers", () => {
 
     it("still writes the 413's log line when the Trigger lookup fails", async () => {
       process.env.INBOUND_TRIGGER_MAX_BODY_BYTES = "64";
-      mockDb.limit.mockImplementationOnce(() => {
-        throw dbError("08006", "database unreachable");
-      });
+      seedDb(
+        { trigger: [inbound()] },
+        {
+          onQuery: (query) => {
+            if (query.kind === "select" && query.table === "trigger") {
+              throw dbError("08006", "database unreachable");
+            }
+          },
+        },
+      );
 
       const res = await fire("trig-1", {
         body: JSON.stringify({ inputs: { issueKey: "x".repeat(100) } }),
@@ -357,9 +359,7 @@ describe("/hooks/triggers", () => {
 
     it("returns a record's active run with 202 even at the concurrency cap", async () => {
       process.env.INBOUND_TRIGGER_MAX_CONCURRENT_RUNS = "1";
-      vi.mocked(fireTrigger).mockImplementationOnce(
-        () => new Promise(() => {}),
-      );
+      holdRun();
       vi.mocked(nanoid).mockReturnValueOnce("run-1");
       seed();
 
@@ -408,9 +408,7 @@ describe("/hooks/triggers", () => {
 
     it("answers 429 with Retry-After past the concurrency cap, writing no row", async () => {
       process.env.INBOUND_TRIGGER_MAX_CONCURRENT_RUNS = "1";
-      vi.mocked(fireTrigger).mockImplementationOnce(
-        () => new Promise(() => {}),
-      );
+      holdRun();
       vi.mocked(nanoid).mockReturnValueOnce("run-1");
       const fake = seed();
 

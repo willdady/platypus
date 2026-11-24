@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   dbError,
-  mockDb,
   mockNoSession,
   mockSession,
   resetMockDb,
@@ -30,7 +29,7 @@ vi.mock("../services/chat-execution.ts", () => ({
   drizzleChatTurnQueries: {},
 }));
 
-import { createUIMessageStreamResponse, generateText } from "ai";
+import { generateText } from "ai";
 import app from "../server.ts";
 import { runRegistry } from "../runs/run-registry.ts";
 import { recoverStuckChats } from "../jobs/scheduler.ts";
@@ -55,9 +54,8 @@ vi.mock("ai", async () => {
           },
         }),
     ),
-    createUIMessageStreamResponse: vi
-      .fn()
-      .mockReturnValue(new Response("stream")),
+    // why: a stream body is consumed once, so a shared Response leaves later turns locked
+    createUIMessageStreamResponse: vi.fn(() => new Response("stream")),
     generateText: vi.fn().mockResolvedValue({
       output: { title: "Generated Title" },
     }),
@@ -127,11 +125,15 @@ describe("Chat Routes", () => {
   beforeEach(() => {
     resetMockDb();
     vi.clearAllMocks();
-    mockDb.where.mockReturnValue(mockDb);
-    mockDb.orderBy.mockReturnValue(mockDb);
-    mockDb.limit.mockReturnValue(mockDb);
-    mockDb.offset.mockReturnValue(mockDb);
-    mockDb.for.mockResolvedValue([{ id: "ws-1" }]);
+    mockPrepareChatTurn.mockReset();
+    mockValidateTurnAttachments.mockReset();
+    mockValidateTurnAttachments.mockResolvedValue(undefined);
+    vi.mocked(generateText).mockResolvedValue({
+      output: { title: "Generated Title" },
+    } as never);
+    vi.mocked(resolveMemoryPin).mockReturnValue({ reuse: false });
+    vi.mocked(retrieveRecentSummaries).mockResolvedValue([]);
+    vi.mocked(formatSummariesForSystemPrompt).mockReturnValue("");
   });
 
   const orgId = "org-1";
@@ -146,30 +148,24 @@ describe("Chat Routes", () => {
   describe("GET /", () => {
     it("should list chats", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-
-      const mockChats = [{ id: "chat-1", title: "Chat 1" }];
-      mockDb.offset.mockResolvedValueOnce(mockChats);
-      mockDb.where
-        .mockReturnValueOnce(mockDb)
-        .mockReturnValueOnce(mockDb)
-        .mockReturnValueOnce(mockDb)
-        .mockResolvedValueOnce([{ totalCount: 1 }]);
+      seedTenant({
+        chat: [
+          { id: "chat-1", workspaceId, title: "Chat 1" },
+          { id: "chat-elsewhere", workspaceId: "ws-2", title: "Elsewhere" },
+        ],
+      });
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({ results: mockChats, totalCount: 1 });
+      expect(await res.json()).toEqual({
+        results: [{ id: "chat-1", title: "Chat 1" }],
+        totalCount: 1,
+      });
     });
 
     it("rejects an unknown query key instead of silently ignoring it", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
+      seedTenant();
 
       const res = await app.request(`${baseUrl}?tags=typescript`);
       expect(res.status).toBe(400);
@@ -179,41 +175,31 @@ describe("Chat Routes", () => {
 
     it("should return all chats when no filter is provided", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-
-      const mockChats = [
-        { id: "chat-1", title: "Chat 1" },
-        { id: "chat-2", title: "Chat 2" },
-        { id: "chat-3", title: "Chat 3" },
-      ];
-      mockDb.offset.mockResolvedValueOnce(mockChats);
-      mockDb.where
-        .mockReturnValueOnce(mockDb)
-        .mockReturnValueOnce(mockDb)
-        .mockReturnValueOnce(mockDb)
-        .mockResolvedValueOnce([{ totalCount: 3 }]);
+      seedTenant({
+        chat: [
+          { id: "chat-1", workspaceId, title: "Chat 1" },
+          { id: "chat-2", workspaceId, title: "Chat 2" },
+          { id: "chat-3", workspaceId, title: "Chat 3" },
+        ],
+      });
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({ results: mockChats, totalCount: 3 });
+      expect(await res.json()).toEqual({
+        results: [
+          { id: "chat-1", title: "Chat 1" },
+          { id: "chat-2", title: "Chat 2" },
+          { id: "chat-3", title: "Chat 3" },
+        ],
+        totalCount: 3,
+      });
     });
 
     const listChats = async (query: string) => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.offset.mockResolvedValueOnce([]);
-      mockDb.where
-        .mockReturnValueOnce(mockDb)
-        .mockReturnValueOnce(mockDb)
-        .mockReturnValueOnce(mockDb)
-        .mockResolvedValueOnce([{ totalCount: 0 }]);
-      return app.request(`${baseUrl}?${query}`);
+      const fake = seedTenant();
+      const res = await app.request(`${baseUrl}?${query}`);
+      return { res, fake };
     };
 
     it("escapes LIKE wildcards in the search term", async () => {
@@ -259,20 +245,35 @@ describe("Chat Routes", () => {
     });
 
     it("defaults to the first 100 chats", async () => {
-      const res = await listChats("");
+      mockSession();
+      seedTenant({
+        chat: Array.from({ length: 101 }, (_, index) => ({
+          id: `chat-${index}`,
+          workspaceId,
+          title: `Chat ${index}`,
+          createdAt: new Date(Date.UTC(2026, 0, 1, 0, 0, index)),
+        })),
+      });
+
+      const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
-      expect(mockDb.limit).toHaveBeenLastCalledWith(100);
-      expect(mockDb.offset).toHaveBeenLastCalledWith(0);
+      const body = (await res.json()) as { results: Row[]; totalCount: number };
+      expect(body.totalCount).toBe(101);
+      expect(body.results).toHaveLength(100);
+      expect(body.results[0].id).toBe("chat-100");
+      expect(body.results.at(-1)?.id).toBe("chat-1");
     });
 
     it.each(["limit=0", "limit=101", "limit=abc", "limit=1.5", "offset=-1"])(
       "rejects %s with a 400",
       async (query) => {
-        const res = await listChats(query);
+        const { res, fake } = await listChats(query);
         expect(res.status).toBe(400);
         const body = (await res.json()) as { error?: unknown };
         expect(Object.keys(body)).toEqual(["error"]);
-        expect(mockDb.offset).not.toHaveBeenCalled();
+        expect(fake.queries.some((record) => record.table === "chat")).toBe(
+          false,
+        );
       },
     );
   });
@@ -564,41 +565,14 @@ describe("Chat Routes", () => {
       dispose: vi.fn().mockResolvedValue(undefined),
     };
 
-    const freshStream = () => {
-      vi.mocked(createUIMessageStreamResponse).mockReturnValueOnce(
-        new Response("stream"),
-      );
-    };
-
     it("should start a chat stream", async () => {
       mockSession({
         id: "user-1",
         name: "Test User",
         email: "test@example.com",
       });
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([]);
-      mockDb.orderBy.mockResolvedValueOnce([]);
-
-      mockDb.returning.mockResolvedValueOnce([{ id: "chat-1" }]);
-
-      mockPrepareChatTurn.mockResolvedValueOnce({
-        stream: {
-          model: {},
-          tools: {},
-          system: "",
-          messages: [],
-          maxSteps: 1,
-        },
-        resolved: {
-          providerId: "p1",
-          modelId: "m1",
-        },
-        dispose: vi.fn().mockResolvedValue(undefined),
-      });
+      seedTenant();
+      mockPrepareChatTurn.mockResolvedValue(validTurn);
 
       const res = await app.request(`${baseUrl}/chat-1/turns`, {
         method: "POST",
@@ -618,15 +592,8 @@ describe("Chat Routes", () => {
 
     it("maps a NotFoundError from prepareChatTurn to 404 via the central onError seam", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([]);
-      mockDb.orderBy.mockResolvedValueOnce([]);
-      mockDb.returning.mockResolvedValueOnce([{ id: "chat-2" }]);
-
-      mockPrepareChatTurn.mockRejectedValueOnce(
+      seedTenant();
+      mockPrepareChatTurn.mockRejectedValue(
         new NotFoundError("Agent 'agent-1' not found"),
       );
 
@@ -649,15 +616,8 @@ describe("Chat Routes", () => {
 
     it("maps a ValidationError from prepareChatTurn to 400 via the central onError seam", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([]);
-      mockDb.orderBy.mockResolvedValueOnce([]);
-      mockDb.returning.mockResolvedValueOnce([{ id: "chat-3" }]);
-
-      mockPrepareChatTurn.mockRejectedValueOnce(
+      seedTenant();
+      mockPrepareChatTurn.mockRejectedValue(
         new ValidationError("Model id 'bogus' not enabled for provider 'p1'"),
       );
 
@@ -681,17 +641,12 @@ describe("Chat Routes", () => {
 
     it("maps a FileValidationError from the file gate to 400 with the offending files", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([]);
-      mockDb.orderBy.mockResolvedValueOnce([]);
+      seedTenant();
 
       const fileError = new FileValidationError([
         { file: "scan.pdf", reason: "unextractable" },
       ]);
-      mockValidateTurnAttachments.mockRejectedValueOnce(fileError);
+      mockValidateTurnAttachments.mockRejectedValue(fileError);
 
       const res = await app.request(`${baseUrl}/chat-4/turns`, {
         method: "POST",
@@ -718,22 +673,14 @@ describe("Chat Routes", () => {
         name: "Test User",
         email: "test@example.com",
       });
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([]);
-      mockDb.orderBy.mockResolvedValueOnce([]);
-      mockDb.returning.mockResolvedValueOnce([{ id: "chat-a" }]);
+      seedTenant();
 
-      vi.mocked(resolveMemoryPin).mockReturnValueOnce({ reuse: false });
-      vi.mocked(retrieveRecentSummaries).mockResolvedValueOnce([
+      vi.mocked(resolveMemoryPin).mockReturnValue({ reuse: false });
+      vi.mocked(retrieveRecentSummaries).mockResolvedValue([
         { summaryDate: "2026-04-29", summary: "Likes coffee." },
       ]);
-      vi.mocked(formatSummariesForSystemPrompt).mockReturnValueOnce(
-        "pinned-fresh",
-      );
-      mockPrepareChatTurn.mockResolvedValueOnce(validTurn);
+      vi.mocked(formatSummariesForSystemPrompt).mockReturnValue("pinned-fresh");
+      mockPrepareChatTurn.mockResolvedValue(validTurn);
 
       await app.request(`${baseUrl}/chat-a/turns`, {
         method: "POST",
@@ -764,23 +711,23 @@ describe("Chat Routes", () => {
         name: "Test User",
         email: "test@example.com",
       });
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([
-        { memorySnapshot: "pinned-block", lastTurnAt: new Date() },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([]);
-      mockDb.orderBy.mockResolvedValueOnce([]);
-      mockDb.returning.mockResolvedValueOnce([{ id: "chat-b" }]);
+      seedTenant({
+        chat: [
+          {
+            id: "chat-b",
+            workspaceId,
+            memorySnapshot: "pinned-block",
+            lastTurnAt: new Date(),
+          },
+        ],
+      });
 
-      vi.mocked(resolveMemoryPin).mockReturnValueOnce({
+      vi.mocked(resolveMemoryPin).mockReturnValue({
         reuse: true,
         block: "pinned-block",
       });
 
-      mockPrepareChatTurn.mockResolvedValueOnce(validTurn);
+      mockPrepareChatTurn.mockResolvedValue(validTurn);
 
       await app.request(`${baseUrl}/chat-b/turns`, {
         method: "POST",
@@ -803,28 +750,28 @@ describe("Chat Routes", () => {
 
     it("seeds a loadSkill pair for a message that opens with a slash command", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([]);
-      mockDb.orderBy.mockResolvedValueOnce([]);
-      mockDb.limit.mockResolvedValueOnce([
-        { id: "agent-1", workspaceId, skillIds: ["skill-1"], toolSetIds: [] },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([
-        {
-          id: "skill-1",
-          workspaceId,
-          name: "blog-post",
-          body: "Write a blog post.",
-          disableModelInvocation: true,
-        },
-      ]);
-      mockDb.orderBy.mockResolvedValueOnce([]);
-      mockDb.returning.mockResolvedValueOnce([{ id: "chat-cmd" }]);
-      mockPrepareChatTurn.mockResolvedValueOnce(validTurn);
-      freshStream();
+      seedTenant({
+        agent: [
+          {
+            id: "agent-1",
+            workspaceId,
+            organizationId: null,
+            skillIds: ["skill-1"],
+            toolSetIds: [],
+          },
+        ],
+        skill: [
+          {
+            id: "skill-1",
+            workspaceId,
+            organizationId: null,
+            name: "blog-post",
+            body: "Write a blog post.",
+            disableModelInvocation: true,
+          },
+        ],
+      });
+      mockPrepareChatTurn.mockResolvedValue(validTurn);
 
       const res = await app.request(`${baseUrl}/chat-cmd/turns`, {
         method: "POST",
@@ -865,19 +812,18 @@ describe("Chat Routes", () => {
 
     it("sends an unresolvable command as ordinary text", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([]);
-      mockDb.orderBy.mockResolvedValueOnce([]);
-      mockDb.limit.mockResolvedValueOnce([
-        { id: "agent-1", workspaceId, skillIds: ["skill-1"], toolSetIds: [] },
-      ]);
-      mockDb.limit.mockResolvedValue([]);
-      mockDb.returning.mockResolvedValueOnce([{ id: "chat-typo" }]);
-      mockPrepareChatTurn.mockResolvedValueOnce(validTurn);
-      freshStream();
+      seedTenant({
+        agent: [
+          {
+            id: "agent-1",
+            workspaceId,
+            organizationId: null,
+            skillIds: ["skill-1"],
+            toolSetIds: [],
+          },
+        ],
+      });
+      mockPrepareChatTurn.mockResolvedValue(validTurn);
 
       const res = await app.request(`${baseUrl}/chat-typo/turns`, {
         method: "POST",
@@ -905,12 +851,9 @@ describe("Chat Routes", () => {
   describe("DELETE /:chatId", () => {
     it("should delete chat", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-
-      mockDb.limit.mockResolvedValueOnce([{ id: "chat-1", messages: [] }]);
+      const fake = seedTenant({
+        chat: [{ id: "chat-1", workspaceId }],
+      });
 
       const res = await app.request(`${baseUrl}/chat-1`, {
         method: "DELETE",
@@ -919,6 +862,7 @@ describe("Chat Routes", () => {
       expect(await res.json()).toEqual({
         message: "Chat deleted",
       });
+      expect(fake.tables.chat).toEqual([]);
     });
 
     describe("stored files", () => {
@@ -1027,11 +971,9 @@ describe("Chat Routes", () => {
   describe("POST /:chatId/cancel", () => {
     it("returns 200 when cancelling an existing chat (idempotent on inactive runs)", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([{ id: "chat-1" }]);
+      seedTenant({
+        chat: [{ id: "chat-1", workspaceId }],
+      });
 
       const res = await app.request(`${baseUrl}/chat-1/cancel`, {
         method: "POST",
@@ -1045,11 +987,9 @@ describe("Chat Routes", () => {
     it("returns 200 when called twice (idempotent)", async () => {
       for (let i = 0; i < 2; i++) {
         mockSession();
-        mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-        mockDb.limit.mockResolvedValueOnce([
-          { ownerId: "user-1", organizationId: "org-1" },
-        ]);
-        mockDb.limit.mockResolvedValueOnce([{ id: "chat-1" }]);
+        seedTenant({
+          chat: [{ id: "chat-1", workspaceId }],
+        });
 
         const res = await app.request(`${baseUrl}/chat-1/cancel`, {
           method: "POST",
@@ -1060,11 +1000,9 @@ describe("Chat Routes", () => {
 
     it("returns 404 when the chat does not belong to the workspace", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([]);
+      seedTenant({
+        chat: [{ id: "chat-other", workspaceId: "ws-2" }],
+      });
 
       const res = await app.request(`${baseUrl}/chat-other/cancel`, {
         method: "POST",
@@ -1084,16 +1022,16 @@ describe("Chat Routes", () => {
   describe("PUT /:chatId", () => {
     it("should update chat", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([
-        { id: "chat-1", triggerRunId: null },
-      ]);
-
-      const mockChat = { id: "chat-1", title: "Updated Title" };
-      mockDb.returning.mockResolvedValueOnce([mockChat]);
+      const fake = seedTenant({
+        chat: [
+          {
+            id: "chat-1",
+            workspaceId,
+            title: "Old Title",
+            triggerRunId: null,
+          },
+        ],
+      });
 
       const res = await app.request(`${baseUrl}/chat-1`, {
         method: "PATCH",
@@ -1104,19 +1042,33 @@ describe("Chat Routes", () => {
         headers: { "Content-Type": "application/json" },
       });
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual(mockChat);
+      expect(await res.json()).toMatchObject({
+        id: "chat-1",
+        title: "Updated Title",
+        isPinned: true,
+      });
+      expect(fake.tables.chat[0]).toMatchObject({
+        id: "chat-1",
+        title: "Updated Title",
+        isPinned: true,
+      });
+      expect(fake.queries.filter((query) => query.kind === "update")).toEqual([
+        { kind: "update", table: "chat" },
+      ]);
     });
 
     it("pins without touching the title", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([
-        { id: "chat-1", triggerRunId: null },
-      ]);
-      mockDb.returning.mockResolvedValueOnce([{ id: "chat-1", title: "Hi" }]);
+      const fake = seedTenant({
+        chat: [
+          {
+            id: "chat-1",
+            workspaceId,
+            triggerRunId: null,
+            isPinned: false,
+          },
+        ],
+      });
 
       const res = await app.request(`${baseUrl}/chat-1`, {
         method: "PATCH",
@@ -1124,26 +1076,28 @@ describe("Chat Routes", () => {
         headers: { "Content-Type": "application/json" },
       });
       expect(res.status).toBe(200);
-      const setArg = mockDb.set.mock.calls.at(-1)![0] as Record<
-        string,
-        unknown
-      >;
-      expect(setArg.isPinned).toBe(true);
-      expect(setArg.title).toBeUndefined();
+      const body = (await res.json()) as Record<string, unknown>;
+      expect(body.isPinned).toBe(true);
+      expect(body).not.toHaveProperty("title");
+      expect(fake.tables.chat[0]).toMatchObject({
+        id: "chat-1",
+        isPinned: true,
+      });
+      expect(fake.tables.chat[0].title).toBeUndefined();
     });
 
     it("updates a chat with only a title", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([
-        { id: "chat-1", triggerRunId: null },
-      ]);
-      mockDb.returning.mockResolvedValueOnce([
-        { id: "chat-1", title: "A new title" },
-      ]);
+      const fake = seedTenant({
+        chat: [
+          {
+            id: "chat-1",
+            workspaceId,
+            title: "Old Title",
+            triggerRunId: null,
+          },
+        ],
+      });
 
       const res = await app.request(`${baseUrl}/chat-1`, {
         method: "PATCH",
@@ -1151,13 +1105,14 @@ describe("Chat Routes", () => {
         headers: { "Content-Type": "application/json" },
       });
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({ id: "chat-1", title: "A new title" });
-      const setArg = mockDb.set.mock.calls.at(-1)![0] as Record<
-        string,
-        unknown
-      >;
-      expect(setArg.title).toBe("A new title");
-      expect(setArg).not.toHaveProperty("tags");
+      const body = (await res.json()) as Record<string, unknown>;
+      expect(body).toMatchObject({
+        id: "chat-1",
+        title: "A new title",
+      });
+      expect(body).not.toHaveProperty("isPinned");
+      expect(fake.tables.chat[0].title).toBe("A new title");
+      expect(fake.tables.chat[0]).not.toHaveProperty("tags");
     });
   });
 
@@ -1169,10 +1124,7 @@ describe("Chat Routes", () => {
     };
 
     const startsTurn = () => {
-      vi.mocked(createUIMessageStreamResponse).mockReturnValueOnce(
-        new Response("stream"),
-      );
-      mockPrepareChatTurn.mockResolvedValueOnce(validTurn);
+      mockPrepareChatTurn.mockResolvedValue(validTurn);
     };
 
     it("no longer answers the body-addressed turn on the collection", async () => {
@@ -1854,7 +1806,7 @@ describe("Chat Routes", () => {
       };
 
       const summarises = (text = "The summary.") =>
-        vi.mocked(generateText).mockResolvedValueOnce({
+        vi.mocked(generateText).mockResolvedValue({
           text,
           usage: { inputTokens: 100, outputTokens: 20 },
         } as never);
@@ -1913,7 +1865,9 @@ describe("Chat Routes", () => {
       it("502s when the summary pass fails, writing nothing", async () => {
         mockSession();
         const fake = seedCompactable();
-        vi.mocked(generateText).mockRejectedValueOnce(new Error("boom"));
+        vi.mocked(generateText).mockImplementationOnce(() =>
+          Promise.reject(new Error("boom")),
+        );
 
         expect((await compact()).status).toBe(502);
         expect(fake.tables.chat_summary).toHaveLength(0);

@@ -32,8 +32,9 @@ import {
   pointerSettingModelId,
 } from "./model-capability.ts";
 import { generateEmbedding } from "./embedding.ts";
-import { resolveScoped } from "./scoped-resource.ts";
+import { listScopedByIdsForWorkspaces } from "./scoped-resource.ts";
 import { loadActivePath } from "./chat-messages.ts";
+import type { ScopeContext } from "../scope.ts";
 import { errorMessage } from "../utils/error-message.ts";
 import { withDeadline } from "../utils/abort-race.ts";
 
@@ -393,11 +394,33 @@ type ChatToProcess = {
   embeddingProvider: typeof providerTable.$inferSelect | null;
 };
 
+const visibleProvidersFor = (
+  workspaces: (typeof workspaceTable.$inferSelect)[],
+) => {
+  const contexts: ScopeContext[] = workspaces.map((workspace) => ({
+    orgId: workspace.organizationId,
+    workspaceId: workspace.id,
+  }));
+  const ids = [
+    ...new Set(
+      workspaces.flatMap((workspace) =>
+        [
+          workspace.memoryExtractionProviderId,
+          workspace.memoryEmbeddingProviderId,
+        ].filter((id): id is string => !!id),
+      ),
+    ),
+  ];
+  return listScopedByIdsForWorkspaces(db, "provider", ids, contexts);
+};
+
 const findChatsToProcess = async (): Promise<ChatToProcess[]> => {
   const workspacesWithExtraction = await db
     .select()
     .from(workspaceTable)
     .where(isNotNull(workspaceTable.memoryExtractionProviderId));
+
+  const visible = await visibleProvidersFor(workspacesWithExtraction);
 
   const workspaceMap = new Map<string, Omit<ChatToProcess, "chat">>();
   for (const workspace of workspacesWithExtraction) {
@@ -405,26 +428,21 @@ const findChatsToProcess = async (): Promise<ChatToProcess[]> => {
     if (!providerId) {
       throw new Error(`Workspace '${workspace.id}' has no extraction Provider`);
     }
-    const ctx = { orgId: workspace.organizationId, workspaceId: workspace.id };
-    const extraction = await resolveScoped(db, "provider", providerId, ctx);
+    const visibleHere = visible.get(workspace.id);
+    const extraction = visibleHere?.get(providerId);
     if (!extraction) {
       logger.warn(
         {
           workspaceId: workspace.id,
-          providerId: workspace.memoryExtractionProviderId,
+          providerId,
         },
         "Memory extraction skipped: provider is not visible in this workspace",
       );
       continue;
     }
     const embedding = workspace.memoryEmbeddingProviderId
-      ? await resolveScoped(
-          db,
-          "provider",
-          workspace.memoryEmbeddingProviderId,
-          ctx,
-        )
-      : null;
+      ? visibleHere?.get(workspace.memoryEmbeddingProviderId)
+      : undefined;
     workspaceMap.set(workspace.id, {
       workspace,
       extractionProvider: extraction.row,

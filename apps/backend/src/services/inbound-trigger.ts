@@ -273,12 +273,6 @@ const releaseRunSlot = (): void => {
   activeInboundRuns -= 1;
 };
 
-export const activeInboundRunCount = (): number => activeInboundRuns;
-
-export const resetInboundRunSlots = (): void => {
-  activeInboundRuns = 0;
-};
-
 const localTurns = new Map<string, Promise<void>>();
 
 const inLocalTurn = async <T>(key: string, work: () => Promise<T>) => {

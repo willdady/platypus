@@ -24,7 +24,9 @@ infrastructure.
 
 A Workspace has **at most one Sandbox**, and you choose which backend runs it. You
 configure it much as you configure a Provider: pick the backend, fill in its
-settings, save.
+settings, save. Docker and SSH get a form tailored to them; any other backend's
+form is generated from the settings fields its Plugin declares, with credentials
+masked and never shown once saved.
 
 Files and environment variables **persist between Chat turns**. That is what makes
 the Sandbox worth having — an Agent can install something in one turn and use it
@@ -71,9 +73,9 @@ execution; the container is not recreated.
 
 Sandboxes are credential- and reach-bearing, so configuration is **Org
 Admin-managed and never delegatable** to a Workspace Owner. Within a Sandbox the
-gate is field-level: `backend`, `credentials`, `networks`, `extraHosts`,
-`adminEnv`, and creation are admin-only, while `name` and `userEnv` stay
-Owner-editable.
+gate is field-level: `backend`, `config` (a Plugin backend's generated fields
+included), `credentials`, `networks`, `extraHosts`, `adminEnv`, and creation are
+admin-only, while `name` and `userEnv` stay Owner-editable.
 
 ## Next steps
 
