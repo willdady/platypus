@@ -5,14 +5,7 @@ import { BackButton } from "@/components/back-button";
 import { workspaceSection } from "@/components/workspace-nav";
 import { workspaceRoutes } from "@/lib/routes";
 
-/**
- * The header's Back on a Workspace screen without the app sidebar. The Boards
- * and Artifacts lists are top-level — reached from the rail, not from another
- * screen — so they draw no Back. A deeper screen falls back to its area's
- * list when a direct link leaves no history to step through: a Board, its
- * create form and its settings land on the Boards list, an Artifact on the
- * Artifacts list. Everything else falls back to the Workspace home.
- */
+// why: a direct link leaves no history, so a Board falls back to the Boards list
 export function WorkspaceBackButton({
   orgId,
   workspaceId,

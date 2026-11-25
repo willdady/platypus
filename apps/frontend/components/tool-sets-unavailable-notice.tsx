@@ -2,22 +2,14 @@ import { TriangleAlert } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import type { ToolSetsFailureReason } from "@/lib/tool-sets-request";
 
-/**
- * Shown in place of the Tools card when the tool sets couldn't be read.
- *
- * Deliberately distinct from the "this Workspace has no tool sets" case, which
- * renders nothing: substituting an empty list for a failed read hides the
- * misconfiguration that caused it (issue #818).
- */
+// why: never substitute an empty list for a failed read — it hides the misconfiguration
 export function ToolSetsUnavailableNotice({
   reason,
   scope,
   hasExistingSelections,
 }: {
   reason: ToolSetsFailureReason;
-  /** Which catalogue was being read — a Shared Agent reads the org's. */
   scope: "organization" | "workspace";
-  /** Only an existing Agent has selections worth reassuring the reader about. */
   hasExistingSelections: boolean;
 }) {
   const owner = scope === "organization" ? "Organization" : "Workspace";

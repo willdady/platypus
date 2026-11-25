@@ -23,27 +23,19 @@ import { webhookCreateSchema } from "@platypus/schemas";
 import { FIX_FORM_ERRORS_MESSAGE } from "@/lib/apply-write-outcome";
 import { expectSentBodyToMatchSchema } from "@/test/test-utils";
 
-// --- Module mocks ------------------------------------------------------------
-
 vi.mock("@/components/auth-provider", () => authMock);
-// The create form never keys a fetch off a webhook id, so SWR never loads
-// real data here — the harness's default (unset) response is `undefined`.
+// why: the create form keys no fetch off a webhook id, so SWR has nothing
 vi.mock("swr", () => swrMock);
 
 import { WebhookForm } from "./webhook-form";
-
-// --- Helpers -----------------------------------------------------------------
 
 function renderForm() {
   return render(<WebhookForm orgId="org1" workspaceId="ws1" />);
 }
 
-/** The create body the form put on the wire, checked against the strict schema. */
 function savedCreateBody(fetchMock: ReturnType<typeof vi.fn>) {
   return expectSentBodyToMatchSchema(fetchMock, webhookCreateSchema);
 }
-
-// --- Tests -------------------------------------------------------------------
 
 describe("WebhookForm event picker", () => {
   beforeEach(() => {
@@ -119,11 +111,8 @@ describe("WebhookForm validation error surfacing", () => {
     expect(
       await screen.findByText("At least one event is required"),
     ).toBeInTheDocument();
-    // A shown error disables Save until the offending field is corrected.
     expect(saveButton).toBeDisabled();
 
-    // Toggling any event is an edit to the events field — it retracts the
-    // error and re-enables Save, without needing a page reload.
     fireEvent.click(
       screen.getByRole("switch", { name: "Notification created" }),
     );
@@ -135,7 +124,6 @@ describe("WebhookForm validation error surfacing", () => {
     );
     expect(saveButton).toBeEnabled();
 
-    // The round trip completes: re-submitting now succeeds.
     fetchMock.mockResolvedValueOnce(jsonResponse(200, {}));
     fireEvent.click(saveButton);
 
@@ -144,7 +132,6 @@ describe("WebhookForm validation error surfacing", () => {
         "/org1/workspace/ws1/settings/webhooks",
       ),
     );
-    // Every event starts subscribed, so the toggle above dropped one.
     const body = savedCreateBody(fetchMock);
     expect(body.events).not.toContain("notification.created");
     expect(body.events).toContain("notification.updated");
@@ -189,14 +176,11 @@ describe("WebhookForm validation error surfacing", () => {
       await screen.findByText("Header value is too long"),
     ).toBeInTheDocument();
 
-    // Editing the unrelated second row must not strand or clear the first
-    // row's error.
     fireEvent.change(screen.getByRole("textbox", { name: "Header 2 name" }), {
       target: { value: "X-Bar" },
     });
     expect(screen.getByText("Header value is too long")).toBeInTheDocument();
 
-    // Editing the offending row retracts its own error.
     fireEvent.change(screen.getByRole("textbox", { name: "Header 1 name" }), {
       target: { value: "X-Foo-Fixed" },
     });

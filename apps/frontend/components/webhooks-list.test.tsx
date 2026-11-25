@@ -53,8 +53,6 @@ describe("WebhooksList", () => {
     ).toBeInTheDocument();
   });
 
-  // A long URL is cut off with an ellipsis inside the card, so the full URL
-  // stays readable on hover.
   it("clamps the URL to one line, keeping the full URL on hover", async () => {
     mockScopedSWR({ webhooks: [webhook] }, { strict: true });
     await render();
@@ -64,8 +62,6 @@ describe("WebhooksList", () => {
     expect(url).toHaveAttribute("title", "https://hooks.example.com/deploy");
   });
 
-  // A disabled webhook still lists, badged — deleting it to turn it off would
-  // lose its URL and secret.
   it("badges a disabled webhook rather than hiding it", async () => {
     mockScopedSWR(
       { webhooks: [{ ...webhook, enabled: false }] },
@@ -87,8 +83,6 @@ describe("WebhooksList", () => {
     ).toBeInTheDocument();
   });
 
-  // The same button renders once: solid inside the card while the list is
-  // empty, outlined below the list once it has rows.
   it("offers Add webhook solid inside the empty card", async () => {
     mockScopedSWR({ webhooks: [] }, { strict: true });
     await render();
@@ -121,8 +115,6 @@ describe("WebhooksList", () => {
     ).not.toBeInTheDocument();
   });
 
-  // A failed read is not the end of the road: the retry re-reads the list
-  // rather than making the reader reload the page.
   it("offers to retry a failed read", async () => {
     mockScopedSWR({ webhooks: { error: new Error("500") } }, { strict: true });
     await render();

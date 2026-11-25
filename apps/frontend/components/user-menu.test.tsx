@@ -2,8 +2,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { resolveActor } from "@/lib/authorization";
 
-// --- Module mocks ------------------------------------------------------------
-
 const { authState } = vi.hoisted(() => ({
   authState: {
     user: null as {
@@ -33,8 +31,6 @@ vi.mock("next/navigation", () => ({
 }));
 
 import { UserMenu } from "./user-menu";
-
-// --- Tests -------------------------------------------------------------------
 
 beforeEach(() => {
   authState.user = null;

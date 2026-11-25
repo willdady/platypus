@@ -22,22 +22,11 @@ import { cn } from "@/lib/utils";
 
 type WorkspaceShellProps = {
   orgId: string;
-  /**
-   * The Workspace the header acts on. Omitted where it couldn't be read (the
-   * not-found boundary, and the error boundary above the Workspace layout):
-   * the header then leads to the Organization home, where the Workspace list
-   * lives.
-   */
   workspaceId?: string;
-  /**
-   * Draw the app sidebar — the Workspace home and Chat only. Without it the
-   * content takes the full width and the header holds a Back.
-   */
   sidebar?: boolean;
   children: ReactNode;
 };
 
-/** The chrome around every Workspace screen and its boundaries. */
 export function WorkspaceShell({
   orgId,
   workspaceId,
@@ -57,9 +46,7 @@ export function WorkspaceShell({
       {sidebar && <AppSidebar />}
       <SidebarInset
         id={MAIN_CONTENT_ID}
-        // The rail is fixed to the window's left edge; the inset leaves the
-        // same column clear so the content — and the sidebar above it —
-        // starts to its right.
+        // why: the inset clears the fixed rail's column, so content starts right of it
         className={cn(
           "min-w-0",
           workspaceId && "md:pl-(--workspace-rail-width)",
@@ -107,10 +94,6 @@ export function WorkspaceShell({
   );
 }
 
-/**
- * A Workspace route group's layout: the shell, the scrolling content and the
- * Command menu. The groups differ only in whether they draw the sidebar.
- */
 export function workspaceGroupLayout({ sidebar }: { sidebar: boolean }) {
   return async function WorkspaceGroupLayout({
     children,

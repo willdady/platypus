@@ -29,8 +29,7 @@ export function UserMenu() {
   };
 
   if (!user) {
-    // Hold the trigger's slot while the session resolves: the menu sits last
-    // in a right-aligned row, so popping in would shove its neighbours left.
+    // why: hold the slot while the session resolves, or neighbours shove left
     return isPending ? (
       <Skeleton
         role="status"

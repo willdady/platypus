@@ -14,11 +14,6 @@ import {
 } from "@/components/ui/sheet";
 import { WorkspaceSheetNavigation } from "@/components/workspace-sheet-navigation";
 
-/**
- * The phone's menu button and sheet on a Workspace screen without the app
- * sidebar. Below the breakpoint the rail is not drawn, so the sheet holds the
- * Workspace's destinations instead; picking one closes it.
- */
 export function WorkspaceMenu({
   orgId,
   workspaceId,

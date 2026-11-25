@@ -140,7 +140,7 @@ describe("TriggerRunRow", () => {
     it("does not open the run when the menu is opened or used", async () => {
       const onRowClick = vi.fn();
       render(
-        // The row link's own click handler stands in for its navigation.
+        // why: a wrapper's click stands in for the link's navigation
         // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
         <div onClick={onRowClick}>
           <TriggerRunRow run={run()} orgId="org-1" workspaceId="ws-1" />
@@ -161,7 +161,6 @@ describe("TriggerRunRow", () => {
     });
   });
 
-  // #1410: no badge column squeezing the text on a phone.
   it("shows the status under the Trigger name, before the start time, in the same column", () => {
     render(<TriggerRunRow run={run()} orgId="org-1" workspaceId="ws-1" />);
 
@@ -179,7 +178,6 @@ describe("TriggerRunRow", () => {
     );
   });
 
-  // #647: someone stopped it, nothing faulted — so it is not drawn as a failure.
   it("labels a cancelled run Cancelled, without an error", () => {
     render(
       <TriggerRunRow
@@ -193,8 +191,6 @@ describe("TriggerRunRow", () => {
     expect(screen.queryByText("Failed")).not.toBeInTheDocument();
   });
 
-  // #1864: the run header and its timeline read the same durations, so
-  // 90 000 ms is "1m 30s" here, not "1.5m".
   it("formats the elapsed time the way the run's timeline does", () => {
     render(
       <TriggerRunRow
@@ -290,7 +286,6 @@ describe("TriggerRunRow fallback marker", () => {
         "Fell back from gpt-5 to claude-sonnet-4-5 after the primary Provider failed.",
       ),
     ).toBeInTheDocument();
-    // The warning never changes the run's status.
     expect(screen.getByText("Success")).toBeInTheDocument();
   });
 

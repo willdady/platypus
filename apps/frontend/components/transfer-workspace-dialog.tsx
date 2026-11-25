@@ -34,16 +34,9 @@ import { useWorkspace } from "@/hooks/use-workspace";
 type TransferWorkspaceActionProps = {
   orgId: string;
   workspaceId: string;
-  /** The Providers visible in the Workspace; its own are listed for review. */
   providers: Serialized<Provider>[];
 };
 
-/**
- * The Org Admin's Transfer action on a Workspace's settings (ADR-0035): a
- * button beside Delete, disabled with an invite hint when nobody can receive
- * the Workspace, and the dialog that picks a recipient and the history, then
- * confirms what the transfer does.
- */
 export function TransferWorkspaceAction({
   orgId,
   workspaceId,
@@ -77,8 +70,7 @@ export function TransferWorkspaceAction({
         revalidateKeys: [url, scopedUrl(backendUrl, "workspaces", { orgId })],
       });
     },
-    // The recipient field shows a mapped rejection, so this dialog adds no
-    // toast.
+    // why: the field shows its mapped rejection, so this dialog adds no toast
     invalidMessage: null,
     successMessage: "Workspace transferred",
     onSuccess: () => {
@@ -92,7 +84,7 @@ export function TransferWorkspaceAction({
   const nameOf = (userId: string) =>
     members.find((m) => m.userId === userId)?.user.name ?? "The current owner";
   const ownProviders = providers.filter((p) => p.workspaceId === workspaceId);
-  // An Org Admin keeps reading every Workspace, theirs or not.
+  // why: an Org Admin keeps reading every Workspace, theirs or not
   const oldOwner = members.find((m) => m.userId === workspace.ownerId);
   const oldOwnerIsAdmin =
     oldOwner?.role === "admin" || oldOwner?.isSuperAdmin === true;

@@ -22,10 +22,7 @@ function Menu({
   );
 }
 
-/**
- * Radix marks everything outside the open menu `aria-hidden`, so the trigger
- * disappears from the accessibility tree while it is open. Query the slot.
- */
+// why: Radix aria-hides the trigger while open, so query the slot
 function trigger() {
   const el = document.querySelector<HTMLElement>(
     '[data-slot="dropdown-menu-trigger"]',
@@ -37,8 +34,7 @@ function isOpen() {
   return trigger().getAttribute("data-state") === "open";
 }
 
-// The pointer type is the whole point of these tests, so spell out each gesture
-// rather than leaning on fireEvent defaults (jsdom leaves `pointerType` empty).
+// why: spell out pointerType — jsdom leaves fireEvent's defaults empty
 function press(el: Element, pointerType: string) {
   return fireEvent.pointerDown(el, { button: 0, pointerId: 1, pointerType });
 }
@@ -49,7 +45,6 @@ function click(el: Element) {
   return fireEvent.click(el, { button: 0 });
 }
 
-/** A completed touch tap: down, up, then the click the browser synthesises. */
 function tap(el: Element) {
   press(el, "touch");
   release(el, "touch");
@@ -69,7 +64,6 @@ describe("DropdownMenuTrigger pointer handling", () => {
   it("stays closed when a touch turns into a scroll", () => {
     render(<Menu />);
 
-    // A scroll gesture: the browser suppresses the click, so none is fired.
     press(trigger(), "touch");
     fireEvent.pointerMove(trigger(), { pointerId: 1, pointerType: "touch" });
     release(document.body, "touch");
@@ -228,7 +222,7 @@ describe("DropdownMenuTrigger pointer handling", () => {
   });
 
   it("opens on a touch tap when the call site's click prevents default", () => {
-    // Triggers nested in a link do this to stop the link navigating.
+    // why: a trigger in a link prevents default to stop navigation, not the menu
     render(
       <DropdownMenu>
         <DropdownMenuTrigger onClick={(e) => e.preventDefault()}>

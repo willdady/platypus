@@ -17,15 +17,11 @@ import {
   chooseRowMenuAction,
 } from "@/test/list-test-harness";
 
-// --- Module mocks ------------------------------------------------------------
-
 vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("swr", () => swrMock);
 
 import { UsersList } from "./users-list";
 import type { ListedUser } from "./users-list";
-
-// --- Fixtures ----------------------------------------------------------------
 
 const target: ListedUser = {
   id: "u2",
@@ -38,10 +34,7 @@ const target: ListedUser = {
   updatedAt: "2024-01-01T00:00:00.000Z",
 };
 
-/**
- * `GET /auth/admin/list-users` answers with `{ users }`, not the
- * `{ results }` every other list returns, so it registers a raw payload.
- */
+// why: this route answers { users }, not the { results } every other list returns
 function renderUsers(users: ListedUser[]) {
   mockScopedSWR({ "list-users": { data: { users } } }, { strict: true });
   return renderList(<UsersList />);
@@ -57,8 +50,6 @@ async function confirmDelete() {
 }
 
 beforeEach(resetListHarness);
-
-// --- Tests -------------------------------------------------------------------
 
 describe("UsersList row actions", () => {
   it("puts Change password and Delete in the row's ⋮ menu", async () => {
@@ -157,7 +148,6 @@ describe("UsersList table states", () => {
     expect(
       screen.getByRole("status", { name: "Loading users" }),
     ).toHaveAttribute("aria-busy", "true");
-    // The table's real headings hold the frame while its rows load.
     expect(
       screen.getByRole("columnheader", { name: "Created" }),
     ).toBeInTheDocument();
@@ -169,7 +159,7 @@ describe("UsersList session gate", () => {
   it("makes no request until the session has settled", async () => {
     authState.user = null;
     authState.isPending = true;
-    // Strict with nothing registered: any non-null key would throw.
+    // why: strict with nothing registered, so any non-null key would throw
     mockScopedSWR({}, { strict: true });
     await renderList(<UsersList />);
 

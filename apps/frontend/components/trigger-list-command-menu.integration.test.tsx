@@ -19,13 +19,7 @@ import {
 import { CommandMenu } from "./command-menu";
 import { TriggerList } from "./trigger-list";
 
-/**
- * The Triggers list and the command menu read the same collection under two
- * keys — the list with fired One-offs, the menu without — so a delete on the
- * list has to refresh both. SWR is real here and only the network is faked, at
- * `fetch`: a revalidation the list forgets leaves the menu offering the
- * Trigger it just deleted.
- */
+// why: real SWR, faked fetch — a forgotten revalidation leaves the menu stale
 
 vi.mock("@/components/auth-provider", () => authMock);
 
@@ -42,7 +36,7 @@ function cronTrigger(id: string, name: string): Trigger {
   } as unknown as Trigger;
 }
 
-/** A spent One-off: the list can show it, the command menu never does. */
+// why: a spent One-off — the list shows it, the command menu never does
 const firedOneOff = {
   ...cronTrigger("t3", "Spent job"),
   config: { cronExpression: "0 0 * * *", timezone: "UTC", isOneOff: true },
@@ -71,7 +65,7 @@ beforeEach(() => {
         : triggers.filter((trigger) => !trigger.firedAt);
       return Promise.resolve(jsonResponse(200, { results: rows }));
     }
-    // Every other list the command menu reads is empty.
+    // why: every other list the command menu reads is empty
     return Promise.resolve(jsonResponse(200, { results: [] }));
   });
   vi.stubGlobal("fetch", fetchMock);
@@ -86,7 +80,6 @@ function renderTriggersAndMenu() {
   );
 }
 
-/** The command menu's keyboard shortcut, which opens or closes it. */
 function toggleMenu() {
   act(() => {
     fireEvent.keyDown(document, { key: "k", metaKey: true });
@@ -110,8 +103,6 @@ describe("the command menu's Trigger list", () => {
     expect(
       await within(menu).findByRole("option", { name: "Alpha job" }),
     ).toBeInTheDocument();
-    // The menu reads the list without fired One-offs; the list itself reads
-    // them, which is what makes the two cache keys differ.
     expect(
       within(menu).queryByRole("option", { name: "Spent job" }),
     ).not.toBeInTheDocument();
@@ -122,9 +113,6 @@ describe("the command menu's Trigger list", () => {
     );
     await deleteFirstTrigger();
 
-    // The list re-reads and the menu refreshes off the same write: the
-    // deleted Trigger is gone and the one that remains still shows, which
-    // proves the menu has read again rather than merely not loaded yet.
     await screen.findByText("Beta job");
     expect(screen.queryByText("Alpha job")).not.toBeInTheDocument();
 

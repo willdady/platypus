@@ -1,10 +1,5 @@
 import { User } from "lucide-react";
 
-/**
- * The avatar-and-name cell the users and members tables lead with — the
- * loaded counterpart of `UserCellSkeleton`. The avatar is optional: a row
- * that never showed one keeps the placeholder icon.
- */
 export function UserCell({
   name,
   email,
@@ -18,8 +13,7 @@ export function UserCell({
     <div className="flex items-center gap-3">
       <div className="size-8 shrink-0 overflow-hidden rounded-full bg-muted flex items-center justify-center">
         {image ? (
-          // Avatar URLs come from an arbitrary OAuth/external host; not
-          // routable through the Next image optimizer.
+          // why: an avatar URL is an arbitrary host, not routable through the optimizer
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={image}
