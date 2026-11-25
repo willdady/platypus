@@ -73,6 +73,7 @@ describe("KanbanBoardForm label errors", () => {
     expect(
       await screen.findByText("A label name must be unique"),
     ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
 
     const labelName = screen.getByPlaceholderText("Label name");
     fireEvent.change(labelName, { target: { value: "Bugfix" } });
@@ -82,5 +83,6 @@ describe("KanbanBoardForm label errors", () => {
         screen.queryByText("A label name must be unique"),
       ).not.toBeInTheDocument(),
     );
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
   });
 });
