@@ -5,8 +5,6 @@ import { useStreamingFavicon } from "./use-streaming-favicon";
 const DOT = "data:image/png;base64,dot";
 const ORIGINAL = "http://localhost/favicon.ico";
 
-// jsdom neither decodes images nor implements canvas, so both are faked: the
-// image "loads" on a microtask and the canvas hands back a fixed data URL.
 class FakeImage {
   onload: (() => void) | null = null;
   onerror: (() => void) | null = null;

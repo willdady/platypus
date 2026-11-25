@@ -4,7 +4,6 @@ import { useMediaQuery } from "./use-media-query";
 
 const realMatchMedia = window.matchMedia;
 
-/** A matchMedia stub whose single query list can be flipped and counted. */
 function installMediaQueryList(initial: boolean) {
   const listeners = new Set<() => void>();
   const mql = {

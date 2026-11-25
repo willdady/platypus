@@ -11,9 +11,6 @@ describe("useRevalidateOnRestore", () => {
     vi.useRealTimers();
   });
 
-  // The gap SWR's own focus and reconnect revalidation leaves: a restored page
-  // was frozen, so its poll has not been polling and what is on screen is as
-  // old as the moment it was put away.
   it("revalidates when the page is restored from the back/forward cache", () => {
     const revalidate = vi.fn();
     renderHook(() => useRevalidateOnRestore(revalidate));
@@ -23,8 +20,6 @@ describe("useRevalidateOnRestore", () => {
     expect(revalidate).toHaveBeenCalledTimes(1);
   });
 
-  // An ordinary navigation fires `pageshow` too, and that page already
-  // revalidates on mount — acting on it would double every page load.
   it("ignores an ordinary page load", () => {
     const revalidate = vi.fn();
     renderHook(() => useRevalidateOnRestore(revalidate));
@@ -34,8 +29,6 @@ describe("useRevalidateOnRestore", () => {
     expect(revalidate).not.toHaveBeenCalled();
   });
 
-  // Some browsers fire a restore alongside their own focus event, which SWR
-  // revalidates on separately. Coming back must cost one request, not several.
   it("collapses a burst of restores into a single revalidation", () => {
     const revalidate = vi.fn();
     renderHook(() => useRevalidateOnRestore(revalidate));

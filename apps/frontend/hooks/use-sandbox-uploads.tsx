@@ -6,23 +6,8 @@ import type { SandboxUpload } from "@platypus/schemas";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { writeAt } from "@/lib/api-write";
 
-/**
- * Places a message's Sandbox uploads in the Sandbox before the message is sent
- * (ADR-0028). Each file lands at the Sandbox root under its own name. A taken
- * path asks the User before overwriting; a cancel or any other failure rejects,
- * so the Send stops and the chips stay.
- *
- * A file that landed is remembered by its `File` object, which its chip holds
- * across retries, so a retried Send uploads only what has not landed and never
- * asks to overwrite a file it just uploaded.
- *
- * `uploading` is true while a Send's uploads run, so the composer can show the
- * Send as busy; a second Send meanwhile is refused with a toast.
- */
 export function useSandboxUploads(fileUrl: string) {
   const landed = useRef(new WeakMap<File, SandboxUpload>());
-  // The ref guards a second Send synchronously; the state re-renders the
-  // composer. Both flip together.
   const running = useRef(false);
   const [uploading, setUploading] = useState(false);
   const [conflict, setConflict] = useState<{
@@ -48,8 +33,6 @@ export function useSandboxUploads(fileUrl: string) {
     );
 
   const upload = async (files: File[]): Promise<SandboxUpload[]> => {
-    // A second Send while the first is still uploading would put the same
-    // files again, and ask to overwrite what the first just placed.
     if (running.current) {
       toast.info("Still uploading to the Sandbox");
       throw new Error("Sandbox uploads already running");
