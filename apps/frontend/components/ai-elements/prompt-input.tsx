@@ -342,7 +342,10 @@ export type PromptInputProps = Omit<
   accept?: string;
   initialAttachments?: FileUIPart[];
   globalDrop?: boolean;
-  onError?: (err: { code: "accept" | "conversion"; message: string }) => void;
+  onError?: (err: {
+    code: "accept" | "conversion" | "submit";
+    message: string;
+  }) => void;
   onSubmit: (
     message: PromptInputMessage,
     event: FormEvent<HTMLFormElement>,
@@ -534,16 +537,24 @@ export function PromptInput({
     });
   };
 
-  const reportConversionFailure = () => {
-    const failure = {
-      code: "conversion" as const,
-      message: "Couldn't read an attachment. Remove it and try again.",
-    };
+  const reportFailure = (code: "conversion" | "submit", message: string) => {
+    const failure = { code, message };
     if (onError) {
       onError(failure);
     } else {
-      toast.error(failure.message);
+      toast.error(message);
     }
+  };
+
+  const reportConversionFailure = () => {
+    reportFailure(
+      "conversion",
+      "Couldn't read an attachment. Remove it and try again.",
+    );
+  };
+
+  const reportSendFailure = () => {
+    reportFailure("submit", "Your message couldn't be sent. Try again.");
   };
 
   const ctx = useMemo<AttachmentsContext>(
@@ -607,12 +618,14 @@ export function PromptInput({
           if (result instanceof Promise) {
             result.then(clear).catch(() => {
               // why: keep the attachments on failure so the user can retry the send
+              reportSendFailure();
             });
           } else {
             clear();
           }
         } catch {
           // why: keep the attachments on failure so the user can retry the send
+          reportSendFailure();
         }
       })
       .catch(reportConversionFailure);
