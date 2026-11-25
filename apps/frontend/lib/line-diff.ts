@@ -1,21 +1,26 @@
 export type DiffLine = { kind: "same" | "added" | "removed"; text: string };
 
-// why: Myers' O((n+m)·D) walk beats an n×m LCS table, whose allocation grows with the product of both line counts.
+// why: Myers' O((n+m)·D) beats an n×m LCS table sized by the product of both sides.
 export function lineDiff(before: string, after: string): DiffLine[] {
   const a = before.split("\n");
   const b = after.split("\n");
+  const { trace, editDistance } = findEditPath(a, b);
+  return backtrack(a, b, trace, editDistance);
+}
+
+type EditPath = { trace: Int32Array[]; editDistance: number };
+
+function findEditPath(a: string[], b: string[]): EditPath {
   const n = a.length;
   const m = b.length;
   const max = n + m;
-
   const offset = max;
   const v = new Int32Array(2 * max + 1);
 
   // why: trace[d] keeps only the [-d, d] diagonal band read when unfolding edit step d.
   const trace: Int32Array[] = [];
-  let edits = 0;
 
-  outer: for (let d = 0; d <= max; d++) {
+  for (let d = 0; d <= max; d++) {
     trace.push(v.slice(offset - d, offset + d + 1));
     for (let k = -d; k <= d; k += 2) {
       let x: number;
@@ -30,14 +35,10 @@ export function lineDiff(before: string, after: string): DiffLine[] {
         y++;
       }
       v[offset + k] = x;
-      if (x >= n && y >= m) {
-        edits = d;
-        break outer;
-      }
+      if (x >= n && y >= m) return { trace, editDistance: d };
     }
   }
-
-  return backtrack(a, b, trace, edits);
+  return { trace, editDistance: max };
 }
 
 function backtrack(
@@ -51,15 +52,15 @@ function backtrack(
   let y = b.length;
 
   for (let d = editDistance; d > 0; d--) {
-    const v = trace[d];
+    const band = trace[d];
     const k = x - y;
     let prevK: number;
-    if (k === -d || (k !== d && v[k - 1 + d] < v[k + 1 + d])) {
+    if (k === -d || (k !== d && band[k - 1 + d] < band[k + 1 + d])) {
       prevK = k + 1;
     } else {
       prevK = k - 1;
     }
-    const prevX = v[prevK + d];
+    const prevX = band[prevK + d];
     const prevY = prevX - prevK;
     while (x > prevX && y > prevY) {
       reversed.push({ kind: "same", text: a[x - 1] });
