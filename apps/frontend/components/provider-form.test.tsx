@@ -30,21 +30,12 @@ import {
 import { expectSentBodyToMatchSchema, selectOption } from "@/test/test-utils";
 import { FIX_FORM_ERRORS_MESSAGE } from "@/lib/apply-write-outcome";
 
-// --- Module mocks ------------------------------------------------------------
-
 vi.mock("@/components/auth-provider", () => authMock);
-// The form makes two reads: the Provider being edited, and the
-// `GET /organizations/:orgId/web-backends` catalog. The harness keys its
-// responses off the request URL suffix so the catalog read does not get
-// handed the Provider, which carries no `results`.
 vi.mock("swr", () => swrMock);
 
 import { ProviderForm } from "./provider-form";
 import { UnsavedChangesProvider } from "./unsaved-changes-guard";
 
-// --- Helpers -----------------------------------------------------------------
-
-/** The body an accepted save resolves with, so the form can read it back. */
 const ACCEPTED_SAVE = { id: "p1", aliasRepoints: [] };
 
 function renderEditForm(
@@ -67,17 +58,15 @@ function renderEditForm(
   });
 }
 
-/** Whether leaving the page now would prompt, i.e. the form is dirty. */
 function unload() {
   const event = new Event("beforeunload", { cancelable: true });
   window.dispatchEvent(event);
   return event.defaultPrevented;
 }
 
-/** The card for the model whose title reads `id`. */
 function modelCard(id: string) {
   const card = screen
-    // Hidden too: an open dialog hides the form from the accessibility tree.
+    // why: an open dialog hides the form from the accessibility tree
     .getAllByRole("listitem", { hidden: true })
     .find((li) => within(li).queryByText(id, { selector: "p" }));
   if (!card) throw new Error(`No card for model "${id}"`);
@@ -100,13 +89,10 @@ function type(dialog: HTMLElement, label: string, value: string) {
   });
 }
 
-/** The body the form put on the wire for the last save, checked against the
- * strict update schema the backend validates it with. */
 function savedProviderBody(fetchMock: ReturnType<typeof vi.fn>) {
   return expectSentBodyToMatchSchema(fetchMock, providerUpdateSchema);
 }
 
-/** The `modelIds` the form put on the wire for the last save. */
 function savedModelIds(fetchMock: ReturnType<typeof vi.fn>) {
   return savedProviderBody(fetchMock).modelIds as ({ id: string } & Record<
     string,
@@ -120,13 +106,8 @@ function save() {
 
 beforeEach(() => {
   resetFormHarness();
-  // Empty by default — the Web search selector offers only None (and the
-  // built-in search option, where the Provider has one) for every test that
-  // predates the catalog.
   setDataFor("/web-backends", { results: [] });
 });
-
-// --- Tests -------------------------------------------------------------------
 
 describe("ProviderForm form submission", () => {
   beforeEach(() => resetFormHarness());
@@ -397,8 +378,6 @@ describe("ProviderForm save feedback", () => {
     );
   });
 
-  // A conflict that names the records blocking the save is the one failure
-  // shown inline rather than toasted.
   it("shows a save conflict in the destructive Alert instead of a toast", async () => {
     stubRejectedSave("Used by the Support Agent", 409);
     renderEditForm([{ id: "gpt-4o", passthroughFileTypes: [] }]);
@@ -526,8 +505,6 @@ describe("ProviderForm model cards", () => {
     ]);
   });
 
-  // A Workspace viewing an Organization provider: the card already shows every
-  // set field, so there is nothing a dialog would add.
   it("offers no Edit, Remove or Add model on a read-only provider", () => {
     setData({
       id: "p1",
@@ -665,8 +642,6 @@ describe("ProviderForm model dialog", () => {
     });
   });
 
-  // The dialog is portalled out of the DOM tree but not the React tree, so its
-  // submit would otherwise bubble to the Provider form it sits in.
   it("saves the model on Enter without submitting the Provider form", () => {
     const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
     setData({
@@ -808,8 +783,6 @@ describe("ProviderForm model dialog", () => {
     ]);
   });
 
-  // Values the toggles don't cover open Advanced on their own and survive an
-  // untouched open → save.
   it("keeps other media types through an untouched Save", async () => {
     const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
     renderEditForm([
@@ -862,7 +835,6 @@ describe("ProviderForm model dialog", () => {
     ]);
   });
 
-  // An empty list means the model reads nothing natively (ADR-0039).
   it("stores no native file types when nothing is ticked", async () => {
     const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
     renderEditForm([{ id: "gpt-4o", passthroughFileTypes: ["image/*"] }]);
@@ -876,9 +848,6 @@ describe("ProviderForm model dialog", () => {
     expect(savedModelIds(fetchMock)[0].passthroughFileTypes).toEqual([]);
   });
 
-  // Emptying the input has to actually clear the stored value. The whole
-  // `modelIds` array is replaced on save, so an absent key is a real removal —
-  // but only if the form stops sending the old number.
   it("clears a declared output ceiling when the input is emptied", async () => {
     const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
     renderEditForm([
@@ -894,9 +863,6 @@ describe("ProviderForm model dialog", () => {
     expect(savedModelIds(fetchMock)[0]).not.toHaveProperty("maxOutputTokens");
   });
 
-  // `Number.parseInt` truncated at the first unreadable character, so `1e5`
-  // became 1 — accepted by the schema, and every reply on the model then
-  // stopped after one token. A number must be staged as typed or not at all.
   it.each([
     {
       field: "maxOutputTokens",
@@ -926,8 +892,6 @@ describe("ProviderForm model dialog", () => {
     },
   );
 
-  // A fraction is left for the schema's `.int()` to reject with a message,
-  // never truncated into something storable.
   it("rejects a fractional Max output tokens in the dialog", () => {
     renderEditForm([{ id: "gpt-4o", passthroughFileTypes: [] }]);
 
@@ -967,10 +931,6 @@ describe("ProviderForm model dialog", () => {
 });
 
 describe("ProviderForm switching Providers", () => {
-  // The form is reused across Providers within one mount. Populating from the
-  // warm SWR cache has to repopulate on the switch too, not just on first load —
-  // otherwise the reader would see the previous Provider's fields left on
-  // screen under the new Provider's name.
   it("repopulates every field when the reader switches to another Provider, even from an already-warm cache", () => {
     setData({
       id: "p1",
@@ -988,8 +948,6 @@ describe("ProviderForm switching Providers", () => {
     expect(screen.getByLabelText("Name")).toHaveValue("OpenAI provider");
     expect(modelCard("gpt-4o")).toBeInTheDocument();
 
-    // Already resolved before the rerender, as it would be for a Provider
-    // whose data is already warm in SWR's cache.
     setData({
       id: "p2",
       name: "Anthropic provider",
@@ -1011,14 +969,6 @@ describe("ProviderForm switching Providers", () => {
     expect(modelCard("claude-opus")).toBeInTheDocument();
   });
 
-  // The specific behaviour the old initialised-flag ref protected: a Provider
-  // is populated once, and a later SWR revalidation of that *same* Provider —
-  // a focus revalidation, another tab saving it — hands back a new object
-  // reference for unchanged (or server-updated) data. That must not re-run
-  // the populate and stomp an edit the reader hasn't saved yet. Keying the
-  // reset on `providerId` (gated on the fetch having resolved) rather than on
-  // `provider` itself is what keeps this working without the ref: `provider`
-  // gets a new reference on every such revalidation, but `providerId` does not.
   it("does not clobber an in-progress edit when the same Provider's data revalidates", () => {
     const provider = {
       id: "p1",
@@ -1037,7 +987,6 @@ describe("ProviderForm switching Providers", () => {
       target: { value: "My edited name" },
     });
 
-    // A new object for the same Provider, as a revalidation would hand back.
     setData({ ...provider });
     rerender(<ProviderForm orgId="org1" providerId="p1" />);
 
@@ -1052,9 +1001,6 @@ describe("ProviderForm validation errors on model cards", () => {
     { id: "c", alias: "DUP", passthroughFileTypes: [] },
   ];
 
-  // Keyed on the first path segment, both messages landed on the Models field
-  // and the second overwrote the first: one message, one fix per round-trip,
-  // and no indication of which model was wrong.
   it("marks every rejected card invalid with its own message", async () => {
     stubRejectedSave([
       { path: ["modelIds", 1, "alias"], message: "Alias 'dup' duplicates" },
@@ -1120,9 +1066,6 @@ describe("ProviderForm validation errors on model cards", () => {
     ).toBeInTheDocument();
   });
 
-  // The button used to be disabled while any error was outstanding, and errors
-  // were only retracted by field-specific handlers. An error key with no
-  // matching handler disabled Save with no way back but a reload.
   it("leaves Save usable after a rejection, so the retry is one click", async () => {
     stubRejectedSave([
       { path: ["modelIds", 1, "alias"], message: "Alias 'dup' duplicates" },
@@ -1223,7 +1166,6 @@ describe("ProviderForm headers", () => {
     });
   });
 
-  // A row with no name is a half-typed entry, not a header.
   it("drops a row with no name instead of saving an empty header name", async () => {
     const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
     renderProvider({ headers: { "X-Api": "1" } });
@@ -1237,8 +1179,6 @@ describe("ProviderForm headers", () => {
     expect(savedProviderBody(fetchMock).headers).toEqual({ "X-Api": "1" });
   });
 
-  // Removing the last row has to clear the stored headers, not leave them
-  // behind: the edit form sends the whole map.
   it("clears the stored headers when every row is removed", async () => {
     const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
     renderProvider({ headers: { "X-Api": "1" } });
@@ -1362,7 +1302,6 @@ describe("ProviderForm Web search selector", () => {
     { backend: "acme-search.searx", name: "SearXNG", plugin: "acme-search" },
   ];
 
-  /** Renders the edit form and opens the Advanced settings section the field sits in. */
   const renderWithAdvancedOpen = (overrides: Partial<Provider>) => {
     setData({
       id: "p1",
@@ -1393,10 +1332,6 @@ describe("ProviderForm Web search selector", () => {
     expect(searchSelect()).toHaveTextContent("SearXNG (acme-search)");
   });
 
-  // vLLM (apiMode: "chat") has no native search, so it must not be offered a
-  // "built-in search" option that resolves to nothing. Stored as "none" here:
-  // a Provider already storing "native" is the one case the option does render,
-  // named as unavailable, so that the stale value stays visible and clearable.
   it("omits the built-in search option for a Provider with no native search", () => {
     renderWithAdvancedOpen({ searchSource: "none" } as Partial<Provider>);
 
@@ -1409,10 +1344,6 @@ describe("ProviderForm Web search selector", () => {
     expect(searchSelect()).toHaveTextContent("The provider's built-in search");
   });
 
-  // A row backfilled to "native" (ADR-0014) with no native search of its own
-  // — the default fixture here is exactly that shape, vLLM (chat mode) — must
-  // not leave the select showing a value nothing in the list matches. The
-  // field is present even with no backend installed (the default catalog).
   it.each([
     { name: "a chat-mode OpenAI Provider", overrides: {} },
     {
@@ -1430,11 +1361,6 @@ describe("ProviderForm Web search selector", () => {
     },
   );
 
-  // Naming it must not become rewriting it. `doSubmit` sends `searchSource` on
-  // every save, so coercing the stored value would let a save that touched only
-  // the name silently retire a selection nobody edited — one that resolves to no
-  // search anyway while the capability is missing, and that comes back on its
-  // own if the Provider regains a native tool.
   it("keeps a stale native selection stored when some other field is saved", async () => {
     const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
 
@@ -1446,8 +1372,6 @@ describe("ProviderForm Web search selector", () => {
     expect(savedProviderBody(fetchMock).searchSource).toBe("native");
   });
 
-  // The other half of keeping it: picking None explicitly is a real edit, and
-  // must overwrite the stored "native" rather than round-tripping it.
   it("stores none when the reader picks it on a Provider with no native search", async () => {
     const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
 
@@ -1460,17 +1384,10 @@ describe("ProviderForm Web search selector", () => {
     expect(savedProviderBody(fetchMock).searchSource).toBe("none");
   });
 
-  // Switching Provider Type away from native search after "The provider's
-  // built-in search" was selected takes that SelectItem out of the list — the
-  // control would otherwise point at a value nothing matches until the page
-  // reloads. Named as unavailable rather than cleared, so switching back
-  // restores the selection instead of silently retiring it.
   it("names a selected built-in search unavailable when Provider Type loses native search", async () => {
     renderWithAdvancedOpen({ apiMode: "responses", searchSource: "native" });
     expect(searchSelect()).toHaveTextContent("The provider's built-in search");
 
-    // Provider Type's SelectTrigger has no accessible name (a pre-existing
-    // gap), so it is found by its current value instead.
     await selectOption("OpenAI", "Bedrock");
 
     expect(searchSelect()).toHaveTextContent(
@@ -1478,8 +1395,6 @@ describe("ProviderForm Web search selector", () => {
     );
   });
 
-  // The round trip the naming exists to protect: an orphaned selection is still
-  // there, and applies again, once the Provider is capable a second time.
   it("restores a selected built-in search when API Mode regains native search", async () => {
     renderWithAdvancedOpen({ apiMode: "chat", searchSource: "native" });
     expect(searchSelect()).toHaveTextContent("unavailable here");
@@ -1490,14 +1405,12 @@ describe("ProviderForm Web search selector", () => {
     expect(searchSelect()).not.toHaveTextContent("unavailable here");
   });
 
-  // Hiding the control would conceal a stored id nobody could then see or clear.
   it("shows a stored backend the catalog no longer lists, and names it as missing", () => {
     renderWithAdvancedOpen({ searchSource: "gone.searx" } as Partial<Provider>);
 
     expect(searchSelect()).toHaveTextContent("gone.searx (not installed)");
   });
 
-  // An empty list means "none installed" only when the catalog actually answered.
   it("keeps the field and says so when the catalog could not be loaded", () => {
     setError(new Error("500"), "/web-backends");
     renderWithAdvancedOpen({});
@@ -1508,8 +1421,6 @@ describe("ProviderForm Web search selector", () => {
     ).toBeInTheDocument();
   });
 
-  // Calling an installed backend "not installed" because the request failed sends
-  // an Operator hunting a plugin that is fine.
   it("does not call a stored backend uninstalled when the catalog failed", () => {
     setError(new Error("500"), "/web-backends");
     renderWithAdvancedOpen({
@@ -1582,8 +1493,6 @@ describe("ProviderForm Test action", () => {
         modelId: "gpt-4o",
       }),
     );
-    // Save-only settings are not part of a test request, so a form that is not
-    // yet savable can still be tested.
     expect(body).not.toHaveProperty("taskModelId");
     expect(body).not.toHaveProperty("memoryExtractionModelId");
     expect(body).not.toHaveProperty("searchSource");
@@ -1616,7 +1525,6 @@ describe("ProviderForm Test action", () => {
   });
 
   it("reports a request the API refused as not run, not as a Provider error", async () => {
-    // A half-filled form can fail validation before the Provider is contacted.
     stubRejectedSave([{ path: ["apiKey"], message: "API key is required" }]);
     renderEditForm([{ id: "gpt-4o", passthroughFileTypes: [] }]);
 
@@ -1691,8 +1599,6 @@ describe("ProviderForm Test action", () => {
     });
     resolve();
 
-    // The probe's answer was for the values that are now gone, so it must not
-    // land on the card as a verdict about the edited Provider.
     await waitFor(() => expect(testButton("gpt-4o")).toBeEnabled());
     expect(screen.queryByText("Connection successful")).not.toBeInTheDocument();
   });
@@ -1771,8 +1677,6 @@ describe("ProviderForm Test action", () => {
     expect(
       screen.queryByRole("button", { name: "Test model gpt-4o" }),
     ).not.toBeInTheDocument();
-    // The other card actions keep their existing visibility: this gate is
-    // about who may contact the Provider, not about the rest of the form.
     expect(
       screen.getByRole("button", { name: "Edit model gpt-4o" }),
     ).toBeInTheDocument();
@@ -1823,7 +1727,6 @@ describe("ProviderForm Test action", () => {
   });
 });
 
-// Issue #1521: the Reasoning map is JSON on the Model entry.
 describe("ProviderForm model dialog Reasoning map", () => {
   const MAP = { thinking: { on: { think: true }, off: { think: false } } };
 

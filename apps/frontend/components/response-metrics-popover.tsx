@@ -16,22 +16,9 @@ type ResponseMetrics = {
   } & CachedInputTokens;
   prepDurationMs?: number;
   modelDurationMs?: number;
-  /** The sum of the turn's locally-executed tool durations, when the message
-   *  carries at least one. `0` is a real measurement (a fast tool rounds to
-   *  it) and is kept, not treated as absent. */
   measuredToolDurationMs?: number;
 };
 
-/**
- * Reads the per-response metrics panel's fields off an assistant message's
- * metadata (issue #354): the turn's billed Token usage and the Preparation /
- * Model phase durations, plus the measured tool time nested under Model.
- *
- * `undefined` when nothing at all is available — the case in which the chat
- * shows no `(i)` control. A message persisted before this change carries none
- * of the new fields and so renders no panel, unless it happens to carry
- * `toolDurations` from #353.
- */
 export function responseMetrics(
   metadata: ChatMessageMetadata | undefined,
 ): ResponseMetrics | undefined {
@@ -72,16 +59,6 @@ function MetricRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-/**
- * The panel's body. A leaf that reads only the metrics it is handed, so
- * opening the popover never re-renders the message or the message list it
- * lives inside (issue #354).
- *
- * No Total wall-clock figure and no derived `Model − tools` remainder:
- * Preparation and Model are each their own reading, and tool calls inside a
- * step run concurrently, so summed tool time can legitimately exceed the
- * Model phase it is measured inside of.
- */
 function ResponseMetricsContent({ metrics }: { metrics: ResponseMetrics }) {
   const {
     tokenUsage,
@@ -94,9 +71,6 @@ function ResponseMetricsContent({ metrics }: { metrics: ResponseMetrics }) {
     prepDurationMs !== undefined ||
     modelDurationMs !== undefined ||
     measuredToolDurationMs !== undefined;
-  // Nested under Model normally. A message with tool time but no Model
-  // reading — an older message carrying only #353's `toolDurations` — has
-  // nothing to nest it under, so it renders as its own line instead.
   const toolLineIsNested = modelDurationMs !== undefined;
 
   return (
@@ -107,10 +81,6 @@ function ResponseMetricsContent({ metrics }: { metrics: ResponseMetrics }) {
             label="Input"
             value={formatTokenCount(tokenUsage.inputTokens)}
           />
-          {/* Cached input is a breakdown of the Input figure above, which
-            already includes it — shown under Input, never subtracted from it
-            (issue #734). Absent means the Provider reported no cached reads,
-            which is never read as zero. */}
           {cachedTokenBreakdown(tokenUsage, formatTokenCount).map((line) => (
             <p key={line} className="pl-3 text-xs text-muted-foreground">
               {line}
@@ -160,19 +130,9 @@ function ResponseMetricsContent({ metrics }: { metrics: ResponseMetrics }) {
 }
 
 export type ResponseMetricsPopoverProps = {
-  /** The assistant message's metadata. Absent fields simply omit that row —
-   *  see `responseMetrics`. */
   metadata: ChatMessageMetadata | undefined;
 };
 
-/**
- * The `(i)` control on the assistant action bar (issue #354): a click/tap
- * popover, not hover — hover is inaccessible on touch — listing whichever of
- * Token usage, Preparation and Model are available for this response.
- *
- * Renders nothing when no metric at all is available, which is also true of
- * every message persisted before this change.
- */
 export function ResponseMetricsPopover({
   metadata,
 }: ResponseMetricsPopoverProps) {

@@ -18,11 +18,6 @@ function renderPullToRefresh(
   return { view, container: view.container.firstElementChild as HTMLElement };
 }
 
-/**
- * Walks the gesture the component expects: a small move inside the settle
- * window, a pause past the settle period, then the pull itself. A single large
- * move would be disqualified as a flick.
- */
 function pullDown(container: HTMLElement, endY: number) {
   fireEvent.touchStart(container, { touches: [touchAt(0)] });
   fireEvent.touchMove(container, { touches: [touchAt(10)] });
@@ -80,7 +75,6 @@ describe("PullToRefresh", () => {
     expect(onRefresh).not.toHaveBeenCalled();
   });
 
-  // A flick disqualifies the whole gesture, so a fast scroll can't refresh.
   it("ignores a gesture that moves too far before the settle period", async () => {
     const onRefresh = vi.fn().mockResolvedValue(undefined);
     const { container } = renderPullToRefresh(onRefresh);

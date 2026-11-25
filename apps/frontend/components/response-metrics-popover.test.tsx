@@ -26,7 +26,6 @@ describe("ResponseMetricsPopover", () => {
       />,
     );
 
-    // Closed until clicked, not merely hovered.
     expect(screen.queryByText("Input")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Response metrics" }));
@@ -142,8 +141,6 @@ describe("ResponseMetricsPopover", () => {
     expect(screen.queryByText(/of which tools/)).not.toBeInTheDocument();
   });
 
-  // `0` is a real measurement — a tool that finished inside a millisecond — not
-  // an absent one, so the line is shown.
   it("keeps a zero measured tool duration rather than treating it as absent", async () => {
     render(
       <ResponseMetricsPopover
@@ -193,8 +190,6 @@ describe("ResponseMetricsPopover", () => {
   });
 });
 
-// The panel's body reads only the metrics it is handed. The pure reader is
-// unit-tested here so the rendering tests above can stay about rendering.
 describe("responseMetrics", () => {
   it("returns undefined for a message with no metadata at all", () => {
     expect(responseMetrics(undefined)).toBeUndefined();
@@ -267,8 +262,6 @@ describe("responseMetrics", () => {
   });
 
   it("shows an (i) for a message that carries only measured tool time", () => {
-    // The legacy case: a message persisted before this change, which carries
-    // #353's tool durations but neither Token usage nor a phase duration.
     const metrics = responseMetrics({
       toolDurations: { "call-1": 842 },
     });

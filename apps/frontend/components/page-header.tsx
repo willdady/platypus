@@ -3,22 +3,11 @@ import { cn } from "@/lib/utils";
 
 export type PageHeaderProps = {
   title: ReactNode;
-  /** Drawn under the title in muted text; accepts nodes a page fills live. */
   description?: ReactNode;
-  /** Page-level actions drawn beside the title, e.g. a link elsewhere. */
   actions?: ReactNode;
-  /**
-   * `flush` drops the title's own bottom margin where the parent column's gap
-   * already spaces it — the `stacked` ResourcePage.
-   */
   titleSpacing?: "default" | "flush";
 };
 
-/**
- * The title block every settings and list page shares: one `<h1>`, an optional
- * muted description, and optional actions beside the title. Owning the spacing
- * here stops pages drifting apart as you move between screens.
- */
 export function PageHeader({
   title,
   description,

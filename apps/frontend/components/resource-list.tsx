@@ -41,14 +41,11 @@ import {
   DetachSharedDialog,
 } from "./shared-resource-actions";
 
-/** A list row as the API returns it: an id, a name, and — inside a workspace — its scope. */
 type ScopedResource = {
   readonly id: string;
   readonly name: string;
   readonly scope?: "organization" | "workspace";
-  /** A Provider's type. */
   readonly providerType?: string;
-  /** An MCP server's URL. */
   readonly url?: string;
 };
 
@@ -60,37 +57,21 @@ type EmptyStateProps = {
 };
 
 export type ResourceListLabels = {
-  /** Create CTA: "Add provider" / "Add MCP server". */
   readonly add: string;
-  /** Attach CTA: "Attach shared provider" / "Attach shared MCP server". */
   readonly attach: string;
-  /** The resource named mid-sentence: "provider" / "MCP server". */
   readonly noun: string;
-  /** The resource named in a fetch failure: "providers" / "MCP servers". */
   readonly plural: string;
 };
 
 export type ResourceListConfig = {
-  /** Collection entity as the API spells it: "providers" / "mcps". */
   readonly entity: string;
-  /** Which Shared resource this is — names the attach/detach endpoints (ADR-0007). */
   readonly resourceType: DelegatableResourceType;
-  /** Which settings route the resource's own pages live under (`lib/routes`). */
   readonly settingsKey: "providers" | "mcp";
   readonly labels: ResourceListLabels;
-  /** The row field shown on the card's second line: a Provider's type, an MCP server's URL. */
   readonly secondLine: "providerType" | "url";
-  /** Rendered when the list has no resources, holding whichever Add / Attach buttons the caller gets. */
   readonly emptyState: ComponentType<EmptyStateProps>;
 };
 
-/**
- * The Organization-or-Workspace list of a Scoped resource (ADR-0007), one
- * component for providers and MCP servers. The resource nouns, labels, route,
- * delegation flag, and empty state are the parameters; everything else — the
- * read, the org-scoped lock, attach, detach, and the fetch-error state — is
- * shared, so the two resources cannot drift apart again.
- */
 export function ResourceList({
   orgId,
   workspaceId,
@@ -107,9 +88,6 @@ export function ResourceList({
   const [resourceToManage, setResourceToManage] =
     useState<ScopedResource | null>(null);
 
-  // Resolved once per render and reused for the list's read and every write
-  // below, rather than re-deriving the Organization-vs-Workspace branch at
-  // each call site.
   const scope: Scope = workspaceId ? { orgId, workspaceId } : { orgId };
 
   const {
@@ -133,33 +111,18 @@ export function ResourceList({
       writeEntity(url, config.entity, scope, { id: resource.id }),
   });
 
-  // On the Organization surface a Shared resource can't be deleted while
-  // attached (ADR-0007); the guard explains the blocker up front instead of
-  // sending a delete the backend is guaranteed to refuse. Inside a Workspace
-  // there is nothing to check — the row is either private or a locked card.
   const deleteGuard = useSharedDeleteGuard<ScopedResource>({
     resourceType: config.resourceType,
     scope,
     onAllowed: deleteFlow.request,
   });
 
-  // Attach, detach, and Promote a Shared resource are the same rule
-  // (ADR-0007 / #154), asked of the auth module instead of re-derived here.
   const canAttach = canManageSharedResource(actor, workspaceId);
-  // Where an org-scoped resource is attached is managed from the Organization
-  // surface only, by an Org Admin — as for Skills and Agents.
   const canManageAttachments =
     !workspaceId && canManageOrgSharedResource(actor);
 
-  // Workspace-scoped config is admin-only unless the workspace delegates it
-  // (ADR-0006), resolved once per render from the Workspace's own delegation
-  // flags by `useCanConfigureWorkspaceResource` — no separate fetch needed.
-  // Org-level management lives behind an admin-only route, so it is always
-  // manageable here.
   const canManage = workspaceId ? canConfigureInWorkspace : true;
 
-  // The resource's own settings surface, with any trailing segment: a row's
-  // detail page, or its create page.
   const orgSettingsRoot = orgRoutes(orgId).settings[config.settingsKey];
   const settingsRoot = workspaceId
     ? workspaceRoutes(orgId, workspaceId).settings[config.settingsKey]
@@ -190,15 +153,11 @@ export function ResourceList({
 
   const EmptyState = config.emptyState;
 
-  // The card's description carries the row's second line: a Provider's type,
-  // an MCP server's URL.
   const cards = resources.map((resource) => ({
     ...resource,
     description: resource[config.secondLine],
   }));
 
-  // A Shared resource is locked inside a Workspace: a plain card, with Detach
-  // named in its menu rather than behind the card's own click (ADR-0007).
   const isShared = (resource: ScopedResource) =>
     Boolean(workspaceId) && resource.scope === "organization";
 
@@ -213,8 +172,6 @@ export function ResourceList({
         subject={config.labels.plural}
         onRetry={() => void mutate()}
         skeleton={
-          // The same cards, then the same Add / Attach buttons the loaded
-          // list offers this caller, so neither pops in when the read lands.
           <>
             <CardGridSkeleton
               singleColumn
@@ -246,8 +203,6 @@ export function ResourceList({
         descriptionLines={1}
         href={(resource) => settingsHref(resource.id)}
         isShared={isShared}
-        // On the Organization surface the row is not locked, but a Shared
-        // resource still carries its badge.
         badges={(resource) =>
           !workspaceId &&
           resource.scope === "organization" && <OrganizationBadge />

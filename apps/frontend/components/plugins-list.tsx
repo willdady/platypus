@@ -16,9 +16,6 @@ import { EmptyCard } from "@/components/empty-card";
 import { LoadingRegion } from "@/components/list-skeletons";
 import { Skeleton } from "@/components/ui/skeleton";
 
-// Mirrors the read-only `GET /organizations/:orgId/plugins` payload (ADR-0013).
-// Contributions are the ids the plugin registered — tool sets, sandbox
-// backends, web backends and tool gates all tie back to their originating plugin here.
 type InstalledPlugin = {
   name: string;
   version: string;
@@ -45,8 +42,6 @@ function PluginsList({
     mutate,
   } = useScopedList<InstalledPlugin>("plugins", { orgId });
 
-  // No data and no error is still loading — gating on data rather than
-  // `isLoading` alone keeps "No plugins installed" from flashing first.
   if (!data && !error) {
     return (
       <LoadingRegion label="Loading plugins">
@@ -56,13 +51,11 @@ function PluginsList({
               <Item variant="outline" className="items-start">
                 <Skeleton className="size-8 shrink-0 rounded-sm" />
                 <ItemContent>
-                  {/* Name, version badge, origin badge */}
                   <div className="flex items-center gap-2">
                     <Skeleton className="h-4 w-32" />
                     <Skeleton className="h-badge w-12 rounded-full" />
                     <Skeleton className="h-badge w-12 rounded-full" />
                   </div>
-                  {/* One contribution row: its label, then an id badge */}
                   <div className="mt-1 flex items-center gap-1.5">
                     <Skeleton className="mr-1 h-3 w-16" />
                     <Skeleton className="h-badge w-20 rounded-full" />
@@ -76,7 +69,6 @@ function PluginsList({
     );
   }
 
-  // Only a cold failure replaces the list; a failed revalidation keeps it.
   if (error && !data) {
     return (
       <EmptyCard

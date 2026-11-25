@@ -19,19 +19,12 @@ import {
 import { formatToolDuration } from "@/lib/tool-duration";
 import { cn } from "@/lib/utils";
 
-/**
- * What the timeline says about a run that recorded nothing — one that ran
- * before timelines existed, or failed before its first step. A constant so
- * tests assert the wording without restating it.
- */
 export const RUN_TIMELINE_EMPTY_NOTICE =
   "No timeline was recorded for this run. Runs that finished before timelines were introduced, and runs that failed before their first step, have none.";
 
-/** What a run whose timeline hit the event ceiling is marked with. */
 export const RUN_TIMELINE_TRUNCATED_NOTICE =
   "This run recorded more events than a timeline keeps, so later events are missing.";
 
-/** How an event whose end nobody saw is labelled in place of a duration. */
 export const UNKNOWN_DURATION_LABEL = "Unknown duration";
 
 function Bar({ row, totalMs }: { row: TimelineRow; totalMs: number }) {
@@ -39,8 +32,6 @@ function Bar({ row, totalMs }: { row: TimelineRow; totalMs: number }) {
   const style = { left: `${left * 100}%`, width: `${width * 100}%` };
 
   if (row.end.kind === "unknown") {
-    // A marker at the start and a label, never a bar drawn to "now": the
-    // event's end was not observed, and a bar would claim it was.
     return (
       <>
         <span
@@ -86,14 +77,6 @@ function Bar({ row, totalMs }: { row: TimelineRow; totalMs: number }) {
   );
 }
 
-/**
- * A Trigger run's **Run timeline** as a waterfall: one row per Run event, the
- * label on the left and a bar on the right laid out against the run's whole
- * span, nested where a delegation opened its own run. Where a run's time went,
- * and only that — it says what kind of thing ran and for how long, never what
- * it said (that is the boundary ADR-0023 draws, and the reason there is no
- * input or output to expand).
- */
 export function RunTimeline({
   events,
   runStatus,
@@ -103,7 +86,6 @@ export function RunTimeline({
   events: RunEvent[];
   runStatus: TriggerRunStatus;
   eventsTruncated?: boolean;
-  /** The clock a still-running event is drawn to. Defaults to the wall clock. */
   now?: number;
 }) {
   const layout = useMemo(
@@ -112,8 +94,6 @@ export function RunTimeline({
   );
 
   if (layout.rows.length === 0) {
-    // A section state, not a screen card. The full notice stays: it explains
-    // why a run can have no timeline, which a one-line state can't (#1852).
     return <ListState variant="empty">{RUN_TIMELINE_EMPTY_NOTICE}</ListState>;
   }
 
