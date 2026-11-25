@@ -48,8 +48,6 @@ describe("rankSlashCommands", () => {
     ]);
   });
 
-  // A prefix collision: both stay candidates, but the name the user has fully
-  // typed leads, so Tab accepts what is visibly highlighted.
   it("puts an exact match ahead of a longer name sharing its prefix", () => {
     expect(rankSlashCommands(commands, "deploy").map((c) => c.name)).toEqual([
       "deploy",

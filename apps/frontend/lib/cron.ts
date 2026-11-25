@@ -1,9 +1,3 @@
-/**
- * The Trigger form's simple schedule editor maps to and from a five-field cron
- * expression here. A saved expression that fits none of its frequencies
- * parses to `null`, and the form edits it as a raw expression instead.
- */
-
 export type Frequency =
   | "every-5-minutes"
   | "every-10-minutes"
@@ -14,7 +8,6 @@ export type Frequency =
   | "weekly"
   | "monthly";
 
-/** A schedule as the simple editor holds it. */
 export type SimpleSchedule = {
   frequency: Frequency;
   minute: string;

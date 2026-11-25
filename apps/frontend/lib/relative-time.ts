@@ -1,9 +1,3 @@
-/**
- * The one "5 minutes ago" formatter: notifications, kanban comments, and
- * trigger runs all render a timestamp relative to now, and each used to carry
- * its own copy (two hand-rolled, one inline dependency call).
- */
-
 const SECOND = 1;
 const MINUTE = 60 * SECOND;
 const HOUR = 60 * MINUTE;

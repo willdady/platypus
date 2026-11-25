@@ -1,40 +1,17 @@
 import type { FileUIPart, TextUIPart } from "ai";
 import type { SandboxUpload } from "@platypus/schemas";
 
-/**
- * The loosest shape these readers need: a part is anything with a `type`, and
- * whatever else that type brings with it. Deliberately not `UIMessage["parts"]`
- * — the part union is generic over a Chat's tools and data parts, and these
- * readers only ever ask what kind of part they are looking at.
- */
+// why: not UIMessage["parts"] — that union is generic over a Chat's tools and data parts
 type UnknownPart = { type: string; [key: string]: unknown };
 
-/**
- * What a message carrying files and no words of its own is sent as. Shared by
- * the composer and the edit surface, so an attachment-only turn reads the same
- * whether it was sent or edited into being.
- */
 export const ATTACHMENTS_ONLY_TEXT = "Sent with attachments";
 
-/**
- * Whether a file part should render as an image rather than a generic file
- * attachment. An image media type with no URL (a Provider-reference-only
- * file, or a still-uploading part) has nothing a client can put in an `<img
- * src>` — falling back to the file card there is strictly better than a
- * broken image, so the URL is required alongside the media type (issue #579).
- */
 export function isImageAttachment(
   part: Pick<FileUIPart, "mediaType" | "url">,
 ): boolean {
   return Boolean(part.mediaType?.startsWith("image/") && part.url);
 }
 
-/**
- * The message as one string: every text part, in order, joined. A turn can
- * carry several — a model that wrote, called a tool, and wrote again — and
- * they are one message to a reader, so Copy and the edit surface both open
- * from this rather than each keeping their own idea of it.
- */
 export function messageText(parts: readonly UnknownPart[] | undefined): string {
   return (parts ?? [])
     .filter((part): part is TextUIPart => part.type === "text")
@@ -42,12 +19,6 @@ export function messageText(parts: readonly UnknownPart[] | undefined): string {
     .join("");
 }
 
-/**
- * Every file the message carries, in the order it carries them. Images are
- * included: they render inline in the transcript but are attachments in an
- * edit surface, and an edit that kept only the non-image ones would drop the
- * screenshot the question was about (issue #710).
- */
 export function messageAttachments(
   parts: readonly UnknownPart[] | undefined,
 ): FileUIPart[] {
@@ -56,7 +27,6 @@ export function messageAttachments(
   );
 }
 
-/** The Sandbox uploads the message records, in order. */
 export function messageSandboxUploads(
   parts: readonly UnknownPart[] | undefined,
 ): SandboxUpload[] {
@@ -65,10 +35,6 @@ export function messageSandboxUploads(
     .map((part) => part.data as SandboxUpload);
 }
 
-/**
- * What a tool call's card shows as its error: the tool's own, or the reason a
- * Tool gate gave for denying it, which names the gate.
- */
 export function toolErrorText(part: {
   state: string;
   errorText?: string;

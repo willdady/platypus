@@ -20,17 +20,15 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { orgRoutes, userRoutes, workspaceRoutes } from "@/lib/routes";
 
-// Plain module, not "use client": the server-rendered header reads these too.
+// why: no "use client" — the server-rendered header reads these too
 
 export type SettingsNavLink = {
   href: string;
   icon: LucideIcon;
   label: string;
-  /** Marks a link only active on its own path, not on paths beneath it. */
   exact?: boolean;
 };
 
-/** The Organization settings pages, listed in its settings sidebar. */
 export function orgSettingsLinks(orgId: string): SettingsNavLink[] {
   const routes = orgRoutes(orgId).settings;
   return [
@@ -52,7 +50,6 @@ export function orgSettingsLinks(orgId: string): SettingsNavLink[] {
   ];
 }
 
-/** The Workspace settings pages, listed in its settings sidebar. */
 export function workspaceSettingsLinks(
   orgId: string,
   workspaceId: string,
@@ -69,10 +66,6 @@ export function workspaceSettingsLinks(
   ];
 }
 
-/**
- * The User's own settings pages, shared by their sidebar and the account menu.
- * Users is for super admins only.
- */
 export function userSettingsLinks(isSuperAdmin: boolean): SettingsNavLink[] {
   return [
     { href: userRoutes.profile, icon: User, label: "Profile", exact: true },

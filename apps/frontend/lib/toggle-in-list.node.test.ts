@@ -10,12 +10,16 @@ describe("toggleInList", () => {
     expect(toggleInList(["a", "b"], "a", false)).toEqual(["b"]);
   });
 
-  it("keeps a list that already holds the id", () => {
-    expect(toggleInList(["a", "b"], "a", true)).toEqual(["a", "b"]);
+  it("returns the same list when it already holds the id", () => {
+    const list = ["a", "b"];
+
+    expect(toggleInList(list, "a", true)).toBe(list);
   });
 
-  it("keeps a list that does not hold the id", () => {
-    expect(toggleInList(["a"], "b", false)).toEqual(["a"]);
+  it("returns the same list when it does not hold the id", () => {
+    const list = ["a"];
+
+    expect(toggleInList(list, "b", false)).toBe(list);
   });
 
   it("does not mutate the list it is given", () => {
