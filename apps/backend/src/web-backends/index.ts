@@ -82,11 +82,7 @@ const presentableReadUrl = (resolved: unknown, requested: string): string => {
     return resolved;
   }
   if (requested.length <= MAX_URL_CHARS) return requested;
-  try {
-    return new URL(requested).origin;
-  } catch {
-    return "";
-  }
+  return new URL(requested).origin;
 };
 
 const timeoutMessage = (toolName: string, timeoutMs: number): string =>
