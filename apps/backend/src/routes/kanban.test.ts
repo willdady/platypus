@@ -705,6 +705,7 @@ describe("Kanban Routes", () => {
       );
 
       expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({ error: "Card not found" });
       expect(fake.tables.kanban_card[0]).toMatchObject({
         id: "card-2",
         title: "Card",
