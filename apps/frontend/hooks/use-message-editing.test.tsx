@@ -4,13 +4,6 @@ import type { FileUIPart, UIMessage } from "ai";
 import { useMessageEditing } from "./use-message-editing";
 import { reportPdf, screenshotPng } from "@/test/chat-test-fixtures";
 
-/**
- * Editing used to resubmit `{ text }` and nothing else, so a message that
- * carried a file came back without it — the model answered a different
- * question and nothing on screen said why (issue #710). These tests pin the
- * round trip at the hook: what an edit opens holding, and what it resubmits.
- */
-
 const transcript: UIMessage[] = [
   {
     id: "u1",
@@ -66,8 +59,6 @@ describe("useMessageEditing opening an edit", () => {
 });
 
 describe("useMessageEditing submitting an edit", () => {
-  // The part records a past upload: the edit carries it, and nothing is
-  // uploaded again.
   it("keeps the message's Sandbox uploads on the resent edit", () => {
     const upload = { path: "data.csv", size: 3 };
     const { result, resend } = harness([
@@ -114,8 +105,6 @@ describe("useMessageEditing submitting an edit", () => {
     expect(resend.mock.calls[0][0]).toBe(2);
   });
 
-  // A resend refused by the pre-turn checks (an out-of-range Max steps, say)
-  // leaves the edit there to retry once the setting is fixed (issue #971).
   it("stays open when the resend is refused", () => {
     const { result, resend } = harness(transcript, false);
 
@@ -148,7 +137,6 @@ describe("useMessageEditing submitting an edit", () => {
     expect(resend.mock.calls[0][1].files).toEqual([reportPdf, added]);
   });
 
-  // An attachment-only edit is a real edit: the question was the file.
   it("resends an edit left with attachments and no words", () => {
     const { result, resend } = harness();
 
@@ -160,8 +148,6 @@ describe("useMessageEditing submitting an edit", () => {
     expect(resend).toHaveBeenCalledWith(0, { text: "", files: [reportPdf] });
   });
 
-  // Truncating the transcript and sending nothing is how a stray Enter would
-  // wipe a conversation with no way back.
   it("refuses an edit with neither text nor attachments", () => {
     const { result, resend } = harness();
 
@@ -184,12 +170,6 @@ describe("useMessageEditing submitting an edit", () => {
   });
 });
 
-/**
- * A message invoking a Skill carries its command in the text — there is no
- * structured part alongside it (issue #649). That is what makes the edit
- * round trip work at all, and it is worth pinning: the composer's value is a
- * string, so a command held anywhere else would be silently dropped here.
- */
 describe("useMessageEditing on a message that invokes a Skill", () => {
   const withCommand: UIMessage[] = [
     {
@@ -226,8 +206,6 @@ describe("useMessageEditing on a message that invokes a Skill", () => {
       }),
     );
 
-    // The seeded pair goes with the message it belonged to; the resubmitted
-    // turn is seeded afresh from the command in its text.
     expect(resend).toHaveBeenCalledWith(0, {
       text: "/blog-post about platypuses",
       files: [],

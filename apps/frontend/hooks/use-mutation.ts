@@ -1,13 +1,5 @@
 import { useRef, useState } from "react";
 
-/**
- * Wraps an async write so it can't be sent twice. `run` drops any call made
- * while a previous one is still in flight — a double click, or Enter held
- * down — and `pending` drives the button's disabled state and pending label.
- *
- * The guard is a ref, not the `pending` state: two clicks in the same tick
- * both see the state from before the first one landed.
- */
 export function useMutation<Args extends unknown[], Result>(
   fn: (...args: Args) => Promise<Result>,
 ) {

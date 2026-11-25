@@ -17,8 +17,6 @@ describe("useTimeout", () => {
     expect(fn).toHaveBeenCalledOnce();
   });
 
-  // Rapid clicks restart the delay rather than overlap: an earlier timer must
-  // not cut a later one's feedback short.
   it("replaces a pending timer when scheduled again", () => {
     const first = vi.fn();
     const second = vi.fn();

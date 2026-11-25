@@ -43,11 +43,6 @@ function store(value: unknown) {
   return localStorage.setItem(STORAGE_KEY, JSON.stringify({ value }));
 }
 
-/**
- * Renders the hook while keeping every render's result, so a test can assert
- * on what the picker WOULD have painted — the flicker in issue #799 was
- * invisible to a test that only looked at the settled value.
- */
 function renderTracked(initialProps: UseModelSelectionInput) {
   const renders: { selection: ModelSelection; isResolved: boolean }[] = [];
   const view = renderHook(
@@ -61,7 +56,6 @@ function renderTracked(initialProps: UseModelSelectionInput) {
     },
     { initialProps },
   );
-  /** The selections the picker would have shown as a real choice, in order. */
   const painted = () =>
     renders.filter((r) => r.isResolved).map((r) => r.selection);
   return { ...view, renders, painted };
@@ -107,7 +101,6 @@ describe("useModelSelection — nothing paints before the ladder resolves", () =
     });
     expect(painted()).toEqual([]);
 
-    // The row read 404s to `null` for a brand-new chat.
     rerender({ ...base, isChatLoading: false });
     expect(painted()[0]).toEqual({
       agentId: "a1",
@@ -129,8 +122,6 @@ describe("useModelSelection — nothing paints before the ladder resolves", () =
       agents: undefined,
     });
 
-    // Resolving now would name the row's provider/model and then swap to the
-    // Agent once the list lands — one flicker traded for another.
     expect(painted()).toEqual([]);
 
     rerender({ ...base, chatData, agents: [agent({ id: "a2" })] });
@@ -239,8 +230,6 @@ describe("useModelSelection — user choice", () => {
 
 describe("useModelSelection — workspace and stale references", () => {
   it("hands a `?agentId=` naming a deleted Agent back to the ladder", () => {
-    // Pinning the dead id would leave the trigger labelled "Select model" for
-    // as long as the link is open, which is the state issue #799 forbids.
     const { renders, painted } = renderTracked({
       ...base,
       initialAgentId: "gone",
@@ -259,8 +248,6 @@ describe("useModelSelection — workspace and stale references", () => {
     const { result, rerender } = renderTracked(base);
     expect(result.current.selection.agentId).toBe("a1");
 
-    // A workspace switch that reuses this mount: the other workspace has its
-    // own key, and nothing is stored under it.
     rerender({ ...base, workspaceId: "w2" });
 
     expect(result.current.selection).toEqual({
@@ -301,11 +288,6 @@ describe("useModelSelection — workspace and stale references", () => {
   });
 });
 
-/**
- * The stored selection is the Workspace's last pick (issue #1503): only a pick
- * in the picker writes it. Anything else that resolves a selection — opening a
- * Chat, restoring a new one, falling back, following a link — leaves it be.
- */
 describe("useModelSelection — only a pick is remembered", () => {
   const storedAgent = () => ({ value: { type: "agent", id: "a1" } });
 
@@ -322,7 +304,6 @@ describe("useModelSelection — only a pick is remembered", () => {
   });
 
   it("leaves the stored selection untouched when a new Chat falls back to the first Provider", () => {
-    // The stored Agent is missing from the list (deleted, or a stale cache).
     store({ type: "agent", id: "gone" });
     const { result } = renderTracked(base);
     expect(result.current.selection.providerId).toBe("p1");

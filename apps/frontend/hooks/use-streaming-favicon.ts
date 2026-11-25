@@ -2,7 +2,6 @@ import { useEffect, useRef } from "react";
 
 const BLINK_MS = 1000;
 
-/** The favicon with a solid dot in its bottom-right corner, or null if it can't be drawn. */
 function drawDotFrame(href: string): Promise<string | null> {
   return new Promise((resolve) => {
     const img = new Image();
@@ -13,11 +12,9 @@ function drawDotFrame(href: string): Promise<string | null> {
       const ctx = canvas.getContext("2d");
       if (!ctx) return resolve(null);
       ctx.drawImage(img, 0, 0, size, size);
-      // Punch a transparent gap through the icon, then sit the dot inside it,
-      // so the dot stays distinct from the icon's own teal background.
       const gap = size * 0.14;
       const r = size * 0.18;
-      const c = size * 0.72; // dot centre, independent of the gap
+      const c = size * 0.72;
       ctx.globalCompositeOperation = "destination-out";
       ctx.beginPath();
       ctx.arc(c, c, r + gap, 0, 2 * Math.PI);
@@ -30,7 +27,7 @@ function drawDotFrame(href: string): Promise<string | null> {
       try {
         resolve(canvas.toDataURL("image/png"));
       } catch {
-        resolve(null); // tainted canvas
+        resolve(null);
       }
     };
     img.onerror = () => resolve(null);
@@ -38,11 +35,6 @@ function drawDotFrame(href: string): Promise<string | null> {
   });
 }
 
-/**
- * Blinks a dot on the tab favicon while `active`, restoring the original icon
- * exactly when it turns false or the caller unmounts. Uses `setInterval` rather
- * than `requestAnimationFrame`, which is paused in background tabs.
- */
 export function useStreamingFavicon(active: boolean) {
   const dotFrame = useRef<Promise<string | null> | null>(null);
 
@@ -66,6 +58,7 @@ export function useStreamingFavicon(active: boolean) {
     void dotFrame.current.then((dot) => {
       if (cancelled || !dot) return;
       let on = false;
+      // why: setInterval, not requestAnimationFrame, which is paused in background tabs
       timer = setInterval(() => {
         on = !on;
         if (on) links.forEach((l) => l.setAttribute("href", dot));

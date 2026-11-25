@@ -13,7 +13,6 @@ import { useSandboxUploads } from "./use-sandbox-uploads";
 
 const FILE_URL = "http://test/organizations/org1/workspaces/ws1/sandbox/file";
 
-/** Renders the hook's dialog and hands back its `upload`. */
 function harness() {
   let upload!: ReturnType<typeof useSandboxUploads>["upload"];
   const Harness = () => {

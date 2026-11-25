@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import { renderHook } from "@testing-library/react";
 import { useStreamdownControls } from "./use-streamdown-controls";
 
-// jsdom does not define `isSecureContext` at all.
+// why: jsdom does not define isSecureContext at all
 function stubSecureContext(secure: boolean) {
   return Object.defineProperty(window, "isSecureContext", {
     value: secure,

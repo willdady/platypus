@@ -1,10 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
 
-/**
- * A `setTimeout` owned by the component: scheduling again replaces the pending
- * timer, and unmounting drops it, so rapid clicks never overlap and nothing
- * fires into an unmounted component.
- */
 export function useTimeout(): (fn: () => void, ms: number) => void {
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
