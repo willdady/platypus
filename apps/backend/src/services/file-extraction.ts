@@ -53,10 +53,6 @@ const normalizeExtractedWhitespace = (text: string): string =>
 const CACHE_LIMIT = 16;
 const cache = new Map<string, string | null>();
 
-export const resetExtractedTextCache = (): void => {
-  cache.clear();
-};
-
 const cacheKey = (
   format: ExtractableDocumentFormat,
   bytes: Uint8Array,

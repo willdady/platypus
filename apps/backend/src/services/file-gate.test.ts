@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import { DEFAULT_MAX_EXTRACTED_TEXT_CHARS } from "@platypus/schemas";
 import type { PlatypusUIMessage } from "../types.ts";
 import {
@@ -7,10 +7,7 @@ import {
   assertFilePartsSupported,
   normalizeFileParts,
 } from "./file-gate.ts";
-import {
-  resetExtractedTextCache,
-  MAX_EXTRACTION_INPUT_BYTES,
-} from "./file-extraction.ts";
+import { MAX_EXTRACTION_INPUT_BYTES } from "./file-extraction.ts";
 import {
   buildTestDocx,
   buildTestPdf,
@@ -64,10 +61,6 @@ describe("assertFilePartsSupported", () => {
       return e as FileValidationError;
     }
   };
-
-  beforeEach(() => {
-    resetExtractedTextCache();
-  });
 
   it("passes when every file is native or text-like", async () => {
     expect(
@@ -208,10 +201,6 @@ describe("assertFilePartsSupported", () => {
 describe("normalizeFileParts", () => {
   const chatPassthrough = ["image/*"];
   const nativePdfPassthrough = ["image/*", PDF_TYPE];
-
-  beforeEach(() => {
-    resetExtractedTextCache();
-  });
 
   it("leaves natively-supported files untouched", async () => {
     const input = [

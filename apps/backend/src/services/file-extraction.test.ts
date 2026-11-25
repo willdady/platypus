@@ -1,8 +1,7 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import { DEFAULT_MAX_EXTRACTED_TEXT_CHARS } from "@platypus/schemas";
 import {
   extractDocumentText,
-  resetExtractedTextCache,
   MAX_EXTRACTION_INPUT_BYTES,
   type ExtractedText,
   type ExtractionResult,
@@ -22,10 +21,6 @@ const ok = (result: ExtractionResult): ExtractedText => {
 const cap = { maxChars: DEFAULT_MAX_EXTRACTED_TEXT_CHARS };
 
 describe("extractDocumentText", () => {
-  beforeEach(() => {
-    resetExtractedTextCache();
-  });
-
   it("extracts text from a text-based PDF", async () => {
     const result = await extractDocumentText(
       bytes(buildTestPdf(["Quarterly revenue rose", "Costs held flat"])),
