@@ -13,13 +13,6 @@ import { CHAT_MAX_STEPS_ERROR, CHAT_SELECTION_ERROR } from "@/lib/chat-turn";
 import { reportPdf } from "@/test/chat-test-fixtures";
 import { useChatTurn } from "./use-chat-turn";
 
-/**
- * A Chat turn starts from the composer, Regenerate and a resent edit, and all
- * three used to build their own request — so only the composer ran the
- * pre-turn checks and the post-send refresh (issue #971). These pin that the
- * three are judged identically, and that a refused turn touches nothing.
- */
-
 const settings: ChatSettings = {
   instructions: "",
   temperature: undefined,
@@ -117,7 +110,6 @@ describe("useChatTurn refusing a turn", () => {
     },
   );
 
-  // The same condition that disables the composer.
   it.each(starts)(
     "%s refuses while a run is held elsewhere and touches nothing",
     (_, start) => {
@@ -131,8 +123,6 @@ describe("useChatTurn refusing a turn", () => {
 });
 
 describe("useChatTurn starting a turn", () => {
-  // Issue #1256: the answer that completes a reply's set sends the turn, so
-  // each carries the body. A refresh between two answers would undo the first.
   it("answers an approval with the turn's body, and no refresh", () => {
     const h = harness();
 
@@ -158,7 +148,6 @@ describe("useChatTurn starting a turn", () => {
     expect(h.calls).toEqual(["sendMessage", "refreshChat"]);
   });
 
-  // An attachment-only message is a real turn: the question was the file.
   it("stands in a text for a message with attachments and no words", () => {
     const h = harness();
 
@@ -170,7 +159,6 @@ describe("useChatTurn starting a turn", () => {
     ]);
   });
 
-  // Files first, as the SDK orders a text-and-files message, then the text.
   it("sends a message's Sandbox uploads as parts of it", () => {
     const h = harness();
     const upload = { path: "data.csv", size: 3 };
@@ -189,8 +177,6 @@ describe("useChatTurn starting a turn", () => {
     ]);
   });
 
-  // Named explicitly: the SDK's default names no message, and the server
-  // needs the reply's id to know what to run from.
   it("regenerates the named reply with the turn's body, then refreshes the row", () => {
     const h = harness();
 
@@ -213,7 +199,6 @@ describe("useChatTurn starting a turn", () => {
     expect(update(["u1", "a1", "u2"])).toEqual(["u1"]);
   });
 
-  // The edited message's own parent, which may be a message since deleted.
   it("sends an edit under the parent it names", () => {
     const h = harness();
 

@@ -12,12 +12,10 @@ import { joinUrl } from "@/lib/utils";
 
 type TurnOptions = { body: Record<string, unknown> };
 
-/** A message to send: its Sandbox uploads have already landed. */
 export type TurnMessage = PromptInputMessage & {
   sandboxUploads?: SandboxUpload[];
 };
 
-/** What the chat hook's `sendMessage` takes. */
 type Outgoing =
   | { text: string; files: FileUIPart[] }
   | {
@@ -28,11 +26,6 @@ type Outgoing =
       )[];
     };
 
-/**
- * An attachment-only message is a real turn: the question was the file. A
- * message with Sandbox uploads goes as parts, in the order the SDK gives a
- * text-and-files one: files, then the text.
- */
 function outgoing({ text, files, sandboxUploads }: TurnMessage): Outgoing {
   const words = text || ATTACHMENTS_ONLY_TEXT;
   if (!sandboxUploads?.length) return { text: words, files };
@@ -52,9 +45,7 @@ export type UseChatTurnInput<T extends UIMessage> = {
   selection: ModelSelection;
   settings: ChatSettings;
   search: boolean;
-  /** Another tab's run is live: the same condition that disables the composer. */
   runHeldElsewhere: boolean;
-  /** The chat hook's own calls. */
   chat: {
     sendMessage: (message: Outgoing, options: TurnOptions) => unknown;
     regenerate: (options: TurnOptions & { messageId: string }) => unknown;
@@ -72,20 +63,6 @@ export type UseChatTurnInput<T extends UIMessage> = {
   chatId: string;
 };
 
-/**
- * Starting a Chat turn, whichever entry point asks: the composer, Regenerate,
- * or a resent edit (issue #971). The module decides whether a turn may start
- * and what goes on the wire, so a rule added here cannot be forgotten at a
- * second call site the way #539 and #648 were.
- *
- * Each start returns whether the turn started. A refused one touches nothing —
- * the checks run before the transcript is cut, because the SDK's `regenerate`
- * and an edit's truncation both drop messages the user would lose for a
- * request that could never succeed.
- *
- * The starts are stable while their inputs are: `ChatMessage` is memoised on
- * its callbacks, and a streamed token changes none of them (#869).
- */
 export function useChatTurn<T extends UIMessage>({
   selection,
   settings,
@@ -116,10 +93,6 @@ export function useChatTurn<T extends UIMessage>({
         return false;
       }
       dispatch({ body: request.body });
-      // Tell the chat read a run has started rather than leaving it to infer
-      // one. The run's start hook writes `status: "running"`, and until this
-      // read learns that, nothing here can tell a live run from last turn's
-      // finished one (issue #648).
       refreshChat();
       return true;
     },
@@ -132,24 +105,12 @@ export function useChatTurn<T extends UIMessage>({
     [sendMessage, start],
   );
 
-  /**
-   * Regenerates the reply `messageId`, named explicitly: the SDK's default
-   * names no message, and the server needs one to know what to run from.
-   */
   const regenerate = useCallback(
     (messageId: string) =>
       start((options) => regenerateTurn({ ...options, messageId })),
     [regenerateTurn, start],
   );
 
-  /**
-   * Drops the message at `truncateAt` and everything after it from the screen,
-   * then sends the edit as a new message under `parentId`, the edited one's
-   * parent — or under the message above it where that is not known yet. The
-   * stored rows stay (ADR-0026). Never `sendMessage({ messageId })`: it
-   * replaces the message in place under the same id, which is a row the server
-   * already holds.
-   */
   const resendEdited = useCallback(
     (truncateAt: number, message: TurnMessage, parentId?: string | null) =>
       start((options) => {
@@ -164,12 +125,6 @@ export function useChatTurn<T extends UIMessage>({
     [sendMessage, setMessages, start],
   );
 
-  /**
-   * Answers one of a reply's tool approvals (issue #1256). The chat hook
-   * holds each answer until the reply's last, then sends them all as one turn
-   * with that answer's body, so every answer carries it. No refresh: a read
-   * landing between two answers would put the first one's card back.
-   */
   const respond = useCallback(
     (approvalId: string, approved: boolean): boolean => {
       if (runHeldElsewhere) return false;
@@ -188,16 +143,7 @@ export function useChatTurn<T extends UIMessage>({
   );
 
   const cancel = useCallback(() => {
-    // The server-side run is decoupled from the request lifecycle, so
-    // aborting the local fetch (what `stop()` does) no longer cancels
-    // the run. Send an explicit cancel POST so the server stops billing
-    // tokens and persists the partial result with status="cancelled".
-    // Fire-and-forget (not awaited) so `stop()` below isn't held up by
-    // the round trip, but a failure still surfaces — the user can retry
-    // by pressing stop again, and the server treats repeated cancels as
-    // idempotent no-ops, but silently swallowing a real failure (e.g. a
-    // network error) would leave them thinking the run was cancelled
-    // when it wasn't.
+    // why: stop() doesn't cancel the server run; the POST does, and a failure is toasted
     void writeAt(
       joinUrl(
         backendUrl || "",
