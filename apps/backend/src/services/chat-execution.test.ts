@@ -96,10 +96,12 @@ import {
   prepareChatTurn,
   validateTurnAttachments,
   resolveSearchMode,
-  wrapToolsWithActivity,
-  normalizeToolResult,
-  type ToolActivityEvent,
 } from "./chat-execution.ts";
+import {
+  wrapToolsWithActivity,
+  type ToolActivityEvent,
+} from "./tool-activity.ts";
+import { normalizeToolResult } from "./tool-result.ts";
 import { NotFoundError, ValidationError } from "../errors.ts";
 import {
   composeWebBackend,

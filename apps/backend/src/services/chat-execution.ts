@@ -31,7 +31,6 @@ import {
   type SubAgentCatalogueEntry,
   type SubAgentFailure,
 } from "../tools/sub-agent.ts";
-import { normalizeToolResult } from "./tool-result.ts";
 import {
   renderSystemPrompt,
   type SystemPromptStableContext,
@@ -702,9 +701,6 @@ const resolveMemories = async (
   if (!includeMemories) return [];
   return queries.getRecentMemories(userId, workspaceId, referenceDate);
 };
-
-export { normalizeToolResult };
-export { wrapToolsWithActivity, type ToolActivityEvent };
 
 const resolveFallbackOrLog = async (
   agent: FallbackAgentSource & { id: string },
