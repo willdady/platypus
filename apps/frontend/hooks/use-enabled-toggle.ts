@@ -2,11 +2,6 @@ import { useBackendUrl } from "@/components/auth-provider";
 import { writeEntity, type Scope } from "@/lib/api-write";
 import { useOptimisticRows } from "@/hooks/use-optimistic-rows";
 
-/**
- * Flips a row's `enabled` from its card menu — the same field the edit form's
- * Enabled switch writes. The row flips at once; a refusal is toasted and the
- * row flips back. Render the list through `apply` so the flip shows.
- */
 export function useEnabledToggle<
   T extends { readonly id: string; readonly enabled: boolean },
 >({
@@ -14,7 +9,6 @@ export function useEnabledToggle<
   scope,
   mutate,
 }: {
-  /** Collection entity as the API spells it: "webhooks" / "a2a-endpoints". */
   readonly entity: string;
   readonly scope: Scope;
   readonly mutate: () => void | Promise<unknown>;
@@ -31,7 +25,7 @@ export function useEnabledToggle<
       () =>
         writeEntity(backendUrl, entity, scope, {
           id: item.id,
-          // Every entity this hook serves updates partially.
+          // why: every entity this hook serves updates partially
           method: "PATCH",
           data: { enabled },
         }),

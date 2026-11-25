@@ -30,9 +30,7 @@ import {
   type ColumnWithCards,
 } from "@/lib/board-moves";
 
-// Module-level so their identity survives re-renders: `useSensor` memoizes on
-// the options object, and a fresh literal here rebuilds the sensor list, the
-// activators, and every dnd-kit context consumer on every board render.
+// why: module-level, or a fresh literal rebuilds every sensor and dnd-kit consumer
 const POINTER_SENSOR_OPTIONS = {
   activationConstraint: { distance: 5 },
 } as const;
@@ -41,7 +39,7 @@ const TOUCH_SENSOR_OPTIONS = {
   activationConstraint: { delay: 250, tolerance: 5 },
 } as const;
 
-// Space alone picks an item up: Enter is a card's "open", as a click is.
+// why: Space alone picks up; Enter opens the card, as a click does
 const KEYBOARD_SENSOR_OPTIONS = {
   coordinateGetter: sortableKeyboardCoordinates,
   keyboardCodes: {
@@ -51,27 +49,13 @@ const KEYBOARD_SENSOR_OPTIONS = {
   },
 };
 
-/**
- * The Board's drag state and gestures: the optimistic column copy a drag
- * mutates, the dnd-kit sensors and collision rule, and the handlers that turn
- * a drop into a write. Kept out of the view so the render reads a small
- * surface, and the frame-coalescing and stale-closure guards below sit beside
- * the state they protect.
- *
- * `columns` is the local copy while a drag or write is in flight, otherwise
- * the server's. `sync` is what `lib/board-moves` writes through, so a card
- * moved from the Card dialog lands by the same path as a drag.
- */
 export function useBoardDrag({
   serverColumns,
   boardUrl,
   refetch,
 }: {
-  /** The server's columns for the board, from the polled board state. */
   serverColumns: ColumnWithCards[];
-  /** The board's own URL, which every move writes under. */
   boardUrl: string;
-  /** Re-reads the board, so a refused move can fall back to the server's copy. */
   refetch: () => Promise<unknown>;
 }) {
   const [localColumns, _setLocalColumns] = useState<ColumnWithCards[] | null>(
@@ -106,17 +90,9 @@ export function useBoardDrag({
   const [activeId, setActiveId] = useState<string | null>(null);
   const [activeType, setActiveType] = useState<"column" | "card" | null>(null);
   const activeTypeRef = useRef<"column" | "card" | null>(null);
-  // Throttle drag-over updates to once per animation frame. dnd-kit fires
-  // onDragOver from a useEffect on overId, so a setLocalColumns inside that
-  // handler can shift layout, change overId, re-fire the effect, and loop
-  // (React #185). Coalescing to one update per frame breaks the loop while
-  // still letting the user see cards animate as they drag.
+  // why: one drag-over a frame; a second before the flush re-loops on the shift (React #185)
   const dragOverFrameRef = useRef<number | null>(null);
-  // The column a card drag started from, captured before drag-over rewrites
-  // localColumns. Cross-column moves are applied to the local copy while the
-  // card is still in flight, so by drag-end the card already sits in its
-  // target column locally — reading the source from there would send the
-  // target as `expectedColumnId` and refuse every cross-column move.
+  // why: captured before drag-over rewrites the copy, or cross-column moves are refused
   const dragOriginColumnRef = useRef<string | null>(null);
 
   const columns: ColumnWithCards[] = useMemo(
@@ -124,26 +100,16 @@ export function useBoardDrag({
     [localColumns, serverColumns],
   );
 
-  // Drag handlers run between commits, so an effect-updated ref always holds
-  // the columns the last commit rendered. Reading `columns` directly would
-  // rebuild the handlers on every drag frame, and every DndContext prop change
-  // re-renders its subtree.
+  // why: handlers run between commits; reading `columns` rebuilds them every drag frame
   const columnsRef = useRef(columns);
   useEffect(() => {
     columnsRef.current = columns;
   });
 
-  // When fresh server data arrives (and we're not mid-drag), drop the local
-  // optimistic copy so the board reflects the server. Uses React's "adjust
-  // state during render" pattern (state, not a ref, to avoid reading/writing
-  // a ref during render).
+  // why: reset during render with the raw setter; refs must not be written in render
   const [prevData, setPrevData] = useState(serverColumns);
   if (serverColumns !== prevData && !activeId) {
     setPrevData(serverColumns);
-    // Use the raw state setter here: setLocalColumns writes localColumnsRef,
-    // and refs must not be written during render. The ref is re-synced on the
-    // next drag start (and only ever read inside drag handlers), so leaving it
-    // until then is safe.
     if (localColumns) _setLocalColumns(null);
   }
 
@@ -153,10 +119,8 @@ export function useBoardDrag({
     useSensor(KeyboardSensor, KEYBOARD_SENSOR_OPTIONS),
   );
 
+  // why: sortable contexts key off identity; a rebuild re-renders every card
   const columnIdsKey = columns.map((c) => c.id).join("\n");
-  // Both sortable contexts key off array identity, so rebuilding this array
-  // every render makes every card and column re-render. Rebuild it only when
-  // the id sequence actually changes.
   const columnIds = useMemo(
     () => (columnIdsKey ? columnIdsKey.split("\n") : []),
     [columnIdsKey],
@@ -165,7 +129,6 @@ export function useBoardDrag({
   const collisionDetection: CollisionDetection = useCallback(
     (args) => {
       if (activeTypeRef.current === "column") {
-        // Only consider column sortable containers, ignore cards and card droppables
         const filtered = {
           ...args,
           droppableContainers: args.droppableContainers.filter((container) =>
@@ -174,9 +137,7 @@ export function useBoardDrag({
         };
         return closestCenter(filtered);
       }
-      // Card drags: pointerWithin gives a stable over-target tied to the
-      // cursor, so layout shifts during a cross-column move can't flip the
-      // over-target between columns and trigger an update loop.
+      // why: pointerWithin's over-target follows the cursor, so a layout shift can't flip it
       const pointerCollisions = pointerWithin(args);
       if (pointerCollisions.length > 0) {
         return pointerCollisions;
@@ -189,7 +150,6 @@ export function useBoardDrag({
   const handleDragStart = useCallback(
     (event: DragStartEvent) => {
       const { active } = event;
-      // Every draggable (a column, a card) names its kind in its data.
       const type = active.data.current?.type as "column" | "card";
       const cols = columnsRef.current;
       setActiveId(active.id as string);
@@ -209,10 +169,6 @@ export function useBoardDrag({
       const { active, over } = event;
       if (!over || activeTypeRef.current !== "card") return;
 
-      // Skip if we already scheduled an update this frame: a previous
-      // drag-over already set localColumns, and processing another one before
-      // React flushes can re-trigger this handler off the resulting layout
-      // shift.
       if (dragOverFrameRef.current !== null) return;
 
       const cols = localColumnsRef.current;
@@ -230,13 +186,12 @@ export function useBoardDrag({
         });
       };
 
-      // Same column reorder
       if (activeColumn.id === overColumn.id) {
         const activeIndex = activeColumn.cards.findIndex(
           (c) => c.id === active.id,
         );
         const overIndex = overColumn.cards.findIndex((c) => c.id === over.id);
-        // overIndex === -1 means hovering over the column drop zone → move to end
+        // why: -1 is the column drop zone, so the card goes to the end
         const targetIndex =
           overIndex === -1 ? activeColumn.cards.length - 1 : overIndex;
         if (activeIndex !== targetIndex) {
@@ -253,7 +208,6 @@ export function useBoardDrag({
         return;
       }
 
-      // Cross-column move
       const activeColId = activeColumn.id;
       const overColId = overColumn.id;
       const overCardId = over.id;
@@ -301,9 +255,7 @@ export function useBoardDrag({
         dragOverFrameRef.current = null;
       }
 
-      // Read the latest localColumns from the ref to avoid stale closures.
-      // React may batch state updates from handleDragOver and handleDragEnd
-      // within the same frame, so the closure variable can be outdated.
+      // why: drag-over and drag-end batch in one frame, so the closure's copy may be stale
       const cols = localColumnsRef.current;
 
       if (!over || !cols) {
@@ -314,7 +266,7 @@ export function useBoardDrag({
       if (active.data.current?.type === "column") {
         const current = columnsRef.current;
         const oldIndex = current.findIndex((c) => c.id === active.id);
-        // over.id may be a column id or a card id within that column
+        // why: over.id is a column or one of its cards; a card maps to its column
         let newIndex = current.findIndex((c) => c.id === over.id);
         if (newIndex === -1) {
           const overColumn = columnOfCard(current, String(over.id));
@@ -335,9 +287,6 @@ export function useBoardDrag({
         return;
       }
 
-      // Card drag end.  Drag-over has already moved the card in the local
-      // copy, so `fromColumnId` here is where the card sits *now* — the drag's
-      // true origin lives in dragOriginColumnRef.
       const cardId = String(active.id);
       const placement = placeCard(cols, {
         activeId: cardId,
@@ -352,8 +301,6 @@ export function useBoardDrag({
       }
       const { fromColumnId, toColumnId, afterCardId } = placement;
 
-      // Optimistic local update so the UI doesn't flash while the request
-      // is in flight.
       setLocalColumns(
         (prev) => prev && applyCardMove(prev, { cardId, ...placement }),
       );
@@ -377,7 +324,6 @@ export function useBoardDrag({
     [boardUrl, sync, setLocalColumns],
   );
 
-  /** Moves a column one place from its menu, the keyboard equivalent of a drag. */
   const moveColumn = useCallback(
     async (columnId: string, direction: "left" | "right") => {
       const current = columnsRef.current;
@@ -408,11 +354,8 @@ export function useBoardDrag({
       : null;
 
   return {
-    /** The local copy while a drag or write is in flight, else the server's. */
     columns,
-    /** The last committed columns, for handlers that run between commits. */
     columnsRef,
-    /** What `lib/board-moves` writes through. */
     sync,
     activeId,
     activeType,

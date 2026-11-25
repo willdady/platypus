@@ -26,7 +26,6 @@ const success: WriteOutcome<unknown> = {
   revalidateKeys: [],
 };
 
-/** A write that resolves only when the test says so. */
 function deferredWrite() {
   let resolve!: (outcome: WriteOutcome<unknown>) => void;
   writeEntitySpy.mockImplementationOnce(
@@ -120,7 +119,6 @@ describe("useEnabledToggle", () => {
     });
     expect(result.current.isToggling("a")).toBe(false);
     expect(result.current.isToggling("b")).toBe(true);
-    // B's flip survives A's write landing.
     expect(result.current.apply(rows)[1].enabled).toBe(true);
 
     await act(async () => {
