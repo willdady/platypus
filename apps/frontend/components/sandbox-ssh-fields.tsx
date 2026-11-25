@@ -14,10 +14,6 @@ import type { SandboxConfigFieldsProps } from "@/components/sandbox-settings";
 
 const DEFAULT_SSH_PORT = "22";
 
-/**
- * The private key's state: a key stored server-side (GET never returns it, only
- * that one exists), the admin replacing that key, or nothing stored yet.
- */
 export type SandboxKeyState = "stored" | "replacing" | "none";
 
 type SandboxSshFieldsProps = SandboxConfigFieldsProps & {
@@ -25,12 +21,6 @@ type SandboxSshFieldsProps = SandboxConfigFieldsProps & {
   onReplaceKey: () => void;
 };
 
-/**
- * The SSH backend's fields (ADR-0012): where to attach and the credentials to
- * attach with. Admin-only, like the rest of the sandbox config, so the form
- * mounts them only for an admin.
- *
- */
 function SandboxSshFields({
   formData,
   setConfigField,
@@ -39,6 +29,7 @@ function SandboxSshFields({
   keyState,
   onReplaceKey,
 }: SandboxSshFieldsProps) {
+  // why: a stored key has no control to label, so its caption is plain text
   return (
     <>
       <FormTextField
@@ -119,8 +110,6 @@ function SandboxSshFields({
         }
       />
 
-      {/* Once stored there is no control to label, only the status row, so the
-          caption drops to plain text. */}
       {keyState === "stored" ? (
         <Field>
           <FieldTitle>Private key</FieldTitle>
@@ -156,8 +145,6 @@ function SandboxSshFields({
           error={errors["credentials.privateKey"]}
           onChange={(value) => {
             setConfigField("sshPrivateKey", value);
-            // The passphrase only travels with a key, so clearing the key
-            // clears it rather than dropping it on save.
             if (!value.trim()) setConfigField("sshPassphrase", "");
           }}
           disabled={disabled}

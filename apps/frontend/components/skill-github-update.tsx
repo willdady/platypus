@@ -22,7 +22,6 @@ const DIFF_LINE_CLASS = {
 };
 const DIFF_LINE_MARK = { same: " ", added: "+", removed: "-" };
 
-/** What updating would change: the files, `SKILL.md` line by line, and the Sandbox need. */
 function UpdateDiff({ diff }: { diff: Diff }) {
   const rows = [
     ...diff.files.added.map((file) => ({
@@ -100,19 +99,12 @@ function UpdateDiff({ diff }: { diff: Diff }) {
   );
 }
 
-/**
- * Check for updates on a Skill installed from GitHub: up to date, or the diff
- * of what updating would change, then Update to exactly the checked commit.
- * A Modified Skill warns that its local edits will be overwritten. `children`
- * are the card's other buttons, sharing the button row.
- */
 export function SkillGithubUpdate({
   skillUrl,
   skill,
   onUpdated,
   children,
 }: {
-  /** The Skill's backend URL at the scope it is managed from. */
   skillUrl: string;
   skill: Serialized<Skill>;
   onUpdated: (skill: Serialized<Skill>) => void;
@@ -138,7 +130,7 @@ export function SkillGithubUpdate({
         { method: "POST", data: { commitSha } },
       );
       if (outcome.outcome !== "success") {
-        // A refused update shows in the confirm dialog, which stays open.
+        // why: a refused update belongs in the confirm dialog that stays open
         if (confirming) setUpdateError(outcome.message);
         else toast.error(outcome.message);
         return;

@@ -80,16 +80,9 @@ import {
   SkillImportButton,
 } from "@/components/skill-bundle";
 
-// The list serves two surfaces: a Workspace (workspaceId provided) where it
-// shows workspace-scoped Skills plus attached org-scoped Shared Skills as
-// locked cards, and the Organization settings surface (no workspaceId) where it
-// manages org-scoped Skills directly (ADR-0007). The API's response shape
-// always carries `scope`.
 type SerializedSkill = Serialized<SkillResponse>;
 
-/** The agent-filter value for Skills attached to no agent. */
 const UNATTACHED = "unattached";
-/** Skills per page on the Workspace home. */
 const SKILLS_PAGE_SIZE = 8;
 
 function UserInvocableBadge({ skill }: { skill: SerializedSkill }) {
@@ -106,12 +99,6 @@ function UserInvocableBadge({ skill }: { skill: SerializedSkill }) {
   );
 }
 
-// The agent-association indicator shown on workspace skill cards: a Bot icon
-// with an "N agent(s)" count whose tooltip lists the agents, or a warning when
-// the Skill is attached to no agents. Rendered for both workspace-scoped and
-// attached org-scoped (Shared) Skills (#296). The trigger uses preventDefault
-// so tapping the count does not follow the card's link. While the agent read is
-// unavailable the line is drawn empty, so the card keeps its height.
 function SkillAgentsIndicator({
   agents,
   unavailable = false,
@@ -153,19 +140,13 @@ function SkillAgentsIndicator({
   );
 }
 
-/**
- * The skill cards as they load; the workspace home draws them too. Each line
- * the loaded card reserves is drawn, so the list doesn't jump as it lands.
- */
 export function SkillCardsSkeleton({
   cards,
   agentLine = false,
   sharingLines = false,
 }: {
   cards?: number;
-  /** A workspace card's agent count. */
   agentLine?: boolean;
-  /** An Org Admin's "Shared with" badge and unattached warning. */
   sharingLines?: boolean;
 }) {
   return (
@@ -194,19 +175,13 @@ export function SkillsList({
   const [skillToManage, setSkillToManage] = useState<SerializedSkill | null>(
     null,
   );
-  // Both filters live in the URL, so they survive a refresh and Back. Only the
-  // Workspace home shows the controls; elsewhere the params are ignored.
   const { get, set, page: pageItems } = useListParams("skillsPage");
   const agentFilter = (workspaceId && get("skillAgent")) || ALL;
-  // A default value leaves its param out. A new filter starts on page 1.
   const { value: nameFilter, onValueChange: setNameFilter } =
     useSearchParamInput("skillQuery", "skillsPage");
   const setAgentFilter = (value: string) =>
     set("skillAgent", value === ALL ? null : value);
 
-  // Resolved once per render and reused for the list's read and every write
-  // below, rather than re-deriving the Organization-vs-Workspace branch at
-  // each call site.
   const scope: Scope = workspaceId ? { orgId, workspaceId } : { orgId };
   const editBasePath = workspaceId
     ? workspaceRoutes(orgId, workspaceId).skills.root
@@ -220,7 +195,6 @@ export function SkillsList({
     mutate,
   } = useScopedList<SerializedSkill>("skills", scope);
 
-  // Agent associations are a workspace concern; only fetched on that surface.
   const {
     data: agentsData,
     results: agents,
@@ -229,17 +203,12 @@ export function SkillsList({
     mutate: mutateAgents,
   } = useScopedList<Agent>("agents", workspaceId ? scope : null);
 
-  // A failed agent read cannot tell "attached to no agents" from "the
-  // associations didn't load", so the per-card indicator stays off until the
-  // list has landed; one read failure above the list replaces it.
   const agentsFailed = Boolean(workspaceId && agentsError && !agentsData);
   const agentsUnavailable =
     Boolean(workspaceId) && (isLoadingAgents || agentsFailed);
 
   const skills = sortByName(skillRows);
 
-  // Attach, detach, and Promote a Shared resource are the same rule
-  // (ADR-0007 / #154), asked of the auth module instead of re-derived here.
   const canAttach = canManageSharedResource(actor, workspaceId);
   const canPromote = canAttach;
   const canManageOrg = canManageOrgSharedResource(actor);
@@ -266,10 +235,6 @@ export function SkillsList({
     delete: (skill, url) => writeEntity(url, "skills", scope, { id: skill.id }),
   });
 
-  // On the Organization surface a Shared Skill can't be deleted while attached
-  // (ADR-0007); the guard explains the blocker up front instead of offering a
-  // Delete button that is guaranteed to fail. Inside a Workspace there is
-  // nothing to check — the row is either private or a locked Shared card.
   const deleteGuard = useSharedDeleteGuard<SerializedSkill>({
     resourceType: "skill",
     scope,
@@ -279,15 +244,11 @@ export function SkillsList({
   const handleDeleteClick = (skill: SerializedSkill) =>
     workspaceId ? deleteFlow.request(skill) : deleteGuard.request(skill);
 
-  // Org-scoped (Shared) Skills are locked inside a Workspace: they can only
-  // be edited from the organization settings surface (ADR-0007).
   const isSharedInWorkspace = (skill: SerializedSkill) =>
     Boolean(workspaceId) && skill.scope === "organization";
 
   const renderMenu = (skill: SerializedSkill) => {
     if (isSharedInWorkspace(skill)) {
-      // Like a Shared Agent: Detach is named in the menu rather than behind
-      // the card's own click, and only an Org Admin gets one.
       return canAttach ? (
         <RowActionsMenu
           name={skill.name}
@@ -327,24 +288,16 @@ export function SkillsList({
     );
   };
 
-  // The Command palette's own scorer, applied to the name: a card grid, not a
-  // `Command` list, so it is called directly rather than through `Command`.
-  // Only agents that would narrow the list to something are worth offering.
   const agentOptions = agents.filter((agent) =>
     skills.some((skill) => agent.skillIds.includes(skill.id)),
   );
 
-  // A chosen agent that has since dropped out of the options (detached from
-  // its last Skill, or deleted) reads as no filter, rather than leaving a
-  // blank select over an empty list.
   const activeAgentFilter =
     agentFilter === UNATTACHED ||
     agentOptions.some((agent) => agent.id === agentFilter)
       ? agentFilter
       : ALL;
 
-  // The Organization surface has no filters, so a stale search param there is
-  // ignored rather than hiding rows.
   const query = workspaceId ? nameFilter.trim() : "";
   const matchesAgent = (skill: SerializedSkill) => {
     if (activeAgentFilter === ALL) return true;
@@ -353,16 +306,11 @@ export function SkillsList({
       ? skillAgents.length === 0
       : skillAgents.some((agent) => agent.id === activeAgentFilter);
   };
-  // The Command palette's own scorer, applied to the name: a card grid, not a
-  // `Command` list, so it is called directly rather than through `Command`.
   const shown = skills.filter(
     (skill) =>
       (!query || defaultFilter(skill.name, query) > 0) && matchesAgent(skill),
   );
 
-  // Workspace home only: the Organization surface fetches no agent data, so
-  // the agent filter would have nothing to offer there. Nothing to filter, no
-  // controls.
   const controls = workspaceId && skills.length > 0 && (
     <ListToolbar>
       <SearchInput
@@ -393,13 +341,8 @@ export function SkillsList({
     </ListToolbar>
   );
 
-  // The Organization's own Skills screen shows the empty card, holding the
-  // buttons; the workspace home's Skills section keeps the one-line state.
   const showEmptyCard = !workspaceId && skills.length === 0;
 
-  // An EmptyCard screen shows its footer once there are rows; a ListState
-  // section (the workspace home) shows it under every state, loading and
-  // failed included.
   const showFooter = Boolean(workspaceId) || !showEmptyCard;
 
   const actions = (
@@ -432,7 +375,6 @@ export function SkillsList({
     </>
   );
 
-  // Paged on the Workspace home only; the Organization surface lists them all.
   const page = workspaceId
     ? pageItems(shown, SKILLS_PAGE_SIZE)
     : { items: shown, page: 1, pageCount: 1, ...NO_GHOSTS };
@@ -463,9 +405,8 @@ export function SkillsList({
               agentLine={Boolean(workspaceId)}
               sharingLines={!workspaceId && canManageOrg}
             />
-            {/* The Workspace home's footer shows in every state, so only the
-                Organization screen reserves it as a skeleton. */}
             {!workspaceId && (
+              // why: only the Organization footer needs reserving; the other shows always
               <ButtonRowSkeleton className="mt-4" widths={["w-32"]} />
             )}
           </>

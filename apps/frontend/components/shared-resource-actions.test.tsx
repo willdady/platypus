@@ -1,14 +1,11 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 
-// --- Module mocks ------------------------------------------------------------
-
 vi.mock("@/components/auth-provider", () => ({
   useBackendUrl: () => "http://test",
   useAuth: () => ({ user: { id: "u1" }, actor: "org-admin" }),
 }));
 
-// The organization's rows the picker offers. Set per test.
 let orgRows: { id: string; name: string }[] = [];
 
 vi.mock("swr", () => ({
@@ -24,8 +21,6 @@ import { expectSentBodyToMatchSchema, jsonResponse } from "@/test/test-utils";
 afterEach(() => {
   orgRows = [];
 });
-
-// --- Tests -------------------------------------------------------------------
 
 describe.each([
   { resourceType: "skill" as const, label: "Attach shared skill" },

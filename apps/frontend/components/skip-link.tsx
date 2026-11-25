@@ -1,10 +1,5 @@
-/** The id of the page's `<main>`, which the skip link jumps to. */
 export const MAIN_CONTENT_ID = "main-content";
 
-/**
- * The first thing a keyboard user tabs to: a jump past the header and sidebar
- * to the page's own content. Hidden until focused.
- */
 export function SkipLink() {
   return (
     <a

@@ -20,14 +20,10 @@ import {
 } from "@/test/list-test-harness";
 import { openDropdownMenu, selectOption } from "@/test/test-utils";
 
-// --- Module mocks ------------------------------------------------------------
-
 vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("swr", () => swrMock);
 
 import { SkillsList } from "./skills-list";
-
-// --- Fixtures ----------------------------------------------------------------
 
 type SkillWithScope = Skill & { scope?: "organization" | "workspace" };
 
@@ -45,21 +41,17 @@ const workspaceSkill: SkillWithScope = {
   scope: "workspace",
 } as unknown as SkillWithScope;
 
-/** Renders the Workspace surface with `skills` in the list. */
 function renderSkills(skills: SkillWithScope[], menuItem?: string) {
   mockScopedSWR({ "/skills": skills });
   return renderList(<SkillsList orgId="org1" workspaceId="ws1" />, menuItem);
 }
 
-/** Renders the Organization surface, which has no `workspaceId`. */
 function renderOrgSkills(skills: SkillWithScope[], menuItem?: string) {
   mockScopedSWR({ "/skills": skills });
   return renderList(<SkillsList orgId="org1" />, menuItem);
 }
 
 beforeEach(resetListHarness);
-
-// --- Tests -------------------------------------------------------------------
 
 describe("SkillsList detach", () => {
   it("surfaces the backend's reason and keeps the dialog open when detach is refused", async () => {
@@ -200,8 +192,6 @@ describe("SkillsList delete", () => {
     const fetchMock = stubAcceptedSave();
 
     await renderOrgSkills([orgSkill], "Delete");
-    // The Organization surface checks the live attachment count (a GET)
-    // before opening the confirm dialog.
     await confirmDialog("Delete");
 
     await waitFor(() => expect(mutate).toHaveBeenCalled());
@@ -400,7 +390,6 @@ describe("SkillsList filters", () => {
       search("  ");
       await selectOption("Writer", "Any agent");
       expect(window.location.search).toBe("");
-      // Every write replaces the entry: a keystroke is not a step back.
       expect(replaceState).toHaveBeenCalled();
       expect(pushState).not.toHaveBeenCalled();
     });
@@ -530,14 +519,10 @@ describe("SkillsList empty states", () => {
 describe("SkillsList footer", () => {
   const createSkill = () =>
     screen.queryByRole("link", { name: /Create skill/ });
-  // The footer's own box, which no accessible query reaches; the slot
-  // attribute is the handle ListFooter offers.
   const footer = () =>
     // eslint-disable-next-line testing-library/no-node-access
     createSkill()?.closest('[data-slot="list-footer"]');
 
-  // The Workspace home is a ListState section, not an EmptyCard screen: its
-  // footer sits under every state, loading and failed included, outlined.
   it("shows Create skill outlined under the Workspace section while it loads", async () => {
     mockScopedSWR({ "/skills": { isLoading: true }, "/agents": [] });
     await renderList(<SkillsList orgId="org1" workspaceId="ws1" />);
@@ -558,8 +543,6 @@ describe("SkillsList footer", () => {
     ).toBeInTheDocument();
   });
 
-  // The section's parent already spaces its children, so the footer adds no
-  // top gap of its own.
   it("offers Create skill outlined under a populated Workspace section", async () => {
     await renderSkills([workspaceSkill]);
 
@@ -570,8 +553,6 @@ describe("SkillsList footer", () => {
     expect(footer()).not.toHaveClass("mt-4");
   });
 
-  // The Organization surface is an EmptyCard screen: its footer shows once
-  // there are rows, and keeps the plain settings page's top gap.
   it("hides the Organization surface's footer while it loads", async () => {
     mockScopedSWR({ "/skills": { isLoading: true } });
     await renderList(<SkillsList orgId="org1" />);
@@ -587,7 +568,6 @@ describe("SkillsList footer", () => {
 });
 
 describe("SkillsList paging", () => {
-  // Ten skills, "skill-01" … "skill-10": two pages of eight.
   const tenSkills = Array.from({ length: 10 }, (_, i) => {
     const name = `skill-${String(i + 1).padStart(2, "0")}`;
     return { ...workspaceSkill, id: name, name };

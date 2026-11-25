@@ -1,7 +1,6 @@
 import { TriangleAlert } from "lucide-react";
 import type { SelectionSubstitution } from "@/lib/restore-selection";
 
-/** How the notice names what went missing. */
 const MISSING_LABEL: Record<SelectionSubstitution["missing"], string> = {
   agent: "Agent",
   provider: "Provider",
@@ -14,12 +13,6 @@ function sentence({ missing, source }: SelectionSubstitution) {
     : `The ${MISSING_LABEL[missing]} you last used is no longer available, so this chat is using a different one.`;
 }
 
-/**
- * Says that the Chat opened against something other than what it asked for —
- * its Agent, Provider or model was deleted — so the user is not left talking
- * to a different model without knowing it. The picker beside it shows what
- * took its place, and picking anything there clears the notice.
- */
 export function SelectionSubstitutedNotice({
   substitution,
 }: {
