@@ -67,10 +67,8 @@ export const Reasoning = memo(
     const [hasAutoClosed, setHasAutoClosed] = useState(false);
     const [startTime, setStartTime] = useState<number | null>(null);
 
-    // Track duration when streaming starts and ends. This measures wall-clock
-    // time at the streaming transition (Date.now()), which can't be derived
-    // during render, so recording it via setState in this effect is intended.
     useEffect(() => {
+      // why: wall-clock duration can't be derived during render, so an effect records it
       if (isStreaming) {
         if (startTime === null) {
           // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -82,10 +80,8 @@ export const Reasoning = memo(
       }
     }, [isStreaming, startTime, setDuration]);
 
-    // Auto-close when streaming ends (once only), if it started open
     useEffect(() => {
       if (defaultOpen && !isStreaming && isOpen && !hasAutoClosed) {
-        // Add a small delay before closing to allow user to see the content
         const timer = setTimeout(() => {
           setIsOpen(false);
           setHasAutoClosed(true);
@@ -171,7 +167,7 @@ export const ReasoningContent = memo(
     return (
       <CollapsibleContent
         className={cn(
-          // Indented past the icon slot to the chat text's left edge.
+          // why: pl-8 lines the body up with the chat text past the 24px icon slot
           "mt-4 pl-8 text-sm",
           "data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 text-muted-foreground outline-none data-[state=closed]:animate-out data-[state=open]:animate-in",
           className,

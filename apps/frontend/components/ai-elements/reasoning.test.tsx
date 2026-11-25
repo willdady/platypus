@@ -60,7 +60,6 @@ describe("Reasoning", () => {
     expect(reasoningText()).toBeInTheDocument();
   });
 
-  // Partial seconds round up, so a short think never reads as zero.
   it("records how many seconds it thought for once streaming ends", () => {
     const { rerender } = renderReasoning({ isStreaming: true });
 
@@ -84,7 +83,6 @@ describe("Reasoning", () => {
     expect(reasoningText()).toBeNull();
   });
 
-  // The auto-close happens once; after that the reader is in charge.
   it("stays open when the reader reopens it after it closed itself", () => {
     const { rerender } = renderReasoning({ isStreaming: true });
     rerender({ isStreaming: false });
@@ -97,7 +95,6 @@ describe("Reasoning", () => {
     expect(reasoningText()).toBeInTheDocument();
   });
 
-  // How the chat renders it: closed, and left alone in both directions.
   it("neither opens nor closes on its own when it starts closed", () => {
     const { rerender } = renderReasoning({
       isStreaming: true,
