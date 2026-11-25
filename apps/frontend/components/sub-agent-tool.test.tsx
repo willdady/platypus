@@ -35,10 +35,6 @@ function truncatedDelegateCall(
   } as unknown as ToolUIPart;
 }
 
-// The two shapes a delegation is ever stored in. `tool-delegate` is what every
-// new one writes and names its target in the input; `tool-delegateTo<Name>` is
-// what Chats written before the single dispatcher hold — permanently, since
-// stored messages are never rewritten — and names it in the tool name.
 describe("SubAgentTool name resolution", () => {
   it("names the sub-agent from the tool input on a new delegation", () => {
     render(
@@ -64,8 +60,6 @@ describe("SubAgentTool name resolution", () => {
     expect(screen.getByText("Research Bot")).toBeInTheDocument();
   });
 
-  // The target arrives with the streamed input, so this covers only the sliver
-  // of a turn before the model has finished writing the call.
   it("falls back to a generic label before the target has streamed in", () => {
     render(
       <SubAgentTool
@@ -84,8 +78,6 @@ describe("SubAgentTool name resolution", () => {
   });
 });
 
-// A delegated run is the longest thing that happens in a chat, so its card is
-// the one where the duration matters most.
 describe("SubAgentTool duration", () => {
   it("renders the recorded duration in the header", () => {
     render(<SubAgentTool toolPart={delegateCall({ durationMs: 42_000 })} />);
@@ -101,11 +93,7 @@ describe("SubAgentTool duration", () => {
   });
 });
 
-// Issue #442. The card shows the delegate's answer verbatim, so a fragment
-// reads as a finished finding to the person as much as to the parent Agent.
 describe("SubAgentTool cut-short marker", () => {
-  // The card is collapsed by default and the response lives inside it, so the
-  // marker is only reachable once the card is opened.
   const renderExpanded = (toolPart: ToolUIPart) => {
     render(<SubAgentTool toolPart={toolPart} />);
     fireEvent.click(screen.getByRole("button"));
@@ -137,9 +125,6 @@ describe("SubAgentTool cut-short marker", () => {
   });
 });
 
-// Issue #540. The delegate's other way of coming back unfinished: its loop ran
-// out of steps. On the card that is the same class of fact as the one above, and
-// gets the same row with its own wording.
 describe("SubAgentTool step-limit marker", () => {
   const stepLimitedDelegateCall = (
     entries: Array<Record<string, unknown>> = [],
@@ -194,9 +179,6 @@ describe("SubAgentTool step-limit marker", () => {
   });
 });
 
-// Issue #834. The Sub-Agent card is the one tool whose body embeds a whole
-// nested transcript, so it is the one that most needs the shared shell:
-// collapsed until clicked, status in the shared words, no border of its own.
 describe("SubAgentTool disclosure", () => {
   it("is collapsed until clicked and reports its status in the header", () => {
     const { container } = render(<SubAgentTool toolPart={delegateCall()} />);

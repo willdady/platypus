@@ -59,7 +59,6 @@ const PREVIEW: SkillGithubPreview = {
   ],
 };
 
-/** What a test changes about the preview the fake GitHub answers. */
 let PREVIEW_OVERRIDE: Partial<SkillGithubPreview>;
 let fetchMock: ReturnType<typeof vi.fn>;
 

@@ -3,8 +3,6 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import { SamplingControls } from "./sampling-controls";
 
 describe("SamplingControls", () => {
-  // #1941: one component for both the Agent form and the Chat settings dialog,
-  // so the six fields read the same and sit in the same order on both.
   it("renders the six sampling fields in order", () => {
     render(<SamplingControls value={{}} onChange={vi.fn()} />);
 
@@ -22,9 +20,6 @@ describe("SamplingControls", () => {
     ]);
   });
 
-  // The bounds are the schema's, so the browser's own hints match the request
-  // validator. Seed has no bound because any whole number is valid, and the
-  // counts need no step because they only take whole numbers.
   it.each([
     ["Temperature", "min", "0"],
     ["Temperature", "step", "0.1"],
@@ -80,8 +75,6 @@ describe("SamplingControls", () => {
     expect(screen.getByLabelText("Frequency Penalty")).toHaveValue(0.5);
   });
 
-  // Each field reports a patch holding only itself, as the continuous ones
-  // parse as floats and the counts as whole numbers.
   it.each([
     ["Temperature", "temperature", "0.7", 0.7],
     ["Seed", "seed", "42", 42],
@@ -103,7 +96,6 @@ describe("SamplingControls", () => {
     },
   );
 
-  // Emptying a field means "not set", so the Provider or model default applies.
   it.each([
     ["Temperature", "temperature"],
     ["Seed", "seed"],

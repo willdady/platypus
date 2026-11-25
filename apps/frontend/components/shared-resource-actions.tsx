@@ -23,12 +23,6 @@ import type {
 import type { DeleteFlow } from "@/hooks/use-delete-flow";
 import type { AttachmentResourceType } from "@platypus/schemas";
 
-/**
- * The attach half of the Shared-resource actions (#880): the CTA, the picker
- * dialog, and the "which org rows are already here" derivation the agents,
- * skills, MCP, and providers lists each carried separately. The caller passes
- * its own rows; anything scoped to the organization is already attached.
- */
 export function AttachSharedAction<
   T extends { readonly id: string; readonly scope?: string },
 >({
@@ -42,7 +36,6 @@ export function AttachSharedAction<
   orgId: string;
   workspaceId: string;
   resourceType: AttachmentResourceType;
-  /** Attach CTA: "Attach shared skill" / "Attach shared MCP server". */
   label: string;
   resources: readonly T[];
   onAttached: () => void;
@@ -73,11 +66,6 @@ export function AttachSharedAction<
   );
 }
 
-/**
- * The dialog a locked org-scoped row opens in a Workspace: it explains where
- * the resource is managed and offers Detach plus a link to the organization
- * settings. Only the noun and the settings link differ per resource.
- */
 export function DetachSharedDialog<T extends NamedResource>({
   detach,
   noun,
@@ -85,10 +73,8 @@ export function DetachSharedDialog<T extends NamedResource>({
   orgSettingsHref,
 }: {
   detach: DeleteFlow<T>;
-  /** The resource named in the title and mid-sentence: "agent" / "skill". */
   noun: string;
   canDetach: boolean;
-  /** Where the Shared resource is actually edited. */
   orgSettingsHref: (target: T) => string;
 }) {
   return (
@@ -132,8 +118,6 @@ export function DetachSharedDialog<T extends NamedResource>({
           )}
           {canDetach && detach.target && (
             <Button asChild>
-              {/* The Org settings copy, even from a workspace: that is where the
-                Shared resource is edited. */}
               <Link href={orgSettingsHref(detach.target)}>
                 <ExternalLink />
                 Org settings
@@ -153,17 +137,11 @@ const BLOCKER_LABEL: Record<PromoteBlocker["type"], string> = {
   mcp: "MCP tool set",
 };
 
-/**
- * The Promote confirmation. A refused promote may come back with the
- * workspace-private references to fix first (ADR-0007's no-cascade rule);
- * those replace the plain error message when present.
- */
 export function PromoteSharedDialog<T extends NamedResource>({
   promote,
   noun,
 }: {
   promote: PromoteFlow<T>;
-  /** The resource named mid-sentence: "agent" / "skill". */
   noun: string;
 }) {
   return (
@@ -217,19 +195,13 @@ export function PromoteSharedDialog<T extends NamedResource>({
   );
 }
 
-/**
- * What the Organization surface shows instead of a delete it knows will fail:
- * the attachment count, and a way through to the attachments dialog.
- */
 export function DeleteBlockedDialog<T extends NamedResource>({
   guard,
   noun,
   onManage,
 }: {
   guard: DeleteGuard<T>;
-  /** The resource named mid-sentence: "agent" / "skill". */
   noun: string;
-  /** Opens the Manage attachments dialog for the blocked row. */
   onManage: (item: T) => void;
 }) {
   return (

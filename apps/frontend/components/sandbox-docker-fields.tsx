@@ -15,11 +15,6 @@ import { useScopedList } from "@/hooks/use-scoped-list";
 import { toggleInList } from "@/lib/toggle-in-list";
 import type { SandboxConfigFieldsProps } from "@/components/sandbox-settings";
 
-/**
- * The Docker backend's fields (ADR-0005): the operator's network allowlist and
- * the extra host entries. Admin-only, like the rest of the sandbox config, so
- * the form mounts them only for an admin.
- */
 function SandboxDockerFields({
   orgId,
   formData,
@@ -27,7 +22,6 @@ function SandboxDockerFields({
   errors,
   disabled,
 }: SandboxConfigFieldsProps & { orgId: string }) {
-  // The operator's network allowlist, an admin-only endpoint.
   const {
     data: networksData,
     results: allowedNetworks,
@@ -51,8 +45,6 @@ function SandboxDockerFields({
           default.
         </FieldDescription>
         {networksLoading ? (
-          // A network row, in place of the false "none declared" while the
-          // allowlist is still loading.
           <LoadingRegion
             label="Loading networks"
             className="flex items-center justify-between gap-2"

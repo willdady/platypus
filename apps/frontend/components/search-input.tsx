@@ -9,9 +9,9 @@ type SearchInputProps = Omit<
 > & {
   value: string;
   onValueChange: (value: string) => void;
-  /** Required: the placeholder alone is not an accessible name. */
+  // why: a placeholder is not an accessible name, so aria-label is required
   "aria-label": string;
-  /** Applied to the wrapper; use `inputClassName` for the input itself. */
+  // why: className styles the wrapper; use inputClassName for the input itself
   className?: string;
   inputClassName?: string;
 };
@@ -32,12 +32,11 @@ function SearchInput({
         value={value}
         onChange={(e) => onValueChange(e.target.value)}
         onKeyDown={(e) => {
-          // A search filters as it is typed, so Enter must not save the form
-          // this field happens to sit in.
+          // why: a search filters as you type, so Enter must not submit the form
           if (e.key === "Enter") e.preventDefault();
           onKeyDown?.(e);
         }}
-        // Hide the browser's own clear button; the X below replaces it.
+        // why: the X below replaces the browser's own search clear button
         className={cn(
           "px-8 [&::-webkit-search-cancel-button]:appearance-none",
           inputClassName,

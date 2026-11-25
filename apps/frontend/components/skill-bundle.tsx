@@ -29,7 +29,6 @@ import { useSkillImportAllowed } from "@/hooks/use-skill-import-allowed";
 import { useMutation } from "@/hooks/use-mutation";
 import { optionalFetcher } from "@/lib/utils";
 
-/** Marks a Skill whose scripts or binary files only a Sandbox can use. */
 export function NeedsSandboxBadge({ skill }: { skill: Serialized<Skill> }) {
   if (!skill.needsSandbox) return null;
 
@@ -44,7 +43,6 @@ export function NeedsSandboxBadge({ skill }: { skill: Serialized<Skill> }) {
   );
 }
 
-/** Marks a GitHub-installed Skill edited since it was installed or updated. */
 export function ModifiedBadge({ skill }: { skill: Serialized<Skill> }) {
   if (!skill.modified) return null;
 
@@ -59,7 +57,6 @@ export function ModifiedBadge({ skill }: { skill: Serialized<Skill> }) {
   );
 }
 
-/** A link to a Skill's directory on GitHub, at one commit. */
 export function githubTreeUrl(
   source: string,
   commitSha: string,
@@ -68,11 +65,6 @@ export function githubTreeUrl(
   return `https://github.com/${source}/tree/${commitSha}${skillPath ? `/${skillPath}` : ""}`;
 }
 
-/**
- * Picks a `.zip` and sends it as the raw request body to `url`. The backend
- * validates the whole bundle before writing anything and names the rule a
- * rejected zip broke, so its message is shown as-is.
- */
 function useZipUpload<TResult>(
   method: "POST" | "PUT",
   onSuccess: (result: Serialized<TResult>) => void,
@@ -107,7 +99,6 @@ function useZipUpload<TResult>(
   return { input, pick: () => inputRef.current?.click(), uploading };
 }
 
-/** Creates a new Skill from a zip, then hands it to `onImported`. */
 export function SkillImportButton({
   scope,
   onImported,
@@ -147,11 +138,6 @@ function formatValue(value: unknown) {
   return typeof value === "string" ? value : JSON.stringify(value);
 }
 
-/**
- * A Skill's bundle beyond the form's fields: the GitHub source, the bundled
- * files (view-only, each downloadable), the frontmatter kept from the imported
- * `SKILL.md` (read-only), then Export, Replace bundle and the update check.
- */
 export function SkillBundleCard({
   scope,
   skill,
@@ -169,8 +155,6 @@ export function SkillBundleCard({
   });
   const files: SkillFile[] = skill.files ?? [];
   const frontmatter = Object.entries(skill.frontmatter ?? {});
-  // Only a Workspace has a Sandbox; a backend that can't receive bytes gets
-  // the Skill's text files only.
   const { data: sandbox } = useScopedSWR<Sandbox | null>(
     "sandbox",
     scope.workspaceId ? scope : null,

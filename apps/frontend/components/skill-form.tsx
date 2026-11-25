@@ -69,7 +69,6 @@ function SkillFormSkeleton({
 }: {
   className?: string;
   editing: boolean;
-  /** Whether the Agents card shows (the workspace surface). */
   agents: boolean;
 }) {
   return (
@@ -97,18 +96,14 @@ function SkillForm({
 }: {
   classNames?: string;
   orgId: string;
-  // Absent on the Organization settings surface, where the form manages an
-  // org-scoped Shared Skill (ADR-0007).
   workspaceId?: string;
   skillId?: string;
 }) {
-  // The scope determines the backend collection and where we return after save.
   const returnPath = workspaceId
     ? workspaceRoutes(orgId, workspaceId).root
     : orgRoutes(orgId).settings.skills;
   const scope = workspaceId ? { orgId, workspaceId } : { orgId };
 
-  // Agent associations are a workspace concern; only fetched on that surface.
   const { results: agents, isLoading: agentsLoading } = useScopedList<Agent>(
     "agents",
     workspaceId ? scope : null,
@@ -138,12 +133,10 @@ function SkillForm({
     id: skillId,
     fromRecord: toForm,
     sideState: selectedAgentIds,
-    // agentIds are present in workspace mode only.
     onSeed: (skill) => {
       if (skill.agentIds) setSelectedAgentIds(skill.agentIds);
     },
     retractableFields: RETRACTABLE_FIELDS,
-    // A Skill name is normalised to lowercase as it is typed.
     transformField: (id, value) =>
       id === "name" ? value.toLowerCase() : value,
     buildPayload: (data) => ({
@@ -152,8 +145,6 @@ function SkillForm({
       body: data.body,
       argumentHint: data.argumentHint || null,
       disableModelInvocation: data.disableModelInvocation,
-      // Agent associations only apply to the workspace surface; scope comes
-      // from the route.
       ...(workspaceId ? { agentIds: selectedAgentIds } : {}),
     }),
     successMessage: () => (skillId ? "Skill updated" : "Skill created"),
@@ -170,8 +161,6 @@ function SkillForm({
     guidanceOnForbidden: true,
   });
 
-  // Delete checks the saved agent set, so toggles not yet saved would make it
-  // fail with a message that contradicts the screen (#1395).
   const savedAgentIds = record?.agentIds ?? [];
   const agentsDirty =
     savedAgentIds.length !== selectedAgentIds.length ||
@@ -292,8 +281,7 @@ function SkillForm({
           scope={scope}
           skill={record}
           onReplaced={(replaced) => {
-            // A Replace rewrites the fields too, so the form re-seeds from it
-            // rather than keeping what was typed before.
+            // why: a bundle replace rewrites the fields, so the form re-seeds
             seedFormData(toForm(replaced));
             void mutateRecord();
           }}
@@ -322,8 +310,7 @@ function SkillForm({
   return (
     <DetailFormState
       {...loadState}
-      // The Agents card renders only once its list lands; hold it back with
-      // the record rather than popping it in after.
+      // why: hold the Agents card back with the record, so it never pops in after
       isLoading={agentsLoading || loadState.isLoading}
       subject="skill"
       skeleton={

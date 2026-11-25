@@ -20,14 +20,6 @@ function skill(
   };
 }
 
-/**
- * The picker is driven through the REAL composer, not a bare textarea: the
- * keydown ordering is the integration risk this feature carries.
- * `PromptInputTextarea` owns Enter-to-submit and runs a caller's handler first,
- * standing down only on `defaultPrevented` — so "Enter accepts the highlighted
- * command instead of sending the message" is a claim about that interaction,
- * and only the composer can test it.
- */
 function renderPicker({
   commands,
   enabled = true,
@@ -158,7 +150,6 @@ describe("SlashCommandPicker", () => {
       "slash-command-option-deploy-staging",
     );
 
-    // Wraps, so the list is navigable in one direction alone.
     fireEvent.keyDown(textarea, { key: "ArrowDown" });
     expect(textarea).toHaveAttribute(
       "aria-activedescendant",
@@ -181,7 +172,6 @@ describe("SlashCommandPicker", () => {
     expect(textarea.value).toBe("/blog-post ");
     expect(onSubmit).not.toHaveBeenCalled();
     expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
-    // The caret sits after the token, so the user keeps typing their prompt.
     expect(textarea.selectionStart).toBe("/blog-post ".length);
     expect(textarea).toHaveFocus();
   });
@@ -223,8 +213,6 @@ describe("SlashCommandPicker", () => {
     const { textarea, onSubmit } = renderPicker({ commands });
     type(textarea, "/usr");
 
-    // Open, saying so, but with nothing to accept — so Enter is the textarea's
-    // again and the message goes as typed.
     expect(screen.queryAllByRole("option")).toHaveLength(0);
     expect(screen.getByText(/ordinary text/)).toBeInTheDocument();
     expect(textarea).not.toHaveAttribute("aria-activedescendant");
@@ -238,9 +226,6 @@ describe("SlashCommandPicker", () => {
     );
   });
 
-  // `aria-controls` has to follow the listbox element, not the open state: an
-  // open picker with nothing to list renders a message and no list, and an id
-  // pointing at nothing is worse than no id at all.
   it("points aria-controls at the listbox only while one is rendered", () => {
     const { textarea } = renderPicker({ commands });
 
@@ -253,7 +238,6 @@ describe("SlashCommandPicker", () => {
     type(textarea, "/usr");
     expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
     expect(textarea).not.toHaveAttribute("aria-controls");
-    // Still a popup, and the line explaining why is announced.
     expect(textarea).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByRole("status")).toHaveTextContent("No matching command");
   });

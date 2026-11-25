@@ -18,26 +18,15 @@ const menuWidthClass: Record<MenuWidth, { width: string; offset: string }> = {
 };
 
 export type SettingsColumnsProps = {
-  /** The navigation column, fixed beside the content at `md` and up. */
   menu: ReactNode;
   children: ReactNode;
   columnWidth?: ColumnWidth;
   menuWidth?: MenuWidth;
-  /** Padding and spacing for the content column — the one axis that genuinely differs per surface. */
   contentClassName?: string;
-  /**
-   * Render the content column as the page's `<main>`. Off where an outer
-   * shell already provides one (the Workspace settings sit inside it).
-   */
+  // why: a nested <main> is invalid, so an inner shell leaves it to the outer one
   isMain?: boolean;
 };
 
-/**
- * The menu column + content column every settings-like surface shares. The
- * outer chrome — sidebar provider, header, scroll container — lives in
- * {@link SettingsShell}; the Workspace settings layout uses this directly
- * because the Workspace shell already provides that chrome.
- */
 export function SettingsColumns({
   menu,
   children,
@@ -80,11 +69,7 @@ export type SettingsShellProps = {
   headerLeft?: ReactNode;
 } & SettingsColumnsProps;
 
-/**
- * The full-height settings chrome: sidebar provider, header, and the centered
- * scroll container around {@link SettingsColumns}. Backs the Organization,
- * user, and home layouts; `ProtectedRoute` stays at each call site.
- */
+// why: ProtectedRoute stays at each call site, not inside this shell
 export function SettingsShell({ headerLeft, ...columns }: SettingsShellProps) {
   return (
     <SidebarProvider>

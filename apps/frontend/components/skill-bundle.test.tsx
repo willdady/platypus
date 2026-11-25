@@ -53,15 +53,14 @@ function renderCard(
   );
 }
 
-/** The reads the card makes, the Skill import gate open unless overridden. */
 function mockReads(
   reads: Record<string, { data: unknown }> = {},
   gate = { skillImportGate: "all", skillImportAllowed: false },
 ) {
+  // why: mock URLs match by substring, first wins, so the Workspace comes first
   mockScopedSWR(
     {
       "/sandbox": { data: null },
-      // Matched by substring, first wins: the Workspace URL holds the Organization's.
       "/workspaces/ws1": {
         data: { id: "ws1", skillImportAllowed: gate.skillImportAllowed },
       },

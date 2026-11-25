@@ -12,17 +12,10 @@ import { FieldGroup } from "@/components/ui/field";
 import { FormTextField } from "@/components/form-text-field";
 import { cn } from "@/lib/utils";
 
-/** The six sampling parameters, taken from the schema both screens are judged by. */
 type SamplingValue = Partial<Pick<Chat, ChatSamplingField>>;
 
-/** A validation message per field, from whichever screen owns validation. */
 type SamplingErrors = Partial<Record<ChatSamplingField, string | null>>;
 
-/**
- * The six sampling fields, in the order both screens have always shown them.
- * Bounds come from the schema the request is judged by, so the browser's hints
- * cannot drift from it; `step` is only there for the continuous values.
- */
 const FIELDS: ReadonlyArray<{
   field: ChatSamplingField;
   label: string;
@@ -71,11 +64,6 @@ const FIELDS: ReadonlyArray<{
   },
 ];
 
-/**
- * The sampling controls shared by the Agent form and the Chat settings dialog,
- * so the two offer the same six fields with the same labels, order and bounds.
- * A cleared field reports `undefined`, meaning the Provider or model default.
- */
 export function SamplingControls({
   value,
   onChange,
@@ -87,7 +75,6 @@ export function SamplingControls({
   onChange: (patch: SamplingValue) => void;
   errors?: SamplingErrors;
   disabled?: boolean;
-  /** Spacing overrides, so each screen keeps the grid gap it had before. */
   className?: string;
 }) {
   return (
