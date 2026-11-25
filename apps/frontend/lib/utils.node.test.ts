@@ -74,10 +74,6 @@ describe("fetcher", () => {
   });
 });
 
-// Issue #648: SWR stops interval revalidation while the cached entry holds an
-// error, and the only thing that would clear it is a fetch the interval will no
-// longer perform. A brand-new Chat is read before its row exists, so a throwing
-// 404 there disables the poll that is meant to recover the run.
 describe("optionalFetcher", () => {
   const respondWith = (status: number, body: unknown = {}) => {
     vi.stubGlobal(
@@ -104,8 +100,6 @@ describe("optionalFetcher", () => {
     });
   });
 
-  // Absence is the only concession. A real failure must still reach the cache
-  // as an error, or a broken deployment reads as an empty Chat.
   it("throws on every other failure", async () => {
     respondWith(500, { error: "boom" });
     await expect(

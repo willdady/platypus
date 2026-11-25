@@ -1,36 +1,10 @@
-/**
- * The front-end route map, in one place.
- *
- * Every URL the app navigates to used to be a hand-interpolated template —
- * roughly a hundred of them across the front end, each free to drift from the
- * App Router tree it pointed at. These builders are the single definition of
- * those paths for the Organization, Workspace, and User scopes: a rename or a
- * moved segment changes one line here rather than every call site.
- *
- * Follows the API-side precedent of `scopedPath` (ADR-0007): a pure function
- * resolves a resource's path from its scope, so a component holds a route
- * value instead of re-deriving the shape at each use. Dynamic segments are
- * functions (`chat.detail(id)`); static ones are plain strings.
- */
-
-/**
- * Prefix an app path with the deployment's `BASE_PATH`.
- *
- * `next/link` and the router add the base path themselves, so this is only for
- * the places they don't reach: `window.location`, `history`, absolute URLs
- * handed to someone else, and metadata such as the manifest. Read at call time
- * so tests can stub it; Next inlines `NEXT_PUBLIC_BASE_PATH` at build.
- */
+// why: next/link adds the base path; this is for window.location and hand-built URLs
 export function withBasePath(path: string): string {
   const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
   if (!basePath) return path;
   return path === "/" ? basePath : `${basePath}${path}`;
 }
 
-/**
- * The inverse of `withBasePath`: the app path under `BASE_PATH` that a
- * same-origin pathname points at, or null when it lies outside the app.
- */
 export function stripBasePath(pathname: string): string | null {
   const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
   if (!basePath) return pathname;
@@ -38,32 +12,22 @@ export function stripBasePath(pathname: string): string | null {
   return pathname.slice(basePath.length) || "/";
 }
 
-/** App-level pages outside any Organization. */
 export const appRoutes = {
   home: "/",
   signIn: "/sign-in",
   signUp: "/sign-up",
   createOrganization: "/create",
-  /** The bare invite address an invitation page scrubs its token down to. */
   invite: "/invite",
   inviteToken: (token: string) => `/invite/${encodeURIComponent(token)}`,
 } as const;
 
-/** Sign-in, returning to `path` once signed in. */
 export function signInReturningTo(path: string): string {
   return `${appRoutes.signIn}?next=${encodeURIComponent(path)}`;
 }
 
-/**
- * Where sign-in goes on to, given its query string: `next` when it resolves to
- * a path on this origin, home otherwise. Honouring any `next` would make
- * sign-in an open redirect.
- */
 export function signInDestination(search: string): string {
   const next = new URLSearchParams(search).get("next");
   if (!next) return appRoutes.home;
-  // Resolved against a stand-in origin: `//host`, `/\\host` and absolute
-  // URLs all resolve somewhere else, and so fail the comparison.
   const origin = "http://platypus.invalid";
   let url: URL;
   try {
@@ -76,12 +40,10 @@ export function signInDestination(search: string): string {
     : appRoutes.home;
 }
 
-/** The absolute invitation link to hand to an invitee. */
 export function invitationLink(origin: string, token: string): string {
   return `${origin}${withBasePath(appRoutes.inviteToken(token))}`;
 }
 
-/** Organization-scoped pages: the org root, workspace creation, and settings. */
 export function orgRoutes(orgId: string) {
   const settings = `/${orgId}/settings`;
   return {
@@ -110,7 +72,6 @@ export function orgRoutes(orgId: string) {
   };
 }
 
-/** Pages under one Workspace. */
 export function workspaceRoutes(orgId: string, workspaceId: string) {
   const root = `/${orgId}/workspace/${workspaceId}`;
   const settings = `${root}/settings`;
@@ -119,7 +80,6 @@ export function workspaceRoutes(orgId: string, workspaceId: string) {
     chat: {
       root: `${root}/chat`,
       detail: (chatId: string) => `${root}/chat/${chatId}`,
-      /** A new chat pre-selecting one Agent. */
       forAgent: (agentId: string) =>
         `${root}/chat?agentId=${encodeURIComponent(agentId)}`,
     },
@@ -150,7 +110,6 @@ export function workspaceRoutes(orgId: string, workspaceId: string) {
     triggerRuns: {
       root: `${root}/trigger-runs`,
       detail: (runId: string) => `${root}/trigger-runs/${runId}`,
-      /** The run list filtered to one Trigger. */
       forTrigger: (triggerId: string) =>
         `${root}/trigger-runs?triggerId=${encodeURIComponent(triggerId)}`,
     },
@@ -173,16 +132,11 @@ export function workspaceRoutes(orgId: string, workspaceId: string) {
   };
 }
 
-/**
- * Whether a Workspace pathname draws the app sidebar: the Workspace home and
- * Chat do, every other Workspace screen doesn't. Mirrors the `(sidebar)` route
- * group, for the boundaries that render above it.
- */
+// why: mirrors the (sidebar) route group, which renders boundaries above it
 export function isWorkspaceSidebarRoute(pathname: string) {
   return /^\/[^/]+\/workspace\/[^/]+(\/chat(\/[^/]+)?)?\/?$/.test(pathname);
 }
 
-/** The User's own settings, outside any Organization. */
 export const userRoutes = {
   profile: "/settings",
   contexts: "/settings/contexts",

@@ -1,31 +1,12 @@
 import { type ToolSet } from "@platypus/schemas";
 import { serverRead } from "@/lib/server-read";
 
-/**
- * Why a server-side tool sets read failed.
- *
- * `unauthorized` is called out separately because it is the case operators
- * actually hit: during SSR the frontend can only forward the cookies the
- * browser sent to the *frontend* origin, so a deployment whose frontend and
- * backend sit on different hosts forwards no session cookie and the backend
- * answers 401 (issue #819). Naming authentication in that case is the
- * difference between a dead end and a fixable one.
- */
 export type ToolSetsFailureReason = "unauthorized" | "unavailable";
 
 export type ToolSetsResult =
   | { ok: true; toolSets: ToolSet[] }
   | { ok: false; reason: ToolSetsFailureReason };
 
-/**
- * Reads a tool sets collection from the backend during server-side rendering.
- *
- * Never throws and never returns `undefined`: a failed read is reported as a
- * value so the page can render an honest error instead of dying mid-render.
- * Callers get an empty `toolSets` array only when the backend really did
- * return an empty collection — "none exist" stays distinguishable from
- * "couldn't ask".
- */
 export async function fetchToolSets(path: string): Promise<ToolSetsResult> {
   const result = await serverRead<unknown>(path);
   if (!result.ok) {
@@ -46,10 +27,6 @@ export async function fetchToolSets(path: string): Promise<ToolSetsResult> {
   return { ok: true, toolSets: results as ToolSet[] };
 }
 
-/**
- * Decodes a result into the props the Agent form takes, so the three pages
- * that render the form don't each repeat the unpacking.
- */
 export function toolSetFormProps(result: ToolSetsResult): {
   toolSets: ToolSet[];
   toolSetsError?: ToolSetsFailureReason;

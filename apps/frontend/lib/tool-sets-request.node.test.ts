@@ -14,10 +14,6 @@ function stubFetch(impl: () => Promise<Response> | Response) {
   return spy;
 }
 
-/**
- * A genuine `Response`, not the shape-cast stub in `lib/test-utils`: this
- * module runs server-side and reads the body through the real class.
- */
 function httpResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,

@@ -1,7 +1,6 @@
 import type { Provider } from "@platypus/schemas";
 import type { Serialized } from "./api-write";
 
-/** What a provider select picks a provider for, and so which model it runs. */
 export type ProviderModelRole = "task" | "memoryExtraction" | "embedding";
 
 const ROLE_MODEL_ID = {
@@ -10,11 +9,6 @@ const ROLE_MODEL_ID = {
   embedding: "embeddingModelId",
 } as const satisfies Record<ProviderModelRole, keyof Provider>;
 
-/**
- * A provider option's label in a Workspace settings provider select:
- * `name (model id)`, or the name alone when the provider has no model for
- * that role.
- */
 export function providerModelLabel(
   provider: Serialized<Provider>,
   role: ProviderModelRole,
@@ -23,7 +17,6 @@ export function providerModelLabel(
   return modelId ? `${provider.name} (${modelId})` : provider.name;
 }
 
-/** Whether the provider declares a model id for `role`. */
 export function providerHasModelFor(
   provider: Serialized<Provider>,
   role: ProviderModelRole,

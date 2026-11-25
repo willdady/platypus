@@ -77,8 +77,6 @@ describe("getModelOptions", () => {
 
 describe("findModelOption", () => {
   it("selects the aliased entry for an Agent still storing the bare id", () => {
-    // The regression this exists for: without entry-based matching the Agent
-    // form renders its placeholder over a correctly-configured Agent.
     expect(findModelOption(aliased, "gpt-4")).toEqual({
       value: "alias:flagship",
       label: "flagship",
@@ -151,8 +149,6 @@ describe("joinNativeFileTypes", () => {
 
 describe("getContextWindow", () => {
   it("returns the declared window for an aliased model", () => {
-    // The window lives on the model ENTRY, so repointing an alias moves it —
-    // no special handling required (ADR-0017 + ADR-0018).
     const p = provider([
       {
         id: "claude-sonnet",

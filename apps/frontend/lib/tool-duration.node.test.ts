@@ -6,8 +6,6 @@ describe("formatToolDuration", () => {
     expect(formatToolDuration(842)).toBe("842ms");
   });
 
-  // A third of the calls on a real chat round to zero milliseconds; a bare
-  // `0ms` reads as a field that failed to populate.
   it("renders a sub-millisecond duration as less than a millisecond", () => {
     expect(formatToolDuration(0)).toBe("<1ms");
     expect(formatToolDuration(1)).toBe("1ms");
@@ -50,8 +48,6 @@ describe("toolCallDurationMs", () => {
     ).toBe(500);
   });
 
-  // The live case: during the turn that produced it, the SDK hands back a tool
-  // part with no metadata, so the message's map is the only carrier.
   it("falls back to the message's map when the part carries nothing", () => {
     expect(
       toolCallDurationMs(
@@ -62,8 +58,6 @@ describe("toolCallDurationMs", () => {
     ).toBe(842);
   });
 
-  // A non-numeric part value is "no duration", not an answer that hides the
-  // map's real one — the fall-through the old two-carrier read performed.
   it("falls back to the map when the part's value is not a number", () => {
     expect(
       toolCallDurationMs(
@@ -90,8 +84,6 @@ describe("toolCallDurationMs", () => {
     ).toBeUndefined();
   });
 
-  // Messages written before either carrier existed, which the docs promise
-  // render no time rather than a zero.
   it("has no duration when neither carrier has one", () => {
     expect(toolCallDurationMs(undefined, undefined, "call-1")).toBeUndefined();
     expect(toolCallDurationMs({}, {}, "call-1")).toBeUndefined();

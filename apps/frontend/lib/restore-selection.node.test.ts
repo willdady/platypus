@@ -47,8 +47,6 @@ describe("resolveRestoredSelection — priority 1 (existing chat)", () => {
       },
       storedSelection: null,
       providers: [provider()],
-      // A non-empty list missing the target id — genuinely deleted, as
-      // opposed to merely not having loaded yet (see the next test).
       agents: [agent({ id: "some-other-agent" })],
     });
     expect(result).toMatchObject({
@@ -59,9 +57,6 @@ describe("resolveRestoredSelection — priority 1 (existing chat)", () => {
   });
 
   it("does not judge the Agent reference before `agents` has loaded", () => {
-    // agents.length === 0 here means "still loading", not "deleted" — treating
-    // it as deleted would commit to Priority 3 before the Agent ever gets a
-    // chance to match once the real list arrives (a regression this guards).
     const result = resolveRestoredSelection({
       chatData: {
         agentId: "a1",
@@ -195,9 +190,6 @@ describe("resolveRestoredSelection — priority 2 (localStorage, new chats only)
   );
 
   it("is never consulted when a chat already exists", () => {
-    // A chat exists but has neither agentId nor providerId/modelId set — an
-    // edge case, but localStorage still must not leak into a real chat, so
-    // this should fall through to priority 3 rather than the stored value.
     const result = resolveRestoredSelection({
       chatData: {},
       storedSelection: { type: "agent", id: "a1" },

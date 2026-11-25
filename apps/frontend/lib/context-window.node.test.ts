@@ -11,9 +11,6 @@ import {
 } from "./context-window";
 
 describe("CONTEXT_WINDOW_PRESETS", () => {
-  // Decimal, not binary: under-declaring costs a sliver of a window that a
-  // vendor hard-fails on when over-declared, so 128k is 128,000 and a genuine
-  // 131,072-token model simply forfeits 3k.
   it("reads its sizes as decimal thousands", () => {
     const byLabel = new Map(
       CONTEXT_WINDOW_PRESETS.map((p) => [p.label, p.tokens]),
@@ -47,13 +44,8 @@ describe("optionForContextWindow", () => {
     expect(optionForContextWindow(128_000)).toBe("128000");
   });
 
-  // A proxied model whose real capacity is unusual is stored as a plain
-  // integer, so the control has to come back showing Custom rather than
-  // silently rounding to the nearest option it recognises.
   it("reads any other value as Custom", () => {
     expect(optionForContextWindow(131_072)).toBe(CONTEXT_WINDOW_CUSTOM);
-    // Out of bounds still reads as Custom: the row is showing a value the
-    // server rejected, and the reader has to see it to fix it.
     expect(optionForContextWindow(128)).toBe(CONTEXT_WINDOW_CUSTOM);
   });
 });
@@ -70,9 +62,6 @@ describe("contextWindowForOption", () => {
     ).toBeUndefined();
   });
 
-  // Switching to Custom is the reader opening a text box, not entering a
-  // number. Keeping what was there lets them edit 128,000 into 131,072 rather
-  // than retype it, and clears nothing they had set.
   it("keeps the current value when switching to Custom", () => {
     expect(contextWindowForOption(CONTEXT_WINDOW_CUSTOM, 128_000)).toBe(
       128_000,
@@ -93,9 +82,6 @@ describe("parseContextWindowInput", () => {
     expect(parseContextWindowInput("   ")).toBeUndefined();
   });
 
-  // Deliberately NOT clamped to the schema's bounds. A `128` typed where
-  // 128,000 was meant has to reach the server and be rejected with a message,
-  // not be quietly swallowed into "no window declared".
   it("passes a nonsense value through so the schema rejects it", () => {
     expect(parseContextWindowInput("128")).toBe(128);
     expect(parseContextWindowInput("0")).toBe(0);
@@ -129,17 +115,12 @@ describe("formatTokens", () => {
     expect(formatTokens(10_000_000)).toBe("10M");
   });
 
-  // A window declared in binary thousands is still the same window as one
-  // declared in decimal, and a reader comparing two models should not have to
-  // notice a 48,576-token difference that changes nothing about the reading.
   it("drops a trailing zero rather than showing a false precision", () => {
     expect(formatTokens(1_048_576)).toBe("1M");
     expect(formatTokens(1_100_000)).toBe("1.1M");
     expect(formatTokens(1_050)).toBe("1.1K");
   });
 
-  // Rounding at one unit must not print a figure that belongs to the next:
-  // 999,999 is a hair under a million and reads as one, never as 1000K.
   it("promotes to the next unit when rounding carries", () => {
     expect(formatTokens(999_999)).toBe("1M");
     expect(formatTokens(999_949)).toBe("999.9K");

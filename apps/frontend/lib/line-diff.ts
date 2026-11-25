@@ -1,16 +1,8 @@
 export type DiffLine = { kind: "same" | "added" | "removed"; text: string };
 
-/**
- * A line diff of `before` against `after`, from their longest common
- * subsequence: lines only in `before` are removed, only in `after` added.
- *
- * ponytail: the LCS table is O(n·m), fine for a `SKILL.md` (a few thousand
- * lines at most). Switch to Myers' algorithm if it ever diffs larger text.
- */
 export function lineDiff(before: string, after: string): DiffLine[] {
   const a = before.split("\n");
   const b = after.split("\n");
-  // lcs[i][j]: the common subsequence length of a[i..] and b[j..].
   const lcs = Array.from({ length: a.length + 1 }, () =>
     new Array<number>(b.length + 1).fill(0),
   );
