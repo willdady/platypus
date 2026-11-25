@@ -24,13 +24,9 @@ import { triggerCreateSchema, triggerUpdateSchema } from "@platypus/schemas";
 import { expectSentBodyToMatchSchema, selectOption } from "@/test/test-utils";
 import { getBrowserTimezone } from "@/lib/timezones";
 
-// --- Module mocks ------------------------------------------------------------
-
 vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("swr", () => swrMock);
-// The real list is every IANA zone (~420); opening the Timezone select renders
-// all of them, which pushed a two-pick test past the 5s timeout on CI. These
-// are the only zones the suite picks, plus the browser's own.
+// why: the full IANA list pushes a two-pick test past the CI timeout
 vi.mock("@/lib/timezones", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/timezones")>();
   return {
@@ -48,17 +44,13 @@ vi.mock("@/lib/timezones", async (importOriginal) => {
 
 import { TriggerForm } from "./trigger-form";
 
-// --- Helpers -----------------------------------------------------------------
-
 const agents = [{ id: "agent-1", name: "Agent One" }];
 const boards = [{ id: "board-1", name: "Board One" }];
 
-/** The create body the form put on the wire, checked against the strict schema. */
 function savedCreateBody(fetchMock: ReturnType<typeof vi.fn>) {
   return expectSentBodyToMatchSchema(fetchMock, triggerCreateSchema);
 }
 
-/** The update body the form put on the wire, checked against the strict schema. */
 function savedUpdateBody(fetchMock: ReturnType<typeof vi.fn>) {
   return expectSentBodyToMatchSchema(fetchMock, triggerUpdateSchema);
 }
@@ -73,7 +65,6 @@ async function renderEventTriggerForm() {
   render(<TriggerForm orgId="org1" workspaceId="ws1" />);
   expect(await screen.findByText("Agent")).toBeInTheDocument();
 
-  // Trigger Type is a Radix Select defaulting to "Cron".
   await selectOption("Cron", "Event");
 }
 
@@ -106,8 +97,6 @@ describe("TriggerForm — form submission", () => {
   });
 });
 
-// #1845: every save and delete toasts success, including those that navigate
-// away.
 describe("TriggerForm — success feedback", () => {
   it("toasts that the Trigger was created", async () => {
     stubAcceptedSave({ id: "t1" });
@@ -242,7 +231,7 @@ describe("TriggerForm — changed-fields filter", () => {
       screen.getByText("Only when these fields change (card.updated)"),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Assignees")).toBeInTheDocument();
-    // card.moved is the event for a Column change.
+    // why: card.moved is the Column event, so Column is not a changed field
     expect(screen.queryByLabelText("Column")).not.toBeInTheDocument();
   });
 
@@ -286,7 +275,6 @@ describe("TriggerForm — Include Memories", () => {
     render(<TriggerForm orgId="org1" workspaceId="ws1" />);
     expect(await screen.findByText("Agent")).toBeInTheDocument();
 
-    // Collapsed by default, so the switch isn't reachable yet.
     expect(screen.queryByLabelText(/Include Memories/)).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Name"), {
@@ -378,7 +366,7 @@ describe("TriggerForm — default timezone", () => {
     const { rerender } = render(<TriggerForm orgId="org1" workspaceId="ws1" />);
     expect(await screen.findByText("Agent")).toBeInTheDocument();
 
-    // Radix only reports a change, so pick the browser zone back deliberately.
+    // why: Radix only reports a change, so pick away and back to re-pick
     await selectOption(browserZone, otherZone);
     await selectOption(otherZone, browserZone);
 
@@ -416,9 +404,6 @@ describe("TriggerForm — editing a saved trigger", () => {
   const update = () =>
     fireEvent.click(screen.getByRole("button", { name: "Update" }));
 
-  // A saved schedule is read back into the simple editor where it fits one of
-  // its frequencies, and left as a raw expression where it doesn't; either
-  // way an untouched save must send the same schedule back.
   it.each([
     "*/15 * * * *",
     "5 * * * *",
@@ -518,7 +503,6 @@ describe("TriggerForm — record revalidation", () => {
     fireEvent.change(screen.getByLabelText("Description"), {
       target: { value: "Edited" },
     });
-    // A focus revalidation after the scheduler ran: same row, later schedule.
     setDataFor("/triggers/trigger-1", {
       ...trigger,
       lastRunAt: "2026-09-23T09:00:00.000Z",
@@ -652,7 +636,6 @@ describe("TriggerForm — Inbound Triggers", () => {
     );
     expect(push).not.toHaveBeenCalled();
 
-    // Only the button closes it: Escape does not, and there is no corner X.
     fireEvent.keyDown(screen.getByDisplayValue("pit_shown-once"), {
       key: "Escape",
     });
@@ -667,8 +650,6 @@ describe("TriggerForm — Inbound Triggers", () => {
   });
 
   it("does not claim the gate is closed while the Workspace is still loading", async () => {
-    // Under `selected` the answer is the Workspace's own flag: unknown until
-    // it loads, and unknown is not "not allowed".
     setDataFor("/organizations/org1", { inboundTriggerGate: "selected" });
     setLoading("/workspaces/ws1");
     await renderInboundTriggerForm();

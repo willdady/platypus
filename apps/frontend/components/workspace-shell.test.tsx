@@ -9,11 +9,10 @@ const { params, reads, auth } = vi.hoisted(() => ({
     ownsWorkspace: true,
     workspaceDelegation: null,
   },
-  // Keyed by `${workspaceId}|${entity}`, as the app sidebar's test does.
+  // why: keyed by workspaceId|entity, as the app sidebar's test does
   reads: new Map<string, { data: unknown; isLoading: boolean }>(),
 }));
 
-/** The pathname the shell reads, which each test sets before rendering. */
 const path = { current: `/${params.orgId}/workspace/${params.workspaceId}` };
 
 vi.mock("next/navigation", () => ({
@@ -143,7 +142,6 @@ describe("WorkspaceShell rail", () => {
 });
 
 describe("WorkspaceShell menu", () => {
-  /** Opens the phone sheet from the top bar's menu button. */
   const openMenu = () => {
     fireEvent.click(screen.getByRole("button", { name: "Open menu" }));
     return screen.getByRole("dialog");
@@ -192,7 +190,6 @@ describe("WorkspaceShell menu", () => {
     expect(
       within(nav).getByRole("link", { name: "Artifacts" }),
     ).toHaveAttribute("href", "/org1/workspace/ws1/artifacts");
-    // Chat navigation stays on the Workspace home and Chat.
     expect(
       within(sheet).queryByRole("link", { name: "New chat" }),
     ).not.toBeInTheDocument();
@@ -278,7 +275,6 @@ describe("WorkspaceShell switcher", () => {
     expect(screen.getByText("Alpha")).toBeInTheDocument();
   });
 
-  /** Opens the switcher's menu from anywhere on its one-line button. */
   const openSwitcher = () => {
     const trigger = screen.getByRole("button", { name: /Alpha/ });
     fireEvent.pointerDown(trigger, { button: 0, pointerId: 1 });

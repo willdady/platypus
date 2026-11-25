@@ -13,25 +13,12 @@ import {
 } from "./ai-elements/tool";
 import { Shimmer } from "./ai-elements/shimmer";
 
-/** One part of a message, kept with its index in `message.parts`. */
 export type IndexedPart<P> = { part: P; index: number };
 
-/**
- * What a message's parts render as, in order: a part on its own, or a Tool
- * call group of one or more adjacent groupable calls.
- */
 export type PartSegment<P, G extends P> =
   | ({ kind: "part" } & IndexedPart<P>)
   | { kind: "group"; entries: IndexedPart<G>[] };
 
-/**
- * Splits a message's parts into segments. A run of groupable parts becomes
- * one group, a run of one included, so a row never changes shape when a
- * second call streams in. Any other part ends the run — except a step
- * boundary, which draws nothing, so the calls either side of it still sit
- * together on screen. A hidden part renders elsewhere, so it is dropped
- * without ending the run.
- */
 export function partitionParts<P extends { type: string }, G extends P>(
   parts: readonly P[],
   isGroupable: (part: P) => part is G,
@@ -55,7 +42,6 @@ export function partitionParts<P extends { type: string }, G extends P>(
   return segments;
 }
 
-/** Decorative only: the header's accessible name never carries one. */
 export const TOOL_CALL_VERBS = [
   "Hullabalooing",
   "Fossicking",
@@ -94,7 +80,6 @@ export const TOOL_CALL_VERBS = [
   "Emuing",
 ] as const;
 
-/** How long a verb stays up before a joining call may replace it. */
 const VERB_HOLD_MS = 2000;
 
 type VerbState = { verb: string; count: number; changedAt: number };
@@ -104,11 +89,6 @@ function pickVerb(previous: string | undefined, random: () => number) {
   return choices[Math.floor(random() * choices.length)];
 }
 
-/**
- * The active header's verb after the group holds `count` calls at `now`. A
- * call joining re-picks the verb, unless the current one has been up for
- * less than the hold — then the join is absorbed, not deferred.
- */
 export function advanceVerb(
   state: VerbState,
   count: number,
@@ -127,34 +107,22 @@ function ActiveLabel({ count }: { count: number }) {
     changedAt: Date.now(),
   }));
   useEffect(() => {
-    // Reacts to a call joining; the hold needs the wall clock, which render
-    // must not read.
+    // why: the hold needs the wall clock, and render must not read it
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setState((current) => advanceVerb(current, count, Date.now()));
   }, [count]);
   return <Shimmer as="span">{`${state.verb}…`}</Shimmer>;
 }
 
-/** How many names the settled header spells out before "+N more". */
 const SHOWN_NAMES = 2;
 
-/**
- * A Tool call group (see GLOSSARY): one collapsible row holding adjacent tool
- * calls, each still its own disclosure inside. Collapsed until the reader
- * opens it, and never opened or closed for them.
- *
- * Active while the group is the last thing in a reply still being written;
- * settled once anything follows it or the turn ends, and never active again.
- */
 export function ToolCallGroup({
   names,
   errored,
   active,
   children,
 }: {
-  /** Each call's display name, in order — one per child. */
   names: string[];
-  /** Whether any call in the group failed. */
   errored: boolean;
   active: boolean;
   children: ReactNode;
@@ -167,6 +135,7 @@ export function ToolCallGroup({
   const more = distinct.length - SHOWN_NAMES;
   const label = `${names.length} tool ${names.length === 1 ? "call" : "calls"}: ${distinct.join(", ")}${settled && errored ? " (with errors)" : ""}`;
 
+  // why: kept mounted while closed, so each call keeps its open state
   return (
     <Tool open={open} onOpenChange={setOpen}>
       <CollapsibleTrigger
@@ -197,9 +166,6 @@ export function ToolCallGroup({
           )}
         />
       </CollapsibleTrigger>
-      {/* Kept mounted while closed so each call keeps its own open state;
-      a forced-mount Radix content never hides itself. `hidden` beats the
-      `flex` class through Tailwind preflight's `[hidden]` rule. */}
       <ToolContent forceMount hidden={!open} className="gap-3">
         {children}
       </ToolContent>

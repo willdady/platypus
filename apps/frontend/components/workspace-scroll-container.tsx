@@ -15,10 +15,7 @@ export function WorkspaceScrollContainer({
   const pathname = usePathname();
   const { mutate } = useSWRConfig();
 
-  // Chat manages its own scrolling via StickToBottom and doesn't benefit from
-  // pull-to-refresh. Wrapping it causes overscroll-behavior-y:contain to
-  // prevent the browser from scrolling the input into view when the mobile
-  // keyboard opens.
+  // why: pull-to-refresh's overscroll hides the input when the keyboard opens
   const isChatRoute = /\/chat(\/|$)/.test(pathname);
 
   if (isChatRoute) {

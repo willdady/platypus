@@ -32,7 +32,7 @@ import { TableList } from "@/components/table-list";
 import { RowActionsMenu } from "@/components/row-actions-menu";
 import { UserCell } from "@/components/user-cell";
 
-/** A row of `list-users`, read as plain JSON rather than through the auth client. */
+// why: read as plain JSON, not through the auth client
 export type ListedUser = Serialized<User>;
 
 type ListUsersResponse = {
@@ -55,7 +55,7 @@ export function UsersList() {
       writeAt(joinUrl(url, "/auth/admin/remove-user"), {
         method: "POST",
         data: { userId: target.id },
-        // better-auth's admin actions echo the browser's Origin.
+        // why: better-auth's admin actions echo the browser's Origin
         headers: { Origin: window.location.origin },
       }),
     onSuccess: (target) => {
@@ -83,7 +83,6 @@ export function UsersList() {
               {
                 header: "Actions",
                 className: "text-right",
-                // The row's ⋮ menu.
                 cell: (
                   <div className="flex justify-end">
                     <IconButtonSkeleton />

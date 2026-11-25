@@ -15,12 +15,6 @@ import {
 import { workspaceRoutes } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 
-/**
- * The Workspace rail: the leftmost column on every Workspace screen, holding
- * the Workspace's top-level destinations. Icon-only links with a tooltip and
- * an accessible name, so the column stays slim. Drawn from the sidebar's
- * breakpoint up; a phone uses the sheet instead.
- */
 export function WorkspaceRail({
   orgId,
   workspaceId,
@@ -49,7 +43,7 @@ export function WorkspaceRail({
                 aria-current={current === section ? "page" : undefined}
                 className={cn(
                   "aria-[current=page]:bg-sidebar aria-[current=page]:text-foreground",
-                  // Settings sits apart, at the foot of the rail.
+                  // why: Settings sits apart, at the foot of the rail
                   section === "settings" && "mt-auto",
                 )}
               >

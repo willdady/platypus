@@ -9,8 +9,6 @@ describe("ToolDuration", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  // A recorded duration always shows, however small — only an absent one is
-  // blank. Zero is a real measurement, not missing data.
   it.each([
     [1234, /1\.2s/],
     [842, /842ms/],

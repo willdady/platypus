@@ -24,12 +24,11 @@ function click(name: string) {
   return fireEvent.click(
     screen
       .getAllByRole("button", { name })
-      // Every step stays mounted; only the visible step's button is clickable.
       .find((button) => !button.closest("[hidden], [data-state=inactive]"))!,
   );
 }
 
-// The Provider step has a Name field too; the Workspace's is first.
+// why: the Provider step has a Name field too; the Workspace's is first
 function workspaceName() {
   return screen.getAllByLabelText("Name")[0];
 }
@@ -103,8 +102,6 @@ describe("WorkspaceWizard", () => {
     );
   });
 
-  // ADR-0008: an admin assigns the owner on creation; nothing is written until
-  // the last step, which creates the Workspace with its Provider in one write.
   it("creates the workspace with the shared provider and owner picked, and opens it", async () => {
     setDataFor("/organizations/org1/members", {
       results: [{ userId: "u2", user: { name: "Bea", email: "bea@x.test" } }],
@@ -249,7 +246,6 @@ describe("WorkspaceWizard secondary reads", () => {
   const SHARED_PROVIDERS = "/organizations/org1/providers";
   const BACKENDS = "/organizations/org1/sandbox-backends";
 
-  /** Walks the first two steps with the shared provider picked. */
   function reachSandboxStep() {
     fillWorkspaceStep();
     fireEvent.mouseDown(screen.getByRole("tab", { name: "Shared provider" }));

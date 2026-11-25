@@ -8,10 +8,6 @@ import { FormSwitchField } from "@/components/form-switch-field";
 import { orgRoutes } from "@/lib/routes";
 import type { Serialized } from "@/lib/api-write";
 
-/**
- * Who may receive a Workspace transfer (ADR-0035): any member of the
- * Organization who is not banned and does not already own it.
- */
 export function transferRecipients(
   members: Serialized<OrgMemberListItem>[],
   ownerId: string,
@@ -19,14 +15,12 @@ export function transferRecipients(
   return members.filter((m) => m.userId !== ownerId && !m.isBanned);
 }
 
-/** What a transfer does with the Workspace's history, for either choice. */
 export function historyOutcome(keepHistory: boolean, newOwner: string) {
   return keepHistory
     ? `Chats stay, and their Memories move to ${newOwner}.`
     : "Chats, Memories and Notifications are deleted.";
 }
 
-/** Shown in place of a transfer when nobody can receive one. */
 export function NoRecipientHint({ orgId }: { orgId: string }) {
   return (
     <p className="text-sm text-muted-foreground">
@@ -40,18 +34,15 @@ export function NoRecipientHint({ orgId }: { orgId: string }) {
 }
 
 type TransferFieldsProps = {
-  /** Prefixes the field ids, so several sets can share a page. */
   idPrefix: string;
   recipients: Serialized<OrgMemberListItem>[];
   newOwnerId: string;
   keepHistory: boolean;
   onChange: (change: { newOwnerId?: string; keepHistory?: boolean }) => void;
   disabled?: boolean;
-  /** A server rejection mapped to the owner field, shown under the picker. */
   error?: string;
 };
 
-/** The two choices a transfer takes: the new Owner, and the history. */
 export function TransferFields({
   idPrefix,
   recipients,

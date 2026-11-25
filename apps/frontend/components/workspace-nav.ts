@@ -20,12 +20,7 @@ function under(pathname: string, prefix: string) {
   return pathname === prefix || pathname.startsWith(`${prefix}/`);
 }
 
-/**
- * Which part of the Workspace a path belongs to. Boards and Artifacts light
- * for anything under their path; Home for the Workspace root and the screens
- * that hang off it — Agents, Skills, Triggers and their runs; Settings for
- * every Workspace settings screen. A Chat belongs to none of them.
- */
+// why: a Chat belongs to no section, so nothing lights in the rail
 export function workspaceSection(
   pathname: string,
   routes: ReturnType<typeof workspaceRoutes>,
@@ -45,7 +40,6 @@ export function workspaceSection(
   return null;
 }
 
-/** The Workspace's top-level destinations, in the order the rail and sheet draw them. */
 export function workspaceNavItems(
   orgId: string,
   workspaceId: string,

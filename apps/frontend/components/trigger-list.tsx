@@ -68,11 +68,6 @@ import { useListParams } from "@/hooks/use-list-params";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
 import { workspaceRoutes } from "@/lib/routes";
 
-/**
- * Plain-English rendering of a cron expression, e.g. "At 09:00 AM, only on
- * Monday (UTC)". cronstrue throws on a malformed expression, so fall back to
- * showing it raw rather than blanking the row.
- */
 function describeSchedule(cronExpression: string, timezone: string): string {
   try {
     return `${cronstrue.toString(cronExpression, { verbose: false })} (${timezone})`;
@@ -81,10 +76,8 @@ function describeSchedule(cronExpression: string, timezone: string): string {
   }
 }
 
-/** Triggers per page on the Workspace home. */
 const TRIGGERS_PAGE_SIZE = 6;
 
-/** A Trigger that has already fired: spent, so hidden from the live lists. */
 export function hasFired(
   trigger: Pick<Serialized<Trigger>, "firedAt">,
 ): boolean {
@@ -108,7 +101,6 @@ function TriggerTypeIcon({ type }: { type: TriggerType }) {
   return Icon ? <Icon /> : null;
 }
 
-/** The trigger cards as they load; the workspace home draws them too. */
 export function TriggerCardsSkeleton({ cards }: { cards?: number }) {
   return (
     <CardGridSkeleton
@@ -116,7 +108,6 @@ export function TriggerCardsSkeleton({ cards }: { cards?: number }) {
       titleBadges={["w-12"]}
       extra={
         <>
-          {/* The agent it runs, then its type's line and its last run. */}
           <SkeletonLine lineClassName="mt-1 h-4" className="h-3 w-24" />
           <div className="flex flex-col gap-1 mt-1.5">
             <SkeletonLine lineClassName="h-4" className="h-3 w-48" />
@@ -128,12 +119,10 @@ export function TriggerCardsSkeleton({ cards }: { cards?: number }) {
   );
 }
 
-/** One line of a Trigger card: one line tall, its text never wrapping. */
 function CardLine({ children }: { children?: ReactNode }) {
   return <div className="flex h-4 min-w-0 items-center gap-1">{children}</div>;
 }
 
-/** Text that ellipsizes on one line, with the full text on hover. */
 function TruncatedText({
   text,
   title = text,
@@ -148,15 +137,10 @@ function TruncatedText({
   );
 }
 
-/** The dot between two facts sharing a card line. */
 function LineSeparator() {
   return <span aria-hidden="true">·</span>;
 }
 
-/**
- * A Cron Trigger's schedule, with its cron expression on hover, then its
- * next run when it has one.
- */
 function ScheduleLine({
   cronExpression,
   timezone,
@@ -172,7 +156,7 @@ function ScheduleLine({
       <Timer className="size-3 shrink-0" />
       <TruncatedText
         text={schedule}
-        // Unparseable, the schedule already is the expression.
+        // why: unparsed, the schedule already is the expression
         title={
           schedule === cronExpression
             ? schedule
@@ -189,7 +173,6 @@ function ScheduleLine({
   );
 }
 
-/** An Inbound Trigger's line: what it takes, and how its token stands. */
 function InboundLine({
   trigger,
 }: {
@@ -199,6 +182,7 @@ function InboundLine({
   const status = trigger.tokenStatus ?? "none";
   const hasInputs = inputs.length > 0;
   if (!hasInputs && status === "active") return null;
+  // why: line-tall, so the badge fits its one-line box
   return (
     <CardLine>
       {hasInputs && (
@@ -218,7 +202,6 @@ function InboundLine({
       {(status === "none" || status === "expired") && (
         <>
           Token:
-          {/* Line-tall, so the badge fits its one-line box. */}
           <Badge
             variant={TOKEN_STATUS_VARIANTS[status]}
             className="h-4 py-0 text-xs leading-none"
@@ -244,25 +227,18 @@ export function TriggerList({
   const [triggerToClone, setTriggerToClone] =
     useState<Serialized<Trigger> | null>(null);
 
-  // Both filters live in the URL, so they survive a refresh and Back. An
-  // unknown type reads as no filter.
   const showFired = get("triggerShowFired") === "true";
   const parsedType = triggerTypeSchema.safeParse(get("triggerType"));
   const typeFilter: TriggerType | typeof ALL = parsedType.success
     ? parsedType.data
     : ALL;
 
-  // Resolved once per render and reused for the list's reads and every write
-  // below, rather than re-deriving the Organization-vs-Workspace branch at
-  // each call site.
   const scope: Scope = { orgId, workspaceId };
 
   const backendUrl = useBackendUrl();
   const { mutate: mutateCache } = useSWRConfig();
 
-  // The list is read under more than one key — this one with fired One-offs,
-  // the command menu's without — so a write here revalidates every variant,
-  // as the sidebar does for Chats.
+  // why: two list variants share a key, so a write revalidates every one
   const revalidateTriggerList = () =>
     mutateCache((key: unknown) =>
       matchesCollection(key, backendUrl, triggerListEntity(), scope),
@@ -286,8 +262,6 @@ export function TriggerList({
     mutate: revalidateTriggerList,
   });
 
-  // Fired One-offs are read too and hidden here, so the list knows whether
-  // the Workspace has any triggers at all.
   const allTriggers = toggle.apply(triggerRows);
   const triggers = sortByName(
     allTriggers.filter((trigger) => showFired || !hasFired(trigger)),
@@ -299,10 +273,6 @@ export function TriggerList({
       writeEntity(url, "triggers", scope, { id: trigger.id }),
   });
 
-  // Only the fields a create takes: no run or token state rides along. The
-  // create variant is picked from the Trigger's own type, so a field added to
-  // that variant is cloned with no edit here. The clone starts disabled, and
-  // an Inbound clone asks for no token.
   const createClone = (
     original: Serialized<Trigger>,
     name: string,
@@ -311,8 +281,7 @@ export function TriggerList({
     const createSchema = triggerCreateSchema.options.find(
       (option) => option.shape.type.value === original.type,
     );
-    // Unreachable while the create union covers every Trigger type; answer as a
-    // refused create so the dialog can still show a reason inline.
+    // why: unreachable while the create union covers every type; refuse instead
     if (!createSchema) {
       return Promise.resolve({
         outcome: "error",
@@ -320,13 +289,11 @@ export function TriggerList({
       });
     }
 
-    // Unreachable while the read carries a stored Trigger the create accepts;
-    // answer as a refused create rather than send a body the backend refuses.
+    // why: unreachable while the read matches the create; never send a refused body
     const parsed = parseCloneBody(
       createSchema,
       {
         ...pickKeys(original, createSchema.shape),
-        // The route's Workspace, not whatever the read carried.
         workspaceId,
         name,
         enabled: false,
@@ -341,8 +308,7 @@ export function TriggerList({
     });
   };
 
-  // The footer sits under every state, loading and failed included, as the
-  // Create links did when the page drew them.
+  // why: the footer sits under every state, loading and failed included
   const withFooter = (content: ReactNode, pagination?: ReactNode) => (
     <>
       {content}
@@ -361,7 +327,6 @@ export function TriggerList({
     </>
   );
 
-  // Shown even with nothing listed: fired One-offs may be all there is.
   const controls = allTriggers.length ? (
     <ListToolbar>
       <Select
@@ -389,7 +354,6 @@ export function TriggerList({
           onCheckedChange={(checked) =>
             set("triggerShowFired", checked ? "true" : null)
           }
-          // Only a One-off fires, and a One-off is always Cron.
           disabled={typeFilter === "event" || typeFilter === "inbound"}
         />
         <Label htmlFor="show-fired-triggers" className="text-sm font-normal">
@@ -406,8 +370,6 @@ export function TriggerList({
 
   const page = pageItems(shown, TRIGGERS_PAGE_SIZE);
 
-  // Nothing to list yet; fired One-offs hidden but reachable; or a type with
-  // no Trigger of its own.
   const empty = !allTriggers.length ? (
     <ListState variant="empty">No triggers yet.</ListState>
   ) : !triggers.length ? null : (
@@ -453,8 +415,6 @@ export function TriggerList({
           </>
         )}
       </div>
-      {/* Two lines tall, the most any Trigger draws, so every card is one
-          height and any spare space falls last. */}
       <div className="flex min-h-9 flex-col gap-1 mt-1.5 text-xs text-muted-foreground">
         {trigger.type === "cron" ? (
           <ScheduleLine
@@ -500,7 +460,7 @@ export function TriggerList({
       edit={{ href: routes.triggers.detail(trigger.id) }}
       clone={{ onSelect: () => setTriggerToClone(trigger) }}
       toggle={
-        // A fired One-off is spent: it cannot be re-armed.
+        // why: a fired One-off is spent, so it has no Enable toggle
         hasFired(trigger)
           ? undefined
           : {
@@ -526,7 +486,6 @@ export function TriggerList({
         onRetry={() => void mutate()}
         skeleton={<TriggerCardsSkeleton />}
         empty={empty}
-        // The card opens the Trigger's runs; Edit is in the menu.
         href={(trigger) => routes.triggerRuns.forTrigger(trigger.id)}
         badges={renderBadges}
         meta={renderMeta}

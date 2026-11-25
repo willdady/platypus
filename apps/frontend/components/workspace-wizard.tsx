@@ -52,8 +52,7 @@ import { SelectItem } from "@/components/ui/select";
 
 const STEPS = ["Workspace", "Provider", "Sandbox"] as const;
 
-// Each step is checked against the same schema the backend validates the
-// create with, so a step the user has left can't fail the final write.
+// why: each step uses the schema the backend validates the create with
 const workspaceStepSchema = workspaceCreateSchema.pick({
   name: true,
   context: true,
@@ -77,12 +76,6 @@ const accepted: WriteOutcome<undefined> = {
   revalidateKeys: [],
 };
 
-/**
- * Creates a Workspace ready to use: its details, then a Provider (a new one,
- * or Shared ones attached), then an optional Sandbox. Nothing is written until
- * the last step, which creates all of it in one request — a Workspace without
- * a Provider cannot run a Chat, so none is created without one.
- */
 export function WorkspaceWizard({ orgId }: { orgId: string }) {
   const { user } = useAuth();
   const backendUrl = useBackendUrl();
@@ -93,13 +86,10 @@ export function WorkspaceWizard({ orgId }: { orgId: string }) {
 
   const [name, setName] = useState("");
   const [context, setContext] = useState("");
-  // Empty until the admin picks someone else: the backend defaults the owner
-  // to the caller (ADR-0008).
   const [ownerId, setOwnerId] = useState("");
   const [workspaceErrors, setWorkspaceErrors] = useState<FormErrors>({});
 
-  // Unset until the user picks a tab, so it can default to Shared once the
-  // org's Shared Providers load.
+  // why: unset until picked, so it defaults to Shared once the read lands
   const [pickedSource, setProviderSource] = useState<"new" | "shared">();
   const [provider, setProvider] =
     useState<z.output<typeof providerStepSchema>>();
@@ -107,13 +97,10 @@ export function WorkspaceWizard({ orgId }: { orgId: string }) {
 
   const [withSandbox, setWithSandbox] = useState(false);
 
-  // Re-selecting the caller (the default owner) changes nothing the backend
-  // would send, so it doesn't count as an edit either.
+  // why: re-selecting the default owner changes nothing the backend sends
   const ownerChanged = ownerId !== "" && ownerId !== user?.id;
 
-  // The wizard's state is its own, so it registers the whole of it: anything
-  // entered, or moving past the first step, would be lost on a link click or
-  // refresh. Typing then reverting clears it again.
+  // why: the wizard owns its state, so typing then reverting clears the guard
   const isDirty =
     step > 0 ||
     name !== "" ||
@@ -124,7 +111,6 @@ export function WorkspaceWizard({ orgId }: { orgId: string }) {
     withSandbox;
   useUnsavedChangesGuard(isDirty);
 
-  // Only admins reach this page (ADR-0008), and these reads are admin-only.
   const { results: members } = useScopedList<Member>("members", { orgId });
   const {
     data: sharedProvidersData,
@@ -144,8 +130,7 @@ export function WorkspaceWizard({ orgId }: { orgId: string }) {
   } = useScopedList<unknown>("sandbox-backends", {
     orgId,
   });
-  // Hold the default tab until the read settles: falling to New while it is
-  // loading or failed would claim the organization has no shared providers.
+  // why: hold the tab until the read settles, or New claims there are none
   const providersReadable = !isLoadingSharedProviders && !sharedProvidersError;
   const providerSource =
     pickedSource ??
@@ -153,10 +138,7 @@ export function WorkspaceWizard({ orgId }: { orgId: string }) {
   const hasSandboxBackends = backends.length > 0;
   const backendsFailed = Boolean(backendsError && !backendsData);
 
-  // A super-admin acting on an org they're not enrolled in won't appear in
-  // /members, but the backend lets them own a workspace by defaulting to
-  // themselves (ADR-0008). Always offer the current user so the default
-  // resolves to a real, selectable option.
+  // why: offer the current user — a super-admin may not appear in /members
   const ownerOptions =
     user && !members.some((m) => m.userId === user.id)
       ? [
@@ -216,8 +198,7 @@ export function WorkspaceWizard({ orgId }: { orgId: string }) {
       return accepted;
     }
     if (outcome.outcome === "invalid") {
-      // Only the Sandbox's fields are on screen to show an error against; the
-      // other steps passed the same schema before the user left them.
+      // why: only the Sandbox's fields are on screen to show an error against
       const sandboxErrors = Object.fromEntries(
         Object.entries(outcome.fieldErrors)
           .filter(([key]) => key.startsWith("sandbox."))
@@ -237,6 +218,7 @@ export function WorkspaceWizard({ orgId }: { orgId: string }) {
 
   const back = () => setStep((s) => s - 1);
 
+  // why: force-mounted, so a half-filled form survives a tab switch
   return (
     <div>
       <ol className="mb-8 flex flex-wrap gap-x-6 gap-y-2 text-sm">
@@ -263,14 +245,11 @@ export function WorkspaceWizard({ orgId }: { orgId: string }) {
         ))}
       </ol>
 
-      {/* Every step stays mounted, so going back keeps what was entered. */}
       <div hidden={step !== 0}>
         <FieldSet className="mb-6">
           <FieldGroup>
             <FormTextField
               label="Name"
-              // Distinct from the Provider and Sandbox forms' `name`, which
-              // are mounted alongside it.
               name="workspace-name"
               placeholder="Workspace name"
               value={name}
@@ -282,7 +261,6 @@ export function WorkspaceWizard({ orgId }: { orgId: string }) {
               autoFocus
             />
 
-            {/* ADR-0008: on creation an admin assigns the workspace owner. */}
             <FormSelectField
               label="Owner"
               name="ownerId"
@@ -335,7 +313,6 @@ export function WorkspaceWizard({ orgId }: { orgId: string }) {
             <TabsTrigger value="shared">Shared provider</TabsTrigger>
             <TabsTrigger value="new">New provider</TabsTrigger>
           </TabsList>
-          {/* Force-mounted so switching tabs keeps a half-filled form. */}
           <TabsContent
             value="new"
             forceMount
@@ -374,7 +351,6 @@ export function WorkspaceWizard({ orgId }: { orgId: string }) {
               <ul className="mb-6">
                 {sharedProviders.map((p) => (
                   <li key={p.id} className="mb-2">
-                    {/* The whole row toggles the switch. */}
                     <Item variant="outline" className="cursor-pointer" asChild>
                       <label htmlFor={`shared-${p.id}`}>
                         <ItemContent>

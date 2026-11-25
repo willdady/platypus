@@ -22,12 +22,10 @@ import {
 import type { TriggerFieldsProps } from "@/components/trigger-form";
 import { toggleInList } from "@/lib/toggle-in-list";
 
-// The events an Event Trigger can subscribe to. Webhook-only events
-// (`trigger_run.*`) are not among them.
+// why: webhook-only trigger_run.* events are not subscribable
 const AVAILABLE_EVENTS = eventTriggerEventSchema.options;
 
-// Mirrors the fields kanban.ts's changedCardFields diffs (updatedAt,
-// lastEditedBy*, and position are bookkeeping and never appear there).
+// why: mirrors kanban.ts changedCardFields; bookkeeping fields never appear
 const CHANGED_FIELD_OPTIONS = [
   { value: "title", label: "Title" },
   { value: "body", label: "Body" },
@@ -37,7 +35,6 @@ const CHANGED_FIELD_OPTIONS = [
   { value: "priority", label: "Priority" },
 ] as const;
 
-/** An Event Trigger's events and its board, column and changed-field filters. */
 function TriggerEventFields({
   active,
   trigger,
@@ -106,12 +103,10 @@ function TriggerEventFields({
       const next = prev.includes(event)
         ? prev.filter((e) => e !== event)
         : [...prev, event];
-      // Clear board and column filters if no card events remain
       if (!next.some((e) => e.startsWith("card."))) {
         setFilterBoardId("");
         setFilterColumnId("");
       }
-      // The changed-fields filter only makes sense against card.updated
       if (!next.includes("card.updated")) {
         setFilterChangedFields([]);
       }
@@ -148,7 +143,6 @@ function TriggerEventFields({
         {errors.config && <FieldError>{errors.config}</FieldError>}
       </Field>
 
-      {/* Board and column filters for card events */}
       {selectedEvents.some((e) => e.startsWith("card.")) && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormSelectField
@@ -191,7 +185,6 @@ function TriggerEventFields({
         </div>
       )}
 
-      {/* Changed-fields filter — only meaningful against card.updated */}
       {selectedEvents.includes("card.updated") && (
         <Field aria-labelledby="trigger-changed-fields-label">
           <FieldTitle id="trigger-changed-fields-label">

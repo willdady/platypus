@@ -19,7 +19,6 @@ import {
 import { TIMEZONES } from "@/lib/timezones";
 import { cn } from "@/lib/utils";
 
-/** A searchable select over {@link TIMEZONES}; `null` reads as "Not set". */
 export function TimezoneCombobox({
   id,
   value,

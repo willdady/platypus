@@ -1,12 +1,5 @@
 import { Skeleton } from "@/components/ui/skeleton";
 
-/**
- * The loading placeholder for one `TriggerRunRow`, laid out on the same
- * frame — the Trigger name, status badge, start time (absolute and
- * relative), duration and the stats line, then the ⋮ menu — so the
- * rows land without shifting. Each text line is a box of the line's own
- * height holding a shorter bar, which is how the loaded text reads.
- */
 export function TriggerRunRowSkeleton() {
   return (
     <div className="p-4">

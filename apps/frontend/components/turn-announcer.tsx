@@ -9,11 +9,7 @@ const ANNOUNCEMENTS: Partial<Record<ChatStatus, string>> = {
   error: "The reply failed.",
 };
 
-/**
- * One polite announcement per turn. The transcript is marked busy while a reply
- * streams, so screen readers don't read it token by token; this says when the
- * reply has finished, or failed, which the busy transcript alone never does.
- */
+// why: a busy transcript never says the reply finished, so announce it once
 export function TurnAnnouncer({ status }: { status: ChatStatus }) {
   const [prevStatus, setPrevStatus] = useState(status);
   const [message, setMessage] = useState("");

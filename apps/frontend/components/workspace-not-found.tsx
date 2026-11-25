@@ -7,10 +7,6 @@ import { Button } from "@/components/ui/button";
 import { RouteFallback } from "@/components/route-error";
 import { orgRoutes } from "@/lib/routes";
 
-/**
- * A Workspace that doesn't exist (or was deleted), shown inside the shell
- * with the way back to its Organization.
- */
 export function WorkspaceNotFound() {
   const { orgId } = useParams<{ orgId: string }>();
   return (

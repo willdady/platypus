@@ -35,21 +35,10 @@ type SwitcherPresentation = "bar" | "sheet";
 type WorkspaceSwitcherProps = {
   orgId: string;
   workspaceId: string;
-  /**
-   * Where the trigger sits: the one-line button in the top bar, or the stacked
-   * form at the top of the mobile sheet.
-   */
   presentation: SwitcherPresentation;
-  /** Called when a menu item is picked, so a sheet holding the switcher can close. */
   onNavigate?: () => void;
 };
 
-/**
- * The Organization/Workspace switcher — one menu, two triggers. The menu lists
- * the Organization's Workspaces, then Add workspace, Switch org and
- * Organization settings, each under the same permission check wherever it is
- * drawn.
- */
 export function WorkspaceSwitcher({
   orgId,
   workspaceId,
@@ -67,7 +56,7 @@ export function WorkspaceSwitcher({
   const workspaces = sortByName(allWorkspaces);
   const currentWorkspace = workspaces.find((w) => w.id === workspaceId);
 
-  // Placeholders keep each trigger steady until the names land.
+  // why: placeholders keep each trigger steady until the names land
   const orgLoading = !orgData && isOrgLoading;
   const workspaceLoading = !currentWorkspace && isWorkspacesLoading;
 
@@ -163,7 +152,6 @@ export function WorkspaceSwitcher({
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
-          {/* ADR-0008: Workspace creation is org-admin-only. */}
           {canCreateWorkspace(actor) && (
             <DropdownMenuItem asChild>
               <Link href={org.createWorkspace} onClick={onNavigate}>
