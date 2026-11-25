@@ -13,9 +13,7 @@ import { ListFooter } from "@/components/list-pagination";
 import type { Workspace } from "@platypus/schemas";
 import { orgRoutes } from "@/lib/routes";
 
-// The Organization home, drawn by its page and by the Organization loading
-// fallback alike, so switching Organizations keeps the page up instead of
-// swapping it for a placeholder shape for a frame.
+// why: the page and its loading fallback both draw this, so an org switch keeps it up
 export function OrgHome({ orgId }: { orgId: string }) {
   const { actor, isAuthLoading } = useAuth();
   const canCreate = canCreateWorkspace(actor);
@@ -28,19 +26,11 @@ export function OrgHome({ orgId }: { orgId: string }) {
     error: workspacesError,
   } = useScopedList<Workspace>("workspaces", { orgId });
 
-  // Wait for the org-membership fetch too, not just workspaces. Switching orgs
-  // clears orgMembership and re-fetches it; if workspaces resolve first,
-  // canCreate is briefly false and the admin-only buttons would render late,
-  // shifting the toolbar. Gating on isAuthLoading keeps the button
-  // row hidden until admin status is known so it appears fully formed.
-  //
-  // A failed read settles it as well: the list then reports the failure, and
-  // the button row still offers an admin the way to the org settings.
+  // why: wait for the membership fetch too, or admin buttons appear late and shift the bar
   const isReady = (!!workspacesData || !!workspacesError) && !isAuthLoading;
 
   const actions = (
     <>
-      {/* ADR-0008: Workspace creation is org-admin-only. */}
       {canCreate && (
         <Button variant={workspaces.length ? "outline" : "default"} asChild>
           <Link href={routes.createWorkspace}>
@@ -64,9 +54,6 @@ export function OrgHome({ orgId }: { orgId: string }) {
       {!isReady ? (
         <div className="flex flex-col gap-4">
           <WorkspaceList orgId={orgId} />
-          {/* The button row, reserved so it doesn't pop in below the list.
-            Until the membership resolves, whether either button shows is
-            unknown, so both are drawn. */}
           <ButtonRowSkeleton
             widths={[
               ...(isAuthLoading || canCreate ? ["w-36"] : []),

@@ -30,8 +30,7 @@ import { toast } from "sonner";
 import { userRoutes, workspaceRoutes } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 
-// Streamdown is heavy, and the Header carries this dropdown onto nearly every
-// page. Its bodies only render once the bell opens, so load it then.
+// why: Markdown is heavy and rides every page, so it loads when the bell opens
 const Markdown = dynamic(
   () => import("@/components/markdown").then((m) => m.Markdown),
   { ssr: false },
@@ -51,9 +50,6 @@ export function NotificationsDropdown({
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const scope = orgId && workspaceId ? { orgId, workspaceId } : null;
 
-  // The list itself is only read while the bell is open; the badge needs
-  // just the count. Polling is gated the same way, so a closed bell doesn't
-  // keep re-reading in the background.
   const { results: notificationRows, mutate: mutateNotifications } =
     useScopedList<NotificationListItem>(
       "notifications",
@@ -67,8 +63,6 @@ export function NotificationsDropdown({
     refreshInterval: isOpen ? 30000 : 0,
   });
 
-  // The badge's poll only runs while the bell is open, so a restored page would
-  // otherwise keep the count it had when the page was put away.
   useRevalidateOnRestore(() => void mutateUnreadCount());
 
   const { results: invitations } = useScopedList<InvitationListItem>(
@@ -77,11 +71,8 @@ export function NotificationsDropdown({
     { refreshInterval: isOpen ? 60000 * 2 : 0 },
   );
 
-  // Marking read and dismissing show at once and revert if refused.
   const optimistic = useOptimisticRows<Serialized<NotificationListItem>>();
   const notifications = optimistic.apply(notificationRows);
-  // An unread notification being marked read or dismissed already reads as
-  // gone from the badge.
   const unreadNotificationCount = Math.max(
     0,
     (unreadCountData?.count ?? 0) -
@@ -90,8 +81,7 @@ export function NotificationsDropdown({
   );
   const totalCount = unreadNotificationCount + invitations.length;
 
-  // The list first: while a row's override stands the badge already counts
-  // it as read, so a new count landing before the list would count it twice.
+  // why: list first — a count landing while an override stands counts the row twice
   const revalidate = async () => {
     await mutateNotifications();
     await mutateUnreadCount();
@@ -149,7 +139,6 @@ export function NotificationsDropdown({
     setExpandedId(expandedId === notif.id ? null : notif.id);
   };
 
-  /** The page of the Chat or Trigger run a notification was posted from. */
   const sourceHref = (source: NotificationSource) => {
     if (!source || !orgId || !workspaceId) return null;
     const routes = workspaceRoutes(orgId, workspaceId);
@@ -166,8 +155,6 @@ export function NotificationsDropdown({
       onOpenChange={(open) => {
         setIsOpen(open);
         setExpandedId(null);
-        // Opening gives the list a key, which reads it; the count is
-        // refreshed alongside.
         if (open) void mutateUnreadCount();
       }}
     >
@@ -203,9 +190,6 @@ export function NotificationsDropdown({
                 const href = sourceHref(notif.source);
                 return (
                   <Fragment key={notif.id}>
-                    {/* A menu item, so the arrow keys reach it. Enter expands it
-                      (and marks it read) without closing the menu; Delete
-                      dismisses it. */}
                     <DropdownMenuItem
                       className="group/notif flex items-start gap-3 p-3 rounded-sm relative"
                       textValue={notif.title ?? notif.agentName ?? "Platypus"}
@@ -231,7 +215,6 @@ export function NotificationsDropdown({
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="text-xs text-muted-foreground truncate">
-                            {/* Null on a Notification Platypus itself posted. */}
                             {notif.agentName ?? "Platypus"}
                           </span>
                           {!notif.isRead && (
@@ -249,11 +232,6 @@ export function NotificationsDropdown({
                             {notif.title}
                           </div>
                         )}
-                        {/* A link click, and any click in its confirmation
-                          (portalled out of this DOM, but still bubbling
-                          through React), must not toggle the row; a click on
-                          the text itself still does. Only stops propagation,
-                          so it needs no keyboard twin. */}
                         {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
                         <div
                           onClick={(e) => {
@@ -281,7 +259,6 @@ export function NotificationsDropdown({
                               "ol",
                               "li",
                             ]}
-                            // Anything else keeps its text, just unstyled.
                             unwrapDisallowed
                           >
                             {notif.body}
@@ -318,7 +295,6 @@ export function NotificationsDropdown({
                         <X className="size-3.5" />
                       </button>
                     </DropdownMenuItem>
-                    {/* Its own item, so a keyboard can reach it too. */}
                     {href && (
                       <DropdownMenuItem
                         asChild

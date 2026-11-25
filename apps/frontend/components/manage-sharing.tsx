@@ -41,8 +41,7 @@ import type { AttachmentResourceType } from "@platypus/schemas";
 
 type AttachedWorkspace = { workspaceId: string; workspaceName: string };
 
-// One SWR key per resource, so the badge, the card's warning and the Manage
-// attachments dialog share a single read and revalidate together.
+// why: one key per resource, so badge, card warning and dialog revalidate together
 function useAttachments(
   orgId: string | null,
   resourceType: AttachmentResourceType,
@@ -54,11 +53,6 @@ function useAttachments(
   );
 }
 
-/**
- * How many Workspaces a Shared resource is attached to, or `undefined` while
- * the read is pending (or withheld by a `null` orgId, for a viewer who can't
- * see attachments).
- */
 function useAttachmentCount(
   orgId: string | null,
   resourceType: AttachmentResourceType,
@@ -67,10 +61,7 @@ function useAttachmentCount(
   return useAttachments(orgId, resourceType, resourceId).data?.results.length;
 }
 
-/**
- * Hands an org-surface card its attachment count, so a list can call
- * {@link useAttachmentCount} per row without extracting a row component.
- */
+// why: render prop, so a list calls the hook per row without a row component
 export function AttachmentCount({
   orgId,
   resourceType,
@@ -85,7 +76,6 @@ export function AttachmentCount({
   return children(useAttachmentCount(orgId, resourceType, resourceId));
 }
 
-/** The line an org-surface card shows when attached to no Workspaces. */
 export function UnattachedWarning({ className }: { className?: string }) {
   return (
     <span
@@ -100,10 +90,7 @@ export function UnattachedWarning({ className }: { className?: string }) {
   );
 }
 
-/**
- * {@link UnattachedWarning} in a card grid: its one-line box is kept, empty,
- * while the count is pending or non-zero, so every card is one height.
- */
+// why: keep the empty line while pending or non-zero, so every card is one height
 export function UnattachedWarningLine({
   count,
 }: {
@@ -121,12 +108,6 @@ export function UnattachedWarningLine({
   );
 }
 
-/**
- * Read-only affordance shown on an org-surface card: "Shared with N workspaces"
- * with a hover tooltip listing the workspaces (ADR-0007). Mirrors the
- * tool-set/skill hover summaries on the workspace home page. Managing the
- * attachments themselves happens via {@link ManageAttachmentsDialog}.
- */
 export function SharedWithBadge({
   orgId,
   resourceType,
@@ -143,8 +124,7 @@ export function SharedWithBadge({
   );
   const count = attached.length;
 
-  // Sized to the loaded badge (icon + "N workspaces" at text-xs), so a count
-  // doesn't read as "0" before the read resolves.
+  // why: skeleton sized to the loaded badge, so a count never reads as 0 first
   if (isLoading) {
     return (
       <Skeleton className="h-4 w-20" aria-label="Loading shared workspaces" />
@@ -173,13 +153,6 @@ export function SharedWithBadge({
   );
 }
 
-/**
- * Org Admin dialog to manage where a Shared resource is attached (ADR-0007).
- * A searchable multi-select that scales to many workspaces: attached
- * workspaces show as removable chips and the list filters as you type.
- * Opened from the card's "Manage attachments" menu, which passes the row;
- * `null` means closed.
- */
 export function ManageAttachmentsDialog({
   orgId,
   resourceType,
@@ -188,7 +161,6 @@ export function ManageAttachmentsDialog({
 }: {
   orgId: string;
   resourceType: AttachmentResourceType;
-  /** The Shared resource to manage, or `null` while the dialog is closed. */
   resource: NamedResource | null;
   onClose: () => void;
 }) {
@@ -208,10 +180,7 @@ export function ManageAttachmentsDialog({
   );
 }
 
-/**
- * The open dialog's body. Mounted only while a resource is selected, so each
- * row opens with the last row's failure and in-flight state cleared.
- */
+// why: mounted per resource, so a new row starts with no error or in-flight id
 function ManageAttachmentsContent({
   orgId,
   resourceType,
@@ -235,7 +204,6 @@ function ManageAttachmentsContent({
   } = useAttachments(orgId, resourceType, resource.id);
   const attachedIds = new Set(attached.map((a) => a.workspaceId));
 
-  // The full workspace list is only needed while the dialog is open.
   const { results: allWorkspaces, isLoading: wsLoading } = useScopedList<{
     id: string;
     name: string;
@@ -247,8 +215,6 @@ function ManageAttachmentsContent({
     setBusyId(workspaceId);
     setError(null);
     try {
-      // One attachment address: the Workspace names the path, so the body
-      // carries only which Shared resource.
       const outcome = isAttached
         ? await detachResource(
             backendUrl,
@@ -279,8 +245,6 @@ function ManageAttachmentsContent({
       <DialogHeader>
         <DialogTitle>Share “{resource.name}”</DialogTitle>
         <DialogDescription>
-          {/* Keep the apostrophe literal, not `&apos;` — see
-              jsx-entity-whitespace.node.test.ts. */}
           Choose which workspaces this {label} appears in. It runs against each
           workspace’s own resources.
         </DialogDescription>
@@ -292,7 +256,6 @@ function ManageAttachmentsContent({
         </p>
       )}
 
-      {/* Currently-attached workspaces as removable chips. */}
       {attLoading ? (
         <LoadingRegion
           label="Loading attachments"
@@ -324,12 +287,9 @@ function ManageAttachmentsContent({
         </p>
       )}
 
-      {/* Searchable multi-select — scales to many workspaces. */}
       <Command>
         <CommandInput placeholder="Search workspaces..." />
         <CommandList>
-          {/* Rows in place of the false "No workspaces found." while the
-              list is still loading. */}
           {wsLoading ? (
             <LoadingRegion label="Loading workspaces" className="p-1">
               {[0, 1, 2].map((i) => (
@@ -344,12 +304,11 @@ function ManageAttachmentsContent({
           )}
           <CommandGroup>
             {workspaces.map((ws) => {
+              // why: append the id so equal-named workspaces stay distinct; search matches name
               const isAtt = attachedIds.has(ws.id);
               return (
                 <CommandItem
                   key={ws.id}
-                  // Include the id so the search value stays unique even if
-                  // two workspaces share a name; search still matches name.
                   value={`${ws.name} ${ws.id}`}
                   disabled={busyId === ws.id}
                   onSelect={() => toggle(ws.id, isAtt)}

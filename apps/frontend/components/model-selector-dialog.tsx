@@ -28,22 +28,7 @@ function filterByKeywords(_value: string, search: string, keywords?: string[]) {
   return haystack.includes(search.toLowerCase()) ? 1 : 0;
 }
 
-/**
- * Stops a press from moving focus, which is what keeps the on-screen keyboard
- * up across a model switch (issue #749).
- *
- * A press inside the picker otherwise focuses the nearest focusable ancestor:
- * the trigger button on the way in, and — because a model row is not itself
- * focusable — cmdk's scrolling list, which carries `tabindex="-1"`, on the way
- * out. Neither is editable, and Chrome on Android drops the keyboard the moment
- * focus leaves an editable element, so it falls away and then reappears once
- * focus reaches the textarea. Suppressed, focus stays on the composer textarea
- * while the picker opens and on the search box while it closes, moving only
- * between editable elements, and the keyboard never leaves.
- *
- * Opening and selecting both run off `click`, so neither is affected, and Tab
- * still reaches these elements for anyone using a hardware keyboard.
- */
+// why: preventDefault on mousedown — focus must stay editable or Android drops the keyboard
 function keepFocus(event: MouseEvent) {
   return event.preventDefault();
 }
@@ -54,37 +39,16 @@ type ModelSelectorDialogProps = {
   agentId: string;
   modelId: string;
   providerId: string;
-  /**
-   * Whether `agentId`/`modelId`/`providerId` are settled. `false` means the
-   * restore ladder has not produced a result yet, so the trigger shows a
-   * neutral pending label instead of "Select model" — claiming nothing is
-   * selected and then correcting itself a frame later is the flicker issue
-   * #799 was about.
-   */
   isResolved: boolean;
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   onModelChange: (value: string) => void;
-  /**
-   * The resolved model's Output ceiling (issue #454), shown as a tooltip on
-   * the trigger — the only reader this figure has today, so an Org Admin's
-   * declaration is visible before a reply is cut short, not only after.
-   */
   maxOutputTokens?: number;
-  /**
-   * Runs in place of the dialog's default close behaviour, which returns focus
-   * to the trigger button. Callers that want focus somewhere else — the
-   * composer wants its textarea (issue #749) — call `preventDefault()` on the
-   * event and focus their own target, so the close is a single focus move.
-   */
   onCloseAutoFocus?: (event: Event) => void;
-  /**
-   * Why the selection cannot change right now. Set, the trigger is disabled
-   * and says why on hover.
-   */
   lockedReason?: string;
 };
 
+// why: unresolved shows a neutral label — 'Select model' then correcting is the flicker
 export function ModelSelectorDialog({
   agents,
   providers,
@@ -101,9 +65,6 @@ export function ModelSelectorDialog({
 }: ModelSelectorDialogProps) {
   const selectedAgent = agentId ? agents.find((a) => a.id === agentId) : null;
 
-  // Normalising every Provider's model list is pure work, but it ran on every
-  // render — once per Provider, per keystroke, per streamed token (issue #869).
-  // Keyed on the Provider list, which the caller memoises from its SWR read.
   const providerOptions = useMemo(
     () =>
       providers.map((provider) => ({
@@ -113,15 +74,10 @@ export function ModelSelectorDialog({
     [providers],
   );
 
-  // Label the trigger with what the picker shows, never the stored reference —
-  // `alias:flagship` is a storage disambiguator and is never user-visible.
   const selectedProvider = providerId
     ? providers.find((p) => p.id === providerId)
     : undefined;
-  // A label more than one Provider offers names its Provider too (issue
-  // #1651): the button otherwise reads the same for either, though
-  // Provider-level settings like Web search differ. Compared by label, not
-  // reference — that is what the user sees.
+  // why: label from the picker, never alias:flagship — that is storage, not a name
   const selectedModelLabel = useMemo(() => {
     const label =
       selectedProvider && modelId
@@ -134,6 +90,7 @@ export function ModelSelectorDialog({
     return offeredBy > 1 ? `${label} · ${selectedProvider.name}` : label;
   }, [selectedProvider, modelId, providerOptions]);
 
+  // why: not bg-accent — that is the outline button's hover fill, so the bar vanishes
   const trigger = (
     <Button
       variant="outline"
@@ -155,10 +112,6 @@ export function ModelSelectorDialog({
           </span>
         </>
       ) : (
-        // `bg-foreground/10`, not the Skeleton's `bg-accent`: that is the
-        // outline button's own hover fill, so the bar vanished on hover. The
-        // width is roughly a model or Agent label's, so the trigger doesn't
-        // jump sideways when the selection resolves.
         <Skeleton
           className="h-4 w-28 bg-foreground/10"
           aria-label="Loading selection"
@@ -185,8 +138,7 @@ export function ModelSelectorDialog({
     </ModelSelectorItem>
   );
 
-  // A disabled button takes no pointer events, so the tooltip hangs off a
-  // wrapper that does.
+  // why: the tooltip hangs off a wrapper — a disabled button takes no pointer events
   if (lockedReason) {
     return (
       <Tooltip>
@@ -219,7 +171,6 @@ export function ModelSelectorDialog({
         <ModelSelectorInput placeholder="Search agents and models..." />
         <ModelSelectorList>
           <ModelSelectorEmpty>No results found.</ModelSelectorEmpty>
-          {/* Agents Groups: pinned ones first, in their own group */}
           {pinnedAgents.length > 0 && (
             <ModelSelectorGroup heading="Pinned">
               {pinnedAgents.map(renderAgentItem)}
@@ -231,7 +182,6 @@ export function ModelSelectorDialog({
             </ModelSelectorGroup>
           )}
 
-          {/* Providers Group */}
           {providerOptions.map(({ provider, options }) => (
             <ModelSelectorGroup key={provider.id} heading={provider.name}>
               {options.map((model) => (

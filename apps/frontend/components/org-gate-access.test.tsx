@@ -250,8 +250,7 @@ describe("an Organization access gate's unsaved changes", () => {
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Save" })).toBeDisabled(),
     );
-    // Let the guard's effect run before the click: the button goes disabled in
-    // the render that clears `draft`, and the provider deregisters after it.
+    // why: flush effects — the guard deregisters a render after the button disables
     await act(async () => {
       await Promise.resolve();
     });

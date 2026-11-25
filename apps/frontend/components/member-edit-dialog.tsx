@@ -39,9 +39,7 @@ export function MemberEditDialog({
       scope: { orgId },
       id: member.id,
       method: "PATCH",
-      // Only the role is editable; the payload is the form's own shape.
       buildPayload: (data) => data,
-      // The role field shows a mapped rejection, so this dialog adds no toast.
       invalidMessage: null,
       conflictField: null,
       successMessage: "Member role updated",

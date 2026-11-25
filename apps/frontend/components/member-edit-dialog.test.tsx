@@ -57,13 +57,11 @@ beforeEach(() => {
 });
 
 describe("MemberEditDialog", () => {
-  // Saving the role the member already has would be a no-op write.
   it("keeps Save disabled until the role changes", () => {
     renderDialog();
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   });
 
-  // The role change is a PATCH on the one membership row, not the user.
   it("PATCHes the new role and reports success", async () => {
     const fetchMock = stubAcceptedSave({ id: "m1", role: "admin" });
     await changeRoleToAdmin();
@@ -79,8 +77,6 @@ describe("MemberEditDialog", () => {
     expect(toastSuccess).toHaveBeenCalledWith("Member role updated");
   });
 
-  // No field renders a server error, so the backend's refusal has to reach
-  // the reader as a toast.
   it("toasts the backend's message on a refusal and stays open", async () => {
     stubRejectedSave("Member not found", 400);
     await changeRoleToAdmin();
@@ -91,7 +87,6 @@ describe("MemberEditDialog", () => {
     expect(onSuccess).not.toHaveBeenCalled();
     expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
-  // A mapped 400 lands on the role field, in view, with no extra toast.
   it("shows a field-mapped refusal inline without a toast", async () => {
     stubRejectedSave([{ path: ["role"], message: "Role is not allowed" }], 400);
     await changeRoleToAdmin();
@@ -102,7 +97,6 @@ describe("MemberEditDialog", () => {
     expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 
-  // A last-admin refusal is a 409 conflict, not a field error.
   it("toasts a last-admin refusal and stays open", async () => {
     stubRejectedSave("Cannot demote the last organization admin", 409);
     await changeRoleToAdmin();

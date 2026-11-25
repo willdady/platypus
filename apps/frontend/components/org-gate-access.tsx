@@ -42,35 +42,20 @@ function sameSet(a: Set<string>, b: Set<string>) {
   return a.size === b.size && [...a].every((id) => b.has(id));
 }
 
-/** One Workspace as a gate's access screen lists it. */
 type GateWorkspace = Access["workspaces"][number];
 
-/** What differs between the Organization's gates: where, and the words. */
 type GateCopy = {
-  /** The API path under the Organization the access is read and saved at. */
   entity: string;
-  /** Lower case, for "Loading …" and the load error. */
   subject: string;
   savedMessage: string;
   selectLabel: string;
   selectName: string;
   selectDescription: string;
   allowedDescription: string;
-  /** The column header for how many gated resources a Workspace holds. */
   countHeader: string;
-  /**
-   * The warning for Workspaces with resources the save would cut off. Absent
-   * where shutting a Workspace out leaves what it has working.
-   */
   cutOffMessage?: (cutOff: GateWorkspace[]) => string;
 };
 
-/**
- * Which Workspaces an Organization gate lets in: the gate and, under Selected
- * workspaces, each Workspace's switch. Staged and saved in one write, so
- * switching to Selected never refuses calls for the Workspaces that should
- * keep them while the Admin ticks them one by one.
- */
 export function OrgGateAccess({
   orgId,
   copy,
@@ -84,8 +69,6 @@ export function OrgGateAccess({
     copy.entity,
     scope,
   );
-  // The Admin's unsaved edits; null shows what is saved. Cleared on save, so
-  // the next read is shown as it stands.
   const [draft, setDraft] = useState<Draft | null>(null);
 
   const savedAllowed = new Set(
@@ -97,36 +80,28 @@ export function OrgGateAccess({
     allowed: savedAllowed,
   };
 
-  // Whether the staged gate and switches differ from the saved access. The
-  // hook's `sideState` can't carry `draft` here: clearing it after a save
-  // would leave the hook's clean snapshot holding the staged value.
+  // why: dirty is derived here — sideState would hold the staged value after a save
   const dirty =
     gate !== savedGate ||
     (gate === "selected" && !sameSet(allowed, savedAllowed));
   useUnsavedChangesGuard(dirty);
 
+  // why: the draft is staged here, so the write reads it; formData never changes
   const {
     isSubmitting: isSaving,
     validationErrors,
     submit,
   } = useEntityForm<object, Access>({
     initialData: {},
-    // The staged access is guarded above from the saved one; the hook's own
-    // `formData` never changes here.
     guardUnsavedChanges: false,
-    // The staged draft lives outside the hook's form state, so the write
-    // reads it directly rather than through `formData`.
     write: () =>
       writeAt<Access>(scopedUrl(backendUrl, copy.entity, scope), {
         method: "PUT",
         data: {
           gate,
-          // null leaves every Workspace switch alone; [] would turn them all
-          // off, which is only right when the Admin deliberately deselects.
           allowedWorkspaceIds: gate === "selected" ? [...allowed] : null,
         },
       }),
-    // The gate field shows a mapped rejection, so this surface adds no toast.
     invalidMessage: null,
     successMessage: copy.savedMessage,
     onSuccess: async (saved) => {
@@ -154,7 +129,6 @@ export function OrgGateAccess({
   }
   if (!data) return null;
 
-  // The switches only count under Selected; elsewhere they are left as saved.
   const cutOff =
     gate === "selected"
       ? data.workspaces.filter((ws) => ws.count > 0 && !allowed.has(ws.id))
@@ -269,7 +243,6 @@ const INBOUND_TRIGGER_GATE: GateCopy = {
       : `${cutOff.length} workspaces with Inbound Triggers aren't allowed, so their calls will be refused: ${cutOff.map((ws) => ws.name).join(", ")}.`,
 };
 
-/** Which Workspaces take Inbound Trigger calls (ADR-0030). */
 export function OrgInboundTriggerAccess({ orgId }: { orgId: string }) {
   return <OrgGateAccess orgId={orgId} copy={INBOUND_TRIGGER_GATE} />;
 }
@@ -291,10 +264,6 @@ const A2A_GATE: GateCopy = {
       : `${cutOff.length} workspaces with A2A endpoints aren't allowed, so their endpoints will stop answering: ${cutOff.map((ws) => ws.name).join(", ")}.`,
 };
 
-/**
- * Which Workspaces may have A2A endpoints (ADR-0032). Separate from the
- * Inbound Trigger gate, and off by default.
- */
 export function OrgA2aAccess({ orgId }: { orgId: string }) {
   return <OrgGateAccess orgId={orgId} copy={A2A_GATE} />;
 }
@@ -312,10 +281,6 @@ const SKILL_IMPORT_GATE: GateCopy = {
   countHeader: "Skills",
 };
 
-/**
- * Which Workspaces may import Skill bundles (ADR-0037). On by default for
- * every Workspace; importing at Organization scope is never gated.
- */
 export function OrgSkillImportAccess({ orgId }: { orgId: string }) {
   return <OrgGateAccess orgId={orgId} copy={SKILL_IMPORT_GATE} />;
 }

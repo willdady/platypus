@@ -29,10 +29,6 @@ import { orgRoutes } from "@/lib/routes";
 import { sortByName } from "@/lib/utils";
 import { useSharedDeleteGuard } from "@/hooks/use-shared-resource-actions";
 
-// The Organization surface for Shared Agents (ADR-0007): Org Admins see and
-// manage every Shared Agent, attached or not. Promotion (from a Workspace) is
-// the way a Shared Agent is created; it is then edited, shared, and deleted
-// here on the Organization surface — in Workspaces it is locked.
 export function OrgAgentsList({ orgId }: { orgId: string }) {
   const { actor } = useAuth();
   const canManage = canManageOrgSharedResource(actor);
@@ -40,9 +36,6 @@ export function OrgAgentsList({ orgId }: { orgId: string }) {
     null,
   );
 
-  // Resolved once per render and reused for the list's read and every write
-  // below, rather than re-deriving the Organization-vs-Workspace branch at
-  // each call site.
   const scope: Scope = { orgId };
 
   const {
@@ -81,14 +74,11 @@ export function OrgAgentsList({ orgId }: { orgId: string }) {
             extra={
               canManage && (
                 <>
-                  {/* The "Shared with N workspaces" badge. */}
                   <SkeletonLine lineClassName="mt-1 h-4" className="h-3 w-32" />
-                  {/* The unattached warning's reserved line. */}
                   <div className="mt-1 h-4" />
                 </>
               )
             }
-            // The row menu is an Org Admin's alone, as on the loaded card.
             actions={canManage ? <IconButtonSkeleton /> : null}
           />
         }

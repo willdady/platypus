@@ -4,13 +4,7 @@ import type { ComponentProps } from "react";
 import { Streamdown } from "streamdown";
 import { linkSafety } from "@/components/link-safety";
 
-/**
- * Markdown that is already whole when it renders: card bodies and comments,
- * notification bodies, editor previews. The same renderer the
- * Chat draws messages with, minus the two things only a live stream wants —
- * the repair pass for half-written syntax, and the copy/download controls on
- * code blocks and tables.
- */
+// why: static, no controls — a card body is whole when it renders, unlike a stream
 export function Markdown(props: ComponentProps<typeof Streamdown>) {
   return (
     <Streamdown

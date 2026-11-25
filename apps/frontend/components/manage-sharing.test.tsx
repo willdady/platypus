@@ -13,21 +13,12 @@ import {
   mutate,
 } from "@/test/list-test-harness";
 
-// --- Module mocks ------------------------------------------------------------
-
 vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("swr", () => swrMock);
 
 import { ManageAttachmentsDialog, SharedWithBadge } from "./manage-sharing";
 
-// --- Helpers -----------------------------------------------------------------
-
-/**
- * Registers the two reads the dialog makes — the attachments it already has,
- * and the workspaces it can attach to. `/attachments?` goes first: matching is
- * by URL fragment in registration order, and the attachments URL also carries
- * the org path the workspaces read is keyed on.
- */
+// why: match by URL fragment in order — the attachments URL contains /workspaces
 function renderDialog({
   attached = [],
   workspaces = [],
@@ -47,8 +38,6 @@ function renderDialog({
 }
 
 beforeEach(resetListHarness);
-
-// --- Tests -------------------------------------------------------------------
 
 describe("ManageAttachmentsDialog attach", () => {
   it("POSTs the attachment and revalidates on success", async () => {
@@ -95,7 +84,6 @@ describe("ManageAttachmentsDialog detach", () => {
 
     expect(await screen.findByText("Locked elsewhere")).toBeInTheDocument();
     expect(mutate).not.toHaveBeenCalled();
-    // The chip stays — no optimistic removal on a refused detach.
     expect(screen.getByText("Engineering")).toBeInTheDocument();
   });
 });
