@@ -33,7 +33,7 @@ export function WorkspaceRail({
     >
       {workspaceNavItems(orgId, workspaceId).map(
         ({ section, label, href, icon: Icon }) => (
-          <Tooltip key={section}>
+          <Tooltip key={section} delayDuration={700}>
             <TooltipTrigger asChild>
               <Button
                 asChild
