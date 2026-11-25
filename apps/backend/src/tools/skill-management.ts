@@ -74,13 +74,7 @@ export function createSkillManagementTools(
       body: skillFields.body.describe("The Markdown content of the skill"),
     }),
     execute: async ({ name, description, body }) => {
-      let row;
-      try {
-        row = await upsertSkill(ctx, { name, description, body });
-      } catch (error) {
-        if (error instanceof LockedError) return { error: error.message };
-        throw error;
-      }
+      const row = await upsertSkill(ctx, { name, description, body });
 
       const url = buildResourceUrl(
         frontendUrl,

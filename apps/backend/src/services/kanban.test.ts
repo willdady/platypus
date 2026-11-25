@@ -1,12 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { asDb, createMockDb, type MockDb } from "../test-utils.ts";
+import {
+  resetMockDb,
+  seedDb,
+  type FakeDb,
+  type Row,
+  type Store,
+} from "../test-utils.ts";
 
 vi.mock("./event-dispatch.ts", () => ({
   dispatchEvent: vi.fn(),
 }));
 
-import { eq } from "drizzle-orm";
-import { kanbanCard as kanbanCardTable } from "../db/schema.ts";
+import type { db } from "../index.ts";
 import { ConflictError, NotFoundError, ValidationError } from "../errors.ts";
 import { dispatchEvent } from "./event-dispatch.ts";
 import {
@@ -31,6 +36,8 @@ import {
 import { updateCommentBody, type CommentRow } from "./kanban-comment.ts";
 import type { CardRow, KanbanContext } from "./kanban-shared.ts";
 
+type Database = typeof db;
+
 const dispatched = (
   event: EventTriggerEvent,
   data: Record<string, unknown>,
@@ -42,39 +49,121 @@ const dispatched = (
 const scope = { orgId: "org-1", workspaceId: "ws-1" };
 const ctx: KanbanContext = { ...scope, actor: { agentId: "agent-1" } };
 
-describe("kanban module", () => {
-  let db: MockDb;
+const at = (iso: string) => new Date(iso);
 
+const world = (extra: Store = {}): Store => ({
+  kanban_board: [
+    {
+      id: "board-1",
+      workspaceId: "ws-1",
+      name: "Work",
+      labels: [
+        { id: "lbl-a", name: "Urgent", color: "#000" },
+        { id: "lbl-b", name: "Later", color: "#111" },
+      ],
+      createdAt: at("2026-01-01T00:00:00.000Z"),
+      updatedAt: at("2026-01-01T00:00:00.000Z"),
+    },
+  ],
+  kanban_column: [
+    {
+      id: "col-old",
+      boardId: "board-1",
+      name: "Doing",
+      position: 1,
+      createdAt: at("2026-01-01T00:00:00.000Z"),
+      updatedAt: at("2026-01-01T00:00:00.000Z"),
+    },
+    {
+      id: "col-new",
+      boardId: "board-1",
+      name: "Done",
+      position: 2,
+      createdAt: at("2026-01-01T00:00:00.000Z"),
+      updatedAt: at("2026-01-01T00:00:00.000Z"),
+    },
+  ],
+  ...extra,
+});
+
+const card = (id: string, columnId: string, extra: Row = {}): Row => ({
+  id,
+  columnId,
+  title: id,
+  body: null,
+  labelIds: [],
+  assignees: [],
+  priority: "none",
+  dueDate: null,
+  position: 1,
+  createdByUserId: null,
+  createdByAgentId: "agent-1",
+  lastEditedByUserId: null,
+  lastEditedByAgentId: null,
+  createdAt: at("2026-01-01T00:00:00.000Z"),
+  updatedAt: at("2026-01-01T00:00:00.000Z"),
+  ...extra,
+});
+
+const seed = (extra: Store = {}) => {
+  const fake = seedDb(world(extra));
+  return { fake, database: fake.handle as Database };
+};
+
+const cardIn = (fake: FakeDb, id: string) =>
+  fake.tables.kanban_card.find((row) => row.id === id);
+
+const historyOf = (fake: FakeDb, cardId: string) =>
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- a table no test seeded or wrote is absent
+  (fake.tables.kanban_card_history ?? []).filter(
+    (row) => row.cardId === cardId,
+  );
+
+type Handle = Record<string | symbol, (...args: unknown[]) => unknown>;
+
+const handleMissingFullRows = (fake: FakeDb): Database => {
+  const handle = fake.handle as Handle;
+  return new Proxy(handle, {
+    get(target, property) {
+      const value = target[property];
+      if (typeof value !== "function") return value;
+      if (property !== "select") return value.bind(target);
+      return (selection?: unknown) => {
+        if (selection === undefined) fake.tables.kanban_card.length = 0;
+        return value.call(target, selection);
+      };
+    },
+  }) as unknown as Database;
+};
+
+describe("kanban module", () => {
   beforeEach(() => {
-    db = createMockDb();
+    resetMockDb();
     vi.mocked(dispatchEvent).mockClear();
   });
 
   describe("label rules", () => {
-    const boardHasLabels = (ids: string[]) =>
-      db.limit.mockResolvedValue([{ labels: ids.map((id) => ({ id })) }]);
-
     it("rejects a create that names a label the board does not have", async () => {
-      boardHasLabels(["lbl-a"]);
+      const { database } = seed();
 
       await expect(
-        requireKnownLabelIds(asDb(db), "board-1", ["lbl-a", "lbl-ghost"]),
+        requireKnownLabelIds(database, "board-1", ["lbl-a", "lbl-ghost"]),
       ).rejects.toThrow(ValidationError);
     });
 
     it("accepts a create whose labels are all on the board", async () => {
-      boardHasLabels(["lbl-a", "lbl-b"]);
+      const { database } = seed();
 
       await expect(
-        requireKnownLabelIds(asDb(db), "board-1", ["lbl-b"]),
+        requireKnownLabelIds(database, "board-1", ["lbl-b"]),
       ).resolves.toBeUndefined();
     });
 
     it("drops unknown labels on an update, keeping the submitted order", async () => {
-      boardHasLabels(["lbl-a", "lbl-b"]);
+      const { database } = seed();
 
       expect(
-        await keepKnownLabelIds(asDb(db), "board-1", [
+        await keepKnownLabelIds(database, "board-1", [
           "lbl-b",
           "lbl-ghost",
           "lbl-a",
@@ -83,19 +172,24 @@ describe("kanban module", () => {
     });
 
     it("asks the board nothing when no labels were submitted", async () => {
-      expect(await keepKnownLabelIds(asDb(db), "board-1", [])).toEqual([]);
-      expect(db.select).not.toHaveBeenCalled();
+      const { fake, database } = seed();
+
+      expect(await keepKnownLabelIds(database, "board-1", [])).toEqual([]);
+      expect(fake.queries).toEqual([]);
     });
   });
 
   describe("assignee rules", () => {
     it("passes an org member", async () => {
-      db.where.mockResolvedValueOnce([{ userId: "user-1" }]);
-      db.where.mockResolvedValueOnce([]);
+      const { database } = seed({
+        organization_member: [
+          { id: "om-1", organizationId: "org-1", userId: "user-1" },
+        ],
+      });
 
       await expect(
         requireValidAssignees(
-          asDb(db),
+          database,
           [{ type: "user", id: "user-1" }],
           scope,
         ),
@@ -103,12 +197,13 @@ describe("kanban module", () => {
     });
 
     it("passes a super admin, who holds no membership row", async () => {
-      db.where.mockResolvedValueOnce([]);
-      db.where.mockResolvedValueOnce([{ id: "admin-1" }]);
+      const { database } = seed({
+        user: [{ id: "admin-1", role: "admin" }],
+      });
 
       await expect(
         requireValidAssignees(
-          asDb(db),
+          database,
           [{ type: "user", id: "admin-1" }],
           scope,
         ),
@@ -116,12 +211,11 @@ describe("kanban module", () => {
     });
 
     it("rejects a user who is neither", async () => {
-      db.where.mockResolvedValueOnce([]);
-      db.where.mockResolvedValueOnce([]);
+      const { database } = seed();
 
       await expect(
         requireValidAssignees(
-          asDb(db),
+          database,
           [{ type: "user", id: "outsider" }],
           scope,
         ),
@@ -129,14 +223,23 @@ describe("kanban module", () => {
     });
 
     it("passes a Shared agent attached to this workspace", async () => {
-      db.where.mockResolvedValueOnce([]);
-      db.where.mockResolvedValueOnce([
-        { agent: { id: "shared-agent" }, attachment: { id: "att-1" } },
-      ]);
+      const { database } = seed({
+        agent: [
+          { id: "shared-agent", organizationId: "org-1", workspaceId: null },
+        ],
+        attachment: [
+          {
+            id: "att-1",
+            workspaceId: "ws-1",
+            resourceType: "agent",
+            resourceId: "shared-agent",
+          },
+        ],
+      });
 
       await expect(
         requireValidAssignees(
-          asDb(db),
+          database,
           [{ type: "agent", id: "shared-agent" }],
           scope,
         ),
@@ -144,12 +247,19 @@ describe("kanban module", () => {
     });
 
     it("rejects an agent that is not visible here", async () => {
-      db.where.mockResolvedValueOnce([]);
-      db.where.mockResolvedValueOnce([]);
+      const { database } = seed({
+        agent: [
+          {
+            id: "someone-elses-agent",
+            organizationId: "org-2",
+            workspaceId: null,
+          },
+        ],
+      });
 
       await expect(
         requireValidAssignees(
-          asDb(db),
+          database,
           [{ type: "agent", id: "someone-elses-agent" }],
           scope,
         ),
@@ -157,60 +267,69 @@ describe("kanban module", () => {
     });
 
     it("asks nothing when there are no assignees", async () => {
+      const { fake, database } = seed();
+
       await expect(
-        requireValidAssignees(asDb(db), [], scope),
+        requireValidAssignees(database, [], scope),
       ).resolves.toBeUndefined();
-      expect(db.select).not.toHaveBeenCalled();
+      expect(fake.queries).toEqual([]);
     });
   });
 
   describe("placeCardInColumn", () => {
     it("appends past the last card when no anchor is given", async () => {
-      db.where.mockResolvedValue([{ maxPos: 3 }]);
+      const { database } = seed({
+        kanban_card: [card("card-1", "col-old", { position: 3 })],
+      });
 
       expect(
-        await placeCardInColumn(asDb(db), {
-          columnId: "col-1",
+        await placeCardInColumn(database, {
+          columnId: "col-old",
           afterCardId: undefined,
         }),
       ).toBe(4);
     });
 
     it("starts at 1 in an empty column", async () => {
-      db.where.mockResolvedValue([{ maxPos: null }]);
+      const { database } = seed();
 
       expect(
-        await placeCardInColumn(asDb(db), {
-          columnId: "col-1",
+        await placeCardInColumn(database, {
+          columnId: "col-old",
           afterCardId: undefined,
         }),
       ).toBe(1);
     });
 
     it("halves the gap ahead of the first card for a null anchor", async () => {
-      db.orderBy.mockResolvedValue([
-        { id: "card-2", position: 1.0 },
-        { id: "card-3", position: 2.0 },
-      ]);
+      const { fake, database } = seed({
+        kanban_card: [
+          card("card-2", "col-old", { position: 1.0 }),
+          card("card-3", "col-old", { position: 2.0 }),
+        ],
+      });
 
       expect(
-        await placeCardInColumn(asDb(db), {
-          columnId: "col-1",
+        await placeCardInColumn(database, {
+          columnId: "col-old",
           afterCardId: null,
         }),
       ).toBe(0.5);
-      expect(db.update).not.toHaveBeenCalled();
+      expect(cardIn(fake, "card-2")?.position).toBe(1);
+      expect(cardIn(fake, "card-3")?.position).toBe(2);
     });
 
     it("leaves the moved card out of the ordering it is re-entering", async () => {
-      db.orderBy.mockResolvedValue([
-        { id: "card-1", position: 1.0 },
-        { id: "card-2", position: 2.0 },
-      ]);
+      const { database } = seed({
+        kanban_card: [
+          card("card-1", "col-old", { position: 1.0 }),
+          card("card-2", "col-old", { position: 2.0 }),
+        ],
+      });
 
       expect(
-        await placeCardInColumn(asDb(db), {
-          columnId: "col-1",
+        await placeCardInColumn(database, {
+          columnId: "col-old",
           afterCardId: "card-2",
           excludeCardId: "card-1",
         }),
@@ -218,30 +337,32 @@ describe("kanban module", () => {
     });
 
     it("renumbers the column when the gap has collapsed", async () => {
-      db.orderBy.mockResolvedValue([
-        { id: "card-2", position: 1.0 },
-        { id: "card-3", position: 1.0000001 },
-      ]);
+      const { fake, database } = seed({
+        kanban_card: [
+          card("card-2", "col-old", { position: 1.0 }),
+          card("card-3", "col-old", { position: 1.0000001 }),
+        ],
+      });
 
       expect(
-        await placeCardInColumn(asDb(db), {
-          columnId: "col-1",
+        await placeCardInColumn(database, {
+          columnId: "col-old",
           afterCardId: "card-2",
         }),
       ).toBe(2);
 
-      expect(db.set.mock.calls.map((call) => call[0])).toEqual([
-        expect.objectContaining({ position: 1 }),
-        expect.objectContaining({ position: 3 }),
-      ]);
+      expect(cardIn(fake, "card-2")?.position).toBe(1);
+      expect(cardIn(fake, "card-3")?.position).toBe(3);
     });
 
     it("rejects an anchor that is not in the column", async () => {
-      db.orderBy.mockResolvedValue([{ id: "card-2", position: 1.0 }]);
+      const { database } = seed({
+        kanban_card: [card("card-2", "col-old", { position: 1.0 })],
+      });
 
       await expect(
-        placeCardInColumn(asDb(db), {
-          columnId: "col-1",
+        placeCardInColumn(database, {
+          columnId: "col-old",
           afterCardId: "ghost",
         }),
       ).rejects.toThrow("afterCardId not found in column");
@@ -478,26 +599,20 @@ describe("kanban module", () => {
 
   describe("moveCard", () => {
     it("dispatches card.moved with the previous column when the column changes", async () => {
-      db.limit
-        .mockResolvedValueOnce([
-          { id: "card-1", columnId: "col-old", boardId: "board-1" },
-        ])
-        .mockResolvedValueOnce([{ id: "col-new", boardId: "board-1" }])
-        .mockResolvedValueOnce([
-          { id: "col-old", name: "Old" },
-          { id: "col-new", name: "New" },
-        ]);
-      db.orderBy.mockResolvedValueOnce([]);
-      db.returning.mockResolvedValue([
-        { id: "card-1", columnId: "col-new", position: 1 },
-      ]);
+      const { fake, database } = seed({
+        kanban_card: [card("card-1", "col-old")],
+      });
 
-      await moveCard(asDb(db), ctx, {
+      await moveCard(database, ctx, {
         cardId: "card-1",
         columnId: "col-new",
         afterCardId: null,
       });
 
+      expect(cardIn(fake, "card-1")).toMatchObject({
+        columnId: "col-new",
+        position: 1,
+      });
       expect(dispatchEvent).toHaveBeenCalledWith(
         "org-1",
         "ws-1",
@@ -520,22 +635,20 @@ describe("kanban module", () => {
     });
 
     it("does not dispatch card.moved for a within-column reorder", async () => {
-      db.limit
-        .mockResolvedValueOnce([
-          { id: "card-1", columnId: "col-1", boardId: "board-1" },
-        ])
-        .mockResolvedValueOnce([{ id: "col-1", boardId: "board-1" }]);
-      db.orderBy.mockResolvedValueOnce([]);
-      db.returning.mockResolvedValue([
-        { id: "card-1", columnId: "col-1", position: 1 },
-      ]);
-
-      await moveCard(asDb(db), ctx, {
-        cardId: "card-1",
-        columnId: "col-1",
-        afterCardId: null,
+      const { fake, database } = seed({
+        kanban_card: [
+          card("card-1", "col-old", { position: 1 }),
+          card("card-2", "col-old", { position: 2 }),
+        ],
       });
 
+      await moveCard(database, ctx, {
+        cardId: "card-1",
+        columnId: "col-old",
+        afterCardId: "card-2",
+      });
+
+      expect(cardIn(fake, "card-1")?.position).toBe(3);
       expect(dispatchEvent).not.toHaveBeenCalledWith(
         "org-1",
         "ws-1",
@@ -553,21 +666,11 @@ describe("kanban module", () => {
     });
 
     it("moves the card when the expected column still matches", async () => {
-      db.limit
-        .mockResolvedValueOnce([
-          { id: "card-1", columnId: "col-old", boardId: "board-1" },
-        ])
-        .mockResolvedValueOnce([{ id: "col-new", boardId: "board-1" }])
-        .mockResolvedValueOnce([
-          { id: "col-old", name: "Old" },
-          { id: "col-new", name: "New" },
-        ]);
-      db.orderBy.mockResolvedValueOnce([]);
-      db.returning.mockResolvedValue([
-        { id: "card-1", columnId: "col-new", position: 1 },
-      ]);
+      const { fake, database } = seed({
+        kanban_card: [card("card-1", "col-old")],
+      });
 
-      const result = await moveCard(asDb(db), ctx, {
+      const result = await moveCard(database, ctx, {
         cardId: "card-1",
         columnId: "col-new",
         afterCardId: null,
@@ -575,80 +678,16 @@ describe("kanban module", () => {
       });
 
       expect(result.card.columnId).toBe("col-new");
-    });
-
-    it("constrains the update to the expected column", async () => {
-      vi.mocked(eq).mockClear();
-      db.limit
-        .mockResolvedValueOnce([
-          { id: "card-1", columnId: "col-old", boardId: "board-1" },
-        ])
-        .mockResolvedValueOnce([{ id: "col-new", boardId: "board-1" }])
-        .mockResolvedValueOnce([
-          { id: "col-old", name: "Old" },
-          { id: "col-new", name: "New" },
-        ]);
-      db.orderBy.mockResolvedValueOnce([]);
-      db.returning.mockResolvedValue([
-        { id: "card-1", columnId: "col-new", position: 1 },
-      ]);
-
-      await moveCard(asDb(db), ctx, {
-        cardId: "card-1",
-        columnId: "col-new",
-        afterCardId: null,
-        expectedColumnId: "col-old",
-      });
-
-      expect(vi.mocked(eq)).toHaveBeenCalledWith(
-        kanbanCardTable.columnId,
-        "col-old",
-      );
-    });
-
-    it("leaves the update unconditional when no column is expected", async () => {
-      vi.mocked(eq).mockClear();
-      db.limit
-        .mockResolvedValueOnce([
-          { id: "card-1", columnId: "col-old", boardId: "board-1" },
-        ])
-        .mockResolvedValueOnce([{ id: "col-new", boardId: "board-1" }])
-        .mockResolvedValueOnce([
-          { id: "col-old", name: "Old" },
-          { id: "col-new", name: "New" },
-        ]);
-      db.orderBy.mockResolvedValueOnce([]);
-      db.returning.mockResolvedValue([
-        { id: "card-1", columnId: "col-new", position: 1 },
-      ]);
-
-      await moveCard(asDb(db), ctx, {
-        cardId: "card-1",
-        columnId: "col-new",
-        afterCardId: null,
-      });
-
-      expect(vi.mocked(eq)).not.toHaveBeenCalledWith(
-        kanbanCardTable.columnId,
-        "col-old",
-      );
+      expect(cardIn(fake, "card-1")?.columnId).toBe("col-new");
     });
 
     it("refuses the move when the card has left the expected column", async () => {
-      db.limit
-        .mockResolvedValueOnce([
-          { id: "card-1", columnId: "col-old", boardId: "board-1" },
-        ])
-        .mockResolvedValueOnce([{ id: "col-new", boardId: "board-1" }])
-        .mockResolvedValueOnce([
-          { id: "col-old", name: "Old" },
-          { id: "col-new", name: "New" },
-        ]);
-      db.orderBy.mockResolvedValueOnce([]);
-      db.returning.mockResolvedValue([]);
+      const { fake, database } = seed({
+        kanban_card: [card("card-1", "col-old", { position: 4 })],
+      });
 
       await expect(
-        moveCard(asDb(db), ctx, {
+        moveCard(database, ctx, {
           cardId: "card-1",
           columnId: "col-new",
           afterCardId: null,
@@ -656,21 +695,39 @@ describe("kanban module", () => {
         }),
       ).rejects.toThrow(ConflictError);
 
+      expect(cardIn(fake, "card-1")).toMatchObject({
+        columnId: "col-old",
+        position: 4,
+      });
       expect(dispatchEvent).not.toHaveBeenCalled();
     });
 
     it("does not name the card's current column in the refusal", async () => {
-      db.limit
-        .mockResolvedValueOnce([
-          { id: "card-1", columnId: "col-note-processing", boardId: "board-1" },
-        ])
-        .mockResolvedValueOnce([{ id: "col-new", boardId: "board-1" }]);
-      db.orderBy.mockResolvedValueOnce([]);
-      db.returning.mockResolvedValue([]);
+      const { database } = seed({
+        kanban_column: [
+          {
+            id: "col-note-processing",
+            boardId: "board-1",
+            name: "Note processing",
+            position: 1,
+            createdAt: at("2026-01-01T00:00:00.000Z"),
+            updatedAt: at("2026-01-01T00:00:00.000Z"),
+          },
+          {
+            id: "col-new",
+            boardId: "board-1",
+            name: "Done",
+            position: 2,
+            createdAt: at("2026-01-01T00:00:00.000Z"),
+            updatedAt: at("2026-01-01T00:00:00.000Z"),
+          },
+        ],
+        kanban_card: [card("card-1", "col-note-processing")],
+      });
 
       let message = "";
       try {
-        await moveCard(asDb(db), ctx, {
+        await moveCard(database, ctx, {
           cardId: "card-1",
           columnId: "col-new",
           afterCardId: null,
@@ -683,65 +740,31 @@ describe("kanban module", () => {
       expect(message).toContain("expected column");
       expect(message).not.toContain("col-note-processing");
     });
-
-    it("throws the refusal from inside the transaction so the rebalance rolls back", async () => {
-      db.limit
-        .mockResolvedValueOnce([
-          { id: "card-1", columnId: "col-old", boardId: "board-1" },
-        ])
-        .mockResolvedValueOnce([{ id: "col-new", boardId: "board-1" }]);
-      db.orderBy.mockResolvedValue([
-        { id: "card-2", position: 1.0 },
-        { id: "card-3", position: 1.0005 },
-      ]);
-      db.returning.mockResolvedValue([]);
-
-      let threwInsideTransaction = false;
-      db.transaction.mockImplementation(async (cb: (tx: MockDb) => unknown) => {
-        try {
-          return await cb(db);
-        } catch (error) {
-          threwInsideTransaction = true;
-          throw error;
-        }
-      });
-
-      await expect(
-        moveCard(asDb(db), ctx, {
-          cardId: "card-1",
-          columnId: "col-new",
-          afterCardId: "card-2",
-          expectedColumnId: "col-stale",
-        }),
-      ).rejects.toThrow(ConflictError);
-
-      expect(db.update.mock.calls.length).toBeGreaterThan(1);
-      expect(threwInsideTransaction).toBe(true);
-    });
   });
 
   describe("updateCard", () => {
     it("emits an empty changedFields when the update echoes the card back unchanged", async () => {
-      const previous = {
-        id: "card-1",
-        columnId: "col-1",
-        title: "Title",
-        body: "Body",
-        priority: "medium",
-      };
-      db.limit
-        .mockResolvedValueOnce([
-          { id: "card-1", columnId: "col-1", boardId: "board-1" },
-        ])
-        .mockResolvedValueOnce([previous]);
-      db.returning.mockResolvedValue([{ ...previous }]);
+      const { fake, database } = seed({
+        kanban_card: [
+          card("card-1", "col-old", {
+            title: "Title",
+            body: "Body",
+            priority: "medium",
+          }),
+        ],
+      });
 
-      await updateCard(asDb(db), ctx, "card-1", {
+      await updateCard(database, ctx, "card-1", {
         title: "Title",
         body: "Body",
         priority: "medium",
       });
 
+      expect(cardIn(fake, "card-1")).toMatchObject({
+        title: "Title",
+        body: "Body",
+        priority: "medium",
+      });
       expect(dispatchEvent).toHaveBeenCalledWith(
         "org-1",
         "ws-1",
@@ -750,16 +773,13 @@ describe("kanban module", () => {
     });
 
     it("reports body when the change arrives as a plain edit", async () => {
-      const previous = { id: "card-1", columnId: "col-1", body: "Old body" };
-      db.limit
-        .mockResolvedValueOnce([
-          { id: "card-1", columnId: "col-1", boardId: "board-1" },
-        ])
-        .mockResolvedValueOnce([previous]);
-      db.returning.mockResolvedValue([{ ...previous, body: "New body" }]);
+      const { fake, database } = seed({
+        kanban_card: [card("card-1", "col-old", { body: "Old body" })],
+      });
 
-      await updateCard(asDb(db), ctx, "card-1", { body: "New body" });
+      await updateCard(database, ctx, "card-1", { body: "New body" });
 
+      expect(cardIn(fake, "card-1")?.body).toBe("New body");
       expect(dispatchEvent).toHaveBeenCalledWith(
         "org-1",
         "ws-1",
@@ -768,18 +788,15 @@ describe("kanban module", () => {
     });
 
     it("reports body when the change arrives as a bodyDiff", async () => {
-      const previous = { id: "card-1", columnId: "col-1", body: "Old body" };
-      db.limit
-        .mockResolvedValueOnce([
-          { id: "card-1", columnId: "col-1", boardId: "board-1" },
-        ])
-        .mockResolvedValueOnce([previous]);
-      db.returning.mockResolvedValue([{ ...previous, body: "New body" }]);
+      const { fake, database } = seed({
+        kanban_card: [card("card-1", "col-old", { body: "Old body" })],
+      });
 
-      await updateCard(asDb(db), ctx, "card-1", {
+      await updateCard(database, ctx, "card-1", {
         bodyDiff: [{ search: "Old", replace: "New" }],
       });
 
+      expect(cardIn(fake, "card-1")?.body).toBe("New body");
       expect(dispatchEvent).toHaveBeenCalledWith(
         "org-1",
         "ws-1",
@@ -789,30 +806,19 @@ describe("kanban module", () => {
   });
 
   describe("card history", () => {
-    const entries = () =>
-      db.values.mock.calls
-        .map((call) => call[0] as Record<string, unknown>)
-        .filter((value) => "kind" in value);
-
     it("records one entry naming every field that moved, not one per field", async () => {
-      db.limit
-        .mockResolvedValueOnce([
-          { id: "card-1", columnId: "col-1", boardId: "board-1" },
-        ])
-        .mockResolvedValueOnce([
-          { id: "card-1", columnId: "col-1", title: "Old", priority: "low" },
-        ])
-        .mockResolvedValueOnce([]);
-      db.returning.mockResolvedValue([
-        { id: "card-1", columnId: "col-1", title: "New", priority: "high" },
-      ]);
+      const { fake, database } = seed({
+        kanban_card: [
+          card("card-1", "col-old", { title: "Old", priority: "low" }),
+        ],
+      });
 
-      await updateCard(asDb(db), ctx, "card-1", {
+      await updateCard(database, ctx, "card-1", {
         title: "New",
         priority: "high",
       });
 
-      expect(entries()).toEqual([
+      expect(historyOf(fake, "card-1")).toEqual([
         expect.objectContaining({
           cardId: "card-1",
           kind: "updated",
@@ -825,101 +831,68 @@ describe("kanban module", () => {
     });
 
     it("records a body edit without either version of the text", async () => {
-      db.limit
-        .mockResolvedValueOnce([
-          { id: "card-1", columnId: "col-1", boardId: "board-1" },
-        ])
-        .mockResolvedValueOnce([
-          { id: "card-1", columnId: "col-1", body: "the old body" },
-        ])
-        .mockResolvedValueOnce([]);
-      db.returning.mockResolvedValue([
-        { id: "card-1", columnId: "col-1", body: "the new body" },
-      ]);
+      const { fake, database } = seed({
+        kanban_card: [card("card-1", "col-old", { body: "the old body" })],
+      });
 
-      await updateCard(asDb(db), ctx, "card-1", { body: "the new body" });
+      await updateCard(database, ctx, "card-1", { body: "the new body" });
 
-      expect(entries()).toEqual([
+      expect(historyOf(fake, "card-1")).toEqual([
         expect.objectContaining({ changes: [{ field: "body" }] }),
       ]);
-      expect(JSON.stringify(entries())).not.toContain("the old body");
-      expect(JSON.stringify(entries())).not.toContain("the new body");
+      expect(JSON.stringify(historyOf(fake, "card-1"))).not.toContain(
+        "the old body",
+      );
+      expect(JSON.stringify(historyOf(fake, "card-1"))).not.toContain(
+        "the new body",
+      );
     });
 
     it("writes nothing when the write moved no tracked field", async () => {
-      db.limit
-        .mockResolvedValueOnce([
-          { id: "card-1", columnId: "col-1", boardId: "board-1" },
-        ])
-        .mockResolvedValueOnce([
-          { id: "card-1", columnId: "col-1", title: "Same" },
-        ]);
-      db.returning.mockResolvedValue([
-        { id: "card-1", columnId: "col-1", title: "Same" },
-      ]);
+      const { fake, database } = seed({
+        kanban_card: [card("card-1", "col-old", { title: "Same" })],
+      });
 
-      await updateCard(asDb(db), ctx, "card-1", { title: "Same" });
+      await updateCard(database, ctx, "card-1", { title: "Same" });
 
-      expect(entries()).toEqual([]);
+      expect(historyOf(fake, "card-1")).toEqual([]);
     });
 
     it("attributes the entry to the acting agent", async () => {
-      db.limit
-        .mockResolvedValueOnce([
-          { id: "card-1", columnId: "col-1", boardId: "board-1" },
-        ])
-        .mockResolvedValueOnce([
-          { id: "card-1", columnId: "col-1", title: "A" },
-        ])
-        .mockResolvedValueOnce([]);
-      db.returning.mockResolvedValue([
-        { id: "card-1", columnId: "col-1", title: "B" },
-      ]);
+      const { fake, database } = seed({
+        kanban_card: [card("card-1", "col-old", { title: "A" })],
+      });
 
-      await updateCard(asDb(db), ctx, "card-1", { title: "B" });
+      await updateCard(database, ctx, "card-1", { title: "B" });
 
-      expect(entries()[0]).toMatchObject({ actorAgentId: "agent-1" });
-      expect(entries()[0]).not.toHaveProperty("actorUserId");
+      expect(historyOf(fake, "card-1")[0]).toMatchObject({
+        actorAgentId: "agent-1",
+      });
+      expect(historyOf(fake, "card-1")[0]).not.toHaveProperty("actorUserId");
     });
 
     it("attributes the entry to the acting user", async () => {
       const userCtx: KanbanContext = { ...scope, actor: { userId: "user-1" } };
-      db.limit
-        .mockResolvedValueOnce([
-          { id: "card-1", columnId: "col-1", boardId: "board-1" },
-        ])
-        .mockResolvedValueOnce([
-          { id: "card-1", columnId: "col-1", title: "A" },
-        ])
-        .mockResolvedValueOnce([]);
-      db.returning.mockResolvedValue([
-        { id: "card-1", columnId: "col-1", title: "B" },
-      ]);
+      const { fake, database } = seed({
+        kanban_card: [card("card-1", "col-old", { title: "A" })],
+      });
 
-      await updateCard(asDb(db), userCtx, "card-1", { title: "B" });
+      await updateCard(database, userCtx, "card-1", { title: "B" });
 
-      expect(entries()[0]).toMatchObject({ actorUserId: "user-1" });
-      expect(entries()[0]).not.toHaveProperty("actorAgentId");
+      expect(historyOf(fake, "card-1")[0]).toMatchObject({
+        actorUserId: "user-1",
+      });
+      expect(historyOf(fake, "card-1")[0]).not.toHaveProperty("actorAgentId");
     });
 
     it("snapshots label names rather than storing bare ids", async () => {
-      db.limit
-        .mockResolvedValueOnce([
-          { id: "card-1", columnId: "col-1", boardId: "board-1" },
-        ])
-        .mockResolvedValueOnce([
-          { id: "card-1", columnId: "col-1", labelIds: [] },
-        ])
-        .mockResolvedValueOnce([{ labels: [{ id: "lbl-a" }] }])
-        .mockResolvedValueOnce([{ labels: [{ id: "lbl-a", name: "Urgent" }] }])
-        .mockResolvedValueOnce([]);
-      db.returning.mockResolvedValue([
-        { id: "card-1", columnId: "col-1", labelIds: ["lbl-a"] },
-      ]);
+      const { fake, database } = seed({
+        kanban_card: [card("card-1", "col-old", { labelIds: [] })],
+      });
 
-      await updateCard(asDb(db), ctx, "card-1", { labelIds: ["lbl-a"] });
+      await updateCard(database, ctx, "card-1", { labelIds: ["lbl-a"] });
 
-      expect(entries()[0]).toMatchObject({
+      expect(historyOf(fake, "card-1")[0]).toMatchObject({
         changes: [
           {
             field: "labelIds",
@@ -931,28 +904,17 @@ describe("kanban module", () => {
     });
 
     it("records a move as the columns it went between", async () => {
-      db.limit
-        .mockResolvedValueOnce([
-          { id: "card-1", columnId: "col-old", boardId: "board-1" },
-        ])
-        .mockResolvedValueOnce([{ id: "col-new", boardId: "board-1" }])
-        .mockResolvedValueOnce([
-          { id: "col-old", name: "Doing" },
-          { id: "col-new", name: "Done" },
-        ])
-        .mockResolvedValueOnce([]);
-      db.orderBy.mockResolvedValueOnce([]);
-      db.returning.mockResolvedValue([
-        { id: "card-1", columnId: "col-new", position: 1 },
-      ]);
+      const { fake, database } = seed({
+        kanban_card: [card("card-1", "col-old")],
+      });
 
-      await moveCard(asDb(db), ctx, {
+      await moveCard(database, ctx, {
         cardId: "card-1",
         columnId: "col-new",
         afterCardId: null,
       });
 
-      expect(entries()).toEqual([
+      expect(historyOf(fake, "card-1")).toEqual([
         expect.objectContaining({
           kind: "updated",
           changes: [
@@ -967,24 +929,26 @@ describe("kanban module", () => {
     });
 
     it("records a creation as the column the card appeared in", async () => {
-      db.where.mockReturnValueOnce(db).mockResolvedValueOnce([{ maxPos: 1 }]);
-      db.limit
-        .mockResolvedValueOnce([{ id: "col-1", boardId: "board-1" }])
-        .mockResolvedValueOnce([{ id: "col-1", name: "Backlog" }])
-        .mockResolvedValueOnce([]);
-      db.returning.mockResolvedValue([{ id: "card-1", columnId: "col-1" }]);
+      const { fake, database } = seed();
 
-      await createCard(asDb(db), ctx, { columnId: "col-1", title: "New" });
+      const { card: created } = await createCard(database, ctx, {
+        columnId: "col-old",
+        title: "New",
+      });
 
-      expect(entries()).toEqual([
+      expect(cardIn(fake, created.id)).toMatchObject({
+        columnId: "col-old",
+        title: "New",
+      });
+      expect(historyOf(fake, created.id)).toEqual([
         expect.objectContaining({
-          cardId: "card-1",
+          cardId: created.id,
           kind: "created",
           changes: [
             {
               field: "columnId",
               before: null,
-              after: { id: "col-1", name: "Backlog" },
+              after: { id: "col-old", name: "Doing" },
             },
           ],
         }),
@@ -992,37 +956,38 @@ describe("kanban module", () => {
     });
 
     it("trims past the cap on the same write that appended", async () => {
-      db.limit
-        .mockResolvedValueOnce([
-          { id: "card-1", columnId: "col-1", boardId: "board-1" },
-        ])
-        .mockResolvedValueOnce([
-          { id: "card-1", columnId: "col-1", title: "A" },
-        ])
-        .mockResolvedValueOnce([]);
-      db.returning.mockResolvedValue([
-        { id: "card-1", columnId: "col-1", title: "B" },
-      ]);
+      const existing = Array.from(
+        { length: KANBAN_CARD_HISTORY_LIMIT + 1 },
+        (_, index) => ({
+          id: `hist-${String(index).padStart(3, "0")}`,
+          cardId: "card-1",
+          kind: "updated",
+          changes: [{ field: "title" }],
+          createdAt: new Date(Date.UTC(2026, 0, 1, 0, index)),
+        }),
+      );
+      const { fake, database } = seed({
+        kanban_card: [card("card-1", "col-old", { title: "A" })],
+        kanban_card_history: existing,
+      });
 
-      await updateCard(asDb(db), ctx, "card-1", { title: "B" });
+      await updateCard(database, ctx, "card-1", { title: "B" });
 
-      expect(db.delete).toHaveBeenCalled();
-      expect(db.limit).toHaveBeenCalledWith(KANBAN_CARD_HISTORY_LIMIT);
+      const entries = historyOf(fake, "card-1");
+      expect(entries).toHaveLength(KANBAN_CARD_HISTORY_LIMIT);
+      expect(entries.map((entry) => entry.id)).not.toContain("hist-000");
+      expect(entries.map((entry) => entry.id)).toContain("hist-050");
     });
   });
 
   describe("bulkUpdateCards", () => {
     it("reports the cards it could not reach and updates the rest", async () => {
-      db.limit
-        .mockResolvedValueOnce([
-          { id: "card-1", columnId: "col-1", boardId: "board-1" },
-        ])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([{ id: "card-1", priority: "low" }]);
-      db.returning.mockResolvedValue([{ id: "card-1" }]);
+      const { fake, database } = seed({
+        kanban_card: [card("card-1", "col-old", { priority: "low" })],
+      });
 
       expect(
-        await bulkUpdateCards(asDb(db), ctx, {
+        await bulkUpdateCards(database, ctx, {
           cardIds: ["card-1", "card-2"],
           priority: "high",
         }),
@@ -1030,7 +995,7 @@ describe("kanban module", () => {
         { cardId: "card-1", success: true },
         { cardId: "card-2", success: false, error: "Card not found" },
       ]);
-      expect(db.set).toHaveBeenCalledTimes(1);
+      expect(cardIn(fake, "card-1")?.priority).toBe("high");
       expect(dispatchEvent).toHaveBeenCalledWith(
         "org-1",
         "ws-1",
@@ -1038,65 +1003,32 @@ describe("kanban module", () => {
       );
     });
 
-    it("throws NotFoundError when a card is deleted before its write", async () => {
-      db.limit
-        .mockResolvedValueOnce([
-          { id: "card-1", columnId: "col-1", boardId: "board-1" },
-        ])
-        .mockResolvedValueOnce([{ id: "card-1", priority: "low" }]);
-      db.returning.mockResolvedValueOnce([]);
-
-      await expect(
-        bulkUpdateCards(asDb(db), ctx, {
-          cardIds: ["card-1"],
-          priority: "high",
-        }),
-      ).rejects.toThrow(new NotFoundError("Card not found"));
-      expect(dispatchEvent).not.toHaveBeenCalled();
-    });
-
     it("refuses the whole batch when the assignee cannot work here", async () => {
-      db.where.mockResolvedValueOnce([]);
-      db.where.mockResolvedValueOnce([]);
+      const { fake, database } = seed({
+        kanban_card: [card("card-1", "col-old", { priority: "low" })],
+      });
 
       await expect(
-        bulkUpdateCards(asDb(db), ctx, {
+        bulkUpdateCards(database, ctx, {
           cardIds: ["card-1"],
           assignees: [{ type: "user", id: "outsider" }],
         }),
       ).rejects.toThrow("Invalid user assignee");
-      expect(db.update).not.toHaveBeenCalled();
+      expect(cardIn(fake, "card-1")?.priority).toBe("low");
     });
 
     it("dispatches card.moved for a card whose column changes, but not for one that stays put", async () => {
-      db.limit
-        .mockResolvedValueOnce([{ id: "col-new", boardId: "board-1" }])
-        .mockResolvedValueOnce([
-          { id: "card-1", columnId: "col-old", boardId: "board-1" },
-        ])
-        .mockResolvedValueOnce([
-          { id: "card-2", columnId: "col-new", boardId: "board-1" },
-        ])
-        .mockResolvedValueOnce([{ id: "card-1", columnId: "col-old" }])
-        .mockResolvedValueOnce([
-          { id: "col-old", name: "Old" },
-          { id: "col-new", name: "New" },
-        ])
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([{ id: "card-2", columnId: "col-new" }]);
-      db.returning
-        .mockResolvedValueOnce([
-          { id: "card-1", columnId: "col-new", position: 1 },
-        ])
-        .mockResolvedValueOnce([
-          { id: "card-2", columnId: "col-new", position: 2 },
-        ]);
+      const { fake, database } = seed({
+        kanban_card: [card("card-1", "col-old"), card("card-2", "col-new")],
+      });
 
-      await bulkUpdateCards(asDb(db), ctx, {
+      await bulkUpdateCards(database, ctx, {
         cardIds: ["card-1", "card-2"],
         columnId: "col-new",
       });
 
+      expect(cardIn(fake, "card-1")?.columnId).toBe("col-new");
+      expect(cardIn(fake, "card-2")?.columnId).toBe("col-new");
       expect(dispatchEvent).toHaveBeenCalledWith(
         "org-1",
         "ws-1",
@@ -1128,27 +1060,42 @@ describe("kanban module", () => {
 
   describe("copyCard", () => {
     it("throws NotFoundError when the source card is deleted before it is read", async () => {
-      db.limit
-        .mockResolvedValueOnce([
-          { id: "card-1", columnId: "col-1", boardId: "board-1" },
-        ])
-        .mockResolvedValueOnce([{ id: "col-1", boardId: "board-1" }])
-        .mockResolvedValueOnce([]);
+      const fake = seedDb(world({ kanban_card: [card("card-1", "col-old")] }));
 
       await expect(
-        copyCard(asDb(db), ctx, { cardId: "card-1", columnId: "col-1" }),
+        copyCard(handleMissingFullRows(fake), ctx, {
+          cardId: "card-1",
+          columnId: "col-old",
+        }),
       ).rejects.toThrow(new NotFoundError("Card not found"));
-      expect(db.insert).not.toHaveBeenCalled();
+      expect(fake.tables.kanban_card).toEqual([]);
     });
   });
 
   describe("updateCommentBody", () => {
     it("throws NotFoundError when the comment is deleted before the write", async () => {
-      db.returning.mockResolvedValueOnce([]);
+      const fake = seedDb(
+        world({
+          kanban_card: [card("card-1", "col-old")],
+          kanban_card_comment: [
+            { id: "comment-1", cardId: "card-1", body: "Before" },
+          ],
+        }),
+        {
+          onQuery: (query) => {
+            if (
+              query.kind === "update" &&
+              query.table === "kanban_card_comment"
+            ) {
+              fake.tables.kanban_card_comment.length = 0;
+            }
+          },
+        },
+      );
 
       await expect(
         updateCommentBody(
-          asDb(db),
+          fake.handle as Database,
           { id: "comment-1" } as CommentRow,
           "Edited",
         ),

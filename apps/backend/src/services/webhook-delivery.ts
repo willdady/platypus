@@ -31,14 +31,17 @@ export async function deliverWebhook(
   });
 }
 
+export type DeliveryOutcome = "delivered" | "refused" | "unknown";
+
 export async function postWithRetries(params: {
   url: string;
   body: string;
   headers: Record<string, string>;
   label: string;
   allowPrivateNetworks?: boolean;
-}): Promise<void> {
+}): Promise<DeliveryOutcome> {
   const { url, body, headers, label, allowPrivateNetworks } = params;
+  let outcome: DeliveryOutcome = "unknown";
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     if (attempt > 0) {
       await new Promise((resolve) =>
@@ -57,7 +60,7 @@ export async function postWithRetries(params: {
           { url, reason: egress.reason },
           `${label} delivery blocked by network policy`,
         );
-        return;
+        return "refused";
       }
 
       const response = await fetch(url, {
@@ -73,14 +76,16 @@ export async function postWithRetries(params: {
           { url, attempt: attempt + 1 },
           `${label} delivered successfully`,
         );
-        return;
+        return "delivered";
       }
 
+      outcome = "refused";
       logger.warn(
         { url, status: response.status, attempt: attempt + 1 },
         `${label} delivery failed with non-OK status`,
       );
     } catch (error) {
+      outcome = "unknown";
       logger.warn(
         {
           url,
@@ -95,4 +100,5 @@ export async function postWithRetries(params: {
   }
 
   logger.error({ url }, `${label} delivery exhausted all retries`);
+  return outcome;
 }

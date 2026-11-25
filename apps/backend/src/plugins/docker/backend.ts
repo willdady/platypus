@@ -111,14 +111,13 @@ function volumeName(workspaceId: string): string {
 }
 
 // why: hand-rolled because tar-stream is not a direct dependency and pnpm's strict resolver misses it
-export function buildSingleFileTar(name: string, content: Buffer): Buffer {
-  const entryName = name.replace(/^\/+/, "");
-  if (Buffer.byteLength(entryName) > 100) {
-    throw new Error(`tar entry name too long (>100 bytes): ${entryName}`);
+function buildSingleFileTar(name: string, content: Buffer): Buffer {
+  if (Buffer.byteLength(name) > 100) {
+    throw new Error(`tar entry name too long (>100 bytes): ${name}`);
   }
 
   const header = Buffer.alloc(512, 0);
-  header.write(entryName, 0, 100, "utf8");
+  header.write(name, 0, 100, "utf8");
   header.write("0000644 ", 100, 8, "utf8");
   header.write("0000000 ", 108, 8, "utf8");
   header.write("0000000 ", 116, 8, "utf8");
@@ -161,7 +160,7 @@ function splitParent(absPath: string): { parent: string; name: string } {
   };
 }
 
-export const EXEC_MARKER_VAR = "PLATYPUS_EXEC_ID";
+const EXEC_MARKER_VAR = "PLATYPUS_EXEC_ID";
 
 // why: repeats because a child forked mid-sweep survives one pass; PidsLimit caps a fork bomb
 const KILL_SCRIPT = `
@@ -413,14 +412,14 @@ class DockerSandboxTransport implements SandboxTransport {
   private logger: PluginLogger;
 
   constructor(
-    config: Partial<DockerSandboxConfig>,
+    config: DockerSandboxConfig,
     _credentials: DockerSandboxCredentials,
     logger: PluginLogger,
   ) {
     this.docker = new Docker();
     this.inflight = new Map();
-    this.networks = config.networks ?? [];
-    this.extraHosts = config.extraHosts ?? [];
+    this.networks = config.networks;
+    this.extraHosts = config.extraHosts;
     this.logger = logger;
   }
 
@@ -646,7 +645,7 @@ class DockerSandboxTransport implements SandboxTransport {
 }
 
 export const createDockerSandboxBackend = (
-  config: Partial<DockerSandboxConfig>,
+  config: DockerSandboxConfig,
   credentials: DockerSandboxCredentials,
   plugin: PluginConfigContext,
 ): SandboxBackend =>

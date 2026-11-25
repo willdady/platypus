@@ -8,6 +8,7 @@ import { RunEventRecorder } from "./run-events.ts";
 import { driveDelegate, driveOnce } from "./drive.ts";
 import type { RunPlan } from "./run-plan.ts";
 import type { RunStatus } from "./types.ts";
+import { TEST_USAGE_MODEL } from "./run-plan.test-fixtures.ts";
 
 const USAGE = {
   inputTokens: {
@@ -63,6 +64,7 @@ const planOf = (
   overrides: Partial<RunPlan> = {},
 ): RunPlan => ({
   model,
+  usageModel: TEST_USAGE_MODEL,
   tools: {},
   maxSteps: 3,
   ...overrides,

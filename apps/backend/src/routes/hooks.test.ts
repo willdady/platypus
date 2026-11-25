@@ -1,12 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import {
-  dbError,
-  mockDb,
-  resetMockDb,
-  seedDb,
-  type Row,
-} from "../test-utils.ts";
-import { mockLogger, mockNanoid } from "../test-setup.ts";
+import { nanoid } from "nanoid";
+import { dbError, resetMockDb, seedDb, type Row } from "../test-utils.ts";
+import { mockLogger } from "../test-setup.ts";
+
+vi.mock("nanoid", { spy: true });
 
 vi.mock("../services/trigger-firing.ts", () => ({
   fireTrigger: vi.fn(() => Promise.resolve("ran")),
@@ -15,13 +12,10 @@ vi.mock("../services/notification.ts", () => ({
   createNotification: vi.fn(() => Promise.resolve({ id: "notification-1" })),
 }));
 
-import app from "../server.ts";
 import { fireTrigger } from "../services/trigger-firing.ts";
-import {
-  hashBearerToken,
-  resetTokenTouches,
-} from "../services/bearer-token.ts";
-import { resetInboundRunSlots } from "../services/inbound-trigger.ts";
+import { hashBearerToken } from "../services/bearer-token.ts";
+
+let app: (typeof import("../server.ts"))["default"];
 
 const TOKEN = "pit_the-right-token";
 const DAY = 24 * 60 * 60 * 1000;
@@ -103,12 +97,16 @@ const callLogLines = () =>
     .filter(([, message]) => message === "Inbound trigger call")
     .map(([fields]) => fields as Record<string, unknown>);
 
+const holdRun = () => {
+  vi.mocked(fireTrigger).mockImplementationOnce(() => new Promise(() => {}));
+};
+
 describe("/hooks/triggers", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     resetMockDb();
     vi.clearAllMocks();
-    resetInboundRunSlots();
-    resetTokenTouches();
+    vi.resetModules();
+    ({ default: app } = await import("../server.ts"));
   });
 
   afterEach(() => {
@@ -118,7 +116,7 @@ describe("/hooks/triggers", () => {
 
   describe("POST /:triggerId", () => {
     it("accepts a call with 202 and a run id that already exists as pending", async () => {
-      mockNanoid.mockReturnValueOnce("run-1");
+      vi.mocked(nanoid).mockReturnValueOnce("run-1");
       const fake = seed();
 
       const res = await fire("trig-1");
@@ -240,14 +238,19 @@ describe("/hooks/triggers", () => {
     });
 
     it.each([
-      ["a wrong token", "pit_wrong", {}],
-      ["no token", null, {}],
-      ["an expired token", TOKEN, { tokenExpiresAt: new Date(Date.now() - 1) }],
+      ["a wrong token", "pit_wrong", "trig-wrong-token", {}],
+      ["no token", null, "trig-no-token", {}],
+      [
+        "an expired token",
+        TOKEN,
+        "trig-expired-token",
+        { tokenExpiresAt: new Date(Date.now() - 1) },
+      ],
     ])(
       "stamps last rejected on a real Inbound Trigger called with %s",
-      async (_case, token, over) => {
-        const fake = seed({ triggers: [inbound(over)] });
-        await fire("trig-1", { token });
+      async (_case, token, id, over) => {
+        const fake = seed({ triggers: [inbound({ id, ...over })] });
+        await fire(id, { token });
         await new Promise((resolve) => setTimeout(resolve, 0));
         expect(fake.tables.trigger[0].lastRejectedAt).toBeInstanceOf(Date);
         expect(fake.tables.trigger[0].lastUsedAt).toBeNull();
@@ -279,9 +282,11 @@ describe("/hooks/triggers", () => {
       const earlier = new Date(Date.now() - DAY);
 
       for (const token of [null, "pit_wrong"]) {
-        const fake = seed({ triggers: [inbound({ lastRejectedAt: earlier })] });
+        const fake = seed({
+          triggers: [inbound({ id: "trig-413", lastRejectedAt: earlier })],
+        });
 
-        const res = await fire("trig-1", {
+        const res = await fire("trig-413", {
           token,
           body: JSON.stringify({ inputs: { issueKey: "x".repeat(100) } }),
         });
@@ -297,9 +302,16 @@ describe("/hooks/triggers", () => {
 
     it("still writes the 413's log line when the Trigger lookup fails", async () => {
       process.env.INBOUND_TRIGGER_MAX_BODY_BYTES = "64";
-      mockDb.limit.mockImplementationOnce(() => {
-        throw dbError("08006", "database unreachable");
-      });
+      seedDb(
+        { trigger: [inbound()] },
+        {
+          onQuery: (query) => {
+            if (query.kind === "select" && query.table === "trigger") {
+              throw dbError("08006", "database unreachable");
+            }
+          },
+        },
+      );
 
       const res = await fire("trig-1", {
         body: JSON.stringify({ inputs: { issueKey: "x".repeat(100) } }),
@@ -326,19 +338,20 @@ describe("/hooks/triggers", () => {
       process.env.TRIGGER_BREAKER_MAX_RUNS = "1";
       try {
         const fake = seed({
+          triggers: [inbound({ id: "trig-suppressed" })],
           runs: [
             {
               id: "run-done",
-              triggerId: "trig-1",
+              triggerId: "trig-suppressed",
               entityId: "PLAT-42",
               status: "success",
               startedAt: new Date(Date.now() - 60_000),
             },
           ],
         });
-        mockNanoid.mockReturnValueOnce("run-suppressed");
+        vi.mocked(nanoid).mockReturnValueOnce("run-suppressed");
 
-        const res = await fire("trig-1");
+        const res = await fire("trig-suppressed");
 
         expect(res.status).toBe(202);
         expect(await res.json()).toEqual({
@@ -354,10 +367,8 @@ describe("/hooks/triggers", () => {
 
     it("returns a record's active run with 202 even at the concurrency cap", async () => {
       process.env.INBOUND_TRIGGER_MAX_CONCURRENT_RUNS = "1";
-      vi.mocked(fireTrigger).mockImplementationOnce(
-        () => new Promise(() => {}),
-      );
-      mockNanoid.mockReturnValueOnce("run-1");
+      holdRun();
+      vi.mocked(nanoid).mockReturnValueOnce("run-1");
       seed();
 
       expect((await fire("trig-1")).status).toBe(202);
@@ -405,14 +416,12 @@ describe("/hooks/triggers", () => {
 
     it("answers 429 with Retry-After past the concurrency cap, writing no row", async () => {
       process.env.INBOUND_TRIGGER_MAX_CONCURRENT_RUNS = "1";
-      vi.mocked(fireTrigger).mockImplementationOnce(
-        () => new Promise(() => {}),
-      );
-      mockNanoid.mockReturnValueOnce("run-1");
-      const fake = seed();
+      holdRun();
+      vi.mocked(nanoid).mockReturnValueOnce("run-1");
+      const fake = seed({ triggers: [inbound({ id: "trig-rate-limited" })] });
 
-      expect((await fire("trig-1")).status).toBe(202);
-      const res = await fire("trig-1", {
+      expect((await fire("trig-rate-limited")).status).toBe(202);
+      const res = await fire("trig-rate-limited", {
         body: JSON.stringify({ inputs: { issueKey: "PLAT-7" } }),
       });
 

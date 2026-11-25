@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   convertToModelMessages,
   dynamicTool,
@@ -14,15 +14,15 @@ import type {
 } from "@platypuschat/plugin-sdk";
 import { startRun } from "./run-lifecycle.ts";
 import { driveChat, driveDelegate, driveOnce } from "./drive.ts";
-import { createOverflowRecovery } from "./context-overflow-recovery.ts";
-import { buildModelInvocation, type RunPlan } from "./run-plan.ts";
+import type { RunPlan } from "./run-plan.ts";
+import { TEST_USAGE_MODEL } from "./run-plan.test-fixtures.ts";
 import { RunEventRecorder } from "./run-events.ts";
 import type { RunStatus } from "./types.ts";
 import type { PlatypusUIMessage } from "../types.ts";
 import {
-  clearToolGates,
   registerToolGate,
   wrapToolsWithToolResultGate,
+  type ToolGateRegistration,
   type ToolGateScope,
 } from "../tool-gates/index.ts";
 import {
@@ -135,12 +135,17 @@ const SCOPE: ToolGateScope = {
   readOnlyHints: new Map(),
 };
 
+// why: no unregister exists, so each case silences the gates it registered
+const registered: ToolGateRegistration[] = [];
+let seq = 0;
+
 const planWith = (
   model: MockLanguageModelV3,
   executed: string[],
   gateScope: ToolGateScope | undefined = SCOPE,
 ): RunPlan => ({
   model,
+  usageModel: TEST_USAGE_MODEL,
   maxSteps: 12,
   gateScope,
   tools: {
@@ -182,8 +187,9 @@ const gate = (
 ) => {
   const seen: ToolGateCall[] = [];
   const results: Array<{ call: ToolGateCall; result: unknown }> = [];
-  registerToolGate({
-    id,
+  const registration: ToolGateRegistration = {
+    // why: each case names its own gate, because a registration never expires
+    id: `${id}-${(seq += 1)}`,
     name: id,
     timeoutMs,
     evaluate: (call) => {
@@ -198,7 +204,9 @@ const gate = (
           },
         }
       : {}),
-  });
+  };
+  registered.push(registration);
+  registerToolGate(registration);
   return { seen, results };
 };
 
@@ -223,7 +231,12 @@ const resultGate = (
     evaluateResult: answer,
   }).results;
 
-afterEach(() => clearToolGates());
+afterEach(() => {
+  for (const registration of registered.splice(0)) {
+    registration.evaluate = () => ({ verdict: "allow" });
+    delete registration.evaluateResult;
+  }
+});
 
 describe("a Tool gate's deny", () => {
   it("stops the call in a Trigger run, hands the model the reason, and the run continues", async () => {
@@ -354,6 +367,7 @@ describe("an MCP tool", () => {
     await driveOnce({
       plan: {
         model,
+        usageModel: TEST_USAGE_MODEL,
         maxSteps: 4,
         gateScope: SCOPE,
         tools: {
@@ -928,6 +942,7 @@ describe("a Tool gate's result stage", () => {
     const drive = driveChat({
       plan: {
         model,
+        usageModel: TEST_USAGE_MODEL,
         maxSteps: 4,
         gateScope: { ...SCOPE, attended: true },
         tools: { [DELEGATE_TOOL_NAME]: createDelegateTool([delegate]) },
@@ -1017,6 +1032,7 @@ describe("a Tool gate's result stage", () => {
     const drive = driveChat({
       plan: {
         model,
+        usageModel: TEST_USAGE_MODEL,
         maxSteps: 4,
         gateScope: { ...SCOPE, attended: true },
         tools: { [DELEGATE_TOOL_NAME]: createDelegateTool([delegate]) },
@@ -1067,10 +1083,27 @@ describe("a Tool gate's result stage", () => {
 
 describe("with no gate enabled", () => {
   it("sends the Provider no approval hook and runs the call", async () => {
+    // why: needs a graph whose Tool gate registry was never touched
+    vi.resetModules();
+    const [
+      { buildModelInvocation },
+      { createOverflowRecovery },
+      { driveOnce },
+      { startRun },
+    ] = await Promise.all([
+      import("./run-plan.ts"),
+      import("./context-overflow-recovery.ts"),
+      import("./drive.ts"),
+      import("./run-lifecycle.ts"),
+    ]);
+
     const { model } = callThenAnswer();
     const executed: string[] = [];
     const plan = planWith(model, executed);
-    const { run } = startRecordedRun();
+    const run = startRun({
+      runId: "no-gate",
+      onTerminate: () => {},
+    });
 
     expect(
       "toolApproval" in

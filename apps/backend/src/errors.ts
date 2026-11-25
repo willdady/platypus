@@ -15,10 +15,18 @@ export class LockedError extends Error {
   }
 }
 
+export type ValidationIssue = {
+  path: Array<string | number>;
+  message: string;
+};
+
 export class ValidationError extends Error {
-  constructor(message: string) {
+  readonly issues?: ValidationIssue[];
+
+  constructor(message: string, issues?: ValidationIssue[]) {
     super(message);
     this.name = "ValidationError";
+    this.issues = issues;
   }
 }
 
@@ -88,6 +96,7 @@ export const mapError = (
   status: ContentfulStatusCode;
   message: string;
   files?: string[];
+  issues?: ValidationIssue[];
 } | null => {
   if (error instanceof NotFoundError)
     return { status: 404, message: error.message };
@@ -98,7 +107,11 @@ export const mapError = (
   if (error instanceof ServiceUnavailableError)
     return { status: 503, message: error.message };
   if (error instanceof ValidationError)
-    return { status: 400, message: error.message };
+    return {
+      status: 400,
+      message: error.message,
+      ...(error.issues?.length && { issues: error.issues }),
+    };
   if (error instanceof UnsupportedError)
     return { status: 501, message: error.message };
   if (error instanceof UpstreamError)

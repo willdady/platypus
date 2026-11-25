@@ -26,6 +26,7 @@ import {
   findTokenTaskReading,
   firstReply,
   readingOf,
+  readTaskRows,
   readWithStatus,
   recordedStatus,
   isTerminal,
@@ -34,7 +35,7 @@ import {
   type TaskRow,
   type TaskStatus,
 } from "./a2a-task-state.ts";
-import { pushRecordedEnd } from "./a2a-push.ts";
+import { pushLeaseExpired, pushPending, pushRecordedEnd } from "./a2a-push.ts";
 
 const writeEnd = async (
   executor: Executor,
@@ -42,6 +43,16 @@ const writeEnd = async (
   messageId: string,
   state: A2aTaskEndState,
 ): Promise<TaskRow | undefined> => {
+  // why: the run a cancel was owed to has ended, so the sweep owes it nothing more
+  await executor
+    .update(a2aTaskTable)
+    .set({ canceledAt: null })
+    .where(
+      and(
+        eq(a2aTaskTable.chatId, chatId),
+        eq(a2aTaskTable.messageId, messageId),
+      ),
+    );
   const replyId = (await firstReply(chatId, messageId, executor)) ?? null;
   const [recorded] = await executor
     .update(a2aTaskTable)
@@ -134,12 +145,7 @@ const pushOwedInChat = async (chatId: string): Promise<void> => {
         a2aPushConfigTable,
         eq(a2aPushConfigTable.taskId, a2aTaskTable.id),
       )
-      .where(
-        and(
-          eq(a2aTaskTable.chatId, chatId),
-          isNull(a2aPushConfigTable.notifiedAt),
-        ),
-      );
+      .where(and(eq(a2aTaskTable.chatId, chatId), pushPending()));
     await Promise.all(tasks.map(pushEnd));
   } catch (error) {
     logger.error({ error, chatId }, "A2A push notification failed");
@@ -165,27 +171,50 @@ export const turnEnded = async ({
   await pushOwedInChat(chatId);
 };
 
-const MISSED_PUSH_SWEEP_LIMIT = 100;
+const MISSED_SWEEP_LIMIT = 100;
+
+// why: a Task whose Chat row is gone has stopped too, and derives the end a null Chat status gives
+const chatStopped = () =>
+  or(isNull(chatTable.status), ne(chatTable.status, "running"));
+
+// why: a crash can lose a run's end; record it here once its Chat stops, so no reader derives it
+const recordMissedEnds = async (): Promise<void> => {
+  const tasks = await readTaskRows(
+    and(isNull(a2aTaskTable.state), chatStopped()),
+    { limit: MISSED_SWEEP_LIMIT },
+  );
+  for (const task of tasks) await statusOf(task);
+};
+
+const pushMissedEnds = async (): Promise<void> => {
+  const rows = await db
+    .select()
+    .from(a2aTaskTable)
+    .innerJoin(
+      a2aPushConfigTable,
+      eq(a2aPushConfigTable.taskId, a2aTaskTable.id),
+    )
+    .innerJoin(chatTable, eq(chatTable.id, a2aTaskTable.chatId))
+    .where(
+      and(
+        pushPending(),
+        pushLeaseExpired(),
+        or(isNotNull(a2aTaskTable.state), chatStopped()),
+      ),
+    )
+    .limit(MISSED_SWEEP_LIMIT);
+  const tasks = new Map(rows.map(({ a2a_task }) => [a2a_task.id, a2a_task]));
+  for (const task of tasks.values()) void pushEnd(task);
+};
 
 export const sweepMissedEnds = async (): Promise<void> => {
   try {
-    const rows = await db
-      .select()
-      .from(a2aTaskTable)
-      .innerJoin(
-        a2aPushConfigTable,
-        eq(a2aPushConfigTable.taskId, a2aTaskTable.id),
-      )
-      .innerJoin(chatTable, eq(chatTable.id, a2aTaskTable.chatId))
-      .where(
-        and(
-          isNull(a2aPushConfigTable.notifiedAt),
-          or(isNotNull(a2aTaskTable.state), ne(chatTable.status, "running")),
-        ),
-      )
-      .limit(MISSED_PUSH_SWEEP_LIMIT);
-    const tasks = new Map(rows.map(({ a2a_task }) => [a2a_task.id, a2a_task]));
-    for (const task of tasks.values()) void pushEnd(task);
+    await recordMissedEnds();
+  } catch (error) {
+    logger.error({ error }, "Recording missed A2A Task ends failed");
+  }
+  try {
+    await pushMissedEnds();
   } catch (error) {
     logger.error({ error }, "Sweeping for missed A2A pushes failed");
   }
@@ -218,8 +247,8 @@ export const cancelTask = async (
   });
   if (!claimed) return undefined;
 
-  // why: the cancel is recorded; a run this message misses is stopped by the sweep
-  await cancelRun(task.chatId, { startedBefore: canceledAt }).catch(
+  // why: the cancel names the turn it claimed, so no run of a later turn is stopped
+  await cancelRun(task.chatId, { turnId: task.messageId }).catch(
     (error: unknown) =>
       logger.error({ error, taskId: task.id }, "Sending an A2A cancel failed"),
   );

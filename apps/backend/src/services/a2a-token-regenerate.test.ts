@@ -10,6 +10,7 @@ import {
 import type { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { migratedPglite } from "../db/migrated-pglite.test-fixtures.ts";
+import { seedA2aWorkspace } from "./a2a.test-fixtures.ts";
 import { hashBearerToken } from "./bearer-token.ts";
 import { NotFoundError } from "../errors.ts";
 
@@ -29,17 +30,10 @@ const DAY = 24 * 60 * 60 * 1000;
 let pg: PGlite;
 beforeAll(async () => {
   pg = await migratedPglite();
+  await seedA2aWorkspace(pg);
   await pg.exec(`
-    INSERT INTO "user" ("id", "name", "email", "email_verified", "created_at", "updated_at")
-      VALUES ('u1', 'Jane', 'jane@example.com', true, now(), now());
-    INSERT INTO "organization" ("id", "name") VALUES ('org-1', 'Acme');
     INSERT INTO "workspace" ("id", "organization_id", "owner_id", "name")
-      VALUES ('ws-1', 'org-1', 'u1', 'Support'),
-             ('ws-2', 'org-1', 'u1', 'Other');
-    INSERT INTO "provider" ("id", "workspace_id", "name", "provider_type", "api_key", "task_model_id", "memory_extraction_model_id", "modelIds")
-      VALUES ('p1', 'ws-1', 'P', 'openai', 'k', 'm', 'm', '[]');
-    INSERT INTO "agent" ("id", "workspace_id", "provider_id", "name", "description", "model_id")
-      VALUES ('agent-1', 'ws-1', 'p1', 'Helper', 'Helps', 'm');
+      VALUES ('ws-2', 'org-1', 'u1', 'Other');
     INSERT INTO "a2a_endpoint" ("id", "workspace_id", "agent_id", "name", "description")
       VALUES ('ep-1', 'ws-1', 'agent-1', 'Helper', 'Helps');
   `);

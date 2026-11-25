@@ -4,6 +4,7 @@ import {
   callTool,
   dbError,
   mockDb,
+  renderSql,
   resetMockDb,
   seedDb,
 } from "../test-utils.ts";
@@ -159,15 +160,12 @@ describe("createMemoryTools", () => {
 
       await callTool(tools.memorySearch, { query: "x", limit: 7 });
 
-      const { strings, values } = mockDb.execute.mock.calls[0][0] as {
-        strings: string[];
-        values: unknown[];
-      };
-      const boundAfter = (fragment: RegExp) =>
-        values[strings.findIndex((part) => fragment.test(part))];
-      expect(boundAfter(/user_id =\s*$/)).toBe(userId);
-      expect(boundAfter(/workspace_id =\s*$/)).toBe(workspaceId);
-      expect(boundAfter(/LIMIT\s*$/)).toBe(7);
+      const { sql, params } = renderSql(mockDb.execute.mock.calls[0][0]);
+      expect(sql).toMatch(/user_id = \$2\s+AND workspace_id = \$3/);
+      expect(sql).toMatch(/LIMIT \$5\s*$/);
+      expect(params[1]).toBe(userId);
+      expect(params[2]).toBe(workspaceId);
+      expect(params[4]).toBe(7);
     });
 
     it("maps matched rows to date, summary and relevance", async () => {
