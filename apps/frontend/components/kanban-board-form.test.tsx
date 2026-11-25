@@ -7,6 +7,7 @@ import {
   resetFormHarness,
   setDataFor,
   stubAcceptedSave,
+  stubRejectedSave,
   toastSuccess,
 } from "@/test/form-test-harness";
 
@@ -50,5 +51,38 @@ describe("KanbanBoardForm success feedback", () => {
       expect(toastSuccess).toHaveBeenCalledWith("Board updated"),
     );
     expect(push).not.toHaveBeenCalled();
+  });
+});
+
+describe("KanbanBoardForm label errors", () => {
+  it("shows a rejected labels write and clears it on the next label edit", async () => {
+    setDataFor("/boards/b1", {
+      id: "b1",
+      name: "Roadmap",
+      description: "",
+      labels: [{ id: "l1", name: "Bug", color: "#ef4444" }],
+    });
+    stubRejectedSave([
+      { path: ["labels"], message: "A label name must be unique" },
+    ]);
+
+    render(<KanbanBoardForm orgId="org1" workspaceId="ws1" boardId="b1" />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Save" }));
+
+    expect(
+      await screen.findByText("A label name must be unique"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+
+    const labelName = screen.getByPlaceholderText("Label name");
+    fireEvent.change(labelName, { target: { value: "Bugfix" } });
+
+    await waitFor(() =>
+      expect(
+        screen.queryByText("A label name must be unique"),
+      ).not.toBeInTheDocument(),
+    );
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
   });
 });
