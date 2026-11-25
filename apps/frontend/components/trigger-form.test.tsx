@@ -21,26 +21,15 @@ import {
   toastSuccess,
 } from "@/test/form-test-harness";
 import { triggerCreateSchema, triggerUpdateSchema } from "@platypus/schemas";
-import { expectSentBodyToMatchSchema, selectOption } from "@/test/test-utils";
-import { getBrowserTimezone } from "@/lib/timezones";
+import {
+  expectSentBodyToMatchSchema,
+  selectOption,
+  selectTimezone,
+} from "@/test/test-utils";
+import { getBrowserTimezone, TIMEZONES } from "@/lib/timezones";
 
 vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("swr", () => swrMock);
-// why: the full IANA list pushes a two-pick test past the CI timeout
-vi.mock("@/lib/timezones", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/timezones")>();
-  return {
-    ...actual,
-    TIMEZONES: [
-      ...new Set([
-        "UTC",
-        "Asia/Tokyo",
-        "Pacific/Chatham",
-        actual.getBrowserTimezone(),
-      ]),
-    ],
-  };
-});
 
 import { TriggerForm } from "./trigger-form";
 
@@ -335,6 +324,23 @@ describe("TriggerForm — Extract Memories", () => {
 });
 
 describe("TriggerForm — default timezone", () => {
+  it("lets a new Trigger pick any zone in the full list, even past the first page", async () => {
+    const fetchMock = stubAcceptedSave({ id: "trigger-1" });
+    const zone = TIMEZONES[TIMEZONES.length - 1];
+    render(<TriggerForm orgId="org1" workspaceId="ws1" />);
+    expect(await screen.findByText("Agent")).toBeInTheDocument();
+
+    await selectTimezone(getBrowserTimezone(), zone);
+
+    expect(
+      screen.getByRole("combobox", { name: "Timezone" }),
+    ).toHaveTextContent(zone);
+    expect(
+      screen.getByRole("combobox", { name: "Timezone" }),
+    ).not.toHaveAttribute("aria-describedby");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("moves a new Trigger onto the User timezone when the session lands after mount", async () => {
     const fetchMock = stubAcceptedSave({ id: "trigger-1" });
     authState.user = null;
@@ -366,9 +372,9 @@ describe("TriggerForm — default timezone", () => {
     const { rerender } = render(<TriggerForm orgId="org1" workspaceId="ws1" />);
     expect(await screen.findByText("Agent")).toBeInTheDocument();
 
-    // why: Radix only reports a change, so pick away and back to re-pick
-    await selectOption(browserZone, otherZone);
-    await selectOption(otherZone, browserZone);
+    // why: the picker only reports a change, so pick away and back to re-pick
+    await selectTimezone(browserZone, otherZone);
+    await selectTimezone(otherZone, browserZone);
 
     authState.user = { id: "u1", timezone: "Pacific/Chatham" };
     rerender(<TriggerForm orgId="org1" workspaceId="ws1" />);
