@@ -24,16 +24,6 @@ import type {
   InvitationLinkResolution,
 } from "@platypus/schemas";
 
-/**
- * Redeems an invitation link (#549, ADR-0019). Three arrival states,
- * decided by session vs. the invited address:
- *
- * - No session: a registration form with the email fixed (never editable —
- *   it comes from the token, not from what someone types).
- * - Signed in as the invited address: a single Accept action.
- * - Signed in as a different address: refused, with an explanation and a
- *   sign-out offer, and the Invitation stays pending.
- */
 export default function InviteTokenPage() {
   const { token } = useParams<{ token: string }>();
   const router = useRouter();
@@ -42,17 +32,12 @@ export default function InviteTokenPage() {
   const backendUrl = useBackendUrl();
   const { mutate } = useSWRConfig();
 
-  // The token lives only in this page's own state after the first render —
-  // the URL itself is scrubbed below so a bearer credential doesn't linger
-  // in the address bar, browser history, or an outbound referrer header.
   const [redeemToken] = useState(token);
 
   useEffect(() => {
     window.history.replaceState(null, "", withBasePath(appRoutes.invite));
   }, []);
 
-  // Raw `useSWR`, not `useScopedSWR`: the link resolves before sign-in, so
-  // a failure here is no sign of an ended session.
   const { data, error, isLoading } = useSWR<
     Serialized<InvitationLinkResolution> | null,
     unknown
@@ -70,8 +55,6 @@ export default function InviteTokenPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSigningIn, setIsSigningIn] = useState(false);
 
-  // Land in the Workspace the accept just provisioned, not the root — for a
-  // member of other Organizations "/" may resolve to a different one.
   const enterWorkspace = ({
     organizationId,
     workspaceId,
@@ -95,8 +78,6 @@ export default function InviteTokenPage() {
         }
         return;
       }
-      // This endpoint sets cookies outside Better Auth's client. Refresh its
-      // session store before navigating into a protected page.
       await refreshSession();
       enterWorkspace(outcome.data);
     } finally {
@@ -118,8 +99,6 @@ export default function InviteTokenPage() {
         setFormError(result.error.message || "Sign in failed");
         return;
       }
-      // Stay here with the token in memory. The invited-account state below
-      // offers Accept after the session refresh, without exposing the URL again.
       await refreshSession();
       setPassword("");
     } catch {
@@ -141,7 +120,6 @@ export default function InviteTokenPage() {
       setFormError(outcome.message);
       return;
     }
-    // The sidebar's Organization list now has one more.
     void mutate(scopedUrl(backendUrl, "organizations", {}));
     enterWorkspace(outcome.data);
   };
@@ -151,8 +129,6 @@ export default function InviteTokenPage() {
   };
 
   if (isLoading || isAuthPending) {
-    // Shaped like the registration form, the state a fresh link most often
-    // lands on: heading and invite line, then email, name, password, submit.
     return (
       <InviteShell>
         <LoadingRegion
@@ -195,8 +171,6 @@ export default function InviteTokenPage() {
     );
   }
 
-  // Signed in as someone other than the invited address: refuse, explain,
-  // offer sign-out, and leave the Invitation pending (untouched).
   if (user && user.email !== data.email) {
     return (
       <InviteShell className="flex flex-col gap-4 text-center">
@@ -214,7 +188,6 @@ export default function InviteTokenPage() {
     );
   }
 
-  // Signed in as the invited address: a single Accept action.
   if (user && user.email === data.email) {
     return (
       <InviteShell className="flex flex-col gap-6 text-center">
@@ -241,7 +214,6 @@ export default function InviteTokenPage() {
     );
   }
 
-  // No session: register or sign in here, retaining the resolved token.
   return (
     <InviteShell className="flex flex-col gap-8">
       <div className="text-center">

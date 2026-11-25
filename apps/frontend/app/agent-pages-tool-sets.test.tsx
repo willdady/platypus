@@ -1,9 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render } from "@testing-library/react";
 
-// The Agent form itself is exercised in components/agent-form.test.tsx. Here it
-// stands in as a prop recorder so these tests stay about what the *pages* hand
-// it after reading the tool sets.
 const { formProps } = vi.hoisted(() => ({
   formProps: { current: null as Record<string, unknown> | null },
 }));
@@ -19,7 +16,6 @@ vi.mock("next/headers", () => ({
   headers: async () => new Headers({ cookie: "better-auth.session_token=abc" }),
 }));
 
-// The page shell renders a back button, which needs a router.
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), back: vi.fn() }),
 }));
@@ -41,14 +37,12 @@ function stubFetch(body: unknown, status = 200) {
   );
 }
 
-/** Runs a page the way Next does: resolve it, then render what it returned. */
 async function renderPage(page: (typeof pages)[number]) {
   const element = await page.render();
   render(element);
   return element;
 }
 
-// Each page under test, with the params it takes.
 const pages = [
   {
     name: "workspace Agent create",

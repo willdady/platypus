@@ -49,10 +49,6 @@ const RAW_WRITE_FETCH = {
     "Writes go through writeEntity()/writeAt() in lib/api-write.ts, not a raw fetch() — see ADR-0010 and #563.",
 };
 
-// A backend path is built by `scopedUrl`/`scopedPath` (lib/api-write.ts), or by
-// `backendPath` (lib/server-read.ts) on the server — a tagged template, so
-// exempt here. A hand-built copy is a second spelling of the SWR key, and seeding
-// or invalidation silently misses when the two drift (#1554).
 const HAND_BUILT_ORG_PATH = {
   selector:
     "TemplateLiteral[quasis.0.value.raw=/^\\/organizations\\//]:not(TaggedTemplateExpression > .quasi)",
@@ -60,18 +56,12 @@ const HAND_BUILT_ORG_PATH = {
     "Build backend paths with scopedUrl()/scopedPath() from lib/api-write.ts (or backendPath on the server), not a template literal.",
 };
 
-// Call sites allowed a raw write `fetch()` (see the rule below).
 const RAW_FETCH_EXEMPT = [
   "lib/api-write.ts",
   "components/agent-form.tsx",
   "hooks/use-shared-resource-actions.ts",
 ];
 
-// Top-level functions are declarations (`function X() {}`), not a const holding
-// an arrow or function expression. `func-style: "declaration"` can't do this:
-// it also flags every `const handleX = () => …` inside a component, which stay
-// arrows. Lives in `no-restricted-syntax`, so every block setting that rule
-// spreads it in.
 const TOP_LEVEL_FUNCTION_DECLARATIONS = {
   selector:
     ":matches(Program, Program > ExportNamedDeclaration) > VariableDeclaration > VariableDeclarator > :matches(ArrowFunctionExpression, FunctionExpression)",
@@ -79,8 +69,6 @@ const TOP_LEVEL_FUNCTION_DECLARATIONS = {
     "Declare top-level functions and components with `function`, not a const arrow.",
 };
 
-// A disabled item's badge is drawn by hand instead of through the shared
-// primitive (`card-conventions`), so its icon, weight and casing drift.
 const DISABLED_BADGE = {
   selector:
     ":matches(JSXElement[openingElement.name.name='Badge']:has(JSXText[value=/^\\s*Disabled\\s*$/]), JSXElement[openingElement.name.name='Badge']:has(JSXExpressionContainer > Literal[value='Disabled']))",
@@ -88,9 +76,6 @@ const DISABLED_BADGE = {
     "Render a disabled item's badge with DisabledBadge from components/disabled-badge, not a hand-built Badge.",
 };
 
-// An element that announces itself as "Loading …" is a copy of
-// LoadingRegion's `status` frame (`ui-conventions`). A lone Skeleton that holds
-// a control's slot is not a region; each such call site is exempted below.
 const HAND_BUILT_LOADING_REGION = {
   selector:
     ":matches(JSXOpeningElement:has(JSXAttribute[name.name='aria-label'][value.value=/^Loading /]), JSXOpeningElement:has(JSXAttribute[name.name='aria-label'][value.expression.quasis.0.value.raw=/^Loading /]))",
@@ -98,17 +83,12 @@ const HAND_BUILT_LOADING_REGION = {
     'Wrap a skeleton in LoadingRegion from components/list-skeletons (label="Loading …"), not an aria-label of your own.',
 };
 
-// Every DropdownMenu is either a row's ⋮ menu, which RowActionsMenu builds
-// (`card-conventions`), or one of the different uses exempted below. A
-// hand-built row menu otherwise drifts in item order and separator.
 const HAND_BUILT_ROW_ACTIONS_MENU = {
   selector: "JSXOpeningElement[name.name='DropdownMenu']",
   message:
     "Build a list row's ⋮ menu with RowActionsMenu from components/row-actions-menu, not DropdownMenu primitives.",
 };
 
-// An inline by-name comparator is a copy of sortByName (#1863), which also
-// keeps the input array unmutated.
 const INLINE_NAME_SORT = {
   selector:
     "CallExpression[callee.property.name=/^(sort|toSorted)$/]:has(CallExpression[callee.property.name='localeCompare'][callee.object.property.name='name'])",
@@ -116,7 +96,6 @@ const INLINE_NAME_SORT = {
     "Sort by name with sortByName() from lib/utils, not an inline comparator.",
 };
 
-// Every `no-restricted-syntax` rule, by the name a block excludes.
 const SYNTAX_RULES = {
   topLevelFunctions: TOP_LEVEL_FUNCTION_DECLARATIONS,
   rawWriteFetch: RAW_WRITE_FETCH,
@@ -127,7 +106,6 @@ const SYNTAX_RULES = {
   sortByName: INLINE_NAME_SORT,
 };
 
-/** The `no-restricted-syntax` entry for a block, minus the rules it exempts. */
 function syntaxRules(...exempt) {
   return [
     "error",
@@ -140,18 +118,12 @@ function syntaxRules(...exempt) {
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
-  // The full type-checked preset, scoped to TypeScript so `.mjs` config files
-  // stay linted without type information. It comes before every block below so
-  // their settings win — notably the `no-unused-vars` warning, which the
-  // preset would otherwise make an error.
   ...tseslint.configs.recommendedTypeChecked.map((config) => ({
     ...config,
     files: TS_FILES,
   })),
   // eslint-config-next sets `settings.react.version = "detect"`, which makes
   // eslint-plugin-react@7.37.5 call the `context.getFilename()` API that was
-  // removed in ESLint 10, crashing every lint run. Pin an explicit version to
-  // skip auto-detection. Remove once eslint-plugin-react ships ESLint 10 support.
   {
     settings: {
       react: {
@@ -159,16 +131,10 @@ const eslintConfig = defineConfig([
       },
     },
     rules: {
-      // Allow the destructure-to-omit pattern (e.g. `const { id, ...rest } = obj`)
-      // where the named siblings are intentionally discarded.
       "@typescript-eslint/no-unused-vars": [
         "warn",
         { ignoreRestSiblings: true },
       ],
-      // next/core-web-vitals ships only a handful of jsx-a11y rules. These
-      // catch the mouse-only controls and unlabelled fields #1481 found by
-      // hand: a click handler on a non-interactive element with no keyboard
-      // equivalent, and a label tied to nothing.
       "jsx-a11y/click-events-have-key-events": "error",
       "jsx-a11y/no-static-element-interactions": "error",
       "jsx-a11y/label-has-associated-control": [
@@ -185,10 +151,6 @@ const eslintConfig = defineConfig([
     plugins: { local: { rules: { "no-comments": noComments } } },
     rules: { "local/no-comments": "error" },
   },
-  // Type-aware rules for TypeScript files. `project` lists both tsconfigs
-  // rather than using `projectService`: the app tsconfig excludes the tests,
-  // and `projectService` only finds a file's nearest `tsconfig.json`, so every
-  // test file would fail to parse.
   {
     files: TS_FILES,
     languageOptions: {
@@ -198,30 +160,18 @@ const eslintConfig = defineConfig([
       },
     },
     rules: {
-      // `typeof import("…")` stays allowed: it's Vitest's idiom for typing
-      // `importOriginal`/`vi.importActual` inside a `vi.mock` factory.
       "@typescript-eslint/consistent-type-imports": [
         "error",
         { disallowTypeAnnotations: false },
       ],
       "@typescript-eslint/consistent-type-definitions": ["error", "type"],
       "@typescript-eslint/no-floating-promises": "error",
-      // React ignores the promise an event handler returns, so `onClick={async
-      // () => …}` is fine; wrapping each in `void` would only add noise.
       "@typescript-eslint/no-misused-promises": [
         "error",
         { checksVoidReturn: { attributes: false } },
       ],
     },
   },
-  // A write (any `fetch` call whose `method` is anything but `"GET"`) must go
-  // through the typed-outcome request module (lib/api-write.ts, #563) rather
-  // than a hand-rolled call — that module is the only seam that maps the
-  // backend's ADR-0010 error responses consistently. A handful of call sites
-  // predate the module and can't move onto it (see the comment at each): a
-  // better-auth admin action needing a bespoke `Origin` header, a multipart
-  // avatar upload, and the shared Promote write (every Shared resource's) whose
-  // 422 "blockers" checklist the module's outcome type doesn't carry.
   {
     files: ["**/*.ts", "**/*.tsx"],
     ignores: RAW_FETCH_EXEMPT,
@@ -229,8 +179,6 @@ const eslintConfig = defineConfig([
       "no-restricted-syntax": syntaxRules(),
     },
   },
-  // The files exempt from the raw-fetch rule above still get the others, bar
-  // lib/api-write.ts, home of the `scopedPath` everyone else must use.
   {
     files: RAW_FETCH_EXEMPT,
     ignores: ["lib/api-write.ts"],
@@ -244,104 +192,80 @@ const eslintConfig = defineConfig([
       "no-restricted-syntax": syntaxRules("rawWriteFetch", "handBuiltOrgPath"),
     },
   },
-  // Each convention primitive's own module draws the pattern by definition,
-  // and each inspection's one-line reason covers a legitimately different use.
   {
-    // Home of DisabledBadge.
     files: ["components/disabled-badge.tsx"],
     rules: { "no-restricted-syntax": syntaxRules("disabledBadge") },
   },
   {
-    // Home of LoadingRegion.
     files: ["components/list-skeletons.tsx"],
     rules: { "no-restricted-syntax": syntaxRules("loadingRegion") },
   },
   {
-    // Home of RowActionsMenu.
     files: ["components/row-actions-menu.tsx"],
     rules: { "no-restricted-syntax": syntaxRules("rowActionsMenu") },
   },
   {
-    // The chat sidebar's ⋮ menu is a navigation row with tags and pinning, not
-    // a card's action menu, so it keeps its own content and order.
     files: ["components/app-sidebar.tsx"],
     rules: { "no-restricted-syntax": syntaxRules("rowActionsMenu") },
   },
   {
-    // The notification bell's list, not a row's actions.
     files: ["components/notifications-dropdown.tsx"],
     rules: { "no-restricted-syntax": syntaxRules("rowActionsMenu") },
   },
   {
-    // The theme picker, not a row's actions.
     files: ["components/mode-toggle.tsx"],
     rules: { "no-restricted-syntax": syntaxRules("rowActionsMenu") },
   },
   {
-    // The workspace settings links in the header, not a row's actions.
     files: ["components/header.tsx"],
     rules: { "no-restricted-syntax": syntaxRules("rowActionsMenu") },
   },
   {
-    // The Organization/Workspace switcher, not a row's actions.
     files: ["components/workspace-switcher.tsx"],
     rules: { "no-restricted-syntax": syntaxRules("rowActionsMenu") },
   },
   {
-    // The board switcher in the board's own header, not a row's actions.
     files: ["components/kanban-board.tsx"],
     rules: { "no-restricted-syntax": syntaxRules("rowActionsMenu") },
   },
   {
-    // The assignee picker inside a card dialog, not a row's actions.
     files: ["components/kanban-card-dialog.tsx"],
     rules: { "no-restricted-syntax": syntaxRules("rowActionsMenu") },
   },
   {
-    // Vendored AI Elements pickers (models, tools), not a row's actions.
     files: ["components/ai-elements/**"],
     rules: { "no-restricted-syntax": syntaxRules("rowActionsMenu") },
   },
   {
-    // A test that renders the DropdownMenu primitive itself, not a row's menu.
     files: TEST_FILES,
     rules: { "no-restricted-syntax": syntaxRules("rowActionsMenu") },
   },
   {
-    // Home of sortByName.
     files: ["lib/utils.ts"],
     rules: { "no-restricted-syntax": syntaxRules("sortByName") },
   },
   {
-    // Slash commands sort by tier first; the name is only the tie-breaker.
     files: ["lib/slash-commands.ts"],
     rules: { "no-restricted-syntax": syntaxRules("sortByName") },
   },
   {
-    // The account menu in the header, not a row in a list; its trigger's
-    // placeholder is one Skeleton, not a container.
     files: ["components/user-menu.tsx"],
     rules: {
       "no-restricted-syntax": syntaxRules("rowActionsMenu", "loadingRegion"),
     },
   },
   {
-    // Stands in for the model trigger's label; one Skeleton, not a container.
     files: ["components/model-selector-dialog.tsx"],
     rules: { "no-restricted-syntax": syntaxRules("loadingRegion") },
   },
   {
-    // A count badge's placeholder; one Skeleton, not a container.
     files: ["components/manage-sharing.tsx"],
     rules: { "no-restricted-syntax": syntaxRules("loadingRegion") },
   },
   {
-    // A summary stat's value placeholder; one Skeleton, not a container.
     files: ["app/\\[orgId\\]/workspace/\\[workspaceId\\]/(sidebar)/page.tsx"],
     rules: { "no-restricted-syntax": syntaxRules("loadingRegion") },
   },
-  // Tailwind: `size-N` over a matching `h-N w-N` pair (and the other
-  // shorthands), and `flex flex-col gap-*` over `space-y-*`.
   {
     plugins: { "better-tailwindcss": betterTailwindcss },
     settings: {
@@ -362,8 +286,6 @@ const eslintConfig = defineConfig([
       ],
     },
   },
-  // The frontend never compiles backend source: the Chat UI message contract
-  // it shares with the backend lives in `@platypus/schemas` (#1505).
   {
     rules: {
       "no-restricted-imports": [
@@ -385,9 +307,6 @@ const eslintConfig = defineConfig([
       ],
     },
   },
-  // A hook lives in `hooks/`, not in a component module. The exceptions pair a
-  // hook with the context it reads, which their module keeps private; `ui/`
-  // and `ai-elements/` are vendored (shadcn, AI Elements).
   {
     files: ["components/**/*.ts", "components/**/*.tsx"],
     ignores: [
@@ -404,8 +323,6 @@ const eslintConfig = defineConfig([
       ],
     },
   },
-  // `lib/` holds plain helpers; a component (a PascalCase export) belongs in
-  // `components/`.
   {
     files: ["lib/**/*.ts", "lib/**/*.tsx"],
     ignores: TEST_FILES,
@@ -416,13 +333,11 @@ const eslintConfig = defineConfig([
       ],
     },
   },
-  // Test files: Vitest, Testing Library and jest-dom rules.
   {
     files: TEST_FILES,
     plugins: { vitest },
     rules: {
       ...vitest.configs.recommended.rules,
-      // A helper named `expect…` (e.g. `expectThemedSpinner`) asserts too.
       "vitest/expect-expect": [
         "error",
         { assertFunctionNames: ["expect", "expect*"] },
@@ -438,16 +353,9 @@ const eslintConfig = defineConfig([
     files: TEST_FILES,
     rules: {
       "testing-library/prefer-screen-queries": "error",
-      // Ratchets: warnings, not errors, because the existing tests have too
-      // many to fix in one change (150, 31 and 23 when these rules landed),
-      // and many need an accessible name or role the component lacks. Fix
-      // them as you touch a file, and make each an error once it reaches 0.
       "testing-library/no-node-access": "warn",
       "testing-library/no-container": "warn",
       "testing-library/no-unnecessary-act": "warn",
-      // Flags any variable a `render…` helper's result is assigned to, which
-      // misfires on our own helpers that return something else (a spy, a
-      // list of forms).
       "testing-library/render-result-naming-convention": "off",
     },
   },
@@ -455,42 +363,26 @@ const eslintConfig = defineConfig([
     files: TEST_FILES,
     ...jestDom.configs["flat/recommended"],
   },
-  // Ratchets on the type-checked preset, for test files only: app code and
-  // the `test/` helpers hold every one of these as an error. Each count is the
-  // current violations, so a rule that gains one is visible in the diff. Fix
-  // them as you touch a file, and make each rule an error once it reaches 0.
-  // `require-await` is off outright: see the note beside it.
   {
     files: TEST_FILES,
     rules: {
-      // Every occurrence is a test double that must stay `async`: React
-      // Testing Library's `act(async () => …)` flushes microtasks, and a
-      // mocked `Response.json()` / `next/headers` `headers()` returns a
-      // Promise by contract. Removing `async` would change what the test
-      // does, so this one is off rather than ratcheted.
       "@typescript-eslint/require-await": "off",
-      "@typescript-eslint/no-unsafe-member-access": "warn", // 39
-      "@typescript-eslint/no-unnecessary-type-assertion": "warn", // 35
-      "@typescript-eslint/no-unsafe-assignment": "warn", // 21
-      "@typescript-eslint/unbound-method": "warn", // 13
-      "@typescript-eslint/no-unsafe-return": "warn", // 10
-      "@typescript-eslint/no-base-to-string": "warn", // 8
-      "@typescript-eslint/no-unsafe-call": "warn", // 7
-      "@typescript-eslint/no-unsafe-argument": "warn", // 6
-      "@typescript-eslint/prefer-promise-reject-errors": "warn", // 1
+      "@typescript-eslint/no-unsafe-member-access": "warn",
+      "@typescript-eslint/no-unnecessary-type-assertion": "warn",
+      "@typescript-eslint/no-unsafe-assignment": "warn",
+      "@typescript-eslint/unbound-method": "warn",
+      "@typescript-eslint/no-unsafe-return": "warn",
+      "@typescript-eslint/no-base-to-string": "warn",
+      "@typescript-eslint/no-unsafe-call": "warn",
+      "@typescript-eslint/no-unsafe-argument": "warn",
+      "@typescript-eslint/prefer-promise-reject-errors": "warn",
     },
   },
-  // Override default ignores of eslint-config-next.
   globalIgnores([
-    // Default ignores of eslint-config-next:
     ".next/**",
     "out/**",
     "build/**",
     "next-env.d.ts",
-    // Vitest's coverage report. Generated JavaScript, and it carries its own
-    // `eslint-disable` headers that this config then reports as unused — so a
-    // developer who has run `test:coverage` lints a different set of warnings
-    // from CI, which has no such directory.
     "coverage/**",
   ]),
 ]);

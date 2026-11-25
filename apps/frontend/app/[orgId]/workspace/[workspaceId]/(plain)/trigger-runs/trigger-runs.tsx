@@ -32,12 +32,7 @@ import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { fetcher } from "@/lib/utils";
 import { PageHeader } from "@/components/page-header";
 
-/**
- * How many runs a page of the list holds. The endpoint caps a request at 100;
- * runs are pruned per Trigger — to `maxRunsToKeep`, everything inside the
- * run-rate breaker's window, and the newest suppressed rows — so the volume
- * behind this list is bounded and plain offset paging is enough.
- */
+// why: the endpoint caps a page at 100 and runs are pruned, so offset paging is enough
 const PAGE_SIZE = 50;
 
 type RunPage = Serialized<TriggerRunWithTriggerList>;
@@ -51,16 +46,12 @@ function TriggerRunsPage({
 
   const { user } = useAuth();
   const backendUrl = useBackendUrl();
-  // No page param: the list pages by "Load more", not the URL.
   const { get, set } = useListParams();
 
-  // Both filters live in the URL, so a filtered view survives a refresh and can
-  // be handed to someone else as a link.
   const triggerFilter = get("triggerId") ?? "";
   const statusFilter = get("status") ?? "";
   const isFiltered = Boolean(triggerFilter || statusFilter);
 
-  // Fired One-offs too: their runs are listed here, filterable by name.
   const { results: triggers } = useScopedList<Trigger>(
     triggerListEntity({ includeFired: true }),
     { orgId, workspaceId },
@@ -69,7 +60,6 @@ function TriggerRunsPage({
   const getKey = useCallback(
     (index: number, previous: RunPage | null) => {
       if (!backendUrl || !user) return null;
-      // A short page is the last one — stop asking for another.
       if (previous && previous.results.length < PAGE_SIZE) return null;
       const query = new URLSearchParams({
         limit: String(PAGE_SIZE),
@@ -77,8 +67,7 @@ function TriggerRunsPage({
       });
       if (triggerFilter) query.set("triggerId", triggerFilter);
       if (statusFilter) query.set("status", statusFilter);
-      // `useSWRInfinite` owns its own keys, so this is the one read that
-      // still gates itself — but the path shape still comes from `scopedUrl`.
+      // why: useSWRInfinite owns its keys; scopedUrl still supplies the path shape
       return scopedUrl(backendUrl, `trigger-runs?${query.toString()}`, {
         orgId,
         workspaceId,
@@ -90,15 +79,11 @@ function TriggerRunsPage({
   const { data, error, size, setSize, isLoading, mutate } = useSWRInfinite<
     RunPage,
     unknown
-  >(
-    getKey,
-    fetcher,
-    // Every page already loaded refreshes on each tick, so a run can be watched
-    // moving from 'running' to a terminal status wherever it sits in the list.
-    // A run completing mid-session can shunt a row across a page boundary and
-    // show it twice for one tick; that self-corrects on the next.
-    { refreshInterval: 10000, refreshWhenHidden: false, revalidateAll: true },
-  );
+  >(getKey, fetcher, {
+    refreshInterval: 10000,
+    refreshWhenHidden: false,
+    revalidateAll: true,
+  });
 
   useRevalidateOnRestore(() => void mutate());
 
@@ -127,17 +112,12 @@ function TriggerRunsPage({
 
   return (
     <div className="flex justify-center py-8">
-      {/* The side gutter stays at every width: between the tablet and desktop
-      breakpoints the column is the full content area, and without it the list
-      touched the viewport edges. The widths are the workspace home page's, so
-      the two read as one app. */}
       <div className="w-full px-4 md:px-8 xl:w-4/5 max-w-4xl">
         <PageHeader
           title="Trigger runs"
           description="Recent runs from every trigger in this workspace, newest first."
         />
 
-        {/* The parent supplies the space below the toolbar. */}
         <div className="mb-4">
           <ListToolbar>
             <Select
@@ -149,11 +129,6 @@ function TriggerRunsPage({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value={ALL}>All triggers</SelectItem>
-                {/* The filtered Trigger, while the dropdown's own list is still
-                in flight or after that Trigger was deleted. Without an item
-                carrying the value, the control falls back to "All triggers"
-                and misreports a list that is filtered. The runs themselves
-                name their Trigger, so the label is right on arrival. */}
                 {unlistedTrigger && (
                   <SelectItem value={unlistedTrigger.id}>
                     {unlistedTrigger.name}
@@ -176,7 +151,6 @@ function TriggerRunsPage({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value={ALL}>All statuses</SelectItem>
-                {/* The domain's own status vocabulary, not a hand-written copy. */}
                 {triggerRunStatusSchema.options.map((status) => (
                   <SelectItem key={status} value={status}>
                     {TRIGGER_RUN_STATUS_LABELS[status]}
@@ -187,9 +161,6 @@ function TriggerRunsPage({
           </ListToolbar>
         </div>
 
-        {/* No data and no error is loading — including the frames before the
-          session resolves, when `getKey` has no key yet and SWR reports
-          `isLoading: false`. Reading `isLoading` alone flashed "No runs yet". */}
         {!data && !error ? (
           <LoadingRegion
             label="Loading trigger runs"
@@ -200,9 +171,6 @@ function TriggerRunsPage({
             ))}
           </LoadingRegion>
         ) : error && runs.length === 0 ? (
-          // A read that failed is not an empty result. Saying "nothing matched"
-          // here would be a claim about data the page never received — and the
-          // likeliest cause is a filter in the URL the endpoint rejected.
           <EmptyCard
             icon={<TriangleAlert />}
             title="Couldn't load runs"
@@ -223,9 +191,6 @@ function TriggerRunsPage({
             }
           />
         ) : runs.length === 0 ? (
-          // Two empty states: a workspace that has never run anything is a
-          // different thing from a filter that matches nothing. The first is
-          // the screen's empty state; the second is a section within it.
           isFiltered ? (
             <ListState
               variant="empty"

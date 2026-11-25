@@ -26,9 +26,6 @@ function ContextsPage() {
     isLoading,
     mutate,
   } = useScopedList<ContextWithWorkspaceName>("users/me/contexts", {});
-  // Until the read lands there is no telling whether a global context exists,
-  // so the editor stays hidden and Save stays off: a save then would POST a
-  // duplicate, and anything typed would be overwritten when the data arrives.
   const isLoaded = data !== undefined;
 
   const globalCtx = contexts.find((c) => !c.workspaceId);
@@ -45,22 +42,13 @@ function ContextsPage() {
     entity: "users/me/contexts",
     scope: {},
     id: globalCtx?.id,
-    // A global Context names no Workspace: `null` is the one way to say so.
-    // The Workspace is fixed once the row exists, so an update sends content
-    // alone.
     buildPayload: (data) =>
       globalCtx?.id ? data : { ...data, workspaceId: null },
-    // No field to key it to: the backend's refusal is the message to show.
     conflictField: null,
-    // The editor's field errors are already in view.
     invalidMessage: null,
     successMessage: "Global context saved",
   });
 
-  // Seed the editor from the global context once it is known, and again only
-  // when a different one arrives (the first save creates it). Keyed on the id,
-  // not the list: a revalidation hands back a new array, and re-seeding on that
-  // would overwrite what the user is typing.
   useResetOnChange(isLoaded ? (globalCtx?.id ?? null) : undefined, () =>
     seedFormData({ content: globalCtx?.content || "" }),
   );
@@ -70,7 +58,6 @@ function ContextsPage() {
       <PageHeader title="Contexts" />
 
       <div className="flex flex-col gap-8">
-        {/* Global Context Section */}
         <div>
           <div className="mb-4">
             <SettingsSectionHeading className="flex items-center gap-2">
@@ -99,7 +86,6 @@ function ContextsPage() {
                     maxLength={1000}
                   />
                 ) : isLoading || !error ? (
-                  // The textarea and its character counter.
                   <LoadingRegion label="Loading global context">
                     <Skeleton className="h-16 w-full" />
                     <div className="flex justify-end mt-1">
@@ -126,7 +112,6 @@ function ContextsPage() {
           </div>
         </div>
 
-        {/* Workspace Contexts Section */}
         <div>
           <div className="mb-4">
             <SettingsSectionHeading className="flex items-center gap-2">

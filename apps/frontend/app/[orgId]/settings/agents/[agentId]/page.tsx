@@ -13,9 +13,6 @@ async function OrgAgentEditPage({
 }) {
   const { orgId, agentId } = await params;
 
-  // Org-scoped tool sets: static sets + org MCPs (the only ones a Shared agent
-  // may reference under the no-cascade rule). A failed read is reported to the
-  // form rather than thrown, so the page still renders (issue #818).
   const toolSetsResult = await fetchToolSets(
     backendPath`/organizations/${orgId}/tools`,
   );

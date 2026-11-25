@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
-  // Manual, deliberately: see the afterEach below.
   // eslint-disable-next-line testing-library/no-manual-cleanup
   cleanup,
   fireEvent,
@@ -100,10 +99,6 @@ beforeEach(() => {
   );
 });
 
-// Unmounting the real better-auth client schedules its nanostores cleanup
-// (`window.removeEventListener`) on a 1s timer. Flush it here so the last
-// test's timer can't fire after jsdom is torn down. Relies on Vitest running
-// afterEach hooks in reverse ("stack"), so this unmounts before RTL's cleanup.
 afterEach(() => {
   vi.useFakeTimers();
   cleanup();

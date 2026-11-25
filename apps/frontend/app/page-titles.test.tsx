@@ -10,8 +10,6 @@ import * as triggerPage from "./[orgId]/workspace/[workspaceId]/(plain)/triggers
 
 import { generateMetadata as orgHomeMetadata } from "./[orgId]/(home)/page";
 
-// An edit page names the page type, never the entity it edits: its title is a
-// fixed string, so the server never reads the entity just to label the tab.
 const editPages: Array<{ name: string; metadata: Metadata; title: string }> = [
   { name: "Agent", metadata: agentPage.metadata, title: "Edit Agent" },
   { name: "Trigger", metadata: triggerPage.metadata, title: "Edit Trigger" },

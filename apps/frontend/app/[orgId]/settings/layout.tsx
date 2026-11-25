@@ -9,8 +9,7 @@ import { HeaderHomeButton } from "@/components/header-home-button";
 import { ProtectedRoute } from "@/components/protected-route";
 import { orgRoutes } from "@/lib/routes";
 
-// Unlike the workspace shell, a failure here must not break the page: the
-// organization is only a label and the title, so it degrades to null.
+// why: the organization only labels the page, so a failed read degrades to null
 function readOrganization(orgId: string) {
   return readForLabel<Organization>(backendPath`/organizations/${orgId}`);
 }

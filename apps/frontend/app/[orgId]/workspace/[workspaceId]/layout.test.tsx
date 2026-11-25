@@ -55,8 +55,6 @@ describe("WorkspaceLayout", () => {
     await expect(renderLayout()).rejects.toThrow("NEXT_NOT_FOUND");
   });
 
-  // Thrown to the error boundary, which offers to try again, rather than
-  // rendering the Workspace's pages over a read that failed.
   it.each([500, 503, 429])(
     "fails a Workspace read that answered %i instead of rendering",
     async (status) => {
@@ -69,7 +67,6 @@ describe("WorkspaceLayout", () => {
 
   it("fails a Workspace read the backend never answers once it times out", async () => {
     vi.useFakeTimers();
-    // A fetch that only settles when its request is aborted.
     vi.stubGlobal(
       "fetch",
       vi.fn(
@@ -102,7 +99,6 @@ describe("WorkspaceLayout", () => {
     );
   });
 
-  // Access is the client gate's call, which can say why.
   it("leaves a forbidden Workspace to the access gate", async () => {
     stubWorkspaceRead(403);
 
@@ -116,8 +112,6 @@ describe("WorkspaceLayout metadata", () => {
       params: Promise.resolve({ orgId: "org1", workspaceId: "ws1" }),
     });
 
-  // A page titled "Chats" inside it reads "Chats | Research | Platypus"; the
-  // Workspace home, which names no title of its own, reads "Research | Platypus".
   it("names the Workspace in the title of every page inside it", async () => {
     stubWorkspaceRead(200);
 

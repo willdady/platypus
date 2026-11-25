@@ -4,32 +4,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 
-/**
- * Next compiles JSX with SWC, and SWC drops the leading space of a multi-line
- * JSX text run that contains an HTML entity:
- *
- *   this {label} appears in. It
- *   runs against each workspace&apos;s own resources.
- *
- * compiles to `"this ", label, "appears in. …"` — the UI renders
- * "skillappears in" while the source reads correctly (issue #387). Babel keeps
- * the space, so the vitest render tests cannot see it; this compiles the real
- * files with the real transform instead.
- *
- * Each candidate file is compiled twice: as-is, and with its entities swapped
- * for a plain letter (the shape SWC handles correctly). Any difference in the
- * leading/trailing whitespace of an emitted string is the bug. Write the
- * character literally (’, ", &, —) to avoid it.
- *
- * This loads Next's own SWC binding, so a Next upgrade that moves or fixes it
- * fails here loudly rather than quietly letting the bug back in.
- */
-
 const require = createRequire(import.meta.url);
 const swc = require("next/dist/build/swc");
 
 const APP_ROOT = path.dirname(fileURLToPath(import.meta.url));
-// Any named or numeric entity, so a future &rsquo; or &hellip; is covered too.
 const ENTITY = /&(?:[a-zA-Z][a-zA-Z0-9]{1,10}|#\d+|#x[0-9a-fA-F]+);/g;
 
 function tsxFiles(dir: string): string[] {
@@ -43,7 +21,6 @@ function tsxFiles(dir: string): string[] {
   return found;
 }
 
-/** String literals in emitted JS, in source order. */
 function literals(code: string): string[] {
   const found: string[] = [];
   const re = /"((?:[^"\\\n]|\\.)*)"|'((?:[^'\\\n]|\\.)*)'/g;
@@ -52,7 +29,6 @@ function literals(code: string): string[] {
   return found;
 }
 
-// Deliberately excludes \xa0 so an intentional &nbsp; at an edge is not a diff.
 function edgeSignature(s: string) {
   return `${/^[ \t\n\r]*/.exec(s)![0].length}|${/[ \t\n\r]*$/.exec(s)![0].length}`;
 }

@@ -71,8 +71,6 @@ describe("OAuthCallbackHandler", () => {
       vi.stubGlobal("close", close);
     });
 
-    // The opener's form waits on this message; without it the Authorize
-    // button never learns the outcome and the popup lingers.
     it("tells the opener which MCP was authorized, then closes", async () => {
       stubAcceptedSave({ mcpId: "m1", orgId: "o1", workspaceId: "w1" });
 
@@ -85,7 +83,6 @@ describe("OAuthCallbackHandler", () => {
       );
     });
 
-    // A failed exchange must reach the opener, where the reader can retry.
     it("hands a failed exchange to the opener, then closes", async () => {
       stubRejectedSave("Invalid state", 400);
 
@@ -98,8 +95,6 @@ describe("OAuthCallbackHandler", () => {
       );
     });
 
-    // A provider refusal never reaches the backend, so the opener hears it
-    // from here or not at all.
     it("hands the provider's refusal to the opener", async () => {
       const fetchMock = stubAcceptedSave({});
 
@@ -124,8 +119,6 @@ describe("OAuthCallbackHandler", () => {
       vi.stubGlobal("location", { ...window.location, replace });
     });
 
-    // A blocked popup fell back to this window, so the reader must land back
-    // on the MCP they were authorizing.
     it("returns to the workspace MCP's edit page", async () => {
       stubAcceptedSave({ mcpId: "m1", orgId: "o1", workspaceId: "w1" });
 
@@ -138,7 +131,6 @@ describe("OAuthCallbackHandler", () => {
       );
     });
 
-    // A Shared MCP has no Workspace; it is edited under the org settings.
     it("returns to the org settings for a Shared MCP", async () => {
       stubAcceptedSave({ mcpId: "m1", orgId: "o1" });
 
@@ -149,7 +141,6 @@ describe("OAuthCallbackHandler", () => {
       );
     });
 
-    // Under a BASE_PATH the bare app path would 404.
     it("prefixes the edit page with the base path", async () => {
       vi.stubEnv("NEXT_PUBLIC_BASE_PATH", "/app");
       stubAcceptedSave({ mcpId: "m1", orgId: "o1" });

@@ -103,7 +103,6 @@ describe("UserInvitationsPage", () => {
     expect(screen.getByText("No pending invitations")).toBeInTheDocument();
   });
 
-  // A refused accept (expired, already used) must say why, not vanish.
   it("toasts the backend's message when an accept is refused", async () => {
     stubRejectedSave("Invitation has expired", 400);
     mockScopedSWR({ "/invitations": [invitation] }, { strict: true });
@@ -133,7 +132,6 @@ describe("UserInvitationsPage", () => {
     );
   });
 
-  // The dialog keeps a refused decline so the reader can read it and retry.
   it("keeps a refused decline in the dialog, with the backend's message", async () => {
     stubRejectedSave("Invitation not found", 404);
     const dialog = await confirmDecline();

@@ -3,12 +3,6 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { Suspense } from "react";
 import type { TriggerRunStats, TriggerRunWithTrigger } from "@platypus/schemas";
 
-/**
- * The page reads its runs through `useSWRInfinite`, one page per key. The mock
- * below stands in for the network: it records the keys the page asks for, and
- * answers with whatever `pages` the test has staged, so assertions can be made
- * about both what was rendered and what was requested.
- */
 const state = {
   pages: [] as { results: TriggerRunWithTrigger[] }[],
   keys: [] as (string | null)[],
@@ -17,7 +11,6 @@ const state = {
   setSize: vi.fn(),
   mutate: vi.fn(),
   isLoading: false,
-  /** False stands for no key yet (the session still resolving): no data. */
   resolved: true,
   error: undefined as Error | undefined,
   triggers: [] as { id: string; name: string }[],
@@ -54,7 +47,6 @@ const TRIGGERS = [
   { id: "trigger-2", name: "Card watcher" },
 ];
 
-// The triggers behind the filter dropdown, fetched separately from the runs.
 vi.mock("swr", () => ({
   useSWRConfig: () => ({ cache: new Map() }),
   default: () => ({ data: { results: state.triggers }, isLoading: false }),
@@ -71,9 +63,6 @@ vi.mock("@/components/back-button", () => ({
 const { replaceSpy } = vi.hoisted(() => ({
   replaceSpy: vi.fn(),
 }));
-// `navigationMock.useSearchParams` reads jsdom's location and re-renders on the
-// `history.replaceState` that `replaceSearchParam` makes, so a filter change
-// reaches the request as it does in the app.
 vi.mock("next/navigation", async (importOriginal) => {
   const { navigationMock } = await import("@/test/test-utils");
   return {
@@ -102,9 +91,6 @@ import {
   openDropdownMenu,
   selectOption,
 } from "@/test/test-utils";
-
-// Radix Tooltip content measures itself on focus, which jsdom has no
-// ResizeObserver for. The row's ⋮ menu needs the pointer polyfills.
 
 function stats(overrides?: Partial<TriggerRunStats>): TriggerRunStats {
   return {
@@ -135,8 +121,6 @@ function run(
 }
 
 async function renderPage() {
-  // `params` is a promise the page unwraps with `use`, so the first render
-  // suspends; flush it before asserting.
   await act(async () => {
     render(
       <Suspense>
@@ -164,8 +148,6 @@ beforeEach(() => {
   state.triggers = TRIGGERS;
 });
 
-// The point of the page: one list answering "what fired in this workspace?",
-// which per-trigger pages could only answer one trigger at a time.
 describe("Trigger runs list", () => {
   it("lists runs from every trigger, each row naming its Trigger and opening its run", async () => {
     await renderRuns([
@@ -221,8 +203,6 @@ describe("Trigger runs list", () => {
   });
 });
 
-// Both filters live in the URL so a filtered view survives a refresh and can be
-// pasted to someone else.
 describe("Trigger runs filters", () => {
   it("carries the URL's trigger and status into the request", async () => {
     window.history.replaceState(null, "", "?triggerId=trigger-2&status=failed");
@@ -241,8 +221,6 @@ describe("Trigger runs filters", () => {
     ).toContain("Card watcher");
   });
 
-  // Someone arriving by redirect must see the filter set to theirs — the
-  // dropdown's own list of triggers is a separate fetch and may not be back.
   it("names the filtered trigger before the dropdown's triggers arrive", async () => {
     state.triggers = [];
     window.history.replaceState(null, "", "?triggerId=trigger-1");
@@ -290,11 +268,7 @@ describe("Trigger runs filters", () => {
   });
 });
 
-// Filtering to 'failed' on a healthy workspace must not claim no trigger has
-// ever run.
 describe("Trigger runs empty states", () => {
-  // Before the session resolves there is no key: SWR reports no data and
-  // `isLoading: false`, which is not an empty workspace.
   it("shows the placeholder, not an empty state, before the runs have loaded", async () => {
     state.resolved = false;
     await renderPage();
@@ -325,9 +299,6 @@ describe("Trigger runs empty states", () => {
     ).toBeInTheDocument();
   });
 
-  // A rejected filter — a hand-edited or stale URL the endpoint 400s — must not
-  // read as "nothing matched", which is a claim about the data the page never
-  // received.
   it("reports a failed read rather than showing an empty list", async () => {
     window.history.replaceState(null, "", "?status=bogus");
     state.error = new Error("Bad Request");
@@ -351,8 +322,6 @@ describe("Trigger runs empty states", () => {
     expect(state.mutate).toHaveBeenCalledOnce();
   });
 
-  // Unfiltered, the clear-filters escape is meaningless; the read's own retry
-  // is the only way forward.
   it("offers a retry even when no filter is active", async () => {
     state.error = new Error("Server error");
     await renderRuns([]);
@@ -418,9 +387,6 @@ describe("Trigger runs paging", () => {
     expect(typeof nextSize === "function" ? nextSize(1) : nextSize).toBe(2);
   });
 
-  // A run can then be watched moving from 'running' to a terminal status —
-  // including on pages already loaded — without burning requests on a tab
-  // nobody is looking at.
   it("polls every ten seconds, refreshing every loaded page, but not while hidden", async () => {
     await renderRuns([run()]);
 
@@ -444,8 +410,6 @@ describe("Trigger runs paging", () => {
   });
 });
 
-// A page restored from the back/forward cache was frozen, so its poll did not
-// run and the list is as old as the moment the page was put away.
 describe("Trigger runs restore", () => {
   it("revalidates when the page is restored from the back/forward cache", async () => {
     await renderRuns([run()]);
@@ -455,7 +419,6 @@ describe("Trigger runs restore", () => {
     expect(state.mutate).toHaveBeenCalledOnce();
   });
 
-  // An ordinary navigation already revalidates on mount.
   it("does not revalidate on an ordinary page load", async () => {
     await renderRuns([run()]);
 
@@ -465,8 +428,6 @@ describe("Trigger runs restore", () => {
   });
 });
 
-// The run-rate breaker's visible trace: a dropped firing is a row an Operator
-// can see, not silence. Without it a runaway is indistinguishable from activity.
 describe("Trigger runs suppression", () => {
   it("marks a suppressed firing and explains that no Agent was started", async () => {
     await renderRuns([
@@ -509,9 +470,6 @@ describe("Trigger runs suppression", () => {
   });
 });
 
-// Ported from the retired per-trigger page: a run that hit the model's output
-// ceiling still ends as 'success', so without the marker the runs view is the
-// same for a complete answer and a half-written one.
 describe("Trigger runs truncation marker", () => {
   it("marks a run whose stats say it stopped at the output limit", async () => {
     await renderRuns([run({ stats: stats({ truncatedByTokenLimit: true }) })]);
@@ -532,8 +490,6 @@ describe("Trigger runs truncation marker", () => {
     expect(screen.queryByText(RUN_STEP_LIMIT_NOTICE)).not.toBeInTheDocument();
   });
 
-  // The no-progress stop reports itself already: a failed run with its own
-  // message.
   it("leaves a no-progress failure reported as itself", async () => {
     await renderRuns([
       run({
@@ -570,9 +526,6 @@ describe("Trigger runs stats", () => {
     expect(screen.getByText(/100 in \/ 4\.1K out/)).toBeInTheDocument();
   });
 
-  // Issue #734. The cached-input breakdown reads through a tooltip and must
-  // not change what the visible `in` figure means — the input already includes
-  // cached tokens.
   describe("cached-input breakdown", () => {
     it("shows the read and write counts in a tooltip on the token line", async () => {
       await renderRuns([
@@ -619,14 +572,9 @@ describe("Trigger runs stats", () => {
   });
 });
 
-// Issue #665, carried forward. Backend logs are keyed by runId, but the id is
-// never rendered — the clipboard is the only place an Operator can get it out
-// of the UI.
 describe("Trigger runs copy-run-id control", () => {
   const writeText = vi.fn();
 
-  // Defined, not assigned, and only once the menu is open: each user-event
-  // session installs its own getter-only clipboard on the navigator.
   const stubClipboard = () =>
     Object.defineProperty(navigator, "clipboard", {
       value: { writeText },
@@ -639,7 +587,6 @@ describe("Trigger runs copy-run-id control", () => {
   });
 
   afterEach(() => {
-    // jsdom has no execCommand; drop the one a test installed.
     Reflect.deleteProperty(document, "execCommand");
   });
 

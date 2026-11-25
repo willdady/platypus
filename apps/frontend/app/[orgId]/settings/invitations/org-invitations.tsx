@@ -43,7 +43,6 @@ function OrgInvitationsPage() {
     mutate,
     isLoading,
   } = useScopedList<InvitationListItem>("invitations", { orgId });
-  // Map blueprint id → name so the table can show what each invite provisions.
   const { results: blueprints } = useScopedList<Blueprint>("blueprints", {
     orgId,
   });
@@ -58,9 +57,7 @@ function OrgInvitationsPage() {
     },
   });
 
-  // Available for the whole time an Invitation is pending (#549, ADR-0019) --
-  // once accepted/declined/expired the token no longer resolves to anything,
-  // so there is nothing useful left to copy.
+  // why: an accepted, declined or expired token no longer resolves to anything
   const handleCopyLink = async (token: string) => {
     const link = invitationLink(window.location.origin, token);
     await copyWithToast(
@@ -136,7 +133,6 @@ function OrgInvitationsPage() {
                 {
                   header: "Actions",
                   className: "text-right",
-                  // The row's ⋮ menu.
                   cell: (
                     <div className="flex justify-end">
                       <IconButtonSkeleton />

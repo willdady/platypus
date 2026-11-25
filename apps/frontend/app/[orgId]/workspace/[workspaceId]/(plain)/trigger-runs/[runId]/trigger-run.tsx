@@ -22,19 +22,11 @@ import { mergeRunEvents, nextSinceSeq } from "@/lib/run-timeline";
 import type { Serialized } from "@/lib/api-write";
 import { PageHeader } from "@/components/page-header";
 
-/**
- * How often the page re-reads a run that is still running. Events reach the
- * database on the sink's flush interval, so polling faster than this would
- * deliver the same staleness with more requests — and a live channel would
- * deliver it over new transport, which is why there is none.
- */
 export const RUN_DETAIL_POLL_MS = 5_000;
 
-/** What the page says when the run cannot be read at all. */
 export const RUN_DETAIL_ERROR_NOTICE =
   "This run could not be read. It may have been pruned by the trigger's Max Runs to Keep, or it belongs to another workspace.";
 
-/** The heading above a section of the run page. */
 function SectionHeading({ children }: { children: ReactNode }) {
   return (
     <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-2">
@@ -43,16 +35,6 @@ function SectionHeading({ children }: { children: ReactNode }) {
   );
 }
 
-/**
- * One Trigger run in full: its row as the list shows it, the answer it left
- * behind, and its **Timeline** as a waterfall.
- *
- * The timeline is read incrementally. The first request takes everything;
- * each poll after that asks only for events past a sequence number, and the
- * page folds them into what it already holds. Because an event is written
- * open and patched when it closes, the page asks from just below its oldest
- * still-running event — see `nextSinceSeq` — so the patches reach it too.
- */
 function TriggerRunDetailPage({
   params,
 }: {
@@ -60,9 +42,7 @@ function TriggerRunDetailPage({
 }) {
   const { orgId, workspaceId, runId } = use(params);
 
-  // The events the page has accumulated so far, across polls. A ref rather
-  // than state: the fetcher reads it to decide what to ask for, and SWR's
-  // returned data is what renders.
+  // why: the fetcher reads this across polls; SWR's returned data is what renders
   const heldEvents = useRef<RunEvent[]>([]);
 
   const fetchIncrementally = useCallback(
@@ -95,10 +75,6 @@ function TriggerRunDetailPage({
 
   return (
     <div className="flex justify-center py-8">
-      {/* The side gutter stays at every width: between the tablet and desktop
-      breakpoints the column is the full content area, and without it the list
-      touched the viewport edges. The widths are the workspace home page's, so
-      the two read as one app. */}
       <div className="w-full px-4 md:px-8 xl:w-4/5 max-w-4xl">
         <PageHeader
           title="Trigger run"
@@ -129,10 +105,6 @@ function TriggerRunDetailPage({
               <section>
                 <SectionHeading>Response</SectionHeading>
                 <div className="border rounded-lg p-4">
-                  {/* The chat column caps a message at 80% and lets its inner
-                      column shrink to fit the content; here the Response is
-                      the only thing in its box, so both take the whole width
-                      and a table's frame reaches the edge. */}
                   <Message
                     from="assistant"
                     className="max-w-full sm:max-w-full [&>div]:flex-1"
@@ -155,8 +127,6 @@ function TriggerRunDetailPage({
             </section>
           </div>
         ) : (
-          // Anything short of data or an error is still loading, the frames
-          // before the session resolves included — never a blank page.
           <LoadingRegion
             label="Loading trigger run"
             className="flex flex-col gap-6"
