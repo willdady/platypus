@@ -72,11 +72,6 @@ import {
   type FormErrors,
 } from "@/lib/form-errors";
 
-/**
- * Per-field help for a Model entry. The fields each need a paragraph of
- * explanation, which as one block under the list was a wall nobody read and
- * left the reader matching sentences to fields by hand.
- */
 function InfoHint({
   label,
   children,
@@ -84,12 +79,10 @@ function InfoHint({
   label: string;
   children: React.ReactNode;
 }) {
+  // why: 400ms, so sweeping a row of fields doesn't fire a tooltip per icon
   return (
-    // A short delay, so sweeping the pointer across a row of fields doesn't fire
-    // a tooltip at every icon on the way past.
     <Tooltip delayDuration={400}>
       <TooltipTrigger
-        // Focusable, so the help is reachable by keyboard and not hover-only.
         type="button"
         aria-label={`About ${label}`}
         className="text-muted-foreground hover:text-foreground focus-visible:border-ring focus-visible:ring-ring/50 rounded-full outline-none focus-visible:ring-[3px]"
@@ -135,40 +128,19 @@ function ModelField({
   );
 }
 
-// Shared by the two numeric fields. An empty (or nonsense) value means "unset,
-// use the default" rather than 0 — sending 0 would truncate every extracted
-// document to nothing (issue #342), and would cap every reply at nothing
-// (issue #454). Undefined is also what clears a value already stored: the whole
-// `modelIds` array is replaced on save, so the key simply stops being sent.
-//
-// `Number`, never `Number.parseInt`: parseInt truncates at the first character
-// it cannot read, so `1e5` and `1.9` both became 1 — a value the schema
-// accepts, which then capped every reply on the model at one token with nothing
-// on screen pointing at the field. Anything numeric is passed through EXACTLY
-// as typed and a non-integer is left for the schema to reject with a message,
-// matching `parseContextWindowInput`.
+// why: 0 means unset (0 would truncate); Number not parseInt (`1e5` becomes 1)
 function parsePositiveNumber(value: string): number | undefined {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
 }
 
-/**
- * Adds or edits one Model entry. Submitting only stages the entry into the
- * provider form; nothing is stored until the provider itself is saved, so
- * closing the dialog discards its edits without asking.
- *
- * Only the per-entry rules are checked here. Rules across entries (an alias
- * duplicating another) stay the server's, and come back as `errors`.
- */
 export function ModelEntryDialog({
   model,
   errors,
   onSubmit,
   onClose,
 }: {
-  /** The entry to edit; absent to add a new one. */
   model?: ModelConfigView;
-  /** Server errors against this entry's fields, keyed by field name. */
   errors?: FormErrors;
   onSubmit: (model: ModelConfigView) => void;
   onClose: () => void;
@@ -182,29 +154,22 @@ export function ModelEntryDialog({
   const [toggledFileTypes, setToggledFileTypes] = useState(
     storedFileTypes.toggled,
   );
-  // Held as typed: parsing on every keystroke would drop a trailing comma the
-  // moment it was typed, so a second type could never be entered.
+  // why: keep the raw text — parsing per keystroke eats the comma before the next type
   const [otherFileTypesText, setOtherFileTypesText] = useState(
     storedFileTypes.other.join(", "),
   );
-  // Open from the start when it holds a stored value (media types the toggles
-  // don't cover, or a Reasoning map), so no stored value is hidden.
+  // why: open Advanced when a stored value would otherwise be hidden
   const [advancedOpen, setAdvancedOpen] = useState(
     storedFileTypes.other.length > 0 || !!draft.reasoning,
   );
   const [fieldErrors, setFieldErrors] = useState<FormErrors>(errors ?? {});
-  // The Reasoning map as typed: JSON is only parsed on submit, so a half-typed
-  // object is never rejected mid-keystroke.
   const [storedReasoningText] = useState(() =>
     draft.reasoning ? JSON.stringify(draft.reasoning, null, 2) : "",
   );
+  // why: parse the Reasoning map on submit, so half-typed JSON isn't rejected
   const [reasoningText, setReasoningText] = useState(storedReasoningText);
 
-  // Whether the Context window is being typed rather than picked. State as well
-  // as derivation, because neither alone is enough: Custom chosen with no window
-  // declared leaves the value undefined, so a purely derived control would snap
-  // back to "Not set" and the input the reader just asked for would vanish the
-  // moment they cleared it.
+  // why: Custom needs its own state — a cleared window would snap back to Not set
   const [customContextWindow, setCustomContextWindow] = useState(
     optionForContextWindow(draft.contextWindow) === CONTEXT_WINDOW_CUSTOM,
   );
@@ -223,13 +188,11 @@ export function ModelEntryDialog({
   };
 
   const handleSubmit = (e: React.FormEvent) => {
+    // why: the form is noValidate — the schema owns every message, not a browser bubble
     e.preventDefault();
-    // React bubbles synthetic events through the portal, so without this the
-    // submit would reach any form the provider form is rendered in.
+    // why: React bubbles through the portal — without this the provider form would submit
     e.stopPropagation();
-    // Same keys as the entry it came from, and the stored order when the set
-    // of types is unchanged, so Save with nothing changed leaves the provider
-    // form clean.
+    // why: unchanged types keep the stored order, so a no-op Save leaves the form clean
     const fileTypes = joinNativeFileTypes(toggledFileTypes, otherFileTypesText);
     const stored = draft.passthroughFileTypes;
     const entry: ModelConfigView = {
@@ -240,8 +203,6 @@ export function ModelEntryDialog({
           ? stored
           : fileTypes,
     };
-    // Unchanged text keeps the stored object, so Save with nothing changed
-    // leaves the provider form clean; empty clears the map.
     if (reasoningText !== storedReasoningText) {
       try {
         entry.reasoning =
@@ -264,13 +225,12 @@ export function ModelEntryDialog({
     onSubmit(entry);
   };
 
+  // why: focus Model ID — the info button's tooltip would open on focus and spend Esc
   const modelIdRef = useRef<HTMLInputElement>(null);
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent
-        // Model ID rather than the first tabbable, the info button before it,
-        // whose tooltip would open on focus and spend the first Esc.
         onOpenAutoFocus={(e) => {
           e.preventDefault();
           modelIdRef.current?.focus();
@@ -283,8 +243,6 @@ export function ModelEntryDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {/* noValidate: the schema owns every message, so the number inputs'
-            min/max/step must not stop the submit with a browser bubble. */}
         <form
           noValidate
           onSubmit={handleSubmit}
@@ -320,9 +278,6 @@ export function ModelEntryDialog({
                   value={draft.alias ?? ""}
                   aria-invalid={!!fieldErrors.alias}
                   onChange={(e) =>
-                    // An empty field means "no alias". Anything else goes to the
-                    // schema as typed, so a whitespace-only name is rejected
-                    // rather than silently dropped.
                     update(
                       "alias",
                       e.target.value === "" ? undefined : e.target.value,

@@ -50,7 +50,6 @@ function endpoint(over: Record<string, unknown> = {}) {
   };
 }
 
-/** Opens the row's ⋮ menu, picks its revoke item, then confirms the dialog. */
 async function revoke(actionsFor: string, label: string) {
   await chooseRowMenuAction(actionsFor, label);
   const dialog = await screen.findByRole("dialog");
@@ -73,7 +72,7 @@ describe("OrgA2aEndpointsList", () => {
     expect(within(endpointRow).getByText("Support")).toBeInTheDocument();
     expect(within(endpointRow).getByText("Dana Owner")).toBeInTheDocument();
     const badge = within(endpointRow).getByText("Disabled");
-    // The badge's Pause icon is decorative, so no accessible query sees it.
+    // why: the badge's Pause icon is decorative, so no accessible query sees it
     // eslint-disable-next-line testing-library/no-node-access
     expect(badge.querySelector("svg")).not.toBeNull();
     expect(within(tokenRow).getByText("Telegram")).toBeInTheDocument();

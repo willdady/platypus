@@ -34,17 +34,16 @@ export function OrgListSidebar({ currentOrgId }: OrgListSidebarProps) {
     {},
   );
 
-  // A failed read settles the list too; gating on data alone left a failed
-  // one pulsing forever.
+  // why: a failed read settles too, or the list pulses forever
   const isReady = !!data || !!error;
 
   const organizations = sortByName(results);
 
-  // Eagerly preload workspaces for all orgs so switching feels instant
+  // why: preload every org's workspaces, so switching Organizations feels instant
   useEffect(() => {
     if (!backendUrl) return;
     for (const org of results) {
-      // A failed prefetch resurfaces as the list's own error once it mounts.
+      // why: swallow it — a failed prefetch resurfaces as the list's own error
       preload(
         scopedUrl(backendUrl, "workspaces", { orgId: org.id }),
         fetcher,
@@ -99,8 +98,6 @@ export function OrgListSidebar({ currentOrgId }: OrgListSidebarProps) {
         </SidebarGroupContent>
       </SidebarGroup>
 
-      {/* Drawn as a placeholder while loading, so it doesn't pop in below
-        the list once the list arrives. */}
       <SidebarGroup>
         <SidebarGroupContent>
           {isReady ? (

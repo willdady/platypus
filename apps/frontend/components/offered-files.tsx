@@ -36,14 +36,8 @@ import {
 
 type MessagePart = NonNullable<PlatypusUIMessage["parts"]>[number];
 
-// `size` is missing when the Sandbox backend doesn't report one.
 export type OfferedFile = { path: string; size?: number };
 
-/**
- * Every file the model offered with `fsDownload` in one message, across all
- * its steps: one entry per path, carrying the latest offer's size. Failed and
- * unfinished calls offer nothing.
- */
 export function offeredFiles(parts: readonly MessagePart[]): OfferedFile[] {
   const byPath = new Map<string, OfferedFile>();
   for (const part of parts) {
@@ -54,8 +48,7 @@ export function offeredFiles(parts: readonly MessagePart[]): OfferedFile[] {
   return [...byPath.values()];
 }
 
-// The download route answers `application/octet-stream` for everything, so the
-// extension is all there is to go on.
+// why: the download route says octet-stream for everything, so icons go by extension
 const ICONS: Array<[LucideIcon, string[]]> = [
   [FileImageIcon, ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico"]],
   [FileSpreadsheetIcon, ["csv", "tsv", "xls", "xlsx", "ods"]],
@@ -88,7 +81,6 @@ function fileIcon(name: string): LucideIcon {
   return ICONS.find(([, exts]) => exts.includes(ext))?.[0] ?? FileIcon;
 }
 
-/** An Artifact row's icon, by the Artifact's type rather than a file name. */
 const ARTIFACT_ICONS: Record<ArtifactType, LucideIcon> = {
   markdown: FileTextIcon,
   code: FileCodeIcon,
@@ -97,11 +89,6 @@ const ARTIFACT_ICONS: Record<ArtifactType, LucideIcon> = {
   svg: FileImageIcon,
 };
 
-/**
- * One row of the tray, whichever kind it is: an icon in a slot, a name with a
- * detail line under it, and the row's own actions at the end. Both kinds share
- * it so a file and an Artifact read as the same tray.
- */
 function TrayRow({
   icon: Icon,
   name,
@@ -110,13 +97,9 @@ function TrayRow({
   children,
 }: {
   icon: LucideIcon;
-  /** The row's first line, truncated rather than wrapped. */
   name: string;
-  /** The line under it: a path and size, or a type and version. */
   detail: ReactNode;
-  /** The whole value `name` stands in for, shown on hover. */
   fullName: string;
-  /** The row's actions, if it has any. */
   children?: ReactNode;
 }) {
   return (
@@ -133,13 +116,6 @@ function TrayRow({
   );
 }
 
-/**
- * One stored Artifact the finished reply wrote, read back at that version. The
- * read is what tells the row its type, its content and whether the Artifact is
- * gone: a deleted one says so and offers neither **Open** nor **Download**.
- * **Open** needs only the id and version, so it is offered as soon as the row
- * is; **Download** waits for the content.
- */
 function ArtifactRow({
   artifact,
   scope,
@@ -194,14 +170,6 @@ function ArtifactRow({
   );
 }
 
-/**
- * The things a finished reply produced for the reader, as one tray under it:
- * the Sandbox files it offered for download (ADR-0027) and the Artifacts it
- * created or changed, each at the version that reply wrote. The tool results
- * hold only a path or an id, so each download is built here — a file link
- * against the Workspace's download route, an Artifact from content the viewer
- * has read back. The model never sees any of it.
- */
 export function OfferedFiles({
   files,
   artifacts,
@@ -210,9 +178,7 @@ export function OfferedFiles({
 }: {
   files: OfferedFile[];
   artifacts: StoredArtifact[];
-  /** The Workspace each Artifact is read back from; absent withholds the read. */
   scope?: Scope | null;
-  /** Opens an Artifact in the Chat's side panel at the version it wrote. */
   onOpen?: (target: ArtifactOpenTarget) => void;
 }) {
   const backendUrl = useBackendUrl();

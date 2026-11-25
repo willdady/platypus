@@ -15,14 +15,10 @@ import {
 } from "@/test/list-test-harness";
 import { openDropdownMenu } from "@/test/test-utils";
 
-// --- Module mocks ------------------------------------------------------------
-
 vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("swr", () => swrMock);
 
 import { OrgAgentsList } from "./org-agents-list";
-
-// --- Fixtures ----------------------------------------------------------------
 
 const sharedAgent: Agent = {
   id: "a1",
@@ -30,15 +26,12 @@ const sharedAgent: Agent = {
   description: "desc",
 } as unknown as Agent;
 
-/** Renders the Organization surface with `agents` in the list. */
 function renderAgents(agents: Agent[], menuItem?: string) {
   mockScopedSWR({ "/agents": agents });
   return renderList(<OrgAgentsList orgId="org1" />, menuItem);
 }
 
 beforeEach(resetListHarness);
-
-// --- Tests -------------------------------------------------------------------
 
 describe("OrgAgentsList menu", () => {
   it("separates Delete from the other items", async () => {
@@ -70,7 +63,6 @@ describe("OrgAgentsList delete", () => {
   });
 
   it("surfaces the backend's reason and keeps the agent when delete fails", async () => {
-    // The attachment-count check first, then the delete itself.
     const fetchMock = stubSaveSequence(
       { status: 200, body: { results: [] } },
       { status: 409, body: { error: "Still referenced" } },

@@ -54,7 +54,7 @@ function OrganizationForm({ classNames, orgId }: OrganizationFormProps) {
       identityContext: organization.identityContext ?? "",
     }),
     retractableFields: RETRACTABLE_FIELDS,
-    // identityContext is update-only (the create schema accepts name only).
+    // why: identityContext is update-only — the create schema accepts name alone
     buildPayload: (data) =>
       orgId
         ? { name: data.name, identityContext: data.identityContext || null }
@@ -76,12 +76,7 @@ function OrganizationForm({ classNames, orgId }: OrganizationFormProps) {
     id: orgId,
     successMessage: "Organization deleted",
     onSuccess: () => {
-      // A full document load, deliberately, not `router.push`. The
-      // Organization this view is scoped to no longer exists, and a
-      // client-side transition keeps the app shell alive — the cached RSC
-      // payload and SWR entries for the deleted Org included, which the
-      // surrounding layout would go on rendering. Reloading rebuilds
-      // everything from a server that now agrees the Org is gone.
+      // why: a full reload, not router.push, so the shell's cached Org data does not survive
       hardNavigate(withBasePath(appRoutes.home));
     },
   });

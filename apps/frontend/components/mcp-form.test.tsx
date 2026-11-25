@@ -25,21 +25,15 @@ import {
   OAUTH_MCP_SUCCESS_EVENT,
 } from "@/lib/constants";
 
-// --- Module mocks ------------------------------------------------------------
-
 vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("swr", () => swrMock);
 
 import { McpForm } from "./mcp-form";
 import { toast } from "sonner";
 
-/** The body the form put on the wire for the last save, checked against the
- * strict update schema the backend validates it with. */
 function savedMcpBody(fetchMock: ReturnType<typeof vi.fn>) {
   return expectSentBodyToMatchSchema(fetchMock, mcpUpdateSchema);
 }
-
-// --- Tests -------------------------------------------------------------------
 
 describe("McpForm secret reveal", () => {
   afterEach(() => {
@@ -245,7 +239,6 @@ describe("McpForm record revalidation", () => {
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Edited" },
     });
-    // What `mutateMcp()` after Authorize delivers: the same row, now authorized.
     setData({ ...mcp, oauthAuthorized: true });
     rerender(<McpForm orgId="org1" mcpId="m1" />);
 
@@ -311,8 +304,6 @@ describe("McpForm save payload", () => {
     resetFormHarness();
   });
 
-  // A stored bearer token must not ride along once Auth no longer uses it,
-  // and a header row with no name is dropped rather than sent as "".
   it("sends only the credential the chosen Auth uses, and only named headers", async () => {
     setData({
       id: "m1",
@@ -350,8 +341,6 @@ describe("McpForm save payload", () => {
     });
   });
 
-  // A blank Client Secret on an edit means "keep the stored one", so it is
-  // left off the wire rather than overwriting the secret with "".
   it("keeps the stored client secret and trims the scopes on an Organization MCP", async () => {
     setData({
       id: "m1",
@@ -378,7 +367,6 @@ describe("McpForm save payload", () => {
       name: "Docs",
       url: "http://mcp.test",
       authType: "OAuth",
-      // Unedited, so not sent: a sign-in may have registered a newer one.
       oauthRequestedScope: "calendar email",
     });
   });
@@ -484,8 +472,6 @@ describe("McpForm OAuth", () => {
     return render(<McpForm orgId="org1" workspaceId="ws1" mcpId="m1" />);
   };
 
-  // The popup reports back by postMessage; only this app's own origin may
-  // declare the authorization complete.
   it("accepts an OAuth completion message only from its own origin", () => {
     renderOAuthMcp(false);
     const completion = (origin: string) =>
@@ -503,8 +489,6 @@ describe("McpForm OAuth", () => {
     expect(toast.success).toHaveBeenCalledWith("OAuth authorization completed");
   });
 
-  // Without force, a still-valid refresh token would rotate silently and the
-  // reader who asked to re-authorize would never see the provider.
   it("saves, then forces a fresh flow when re-authorizing", async () => {
     const fetchMock = stubSaveSequence(
       { status: 200, body: { id: "m1" } },
@@ -523,8 +507,6 @@ describe("McpForm OAuth", () => {
     ]);
   });
 
-  // Authorize saves without leaving the form, and its sign-in may register a
-  // new client; saving the same Client ID edit again would sign the MCP out.
   it("does not resend a Client ID edit that Authorize already saved", async () => {
     const fetchMock = stubSaveSequence(
       { status: 200, body: { id: "m1" } },
@@ -550,8 +532,6 @@ describe("McpForm OAuth", () => {
     expect(savedMcpBody(fetchMock)).not.toHaveProperty("oauthClientId");
   });
 
-  // A new URL clears the client server-side while the form stays open; the
-  // field must show that, and re-entering the same Client ID must be sent.
   it("shows the Client ID a URL change cleared, and sends it when re-entered", async () => {
     const fetchMock = stubSaveSequence(
       { status: 200, body: { id: "m1", oauthClientId: null } },
@@ -579,8 +559,6 @@ describe("McpForm OAuth", () => {
     });
   });
 
-  // The form polls the popup until it closes. That poll belongs to the form:
-  // it must not outlive it, and a retry must replace it rather than stack.
   it("keeps one popup poll at a time and stops it on unmount", async () => {
     stubSaveSequence(
       { status: 200, body: { id: "m1" } },
@@ -610,8 +588,6 @@ describe("McpForm OAuth", () => {
     await authorize(1);
     expect(live()).toHaveLength(1);
 
-    // The provider reports failure while the popup stays open; the reader
-    // tries again.
     window.dispatchEvent(
       new MessageEvent("message", {
         origin: window.location.origin,
@@ -626,8 +602,6 @@ describe("McpForm OAuth", () => {
     expect(live()).toHaveLength(0);
   });
 
-  // A blocked popup must not strand the reader: authorization continues in
-  // this window instead.
   it("falls back to this window when the popup is blocked", async () => {
     stubSaveSequence(
       { status: 200, body: { id: "m1" } },

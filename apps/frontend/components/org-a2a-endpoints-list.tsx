@@ -28,18 +28,11 @@ import {
 } from "@/components/org-token-oversight";
 import { useOrgRevoke } from "@/hooks/use-org-revoke";
 
-/** What a revoke stops: the endpoint, or just one of its tokens. */
 type RevokeTarget = {
   endpoint: Serialized<OrgA2aEndpoint>;
   token?: Serialized<OrgA2aEndpoint>["tokens"][number];
 };
 
-/**
- * Every A2A endpoint and token in the Organization, for its Org Admins. The
- * actions are revoking an endpoint or one token: either stops working at once
- * and the Workspace Owner is notified. The Organization's A2A setting is the
- * lasting off switch.
- */
 export function OrgA2aEndpointsList({ orgId }: { orgId: string }) {
   const scope = { orgId };
   const {

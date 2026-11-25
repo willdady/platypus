@@ -2,16 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import type { Provider } from "@platypus/schemas";
 
-/**
- * The edit surface (issue #710). The defect it exists to fix is invisible in a
- * unit test of any one piece: editing resubmitted a bare string, so a message
- * with a file came back without it. So these tests drive the surface the way a
- * user does — open it on a message that carries a file, press Save, and read
- * what it hands back.
- */
-
-// The picker has its own tests; here it stands in for "the surface names what
-// it will re-run on", which is the reason the ticket keeps it.
+// why: the picker is stubbed — its own tests cover it; this proves the surface names it
 vi.mock("./model-selector-dialog", () => ({
   ModelSelectorDialog: ({ modelId }: { modelId: string }) => (
     <button type="button">{modelId || "Select model"}</button>
@@ -26,7 +17,6 @@ import {
 } from "@/test/chat-test-fixtures";
 import type { Serialized } from "@/lib/api-write";
 
-/** The session the editor most recently constructed. */
 let recognition: ReturnType<typeof installSpeechRecognition>;
 
 beforeEach(() => {
@@ -61,8 +51,6 @@ function renderEditor(
         isResolved: true,
         onModelChange: vi.fn(),
       }}
-      // The seeded PDF reads natively by default, so the compatibility notice
-      // stays out of the way of every test that isn't about it.
       passthroughFileTypes={["application/pdf"]}
       onSubmit={onSubmit}
       onCancel={onCancel}
@@ -84,7 +72,6 @@ describe("MessageEditor", () => {
     expect(screen.getByText("report.pdf")).toBeInTheDocument();
   });
 
-  // The regression the ticket exists for.
   it("saves an edited message with its original attachments intact", async () => {
     const { onSubmit } = renderEditor();
 
@@ -174,9 +161,6 @@ describe("MessageEditor", () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
-  // Anything that shapes the message's parts stays; anything that configures
-  // the Chat or the run goes. The picker is the exception the ticket argues
-  // for: an edit re-runs on live composer state, so the surface has to name it.
   it("carries the model picker and nothing that configures the Chat", () => {
     renderEditor();
 
@@ -188,8 +172,6 @@ describe("MessageEditor", () => {
     }
   });
 
-  // Opening on a message means opening ready to replace it, not ready to
-  // append to it.
   it("selects the text it opens on", () => {
     renderEditor();
 
@@ -198,8 +180,6 @@ describe("MessageEditor", () => {
     expect(textarea.selectionEnd).toBe("What does this say?".length);
   });
 
-  // The composer owns the window-level drop (`globalDrop`); a second input
-  // claiming it would take the same file a second time.
   it("does not claim a file dropped on the window", () => {
     renderEditor();
 
@@ -213,13 +193,9 @@ describe("MessageEditor", () => {
     expect(screen.queryByText("dropped.png")).not.toBeInTheDocument();
   });
 
-  // …but a file dropped ON the edit surface is the edit's, and it must not fall
-  // through to the composer's window-level listener.
   it("keeps a file dropped on itself, and stops it bubbling onward", () => {
     const onWindowDrop = vi.fn();
     document.addEventListener("drop", onWindowDrop);
-    // Both types read natively, so the compatibility notice stays out of the
-    // way — it would otherwise name the dropped file a second time.
     const { container } = renderEditor({
       passthroughFileTypes: ["application/pdf", "image/png"],
     });
