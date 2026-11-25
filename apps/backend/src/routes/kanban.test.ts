@@ -660,20 +660,56 @@ describe("Kanban Routes", () => {
     });
   });
 
-  describe("PUT /:boardId/cards/:cardId - board membership", () => {
+  describe("PATCH /:boardId/cards/:cardId - board membership", () => {
     it("should return 404 when card does not belong to board", async () => {
+      // why: a second board in the same workspace, so only the board check can answer 404
+      const fake = boardWorld({
+        cards: [cardRow({ id: "card-2", columnId: "col-sibling" })],
+        tables: {
+          kanban_board: [
+            {
+              id: boardId,
+              workspaceId,
+              name: "Mine",
+              description: null,
+              labels: [],
+              createdAt: new Date("2026-01-01T00:00:00.000Z"),
+              updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+            },
+            {
+              id: "board-sibling",
+              workspaceId,
+              name: "Sibling",
+              description: null,
+              labels: [],
+              createdAt: new Date("2026-01-02T00:00:00.000Z"),
+              updatedAt: new Date("2026-01-02T00:00:00.000Z"),
+            },
+          ],
+          kanban_column: [
+            { id: "col-1", boardId, name: "To Do", position: 1 },
+            {
+              id: "col-sibling",
+              boardId: "board-sibling",
+              name: "To Do",
+              position: 1,
+            },
+          ],
+        },
+      });
       mockSession();
-      boardWorld();
 
       const res = await app.request(
-        `${baseUrl}/${boardId}/cards/card-from-other-board`,
-        {
-          method: "PUT",
-          body: JSON.stringify({ title: "Hack" }),
-          headers: { "Content-Type": "application/json" },
-        },
+        `${baseUrl}/${boardId}/cards/card-2`,
+        json("PATCH", { title: "Hack" }),
       );
+
       expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({ error: "Card not found" });
+      expect(fake.tables.kanban_card[0]).toMatchObject({
+        id: "card-2",
+        title: "Card",
+      });
     });
   });
 
