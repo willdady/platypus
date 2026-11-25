@@ -125,8 +125,6 @@
   "components/chat-settings-dialog.tsx": 7,
   "components/chat-skeleton.tsx": 9,
   "components/chat-streaming.integration.test.tsx": 4,
-  "components/chat.test.tsx": 115,
-  "components/chat.tsx": 195,
   "components/clipboard-fallback.tsx": 1,
   "components/clone-dialog.test.tsx": 2,
   "components/clone-dialog.tsx": 14,
