@@ -62,13 +62,8 @@ import {
   useState,
 } from "react";
 
-/**
- * A file bound for the Workspace's Sandbox rather than the model. Its bytes
- * stay in the browser until Send, and it never gets a preview.
- */
 export type SandboxFile = { id: string; file: File };
 
-/** One composer chip, in the order the input shows them. */
 type AttachmentChip =
   | { kind: "file"; file: FileUIPart & { id: string } }
   | { kind: "sandbox"; file: SandboxFile };
@@ -76,10 +71,8 @@ type AttachmentChip =
 type AttachmentsContext = {
   files: (FileUIPart & { id: string })[];
   sandboxFiles: SandboxFile[];
-  /** Every chip in display order: file attachments first, Sandbox uploads after. */
   chips: AttachmentChip[];
   add: (files: File[] | FileList) => void;
-  /** Removes a File part or a Sandbox file, whichever holds the id. */
   remove: (id: string) => void;
   clear: () => void;
   openFileDialog: () => void;
@@ -154,8 +147,7 @@ export function PromptInputAttachment({
           <div className="relative size-5 shrink-0">
             <div className="absolute inset-0 flex size-5 items-center justify-center overflow-hidden rounded bg-background transition-opacity group-hover:opacity-0">
               {isImage ? (
-                // Attachment served from a blob:/data:/backend URL; not
-                // routable through the Next image optimizer.
+                // why: a blob:/data:/backend URL cannot go through the Next image optimizer
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   alt={filename || "attachment"}
@@ -193,8 +185,9 @@ export function PromptInputAttachment({
         <div className="w-auto flex flex-col gap-3">
           {isImage && (
             <div className="flex max-h-96 w-96 items-center justify-center overflow-hidden rounded-md border">
-              {/* Attachment served from a blob:/data:/backend URL; not
-              routable through the Next image optimizer. */}
+              {
+                // why: a blob:/data:/backend URL cannot go through the Next image optimizer
+              }
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 alt={filename || "attachment preview"}
@@ -339,7 +332,6 @@ export function PromptInputActionAddSandboxUploads(
 export type PromptInputMessage = {
   text: string;
   files: FileUIPart[];
-  /** Files to place in the Sandbox before the message is sent. */
   sandboxFiles?: File[];
 };
 
@@ -347,16 +339,8 @@ export type PromptInputProps = Omit<
   HTMLAttributes<HTMLFormElement>,
   "onSubmit" | "onError"
 > & {
-  accept?: string; // e.g., "image/*", ".pdf", or a comma-separated list of either
-  /**
-   * Parts the input opens holding, for a surface editing a message that already
-   * carries attachments (issue #710). Read once, on mount: after that the list
-   * is the user's, so a later change to this prop leaves it alone. Persisted
-   * parts carry a fetchable URL rather than a `blob:` one, so they pass through
-   * submit untouched.
-   */
+  accept?: string;
   initialAttachments?: FileUIPart[];
-  // When true, accepts drops anywhere on document. Default false (opt-in).
   globalDrop?: boolean;
   onError?: (err: { code: "accept" | "conversion"; message: string }) => void;
   onSubmit: (
@@ -375,15 +359,8 @@ export function PromptInput({
   children,
   ...props
 }: PromptInputProps) {
-  // Refs
   const inputRef = useRef<HTMLInputElement | null>(null);
   const sandboxInputRef = useRef<HTMLInputElement | null>(null);
-  // Held on the form element itself. It used to be resolved by walking up from
-  // a hidden anchor span with `closest("form")` — but that span renders as a
-  // SIBLING of the form, so the walk found nothing and the form-scoped drop
-  // below never bound. Harmless while one input on the page claimed the
-  // window-level drop; with a second, inline input (issue #710) a file dropped
-  // on that one landed in the other.
   const formRef = useRef<HTMLFormElement | null>(null);
 
   const [files, setItems] = useState<(FileUIPart & { id: string })[]>(() =>
@@ -400,9 +377,8 @@ export function PromptInput({
     sandboxInputRef.current?.click();
   }, []);
 
-  // Refused on pick rather than on Send: the transfer bound is fixed, so a
-  // file over it can never be sent.
   const addSandbox = useCallback((fileList: File[] | FileList) => {
+    // why: refused on pick — the transfer bound is fixed, so it could never be sent
     const accepted = Array.from(fileList).filter((f) => {
       if (f.size <= SANDBOX_TRANSFER_MAX_BYTES) return true;
       toast.error(
@@ -477,7 +453,6 @@ export function PromptInput({
     });
   }, []);
 
-  // Attach drop handlers on this input's own form and document (opt-in)
   useEffect(() => {
     const form = formRef.current;
     if (!form) return;
@@ -491,10 +466,6 @@ export function PromptInput({
       if (e.dataTransfer?.types?.includes("Files")) {
         e.preventDefault();
       }
-      // A drop that landed on this input is this input's, so it stops here
-      // rather than bubbling on to a window-level listener — which belongs to
-      // whichever OTHER input on the page set `globalDrop`, and would take the
-      // same file a second time.
       e.stopPropagation();
       if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
         add(e.dataTransfer.files);
@@ -532,11 +503,6 @@ export function PromptInput({
     };
   }, [add, globalDrop]);
 
-  // The live attachment list, for the unmount cleanup below. The cleanup must
-  // not itself depend on `files`: an effect keyed on the list re-runs on every
-  // change and revoked the URLs of files still attached, so adding a second
-  // attachment killed the first's blob URL and submit then read a dead one
-  // (issue #869). Revocation belongs to `remove`, `clear` and unmount alone.
   const liveFilesRef = useRef(files);
   useEffect(() => {
     liveFilesRef.current = files;
@@ -568,10 +534,6 @@ export function PromptInput({
     });
   };
 
-  // A blob URL that no longer resolves (or a FileReader that failed) must say
-  // so: the rejection used to be swallowed and Send simply did nothing
-  // (issue #869). `onError` is the caller's channel; a caller that supplies
-  // none gets a toast, so the failure is never silent.
   const reportConversionFailure = () => {
     const failure = {
       code: "conversion" as const,
@@ -619,12 +581,7 @@ export function PromptInput({
     const formData = new FormData(event.currentTarget);
     const text = (formData.get("message") as string) || "";
 
-    // No `form.reset()`: every textarea here is controlled, and its owner
-    // clears it once the submit succeeds. A reset blanked the box behind the
-    // owner's back, so a Send that failed (a Sandbox upload, say) lost the
-    // text it was about to keep.
-
-    // Convert blob URLs to data URLs asynchronously
+    // why: no reset() — each textarea is controlled and its owner clears it on success
     Promise.all(
       files.map(async ({ id, ...item }) => {
         if (item.url && item.url.startsWith("blob:")) {
@@ -647,17 +604,15 @@ export function PromptInput({
             event,
           );
 
-          // Handle both sync and async onSubmit
           if (result instanceof Promise) {
             result.then(clear).catch(() => {
-              // Don't clear on error - user may want to retry
+              // why: keep the attachments on failure so the user can retry the send
             });
           } else {
-            // Sync function completed without throwing, clear attachments
             clear();
           }
         } catch {
-          // Don't clear on error - user may want to retry
+          // why: keep the attachments on failure so the user can retry the send
         }
       })
       .catch(reportConversionFailure);
@@ -683,7 +638,7 @@ export function PromptInput({
           if (event.currentTarget.files) {
             addSandbox(event.currentTarget.files);
           }
-          // Picking the same file again after removing its chip must fire.
+          // why: reset so picking the same file again after removing its chip fires
           event.currentTarget.value = "";
         }}
         ref={sandboxInputRef}
@@ -725,10 +680,6 @@ export function PromptInputTextarea({
   const isMobile = useIsMobile();
 
   const handleKeyDown: KeyboardEventHandler<HTMLTextAreaElement> = (e) => {
-    // A caller's handler runs first and claims the key by preventing the
-    // default — Escape cancelling an inline edit, say (issue #710). Leaving
-    // `onKeyDown` in the spread below would replace this handler outright
-    // instead, taking Enter-to-submit and Backspace-removes-attachment with it.
     onKeyDown?.(e);
     if (e.defaultPrevented) {
       return;
@@ -738,20 +689,18 @@ export function PromptInputTextarea({
       if (isComposing || e.nativeEvent.isComposing) {
         return;
       }
-      // On mobile, Enter always inserts a newline; user submits via the button
       if (isMobile) {
+        // why: on a phone Enter always inserts a newline; the submit button sends
         return;
       }
       if (e.shiftKey) {
         return;
       }
-      // Block submission while a response is streaming or pending
       if (status === "streaming" || status === "submitted") {
         return;
       }
       e.preventDefault();
 
-      // Check if the submit button is disabled before submitting
       const form = e.currentTarget.form;
       const submitButton = form?.querySelector(
         'button[type="submit"]',
@@ -763,9 +712,6 @@ export function PromptInputTextarea({
       form?.requestSubmit();
     }
 
-    // Backspace on an empty textarea removes the last chip on screen. `chips`
-    // is the composer's display order, so this cannot drift from the renderer
-    // (issue #1938).
     if (e.key === "Backspace" && e.currentTarget.value === "") {
       const lastChip = attachments.chips.at(-1);
       if (lastChip) {
@@ -940,12 +886,7 @@ export type PromptInputSpeechButtonProps = ComponentProps<
   onTranscriptionChange?: (text: string) => void;
 };
 
-/**
- * What each way dictation can fail means to the person it happened to, and
- * what they can do about it (issue #768). Permission denial and "not available
- * here" read differently on purpose: retrying gets you nowhere in one case and
- * is the whole remedy in the other.
- */
+// why: permission denial and "not available" read differently — retrying only fixes one
 const SPEECH_FAULT_MESSAGES: Record<SpeechToTextFaultCode, string> = {
   unsupported: "Voice input isn't supported in this browser.",
   "insecure-context":
@@ -973,9 +914,8 @@ export function PromptInputSpeechButton({
     onTranscriptionChange,
   });
 
-  // Every failure the hook reports is a fresh object, so a second identical
-  // failure is a second toast rather than a silent no-op.
   useEffect(() => {
+    // why: fault is a fresh object per failure, so an identical retry still toasts
     if (fault) {
       toast.error(SPEECH_FAULT_MESSAGES[fault.code]);
     }
@@ -988,15 +928,8 @@ export function PromptInputSpeechButton({
         isListening && "animate-pulse bg-accent text-accent-foreground",
         className,
       )}
-      // The button stays enabled even where dictation cannot run. A disabled
-      // one takes no pointer events, so its tooltip never opens and the reason
-      // never reaches anyone — the silent failure of issue #768. Pressing it
-      // answers with the reason instead.
-      // `onClick` is taken out of the spread and composed here, the way
-      // PromptInputTextarea handles `onKeyDown` (issue #710). A caller rarely
-      // writes one by hand, but wrapping this button in a Radix trigger with
-      // `asChild` injects one, and left in the spread below it would replace
-      // the toggle outright — dictation then never starts (issue #752).
+      // why: stays enabled so its tooltip can explain; disabled takes no pointer events
+      // why: onClick is composed, not spread — an asChild trigger would replace it
       onClick={(event) => {
         onClick?.(event);
         toggleListening();

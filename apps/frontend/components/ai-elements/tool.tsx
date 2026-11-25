@@ -52,25 +52,13 @@ import {
 } from "react";
 import { ToolDuration } from "../tool-duration";
 
-/**
- * Converts a camelCase tool name (extracted from a `tool-*` type string)
- * into a human-friendly label.
- * e.g. "tool-getBoardState" → "Get board state"
- *
- * Underscores count as word boundaries too: snake_case reaches here from
- * provider-native search (`web_search`), the Web-search backend tools (ADR-0014),
- * and most MCP servers, all of which read as "Web_search" otherwise.
- */
 export function humanizeToolType(type: string): string {
-  // Strip the "tool-" prefix
   const name = type.startsWith("tool-") ? type.slice(5) : type;
-  // Split on camelCase boundaries and underscores
   const words = name
     .replace(/([a-z])([A-Z])/g, "$1 $2")
     .replace(/_+/g, " ")
     .split(" ")
     .filter(Boolean);
-  // Capitalise the first word, lowercase the rest
   return words
     .map((w, i) =>
       i === 0 ? w.charAt(0).toUpperCase() + w.slice(1) : w.toLowerCase(),
@@ -78,9 +66,7 @@ export function humanizeToolType(type: string): string {
     .join(" ");
 }
 
-/** Maps each tool name to its owning toolset. */
 const toolToToolSet: Record<string, string> = {
-  // kanban
   listBoards: "kanban",
   getBoardState: "kanban",
   getCard: "kanban",
@@ -93,11 +79,9 @@ const toolToToolSet: Record<string, string> = {
   createComment: "kanban",
   updateComment: "kanban",
   deleteComment: "kanban",
-  // The create-or-update tools these replaced. Kept so the icons on Tool parts
-  // already stored in Chats still resolve to their Tool set.
+  // why: kept so Tool parts already stored in Chats still resolve their Tool set
   upsertCard: "kanban",
   upsertComment: "kanban",
-  // kanban-boards (listBoards and getBoardState are shared with kanban)
   createBoard: "kanban-boards",
   updateBoard: "kanban-boards",
   deleteBoard: "kanban-boards",
@@ -107,57 +91,44 @@ const toolToToolSet: Record<string, string> = {
   reorderColumns: "kanban-boards",
   upsertBoard: "kanban-boards",
   upsertColumn: "kanban-boards",
-  // triggers
   listTriggers: "triggers",
   getTrigger: "triggers",
   createTrigger: "triggers",
   updateTrigger: "triggers",
   deleteTrigger: "triggers",
   upsertTrigger: "triggers",
-  // agent-discovery
   listToolSets: "agent-discovery",
   listModelProviders: "agent-discovery",
   listAgents: "agent-discovery",
   getAgent: "agent-discovery",
-  // skill-management
   listSkills: "skill-management",
   getSkill: "skill-management",
   upsertSkill: "skill-management",
   deleteSkill: "skill-management",
-  // agent-management
   createAgent: "agent-management",
   updateAgent: "agent-management",
   deleteAgent: "agent-management",
-  // time
   getCurrentTime: "time",
   convertTimezone: "time",
-  // identifiers
   generateUuid: "identifiers",
   generateNanoId: "identifiers",
-  // math-conversions
   convertTemperature: "math-conversions",
   convertDistance: "math-conversions",
   convertWeight: "math-conversions",
   convertVolume: "math-conversions",
-  // web-fetch
   fetchUrl: "web-fetch",
-  // notifications
   createNotification: "notifications",
   listNotifications: "notifications",
   updateNotification: "notifications",
   deleteNotification: "notifications",
-  // memory
   memorySearch: "memory",
   memoryGet: "memory",
-  // chats
   listChats: "chats",
   readTranscript: "chats",
-  // artifacts
   createArtifact: "artifacts",
   updateArtifact: "artifacts",
   readArtifact: "artifacts",
   listArtifacts: "artifacts",
-  // sandbox
   shellExec: "sandbox",
   fsRead: "sandbox",
   fsWrite: "sandbox",
@@ -167,18 +138,11 @@ const toolToToolSet: Record<string, string> = {
   fsView: "sandbox",
 };
 
-// Per-tool icon overrides, used when a single toolset has visually distinct
-// tools (e.g. the sandbox toolset's shell vs filesystem tools). Sparse —
-// tools without an entry fall back to their toolset icon.
+// why: not a toolset — contributed per Provider, and shares web-fetch's globe
 const toolIcons: Record<string, LucideIcon> = {
-  // Web-search backend tools (ADR-0014). Not a toolset — they are contributed
-  // per Provider through `searchSource` — so they are named here rather than
-  // in `toolToToolSet`, and they share `web-fetch`'s globe: same job to a
-  // reader.
   web_search: GlobeIcon,
   read_url: GlobeIcon,
-  // Delegation to a Sub-Agent: one tool serving every delegate, drawn with
-  // the same bot the Sub-Agent's own activity rows use.
+  // why: one delegate tool for every Sub-Agent, drawn like its activity rows
   delegate: BotIcon,
   shellExec: TerminalIcon,
   fsRead: FileIcon,
@@ -189,7 +153,6 @@ const toolIcons: Record<string, LucideIcon> = {
   fsView: EyeIcon,
 };
 
-/** One icon per toolset, matching the workspace home page. */
 const toolSetIcons: Record<string, LucideIcon> = {
   kanban: KanbanSquareIcon,
   "kanban-boards": KanbanSquareIcon,
@@ -208,7 +171,6 @@ const toolSetIcons: Record<string, LucideIcon> = {
   sandbox: BoxIcon,
 };
 
-/** Returns an appropriate icon component for a given tool type string. */
 export function getToolIcon(type: string): LucideIcon {
   const name = type.startsWith("tool-") ? type.slice(5) : type;
   if (toolIcons[name]) {
@@ -233,30 +195,15 @@ function useTool() {
   return context;
 }
 
-/**
- * The row every tool call — collapsible or not — is drawn with, shared with
- * `LoadSkillTool` so its one-shot status line sits flush with its neighbours.
- */
 export const toolRowClassName =
   "flex w-full min-w-0 items-center gap-2 text-left text-muted-foreground text-sm";
 
-/**
- * The slot a row's icon sits in: the same width as the assistant avatar
- * (`size-6`), so the text after it lines up with the chat text beside the
- * avatar, whichever of the two a reader is looking at.
- */
+// why: size-6 matches the assistant avatar, so text lines up beside the chat
 export const toolRowIconSlotClassName =
   "flex size-6 shrink-0 items-center justify-center";
 
 export type ToolProps = ComponentProps<typeof Collapsible>;
 
-/**
- * The Chat's tool disclosure shell (issue #834): the same borderless, muted
- * row Thinking draws, holding one tool call. Unlike `Reasoning` it never opens
- * or closes itself — a tool call is an execution record, so the reader's click
- * is the only thing that expands it — and it keeps its own open state so a
- * chevron answers to its row alone, however deep a Sub-Agent nests them.
- */
 export function Tool({
   className,
   open,
@@ -287,27 +234,15 @@ export function Tool({
 
 export type ToolHeaderProps = {
   title?: string;
-  /** Optional human-readable label shown after the tool name (e.g. card title, agent name). */
   label?: string;
-  /** The part's `type`: `tool-<name>`, or `dynamic-tool` for an MCP call. */
   type: ToolUIPart["type"] | "dynamic-tool";
   state: ToolUIPart["state"];
-  /** Recorded execution time, once the run has been persisted. */
   durationMs?: number;
   className?: string;
-  /**
-   * Tool-result clearing (ADR-0018 Notes, issue #524) would leave this
-   * result, or Tool-input clearing (issue #1722) this input, out of the next
-   * model call. The full result stays expandable
-   * below — this only says the model no longer has it.
-   */
+  // why: cleared only drops it from the next model call; the result is still here
   cleared?: boolean;
 };
 
-/**
- * How a tool call stands, in the words the Chat has always used for it. The
- * one copy of the state → wording table; every tool renderer draws this.
- */
 export function ToolStatus({ state }: { state: ToolUIPart["state"] }) {
   const labels: Record<ToolUIPart["state"], string> = {
     "input-streaming": "Pending",
@@ -337,13 +272,6 @@ export function ToolStatus({ state }: { state: ToolUIPart["state"] }) {
   );
 }
 
-/**
- * Shown on a tool part whose result Tool-result clearing (ADR-0018 Notes,
- * issue #524), or whose input Tool-input clearing (issue #1722), has left out
- * of the next model call. The full result is still
- * expandable below this header — the badge says only that the model no
- * longer has it, never that it's gone.
- */
 export function ClearedResultBadge() {
   return (
     <Tooltip>
@@ -377,9 +305,7 @@ export function ToolHeader({
   const { isOpen } = useTool();
   const name = title ?? humanizeToolType(type);
 
-  // getToolIcon returns a stable module-level Lucide icon; render via
-  // createElement so the dynamic selection isn't flagged as a component
-  // created during render.
+  // why: createElement, not JSX, so a dynamic icon isn't read as made in render
   return (
     <CollapsibleTrigger
       className={cn(
@@ -392,10 +318,6 @@ export function ToolHeader({
       <span className={toolRowIconSlotClassName}>
         {createElement(getToolIcon(type), { className: "size-4" })}
       </span>
-      {/* `min-w-0` + `truncate` lets a long MCP name give way instead of
-      pushing the row wide (issue #691); the full name rides on `title`. No
-      `flex-1`: the duration, status and chevron follow the name rather than
-      sitting at the row's far edge. */}
       <span
         className="min-w-0 truncate select-text"
         title={label ? `${name} — ${label}` : name}
@@ -422,9 +344,7 @@ export function ToolContent({ className, ...props }: ToolContentProps) {
   return (
     <CollapsibleContent
       className={cn(
-        // Indented past the icon slot to the chat text's left edge, the way
-        // Thinking's body sits. Sections stack with a gap rather than rules
-        // between them.
+        // why: pl-8 lines the body up with the chat text; sections gap, never rules
         "mt-3 flex flex-col gap-4 pl-8 text-sm",
         "data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 text-muted-foreground outline-none data-[state=closed]:animate-out data-[state=open]:animate-in",
         className,
@@ -434,16 +354,6 @@ export function ToolContent({ className, ...props }: ToolContentProps) {
   );
 }
 
-/**
- * How a tool's Parameters and Result panels are drawn: preformatted text that
- * scrolls on its own axis, so a long unbroken value — a URL, a base64 blob —
- * is reachable rather than clipped (issue #922).
- *
- * `text-foreground` is on the panel rather than on either section, so the two
- * read as one pair. `ToolContent` mutes everything under it — that is right
- * for the section headings and wrong for the data, and the Result section
- * used to be the only one that said so.
- */
 const toolPanelClassName = "overflow-auto p-4 text-xs text-foreground";
 
 export type ToolInputProps = ComponentProps<"div"> & {

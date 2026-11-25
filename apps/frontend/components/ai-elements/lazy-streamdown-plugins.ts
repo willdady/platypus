@@ -1,16 +1,7 @@
 import type { CodeHighlighterPlugin, ThemeInput } from "@streamdown/code";
 import type { DiagramPlugin } from "@streamdown/mermaid";
 
-/**
- * Streamdown's code and diagram plugins, loaded the first time a reply
- * actually has a code block or a diagram. The real plugins import shiki and
- * mermaid at the top level, which would put both on every page that renders
- * a message. Streamdown already treats both as asynchronous — a highlight may
- * answer later through its callback, a diagram render is awaited — so these
- * stand in until the real one arrives and then hand straight through.
- */
-
-// @streamdown/code's own default; the themes ride each highlight call anyway.
+// why: @streamdown/code's own default; each highlight call carries the real themes
 const codeThemes: [ThemeInput, ThemeInput] = ["github-light", "github-dark"];
 
 let code: CodeHighlighterPlugin | undefined;
@@ -19,12 +10,12 @@ function loadCode() {
   return (codeLoad ??= import("@streamdown/code").then((m) => (code = m.code)));
 }
 
+// why: proxies keep shiki and mermaid off every page that renders a message
 export const lazyCode: CodeHighlighterPlugin = {
   name: "shiki",
   type: "code-highlighter",
   getThemes: () => codeThemes,
-  // Neither is read by Streamdown; answered as the real plugin would once it
-  // is here.
+  // why: Streamdown reads neither; answer as the real plugin will once loaded
   supportsLanguage: (language) => code?.supportsLanguage(language) ?? true,
   getSupportedLanguages: () => code?.getSupportedLanguages() ?? [],
   highlight(options, callback) {
@@ -34,7 +25,7 @@ export const lazyCode: CodeHighlighterPlugin = {
         const result = loaded.highlight(options, callback);
         if (result) callback?.(result);
       })
-      // The block stays plain text, as it is while loading.
+      // why: a failed load leaves the block plain text, as it is while loading
       .catch((error) => console.error("Failed to load the highlighter", error));
     return null;
   },

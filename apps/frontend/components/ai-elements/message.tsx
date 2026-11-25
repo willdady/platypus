@@ -17,7 +17,7 @@ import { memo } from "react";
 import { Streamdown } from "streamdown";
 import { lazyCode, lazyMermaid } from "./lazy-streamdown-plugins";
 
-// Module-level, so the memoised response keeps one plugins object.
+// why: one object per module, so the memoised response keeps its plugin identity
 const plugins = { code: lazyCode, mermaid: lazyMermaid };
 
 export type MessageProps = HTMLAttributes<HTMLDivElement> & {
@@ -35,8 +35,7 @@ export function Message({
   return (
     <div
       className={cn(
-        // Wider on a phone, where 80% of a narrow column costs more than the
-        // gutter it buys back.
+        // why: 85% on a phone — 80% of a narrow column costs more than the gutter
         "group flex w-full max-w-[85%] gap-2 sm:max-w-[80%]",
         from === "user" ? "is-user ml-auto justify-end" : "is-assistant",
         className,
@@ -107,7 +106,6 @@ export function MessageAction({
     </Button>
   );
 
-  // `Tooltip` brings its own provider; a second one around it is redundant.
   if (tooltip) {
     return (
       <Tooltip>
@@ -171,8 +169,9 @@ export function MessageAttachment({
     >
       {isImage ? (
         <>
-          {/* Attachment served from a blob:/data:/backend URL; not routable
-          through the Next image optimizer. */}
+          {
+            // why: a blob:/data:/backend URL cannot go through the Next image optimizer
+          }
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             alt={filename || "attachment"}

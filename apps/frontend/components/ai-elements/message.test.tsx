@@ -9,9 +9,6 @@ afterEach(() => {
   Reflect.deleteProperty(document, "execCommand");
 });
 
-// Pins Streamdown's side of the contract: its code-block copy button calls
-// `navigator.clipboard.writeText`. If an upgrade changes that, this fails
-// rather than the button going quiet over plain HTTP.
 describe("MessageResponse code-block copy over plain HTTP", () => {
   it("copies through the clipboard fallback", async () => {
     Object.defineProperty(window, "isSecureContext", {
