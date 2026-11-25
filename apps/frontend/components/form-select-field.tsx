@@ -18,7 +18,6 @@ export type FormSelectFieldProps = {
   name: string;
   value: string;
   onValueChange: (value: string) => void;
-  /** The `SelectItem`s to render inside the content. */
   children: ReactNode;
   error?: string | null;
   description?: ReactNode;
@@ -26,17 +25,9 @@ export type FormSelectFieldProps = {
   disabled?: boolean;
   className?: string;
   triggerClassName?: string;
-  /**
-   * Accessible name for the trigger, e.g. "Action for <Workspace name>".
-   * The visible label still renders above the trigger; pass nothing to keep
-   * the label as the accessible name.
-   */
   ariaLabel?: string;
 };
 
-// Composes the ui/field + ui/select atoms so the
-// Field/FieldLabel/Select/SelectTrigger/SelectValue/FieldError block doesn't
-// have to be hand-wired at every call site, matching `FormTextField`.
 export function FormSelectField({
   label,
   name,

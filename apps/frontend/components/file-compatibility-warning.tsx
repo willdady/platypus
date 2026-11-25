@@ -4,18 +4,6 @@ import { FileText, TriangleAlert } from "lucide-react";
 import { usePromptInputAttachments } from "./ai-elements/prompt-input";
 import { classifyAttachment } from "@/lib/model-config";
 
-/**
- * Proactive, client-side notices (issues #328, #342) about how the currently
- * selected model will handle each attachment:
- *
- * - `reject` → an amber warning: the backend gate would block the turn, because
- *   the file is neither ingested natively nor convertible to text.
- * - `extract` → a neutral heads-up: a PDF/DOCX the model can't read natively is
- *   sent as extracted text, so tables, layout and images are lost.
- *
- * Rendered inside `<PromptInput>` so it can read the live attachment list from
- * context. The backend remains the source of truth; these are only heads-ups.
- */
 export function FileCompatibilityWarning({
   passthroughFileTypes,
 }: {

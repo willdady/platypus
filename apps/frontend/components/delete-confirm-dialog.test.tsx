@@ -36,7 +36,6 @@ describe("DeleteConfirmDialog", () => {
     expect(screen.getByRole("dialog", { name: "Delete agent" })).toBeVisible();
   });
 
-  // An acronym in the noun keeps its case, so it never reads "Mcp".
   it("keeps an acronym in the noun as written", () => {
     renderDialog({ noun: "MCP server" });
 

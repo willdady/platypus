@@ -24,7 +24,6 @@ describe("FetchErrorNotice", () => {
     expect(retry).toHaveBeenCalledOnce();
   });
 
-  // Reading again won't bring back a deleted record or grant access.
   it.each([403, 404])("offers no retry for a %i", (status) => {
     render(
       <FetchErrorNotice
@@ -42,8 +41,6 @@ describe("FetchErrorNotice", () => {
     ).toHaveAttribute("href", "/org1");
   });
 
-  // Some records explain their own failure better than the shared copy (a
-  // pruned run, say), so the caller can supply the description.
   it("uses a caller's description in place of the default one", () => {
     render(
       <FetchErrorNotice

@@ -46,7 +46,6 @@ describe("BlueprintForm shared resource groups", () => {
     expect(
       screen.queryByText("No shared agents in this organization yet."),
     ).not.toBeInTheDocument();
-    // A group whose list landed empty still says so.
     expect(
       screen.getByText("No shared skills in this organization yet."),
     ).toBeInTheDocument();
@@ -166,9 +165,6 @@ describe("BlueprintForm save feedback", () => {
     ).not.toBeInTheDocument();
   });
 
-  // #1958: the form once kept its last save failure in local state, so it
-  // stayed put through later edits and sat beside the next save's field
-  // errors. It now toasts, like its sibling forms.
   it("doesn't carry a failed save's message into later edits or a later save", async () => {
     stubSaveSequence(
       { status: 500, body: { error: "Provider is unavailable" } },
@@ -211,7 +207,6 @@ describe("BlueprintForm shared resource read failures", () => {
     setDataFor("/organizations/org1/providers", { results: [] });
   });
 
-  // A group's own read failing must not read as "this organization has none".
   it.each([
     ["agents", "agents", "No shared agents in this organization yet."],
     ["skills", "skills", "No shared skills in this organization yet."],
@@ -235,7 +230,6 @@ describe("BlueprintForm shared resource read failures", () => {
   );
 });
 
-// ADR-0008: a Tier 2 slot may only point at a Provider the Blueprint attaches.
 describe("BlueprintForm Tier 2 provider slots", () => {
   beforeEach(() => {
     resetFormHarness();
@@ -259,7 +253,6 @@ describe("BlueprintForm Tier 2 provider slots", () => {
 
     fireEvent.click(screen.getByRole("switch", { name: "OpenAI" }));
     await selectOption(taskModelSelect(), "OpenAI");
-    // No model id for the slot: the name alone, never empty brackets.
     expect(taskModelSelect()).toHaveTextContent(/^OpenAI$/);
   };
 

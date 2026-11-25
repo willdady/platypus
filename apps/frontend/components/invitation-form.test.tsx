@@ -15,14 +15,10 @@ import {
   stubRejectedSave,
 } from "@/test/form-test-harness";
 
-// --- Module mocks ------------------------------------------------------------
-
 vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("swr", () => swrMock);
 
 import { InvitationForm } from "./invitation-form";
-
-// --- Helpers -----------------------------------------------------------------
 
 function renderForm() {
   return render(<InvitationForm orgId="org1" />);
@@ -37,16 +33,10 @@ function submit() {
 
 beforeEach(() => {
   resetFormHarness();
-  // The form never has any Blueprints to offer in these tests.
   setData({ results: [] });
 });
 
-// --- Tests -------------------------------------------------------------------
-
 describe("InvitationForm conflict handling", () => {
-  // A duplicate invite is a 409 from the central error seam (ADR-0010),
-  // carrying `{ error: "..." }` — the request module surfaces it as a
-  // conflict outcome rather than the generic validation fallback.
   it("shows the backend's message against the Email field on a duplicate invite", async () => {
     stubRejectedSave(
       "A pending invitation already exists for this user and organization",
@@ -84,8 +74,6 @@ describe("InvitationForm conflict handling", () => {
       expect(toastSuccess).toHaveBeenCalledWith("Invitation created"),
     );
     expect(screen.getByLabelText("Email")).toHaveValue("");
-    // A blank Workspace name and no Blueprints are left to the backend's
-    // defaults rather than sent empty.
     expect(fetchMock.mock.calls[0][0]).toBe(
       "http://test/organizations/org1/invitations",
     );
@@ -96,8 +84,6 @@ describe("InvitationForm conflict handling", () => {
 });
 
 describe("InvitationForm Blueprints", () => {
-  // ADR-0009: Blueprints apply in the order listed, so the order the reader
-  // arranged is the order that goes on the wire.
   it("sends the chosen Blueprints in the arranged order, with the trimmed Workspace name", async () => {
     setData({
       results: [
@@ -106,7 +92,6 @@ describe("InvitationForm Blueprints", () => {
       ],
     });
     const fetchMock = stubAcceptedSave({ id: "inv-1" }, 201);
-    // Radix's Switch measures itself.
     renderForm();
 
     fireEvent.click(screen.getByRole("switch", { name: "Alpha" }));

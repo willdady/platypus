@@ -7,24 +7,6 @@ import { CheckIcon, ChevronRightIcon, CircleIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
-/*
- * Deliberate divergence from the stock shadcn dropdown-menu.
- *
- * `@radix-ui/react-dropdown-menu`'s Trigger toggles the menu on `pointerdown`
- * with no `pointerType` check, so on a touch device the menu opens the instant
- * a finger lands on the trigger — before the gesture can be recognised as a
- * scroll. Upstream: https://github.com/radix-ui/primitives/issues/1912
- *
- * The fix mirrors what Radix already does in `@radix-ui/react-select`: open on
- * `pointerdown` for a mouse (which preserves the press-drag-release gesture)
- * and on the subsequent `click` for touch and pen (which the browser suppresses
- * when the gesture turns into a scroll). Radix does not expose the dropdown's
- * internal context, so the root owns the open state and hands the trigger a
- * toggle through the context below.
- *
- * Re-adding this component with the `shadcn` CLI will revert all of it.
- */
-
 type DropdownMenuContextValue = {
   open: boolean;
   setOpen: (open: boolean) => void;
@@ -78,10 +60,7 @@ function DropdownMenuTrigger({
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Trigger>) {
   const context = React.useContext(DropdownMenuContext);
-  // What the last pointerdown said about the gesture now in progress. The
-  // click handler needs all three, so they travel together.
   const gestureRef = React.useRef({
-    // As the Radix Select trigger does, assume touch until a pointer says otherwise.
     pointerType: "touch",
     openAtPointerDown: false,
     cancelled: false,
@@ -94,25 +73,17 @@ function DropdownMenuTrigger({
   const handlePointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
     onPointerDown?.(event);
 
-    // Recorded before any bail-out below, because the click handler still runs
-    // for gestures this one declines to act on.
+    // why: the click handler still runs for gestures this handler declines
     gestureRef.current = {
       pointerType: event.pointerType,
       openAtPointerDown: context.open,
-      // A call site that cancels pointerdown means to suppress the activation
-      // itself, so the click that follows must not open the menu either.
       cancelled: event.defaultPrevented,
     };
 
     if (event.defaultPrevented || disabled) return;
 
-    // The primitive ignores anything but an unmodified primary press, so leave
-    // those to the browser.
     if (event.button !== 0 || event.ctrlKey) return;
 
-    // Suppress the primitive's own pointerdown toggle. It composes our handler
-    // first and bails out on a default-prevented event, which is the only seam
-    // available for taking the gesture over.
     event.preventDefault();
 
     if (event.pointerType === "mouse") {
@@ -126,12 +97,6 @@ function DropdownMenuTrigger({
     const { pointerType, openAtPointerDown, cancelled } = gestureRef.current;
     if (disabled || cancelled || pointerType === "mouse") return;
 
-    // A touch or pen tap completed without turning into a scroll, so open.
-    //
-    // Deliberately not vetoed by this event's own `defaultPrevented`: triggers
-    // nested inside a link call `preventDefault()` on click to stop the link
-    // navigating, which says nothing about whether the menu should open, and
-    // treating it as a veto would leave those menus unopenable by touch.
     event.currentTarget.focus();
     context.setOpen(!openAtPointerDown);
   };

@@ -18,12 +18,6 @@ import { TableCell } from "@/components/ui/table";
 import { formatDateTime } from "@/lib/format-date";
 import { TOKEN_STATUS_LABELS, TOKEN_STATUS_VARIANTS } from "@/lib/bearer-token";
 
-/**
- * Shows a bearer token the one time it is readable — an Inbound Trigger's or
- * an A2A token's, on creation and on regenerate. Only its hash is stored, so
- * once this closes the token can't be shown again; a lost one is replaced by
- * regenerating it.
- */
 export function TokenDialog({
   description,
   lostHint,
@@ -31,17 +25,14 @@ export function TokenDialog({
   onClose,
 }: {
   description: ReactNode;
-  /** The alert's body: what to do if the token is lost. */
   lostHint: ReactNode;
-  /** The token and whatever the caller needs with it. */
   children: ReactNode;
   onClose: () => void;
 }) {
   return (
     <Dialog open onOpenChange={(next) => !next && onClose()}>
       <DialogContent
-        // Closing is the one irreversible step, so neither a stray click
-        // outside, Escape nor a corner X may do it: only the button does.
+        // why: closing is the one irreversible step, so only the button may do it
         onPointerDownOutside={(e) => e.preventDefault()}
         onEscapeKeyDown={(e) => e.preventDefault()}
         showCloseButton={false}
@@ -50,8 +41,6 @@ export function TokenDialog({
           <DialogTitle>Copy the token now</DialogTitle>
           <DialogDescription>
             {description}
-            {/* Escape and outside clicks are blocked, so tell someone who
-              can't see the footer what does close it. */}
             <span className="sr-only">
               {" "}
               This dialog closes only with the &ldquo;I&apos;ve copied it&rdquo;
@@ -78,11 +67,6 @@ export function TokenDialog({
   );
 }
 
-/**
- * One of a token's times — created, expires, last used or last rejected — in
- * the one format every token list shows, or "Never" for one that hasn't
- * happened yet.
- */
 export function TokenTime({ value }: { value: string | null }) {
   return value ? (
     <time dateTime={new Date(value).toISOString()}>
@@ -93,10 +77,6 @@ export function TokenTime({ value }: { value: string | null }) {
   );
 }
 
-/**
- * The Expires, Last used and Last rejected cells of an Org Admin's oversight
- * row for one token. Never the token.
- */
 export function TokenCells({
   token,
 }: {
@@ -110,8 +90,6 @@ export function TokenCells({
   return (
     <>
       <TableCell>
-        {/* A date like the other columns; only a token that needs attention
-          gets a badge under it. */}
         {token.tokenExpiresAt ? (
           <div className="flex flex-col gap-1">
             <TokenTime value={token.tokenExpiresAt} />

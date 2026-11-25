@@ -5,46 +5,17 @@ import { DefaultFormSkeleton } from "@/components/form-skeleton";
 import { FetchErrorNotice } from "@/components/fetch-error-notice";
 
 export type DetailFormStateProps = {
-  /** True while the record is still being read. */
   isLoading: boolean;
-  /**
-   * The record read's error, if any. A `fetcher` rejection carries the
-   * response status, which is what tells a deleted id from a forbidden one.
-   */
   error?: unknown;
-  /**
-   * The record read's data. Absent with an error means the read failed cold;
-   * present with one means only a revalidation failed, so the form stays.
-   */
   data?: unknown;
-  /** What the record is, for the messages: "provider", "MCP server". */
   subject: string;
   backHref: string;
   backLabel: string;
-  /**
-   * The placeholder shown while loading, shaped like the form it stands in
-   * for (built from `form-skeleton` blocks) so the swap doesn't shift the
-   * page. Defaults to a generic few-fields skeleton.
-   */
   skeleton?: ReactNode;
-  /**
-   * The loading placeholder's accessible name. Defaults to
-   * `Loading {subject}`, which misreads on a create page that is only
-   * waiting on the form's own reads.
-   */
   loadingLabel?: string;
   children: ReactNode;
 };
 
-/**
- * The gate every resource detail form reads its record through: a loading
- * placeholder, then either the form or a failure state that names what went
- * wrong and offers the way back to the list. Without it a deleted id, a 403
- * or a 500 renders a blank *editable* form, and Save then PUTs to a record
- * that isn't there.
- *
- * Create pages pass no `data` and no `error`, so they fall straight through.
- */
 export function DetailFormState({
   isLoading,
   error,

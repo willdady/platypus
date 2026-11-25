@@ -86,21 +86,18 @@ describe("RevealableInput", () => {
     expect(input1).toHaveAttribute("type", "password");
     expect(input2).toHaveAttribute("type", "password");
 
-    // Reveal first input only
     fireEvent.click(
       screen.getByRole("button", { name: "Show first password" }),
     );
     expect(input1).toHaveAttribute("type", "text");
     expect(input2).toHaveAttribute("type", "password");
 
-    // Reveal second input
     fireEvent.click(
       screen.getByRole("button", { name: "Show second password" }),
     );
     expect(input1).toHaveAttribute("type", "text");
     expect(input2).toHaveAttribute("type", "text");
 
-    // Conceal first input
     fireEvent.click(
       screen.getByRole("button", { name: "Hide first password" }),
     );

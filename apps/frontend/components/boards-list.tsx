@@ -20,11 +20,8 @@ import { writeEntity } from "@/lib/api-write";
 import { workspaceRoutes } from "@/lib/routes";
 import { sortByName } from "@/lib/utils";
 
-/** Boards per page on the Workspace home. */
 const BOARDS_PAGE_SIZE = 8;
-/** The URL param holding the name search. */
 const QUERY_PARAM = "boardQuery";
-/** The URL param holding the page. */
 const PAGE_PARAM = "boardsPage";
 
 type BoardCard = {
@@ -33,10 +30,6 @@ type BoardCard = {
   readonly description?: string | null;
 };
 
-/**
- * The Workspace's Boards, sorted by name and searchable. Each card links to
- * its Board and carries the edit/delete menu.
- */
 export function BoardsList({
   orgId,
   workspaceId,
@@ -53,14 +46,12 @@ export function BoardsList({
   } = useScopedList<BoardCard>("boards", { orgId, workspaceId });
 
   const { page: pageItems } = useListParams(PAGE_PARAM);
-  // An empty search leaves its param out. A new search starts on page 1.
   const { value: nameFilter, onValueChange: setNameFilter } =
     useSearchParamInput(QUERY_PARAM, PAGE_PARAM);
 
   const routes = workspaceRoutes(orgId, workspaceId).boards;
 
   const query = nameFilter.trim();
-  // The Command palette's own scorer, applied to the name.
   const cards = sortByName(rows).filter(
     (card) => !query || defaultFilter(card.name, query) > 0,
   );
@@ -79,9 +70,6 @@ export function BoardsList({
       ),
   });
 
-  // The Boards screen is a top-level list, so an empty one holds the empty
-  // card and its Create board. Once there are rows the button moves below the
-  // list, as on the other list screens.
   const actions = (
     <Button variant={rows.length === 0 ? "default" : "outline"} asChild>
       <Link href={routes.create}>
@@ -92,7 +80,6 @@ export function BoardsList({
 
   return (
     <>
-      {/* Nothing to filter, no controls. */}
       {rows.length > 0 && (
         <ListToolbar>
           <SearchInput
@@ -125,7 +112,6 @@ export function BoardsList({
             <ListState variant="empty">No boards match your filters.</ListState>
           )
         }
-        // Nothing follows the description, so one line is all it reserves.
         descriptionLines={1}
         href={(card) => routes.detail(card.id)}
         menu={(card) => (
@@ -137,7 +123,6 @@ export function BoardsList({
         )}
       />
 
-      {/* The empty card holds the button while there are no rows. */}
       {rows.length > 0 && (
         <ListFooter
           pagination={

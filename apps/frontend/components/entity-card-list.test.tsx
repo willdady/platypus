@@ -14,15 +14,11 @@ import {
   setupUser,
 } from "@/test/list-test-harness";
 
-// --- Module mocks ------------------------------------------------------------
-
 vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("swr", () => swrMock);
 
 import { BoardsList } from "./boards-list";
 import { EntityCardList } from "./entity-card-list";
-
-// --- Fixtures ----------------------------------------------------------------
 
 type EntityCard = { id: string; name: string; description?: string | null };
 
@@ -50,18 +46,14 @@ const RESOURCES: {
 
 beforeEach(resetListHarness);
 
-// --- Tests -------------------------------------------------------------------
-
 describe.each(RESOURCES)(
   "$name list",
   ({ List, entity, confirmPhrase, queryParam }) => {
-    /** Renders the list with `cards` in it, optionally opening the row menu. */
     const renderCards = (cards: EntityCard[], menuItem?: string) => {
       mockScopedSWR({ [`/${entity}`]: cards }, { strict: true });
       return renderList(<List orgId="org1" workspaceId="ws1" />, menuItem);
     };
 
-    /** Opens the delete dialog and types the phrase that enables its button. */
     const armDelete = async (cards: EntityCard[]) => {
       await renderCards(cards, "Delete");
       fireEvent.change(
@@ -112,7 +104,6 @@ describe.each(RESOURCES)(
         await screen.findByText(`This ${entity} is in use`),
       ).toBeInTheDocument();
       expect(mutate).not.toHaveBeenCalled();
-      // The dialog stays open on a refused delete, letting the user retry.
       expect(
         screen.getByRole("button", { name: "Delete" }),
       ).toBeInTheDocument();
@@ -207,7 +198,6 @@ describe.each(RESOURCES)(
 );
 
 describe("list paging", () => {
-  // Ten cards, "card-01" … "card-10".
   const ten = Array.from({ length: 10 }, (_, i) => {
     const name = `card-${String(i + 1).padStart(2, "0")}`;
     return { id: name, name };
@@ -258,7 +248,6 @@ describe("list paging", () => {
 
 const item = { id: "i1", name: "Alpha", description: "First" };
 
-/** Renders the loaded list with `item` and the given slots. */
 function renderCards(
   slots: Partial<Parameters<typeof EntityCardList<typeof item>>[0]> = {},
 ) {

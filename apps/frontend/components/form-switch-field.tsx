@@ -16,21 +16,12 @@ export type FormSwitchFieldProps = {
   error?: string | null;
   description?: ReactNode;
   disabled?: boolean;
-  /** Content beside the label and before it, such as a row's avatar. */
   leading?: ReactNode;
-  /**
-   * Where the switch sits: `start` puts it before the label and description,
-   * `end` puts it on the right of them, the label-left settings row.
-   */
   align?: "start" | "end";
   className?: string;
   descriptionClassName?: string;
 };
 
-// Composes the ui/field + ui/switch atoms, so the
-// Field/Switch/FieldLabel/FieldDescription block that the labelled switches
-// in forms all hand-built — in five drifted shapes — is one control with one
-// look, matching `FormTextField` and `FormSelectField`.
 export function FormSwitchField({
   label,
   name,

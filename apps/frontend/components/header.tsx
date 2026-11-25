@@ -5,9 +5,7 @@ import { type Scope } from "@/lib/api-write";
 
 type HeaderProps = {
   leftContent?: React.ReactNode;
-  /** Controls rendered before the shared notification/theme/user cluster. */
   rightContent?: React.ReactNode;
-  /** The Organization/Workspace the header's controls act on, when there is one. */
   scope?: Scope;
 };
 
