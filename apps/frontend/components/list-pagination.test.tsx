@@ -70,7 +70,6 @@ describe("GhostCards", () => {
         <GhostCards page={{ ghosts: 2, rowGhosts: 1 }} />
       </ul>,
     );
-    // Ghosts are aria-hidden, so only a `hidden` query finds them.
     const ghosts = screen.getAllByRole("listitem", { hidden: true });
     expect(ghosts).toHaveLength(3);
     for (const ghost of ghosts) {

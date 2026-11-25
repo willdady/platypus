@@ -13,12 +13,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-/**
- * The "Open external link?" confirmation, drawn with the app's Radix Dialog
- * rather than Streamdown's built-in modal. A plain portalled div can't be
- * clicked under another modal Radix layer (a card Dialog sets
- * `pointer-events: none` on body); a nested Radix Dialog can.
- */
 function LinkSafetyDialog({
   isOpen,
   onClose,
@@ -63,10 +57,9 @@ function LinkSafetyDialog({
   );
 }
 
-/** Every Markdown renderer showing agent-writable content uses this. */
+// why: every Markdown renderer showing agent-writable content must use this
 export const linkSafety: LinkSafetyConfig = {
   enabled: true,
-  // Same-origin links are the app's own pages; only external ones confirm.
   onLinkCheck: (url) => {
     try {
       return (

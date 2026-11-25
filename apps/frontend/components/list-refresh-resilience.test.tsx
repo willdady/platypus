@@ -15,8 +15,6 @@ import {
   renderList,
 } from "@/test/list-test-harness";
 
-// --- Module mocks ------------------------------------------------------------
-
 vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("swr", () => swrMock);
 
@@ -25,8 +23,6 @@ import { BlueprintsList } from "./blueprints-list";
 import { ProvidersList } from "./providers-list";
 import { SkillsList } from "./skills-list";
 import { TriggerList } from "./trigger-list";
-
-// --- Fixtures ----------------------------------------------------------------
 
 const blueprint = {
   id: "b1",
@@ -54,21 +50,13 @@ const trigger = {
   config: { events: [] },
 } as unknown as Trigger;
 
-/**
- * A background refresh that failed after a successful first load: the error
- * is set and the rows it already returned are still held.
- */
 function failedRefresh(rows: unknown[]) {
   return { error: new Error("500"), data: { results: rows } };
 }
 
-// Matches every URL under the Organization, so it is spread in last: reads
-// match in registration order.
 const organization = { "/organizations/org1": { data: { id: "org1" } } };
 
 beforeEach(resetListHarness);
-
-// --- Tests -------------------------------------------------------------------
 
 describe("a list keeps its chrome when a refresh fails with rows held", () => {
   it("keeps the Providers footer", async () => {

@@ -17,10 +17,7 @@ import { cn } from "@/lib/utils";
 import { readableTextColor } from "@/lib/color";
 import type { Serialized } from "@/lib/api-write";
 
-/**
- * How each due-date status reads: its colour, and the words that carry it for
- * anyone who can't tell the colours apart.
- */
+// why: the words carry the status for anyone who cannot tell the colours apart
 const DUE_DATE_STATUS = {
   overdue: {
     prefix: "Overdue: due",
@@ -104,8 +101,7 @@ function KanbanCardComponentInner({
     <div
       ref={setNodeRef}
       {...attributes}
-      // dnd-kit's attributes carry the same role; spelled out for the linter,
-      // which cannot see through the spread.
+      // why: dnd-kit's spread carries the same role, but the a11y linter cannot see it
       role="button"
       {...(draggable ? listeners : {})}
       className={cn(
@@ -117,11 +113,10 @@ function KanbanCardComponentInner({
         priorityColor ? { ...style, borderLeftColor: priorityColor } : style
       }
       onClick={() => onCardClick(card)}
-      // Enter opens the card, as a click does. Space is left to dnd-kit's
-      // keyboard sensor, which picks the card up to move it.
+      // why: Space stays with dnd-kit's sensor, which picks the card up to move it
       onKeyDown={(event) => {
         if (draggable) listeners?.onKeyDown?.(event);
-        // Mid-drag, Enter drops the card; it must not open it as well.
+        // why: mid-drag Enter drops the card, so it must not open it too
         if (event.key === "Enter" && !event.repeat && !isDragging) {
           event.preventDefault();
           onCardClick(card);

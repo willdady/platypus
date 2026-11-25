@@ -67,8 +67,7 @@ function ColumnContent({
   isDraggingColumn?: boolean;
 }) {
   const hasCards = column.cards.length > 0;
-  // SortableContext keys off array identity, so a fresh array here would
-  // re-render every card in the column on any parent render.
+  // why: SortableContext keys off array identity, so a new array re-renders every card
   const cardIds = useMemo(() => column.cards.map((c) => c.id), [column.cards]);
 
   return (
@@ -153,8 +152,7 @@ function ColumnContent({
   );
 }
 
-// Sortable variant: owns the dnd-kit hooks. Kept separate from the overlay
-// path so the hooks below are never called conditionally (rules-of-hooks).
+// why: its hooks must not run conditionally, so the overlay path is a separate component
 function SortableKanbanColumn({
   column,
   labels,
@@ -186,12 +184,7 @@ function SortableKanbanColumn({
     disabled: isDraggingColumn,
   });
 
-  // Broaden the highlight: useDroppable's isOver only fires when the
-  // over-target is the column drop-zone itself.  When the cursor is over a
-  // card, that card is the over-target, so the column wouldn't highlight.
-  // Read the active over from context instead and treat the column as
-  // "over" if the over-target is the drop-zone, the column's sortable, or
-  // any card that belongs to this column.
+  // why: with a card under the cursor, the column itself would never highlight
   const { active, over } = useDndContext();
   const overId = over ? String(over.id) : null;
   const isOver =
@@ -234,8 +227,7 @@ function SortableKanbanColumn({
 }
 
 function KanbanColumnComponentInner(props: KanbanColumnProps) {
-  // Overlay instances render as plain static elements — no dnd hooks. Delegate
-  // the interactive case to SortableKanbanColumn so its hooks always run.
+  // why: the overlay renders static, so the dnd hooks stay in SortableKanbanColumn
   if (props.overlay) {
     return (
       <div className="flex flex-col w-80 min-w-80 shrink-0 bg-muted/50 rounded-lg">

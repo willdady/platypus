@@ -11,25 +11,12 @@ import {
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 
-/**
- * The loading placeholders the lists and tables render in place of their
- * rows, each laid out on the loaded markup's own frame — the same `<ul>`,
- * `Item` variant, grid, and table — so the rows land without shifting. As in
- * `TriggerRunRowSkeleton`, each text line is a box of the line's own height
- * holding a shorter bar, which is how the loaded text reads.
- */
-
-/**
- * The announced frame around a skeleton: one `status` region, busy and named
- * for what is loading, so the placeholder is findable by label rather than by
- * its copy.
- */
+// why: each skeleton mirrors the loaded markup's frame, so rows land without shifting
 export function LoadingRegion({
   label,
   className,
   children,
 }: {
-  /** What is loading: "Loading agents". */
   label: string;
   className?: string;
   children: ReactNode;
@@ -46,14 +33,11 @@ export function LoadingRegion({
   );
 }
 
-/** One line of text: a box `lineClassName` tall holding a bar. */
 export function SkeletonLine({
   className,
   lineClassName = "h-5",
 }: {
-  /** The bar: its width, and its height when not the default. */
   className?: string;
-  /** The line box: the loaded text's line height. */
   lineClassName?: string;
 }) {
   return (
@@ -63,10 +47,7 @@ export function SkeletonLine({
   );
 }
 
-/**
- * A placeholder for a word inside running text — a `<span>` with the
- * `Skeleton` look, since a `<div>` can't sit inside a `<p>`.
- */
+// why: a span, because a div cannot sit inside a paragraph
 export function InlineSkeleton({ className }: { className?: string }) {
   return (
     <span
@@ -79,7 +60,6 @@ export function InlineSkeleton({ className }: { className?: string }) {
   );
 }
 
-/** A ghost `size="icon"` button — a row's `EllipsisVertical` menu trigger. */
 export function IconButtonSkeleton() {
   return (
     <div className="flex size-9 shrink-0 items-center justify-center">
@@ -88,25 +68,18 @@ export function IconButtonSkeleton() {
   );
 }
 
-/** A default-size button (`h-9`); `className` sets its width. */
 export function ButtonSkeleton({ className }: { className?: string }) {
   return <Skeleton className={cn("h-9 w-32", className)} />;
 }
 
-/** The pill badge beside a row's title (`Badge`, or the Organization pill). */
 export function BadgeSkeleton({ className }: { className?: string }) {
   return <Skeleton className={cn("h-badge w-16 rounded-full", className)} />;
 }
 
-/**
- * The action row beneath a list — `mt-4 flex gap-2` under a card grid, bare
- * `flex gap-2` under row lists — one button per width given.
- */
 export function ButtonRowSkeleton({
   widths,
   className,
 }: {
-  /** Each button's width class, in order: `["w-32", "w-44"]`. */
   widths: string[];
   className?: string;
 }) {
@@ -119,17 +92,12 @@ export function ButtonRowSkeleton({
   ) : null;
 }
 
-// Varied title widths, so a column of placeholders doesn't read as one bar.
+// why: varied widths, so a column of placeholders does not read as one bar
 const TITLE_WIDTHS = ["w-40", "w-28", "w-48", "w-32"];
 function at(widths: string[], i: number) {
   return widths[i % widths.length];
 }
 
-/**
- * The `<ul className="mb-4">` of outline `Item` rows the settings lists use
- * (providers, MCP servers, webhooks): a title, an optional pill beside it and
- * an optional second line, and the trailing pencil.
- */
 export function ItemRowsSkeleton({
   rows = 3,
   badge = false,
@@ -137,11 +105,8 @@ export function ItemRowsSkeleton({
   extra,
 }: {
   rows?: number;
-  /** A pill beside the title on the first row (the Organization badge). */
   badge?: boolean;
-  /** A `text-sm` line under the title (a webhook's URL). */
   secondLine?: boolean;
-  /** Anything the row carries under its lines: a "Shared with" badge. */
   extra?: ReactNode;
 }) {
   return (
@@ -168,25 +133,14 @@ export function ItemRowsSkeleton({
 }
 
 export type CardSkeletonProps = {
-  /** The `size-12` round avatar the agent cards lead with. */
   media?: boolean;
-  /** Pills beside the title, one per width class. */
   titleBadges?: string[];
-  /** `text-xs` description lines under the title: the loaded clamp. */
   descriptionLines?: number;
-  /** Anything the card carries under the description: a count, a badge. */
   extra?: ReactNode;
-  /** The trailing actions; defaults to the row menu trigger. */
   actions?: ReactNode;
-  /** Classes on the `Item`, after `h-full`: `items-stretch`. */
   className?: string;
 };
 
-/**
- * The `grid-cols-1 lg:grid-cols-2` card list most resources use (agents,
- * skills, triggers, blueprints, boards): outline `Item` cards of
- * a title, a description, whatever the card carries below it, and the menu.
- */
 export function CardGridSkeleton({
   cards = 4,
   media = false,
@@ -215,7 +169,6 @@ export function CardGridSkeleton({
                   <BadgeSkeleton key={j} className={width} />
                 ))}
               </div>
-              {/* One box, as the loaded description reserves its lines. */}
               <div>
                 {Array.from({ length: descriptionLines }, (_, j) => (
                   <SkeletonLine
@@ -238,7 +191,6 @@ export function CardGridSkeleton({
   );
 }
 
-/** The avatar-and-name cell the user and member tables lead with. */
 export function UserCellSkeleton() {
   return (
     <div className="flex items-center gap-3">
@@ -252,18 +204,11 @@ export function UserCellSkeleton() {
 }
 
 export type TableSkeletonColumn = {
-  /** The column's real heading — static, so it renders as loaded. */
   header: string;
-  /** The placeholder in each of the column's cells. */
   cell: ReactNode;
-  /** Classes on the heading and each cell: `text-right`. */
   className?: string;
 };
 
-/**
- * The bordered, horizontally scrolling table the admin surfaces use (users,
- * members, invitations), with its real headings over placeholder rows.
- */
 export function TableSkeleton({
   columns,
   rows = 3,
@@ -271,7 +216,6 @@ export function TableSkeleton({
 }: {
   columns: TableSkeletonColumn[];
   rows?: number;
-  /** The loaded table's own classes: its `min-w-[…]`. */
   tableClassName?: string;
 }) {
   return (

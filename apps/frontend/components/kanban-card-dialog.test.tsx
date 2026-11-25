@@ -14,8 +14,6 @@ import {
   type KanbanLabel,
 } from "@platypus/schemas";
 
-// --- Module mocks ------------------------------------------------------------
-
 vi.mock("@/components/auth-provider", () => ({
   useBackendUrl: () => "http://test",
   useAuth: () => ({ user: { id: "u1", name: "Alice", image: null } }),
@@ -26,8 +24,6 @@ vi.mock("sonner", () => ({
   toast: { error: toastErrorSpy, success: vi.fn() },
 }));
 
-// The `GET .../comments` and `.../agents` lists this dialog renders. Set per
-// test.
 let comments: Serialized<KanbanCardComment>[] = [];
 const mutateCommentsSpy = vi.fn();
 
@@ -52,8 +48,6 @@ import {
 } from "@/test/test-utils";
 import type { Serialized, WriteOutcome } from "@/lib/api-write";
 
-// --- Helpers -----------------------------------------------------------------
-
 type SaveHandler = Parameters<typeof KanbanCardDialog>[0]["onSave"];
 
 const card: Serialized<KanbanCard> = {
@@ -75,7 +69,6 @@ const existingComment: Serialized<KanbanCardComment> = {
   createdAt: new Date("2026-01-01").toISOString(),
 } as unknown as Serialized<KanbanCardComment>;
 
-// Answers the dialog's `max-width` query for a viewport `width` px wide.
 function setViewportWidth(width: number) {
   window.matchMedia = vi.fn((query: string) => {
     const maxWidth = /max-width:\s*(\d+)px/.exec(query);
@@ -138,13 +131,11 @@ function renderDialog(
   return render(dialogElement({ onOpenChange, onDelete }));
 }
 
-/** Opens the card's Delete confirm dialog and returns it. */
 async function openCardDeleteConfirm() {
   fireEvent.click(screen.getByRole("button", { name: "Delete" }));
   return screen.findByRole("dialog", { name: "Delete card" });
 }
 
-/** Opens the first comment's Delete confirm dialog and returns it. */
 async function openCommentDeleteConfirm() {
   fireEvent.click(
     screen.getByRole("button", { name: /^Delete comment by Bob/ }),
@@ -152,7 +143,6 @@ async function openCommentDeleteConfirm() {
   return screen.findByRole("dialog", { name: "Delete comment" });
 }
 
-/** Selects a tab in the narrow layout's tabbed dialog. */
 function openTab(name: "Details" | "Comments" | "History") {
   fireEvent.mouseDown(screen.getByRole("tab", { name }), { button: 0 });
 }
@@ -163,8 +153,6 @@ afterEach(() => {
   toastErrorSpy.mockClear();
   setViewportWidth(1024);
 });
-
-// --- Tests -------------------------------------------------------------------
 
 describe("KanbanCardDialog add comment", () => {
   it("surfaces the backend's reason and does not revalidate when the comment is refused", async () => {
@@ -222,7 +210,6 @@ describe("KanbanCardDialog comment double submit", () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
     expect(confirm).toBeDisabled();
     expect(confirm).toHaveTextContent("Deleting...");
-    // The card's own Delete waits on its own guard, not this one.
     expect(cardDelete).not.toHaveTextContent("Deleting...");
     resolve();
     await waitFor(() => expect(mutateCommentsSpy).toHaveBeenCalledOnce());
@@ -277,8 +264,6 @@ describe("KanbanCardDialog edit comment", () => {
     fireEvent.change(screen.getByDisplayValue("First comment"), {
       target: { value: "Edited comment" },
     });
-    // The comment's own Save button renders before the card-level Save
-    // button in document order.
     fireEvent.click(screen.getAllByRole("button", { name: "Save" })[0]);
 
     await waitFor(() =>
@@ -364,8 +349,6 @@ describe("KanbanCardDialog fields across card updates", () => {
     rerender(dialogElement({ card: newerCard }));
     expect(title).toHaveValue("A title I am still typing");
 
-    // Back to the value the dialog was seeded from, so it has no edits left
-    // to protect and can take the newer version.
     fireEvent.change(title, { target: { value: "Ship the release" } });
 
     expect(screen.getByText("Ship the release today")).toBeInTheDocument();
@@ -398,7 +381,6 @@ describe("KanbanCardDialog fields across card updates", () => {
       target: { value: "A title I am still typing" },
     });
 
-    // Someone else moves the card while the dialog holds the edits.
     rerender(
       dialogElement({
         card: { ...newerCard, title: card.title },
@@ -425,7 +407,6 @@ describe("KanbanCardDialog fields across card updates", () => {
       target: { value: "A title I am still typing" },
     });
 
-    // Closing is the discard: the board clears the card and the dialog closes.
     rerender(dialogElement({ card: null, open: false }));
     rerender(dialogElement());
 
@@ -570,7 +551,6 @@ describe("KanbanCardDialog delete comment", () => {
     ).toBeInTheDocument();
     expect(toastErrorSpy).not.toHaveBeenCalled();
     expect(mutateCommentsSpy).not.toHaveBeenCalled();
-    // The comment stays in the thread to retry against.
     expect(screen.getByText("First comment")).toBeInTheDocument();
   });
 
@@ -631,7 +611,6 @@ describe("KanbanCardDialog delete card", () => {
     ).toBeInTheDocument();
     expect(onDelete).toHaveBeenCalledWith("c1");
     expect(toastErrorSpy).not.toHaveBeenCalled();
-    // The card dialog is still there, so the delete can be retried.
     expect(screen.getByText("Ship the release")).toBeInTheDocument();
     expect(
       screen.getByRole("dialog", { name: "Delete card" }),
@@ -679,13 +658,11 @@ describe("KanbanCardDialog delete card", () => {
       screen.queryByText("Discard unsaved changes?"),
     ).not.toBeInTheDocument();
     expect(screen.getByText("Renamed")).toBeInTheDocument();
-    // Focus goes back to the button that opened the confirm.
     expect(screen.getByRole("button", { name: "Delete" })).toHaveFocus();
   });
 });
 
 describe("KanbanCardDialog details scroll area", () => {
-  // jsdom has no layout, so pin the class instead of measuring overlap (#1591).
   it("stops its children shrinking", () => {
     renderDialog();
 
@@ -702,15 +679,12 @@ describe("KanbanCardDialog mobile composition", () => {
 
     renderDialog();
 
-    // The tabs are the mobile-only container; the details tab composes the
-    // same title/body/metadata sections the desktop layout shows.
     expect(screen.getByRole("tab", { name: "Details" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Comments" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "History" })).toBeInTheDocument();
     expect(screen.getByText("Ship the release")).toBeInTheDocument();
     expect(screen.getByText("Priority")).toBeInTheDocument();
 
-    // The comments section is not mounted until its tab is selected.
     expect(
       screen.queryByRole("textbox", { name: "Add a comment" }),
     ).not.toBeInTheDocument();
@@ -723,8 +697,6 @@ describe("KanbanCardDialog mobile composition", () => {
 });
 
 describe("KanbanCardDialog mobile comments", () => {
-  // The tabbed layout unmounts the tab it leaves, so the comment state has to
-  // live above the tabs for a draft to survive a look at the details.
   it("keeps a comment draft when the user switches tabs and back", () => {
     setViewportWidth(375);
     renderDialog();
@@ -854,7 +826,6 @@ describe("KanbanCardDialog close with unsaved changes", () => {
     fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
 
     expect(onOpenChange).not.toHaveBeenCalled();
-    // Leaving the editor shows the title as text, still the edited value.
     expect(screen.getByText("Renamed")).toBeInTheDocument();
   });
 

@@ -21,14 +21,9 @@ import {
 } from "@platypus/schemas";
 import type { z } from "zod";
 
-// --- Module mocks ------------------------------------------------------------
-
 const { replace } = vi.hoisted(() => ({ replace: vi.fn() }));
 vi.mock("next/navigation", async () => {
   const React = await vi.importActual<typeof import("react")>("react");
-  // Next keeps `useSearchParams` in step with `history.replaceState`; the mock
-  // does the same off jsdom's location. Next also hands back stable instances
-  // between renders, which the board's memoized children rely on.
   const listeners = new Set<() => void>();
   const nativeReplaceState = window.history.replaceState.bind(window.history);
   window.history.replaceState = (...args) => {
@@ -68,12 +63,9 @@ vi.mock("sonner", () => ({
 }));
 
 let boardState: KanbanBoardState;
-// The board read's outcome beyond its data: whether it has resolved at all,
-// and the error a failed (initial or background) read left behind.
 let boardLoaded = true;
 let boardError: unknown;
 const mutateBoard = vi.fn();
-// The open card's comment thread, and the mutate the dialog revalidates it by.
 let cardComments: KanbanCardComment[] = [];
 const mutateCardComments = vi.fn();
 
@@ -100,10 +92,6 @@ vi.mock("swr", () => ({
   },
 }));
 
-// dnd-kit's pointer sensors don't survive jsdom, so a real drag can't be
-// simulated. This renders the genuine DndContext (so the sortable children
-// still get their provider) while keeping a handle on the drag callbacks the
-// board passes it, which is what lets a test drive a card drop.
 const dragHandlers: {
   onDragStart?: (event: unknown) => void;
   onDragOver?: (event: unknown) => void;
@@ -125,10 +113,6 @@ vi.mock("@dnd-kit/core", async () => {
   };
 });
 
-// Counts every `useSortable` call. The card and column components both own a
-// `useSortable` hook, so a call is a render of that memoized component — the
-// only way to see whether the drag handlers are re-rendering more than they
-// should.
 const { sortableRenders } = vi.hoisted(() => ({
   sortableRenders: new Map<string, number>(),
 }));
@@ -155,8 +139,6 @@ import {
   stubRejectedSave,
   stubSaveSequence,
 } from "@/test/test-utils";
-
-// --- Fixtures ----------------------------------------------------------------
 
 function makeCard(overrides: Partial<KanbanCard> = {}): KanbanCard {
   return {
@@ -245,10 +227,6 @@ function openColumnMenuItem(columnName: string, itemText: string) {
   return screen.findByText(itemText).then((item) => fireEvent.click(item));
 }
 
-// --- Tests -------------------------------------------------------------------
-
-// The open card lives in the URL, so a dialog a test leaves open must not
-// carry into the next one.
 afterEach(() => {
   window.history.replaceState(null, "", "/");
   cardComments = [];
@@ -261,13 +239,11 @@ describe("KanbanBoard transport", () => {
     toastSuccess.mockReset();
     toastError.mockReset();
     mutateBoard.mockReset();
-    // jsdom has no matchMedia; the desktop/mobile checks subscribe to it.
     window.matchMedia = vi.fn().mockReturnValue({
       matches: true,
       addEventListener: vi.fn(),
       removeEventListener: vi.fn(),
     });
-    // Radix DropdownMenu positioning calls this during focus management.
     Element.prototype.scrollIntoView = vi.fn();
     Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
     Element.prototype.releasePointerCapture = vi.fn();
@@ -288,28 +264,13 @@ describe("KanbanBoard transport", () => {
     ).toHaveAttribute("href", "/org1/workspace/ws1/boards/create");
   });
 
-  /**
-   * Every dialog on the board is the same pair of claims — an accepted write
-   * goes to the right endpoint and closes the dialog, a refused one names the
-   * backend's reason and leaves the dialog open to retry. The gesture, the
-   * endpoint, and each outcome's own fixture are the parameters.
-   *
-   * `perform` takes the text to submit so the refused run can describe the
-   * conflict it is provoking: "a column with this name already exists" is only
-   * a real scenario when the name typed is one the board already has.
-   */
   const DIALOG_FLOWS: {
     name: string;
-    /** The dialog's heading: gone once accepted, still there once refused. */
     heading: string;
-    /** Opens the dialog, fills it with `value`, and submits. */
     perform: (value: string) => Promise<void> | void;
     url: string;
-    /** What each outcome's run types. Ignored by a dialog with no input. */
     input: { accepted: string; refused: string };
-    /** The accepted request, asserted on the accepted run only. */
     request: Record<string, unknown>;
-    /** The shared request schema the accepted body must satisfy, when it has one. */
     schema?: z.ZodType;
     accepted: { status: number; body: unknown };
     refused: { status: number; error: string };
@@ -325,8 +286,6 @@ describe("KanbanBoard transport", () => {
         fireEvent.click(screen.getByRole("button", { name: "Add column" }));
       },
       url: "http://test/organizations/org1/workspaces/ws1/boards/board-1/columns",
-      // "To Do" is the column the board already has, so the refused run is
-      // asking for a genuine duplicate.
       input: { accepted: "In Review", refused: "To Do" },
       request: {
         method: "POST",
@@ -358,7 +317,6 @@ describe("KanbanBoard transport", () => {
       },
       schema: kanbanCardCreateSchema,
       accepted: { status: 201, body: { id: "card-2" } },
-      // The column went away between opening the dialog and submitting it.
       refused: { status: 404, error: "Column not found" },
     },
     {
@@ -435,9 +393,6 @@ describe("KanbanBoard transport", () => {
         expect(toastError).not.toHaveBeenCalled();
       });
 
-      // A refused create or edit is a toast; a refused delete belongs in its
-      // dialog, so the reader can read it and retry without the toast
-      // outliving the dialog. Each flow runs only the one that applies.
       const refusalIsInline = name === "column delete";
 
       it.runIf(!refusalIsInline)(
@@ -565,7 +520,6 @@ describe("KanbanBoard transport", () => {
       const trigger = columnContainer.querySelector(
         'button[aria-haspopup="menu"]',
       )!;
-      // Radix's DropdownMenuTrigger opens on pointerdown, not plain click.
       fireEvent.pointerDown(trigger, { pointerId: 1, button: 0 });
       fireEvent.pointerUp(trigger, { pointerId: 1, button: 0 });
       fireEvent.click(trigger);
@@ -654,7 +608,6 @@ describe("KanbanBoard transport", () => {
       ]);
     });
 
-    /** Drops card-1 onto col-2, going through the board's real drag handlers. */
     function dropCardOnDoneColumn() {
       const active = {
         id: "card-1",
@@ -668,12 +621,6 @@ describe("KanbanBoard transport", () => {
       });
     }
 
-    /**
-     * The full dnd-kit sequence: drag-over moves the card into the target
-     * column locally before drag-end fires.  The board must still report the
-     * column the drag *started* in, or the server refuses every cross-column
-     * move as a conflict.
-     */
     it("sends the origin column after drag-over moved the card locally", async () => {
       const fetchMock = stubAcceptedSave({ id: "card-1" });
 
@@ -720,8 +667,6 @@ describe("KanbanBoard transport", () => {
       });
     });
 
-    // The card is elsewhere, so reverting to the last poll would leave it in the
-    // wrong column until the next interval — hence the refetch.
     it("explains a refused drag and re-syncs the board", async () => {
       stubRejectedSave("Card is no longer in the expected column", 409);
 
@@ -763,8 +708,6 @@ describe("KanbanBoard transport", () => {
         .map((el) => el.textContent);
     }
 
-    // Runs one drag-over and waits for the board's animation-frame throttle to
-    // release, so the next drag-over lands in a new frame.
     async function dragOverFrame(active: unknown, over: unknown) {
       await act(async () => {
         dragHandlers.onDragOver?.({ active, over });
@@ -786,8 +729,6 @@ describe("KanbanBoard transport", () => {
       act(() => {
         dragHandlers.onDragStart?.({ active });
       });
-      // Drag start clones every column, so the whole board re-renders once.
-      // The per-frame drag-over updates are what must stay local.
       sortableRenders.clear();
 
       const over = { id: "card-2", rect: { top: 0, height: 10 } };
@@ -808,20 +749,17 @@ describe("KanbanBoard transport", () => {
       boardState = makeBoardState([makeColumn({ id: "col-1" }, [makeCard()])]);
     });
 
-    /** Opens the card and its Delete confirm dialog, returning the latter. */
     async function openCardDeleteConfirm() {
       fireEvent.click(screen.getByText("A card"));
       fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
       return screen.findByRole("dialog", { name: "Delete card" });
     }
 
-    /** Opens the card's Delete confirm dialog and confirms it. */
     async function deleteCard() {
       const confirm = await openCardDeleteConfirm();
       fireEvent.click(within(confirm).getByRole("button", { name: "Delete" }));
     }
 
-    /** The card dialog's two writes, against the same endpoint. */
     const CARD_WRITES: {
       name: string;
       method: string;
@@ -908,8 +846,6 @@ describe("KanbanBoard transport", () => {
         await within(confirm).findByText("Card not found"),
       ).toBeInTheDocument();
       expect(toastError).not.toHaveBeenCalled();
-      // Both the confirm and the card dialog stay open for a retry. The card
-      // dialog sits behind the modal, so it is hidden from the a11y tree.
       expect(
         screen.getByRole("dialog", { name: "Delete card" }),
       ).toBeInTheDocument();
@@ -1024,8 +960,6 @@ describe("KanbanBoard transport", () => {
 describe("KanbanBoard card comment delete", () => {
   beforeEach(() => {
     toastError.mockReset();
-    // Desktop: the comment thread lives below the details, not behind the
-    // mobile Comments tab.
     window.matchMedia = vi.fn((query: string) => ({
       matches: query.includes("pointer: fine"),
       addEventListener: vi.fn(),
@@ -1039,7 +973,6 @@ describe("KanbanBoard card comment delete", () => {
     cardComments = [makeComment()];
   });
 
-  /** Opens the card and its first comment's Delete confirm dialog. */
   async function openCommentDeleteConfirm() {
     fireEvent.click(screen.getByText("A card"));
     fireEvent.click(
@@ -1154,7 +1087,6 @@ describe("KanbanBoard open card", () => {
     fireEvent.click(screen.getByText("A card"));
     await screen.findByRole("dialog");
 
-    // A poll lands with the card renamed elsewhere.
     boardState = makeBoardState([
       makeColumn({ id: "col-1" }, [
         makeCard({ title: "Renamed", updatedAt: new Date("2026-01-02") }),
@@ -1183,10 +1115,8 @@ describe("KanbanBoard double submit", () => {
     boardState = makeBoardState([makeColumn({ id: "col-1" }, [makeCard()])]);
   });
 
-  /** Each gesture opens its dialog and returns the button that submits it. */
   const SUBMITS: {
     name: string;
-    /** A column holding cards can't be deleted, so that flow starts empty. */
     emptyColumn?: boolean;
     open: () => Promise<HTMLElement>;
     pendingLabel: string;
@@ -1315,8 +1245,6 @@ describe("KanbanBoard load states", () => {
     ).toHaveAttribute("href", "/org1/workspace/ws1/boards");
   });
 
-  // A deleted board is not a network blip: reading again won't bring it back,
-  // so there is nothing to retry.
   it("names a deleted board and offers no pointless retry", () => {
     boardLoaded = false;
     boardError = Object.assign(new Error("gone"), { status: 404 });
@@ -1339,8 +1267,6 @@ describe("KanbanBoard load states", () => {
     expect(screen.queryByText("Couldn't load")).not.toBeInTheDocument();
   });
 
-  // A page restored from the back/forward cache was frozen, so the board poll
-  // did not run and the board is as old as the moment it was put away.
   it("revalidates when the page is restored from the back/forward cache", () => {
     renderBoard();
 

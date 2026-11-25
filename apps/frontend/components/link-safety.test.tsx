@@ -4,7 +4,6 @@ import { useState } from "react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Markdown } from "./markdown";
 
-// A Kanban card: Markdown inside a modal Radix Dialog.
 function Card({ body }: { body: string }) {
   const [open, setOpen] = useState(true);
   return (
@@ -17,8 +16,6 @@ function Card({ body }: { body: string }) {
   );
 }
 
-// Streamdown opens the confirmation after an async link check; clicking inside
-// act lets the nested layer finish mounting before the test presses Escape.
 function clickLink(name: string) {
   return act(async () => {
     fireEvent.click(screen.getByRole("button", { name }));

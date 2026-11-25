@@ -60,8 +60,7 @@ import { workspaceRoutes } from "@/lib/routes";
 import { replaceSearchParam } from "@/lib/search-params";
 
 const EMPTY_LABELS: KanbanLabel[] = [];
-// Shared, so an absent board state doesn't hand the drag hook a fresh array
-// each render and reset the optimistic copy.
+// why: a fresh array each render would reset the drag hook's optimistic copy
 const EMPTY_COLUMNS: ColumnWithCards[] = [];
 
 type BoardDialog =
@@ -75,8 +74,7 @@ function noop() {}
 
 const FINE_POINTER_QUERY = "(pointer: fine)";
 
-// dnd-kit's default instructions offer Enter to pick up, which here opens the
-// card instead.
+// why: dnd-kit's default instructions offer Enter, which here opens the card
 const DND_ACCESSIBILITY = {
   screenReaderInstructions: {
     draggable:
@@ -141,23 +139,15 @@ export function KanbanBoard({
     refetch: mutate,
   });
 
-  // Detect desktop via pointer: fine media query to disable drag on touch
-  // devices.
   const isDesktop = useMediaQuery(FINE_POINTER_QUERY);
 
-  // The one board dialog that is open, with what it acts on.
   const [dialog, setDialog] = useState<BoardDialog>(null);
-  // A refused column delete, shown inline in its dialog rather than toasted.
   const [deleteColumnError, setDeleteColumnError] = useState<string | null>(
     null,
   );
 
   const labels = data?.board.labels ?? EMPTY_LABELS;
 
-  // The `?cardId` param is the one record of which card is open: clicking a
-  // card writes it, closing clears it, and a shared link arrives with it. The
-  // card itself is looked up from the polled columns on every render, so the
-  // open dialog always shows the board's latest copy.
   const updateCardIdParam = useCallback(
     (cardId: string | null) => replaceSearchParam("cardId", cardId),
     [],
@@ -174,14 +164,10 @@ export function KanbanBoard({
     [columns, openCardId],
   );
 
-  // A link to a card the board no longer has opens nothing; drop the param so
-  // the URL doesn't keep claiming a card is open.
   useEffect(() => {
     if (data && openCardId && !selectedCard) updateCardIdParam(null);
   }, [data, openCardId, selectedCard, updateCardIdParam]);
 
-  // Stable across drag frames so the memoized columns and cards it is passed
-  // through are not re-rendered on every drag-over update.
   const handleCardClick = useCallback(
     (card: Serialized<KanbanCard>) => updateCardIdParam(card.id),
     [updateCardIdParam],
@@ -192,7 +178,6 @@ export function KanbanBoard({
     setDialog(null);
   }, []);
 
-  /** Sends a dialog's write under the board; closes the dialog once it lands. */
   const submitDialogWrite = async (
     path: string,
     body: Parameters<typeof writeEntity>[3],
@@ -228,9 +213,6 @@ export function KanbanBoard({
   const submitEditColumn = (columnId: string, data: { name: string }) =>
     submitDialogWrite("columns", { id: columnId, data });
 
-  // The delete runs once per confirm: a double click would send it twice. A
-  // refused delete is shown in the dialog, not toasted, so the reader can act
-  // on it there — the same rule every other delete follows.
   const deleteColumn = useMutation((columnId: string) =>
     submitDialogWrite("columns", { id: columnId }, setDeleteColumnError),
   );
@@ -273,8 +255,6 @@ export function KanbanBoard({
       const column = columnOfCard(columns, cardId);
       if (!column) return;
       const { columnId: targetColumnId, ...updateData } = cardData;
-      // Fields first, so a refused update sends nothing else: moving first would
-      // leave the card in its new column with the edits unsaved.
       const updateOutcome = await writeEntity(
         backendUrl,
         `${boardPath}/cards`,
@@ -306,8 +286,6 @@ export function KanbanBoard({
           `Your changes were saved, but the card was not moved. ${result.message}`,
         );
       }
-      // A failed move stays open to retry. A conflict closes: the card has
-      // moved on elsewhere, so there is nothing left to retry.
       if (result.outcome !== "failed") closeDialog();
     },
     [
@@ -322,9 +300,6 @@ export function KanbanBoard({
     ],
   );
 
-  // The card dialog's delete confirm shows the outcome inline, so a refusal
-  // is returned rather than toasted. A successful delete leaves the card it
-  // destroyed: clear the `cardId` param and revalidate the board.
   const handleCardDelete = useCallback(
     async (cardId: string) => {
       const column = columnOfCard(columns, cardId);
@@ -349,8 +324,6 @@ export function KanbanBoard({
     [columns, backendUrl, boardPath, scope, mutate, updateCardIdParam],
   );
 
-  // Only a cold failure replaces the board: a failed background poll keeps the
-  // last good state on screen rather than swapping a loaded board for an error.
   if (error && !data) {
     return (
       <div className="p-4">
@@ -381,7 +354,6 @@ export function KanbanBoard({
                 key={colIndex}
                 className="flex flex-col w-80 min-w-80 shrink-0 bg-muted/50 rounded-lg"
               >
-                {/* Column header: name + count badge, menu button */}
                 <div className="flex items-center justify-between p-3">
                   <Skeleton className="h-6 w-32" />
                   <Skeleton className="size-6 rounded" />
@@ -403,7 +375,6 @@ export function KanbanBoard({
                     />
                   ))}
                 </div>
-                {/* "Add card" footer */}
                 <div className="p-2">
                   <div className="flex h-9 items-center px-4">
                     <Skeleton className="h-4 w-24" />
@@ -411,7 +382,6 @@ export function KanbanBoard({
                 </div>
               </div>
             ))}
-            {/* "Add column" tile */}
             <div className="w-40 min-w-40 shrink-0 bg-muted/30 rounded-lg border border-dashed border-muted-foreground/30" />
           </div>
         </div>
@@ -588,7 +558,6 @@ export function KanbanBoard({
         />
       )}
 
-      {/* Card Details Dialog */}
       <KanbanCardDialog
         card={selectedCard}
         labels={labels}
