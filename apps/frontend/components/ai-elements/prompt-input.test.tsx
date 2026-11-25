@@ -9,6 +9,7 @@ import {
   PromptInputBody,
   PromptInputSubmit,
   PromptInputTextarea,
+  type PromptInputError,
   type PromptInputProps,
 } from "./prompt-input";
 
@@ -656,10 +657,20 @@ describe("PromptInput submit failure", () => {
     filename: "report.pdf",
   };
 
-  const failure = {
-    code: "submit" as const,
+  const failure: PromptInputError = {
+    code: "submit",
     message: "Your message couldn't be sent. Try again.",
   };
+
+  const failingSubmits: [string, PromptInputProps["onSubmit"]][] = [
+    ["a rejected promise", () => Promise.reject(new Error("send failed"))],
+    [
+      "a synchronous throw",
+      () => {
+        throw new Error("send failed");
+      },
+    ],
+  ];
 
   const renderInput = (
     onSubmit: PromptInputProps["onSubmit"],
@@ -684,37 +695,27 @@ describe("PromptInput submit failure", () => {
   const submit = () =>
     fireEvent.click(screen.getByRole("button", { name: "Submit" }));
 
-  it("reports a rejected submit and keeps the attachments", async () => {
-    const onError = vi.fn();
-    renderInput(() => Promise.reject(new Error("send failed")), onError);
+  describe.each(failingSubmits)("with %s", (_, onSubmit) => {
+    it("reports the failure and keeps the attachments", async () => {
+      const onError = vi.fn();
+      renderInput(onSubmit, onError);
 
-    submit();
+      submit();
 
-    await waitFor(() => expect(onError).toHaveBeenCalledWith(failure));
-    expect(screen.getByText("report.pdf")).toBeInTheDocument();
-  });
+      await waitFor(() => expect(onError).toHaveBeenCalledWith(failure));
+      expect(screen.getByText("report.pdf")).toBeInTheDocument();
+    });
 
-  it("reports a thrown submit and keeps the attachments", async () => {
-    const onError = vi.fn();
-    renderInput(() => {
-      throw new Error("send failed");
-    }, onError);
+    it("falls back to a toast when no onError handler is supplied", async () => {
+      renderInput(onSubmit);
 
-    submit();
+      submit();
 
-    await waitFor(() => expect(onError).toHaveBeenCalledWith(failure));
-    expect(screen.getByText("report.pdf")).toBeInTheDocument();
-  });
-
-  it("falls back to a toast when a failed submit has no onError handler", async () => {
-    renderInput(() => Promise.reject(new Error("send failed")));
-
-    submit();
-
-    await waitFor(() =>
-      expect(toast.error).toHaveBeenCalledWith(failure.message),
-    );
-    expect(screen.getByText("report.pdf")).toBeInTheDocument();
+      await waitFor(() =>
+        expect(toast.error).toHaveBeenCalledWith(failure.message),
+      );
+      expect(screen.getByText("report.pdf")).toBeInTheDocument();
+    });
   });
 
   it("clears the attachments after a successful submit", async () => {

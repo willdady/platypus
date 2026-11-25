@@ -335,6 +335,11 @@ export type PromptInputMessage = {
   sandboxFiles?: File[];
 };
 
+export type PromptInputError = {
+  code: "accept" | "conversion" | "submit";
+  message: string;
+};
+
 export type PromptInputProps = Omit<
   HTMLAttributes<HTMLFormElement>,
   "onSubmit" | "onError"
@@ -342,10 +347,7 @@ export type PromptInputProps = Omit<
   accept?: string;
   initialAttachments?: FileUIPart[];
   globalDrop?: boolean;
-  onError?: (err: {
-    code: "accept" | "conversion" | "submit";
-    message: string;
-  }) => void;
+  onError?: (err: PromptInputError) => void;
   onSubmit: (
     message: PromptInputMessage,
     event: FormEvent<HTMLFormElement>,
@@ -537,7 +539,7 @@ export function PromptInput({
     });
   };
 
-  const reportFailure = (code: "conversion" | "submit", message: string) => {
+  const reportFailure = (code: PromptInputError["code"], message: string) => {
     const failure = { code, message };
     if (onError) {
       onError(failure);
@@ -603,8 +605,8 @@ export function PromptInput({
         }
         return item;
       }),
-    )
-      .then((convertedFiles: FileUIPart[]) => {
+    ).then(
+      (convertedFiles: FileUIPart[]) => {
         try {
           const result = onSubmit(
             {
@@ -616,19 +618,19 @@ export function PromptInput({
           );
 
           if (result instanceof Promise) {
-            result.then(clear).catch(() => {
-              // why: keep the attachments on failure so the user can retry the send
-              reportSendFailure();
-            });
+            // why: no clear() on failure so the user can retry the send
+            result.then(clear, reportSendFailure);
           } else {
             clear();
           }
         } catch {
-          // why: keep the attachments on failure so the user can retry the send
+          // why: no clear() on failure so the user can retry the send
           reportSendFailure();
         }
-      })
-      .catch(reportConversionFailure);
+      },
+      // why: only the conversion rejection goes here; a failed send reports itself
+      reportConversionFailure,
+    );
   };
 
   return (
