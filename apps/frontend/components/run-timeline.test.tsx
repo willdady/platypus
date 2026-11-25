@@ -124,7 +124,6 @@ describe("RunTimeline", () => {
       left: parseFloat(bar.style.left),
       width: parseFloat(bar.style.width),
     }));
-    // b starts before a ends: the bars share horizontal ground.
     expect(b.left).toBeLessThan(a.left + a.width);
     expect(b.left).toBeGreaterThan(a.left);
   });
@@ -167,7 +166,6 @@ describe("RunTimeline", () => {
     );
 
     expect(screen.getByText(UNKNOWN_DURATION_LABEL)).toBeInTheDocument();
-    // One real bar — the completed event's. The open one gets a marker only.
     expect(container.querySelectorAll('[role="img"]')).toHaveLength(1);
   });
 
@@ -234,9 +232,6 @@ describe("RunTimeline", () => {
     expect(screen.getByText(RUN_TIMELINE_EMPTY_NOTICE)).toBeInTheDocument();
   });
 
-  // The timeline is a section of the run page, not a screen of its own: its
-  // empty state is a one-line `ListState`, whose line is a paragraph, not an
-  // `EmptyCard` title block.
   it("draws the empty state as a section line, not a screen card", () => {
     render(<RunTimeline events={[]} runStatus="success" />);
 

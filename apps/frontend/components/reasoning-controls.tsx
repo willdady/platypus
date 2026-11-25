@@ -8,7 +8,7 @@ import { FormTextField } from "@/components/form-text-field";
 import { FormSelectField } from "@/components/form-select-field";
 import { SelectItem } from "@/components/ui/select";
 
-/** An unset control, as a Select value (Radix refuses an empty string). */
+// why: Radix Select refuses an empty string, so unset is its own value
 const MODEL_DEFAULT = "default";
 
 const EFFORT_LABELS: Record<ReasoningEffort, string> = {
@@ -26,17 +26,10 @@ export type ReasoningValue = {
   thinkingBudget?: number;
 };
 
-/** Whether the map declares any control a User can set. */
 export function hasReasoningControls(map: ReasoningMap | undefined): boolean {
   return !!(map?.thinking ?? map?.effort ?? map?.budget);
 }
 
-/**
- * The Reasoning controls (ADR-0040) for the selected model: each one shown only
- * where the model's Reasoning map declares it, Effort offering only the steps
- * it declares. Unset means the model's default. Shared by the Agent form and
- * the Chat settings dialog so the two offer the same choices.
- */
 export function ReasoningControls({
   map,
   value,
@@ -56,8 +49,7 @@ export function ReasoningControls({
   const thinkingOff =
     !!map.thinking &&
     (value.reasoningThinking ?? map.default?.thinking) === false;
-  // A stored step this model lacks is never sent, so it shows as the default;
-  // the stored value itself is left alone for a switch back.
+  // why: a step this model lacks is never sent, but the stored value is kept
   const effort =
     value.reasoningEffort && map.effort?.[value.reasoningEffort]
       ? value.reasoningEffort

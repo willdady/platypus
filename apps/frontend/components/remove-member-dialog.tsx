@@ -36,14 +36,12 @@ import { AlertTriangle } from "lucide-react";
 type RemoveMemberDialogProps = {
   orgId: string;
   member: Serialized<OrgMemberListItem>;
-  /** The Organization's members, from which a transfer's recipient is picked. */
   members: Serialized<OrgMemberListItem>[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
 };
 
-/** One Workspace's choice while it is being made. */
 type Draft = {
   action?: "transfer" | "delete";
   newOwnerId: string;
@@ -52,7 +50,6 @@ type Draft = {
 
 const EMPTY_DRAFT: Draft = { newOwnerId: "", keepHistory: true };
 
-/** The decision a draft makes, or undefined while it is incomplete. */
 function decisionOf(
   workspaceId: string,
   draft: Draft,
@@ -69,11 +66,6 @@ function decisionOf(
   return undefined;
 }
 
-/**
- * Remove from Org (ADR-0035). Each Workspace the member owns needs Transfer
- * or Delete before the removal can go ahead; the backend applies them and the
- * removal together, or none of them.
- */
 export function RemoveMemberDialog({
   orgId,
   member,
@@ -87,7 +79,6 @@ export function RemoveMemberDialog({
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
 
-  // An Org Admin's list holds every Workspace in the Organization.
   const {
     data: workspacesData,
     results: workspaces,
@@ -127,8 +118,6 @@ export function RemoveMemberDialog({
       toast.success("Member removed from organization");
       onSuccess();
     } else {
-      // A refused removal stays in the open dialog, so the message can be
-      // read and retried rather than toasted and lost.
       setDeleteError(outcome.message);
     }
   });

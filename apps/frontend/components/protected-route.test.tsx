@@ -59,7 +59,6 @@ describe("ProtectedRoute", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  // A session read that never landed says nothing about the session (#1204).
   it("offers a retry, not sign-in, when the session read fails", () => {
     Object.assign(auth, { user: null, accessReadError: { status: 500 } });
     renderGate({});
@@ -140,8 +139,6 @@ describe("ProtectedRoute", () => {
     expect(screen.getByText("Secret page")).toBeInTheDocument();
   });
 
-  // The gate only decides once the session has resolved, and the page must
-  // not mount and fire reads before then.
   it("holds the page back while the session is still resolving", () => {
     Object.assign(auth, { user: null, isAuthLoading: true });
     renderGate({ requireSuperAdmin: true });
@@ -193,7 +190,6 @@ describe("ProtectedRoute when an access read fails", () => {
     },
   );
 
-  // A failed read only matters where it would have turned the caller away.
   it("lets in a caller the gate admits anyway", () => {
     Object.assign(auth, {
       actor: "operator",

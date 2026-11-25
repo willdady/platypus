@@ -18,7 +18,6 @@ import { FetchErrorNotice } from "@/components/fetch-error-notice";
 
 type ProtectedRouteProps = {
   children: React.ReactNode;
-  /** Require the caller to be an Org Admin; implies `requireOrgAccess`. */
   requireOrgAdmin?: boolean;
   requireOrgAccess?: boolean;
   requireWorkspaceAccess?: boolean;
@@ -28,7 +27,6 @@ type ProtectedRouteProps = {
 type AccessDeniedProps = {
   title: string;
   description: React.ReactNode;
-  /** `organization` swaps the home button for one back to the Organization. */
   variant?: "home" | "organization";
 };
 
@@ -67,11 +65,6 @@ function AccessDenied({
   );
 }
 
-/**
- * In place of an access denial when the membership or Workspace read behind
- * it failed: the caller may well have access, so the page offers to read
- * again rather than turning them away.
- */
 function AccessReadFailed({
   error,
   onRetry,
@@ -114,9 +107,7 @@ export function ProtectedRoute({
   const [hasSettled, setHasSettled] = useState(false);
   if (!isAuthLoading && !hasSettled) setHasSettled(true);
 
-  // With no user, a failed read means the session was never read, not that
-  // there is none. Replaced, not pushed, so Back doesn't return to a page that
-  // only redirects again.
+  // why: replace, not push, so Back does not return to a page that only redirects
   useEffect(() => {
     if (!isAuthLoading && !user && !accessReadError) {
       router.replace(
@@ -127,10 +118,6 @@ export function ProtectedRoute({
     }
   }, [user, isAuthLoading, accessReadError, router, pathname]);
 
-  // Held back until the roles are first known, so a gated page doesn't mount
-  // and fire reads the backend will refuse. Once admitted, a later read keeps
-  // the page up: the `[orgId]` layout stays mounted across a Workspace switch,
-  // and swapping it for a skeleton would blank the whole Organization.
   if (isAuthLoading) {
     return hasSettled ? <>{children}</> : <PageSpinner />;
   }

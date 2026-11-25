@@ -45,7 +45,6 @@ function renderSelect(
   );
 }
 
-/** Opens the select and reads every option it offers. */
 async function openOptions() {
   await setupUser().click(screen.getByRole("combobox", { name: "Provider" }));
   return (await screen.findAllByRole("option")).map(

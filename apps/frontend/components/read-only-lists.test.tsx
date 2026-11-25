@@ -10,21 +10,12 @@ import {
   expectEntryActionVariant,
 } from "@/test/list-test-harness";
 
-// --- Module mocks ------------------------------------------------------------
-
 vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("swr", () => swrMock);
 
 import { ContextsList } from "./contexts-list";
 import { WorkspaceList } from "./workspace-list";
 import { PluginsList } from "./plugins-list";
-
-/**
- * The lists with no destructive row action — nothing to delete, so the whole
- * of their behaviour is which of loading, empty, failed and populated they
- * render. Each answers those four differently on purpose (a skeleton here, a
- * silent null there), and until now none of them had a test saying so.
- */
 
 beforeEach(resetListHarness);
 
@@ -59,7 +50,6 @@ describe("ContextsList", () => {
     ).toBeInTheDocument();
   });
 
-  // A personal context has no workspace, and this list is the workspace one.
   it("leaves out a context that belongs to no workspace", async () => {
     mockScopedSWR(
       {
@@ -80,8 +70,6 @@ describe("ContextsList", () => {
     expect(addContext()).toBeInTheDocument();
   });
 
-  // A section's footer never blinks out: the entry button sits below the list
-  // in every state, including loading and a failed read.
   it("keeps the create CTA below a populated list, outlined", async () => {
     mockScopedSWR({ contexts: [workspaceContext] }, { strict: true });
     await renderList(<ContextsList />);
@@ -160,8 +148,6 @@ describe("WorkspaceList", () => {
     );
   });
 
-  // Empty and loading both render no links, so the pair is what tells them
-  // apart: the skeletons are the whole of the loading state.
   it("renders no rows and no skeletons when the organization has none", async () => {
     mockScopedSWR({ workspaces: [] }, { strict: true });
     const { container } = await renderList(<WorkspaceList orgId="org1" />);
@@ -184,7 +170,6 @@ describe("WorkspaceList", () => {
     ).toBeGreaterThan(0);
   });
 
-  // The org home page waits on this read, so a silent failure left it blank.
   it("says the read failed rather than rendering nothing", async () => {
     mockScopedSWR(
       { workspaces: { error: new Error("500") } },
@@ -219,8 +204,6 @@ describe("PluginsList", () => {
     expect(screen.getByText("acme-search")).toBeInTheDocument();
   });
 
-  // Plugins are a deploy-time concern, so the empty state has to send the
-  // reader to their operator rather than offer an install button.
   it("points an empty deployment at its operator, not an install flow", async () => {
     mockScopedSWR({ plugins: [] }, { strict: true });
     await renderList(<PluginsList orgId="org1" />);
@@ -229,8 +212,6 @@ describe("PluginsList", () => {
     expect(screen.getByText("PLATYPUS_PLUGINS")).toBeInTheDocument();
   });
 
-  // No key yet (the session still resolving) reports `isLoading: false` with
-  // no data — which is not an empty catalog.
   it("holds a placeholder, not the empty state, until the catalog arrives", async () => {
     mockScopedSWR({ plugins: { data: undefined } }, { strict: true });
     await renderList(<PluginsList orgId="org1" />);
@@ -247,5 +228,33 @@ describe("PluginsList", () => {
 
     expect(screen.getByText("Couldn't load plugins")).toBeInTheDocument();
     expect(screen.queryByText("No plugins installed")).not.toBeInTheDocument();
+  });
+
+  it("keeps the rows when only a revalidation fails", async () => {
+    mockScopedSWR(
+      {
+        plugins: {
+          data: {
+            results: [
+              {
+                name: "acme-search",
+                version: "1.2.0",
+                contributions: {
+                  toolSets: [],
+                  sandboxBackends: [],
+                  webBackends: ["searx"],
+                },
+              },
+            ],
+          },
+          error: new Error("500"),
+        },
+      },
+      { strict: true },
+    );
+    await renderList(<PluginsList orgId="org1" />);
+
+    expect(screen.getByText("acme-search")).toBeInTheDocument();
+    expect(screen.queryByText("Couldn't load plugins")).not.toBeInTheDocument();
   });
 });

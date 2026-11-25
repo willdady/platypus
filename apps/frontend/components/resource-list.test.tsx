@@ -27,8 +27,6 @@ import {
   openDropdownMenu,
 } from "@/test/test-utils";
 
-// --- Module mocks ------------------------------------------------------------
-
 vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("swr", () => swrMock);
 
@@ -38,8 +36,6 @@ import { McpList } from "./mcp-list";
 type ScopedResource = (Provider | MCP) & {
   scope?: "organization" | "workspace";
 };
-
-// --- Fixtures ----------------------------------------------------------------
 
 const orgProvider = {
   id: "p1",
@@ -73,18 +69,14 @@ const RESOURCES: {
   name: string;
   List: ComponentType<{ orgId: string; workspaceId?: string }>;
   resourceType: "provider" | "mcp";
-  /** Collection entity as the API spells it — the read the list makes. */
   entity: string;
   settingsPath: string;
-  /** The Workspace delegation flag letting its Owner self-manage the resource. */
   delegationFlag: keyof WorkspaceDelegationFlags;
   item: ScopedResource;
   workspaceItem: ScopedResource;
   dialogTitle: string;
-  /** The shared row's attach CTA. */
   attachLabel: string;
   fetchErrorNoun: string;
-  /** What the card's second line shows for `workspaceItem`. */
   secondLine: string;
 }[] = [
   {
@@ -119,8 +111,6 @@ const RESOURCES: {
 
 beforeEach(resetListHarness);
 
-// --- Tests -------------------------------------------------------------------
-
 describe.each(RESOURCES)(
   "$name list",
   ({
@@ -136,7 +126,6 @@ describe.each(RESOURCES)(
     fetchErrorNoun,
     secondLine,
   }) => {
-    /** Renders the Workspace surface with `rows` in the list. */
     const renderRows = (rows: ScopedResource[]) => {
       mockScopedSWR({ [`/${entity}`]: rows });
       return renderList(<List orgId="org1" workspaceId="ws1" />);
@@ -249,8 +238,6 @@ describe.each(RESOURCES)(
       ).toBeInTheDocument();
     });
 
-    // Rows and the caller's own Add / Attach buttons, so neither pops in —
-    // and nothing clickable until the read lands.
     it("holds the rows and action buttons with a skeleton while loading", async () => {
       authState.actor = "org-admin";
       mockScopedSWR({ [`/${entity}`]: { isLoading: true } });
@@ -269,8 +256,6 @@ describe.each(RESOURCES)(
       expect(screen.getByText(secondLine)).toBeInTheDocument();
     });
 
-    // A long URL is cut off with an ellipsis inside the card, so the full
-    // value stays readable on hover.
     it("ellipsizes the row's second line, keeping the full value on hover", async () => {
       await renderRows([workspaceItem]);
 
@@ -361,7 +346,6 @@ describe.each(RESOURCES)(
     });
 
     describe("on the Organization surface", () => {
-      /** Renders the Organization surface with `rows` in the list. */
       const renderOrgRows = (rows: ScopedResource[], menuItem?: string) => {
         mockScopedSWR({ [`/${entity}`]: rows });
         return renderList(<List orgId="org1" />, menuItem);
@@ -524,9 +508,7 @@ describe.each(RESOURCES)(
         ),
       ).toBeInTheDocument();
 
-      // A refused detach must not revalidate the list.
       expect(mutate).not.toHaveBeenCalled();
-      // The dialog stays open rather than silently closing.
       expect(screen.getByText(dialogTitle)).toBeInTheDocument();
     });
   },
