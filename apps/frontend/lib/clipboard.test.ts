@@ -6,7 +6,6 @@ import {
   installClipboardFallback,
 } from "./clipboard";
 
-// jsdom does not define `isSecureContext` at all.
 function stubSecureContext(secure: boolean) {
   return Object.defineProperty(window, "isSecureContext", {
     value: secure,
@@ -14,8 +13,6 @@ function stubSecureContext(secure: boolean) {
   });
 }
 
-// jsdom implements neither the Clipboard API nor execCommand, so both are
-// installed per test and removed after.
 function setClipboard(writeText: ((text: string) => Promise<void>) | null) {
   return Object.defineProperty(navigator, "clipboard", {
     value: writeText ? { writeText } : undefined,
@@ -57,7 +54,6 @@ describe("copyToClipboard", () => {
 
     expect(await copyToClipboard("tok_123")).toBe(true);
     expect(selected).toBe("tok_123");
-    // The throwaway textarea is gone afterwards.
     expect(document.querySelector("textarea")).toBeNull();
   });
 
@@ -77,7 +73,6 @@ describe("copyToClipboard", () => {
 
     expect(await copyToClipboard("tok_123")).toBe(true);
     expect(parent).toBe(dialog);
-    // Focus goes back to the button that asked for the copy.
     expect(button).toHaveFocus();
     dialog.remove();
   });

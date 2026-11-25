@@ -3,15 +3,8 @@ import type { PlatypusUIMessage } from "@platypus/schemas";
 import { chatMessage as message } from "@/test/chat-test-fixtures";
 import { prepareChatTurnRequest } from "./chat-transport";
 
-/**
- * The body one Chat turn puts on the wire (ADR-0026). The server owns the
- * Transcript, so what matters here is what a turn does NOT carry — history —
- * and that each of the three triggers names what it acts on.
- */
-
 const CHAT_ID = "chat-1";
 
-/** One call as the AI SDK makes it, with the parts each test varies. */
 function prepare(over: Partial<Parameters<typeof prepareChatTurnRequest>[0]>) {
   return prepareChatTurnRequest({
     id: CHAT_ID,
@@ -77,7 +70,6 @@ describe("prepareChatTurnRequest", () => {
     });
   });
 
-  // Issue #1256: the SDK sends the answers by resubmitting the reply itself.
   it("sends a reply's answered approvals as the answers alone", () => {
     const answered = (id: string, approved: boolean) => ({
       type: "dynamic-tool",

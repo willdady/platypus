@@ -7,7 +7,6 @@ export const TOKEN_STATUS_LABELS: Record<BearerTokenStatus, string> = {
   expired: "Expired",
 };
 
-/** The badge variant each status reads as: the two that stop calls stand out. */
 export const TOKEN_STATUS_VARIANTS: Record<
   BearerTokenStatus,
   "secondary" | "outline" | "destructive"

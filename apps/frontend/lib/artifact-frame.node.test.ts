@@ -74,8 +74,6 @@ describe("buildArtifactFrameDocument", () => {
       scriptOrigins: [],
     });
 
-    // Ours first: a later policy can only tighten, so the Artifact cannot
-    // widen what the frame allows itself.
     expect(doc.indexOf("default-src 'none'")).toBeLessThan(
       doc.indexOf("default-src *"),
     );
