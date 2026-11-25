@@ -37,7 +37,6 @@ function ids(columns: ColumnWithCards[]) {
   );
 }
 
-/** A rect whose centre-Y is `centreY`. */
 function rect(centreY: number) {
   return { top: centreY - 5, height: 10 };
 }
@@ -51,7 +50,6 @@ describe("dropZoneId", () => {
   );
 
   it("is distinguishable from a bare column id", () => {
-    // So the round-trip above proves the prefix is stripped, not echoed.
     expect(parseDropZoneId("col-1")).toBeNull();
   });
 });
@@ -173,8 +171,6 @@ describe("placeCard", () => {
   });
 
   it("goes after the target's last card when over itself after crossing", () => {
-    // Drag-over has already moved "a" to the end of col-2 locally, so the
-    // over target is "a" itself, and the origin is col-1.
     expect(
       placeCard([column("col-1", ["b"]), column("col-2", ["d", "a"])], {
         activeId: "a",

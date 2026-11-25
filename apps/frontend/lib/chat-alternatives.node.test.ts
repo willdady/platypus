@@ -1,10 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { alternativePositions } from "./chat-alternatives";
 
-/**
- * u1 → a1 → u2 → a2, with u2 edited twice (u2b, u2c) and a1 regenerated (a1b),
- * oldest first as the tree arrives.
- */
 const tree = [
   { id: "u1", parentId: null },
   { id: "a1", parentId: "u1" },
@@ -53,8 +49,6 @@ describe("alternativePositions", () => {
     });
   });
 
-  // A deleted message is not in the tree, but the messages under it still
-  // name it as their parent.
   it("finds Alternatives under a deleted parent", () => {
     const positions = alternativePositions(
       [

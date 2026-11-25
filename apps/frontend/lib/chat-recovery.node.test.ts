@@ -40,7 +40,6 @@ function assistant(text: string, extraParts = 0): PlatypusUIMessage {
   } as PlatypusUIMessage;
 }
 
-/** The three readings the recovery decisions are made from. */
 function belief(
   runStatus: RunStatus | undefined,
   turnStatus: TurnStatus,
@@ -50,9 +49,6 @@ function belief(
 }
 
 describe("chatPollIntervalMs", () => {
-  // This tab's own stream is the live source; a read under it lands nowhere.
-  // A row already reading `running` (the read taken at submit) is no reason
-  // either.
   it.each([
     ["succeeded", "submitted"],
     ["succeeded", "streaming"],
@@ -67,16 +63,12 @@ describe("chatPollIntervalMs", () => {
     },
   );
 
-  // The recovery itself: a dropped stream leaves the turn at `error` while the
-  // run carries on, and this is what gets the partial answer moving again.
   it("keeps polling after a stream drops while the run is still going", () => {
     expect(chatPollIntervalMs(belief("running", "error", true))).toBe(
       CHAT_POLL_INTERVAL_MS,
     );
   });
 
-  // A brand-new Chat whose row was still absent when the drop happened: there
-  // is no status to lean on, only the fact that bytes had been arriving.
   it("keeps polling after a drop on a Chat with no row yet", () => {
     expect(chatPollIntervalMs(belief(undefined, "error", true))).toBe(
       CHAT_POLL_INTERVAL_MS,
@@ -89,18 +81,12 @@ describe("chatPollIntervalMs", () => {
     );
   });
 
-  // Including a `succeeded` left over from the previous turn: the read taken
-  // when the turn ends replaces it with this turn's status, and polling
-  // resumes from that.
   it("stops once the server reports an outcome for a dropped turn", () => {
     for (const runStatus of ["succeeded", "failed", "cancelled"] as const) {
       expect(chatPollIntervalMs(belief(runStatus, "error", true))).toBe(0);
     }
   });
 
-  // Nothing streamed, so no run was ever taken — a rejected attachment or a
-  // refused submission. Polling for an outcome that will never come would spin
-  // forever.
   it("does not poll a turn the server refused", () => {
     expect(chatPollIntervalMs(belief(undefined, "error", false))).toBe(0);
   });
@@ -112,9 +98,6 @@ describe("chatPollIntervalMs", () => {
 });
 
 describe("isRunHeldElsewhere", () => {
-  // The case the old guard missed: it required the local status to be `ready`,
-  // and a dropped stream leaves it at `error`, so the composer came back and a
-  // second concurrent run could be fired into a Chat that already had one.
   it("holds the composer after a stream drops mid-run", () => {
     expect(isRunHeldElsewhere(belief("running", "error", true))).toBe(true);
   });
@@ -127,23 +110,16 @@ describe("isRunHeldElsewhere", () => {
     expect(isRunHeldElsewhere(belief("running", "ready"))).toBe(true);
   });
 
-  // This tab IS the one streaming, so the ordinary streaming controls apply
-  // rather than the reconnected-to-someone-else's-run ones.
   it("leaves a turn this tab is streaming alone", () => {
     expect(isRunHeldElsewhere(belief("running", "streaming"))).toBe(false);
     expect(isRunHeldElsewhere(belief("running", "submitted"))).toBe(false);
   });
 
-  // A turn that genuinely failed must leave the composer usable, or there is no
-  // way to retry.
   it("releases the composer when no run is live", () => {
     expect(isRunHeldElsewhere(belief("failed", "error", true))).toBe(false);
     expect(isRunHeldElsewhere(belief(undefined, "ready"))).toBe(false);
   });
 
-  // The trap the previous case would walk into if `turnEstablished` were
-  // ignored: a brand-new Chat whose first submission was refused has no row and
-  // an `error` status, and the composer would be locked with no way out.
   it("releases the composer after a refused submission on a new Chat", () => {
     expect(isRunHeldElsewhere(belief(undefined, "error", false))).toBe(false);
   });
@@ -161,8 +137,6 @@ describe("classifyChatError", () => {
     ).toBe("none");
   });
 
-  // The reported symptom: a backgrounded tab's socket teardown was reported as
-  // a failed turn, while the run was healthy and completed normally.
   it("treats a drop from a live run as recovering, not a failure", () => {
     expect(
       classifyChatError({ error, ...belief("running", "error", true) }),
@@ -187,8 +161,6 @@ describe("classifyChatError", () => {
     ).toBe("failure");
   });
 
-  // Nothing streamed, so there is no run to recover: a rejected attachment, a
-  // duplicate submission answered 409, a network that was never there.
   it("reports a request that never established, whatever the row says", () => {
     for (const runStatus of ["running", "succeeded", undefined] as const) {
       expect(
@@ -199,8 +171,6 @@ describe("classifyChatError", () => {
 });
 
 describe("composerTurnStatus", () => {
-  // A run this tab is not receiving reads as streaming, so the submit button is
-  // a stop button and Enter is blocked.
   it("presents a run held elsewhere as streaming", () => {
     expect(composerTurnStatus(belief("running", "ready"), "none")).toBe(
       "streaming",
@@ -210,17 +180,12 @@ describe("composerTurnStatus", () => {
     ).toBe("streaming");
   });
 
-  // The defect this exists for: once recovery finishes the turn is still sitting
-  // at `error`, and passing that through puts a failure icon on the submit
-  // button — the same "a dropped connection reported as a failed turn" symptom
-  // the modal fix removed, only moved onto the button.
   it("clears a recovered drop rather than leaving a failure on the button", () => {
     expect(composerTurnStatus(belief("succeeded", "error", true), "none")).toBe(
       "ready",
     );
   });
 
-  // A turn that genuinely failed keeps its reading: the button should say so.
   it("keeps the error reading for a turn that actually failed", () => {
     expect(composerTurnStatus(belief("failed", "error", true), "failure")).toBe(
       "error",
@@ -268,9 +233,6 @@ describe("snapshotMayLand", () => {
   const a2 = (text: string) => ({ ...assistant(text), id: "a-2" });
 
   describe("once the run is over", () => {
-    // The row is final and the canonical form of the transcript — rewritten
-    // attachment URLs, normalized tool parts — so an otherwise-identical
-    // snapshot lands rather than leaving the page on its own version.
     it("applies a snapshot equal to what is held", () => {
       const held = [user("q"), assistant("an answer", 1)];
 
@@ -288,15 +250,12 @@ describe("snapshotMayLand", () => {
       },
     );
 
-    // Deleting every message reaches other tabs too.
     it("applies an emptied Chat", () => {
       expect(snapshotMayLand([], [user("q"), a1("a")], "succeeded")).toBe(true);
     });
   });
 
   describe("while the run is in progress", () => {
-    // The row is flushed on an interval, so mid-run it holds less text than the
-    // stream has already shown. Applying it would make the answer shorten.
     it("refuses a snapshot whose leaf is behind the text on screen", () => {
       const held = [user("q"), a1("the first two thirds of an answer")];
       const snapshot = [user("q"), a1("the first third")];
@@ -318,8 +277,6 @@ describe("snapshotMayLand", () => {
       expect(snapshotMayLand(snapshot, held, "running")).toBe(true);
     });
 
-    // Only the leaf grows during a run, so a message deleted further up in
-    // another tab still reaches this one.
     it("applies a mid-path delete under the same leaf", () => {
       const held = [user("q"), a1("an answer"), user("more"), a2("partial")];
       const snapshot = [user("q"), user("more"), a2("partial")];
@@ -327,15 +284,12 @@ describe("snapshotMayLand", () => {
       expect(snapshotMayLand(snapshot, held, "running")).toBe(true);
     });
 
-    // A connection dropped before the reply's first flush: the row still ends
-    // at the question, and the partial reply on screen must stay.
     it("refuses a snapshot ending at a message held further up", () => {
       const held = [user("q"), a1("a partial reply")];
 
       expect(snapshotMayLand([user("q")], held, "running")).toBe(false);
     });
 
-    // Another tab's run, on a path this tab is not showing.
     it("applies a longer snapshot for a different path", () => {
       const held = [user("q"), a1("an answer")];
       const snapshot = [user("q"), a2("another answer"), user("next")];
@@ -343,7 +297,6 @@ describe("snapshotMayLand", () => {
       expect(snapshotMayLand(snapshot, held, "running")).toBe(true);
     });
 
-    // A tab that arrived mid-run holds nothing, so anything lands.
     it("applies the first snapshot onto an empty transcript", () => {
       expect(snapshotMayLand([user("q"), a1("a")], [], "running")).toBe(true);
     });
@@ -356,13 +309,10 @@ describe("snapshotMessages", () => {
     expect(snapshotMessages({ messages } as never)).toBe(messages);
   });
 
-  // Deleting every message leaves a row with none, which other tabs must see.
   it("reads an emptied Chat as an empty snapshot", () => {
     expect(snapshotMessages({ messages: [] } as never)).toEqual([]);
   });
 
-  // A brand-new Chat's row does not exist yet, and the read resolves to null
-  // rather than throwing.
   it("reads an absent row as no snapshot", () => {
     expect(snapshotMessages(null)).toBeUndefined();
     expect(snapshotMessages(undefined)).toBeUndefined();

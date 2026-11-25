@@ -9,11 +9,6 @@ import {
 import type { PlatypusUIMessage } from "@platypus/schemas";
 import type { ChatTranscriptSummary } from "./chat-summary";
 
-/**
- * The send-time read's frontend half (ADR-0041, issue #1716): which summary
- * gets a divider, and when the composer meter must read "—".
- */
-
 function user(id: string): PlatypusUIMessage {
   return { id, role: "user", parts: [{ type: "text", text: id }] };
 }
@@ -76,7 +71,6 @@ describe("isSummaryUsable", () => {
   });
 
   it("is unusable when the anchor no longer ends a turn", () => {
-    // u2 deleted: a1 is followed by a2, so the summary has no first kept user.
     const afterDelete = path().filter((m) => m.id !== "u2");
     expect(
       isSummaryUsable(

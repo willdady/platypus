@@ -43,8 +43,6 @@ describe("turnRequest", () => {
     });
   });
 
-  // The Agent supplies its own ceiling, so a value left invalid in the
-  // Direct settings dialog is no reason to refuse it.
   it("ignores an invalid Max steps on an Agent turn", () => {
     expect(
       turnRequest({
@@ -139,8 +137,6 @@ describe("turnRequest", () => {
     },
   );
 
-  // #1177: a Chat saved before the bounds existed, or a value typed past the
-  // input's min/max, would otherwise ride the turn as a 400.
   it.each([
     ["temperature", TEMPERATURE_MIN - 1],
     ["topP", TOP_P_MIN - 0.1],
@@ -193,7 +189,6 @@ describe("turnRequest", () => {
     ).toBe(true);
   });
 
-  // The Agent supplies its own sampling settings.
   it("ignores out-of-range sampling values on an Agent turn", () => {
     expect(
       turnRequest({

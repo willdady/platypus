@@ -62,7 +62,6 @@ describe("canManageSharedResource — attach/detach/Promote (ADR-0007)", () => {
   it.each([
     ["operator", true],
     ["org-admin", true],
-    // Even inside their own Workspace.
     ["workspace-owner", false],
     ["org-member", false],
   ] as const)("%s inside a Workspace: allowed=%s", (actor, allowed) => {
@@ -189,8 +188,6 @@ describe("canAccessOrganization", () => {
 });
 
 describe("canAccessWorkspace", () => {
-  // The Workspace Owner case is their own Workspace; the caller resolves
-  // ownership before it gets here.
   it.each([
     ["operator", true],
     ["org-admin", true],

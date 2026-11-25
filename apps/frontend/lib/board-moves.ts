@@ -3,31 +3,22 @@ import type { KanbanCard, KanbanColumn } from "@platypus/schemas";
 import { writeAt, type Serialized } from "./api-write";
 import { joinUrl } from "./utils";
 
-/**
- * Every way a Card or Column changes place on a Board — the drag, the column
- * menu, and the Card dialog's Column field — goes through here, so the
- * stale-board guard and its conflict handling can't be skipped by one of them.
- */
-
 export type ColumnWithCards = Serialized<KanbanColumn> & {
   cards: Serialized<KanbanCard>[];
 };
 
 const DROP_ZONE_PREFIX = "column-drop-";
 
-/** The droppable id for a column's empty space; the inverse of the parser. */
 export function dropZoneId(columnId: string): string {
   return `${DROP_ZONE_PREFIX}${columnId}`;
 }
 
-/** The column id inside a drop-zone id; null for any other id. */
 export function parseDropZoneId(id: string): string | null {
   return id.startsWith(DROP_ZONE_PREFIX)
     ? id.slice(DROP_ZONE_PREFIX.length)
     : null;
 }
 
-/** The column whose cards include `cardId`, if any. */
 export function columnOfCard(
   columns: ColumnWithCards[],
   cardId: string,
@@ -35,11 +26,6 @@ export function columnOfCard(
   return columns.find((col) => col.cards.some((c) => c.id === cardId));
 }
 
-/**
- * The column an in-flight drag is over: its drop zone, the column itself, or
- * the column holding the hovered card. Undefined when nothing matches, so the
- * caller chooses its own fallback.
- */
 export function resolveOverColumn(
   columns: ColumnWithCards[],
   overId: string,
@@ -58,24 +44,17 @@ type Rect = { top: number; height: number };
 
 export type CardDrop = {
   activeId: string;
-  /** A card id, a column id, or a column drop zone id. */
   overId: string;
-  /** Null when dnd-kit has not measured the dragged card. */
   activeRect: Rect | null;
   overRect: Rect;
 };
 
 export type CardPlacement = {
-  /** The column the card sits in within `columns`. */
   fromColumnId: string;
   toColumnId: string;
-  /** The card to sit behind; null means the head of the column. */
   afterCardId: string | null;
 };
 
-/**
- * Where a dropped card lands. Null when the dragged card is on no column.
- */
 export function placeCard(
   columns: ColumnWithCards[],
   { activeId, overId, activeRect, overRect }: CardDrop,
@@ -91,16 +70,11 @@ export function placeCard(
 
   let afterCardId: string | null;
   if (isDropZone || targetCards.length === 0) {
-    // Dropped on the column drop zone or onto an empty column
     afterCardId =
       targetCards.length > 0 ? targetCards[targetCards.length - 1].id : null;
   } else {
-    // Dropped over a specific card – decide whether to go before or
-    // after it by comparing the dragged card's current centre-Y with
-    // the over card's centre-Y.
     const overIdx = targetCards.findIndex((c) => c.id === overId);
     if (overIdx === -1) {
-      // over card is the active card itself – fall back to array order
       if (targetColumn.id === sourceColumn.id) {
         const cardIndex = sourceColumn.cards.findIndex(
           (c) => c.id === activeId,
@@ -137,11 +111,9 @@ export type CardMove = {
   cardId: string;
   fromColumnId: string;
   toColumnId: string;
-  /** Null means the head of the column. */
   afterCardId: string | null;
 };
 
-/** The columns after `move`, applied locally ahead of the server. */
 export function applyCardMove(
   columns: ColumnWithCards[],
   { cardId, fromColumnId, toColumnId, afterCardId }: CardMove,
@@ -168,37 +140,23 @@ export function applyCardMove(
   });
 }
 
-/** How a write hands its result back to the board. */
 export type BoardSync = {
-  /** Sets the local optimistic copy; null drops it for the last poll. */
   setColumns: (columns: ColumnWithCards[] | null) => void;
   refetch: () => Promise<unknown>;
 };
 
-/** Not a failed write but a stale board, so it says who moved the card. */
 const CARD_MOVED_ELSEWHERE = "This card was moved by someone else.";
 
 export type MoveResult =
   { outcome: "moved" } | { outcome: "conflict" | "failed"; message: string };
 
-/**
- * Moves a card on the server. Always refetches: on a conflict, dropping the
- * optimistic copy falls back to the last poll — the very state that just lost
- * the race — so leaving it would show the card in the wrong column until the
- * next interval.
- */
+// why: refetch even on conflict — the dropped copy falls back to the same stale poll
 export async function moveCard(
   baseUrl: string,
   move: {
     cardId: string;
     columnId: string;
     afterCardId: string | null;
-    /**
-     * The column the caller believes the card is in. The board polls, so
-     * this may already be out of date; sending it makes the move conditional,
-     * and an agent's move that landed meanwhile is reported rather than
-     * overwritten.
-     */
     expectedColumnId: string;
   },
   sync: BoardSync,
@@ -217,10 +175,6 @@ export async function moveCard(
   return { outcome: "failed", message: outcome.message };
 }
 
-/**
- * Moves the column at `fromIndex` to `toIndex`, locally at once and then on
- * the server, rolling the local copy back if the server refuses.
- */
 export async function reorderColumns(
   baseUrl: string,
   columns: ColumnWithCards[],
