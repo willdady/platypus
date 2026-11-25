@@ -108,8 +108,6 @@ describe("A2aEndpointsList", () => {
     ).toBeInTheDocument();
   });
 
-  // The same button renders once: solid inside the card while the list is
-  // empty, outlined below the list once it has rows.
   it("offers Add A2A endpoint solid inside the empty card", async () => {
     mockScopedSWR({ "/a2a-endpoints": [] }, { strict: true });
     await renderList(<A2aEndpointsList orgId="org1" workspaceId="ws1" />);

@@ -78,7 +78,6 @@ describe("ArtifactsList", () => {
 
     expect(screen.getByText("No artifacts yet")).toBeInTheDocument();
     expect(screen.getByText(/Artifacts Tool set/)).toBeInTheDocument();
-    // The toolbar stays, so the page keeps its shape whether or not it has rows.
     expect(
       screen.getByRole("searchbox", { name: "Search artifacts" }),
     ).toBeInTheDocument();
@@ -119,7 +118,6 @@ describe("ArtifactsList", () => {
     expect(
       screen.getByRole("searchbox", { name: "Search artifacts" }),
     ).toBeInTheDocument();
-    // The page's action stays reachable while the filter is on.
     expect(screen.getByRole("button", { name: "Upload" })).toBeInTheDocument();
   });
 

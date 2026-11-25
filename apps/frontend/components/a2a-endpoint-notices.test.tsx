@@ -14,11 +14,8 @@ import { A2aEndpointNotices } from "./a2a-endpoint-notices";
 
 const NOTICE = "A2A endpoints are turned off here";
 
-/**
- * The Workspace read is registered first: its URL also contains the
- * Organization's, and the harness matches in insertion order.
- */
 function seed(a2aGate: string, workspace: { a2aAllowed: boolean } | "loading") {
+  // why: the Workspace key also matches the Organization's, so it is registered first
   return mockScopedSWR(
     {
       "/workspaces/ws1":

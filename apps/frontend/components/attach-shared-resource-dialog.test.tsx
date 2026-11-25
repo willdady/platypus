@@ -8,14 +8,10 @@ import {
   renderList,
 } from "@/test/list-test-harness";
 
-// --- Module mocks ------------------------------------------------------------
-
 vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("swr", () => swrMock);
 
 import { AttachSharedResourceDialog } from "./attach-shared-resource-dialog";
-
-// --- Helpers -----------------------------------------------------------------
 
 function renderDialog(attachedIds: string[] = []) {
   return renderList(
@@ -32,8 +28,6 @@ function renderDialog(attachedIds: string[] = []) {
 }
 
 beforeEach(resetListHarness);
-
-// --- Tests -------------------------------------------------------------------
 
 describe("AttachSharedResourceDialog", () => {
   it("shows a placeholder, not a false empty, while the list loads", async () => {

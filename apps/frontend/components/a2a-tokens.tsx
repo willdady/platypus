@@ -39,16 +39,10 @@ import { ListState } from "@/components/list-state";
 import { useConfirmFlow, useDeleteFlow } from "@/hooks/use-delete-flow";
 import { useEntityForm } from "@/hooks/use-entity-form";
 
-/** The anchor a new endpoint's page opens at, so its first token is next. */
 export const ACCESS_SECTION_ID = "access";
 
 type IssuedToken = Serialized<A2aToken> & { token: string };
 
-/**
- * An existing endpoint's card URL and tokens (ADR-0032): the list, and for
- * the Workspace Owner issuing, regenerating and deleting them. A new token's
- * value is shown once, in a dialog, and never again.
- */
 export function A2aTokens({
   orgId,
   endpoint,
@@ -56,7 +50,6 @@ export function A2aTokens({
 }: {
   orgId: string;
   endpoint: Serialized<A2aEndpoint> & { tokens: Serialized<A2aToken>[] };
-  /** Rereads the endpoint, so the list shows a token issued or removed. */
   mutate: () => Promise<unknown>;
 }) {
   const backendUrl = useBackendUrl();
@@ -65,13 +58,10 @@ export function A2aTokens({
 
   const [issued, setIssued] = useState<string | null>(null);
 
-  // The browser's own jump to #access fires before the endpoint loads, so
-  // land on the card URL and token controls once they render.
   const accessRef = useRef<HTMLDivElement>(null);
   const tokenNameRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (window.location.hash !== `#${ACCESS_SECTION_ID}`) return;
-    // Drop the hash so a reload or Back doesn't land here again.
     history.replaceState(null, "", window.location.pathname);
     accessRef.current?.scrollIntoView({ block: "start" });
     tokenNameRef.current?.focus({ preventScroll: true });
@@ -92,7 +82,6 @@ export function A2aTokens({
   } = useEntityForm<{ name: string; expiryDays: number }, IssuedToken>({
     initialData: { name: "", expiryDays: DEFAULT_BEARER_TOKEN_EXPIRY_DAYS },
     guardUnsavedChanges: false,
-    // The token form's errors are already in view.
     invalidMessage: null,
     write: (data) =>
       writeAt<IssuedToken>(tokensUrl, {
@@ -115,9 +104,6 @@ export function A2aTokens({
     },
   });
 
-  // A regenerate is a confirmation, not a form: the hook owns the token the
-  // dialog is open for, the pending state and the inline refusal, and the
-  // response carries the token to show once.
   const regenerateToken = useConfirmFlow<Serialized<A2aToken>, IssuedToken>({
     delete: (token) =>
       writeAt<IssuedToken>(`${tokensUrl}/${token.id}/regenerate`, {
@@ -263,8 +249,6 @@ export function A2aTokens({
         {...regenerateToken.dialogProps}
       />
 
-      {/* Whenever a token was issued, card URL or not: this is the only time
-          its value can be shown. */}
       {issued && (
         <A2aTokenDialog
           token={issued}

@@ -41,42 +41,19 @@ type AuthContextType = {
   error: Error | null;
   refreshSession: () => Promise<void>;
   orgMembership: OrgMembership | null;
-  /** The named actor for this request — see `lib/authorization.ts`. */
   actor: Actor;
-  /**
-   * Literal Workspace ownership, independent of the `actor` tier — an Org
-   * Admin who also owns this Workspace still resolves to the `"org-admin"`
-   * actor, so `canSendChatMessages` needs this raw fact rather than `actor`.
-   */
   ownsWorkspace: boolean;
-  /** ADR-0006 delegation flags for the Workspace in scope, if any. */
   workspaceDelegation: WorkspaceDelegationFlags | null;
-  /**
-   * A session, membership or Workspace read that failed for a reason other
-   * than access (a 5xx, the network), with nothing to fall back on. The
-   * `user` and `actor` then say less than the caller may hold, so a gate
-   * shows this as a retryable failure rather than turning the caller away.
-   */
   accessReadError: unknown;
-  /** Re-reads the session, the membership and the Workspace. */
   retryAccessReads: () => void;
 };
 
-/**
- * A read's error when it failed for a reason reading again might clear and
- * left no row behind. A 403 or 404 is the server's answer, not a failure;
- * a failed revalidation still has the row it had.
- */
 function transientReadError(error: unknown, data: unknown): unknown {
   return error && !data && !isNotFoundOrForbidden(error) ? error : null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-/**
- * What stays fixed for the life of the page, kept apart from the session and
- * membership state so its readers don't re-render when those change.
- */
 type BackendContextType = {
   backendUrl: string;
   authClient: AuthClient;
@@ -84,27 +61,16 @@ type BackendContextType = {
 
 const BackendContext = createContext<BackendContextType | undefined>(undefined);
 
-// One client per backend URL for the life of the page, outside React. The
-// client owns the session store, and merely reading that store mounts it and
-// fires `/auth/get-session`. A `useMemo` in the component is recomputed on
-// every render attempt React throws away before the first commit — and while
-// a slow page hydrates it throws away thousands — so each attempt made a new
-// client and a new request: one reload sent 300+ `get-session` calls and
-// tripped the backend's rate limiter (#1216). Here the store is created once,
-// so every attempt reads the same one and it fetches once.
+// why: outside React — a per-render client fired 300+ get-session calls (#1216)
 const authClients = new Map<string, AuthClient>();
 function newAuthClient(backendUrl: string) {
   return createAuthClient({
-    // The full URL: given a `baseURL` with a path (a `BACKEND_URL` served under
-    // a prefix), better-auth ignores `basePath`, so `/auth` goes in here.
+    // why: a prefixed baseURL makes better-auth ignore basePath, so /auth goes in the URL
     baseURL: joinUrl(backendUrl, "/auth"),
     plugins: [
-      // Mirrors the backend's user additional fields so `updateUser` accepts them
       inferAdditionalFields({
         user: { timezone: { type: "string", required: false } },
       }),
-      // Types the admin plugin's User fields (`role`, `banned`, …) and its
-      // `authClient.admin.*` actions.
       adminClient(),
     ],
   });
@@ -113,9 +79,7 @@ function newAuthClient(backendUrl: string) {
 type AuthClient = ReturnType<typeof newAuthClient>;
 
 type AuthSession = AuthClient["$Infer"]["Session"];
-/** The signed-in User, as better-auth returns it. */
 export type User = AuthSession["user"];
-/** The current session, without the token nothing here needs to hold. */
 export type Session = Omit<AuthSession["session"], "token">;
 
 function getAuthClient(backendUrl: string) {
@@ -127,10 +91,6 @@ function getAuthClient(backendUrl: string) {
   return client;
 }
 
-/**
- * Also the app's root SWR config, so every read — the membership and
- * Workspace reads below included — shares one `fetcher` and one 401 handler.
- */
 export function AuthProvider({
   children,
   backendUrl,
@@ -139,7 +99,6 @@ export function AuthProvider({
   backendUrl: string;
 }) {
   const authClient = getAuthClient(backendUrl);
-  // `refetch` is fixed for the client's life, so the config never changes.
   const { refetch } = authClient.useSession();
   const swrConfig = useMemo(
     () => ({ fetcher, onError: sessionExpiryHandler(refetch) }),
@@ -179,14 +138,10 @@ function AuthState({
 
   const orgId = params.orgId as string | undefined;
   const workspaceId = params.workspaceId as string | undefined;
-  // Depend on the user id rather than the user object so SWR revalidations
-  // (which produce a new object identity) don't re-trigger these reads.
+  // why: the id, not the user object — a revalidation hands over a new identity
   const userId = data?.user?.id;
 
-  // Membership and Workspace rows are reads, not hand-rolled effects: routing
-  // them through SWR gives them a shared, per-key cache the pages read from
-  // too, instead of a raw `fetch` invisible to every other consumer. Raw
-  // `useSWR`, not `useScopedSWR`: these reads are the gate it waits on.
+  // why: raw useSWR, not useScopedSWR — this read is the gate that hook waits on
   const {
     data: orgMembership,
     error: orgMembershipError,
@@ -207,13 +162,8 @@ function AuthState({
       : null,
   );
 
-  // better-auth clears the session on a 401 — the server saying signed out —
-  // and keeps it through any other failure, so only a session never read is
-  // a failure to report. Taken as signed out, it sent the reader to /sign-in.
   const sessionReadError =
     error && !data && error.status !== 401 ? error : null;
-  // A refused membership is the answer — not a member — whatever else
-  // failed to load, so it leaves the gate to turn the caller away.
   const accessReadError =
     sessionReadError ??
     (isNotFoundOrForbidden(orgMembershipError)
@@ -226,18 +176,14 @@ function AuthState({
     void mutateWorkspace();
   }, [refetch, mutateOrgMembership, mutateWorkspace]);
 
-  // Computed permissions
   const isSuperAdmin = data?.user?.role === "admin";
-  // Both sides must be known: while neither has loaded, `undefined ===
-  // undefined` would report an owner.
   const ownsWorkspace = !!userId && workspace?.ownerId === userId;
   const actor = resolveActor({
     isOperator: isSuperAdmin,
     orgRole: orgMembership?.role ?? null,
     ownsWorkspace,
   });
-  // Keyed on the flags themselves, not the fetched row, so an SWR revalidation
-  // that returns the same row doesn't hand consumers a new object identity.
+  // why: keyed on the flags, not the row — a revalidation must not change identity
   const hasWorkspace = !!workspace;
   const providerSelfManagement = workspace?.providerSelfManagement === true;
   const mcpSelfManagement = workspace?.mcpSelfManagement === true;
@@ -246,9 +192,6 @@ function AuthState({
     [hasWorkspace, providerSelfManagement, mcpSelfManagement],
   );
 
-  // A read SWR is retrying after a failure is not loading as far as the gate
-  // is concerned: it keeps showing the failure until a retry lands, instead
-  // of flickering back to the page on every attempt.
   const isAuthLoading =
     isPending ||
     (!!data?.user &&
@@ -286,15 +229,6 @@ function AuthState({
     ],
   );
 
-  // The session lands as a synchronous store update, often while the page
-  // below is still hydrating. Reaching a Suspense boundary that has not
-  // hydrated yet, a synchronous update makes React throw away its server HTML
-  // and show the route's loading fallback again: a reload flickered from the
-  // page's skeleton to a blank one and back. Deferred, it waits for hydration.
-  //
-  // Only a loading value may lag, and consumers wait on it anyway. A settled
-  // one never does: a stale signed-out value after sign-in would send a
-  // protected page to /sign-in.
   const deferredValue = useDeferredValue(value);
   const provided = deferredValue.isAuthLoading ? deferredValue : value;
 

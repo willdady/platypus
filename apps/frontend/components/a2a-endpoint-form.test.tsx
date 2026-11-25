@@ -29,7 +29,6 @@ import {
 import { expectSentBodyToMatchSchema, selectOption } from "@/test/test-utils";
 import { formatDateTime } from "@/lib/format-date";
 
-// The backend URL a test may blank, to stand for one not configured yet.
 const backend = vi.hoisted(() => ({ url: "http://test" }));
 vi.mock("@/components/auth-provider", () => ({
   ...authMock,
@@ -98,7 +97,6 @@ describe("A2aEndpointForm", () => {
     expect(screen.getByLabelText("Name")).toHaveValue("Helper");
     expect(screen.getByLabelText("Description")).toHaveValue("Internal");
 
-    // A fill the Owner hasn't touched follows the next pick.
     await selectOption("Helper", "Scout");
     expect(screen.getByLabelText("Name")).toHaveValue("Scout");
     expect(screen.getByLabelText("Description")).toHaveValue("Finds things");
@@ -260,13 +258,10 @@ describe("A2aEndpointForm", () => {
     expect(row).toHaveTextContent(/Expires: .*2026/);
     expect(row).toHaveTextContent(/Last used: Never/);
     expect(row).toHaveTextContent(/Last rejected: .*2026/);
-    // The same format the Org Admin's table shows.
     expect(row).toHaveTextContent(formatDateTime("2026-10-02T00:00:00.000Z"));
     expect(row).toHaveTextContent(formatDateTime("2026-09-02T00:00:00.000Z"));
   });
 
-  // Rendered on their own: with no backend URL the form can't read the
-  // endpoint, but a token issued as the URL goes must still be shown.
   it("shows a token issued with no backend URL, saying where the card URL will be", async () => {
     backend.url = "";
     const fetchMock = stubAcceptedSave({
@@ -517,7 +512,6 @@ describe("A2aTokens regenerate", () => {
     fireEvent.click(confirm);
     await waitFor(() => expect(confirm).toBeDisabled());
 
-    // A second click on a pending confirm sends nothing.
     fireEvent.click(confirm);
     expect(fetchMock).toHaveBeenCalledTimes(1);
 

@@ -21,33 +21,16 @@ import type {
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
-/**
- * One line of agent activity, as a Sub-Agent's card in a Chat and a Trigger
- * run's timeline both draw it: what kind of thing happened, its name where it
- * has one, and how it stands. The two readers share the SHAPE — a delegate
- * reads the same way wherever it appears — and nothing else: the Chat card
- * streams its entries live, the timeline reads persisted Run events.
- *
- * `failed` is not a Run event type. It is the shape a Chat's Sub-Agent card
- * has always yielded for "the delegation itself failed", stored on every such
- * Chat message for ever, so it stays readable here without being written
- * anywhere new.
- */
 export type ActivityRowEntry = {
+  // why: "failed" is a stored Chat-card shape, not a Run event type, and must stay readable
   type: RunEventType | "failed";
   toolName?: string | null;
   status: RunEventStatus;
   error?: string;
-  /** The two pairs a `model-switch` event names. */
   modelSwitch?: ModelSwitch | null;
-  /** How many identical consecutive entries this row stands for. */
   count?: number;
 };
 
-/**
- * The colour each kind of Run event is drawn in, wherever activity is shown:
- * `text` for an icon, `bg` for a timeline bar.
- */
 export const activityColor: Record<RunEventType, { text: string; bg: string }> =
   {
     "tool-call": { text: "text-blue-500", bg: "bg-blue-500" },
@@ -106,7 +89,6 @@ const config: Record<
   },
 };
 
-/** The words a row's label uses for an entry, exported so tests need not restate them. */
 export function activityLabel(entry: ActivityRowEntry): string {
   return config[entry.type].label(entry);
 }
@@ -152,7 +134,6 @@ export function ActivityRow({
   className,
 }: {
   entry: ActivityRowEntry;
-  /** Anything to draw after the status mark — a duration, say. */
   trailing?: ReactNode;
   className?: string;
 }) {

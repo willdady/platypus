@@ -9,21 +9,13 @@ import {
   TextareaSkeleton,
 } from "@/components/form-skeleton";
 
-/**
- * The agent form's loading placeholder, block for block: the avatar picker,
- * the field group, the switch cards and the closed Advanced settings row.
- * Its own module so the agent pages' route-level `loading.tsx`, shown while
- * the server fetches the tool sets, needn't pull in the whole form.
- */
 export function AgentFormSkeleton({
   className,
   editing = false,
   tools = true,
 }: {
   className?: string;
-  /** An edit form: taller Instructions, and a Delete button. */
   editing?: boolean;
-  /** Whether the Tools card shows (there are tool sets to pick from). */
   tools?: boolean;
 }) {
   return (

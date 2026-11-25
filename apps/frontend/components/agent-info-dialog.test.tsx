@@ -58,7 +58,6 @@ function renderDialog(
 beforeEach(() => push.mockReset());
 
 describe("AgentInfoDialog", () => {
-  // The dialog is how a Chat user sees what the Agent will run with.
   it("shows the provider, model, instructions and max steps", () => {
     renderDialog({
       agent: agent({ instructions: "Be terse.", maxSteps: 12 }),
@@ -70,8 +69,6 @@ describe("AgentInfoDialog", () => {
     expect(screen.getByText("12")).toBeInTheDocument();
   });
 
-  // A deleted or unshared Provider, or unset fields, must read as such
-  // rather than as a blank box.
   it("falls back when the provider is missing and fields are unset", () => {
     renderDialog({ agent: agent({ providerId: "gone" }) });
 
@@ -87,8 +84,6 @@ describe("AgentInfoDialog", () => {
     expect(screen.getByText("Ask me anything")).toBeInTheDocument();
   });
 
-  // Ids are resolved against what the Workspace can see; an id that no
-  // longer resolves is dropped rather than shown raw.
   it("lists the agent's tools, skills and sub-agents by name", () => {
     renderDialog({
       agent: agent({
@@ -113,7 +108,6 @@ describe("AgentInfoDialog", () => {
     expect(screen.queryByText("Sub-Agents")).not.toBeInTheDocument();
   });
 
-  // Sampling settings sit behind the disclosure; 0 is a real value, not unset.
   it("reveals the sampling settings under Advanced settings", async () => {
     renderDialog({ agent: agent({ temperature: 0, topK: 40 }) });
 
@@ -124,7 +118,6 @@ describe("AgentInfoDialog", () => {
 
     expect(screen.getByText("0")).toBeInTheDocument();
     expect(screen.getByText("40")).toBeInTheDocument();
-    // Seed, Top-p and both penalties are unset, plus Max Steps above.
     expect(screen.getAllByText("Not set")).toHaveLength(5);
   });
 

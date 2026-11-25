@@ -76,9 +76,6 @@ import { orgRoutes, workspaceRoutes } from "@/lib/routes";
 import { sortByName } from "@/lib/utils";
 import { toggleInList } from "@/lib/toggle-in-list";
 
-// toolSetIds, skillIds, and subAgentIds are deliberately excluded: this form
-// has no field that retracts an error keyed to them, so including them here
-// would disable Save forever the moment the server rejects one.
 const RETRACTABLE_FIELDS = [
   "name",
   "description",
@@ -121,18 +118,11 @@ type AgentFormData = {
   frequencyPenalty?: number;
 } & ReasoningValue;
 
-/** A provider coupled with the model reference it resolves through. */
 type AgentModelSelection = {
   providerId: string;
   modelId: string;
 };
 
-/**
- * The Agent's Provider/model picker, shared by its primary and Fallback model
- * (ADR-0043). They differ only in whether `None` is offered beside the
- * providers; the stored pair is matched by model ENTRY so an aliased model
- * still selects (ADR-0017).
- */
 function AgentModelSelect({
   allowNone,
   label,
@@ -147,9 +137,7 @@ function AgentModelSelect({
 }: {
   allowNone: boolean;
   label: string;
-  /** The Select's id, and the field its label points at. */
   modelFieldId: "modelId" | "fallbackModelId";
-  /** The Provider field chosen alongside it, whose error shows here too. */
   providerFieldId: "providerId" | "fallbackProviderId";
   selection: AgentModelSelection;
   providers: Serialized<Provider>[];
@@ -223,30 +211,21 @@ function AgentForm({
   workspaceId?: string;
   agentId?: string;
   toolSets: ToolSet[];
-  // Set when the tool sets couldn't be read, so the form can say so instead of
-  // presenting a failed read as an empty catalogue (issue #818).
   toolSetsError?: ToolSetsFailureReason;
   agents?: Serialized<Agent>[];
-  // When true the form edits an org-scoped (Shared) Agent on the Organization
-  // surface, pulling its references from org-scoped lists and writing via the
-  // org Agent routes (ADR-0007). Otherwise it edits a workspace Agent.
   orgScoped?: boolean;
 }) {
   const backendUrl = useBackendUrl();
   const { mutate } = useSWRConfig();
 
-  // The Organization surface lists/writes org-scoped references, the
-  // Workspace surface its own.
   const scope = orgScoped ? { orgId } : { orgId, workspaceId: workspaceId! };
   const doneHref = orgScoped
     ? orgRoutes(orgId).settings.agents
     : workspaceRoutes(orgId, workspaceId!).root;
 
-  // Fetch providers
   const { results: providers, isLoading: providersLoading } =
     useScopedList<Provider>("providers", scope);
 
-  // Fetch skills
   const { results: allSkills, isLoading: skillsLoading } = useScopedList<Skill>(
     "skills",
     scope,
@@ -254,13 +233,10 @@ function AgentForm({
   const skills = sortByName(allSkills);
   const [skillQuery, setSkillQuery] = useState("");
   const query = skillQuery.trim();
-  // View-only: hidden Skills keep their place in formData.skillIds. cmdk's
-  // scorer is called directly, as on the workspace home Skills list.
   const shownSkills = skills.filter(
     (skill) => !query || defaultFilter(skill.name, query) > 0,
   );
 
-  // Fetch agents for Sub-Agent selection, unless the page handed them in
   const { results: fetchedAgents, isLoading: agentsLoading } =
     useScopedList<Agent>("agents", propAgents ? null : scope);
   const agents = propAgents || fetchedAgents;
@@ -336,20 +312,12 @@ function AgentForm({
     },
     retractableFields: RETRACTABLE_FIELDS,
     buildPayload: (data) => {
-      // Saving migrates a concrete id to the alias its model now carries
-      // (ADR-0017). Once a model is aliased the picker no longer offers the
-      // bare id, so "pin to exactly gpt-4" is not an expressible choice — and
-      // without this the migration would only ever happen when the user
-      // switches to a *different* model, since re-picking the already-selected
-      // option fires no change event. Falls back to the stored value when the
-      // model resolves to nothing, leaving today's dangling-id behaviour alone.
       const submittedProvider = providers.find((p) => p.id === data.providerId);
       const submittedModelId =
         (submittedProvider && data.modelId
           ? findModelOption(submittedProvider, data.modelId)?.value
           : undefined) ?? data.modelId;
 
-      // The Fallback model migrates its alias reference the same way (ADR-0017).
       const submittedFallbackProvider = providers.find(
         (p) => p.id === data.fallbackProviderId,
       );
@@ -367,14 +335,10 @@ function AgentForm({
         inputPlaceholder: data.inputPlaceholder || undefined,
         instructions: data.instructions,
         modelId: submittedModelId,
-        // Null rather than an empty string clears the pair; the two travel
-        // together, so a fallback is never half-set (ADR-0043).
         fallbackProviderId: data.fallbackProviderId || null,
         fallbackModelId: submittedFallbackModelId || null,
         maxSteps: data.maxSteps,
-        // Send null (not undefined) for cleared sampling params so the key
-        // survives JSON.stringify and the backend persists the cleared value
-        // instead of silently keeping the previous one (#263).
+        // why: null, not undefined — the key must survive JSON.stringify so the clear persists
         temperature: data.temperature ?? null,
         topP: data.topP ?? null,
         topK: data.topK ?? null,
@@ -395,9 +359,6 @@ function AgentForm({
     onSuccess: async (data) => {
       const savedAgentId = data.id || agentId;
 
-      // The Agent itself already saved, so a failed avatar write is a
-      // partial success, not a reason to block navigation — surface a
-      // toast and continue on (#595).
       if (avatarDeleted && agentId) {
         const avatarOutcome = await writeAt(
           scopedUrl(backendUrl, `agents/${savedAgentId}/avatar`, scope),
@@ -407,8 +368,6 @@ function AgentForm({
           toast.error(avatarOutcome.message);
         }
       } else if (avatarFile) {
-        // Multipart upload can't go through writeAt (JSON-only body), so
-        // this call stays raw fetch — see the eslint.config.mjs exception.
         const avatarFormData = new FormData();
         avatarFormData.append("file", avatarFile);
         const avatarResponse = await fetch(
@@ -425,8 +384,7 @@ function AgentForm({
         }
       }
 
-      // The save already revalidated the Agent keys, but before the avatar
-      // write landed — refetch so the list shows the new avatar.
+      // why: the save's revalidation ran before the avatar write landed, so refetch after it
       if (avatarDeleted || avatarFile) {
         const agentsUrl = scopedUrl(backendUrl, "agents", scope);
         void mutate(agentsUrl);
@@ -446,7 +404,6 @@ function AgentForm({
     guidanceOnForbidden: true,
   });
 
-  // Initialize with first provider's first model once providers are loaded
   useResetOnChange(
     `${providers.length}:${formData.modelId ?? ""}:${formData.providerId ?? ""}:${agentId ?? ""}`,
     () => {
@@ -465,9 +422,6 @@ function AgentForm({
     },
   );
 
-  // A Shared Agent opened on the Workspace surface is read-only for everyone —
-  // it is edited only on the Organization surface (ADR-0007). In org mode the
-  // form is the canonical editor, so it is always editable.
   const isOrgScoped = agent?.scope === "organization";
   const readOnly = isOrgScoped && !orgScoped;
 
@@ -535,15 +489,11 @@ function AgentForm({
     }));
   };
 
-  // Both patch-reporting controls (Reasoning and Sampling) write their patch
-  // into the form and retract the error keyed to each field it touched.
   const applyControlPatch = (patch: Partial<AgentFormData>) => {
     setFormData((prev) => ({ ...prev, ...patch }));
     clearErrors(...Object.keys(patch));
   };
 
-  // The selected model's Reasoning map, where its Provider honours one: the
-  // Reasoning section shows only the controls it declares (ADR-0040).
   const selectedModel = resolveModel({
     providers,
     selection: { providerId: formData.providerId, modelId: formData.modelId },
@@ -589,8 +539,7 @@ function AgentForm({
             >
               <div className="size-20 rounded-full bg-muted flex items-center justify-center overflow-hidden border-2 border-dashed border-muted-foreground/20 hover:border-muted-foreground/40 transition-colors">
                 {avatarPreviewUrl ? (
-                  // Local blob:/object-URL preview of the chosen file; the Next
-                  // image optimizer cannot process object URLs.
+                  // why: object URL — the Next image optimizer cannot process it
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={avatarPreviewUrl}
@@ -685,8 +634,6 @@ function AgentForm({
               </>
             }
           />
-          {/* Provider and model are chosen from one control, so surface either
-              field's server error on the single Model field. */}
           <div className="flex flex-col gap-3">
             <AgentModelSelect
               allowNone={false}
@@ -708,9 +655,6 @@ function AgentForm({
               />
             )}
           </div>
-          {/* The optional Fallback model (ADR-0043), chosen with the same
-              Provider/model control as the primary. Only a Trigger run
-              consults it, and only when the primary Provider is unavailable. */}
           <AgentModelSelect
             allowNone
             label="Fallback model"
@@ -767,7 +711,6 @@ function AgentForm({
             </CardHeader>
             <CardContent>
               {(() => {
-                // Group tool sets by category
                 const toolSetsByCategory = toolSets.reduce(
                   (acc, toolSet) => {
                     const category = toolSet.category || "Uncategorized";
@@ -780,7 +723,6 @@ function AgentForm({
                   {} as Record<string, ToolSet[]>,
                 );
 
-                // Sort categories alphabetically, but keep "Uncategorized" last
                 const sortedCategories = Object.keys(toolSetsByCategory).sort(
                   (a, b) => {
                     if (a === "Uncategorized") return 1;
@@ -881,7 +823,7 @@ function AgentForm({
               </FieldDescription>
               <FieldGroup className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {agents
-                  .filter((a) => a.id !== agentId) // Only exclude self-assignment
+                  .filter((a) => a.id !== agentId)
                   .map((agent) => (
                     <FormSwitchField
                       key={agent.id}
@@ -935,8 +877,6 @@ function AgentForm({
   return (
     <DetailFormState
       {...loadState}
-      // The Skills and Sub-Agents cards render only once their lists land,
-      // so they're held back with the record rather than popping in after.
       isLoading={
         providersLoading ||
         skillsLoading ||
