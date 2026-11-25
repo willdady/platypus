@@ -1,11 +1,6 @@
 import type { ReactNode } from "react";
 
-/**
- * A list's filter controls in one wrapping row.
- *
- * It carries no space below: the parent supplies that, as the Workspace home's
- * sections do with their `gap-4`.
- */
+// why: no space below; the parent supplies it, as the Workspace home's gap-4 does
 export function ListToolbar({ children }: { children: ReactNode }) {
   return (
     <div

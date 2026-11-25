@@ -23,21 +23,12 @@ function labelNames(labels: KanbanCardHistoryRef[]): string {
     : "none";
 }
 
-/**
- * A value a change moved between. Rendered heavier than the sentence around it
- * so a Column or Label called "moved" or "none" still reads as the value
- * rather than as part of the wording.
- */
+// why: heavier weight so a Column or Label named "none" still reads as a value
 function Value({ children }: { children: ReactNode }) {
   return <span className="font-medium text-foreground">{children}</span>;
 }
 
-/**
- * One change, in a sentence. Values are the snapshots the entry was written
- * with, so a renamed Column still reads as the name it had at the time — and
- * the body, which is recorded without its text, reads as an edit rather than a
- * diff.
- */
+// why: entries carry snapshots, and the body has none, so it reads as an edit
 function describeChange(change: KanbanCardHistoryChange): ReactNode {
   switch (change.field) {
     case "columnId":
@@ -82,22 +73,14 @@ function describeChange(change: KanbanCardHistoryChange): ReactNode {
         </>
       );
     case "assignees":
-      // Only ids are recorded for an assignee, so the change is described
-      // rather than named.
+      // why: an assignee change carries only ids, so it is described not named
       if (change.before.length === 0) return "assigned the card";
       if (change.after.length === 0) return "removed the assignee";
       return "changed the assignee";
   }
 }
 
-/**
- * A Card's history: how it reached its current state, newest first. Read-only
- * and capped by the backend, so there is nothing here to page through.
- *
- * Collapsed on open, and not fetched until it is expanded: a Card can carry up
- * to `KANBAN_CARD_HISTORY_LIMIT` entries, which would otherwise push the
- * comments — the part of the dialog people come to read — off the screen.
- */
+// why: history can be long, so the section opens closed and reads nothing until then
 export function KanbanCardHistory({
   orgId,
   workspaceId,
@@ -111,7 +94,6 @@ export function KanbanCardHistory({
 }) {
   const [open, setOpen] = useState(false);
 
-  // A closed section names no scope, so nothing is read until it opens.
   const {
     data,
     results: entries,

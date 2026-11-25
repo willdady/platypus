@@ -27,11 +27,9 @@ import {
 } from "@platypus/schemas";
 import { workspaceRoutes } from "@/lib/routes";
 
-const DEFAULT_COLOR = KANBAN_LABEL_COLORS[5].value; // Blue
+const DEFAULT_COLOR = KANBAN_LABEL_COLORS[5].value;
 
-// `labels` is excluded: this form has no field that retracts an error keyed
-// to it, so including it here would disable Save forever the moment the
-// server rejects a label.
+// why: nothing retracts a label's error, so listing it would disable Save forever
 const RETRACTABLE_FIELDS = ["name", "description"] as const;
 
 type BoardFormData = {
@@ -49,7 +47,6 @@ export function KanbanBoardForm({
 }: {
   orgId: string;
   workspaceId: string;
-  /** Absent when creating. */
   boardId?: string;
   onDelete?: () => void;
   isDeleting?: boolean;
@@ -60,7 +57,6 @@ export function KanbanBoardForm({
 
   const isEditing = !!boardId;
   const scope = { orgId, workspaceId };
-  // The board view reads columns, cards and labels from here.
   const stateUrl = (id: string) =>
     scopedUrl(backendUrl, `boards/${id}/state`, scope);
 
@@ -89,13 +85,10 @@ export function KanbanBoardForm({
       description: data.description || null,
       labels: data.labels,
     }),
-    // An edit stays on the settings page; a create leaves for the new board's
-    // page. Either way the save toasts, because landing somewhere is not
-    // feedback enough.
     successMessage: () => (isEditing ? "Board updated" : "Board created"),
     onSuccess: async (data) => {
       if (isEditing) {
-        // So the board view picks up renamed labels.
+        // why: the board view reads labels from the state URL, so an edit must revalidate it
         await mutate(stateUrl(data.id));
         return;
       }

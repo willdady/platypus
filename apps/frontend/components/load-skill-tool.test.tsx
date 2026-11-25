@@ -17,9 +17,6 @@ function loadSkillCall(overrides: Partial<LoadSkillPart> = {}): LoadSkillPart {
   } as unknown as LoadSkillPart;
 }
 
-// Issue #834. Loading a Skill is a one-shot status line, not an execution
-// record with a body to read, so it shares the disclosure row's look but
-// never becomes a disclosure: nothing to click, nothing to expand.
 describe("LoadSkillTool", () => {
   it("names the skill and its status without a disclosure to open", () => {
     render(<LoadSkillTool toolPart={loadSkillCall()} />);

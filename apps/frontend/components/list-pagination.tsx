@@ -6,34 +6,17 @@ import { Button } from "@/components/ui/button";
 import { replaceSearchParam } from "@/lib/search-params";
 import { cn } from "@/lib/utils";
 
-/** A page of a list, and where it sits. */
 export type Page<T> = {
   items: readonly T[];
   page: number;
   pageCount: number;
-  /**
-   * Slots a short last page is missing in the two-column layout; 0 when
-   * there is only one page. Drawn on wide screens only.
-   */
   ghosts: number;
-  /**
-   * Slots completing a lone page's half-full last row in the two-column
-   * layout; drawn on wide screens only, where that row exists.
-   */
   rowGhosts: number;
 };
 
-/** The ghost counts of a list that is not paged: none. */
 export const NO_GHOSTS = { ghosts: 0, rowGhosts: 0 } as const;
 
-/**
- * The page a requested value lands on, clamped rather than trusted: a
- * malformed or too-small number reads as page 1, and one past the end — a
- * hand-edited URL, or a list that shrank under it — as the last page.
- *
- * Separate from {@link pageOf} so a server-paged list can ask for the page
- * bound before it has the page's rows.
- */
+// why: separate from pageOf, so a server-paged list can clamp before it has rows
 export function pageBounds(
   requested: string | number | null,
   totalCount: number,
@@ -47,11 +30,6 @@ export function pageBounds(
   return { page: Math.min(Math.max(parsed, 1), pageCount), pageCount };
 }
 
-/**
- * A page of rows that are already the requested page — the shape a
- * server-paged list has — in the same `Page` the client-paged lists use, so
- * both share the ghost-slot arithmetic.
- */
 export function serverPage<T>(
   items: readonly T[],
   page: number,
@@ -67,10 +45,6 @@ export function serverPage<T>(
   };
 }
 
-/**
- * The page of `items` that `requested` (a URL param's raw value) asks for,
- * clamped rather than trusted. See {@link pageBounds}.
- */
 export function pageOf<T>(
   requested: string | null,
   items: readonly T[],
@@ -81,20 +55,13 @@ export function pageOf<T>(
   return serverPage(shown, page, pageCount, pageSize);
 }
 
-/**
- * Empty, dashed slots that fill a short last page out to a full one, so the
- * footer and the sections below stay put, or a lone page's last row out to
- * two. They are for the two-column layout, so they show on wide screens only:
- * a single column would end in a stack of empty cards. The grid needs
- * `auto-rows-fr`, so a row of only ghosts is as tall as a row of cards.
- */
 export function GhostCards({
   page: { ghosts, rowGhosts },
 }: {
   page: Pick<Page<unknown>, "ghosts" | "rowGhosts">;
 }) {
   return Array.from({ length: ghosts + rowGhosts }, (_, i) => (
-    // An SVG outline, not `border-dashed`: CSS cannot set a dash's spacing.
+    // why: an SVG outline, because CSS cannot set a border dash's spacing
     <li
       key={`ghost-${i}`}
       aria-hidden="true"
@@ -114,10 +81,6 @@ export function GhostCards({
   ));
 }
 
-/**
- * Previous, "Page N of M", Next, writing the page to the URL under `param`
- * (page 1 leaves it out). Nothing when there is only one page.
- */
 export function ListPagination({
   page: { page, pageCount },
   param,
@@ -125,7 +88,6 @@ export function ListPagination({
 }: {
   page: Page<unknown>;
   param: string;
-  /** Names the section: four of these share the Workspace home. */
   "aria-label": string;
 }) {
   if (pageCount <= 1) return null;
@@ -158,23 +120,13 @@ export function ListPagination({
   );
 }
 
-/**
- * A list's footer: its Create controls on the left, its pagination on the
- * right, wrapping below them on a narrow screen.
- *
- * A list places its entry buttons by emptiness: the main button is solid
- * inside the empty card while the list has no rows, and the same buttons, all
- * `outline`, sit here once it does. A `ListState` section shows this footer in
- * every state. Leave `className` alone inside a `gap-4` parent; pass `mt-4` on
- * a plain settings page, where nothing else supplies the top gap.
- */
+// why: inside a gap-4 parent leave className alone; a settings page passes mt-4
 export function ListFooter({
   className,
   children,
   pagination,
 }: {
   className?: string;
-  /** The Create controls; omitted on a footer that holds only pagination. */
   children?: ReactNode;
   pagination?: ReactNode;
 }) {
