@@ -1,4 +1,4 @@
-import { and, eq, gt, inArray, isNotNull, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import type { Task } from "@a2a-js/sdk";
 import { TaskNotCancelableError } from "@a2a-js/sdk/errors";
 import { db } from "../index.ts";
@@ -6,14 +6,11 @@ import { a2aTask as a2aTaskTable, chat as chatTable } from "../db/schema.ts";
 import { logger } from "../logger.ts";
 import { runRegistry } from "../runs/run-registry.ts";
 import type { A2aCaller } from "./a2a-task.ts";
-import { currentTurnId, findA2aTask, type TaskRow } from "./a2a-task-state.ts";
+import { findA2aTask, type TaskRow } from "./a2a-task-state.ts";
 import { cancelTask, readTask } from "./a2a-task-lifecycle.ts";
 import { taskIsLive } from "./a2a-liveness.ts";
 
 const SWEEP_MS = 5_000;
-
-const isCurrentTurn = async (task: Pick<TaskRow, "chatId" | "messageId">) =>
-  (await currentTurnId(task.chatId)) === task.messageId;
 
 export const cancelA2aTask = async (
   caller: A2aCaller,
@@ -74,14 +71,15 @@ export const stopRevokedA2aRuns = async (): Promise<void> => {
 };
 
 export const stopCanceledA2aRuns = async (): Promise<void> => {
-  const held = runRegistry.heldRuns();
+  // why: a run with no turn named cannot be shown to be the turn a cancel claimed
+  const held = runRegistry
+    .heldRuns()
+    .flatMap(({ runId, turnId }) => (turnId ? [{ runId, turnId }] : []));
   if (held.length === 0) return;
-  const oldest = Math.min(...held.map((run) => run.startedAt));
   const canceled = await db
     .select({
       chatId: a2aTaskTable.chatId,
       messageId: a2aTaskTable.messageId,
-      canceledAt: a2aTaskTable.canceledAt,
     })
     .from(a2aTaskTable)
     .where(
@@ -90,20 +88,23 @@ export const stopCanceledA2aRuns = async (): Promise<void> => {
           a2aTaskTable.chatId,
           held.map((run) => run.runId),
         ),
+        inArray(
+          a2aTaskTable.messageId,
+          held.map((run) => run.turnId),
+        ),
         isNotNull(a2aTaskTable.canceledAt),
-        gt(a2aTaskTable.canceledAt, new Date(oldest - 1)),
       ),
     );
+  const canceledTurns = new Map<string, Set<string>>();
   for (const task of canceled) {
-    const { canceledAt } = task;
-    if (!canceledAt)
-      throw new Error(
-        `Canceled Task in Chat '${task.chatId}' has no canceledAt`,
-      );
-    if (!(await isCurrentTurn(task))) continue;
-    runRegistry.cancel(task.chatId, {
-      startedBefore: canceledAt.getTime(),
-    });
+    const turns = canceledTurns.get(task.chatId) ?? new Set<string>();
+    turns.add(task.messageId);
+    canceledTurns.set(task.chatId, turns);
+  }
+  for (const run of held) {
+    if (canceledTurns.get(run.runId)?.has(run.turnId)) {
+      runRegistry.cancel(run.runId, { turnId: run.turnId });
+    }
   }
 };
 

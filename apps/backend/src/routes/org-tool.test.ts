@@ -1,25 +1,46 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { mockDb, mockSession, resetMockDb } from "../test-utils.ts";
+import {
+  mockSession,
+  resetMockDb,
+  seedDb,
+  type Store,
+  type Row,
+} from "../test-utils.ts";
 import app from "../server.ts";
 
 describe("Organization Tool Routes", () => {
   beforeEach(() => {
     resetMockDb();
     vi.clearAllMocks();
-    mockDb.where.mockReturnValue(mockDb);
   });
 
   const orgId = "org-1";
   const baseUrl = `/organizations/${orgId}/tools`;
 
+  const mcp = (over: Row = {}): Row => ({
+    id: "mcp-1",
+    name: "Shared MCP",
+    organizationId: orgId,
+    workspaceId: null,
+    ...over,
+  });
+
+  const world = (role: "admin" | "member" = "member", rows: Store = {}) =>
+    seedDb({
+      organization_member: [
+        { id: "m1", userId: "user-1", organizationId: orgId, role },
+      ],
+      mcp: [
+        mcp(),
+        mcp({ id: "mcp-other-org", organizationId: "org-2" }),
+        mcp({ id: "mcp-ws", organizationId: null, workspaceId: "ws-1" }),
+      ],
+      ...rows,
+    });
+
   it("lists static tool sets plus org-scoped MCPs for any member", async () => {
     mockSession();
-    mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-    mockDb.where
-      .mockReturnValueOnce(mockDb)
-      .mockResolvedValueOnce([
-        { id: "mcp-1", name: "Shared MCP", organizationId: orgId },
-      ]);
+    world("member");
 
     const res = await app.request(baseUrl);
     expect(res.status).toBe(200);
@@ -31,12 +52,15 @@ describe("Organization Tool Routes", () => {
       name: "Shared MCP",
       category: "MCP",
     });
+    expect(
+      body.results.filter((t) => t.category === "MCP").map((t) => t.id),
+    ).toEqual(["mcp-1"]);
     expect(body.results.some((t) => t.category !== "MCP")).toBe(true);
   });
 
   it("returns 403 when not a member of the organization", async () => {
     mockSession();
-    mockDb.limit.mockResolvedValueOnce([]);
+    seedDb({});
 
     const res = await app.request(baseUrl);
     expect(res.status).toBe(403);

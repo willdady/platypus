@@ -10,8 +10,4 @@ export function getStorage(): StorageBackend {
     env().STORAGE_BACKEND === "s3" ? new S3Storage() : new DiskStorage());
 }
 
-export function resetStorage(): void {
-  storageInstance = null;
-}
-
 export type { StorageBackend } from "./types.ts";

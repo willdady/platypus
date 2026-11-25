@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { mockDb, mockSession, resetMockDb } from "../test-utils.ts";
+import { mockSession, resetMockDb, seedDb } from "../test-utils.ts";
 import { ConflictError } from "../errors.ts";
 
 vi.mock("../services/inbound-trigger.ts", async (importOriginal) => ({
@@ -22,19 +22,23 @@ const baseUrl = "/organizations/org-1/inbound-triggers";
 
 const asRole = (role: "admin" | "member") => {
   mockSession();
-  mockDb.limit.mockResolvedValueOnce([{ role }]);
+  seedDb({
+    organization_member: [
+      { id: "m-2", userId: "user-1", organizationId: "org-2", role: "admin" },
+      { id: "m-1", userId: "user-1", organizationId: "org-1", role },
+    ],
+  });
 };
 
 describe("Org Inbound Trigger Routes", () => {
   beforeEach(() => {
     resetMockDb();
     vi.clearAllMocks();
-    mockDb.where.mockReturnValue(mockDb);
   });
 
   it("lists the Organization's Inbound Triggers for an Org Admin", async () => {
     asRole("admin");
-    vi.mocked(listOrgInboundTriggers).mockResolvedValueOnce([]);
+    vi.mocked(listOrgInboundTriggers).mockResolvedValue([]);
 
     const res = await app.request(baseUrl);
 
@@ -47,7 +51,7 @@ describe("Org Inbound Trigger Routes", () => {
 
   it("revokes the token the Org Admin saw", async () => {
     asRole("admin");
-    vi.mocked(revokeInboundTriggerToken).mockResolvedValueOnce(true);
+    vi.mocked(revokeInboundTriggerToken).mockResolvedValue(true);
 
     const res = await app.request(
       `${baseUrl}/trig-1/token?tokenCreatedAt=${SEEN}`,
@@ -64,7 +68,7 @@ describe("Org Inbound Trigger Routes", () => {
 
   it("409s when the token was replaced since the list loaded", async () => {
     asRole("admin");
-    vi.mocked(revokeInboundTriggerToken).mockRejectedValueOnce(
+    vi.mocked(revokeInboundTriggerToken).mockRejectedValue(
       new ConflictError("The token was replaced since you loaded the list."),
     );
 
@@ -94,7 +98,7 @@ describe("Org Inbound Trigger Routes", () => {
 
   it("404s a revoke of a Trigger not in the Organization", async () => {
     asRole("admin");
-    vi.mocked(revokeInboundTriggerToken).mockResolvedValueOnce(false);
+    vi.mocked(revokeInboundTriggerToken).mockResolvedValue(false);
 
     const res = await app.request(
       `${baseUrl}/trig-x/token?tokenCreatedAt=${SEEN}`,
@@ -119,7 +123,7 @@ describe("Org Inbound Trigger Routes", () => {
 
   it("reads the gate and every Workspace's switch for an Org Admin", async () => {
     asRole("admin");
-    vi.mocked(getInboundTriggerAccess).mockResolvedValueOnce(
+    vi.mocked(getInboundTriggerAccess).mockResolvedValue(
       ACCESS as Awaited<ReturnType<typeof getInboundTriggerAccess>>,
     );
 
@@ -132,7 +136,7 @@ describe("Org Inbound Trigger Routes", () => {
 
   it("saves the gate with the allowed Workspaces in one call", async () => {
     asRole("admin");
-    vi.mocked(setInboundTriggerAccess).mockResolvedValueOnce(
+    vi.mocked(setInboundTriggerAccess).mockResolvedValue(
       ACCESS as Awaited<ReturnType<typeof setInboundTriggerAccess>>,
     );
 

@@ -1,9 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
-  mockDb,
   mockSession,
   mockNoSession,
   resetMockDb,
+  seedDb,
+  type FakeDb,
+  type Row,
+  type Store,
 } from "../test-utils.ts";
 import app from "../server.ts";
 
@@ -36,30 +39,81 @@ describe("MCP OAuth Callback Route", () => {
   beforeEach(() => {
     resetMockDb();
     vi.clearAllMocks();
-    mockDb.where.mockImplementation(() => mockDb);
   });
+
+  const post = (state: string) =>
+    app.request(baseUrl, {
+      method: "POST",
+      body: JSON.stringify({ code: "auth-code", state }),
+      headers: { "Content-Type": "application/json" },
+    });
+
+  const futureDate = () => new Date(Date.now() + 600000);
+  const expiredDate = () => new Date(Date.now() - 60000);
+
+  const oauthState = (over: Row = {}): Row => ({
+    id: "state-123",
+    mcpId: "mcp-1",
+    userId: "user-1",
+    codeVerifier: "verifier",
+    redirectUri: "http://localhost:3001/oauth/mcp/callback",
+    expiresAt: futureDate(),
+    ...over,
+  });
+
+  const mcpRow = (over: Row = {}): Row => ({
+    id: "mcp-1",
+    name: "MCP",
+    slug: "mcp",
+    url: "http://mcp.example.com",
+    authType: "OAuth",
+    organizationId: null,
+    workspaceId: "ws-1",
+    ...over,
+  });
+
+  const workspaceRow = (over: Row = {}): Row => ({
+    id: "ws-1",
+    organizationId: "org-1",
+    ownerId: "user-1",
+    name: "Workspace",
+    ...over,
+  });
+
+  const otherMcp = mcpRow({
+    id: "mcp-other",
+    name: "Other MCP",
+    slug: "other_mcp",
+    organizationId: "org-2",
+    workspaceId: null,
+  });
+
+  const otherWorkspace = workspaceRow({
+    id: "ws-other",
+    organizationId: "org-2",
+  });
+
+  const world = (rows: Store = {}): FakeDb =>
+    seedDb({
+      mcp_oauth_state: [oauthState({ id: "state-other" }), oauthState()],
+      mcp: [otherMcp, mcpRow()],
+      workspace: [otherWorkspace, workspaceRow()],
+      ...rows,
+    });
 
   it("should return 401 when not authenticated", async () => {
     mockNoSession();
 
-    const res = await app.request(baseUrl, {
-      method: "POST",
-      body: JSON.stringify({ code: "auth-code", state: "state-123" }),
-      headers: { "Content-Type": "application/json" },
-    });
+    const res = await post("state-123");
 
     expect(res.status).toBe(401);
   });
 
   it("should return 400 for invalid state", async () => {
     mockSession();
-    mockDb.limit.mockResolvedValueOnce([]);
+    world();
 
-    const res = await app.request(baseUrl, {
-      method: "POST",
-      body: JSON.stringify({ code: "auth-code", state: "invalid-state" }),
-      headers: { "Content-Type": "application/json" },
-    });
+    const res = await post("invalid-state");
 
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({
@@ -69,47 +123,29 @@ describe("MCP OAuth Callback Route", () => {
 
   it("should return 400 for expired state", async () => {
     mockSession();
-    const expiredDate = new Date(Date.now() - 60000);
-    mockDb.limit.mockResolvedValueOnce([
-      {
-        id: "state-123",
-        mcpId: "mcp-1",
-        userId: "user-1",
-        expiresAt: expiredDate,
-      },
-    ]);
-
-    const res = await app.request(baseUrl, {
-      method: "POST",
-      body: JSON.stringify({ code: "auth-code", state: "state-123" }),
-      headers: { "Content-Type": "application/json" },
+    const fake = world({
+      mcp_oauth_state: [
+        oauthState({ id: "state-other" }),
+        oauthState({ expiresAt: expiredDate() }),
+      ],
     });
+
+    const res = await post("state-123");
 
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({
       error: "OAuth state has expired",
     });
+    expect(fake.tables.mcp_oauth_state.map((row) => row.id)).toEqual([
+      "state-other",
+    ]);
   });
 
   it("should return 404 when MCP not found", async () => {
     mockSession();
-    const futureDate = new Date(Date.now() + 600000);
-    mockDb.limit
-      .mockResolvedValueOnce([
-        {
-          id: "state-123",
-          mcpId: "mcp-1",
-          userId: "user-1",
-          expiresAt: futureDate,
-        },
-      ])
-      .mockResolvedValueOnce([]);
+    world({ mcp: [otherMcp] });
 
-    const res = await app.request(baseUrl, {
-      method: "POST",
-      body: JSON.stringify({ code: "auth-code", state: "state-123" }),
-      headers: { "Content-Type": "application/json" },
-    });
+    const res = await post("state-123");
 
     expect(res.status).toBe(404);
     expect(await res.json()).toEqual({ error: "MCP not found" });
@@ -117,23 +153,9 @@ describe("MCP OAuth Callback Route", () => {
 
   it("should return 400 when MCP URL is not configured", async () => {
     mockSession();
-    const futureDate = new Date(Date.now() + 600000);
-    mockDb.limit
-      .mockResolvedValueOnce([
-        {
-          id: "state-123",
-          mcpId: "mcp-1",
-          userId: "user-1",
-          expiresAt: futureDate,
-        },
-      ])
-      .mockResolvedValueOnce([{ id: "mcp-1", url: null, workspaceId: "ws-1" }]);
+    world({ mcp: [mcpRow({ url: null })] });
 
-    const res = await app.request(baseUrl, {
-      method: "POST",
-      body: JSON.stringify({ code: "auth-code", state: "state-123" }),
-      headers: { "Content-Type": "application/json" },
-    });
+    const res = await post("state-123");
 
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({
@@ -143,26 +165,9 @@ describe("MCP OAuth Callback Route", () => {
 
   it("should return 404 when workspace not found", async () => {
     mockSession();
-    const futureDate = new Date(Date.now() + 600000);
-    mockDb.limit
-      .mockResolvedValueOnce([
-        {
-          id: "state-123",
-          mcpId: "mcp-1",
-          userId: "user-1",
-          expiresAt: futureDate,
-        },
-      ])
-      .mockResolvedValueOnce([
-        { id: "mcp-1", url: "http://mcp.example.com", workspaceId: "ws-1" },
-      ])
-      .mockResolvedValueOnce([]);
+    world({ workspace: [otherWorkspace] });
 
-    const res = await app.request(baseUrl, {
-      method: "POST",
-      body: JSON.stringify({ code: "auth-code", state: "state-123" }),
-      headers: { "Content-Type": "application/json" },
-    });
+    const res = await post("state-123");
 
     expect(res.status).toBe(404);
     expect(await res.json()).toEqual({ error: "Workspace not found" });
@@ -170,28 +175,13 @@ describe("MCP OAuth Callback Route", () => {
 
   it("should return success when OAuth completes successfully", async () => {
     mockSession();
-    const futureDate = new Date(Date.now() + 600000);
-    mockDb.limit
-      .mockResolvedValueOnce([
-        {
-          id: "state-123",
-          mcpId: "mcp-1",
-          userId: "user-1",
-          expiresAt: futureDate,
-        },
-      ])
-      .mockResolvedValueOnce([
-        { id: "mcp-1", url: "http://mcp.example.com", workspaceId: "ws-1" },
-      ])
-      .mockResolvedValueOnce([{ id: "ws-1", organizationId: "org-1" }]);
+    const fake = world();
 
-    vi.mocked(mcpAuth).mockResolvedValueOnce("AUTHORIZED");
+    vi.mocked(mcpAuth).mockImplementationOnce(() =>
+      Promise.resolve("AUTHORIZED"),
+    );
 
-    const res = await app.request(baseUrl, {
-      method: "POST",
-      body: JSON.stringify({ code: "auth-code", state: "state-123" }),
-      headers: { "Content-Type": "application/json" },
-    });
+    const res = await post("state-123");
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
@@ -199,32 +189,20 @@ describe("MCP OAuth Callback Route", () => {
       workspaceId: "ws-1",
       mcpId: "mcp-1",
     });
+    expect(fake.tables.mcp_oauth_state.map((row) => row.id)).toEqual([
+      "state-other",
+    ]);
   });
 
   it("should return 500 for unexpected OAuth result", async () => {
     mockSession();
-    const futureDate = new Date(Date.now() + 600000);
-    mockDb.limit
-      .mockResolvedValueOnce([
-        {
-          id: "state-123",
-          mcpId: "mcp-1",
-          userId: "user-1",
-          expiresAt: futureDate,
-        },
-      ])
-      .mockResolvedValueOnce([
-        { id: "mcp-1", url: "http://mcp.example.com", workspaceId: "ws-1" },
-      ])
-      .mockResolvedValueOnce([{ id: "ws-1", organizationId: "org-1" }]);
+    world();
 
-    vi.mocked(mcpAuth).mockResolvedValueOnce("REDIRECT");
+    vi.mocked(mcpAuth).mockImplementationOnce(() =>
+      Promise.resolve("REDIRECT"),
+    );
 
-    const res = await app.request(baseUrl, {
-      method: "POST",
-      body: JSON.stringify({ code: "auth-code", state: "state-123" }),
-      headers: { "Content-Type": "application/json" },
-    });
+    const res = await post("state-123");
 
     expect(res.status).toBe(500);
     const body = await res.text();
@@ -233,76 +211,46 @@ describe("MCP OAuth Callback Route", () => {
 
   it("should return 500 when OAuth throws an error", async () => {
     mockSession();
-    const futureDate = new Date(Date.now() + 600000);
-    mockDb.limit
-      .mockResolvedValueOnce([
-        {
-          id: "state-123",
-          mcpId: "mcp-1",
-          userId: "user-1",
-          expiresAt: futureDate,
-        },
-      ])
-      .mockResolvedValueOnce([
-        { id: "mcp-1", url: "http://mcp.example.com", workspaceId: "ws-1" },
-      ])
-      .mockResolvedValueOnce([{ id: "ws-1", organizationId: "org-1" }]);
+    const fake = world();
 
-    vi.mocked(mcpAuth).mockRejectedValueOnce(
-      new Error("Token exchange failed"),
+    vi.mocked(mcpAuth).mockImplementationOnce(() =>
+      Promise.reject(new Error("Token exchange failed")),
     );
 
-    const res = await app.request(baseUrl, {
-      method: "POST",
-      body: JSON.stringify({ code: "auth-code", state: "state-123" }),
-      headers: { "Content-Type": "application/json" },
-    });
+    const res = await post("state-123");
 
     expect(res.status).toBe(500);
     expect(await res.json()).toEqual({
       error: "OAuth token exchange failed",
     });
-    expect(mockDb.delete).toHaveBeenCalledTimes(1);
+    expect(
+      fake.queries
+        .filter((query) => query.kind === "delete")
+        .map((q) => q.table),
+    ).toEqual(["mcp_oauth_state"]);
   });
 
   it("should return 403 when another user completes the state", async () => {
     mockSession({ id: "user-2", email: "other@example.com", role: "user" });
-    mockDb.limit.mockResolvedValueOnce([
-      {
-        id: "state-123",
-        mcpId: "mcp-1",
-        userId: "user-1",
-        expiresAt: new Date(Date.now() + 600000),
-      },
-    ]);
+    const fake = world();
 
-    const res = await app.request(baseUrl, {
-      method: "POST",
-      body: JSON.stringify({ code: "auth-code", state: "state-123" }),
-      headers: { "Content-Type": "application/json" },
-    });
+    const res = await post("state-123");
 
     expect(res.status).toBe(403);
     expect(mcpAuth).not.toHaveBeenCalled();
-    expect(mockDb.delete).not.toHaveBeenCalled();
+    expect(fake.queries.some((query) => query.kind === "delete")).toBe(false);
   });
 
   it("should return 403 for a state minted outside a user request", async () => {
     mockSession();
-    mockDb.limit.mockResolvedValueOnce([
-      {
-        id: "state-123",
-        mcpId: "mcp-1",
-        userId: null,
-        expiresAt: new Date(Date.now() + 600000),
-      },
-    ]);
-
-    const res = await app.request(baseUrl, {
-      method: "POST",
-      body: JSON.stringify({ code: "auth-code", state: "state-123" }),
-      headers: { "Content-Type": "application/json" },
+    world({
+      mcp_oauth_state: [
+        oauthState({ id: "state-other" }),
+        oauthState({ userId: null }),
+      ],
     });
+
+    const res = await post("state-123");
 
     expect(res.status).toBe(403);
     expect(mcpAuth).not.toHaveBeenCalled();

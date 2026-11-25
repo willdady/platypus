@@ -1,17 +1,22 @@
 import { logger } from "../logger.ts";
-import { runRegistry } from "./run-registry.ts";
+import { runRegistry, type RunRegistry } from "./run-registry.ts";
 
 // why: under docker stop's 10s grace, so the kill doesn't cut the drain short
 export const SHUTDOWN_DRAIN_MS = 8_000;
 
 export const CRASH_DRAIN_MS = 2_000;
 
+const stopAndCancel = (registry: RunRegistry): void => {
+  registry.beginStop();
+  for (const { runId } of registry.heldRuns()) registry.cancel(runId);
+};
+
 export const drainRuns = async (
   timeoutMs: number = SHUTDOWN_DRAIN_MS,
+  registry: RunRegistry = runRegistry,
 ): Promise<boolean> => {
-  runRegistry.beginStop();
-  for (const { runId } of runRegistry.heldRuns()) runRegistry.cancel(runId);
-  return runRegistry.whenIdle(timeoutMs);
+  stopAndCancel(registry);
+  return registry.whenIdle(timeoutMs);
 };
 
 const withinBudget = (
@@ -34,17 +39,19 @@ export const drainProcess = async (
     closeIdleConnections?: () => void;
     close?: () => Promise<void>;
     endPool?: () => Promise<void>;
+    registry?: RunRegistry;
   },
   timeoutMs: number = SHUTDOWN_DRAIN_MS,
 ): Promise<boolean> => {
   const deadline = Date.now() + timeoutMs;
-  runRegistry.beginStop();
+  const registry = options.registry ?? runRegistry;
+  registry.beginStop();
 
   options.stopBackground?.();
   options.stopAccepting?.();
   options.closeIdleConnections?.();
 
-  let complete = await drainRuns(deadline - Date.now());
+  let complete = await drainRuns(deadline - Date.now(), registry);
   if (options.close) {
     complete =
       (await withinBudget(deadline - Date.now(), options.close)) && complete;
@@ -64,14 +71,16 @@ export const installShutdownHandlers = (options: {
   endPool?: () => Promise<void>;
   exit?: (code: number) => void;
   timeoutMs?: number;
+  registry?: RunRegistry;
 }): (() => void) => {
   const exit = options.exit ?? ((code: number) => process.exit(code));
   const timeoutMs = options.timeoutMs ?? SHUTDOWN_DRAIN_MS;
+  const registry = options.registry ?? runRegistry;
   let stopping = false;
   const onSignal = (signal: NodeJS.Signals) => {
     if (stopping) return;
     stopping = true;
-    const held = runRegistry.heldRuns().length;
+    const held = registry.heldRuns().length;
     logger.info(
       { signal, runs: held },
       "Shutting down: stopping new work and draining held runs",
@@ -95,10 +104,12 @@ export const installCrashHandlers = (
   options: {
     exit?: (code: number) => void;
     timeoutMs?: number;
+    registry?: RunRegistry;
   } = {},
 ): (() => void) => {
   const exit = options.exit ?? ((code: number) => process.exit(code));
   const timeoutMs = options.timeoutMs ?? CRASH_DRAIN_MS;
+  const registry = options.registry ?? runRegistry;
   let crashing = false;
   const onCrash =
     (kind: "unhandledRejection" | "uncaughtException") => (reason: unknown) => {
@@ -107,9 +118,8 @@ export const installCrashHandlers = (
       const error =
         reason instanceof Error ? reason : new Error(String(reason));
       logger.fatal({ err: error }, `Fatal: ${kind}`);
-      runRegistry.beginStop();
-      for (const { runId } of runRegistry.heldRuns()) runRegistry.cancel(runId);
-      void runRegistry.whenIdle(timeoutMs).finally(() => exit(1));
+      stopAndCancel(registry);
+      void registry.whenIdle(timeoutMs).finally(() => exit(1));
     };
   const onRejection = onCrash("unhandledRejection");
   const onException = onCrash("uncaughtException");

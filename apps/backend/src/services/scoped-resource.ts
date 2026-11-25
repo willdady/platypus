@@ -189,25 +189,43 @@ export const resolveScopedByName = async <T extends ScopedResourceType>(
   return { row: orgRow, scope: "organization" };
 };
 
-export const listScoped = async <T extends ScopedResourceType>(
+const workspaceScopedRows = (
   database: Database,
-  type: T,
-  ctx: ScopeContext,
+  type: ScopedResourceType,
+  workspaceIds: string[],
   ids?: string[],
-): Promise<{ row: RowOf[T]; scope: Scope }[]> => {
+) => {
   const { table } = REGISTRY[type];
-
-  const workspaceRows = await database
+  return database
     .select()
     .from(table)
     .where(
-      and(
-        eq(table.workspaceId, ctx.workspaceId),
+      allOf(
+        inArray(table.workspaceId, workspaceIds),
         ids ? inArray(table.id, ids) : undefined,
       ),
     );
+};
 
-  const attachedRows = await database
+const attachedSharedRows = (
+  database: Database,
+  type: ScopedResourceType,
+  contexts: readonly ScopeContext[],
+  ids?: string[],
+) => {
+  const { table } = REGISTRY[type];
+  if (contexts.length === 0) {
+    throw new Error("attachedSharedRows needs at least one Workspace context");
+  }
+  const attachedHere = or(
+    ...contexts.map((context) =>
+      and(
+        eq(attachmentTable.workspaceId, context.workspaceId),
+        eq(table.organizationId, context.orgId),
+      ),
+    ),
+  );
+  return database
     .select()
     .from(table)
     .innerJoin(
@@ -215,15 +233,31 @@ export const listScoped = async <T extends ScopedResourceType>(
       and(
         eq(attachmentTable.resourceId, table.id),
         eq(attachmentTable.resourceType, type),
-        eq(attachmentTable.workspaceId, ctx.workspaceId),
       ),
     )
     .where(
-      and(
-        sharedWhere(table, ctx.orgId),
+      allOf(
+        isNull(table.workspaceId),
+        attachedHere,
         ids ? inArray(table.id, ids) : undefined,
       ),
     );
+};
+
+export const listScoped = async <T extends ScopedResourceType>(
+  database: Database,
+  type: T,
+  ctx: ScopeContext,
+  ids?: string[],
+): Promise<{ row: RowOf[T]; scope: Scope }[]> => {
+  const workspaceRows = await workspaceScopedRows(
+    database,
+    type,
+    [ctx.workspaceId],
+    ids,
+  );
+
+  const attachedRows = await attachedSharedRows(database, type, [ctx], ids);
 
   const orgRows = (attachedRows as unknown as Record<T, RowOf[T]>[]).map(
     (r) => r[type],
@@ -245,6 +279,63 @@ export const listScopedByIds = <T extends ScopedResourceType>(
   ctx: ScopeContext,
 ): Promise<{ row: RowOf[T]; scope: Scope }[]> =>
   ids.length === 0 ? Promise.resolve([]) : listScoped(database, type, ctx, ids);
+
+export type VisibleScopedRow<T extends ScopedResourceType> = {
+  row: RowOf[T];
+  scope: Scope;
+};
+
+export type VisibleScopedRows<T extends ScopedResourceType> = Map<
+  string,
+  Map<string, VisibleScopedRow<T>>
+>;
+
+export const listScopedByIdsForWorkspaces = async <
+  T extends ScopedResourceType,
+>(
+  database: Database,
+  type: T,
+  ids: string[],
+  contexts: readonly ScopeContext[],
+): Promise<VisibleScopedRows<T>> => {
+  const visible: VisibleScopedRows<T> = new Map(
+    contexts.map((context) => [
+      context.workspaceId,
+      new Map<string, VisibleScopedRow<T>>(),
+    ]),
+  );
+  if (ids.length === 0 || contexts.length === 0) return visible;
+
+  const workspaceRows = await workspaceScopedRows(
+    database,
+    type,
+    [...new Set(contexts.map((context) => context.workspaceId))],
+    ids,
+  );
+  for (const row of workspaceRows as RowOf[T][]) {
+    if (row.workspaceId) {
+      visible.get(row.workspaceId)?.set(row.id, { row, scope: "workspace" });
+    }
+  }
+
+  const attachedRows = (await attachedSharedRows(
+    database,
+    type,
+    contexts,
+    ids,
+  )) as unknown as (Record<string, unknown> & {
+    attachment: { workspaceId: string };
+  })[];
+  for (const joined of attachedRows) {
+    const row = joined[type] as RowOf[T];
+    visible.get(joined.attachment.workspaceId)?.set(row.id, {
+      row,
+      scope: "organization",
+    });
+  }
+
+  return visible;
+};
 
 export const resolveOrgScoped = async <T extends ScopedResourceType>(
   database: Database,

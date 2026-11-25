@@ -60,7 +60,7 @@ const skillsUrl = `/organizations/${orgId}/workspaces/${workspaceId}/skills`;
 describe("Skill file download", () => {
   it("sends a bundled .html file as an octet-stream attachment", async () => {
     mockSession();
-    storageGet.mockResolvedValueOnce({
+    storageGet.mockResolvedValue({
       data: Buffer.from("<script>alert(1)</script>"),
       contentType: "application/octet-stream",
     });

@@ -12,7 +12,8 @@ export default defineConfig({
       FRONTEND_URL: "http://localhost:3000",
     },
     include: ["**/*.test.ts"],
-    exclude: ["node_modules", "drizzle"],
+    // why: the .pg tests need a real Postgres; vitest.pg.config.ts runs them
+    exclude: ["node_modules", "drizzle", "**/*.pg.test.ts"],
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "html"],

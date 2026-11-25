@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { mockDb, resetMockDb } from "../test-utils.ts";
-import { and, eq, inArray, notInArray, type SQL } from "drizzle-orm";
+import {
+  mockDb,
+  renderSql,
+  renderedWheres,
+  resetMockDb,
+} from "../test-utils.ts";
 import { agent as agentTable, skill as skillTable } from "../db/schema.ts";
 
 import {
@@ -27,9 +31,6 @@ const createFields = (): SkillCreateFields => ({
   description: "A skill used in tests",
   body: "The skill body",
 });
-
-const sqlWith = (...values: unknown[]) =>
-  expect.objectContaining({ op: "sql", values }) as unknown as SQL;
 
 const updateFields = () => ({
   name: "Renamed",
@@ -88,17 +89,17 @@ describe("skill write model", () => {
       );
 
       expect(mockDb.update).toHaveBeenCalledWith(agentTable);
-      expect(mockDb.set).toHaveBeenCalledWith({
-        skillIds: sqlWith(agentTable.skillIds, '["s1"]'),
-        updatedAt: expect.any(Date) as unknown,
+      const set = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
+      expect(renderSql(set.skillIds)).toEqual({
+        sql: `"agent"."skill_ids" || $1::jsonb`,
+        params: ['["s1"]'],
       });
-      expect(mockDb.where).toHaveBeenCalledWith(
-        and(
-          eq(agentTable.workspaceId, "ws-1"),
-          inArray(agentTable.id, ["agent-1", "agent-2"]),
-          sqlWith(agentTable.skillIds, '["s1"]'),
-        ),
-      );
+      expect(renderedWheres()).toContainEqual({
+        sql:
+          `("agent"."workspace_id" = $1 and "agent"."id" in ($2, $3) and ` +
+          `NOT "agent"."skill_ids" @> $4::jsonb)`,
+        params: ["ws-1", "agent-1", "agent-2", '["s1"]'],
+      });
     });
 
     it("writes no agents when the workspace create carries an empty agentIds", async () => {
@@ -239,20 +240,18 @@ describe("skill write model", () => {
       });
 
       expect(mockDb.update).toHaveBeenCalledTimes(3);
-      expect(mockDb.where).toHaveBeenCalledWith(
-        and(
-          eq(agentTable.workspaceId, "ws-1"),
-          sqlWith(agentTable.skillIds, '["s1"]'),
-          notInArray(agentTable.id, ["agent-1"]),
-        ),
-      );
-      expect(mockDb.where).toHaveBeenCalledWith(
-        and(
-          eq(agentTable.workspaceId, "ws-1"),
-          inArray(agentTable.id, ["agent-1"]),
-          sqlWith(agentTable.skillIds, '["s1"]'),
-        ),
-      );
+      expect(renderedWheres()).toContainEqual({
+        sql:
+          `("agent"."workspace_id" = $1 and "agent"."skill_ids" @> $2::jsonb and ` +
+          `"agent"."id" not in ($3))`,
+        params: ["ws-1", '["s1"]', "agent-1"],
+      });
+      expect(renderedWheres()).toContainEqual({
+        sql:
+          `("agent"."workspace_id" = $1 and "agent"."id" in ($2) and ` +
+          `NOT "agent"."skill_ids" @> $3::jsonb)`,
+        params: ["ws-1", "agent-1", '["s1"]'],
+      });
     });
 
     it("unassigns the skill from every workspace agent when agentIds is emptied", async () => {
@@ -267,12 +266,10 @@ describe("skill write model", () => {
       });
 
       expect(mockDb.update).toHaveBeenCalledTimes(2);
-      expect(mockDb.where).toHaveBeenLastCalledWith(
-        and(
-          eq(agentTable.workspaceId, "ws-1"),
-          sqlWith(agentTable.skillIds, '["s1"]'),
-        ),
-      );
+      expect(renderedWheres()).toContainEqual({
+        sql: `("agent"."workspace_id" = $1 and "agent"."skill_ids" @> $2::jsonb)`,
+        params: ["ws-1", '["s1"]'],
+      });
     });
 
     it("leaves agent assignments alone when the update carries no agentIds", async () => {
@@ -323,12 +320,10 @@ describe("skill write model", () => {
 
       await deleteSkill({ kind: "workspace", ctx: workspaceCtx }, "s1");
 
-      expect(mockDb.where).toHaveBeenCalledWith(
-        and(
-          eq(agentTable.workspaceId, "ws-1"),
-          sqlWith(agentTable.skillIds, '["s1"]'),
-        ),
-      );
+      expect(renderedWheres()).toContainEqual({
+        sql: `("agent"."workspace_id" = $1 and "agent"."skill_ids" @> $2::jsonb)`,
+        params: ["ws-1", '["s1"]'],
+      });
       expect(mockDb.delete).toHaveBeenCalledTimes(1);
       expect(mockDb.where).toHaveBeenLastCalledWith(
         workspaceScopedWhere("skill", "s1", "ws-1"),

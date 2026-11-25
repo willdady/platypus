@@ -56,24 +56,25 @@ describe("cancelRun", () => {
   });
 });
 
-describe("cancelRun at a moment", () => {
-  it("spares a run held here that started after the cancel was decided", async () => {
-    const decidedAt = new Date(Date.now() - 1000);
-    const handle = runRegistry.register("chat-1");
+describe("cancelRun for a turn", () => {
+  it("aborts a run held here for that turn, without broadcasting", async () => {
+    const handle = runRegistry.register("chat-1", { turnId: "msg-a" });
 
-    await cancelRun("chat-1", { startedBefore: decidedAt });
+    await cancelRun("chat-1", { turnId: "msg-a" });
 
-    expect(handle.signal.aborted).toBe(false);
+    expect(handle.signal.aborted).toBe(true);
+    expect(pool.query).not.toHaveBeenCalled();
   });
 
-  it("carries the moment to the other instances", async () => {
-    const decidedAt = new Date(1_000);
+  it("spares a run held here for another turn, and tells the other instances", async () => {
+    const handle = runRegistry.register("chat-1", { turnId: "msg-b" });
 
-    await cancelRun("chat-1", { startedBefore: decidedAt });
+    await cancelRun("chat-1", { turnId: "msg-a" });
 
+    expect(handle.signal.aborted).toBe(false);
     expect(pool.query).toHaveBeenCalledWith("SELECT pg_notify($1, $2)", [
       "run_cancel",
-      JSON.stringify({ runId: "chat-1", startedBefore: 1_000 }),
+      JSON.stringify({ runId: "chat-1", turnId: "msg-a" }),
     ]);
   });
 });
@@ -134,7 +135,7 @@ describe("the notification listener", () => {
     );
   });
 
-  it("spares a run held here that started after another instance's cancel", async () => {
+  it("aborts a run held here when another instance cancels its turn", async () => {
     const client = fakeClient();
     pool.connect.mockResolvedValueOnce(client);
     startNotificationListener();
@@ -142,19 +143,32 @@ describe("the notification listener", () => {
       expect(client.query).toHaveBeenCalledWith("LISTEN run_cancel"),
     );
     listeners.push(client);
-    const handle = runRegistry.register("chat-1");
+    const handle = runRegistry.register("chat-1", { turnId: "msg-a" });
 
     await pool.query("SELECT pg_notify($1, $2)", [
       "run_cancel",
-      JSON.stringify({ runId: "chat-1", startedBefore: Date.now() - 1000 }),
+      JSON.stringify({ runId: "chat-1", turnId: "msg-a" }),
     ]);
-    expect(handle.signal.aborted).toBe(false);
 
-    await pool.query("SELECT pg_notify($1, $2)", [
-      "run_cancel",
-      JSON.stringify({ runId: "chat-1", startedBefore: Date.now() + 1000 }),
-    ]);
     expect(handle.signal.aborted).toBe(true);
+  });
+
+  it("spares a run held here for another turn another instance cancels", async () => {
+    const client = fakeClient();
+    pool.connect.mockResolvedValueOnce(client);
+    startNotificationListener();
+    await vi.waitFor(() =>
+      expect(client.query).toHaveBeenCalledWith("LISTEN run_cancel"),
+    );
+    listeners.push(client);
+    const handle = runRegistry.register("chat-1", { turnId: "msg-b" });
+
+    await pool.query("SELECT pg_notify($1, $2)", [
+      "run_cancel",
+      JSON.stringify({ runId: "chat-1", turnId: "msg-a" }),
+    ]);
+
+    expect(handle.signal.aborted).toBe(false);
   });
 
   it("reconnects when its connection drops", async () => {

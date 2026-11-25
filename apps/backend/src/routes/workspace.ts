@@ -69,8 +69,8 @@ workspace.post(
       );
     }
     if (sandbox) {
-      const sandboxError = sandboxCreateError(sandbox);
-      if (sandboxError) return c.json({ error: sandboxError }, 400);
+      const invalid = sandboxCreateError(sandbox);
+      if (invalid) throw invalid;
     }
 
     const record = await db.transaction(async (tx) => {

@@ -1,6 +1,11 @@
 "use client";
 
-import { Field, FieldDescription, FieldTitle } from "@/components/ui/field";
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldTitle,
+} from "@/components/ui/field";
 import { FormTextField } from "@/components/form-text-field";
 import { FormTextareaField } from "@/components/form-textarea-field";
 import { Button } from "@/components/ui/button";
@@ -15,7 +20,7 @@ const DEFAULT_SSH_PORT = "22";
  */
 export type SandboxKeyState = "stored" | "replacing" | "none";
 
-type SandboxSshFieldsProps = Omit<SandboxConfigFieldsProps, "errors"> & {
+type SandboxSshFieldsProps = SandboxConfigFieldsProps & {
   keyState: SandboxKeyState;
   onReplaceKey: () => void;
 };
@@ -25,12 +30,11 @@ type SandboxSshFieldsProps = Omit<SandboxConfigFieldsProps, "errors"> & {
  * attach with. Admin-only, like the rest of the sandbox config, so the form
  * mounts them only for an admin.
  *
- * No config error is shown here yet, so the component takes no `errors` map —
- * see the form's `setConfigField`, which retracts the error all the same.
  */
 function SandboxSshFields({
   formData,
   setConfigField,
+  errors,
   disabled,
   keyState,
   onReplaceKey,
@@ -42,6 +46,7 @@ function SandboxSshFields({
         name="ssh-host"
         placeholder="ssh.example.com"
         value={formData.sshHost}
+        error={errors["config.host"]}
         onChange={(value) => setConfigField("sshHost", value)}
         disabled={disabled}
         inputClassName="font-mono"
@@ -54,6 +59,7 @@ function SandboxSshFields({
         type="number"
         placeholder={DEFAULT_SSH_PORT}
         value={formData.sshPort}
+        error={errors["config.port"]}
         onChange={(value) => setConfigField("sshPort", value)}
         disabled={disabled}
         inputClassName="font-mono"
@@ -64,6 +70,7 @@ function SandboxSshFields({
         name="ssh-user"
         placeholder="platypus"
         value={formData.sshUser}
+        error={errors["config.user"]}
         onChange={(value) => setConfigField("sshUser", value)}
         disabled={disabled}
         inputClassName="font-mono"
@@ -75,6 +82,7 @@ function SandboxSshFields({
         name="ssh-root-dir"
         placeholder="$HOME/platypus-workspace"
         value={formData.sshRootDir}
+        error={errors["config.rootDir"]}
         onChange={(value) => setConfigField("sshRootDir", value)}
         disabled={disabled}
         inputClassName="font-mono"
@@ -92,6 +100,7 @@ function SandboxSshFields({
         name="ssh-host-key"
         placeholder="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5..."
         value={formData.sshHostKey}
+        error={errors["config.hostKey"]}
         onChange={(value) => setConfigField("sshHostKey", value)}
         disabled={disabled}
         rows={3}
@@ -134,6 +143,9 @@ function SandboxSshFields({
             PEM or OpenSSH private key. Kept server-side, never sent to the
             model.
           </FieldDescription>
+          {errors["credentials.privateKey"] && (
+            <FieldError>{errors["credentials.privateKey"]}</FieldError>
+          )}
         </Field>
       ) : (
         <FormTextareaField
@@ -141,6 +153,7 @@ function SandboxSshFields({
           name="ssh-private-key"
           placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"
           value={formData.sshPrivateKey}
+          error={errors["credentials.privateKey"]}
           onChange={(value) => {
             setConfigField("sshPrivateKey", value);
             // The passphrase only travels with a key, so clearing the key
@@ -169,6 +182,7 @@ function SandboxSshFields({
         type="password"
         placeholder="Passphrase for the private key"
         value={formData.sshPassphrase}
+        error={errors["credentials.passphrase"]}
         onChange={(value) => setConfigField("sshPassphrase", value)}
         disabled={disabled || !formData.sshPrivateKey.trim()}
         autoComplete="off"
