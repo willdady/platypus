@@ -7,7 +7,7 @@ vi.mock("@/lib/clipboard", () => ({ copyWithToast }));
 
 import { ChatErrorDialog } from "./chat-error-dialog";
 
-// Takes the error as a property so an explicit `undefined` isn't defaulted.
+// why: a property, so an explicit undefined isn't defaulted
 function renderDialog(
   { error }: { error?: Error } = { error: new Error("Rate limited") },
 ) {
@@ -19,8 +19,7 @@ function renderDialog(
 function copyButton() {
   return screen.getByRole("button", { name: "Copy error details" });
 }
-// The icon swap has no accessible name, so compare the button's markup with
-// its resting state rather than lean on lucide's class names.
+// why: no accessible name, so compare the markup with its resting state
 function iconMarkup() {
   return copyButton().innerHTML;
 }
@@ -29,14 +28,12 @@ beforeEach(() => copyWithToast.mockReset());
 afterEach(() => vi.useRealTimers());
 
 describe("ChatErrorDialog", () => {
-  // The failed turn's reason is what the user needs to act on.
   it("shows the error message", () => {
     renderDialog();
 
     expect(screen.getByText("Rate limited")).toBeInTheDocument();
   });
 
-  // An error with no message must still say something went wrong.
   it.each([undefined, new Error("")])(
     "falls back to a generic message for %s",
     (error) => {
@@ -56,8 +53,7 @@ describe("ChatErrorDialog", () => {
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
-  // The button shows its own success state, so no success toast is asked
-  // for, and it resets so a second copy reads the same.
+  // why: the button shows its own success state, so no success toast is asked for
   it("copies the message and briefly shows a check", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     copyWithToast.mockResolvedValue(true);
@@ -72,8 +68,7 @@ describe("ChatErrorDialog", () => {
     await waitFor(() => expect(iconMarkup()).toBe(resting));
   });
 
-  // copyWithToast already reported the failure; the icon must not claim
-  // success.
+  // why: copyWithToast already reported the failure; the icon must not claim success
   it("keeps the copy icon when copying fails", async () => {
     copyWithToast.mockResolvedValue(false);
     renderDialog();

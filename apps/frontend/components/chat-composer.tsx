@@ -9,16 +9,9 @@ import { useSlashCommands } from "@/hooks/use-slash-commands";
 import type { SlashCommand } from "@/lib/slash-commands";
 
 type ChatComposerProps = {
-  /**
-   * Runs on submit; the composer clears its own text afterwards, or keeps it
-   * if the returned promise rejects.
-   */
   onSubmit: (message: PromptInputMessage) => void | Promise<void>;
-  /** Whether the action menu offers Upload to Sandbox. */
   canUploadToSandbox: boolean;
-  /** The built-in commands on offer, then the Agent's assigned Skills. */
   commands: SlashCommand[];
-  /** Whether there is any command to offer — the gate on slash handling. */
   slashEnabled: boolean;
   placeholder: string;
   status: ChatStatus;
@@ -26,22 +19,12 @@ type ChatComposerProps = {
   className?: string;
   passthroughFileTypes: string[];
   modelSelection: ModelPickerConfig;
-  /** Extra tools, rendered after the model picker (search toggle, dialogs). */
   tools?: ReactNode;
-  /** Rendered between the tools and the submit control (the context meter). */
   footerContent?: ReactNode;
-  /** The submit control, and anything beside it. */
   submit: ReactNode;
 };
 
-/**
- * The Chat's composing surface, and the owner of everything that changes as
- * the user types: the textarea value and the slash-command picker's state.
- *
- * Both used to live in `Chat`, so every keystroke re-rendered the transcript
- * along with the composer (issue #869). The transcript and the composer now
- * have separate owners, and a keystroke re-renders only this subtree.
- */
+// why: a keystroke re-renders only the composer, never the transcript
 export function ChatComposer({
   onSubmit,
   canUploadToSandbox,
@@ -83,10 +66,7 @@ export function ChatComposer({
           ref: textareaRef,
           value: inputValue,
           onChange: (e) => setInputValue(e.target.value),
-          // Runs before `PromptInputTextarea`'s own Enter-to-submit branch,
-          // which stands down on `defaultPrevented` — that ordering is what
-          // lets Enter accept a highlighted command instead of sending the
-          // message (issue #649).
+          // why: runs first so Enter accepts a highlighted command instead of sending
           onKeyDown: slash.onKeyDown,
           ...slash.combobox,
           className,

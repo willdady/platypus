@@ -25,8 +25,7 @@ export function CollapsibleSection({
   className,
 }: CollapsibleSectionProps) {
   const stored = useSectionOpen(storageKey);
-  // A toggle made here wins over what storage says, so the section still
-  // opens and closes where storage can't be written.
+  // why: a local toggle wins, so the section still opens where storage can't be written
   const [toggled, setToggled] = useState<boolean | null>(null);
   const open = toggled ?? stored;
 
@@ -35,7 +34,7 @@ export function CollapsibleSection({
     try {
       localStorage.setItem(storageKey, String(next));
     } catch {
-      // Not persisted; the in-memory state above still applies.
+      // why: a storage failure must not block the toggle
     }
   };
 

@@ -15,7 +15,6 @@ import {
 import { setErrorReporter } from "@/lib/error-reporting";
 import { authMock } from "@/test/test-utils";
 
-// What each Artifact row's read lands on, keyed `<id>:<version>`.
 const { artifactReads } = vi.hoisted(() => ({
   artifactReads: new Map<string, { data?: unknown; deleted?: boolean }>(),
 }));
@@ -87,7 +86,6 @@ function renderMessage(
   );
 }
 
-// jsdom never loads remote images. Model the image status that Radix reads.
 class TestImage extends EventTarget {
   src = "";
   complete = true;
@@ -152,8 +150,6 @@ describe("ChatMessage agent attribution", () => {
     expect(screen.queryByAltText("Research Agent")).not.toBeInTheDocument();
   });
 
-  // A direct provider/model run carries no attribution; an agentId that no
-  // longer resolves (deleted agent) has to degrade the same way.
   it.each([
     ["a run with no attribution", undefined],
     ["an agentId that resolves to no agent", { agentId: "gone" }],
@@ -161,7 +157,6 @@ describe("ChatMessage agent attribution", () => {
     const { container } = renderMessage(assistantMessage(metadata));
 
     expect(screen.queryByAltText("Research Agent")).not.toBeInTheDocument();
-    // Same AgentAvatar fallback as a resolved agent without an image.
     expect(
       container.querySelector('[data-slot="avatar-fallback"] svg'),
     ).not.toBeNull();
@@ -170,7 +165,6 @@ describe("ChatMessage agent attribution", () => {
 
 type MessagePart = NonNullable<PlatypusUIMessage["parts"]>[number];
 
-/** Opens every Tool call group, so the calls inside it can be reached. */
 function openToolCallGroups() {
   for (const header of screen.queryAllByRole("button", {
     name: /^\d+ tool calls?:/,
@@ -180,8 +174,6 @@ function openToolCallGroups() {
 }
 
 describe("ChatMessage part that fails to render", () => {
-  // A tool input no JSON can carry: rendering it throws, the way a malformed
-  // part from a misbehaving tool would.
   const brokenToolPart = {
     type: "dynamic-tool",
     toolName: "broken",
@@ -264,9 +256,6 @@ describe("ChatMessage image parts", () => {
     );
   });
 
-  // issue #579: a part can carry an image media type with nothing a client
-  // can fetch (e.g. Provider-reference-only). Rendering it as a broken <img>
-  // would be worse than the plain file card every non-image attachment gets.
   it("falls back to a file attachment for an image media type with no URL", () => {
     const { container } = renderMessage(
       userMessageWithFilePart({
@@ -282,7 +271,6 @@ describe("ChatMessage image parts", () => {
 });
 
 describe("ChatMessage Sandbox upload parts", () => {
-  // No link: it would serve what the path holds now, not what was uploaded.
   it("shows the upload's path and size, with no download link", () => {
     const { container } = renderMessage({
       id: "m1",
@@ -303,13 +291,7 @@ describe("ChatMessage Sandbox upload parts", () => {
   });
 });
 
-// A Web-search backend's `web_search` result is normalized server-side into
-// `{ kind: "search", results, ... }` and stamped onto `toolMetadata` (issue
-// #525, `apps/backend/src/runs/web-tool-normalize.ts`) before the frontend
-// ever sees it — these tests build parts exactly as that normalizer leaves
-// them. Its results are client-executed, so its citations arrive as a tool
-// result rather than as `source-url` parts; without lifting them, the same
-// Chat toggle gives pills on Anthropic and nothing on vLLM (ADR-0014).
+// why: backend search citations arrive as a tool result, not as source-url parts
 describe("ChatMessage sources from a Web-search backend", () => {
   const normalizedMetadata = (result: NormalizedWebToolResult) => ({
     [WEB_TOOL_NORMALIZED_KEY]: result,
@@ -342,11 +324,9 @@ describe("ChatMessage sources from a Web-search backend", () => {
     { title: "Habitat", url: "https://example.com/habitat" },
   ];
 
-  /** The Sources row is a collapsed disclosure; the pills mount when it opens. */
   const openSources = () =>
     fireEvent.click(screen.getByRole("button", { name: /Used \d+ sources/ }));
 
-  /** Same for the tool card, whose body holds the answer and any error. */
   const openToolCard = () => {
     openToolCallGroups();
     fireEvent.click(screen.getByRole("button", { name: /^Web search/ }));
@@ -365,8 +345,6 @@ describe("ChatMessage sources from a Web-search backend", () => {
     expect(screen.getByRole("link", { name: "Habitat" })).toBeInTheDocument();
   });
 
-  // The backend drops these before the model sees them; this is the copy that
-  // decides what becomes an `href`, and a backend is third-party code.
   it("renders no pill for a result whose URL is not http(s)", () => {
     renderMessage(
       searchMessage({
@@ -384,13 +362,10 @@ describe("ChatMessage sources from a Web-search backend", () => {
     expect(screen.queryByText("Evil")).not.toBeInTheDocument();
     expect(screen.queryByText("Data")).not.toBeInTheDocument();
     expect(screen.getByText("Fine")).toBeInTheDocument();
-    // Nothing anywhere carries a rejected URL as a link target.
     expect(document.querySelector('a[href^="javascript:"]')).toBeNull();
     expect(document.querySelector('a[href^="data:"]')).toBeNull();
   });
 
-  // Unpresentable results are not counted either — a "Used 3 sources" row that
-  // opens onto one pill is its own bug.
   it("counts only the results it will render", () => {
     renderMessage(
       searchMessage({
@@ -406,8 +381,6 @@ describe("ChatMessage sources from a Web-search backend", () => {
     expect(screen.getByText("Used 1 sources")).toBeInTheDocument();
   });
 
-  // The card's count and the Sources row are one list: "2 results — listed above
-  // as sources" over a single pill is the same bug the row itself avoids.
   it("counts only the presentable results on the card", () => {
     renderMessage(
       searchMessage({
@@ -425,8 +398,6 @@ describe("ChatMessage sources from a Web-search backend", () => {
     expect(screen.queryByText(/2 results/)).not.toBeInTheDocument();
   });
 
-  // Nothing renders above, so nothing is claimed to: the alternative is a count
-  // pointing at a Sources row that is not there.
   it("reports 0 results when no result was presentable", () => {
     renderMessage(
       searchMessage({
@@ -478,8 +449,6 @@ describe("ChatMessage sources from a Web-search backend", () => {
     expect(screen.getAllByRole("link", { name: "Platypus" })).toHaveLength(1);
   });
 
-  // Native `source-url` parts and a plugin backend's results share one row, so
-  // a history that mixes both reads as one list with one count.
   it("merges plugin results with native source-url parts", () => {
     renderMessage(
       searchMessage({ kind: "search", query: "a", results: [results[0]] }, [
@@ -500,8 +469,6 @@ describe("ChatMessage sources from a Web-search backend", () => {
     ).toBeInTheDocument();
   });
 
-  // The tool returns `{ error }` rather than rejecting, so a failed search
-  // arrives as a successful part with nothing to cite.
   it("renders no Sources row when the search returned an error", () => {
     renderMessage(
       searchMessage({
@@ -516,8 +483,6 @@ describe("ChatMessage sources from a Web-search backend", () => {
     expect(screen.getByText("Web search is unavailable.")).toBeInTheDocument();
   });
 
-  // The generic tool renderer would repeat every result as a raw JSON body,
-  // beneath pills that already list them — where native search shows pills alone.
   it("shows the query on a compact card instead of the raw result JSON", () => {
     renderMessage(
       searchMessage({ kind: "search", query: "platypus habitat", results }),
@@ -532,10 +497,6 @@ describe("ChatMessage sources from a Web-search backend", () => {
     expect(screen.queryByText("Parameters")).not.toBeInTheDocument();
   });
 
-  // One message can carry both rows: a vendor emits `source-url` parts for
-  // citations that are not search results, and a backend search can name the same
-  // page. The plugin entry wins the collision — it has the backend's title, where a
-  // `source-url` part has only the URL.
   it("cites a page once, by its title, when both rows name it", () => {
     renderMessage(
       searchMessage({ kind: "search", query: "a", results: [results[0]] }, [
@@ -556,8 +517,6 @@ describe("ChatMessage sources from a Web-search backend", () => {
     expect(links[0]).toHaveAttribute("href", "https://example.com/platypus");
   });
 
-  // "0 results" is true of a search that has not answered yet, and reads as a
-  // search that found nothing.
   it("says it is searching rather than reporting 0 results mid-call", () => {
     renderMessage(
       searchMessage({ kind: "search" }, [], { state: "input-available" }),
@@ -568,8 +527,6 @@ describe("ChatMessage sources from a Web-search backend", () => {
     expect(screen.queryByText(/0 results/)).not.toBeInTheDocument();
   });
 
-  // A denied call is not a running one. The header reports the state; the body
-  // must not claim a search is in flight.
   it("claims no search in flight for a call that was denied", () => {
     renderMessage(
       searchMessage({ kind: "search" }, [], { state: "output-denied" }),
@@ -590,12 +547,7 @@ describe("ChatMessage sources from a Web-search backend", () => {
     expect(screen.queryByText("Parameters")).not.toBeInTheDocument();
   });
 
-  // Restoring the pre-normalization back-compat guess is explicitly out of
-  // scope (issue #525): a search stored before normalization existed carries
-  // no normalized `toolMetadata` and falls to the generic renderer, losing its
-  // card and its Sources pills. An accepted, narrow regression — nothing is
-  // lost from the Transcript, and the alternative is the guess this issue
-  // exists to delete.
+  // why: the pre-normalisation back-compat guess is deliberately out of scope
   it("falls to the generic renderer for a stored result with no normalized metadata", () => {
     renderMessage({
       id: "m1",
@@ -618,11 +570,6 @@ describe("ChatMessage sources from a Web-search backend", () => {
   });
 });
 
-// Native provider search is normalized server-side too (issue #525), reduced
-// to a bare count rather than the raw vendor payload. A shape the backend
-// cannot read (OpenRouter's unknown output, an MCP `web_search`) carries no
-// normalized metadata at all and stays on the generic renderer, which is the
-// only one that can show whatever it really is.
 describe("ChatMessage and provider-executed web_search", () => {
   const nativeSearchMessage = (extraParts: unknown[] = []): PlatypusUIMessage =>
     ({
@@ -635,8 +582,6 @@ describe("ChatMessage and provider-executed web_search", () => {
           state: "output-available",
           providerExecuted: true,
           input: { query: "platypus habitat" },
-          // Vendor-shaped: not core's `{ query, results }` — the normalizer
-          // already reduced this to `resultCount` before the frontend saw it.
           output: [
             { type: "web_search_result", url: "https://vendor.example/a" },
           ],
@@ -670,9 +615,6 @@ describe("ChatMessage and provider-executed web_search", () => {
     expect(screen.queryByText(/Used \d+ sources/)).not.toBeInTheDocument();
   });
 
-  // A `source-url` part carries an optional title and Anthropic sends one. Rendering
-  // the URL as the label regardless left native Providers showing raw URLs in the
-  // row where a backend Provider shows real titles.
   it("titles a native source pill by the title the vendor sent", () => {
     renderMessage(
       nativeSearchMessage([
@@ -692,7 +634,6 @@ describe("ChatMessage and provider-executed web_search", () => {
     );
   });
 
-  // `??` would have kept an empty string and rendered a pill with no label at all.
   it("falls back to the URL when the vendor sends an empty title", () => {
     renderMessage(
       nativeSearchMessage([
@@ -711,9 +652,6 @@ describe("ChatMessage and provider-executed web_search", () => {
     ).toBeInTheDocument();
   });
 
-  // Titling the pill by the vendor's title takes the URL off the screen, so a
-  // `javascript:` citation would read as an ordinary link. Same scheme check a
-  // plugin result's URL goes through.
   it("drops a native source pill whose URL is not presentable", () => {
     renderMessage(
       nativeSearchMessage([
@@ -743,10 +681,6 @@ describe("ChatMessage and provider-executed web_search", () => {
     expect(screen.getByText("Used 1 sources")).toBeInTheDocument();
   });
 
-  // A shape the backend cannot read at all (OpenRouter's unknown output, an
-  // MCP `web_search`) carries no normalized metadata — the backend never
-  // guesses a tool's identity from its payload, so this stays on the generic
-  // renderer exactly as an unrecognised tool always has.
   it("leaves an unreadable native search on the generic renderer", () => {
     renderMessage({
       id: "m1",
@@ -756,7 +690,6 @@ describe("ChatMessage and provider-executed web_search", () => {
           type: "tool-web_search",
           toolCallId: "c1",
           state: "input-available",
-          // Vendor-shaped: OpenRouter carries its results in the call's input.
           input: { results: [{ url: "https://vendor.example/a" }] },
         },
       ],
@@ -800,7 +733,6 @@ describe("ChatMessage reply Artifacts", () => {
   const tray = () =>
     screen.queryByRole("list", { name: "Files and artifacts" });
 
-  /** The read a tray row makes for `artifact-1` at `version` lands. */
   const readAt = (version: number) =>
     artifactReads.set(`artifact-1:${version}`, {
       data: {
@@ -825,7 +757,6 @@ describe("ChatMessage reply Artifacts", () => {
     const list = screen.getByRole("list", { name: "Files and artifacts" });
     expect(within(list).getByText("Release notes")).toBeInTheDocument();
     expect(within(list).getByText("Markdown · Version 1")).toBeInTheDocument();
-    // The Card is gone from the reply body, not shown twice.
     expect(screen.queryByText("Completed")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /open/i }));
@@ -901,7 +832,6 @@ describe("ChatMessage reply Artifacts", () => {
     ).toBeInTheDocument();
   });
 
-  // ADR-0033: a Tool gate's denial is shown where the call happened.
   it("leaves a denied write in the body with its reason", () => {
     renderMessage(
       message([
@@ -921,8 +851,6 @@ describe("ChatMessage reply Artifacts", () => {
     expect(screen.getByText("Blocked by a Tool gate")).toBeInTheDocument();
   });
 
-  // A call the User turned down keeps its answered state, and is drawn as a
-  // denial rather than as the reply's output.
   it("leaves a rejected write in the body with its reason", () => {
     renderMessage(
       message([
@@ -945,13 +873,6 @@ describe("ChatMessage reply Artifacts", () => {
   });
 });
 
-// Issue #578: the dispatch used to be an if/else-if chain where a specialised
-// tool part had to be checked before the generic catch-all or it would land
-// there too, rendering its raw JSON body a second time alongside the
-// specialised card (and, for search, the Sources row above the parts loop).
-// `isGenericToolPart` now excludes every specialised tool part by
-// construction, so this holds regardless of where a renderer sits in the
-// dispatch list.
 describe("ChatMessage generic tool renderer exclusion", () => {
   it("never matches a web tool part carrying a normalized result", () => {
     expect(
@@ -1019,8 +940,6 @@ describe("ChatMessage generic tool renderer exclusion", () => {
     ).toBe(false);
   });
 
-  // A failed, denied or held fsDownload has no file to offer, so it renders
-  // as a normal tool call rather than in the tray.
   it.each([
     ["input-available", false],
     ["output-available", false],
@@ -1051,9 +970,6 @@ describe("ChatMessage generic tool renderer exclusion", () => {
     ).toBe(true);
   });
 
-  // Native provider search is `tool-web_search` shaped but carries no
-  // normalized metadata here — it must stay on the generic renderer, which is
-  // the only one that can show its vendor-shaped payload.
   it("matches a web_search part with no normalized metadata", () => {
     expect(
       isGenericToolPart({
@@ -1070,9 +986,6 @@ describe("ChatMessage generic tool renderer exclusion", () => {
   });
 });
 
-// Sub-agent delegations get a custom card the same way plugin web-search
-// does; the same double-render risk applies if the generic branch ever
-// caught one too.
 describe("ChatMessage sub-agent tool dispatch", () => {
   const delegateMessage = (): PlatypusUIMessage =>
     ({
@@ -1095,15 +1008,11 @@ describe("ChatMessage sub-agent tool dispatch", () => {
     expect(screen.getByText("Research Bot")).toBeInTheDocument();
     fireEvent.click(screen.getByText("Research Bot"));
 
-    // Only the sub-agent card's own labels appear — the generic renderer's
-    // "Parameters"/raw "Result" JSON would mean the call rendered twice.
     expect(screen.getByText("Task")).toBeInTheDocument();
     expect(screen.queryByText("Parameters")).not.toBeInTheDocument();
     expect(screen.queryByText("Result")).not.toBeInTheDocument();
   });
 
-  // The new shape: one `delegate` tool for every sub-agent, so the target is
-  // named in the input rather than in the tool name.
   it("routes a single-tool delegation to the same card", () => {
     renderMessage({
       id: "m1",
@@ -1126,30 +1035,17 @@ describe("ChatMessage sub-agent tool dispatch", () => {
   });
 });
 
-/**
- * The run-outcome notices a message can carry. Each is set by its own metadata
- * flag and shown on its own row, so the matrix — flagged, not flagged, and
- * flagged on an agent turn — is driven once rather than restated per notice.
- */
 const NOTICES = [
-  // Issue #420: a reply that stopped at the model's output ceiling used to just
-  // stop mid-sentence, with the only record of it in the operator's log.
   {
     name: "truncation",
     flag: "truncatedByTokenLimit",
     notice: CUT_SHORT_NOTICE,
   },
-  // Issue #540: a turn whose loop ran out of steps ended with no answer — often
-  // a tool card and nothing after it — and nothing anywhere said a step limit
-  // was what happened.
   {
     name: "step-limit",
     flag: "stoppedAtStepLimit",
     notice: STEP_LIMIT_NOTICE,
   },
-  // Issue #522: a user turns search on, the backend the Provider names is gone
-  // or failed to start, and the reply is written without it. The model is never
-  // told — this row is the only place the difference is visible.
   {
     name: "search-unavailable",
     flag: "searchUnavailable",
@@ -1173,8 +1069,6 @@ describe.each(NOTICES)("ChatMessage $name notice", ({ flag, notice }) => {
     expect(screen.queryByText(notice)).not.toBeInTheDocument();
   });
 
-  // The flags arrive on separate metadata chunks that merge into one message,
-  // so a flagged agent turn is the one case where both are set.
   it("keeps the agent avatar on a flagged agent turn", () => {
     renderMessage(assistantMessage({ agentId: "agent-1", [flag]: true }));
 
@@ -1202,7 +1096,6 @@ describe("ChatMessage transcript summary status", () => {
     expect(
       screen.getByText("Summarising earlier messages…"),
     ).toBeInTheDocument();
-    // The composer's copy is the live region, so this one is visual only.
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
@@ -1216,8 +1109,6 @@ describe("ChatMessage transcript summary status", () => {
 });
 
 describe("ChatMessage notices together", () => {
-  // The two cut-short notices name different limits — one bounds the loop, the
-  // other bounds a single reply — and a turn only ever hits one of them.
   it("renders the output-limit marker without the step-limit one", () => {
     renderMessage(assistantMessage({ truncatedByTokenLimit: true }));
 
@@ -1225,9 +1116,6 @@ describe("ChatMessage notices together", () => {
     expect(screen.queryByText(STEP_LIMIT_NOTICE)).not.toBeInTheDocument();
   });
 
-  // Search-unavailable and cut-short answer different questions — how the reply
-  // was produced, and how it ended — so a turn that lost its search and then ran
-  // out of output budget shows both, in that order.
   it("renders both notices when the turn also stopped at the output limit", () => {
     renderMessage(
       assistantMessage({
@@ -1247,8 +1135,6 @@ describe("ChatMessage notices together", () => {
   });
 });
 
-// Issue #353: the header carries the tool's execution time so a slow reply can
-// be pinned on a specific tool rather than the model.
 describe("ChatMessage tool duration", () => {
   const withToolPart = (part: unknown): PlatypusUIMessage =>
     ({
@@ -1281,14 +1167,6 @@ describe("ChatMessage tool duration", () => {
     ["a dynamic tool", dynamicToolPart],
   ] as const;
 
-  /**
-   * The two places the figure can arrive. Persisted, it rides on the part;
-   * live, the SDK hands back a part stripped of its metadata mid-turn and the
-   * figure comes off the message instead — that second carrier is the one that
-   * was broken, leaving the duration blank until the chat was re-fetched and
-   * then overwritten out of the database by the next turn. Both must read the
-   * same; `lib/tool-duration.node.test.ts` covers the formatting itself.
-   */
   const CARRIERS = [
     [
       "persisted on the part",
@@ -1318,9 +1196,6 @@ describe("ChatMessage tool duration", () => {
     expect(screen.getByText(/1\.2s/)).toBeInTheDocument();
   });
 
-  // The point of driving both carriers: the figure a reader sees must not
-  // depend on which one held it, so the two are compared directly and not just
-  // matched against the same pattern.
   it("shows the same figure whichever carrier holds it", () => {
     const [, fromMessage] = CARRIERS[1];
     const { unmount } = renderMessage(fromMessage(staticToolPart));
@@ -1330,13 +1205,10 @@ describe("ChatMessage tool duration", () => {
     const [, fromPart] = CARRIERS[0];
     renderMessage(fromPart(staticToolPart));
 
-    // Exact equality: toHaveTextContent would pass on a substring.
     // eslint-disable-next-line jest-dom/prefer-to-have-text-content
     expect(screen.getByText(/1\.2s/).textContent).toBe(live);
   });
 
-  // Tool calls recorded before this shipped carry no timing on either carrier;
-  // they render the header exactly as before rather than a placeholder.
   it.each(TOOL_PARTS)(
     "renders no duration for %s recorded before timing existed",
     (_, build) => {
@@ -1356,12 +1228,6 @@ function userMessage(): PlatypusUIMessage {
   };
 }
 
-/**
- * Sending is workspace ownership, and until issue #710 the client gated only
- * the composer on it. The action bar was ungated, so an Org Admin or Operator
- * reading someone else's Chat got Edit, Delete and Regenerate — and Delete
- * mutated their transcript with no server call to refuse it.
- */
 describe("ChatMessage action bar permissions", () => {
   it("offers Edit, Delete and Copy on a user message to someone who can send", () => {
     renderMessage(userMessage());
@@ -1392,7 +1258,6 @@ describe("ChatMessage action bar permissions", () => {
     }
   });
 
-  // Reading is not writing: Copy takes nothing away from the Chat.
   it("still offers Copy to a reader", () => {
     renderMessage(userMessage(), { canSendMessages: false });
 
@@ -1400,12 +1265,6 @@ describe("ChatMessage action bar permissions", () => {
   });
 });
 
-/**
- * Between send and the first chunk the reply is already in the transcript
- * with nothing to show, so an action bar rendered then sits alone above where
- * the answer is about to appear — Regenerate included, since the reply is the
- * last message. The bar waits for the whole turn, not only for the chunks.
- */
 describe("ChatMessage action bar during a turn", () => {
   it.each(["submitted", "streaming"] as const)(
     "withholds the bar from the last reply while the chat is %s",
@@ -1426,8 +1285,6 @@ describe("ChatMessage action bar during a turn", () => {
     expect(screen.getByRole("button", { name: "Copy" })).toBeInTheDocument();
   });
 
-  // Between send and the first chunk the user message IS the last message, so
-  // the gate above used to take its controls with the reply's (issue #918).
   it.each(["submitted", "streaming"] as const)(
     "keeps the bar on the last user message while the chat is %s",
     (status) => {
@@ -1450,7 +1307,6 @@ describe("ChatMessage action bar during a turn", () => {
   });
 });
 
-// The arrows between Alternatives (ADR-0026), labelled by what they sit under.
 describe("ChatMessage Alternatives", () => {
   const second = {
     index: 1,
@@ -1545,8 +1401,6 @@ describe("ChatMessage while editing", () => {
     expect(screen.queryByText("Ask")).not.toBeInTheDocument();
   });
 
-  // The edit surface carries its own Save and Cancel; the message's own
-  // actions would act on a message that is no longer on screen.
   it("withholds the message's own actions", () => {
     renderMessage(userMessage(), editing);
 
@@ -1557,8 +1411,6 @@ describe("ChatMessage while editing", () => {
     }
   });
 
-  // A message being edited shows its attachments inside the edit surface, not
-  // above it — the transcript's copy would be a second, unremovable list.
   it("withholds the attachments the transcript would show", () => {
     const withImage: PlatypusUIMessage = {
       id: "u1",
@@ -1584,9 +1436,6 @@ describe("ChatMessage while editing", () => {
   });
 });
 
-// Issue #834. MCP tools arrive as `dynamic-tool` parts, which are not in the
-// part union and so never reached `ToolHeader`; they now draw through the one
-// shared disclosure, named by the tool's own name.
 describe("ChatMessage dynamic tool renderer", () => {
   const dynamicToolMessage = (
     state: "input-available" | "output-available",
@@ -1628,7 +1477,6 @@ describe("ChatMessage dynamic tool renderer", () => {
     expect(screen.getByText("Running")).toBeInTheDocument();
   });
 
-  // ADR-0033: a Tool gate's denial shows which gate stopped the call, and why.
   it("shows a call a Tool gate denied, with the gate's reason", () => {
     renderMessage({
       id: "m1",
@@ -1658,7 +1506,6 @@ describe("ChatMessage dynamic tool renderer", () => {
   });
 });
 
-// Issue #1256: a Tool gate's `ask` stops the turn to ask the User.
 describe("ChatMessage tool approvals", () => {
   const waiting: PlatypusUIMessage = {
     id: "m1",
@@ -1794,7 +1641,6 @@ describe("ChatMessage Tool call groups", () => {
       "1 tool call: beta",
       "1 tool call: gamma",
     ]);
-    // The delegation renders as its own card, outside any group.
     expect(screen.getByText("Research Bot")).toBeVisible();
   });
 
@@ -1957,7 +1803,6 @@ describe("ChatMessage offered files", () => {
     ).toBeVisible();
   });
 
-  // ADR-0033: a Tool gate's denial is shown where the call happened.
   it("renders a denied offer inline, not in the tray", () => {
     renderMessage(message([offer("c1", "secret.txt", "output-denied")]));
     openToolCallGroups();

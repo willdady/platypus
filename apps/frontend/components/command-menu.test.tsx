@@ -84,7 +84,6 @@ describe("CommandMenu", () => {
       fireEvent.click(retry);
 
       expect(mutate).toHaveBeenCalled();
-      // Retrying keeps the menu open, so the reloaded rows land in view.
       expect(screen.getByRole("dialog")).toBeInTheDocument();
     },
   );

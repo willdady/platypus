@@ -11,8 +11,7 @@ vi.mock("@/components/auth-provider", () => ({
 const onClose = vi.fn();
 const onCreated = vi.fn();
 
-// The create's promise is held open until the test resolves it, so the
-// pending UI (and the ref guard's in-flight window) is observable on demand.
+// why: the create promise is held open so the pending UI is observable
 let resolveCreate!: (outcome: WriteOutcome<{ id: string }>) => void;
 
 function renderDialog(nameMaxLength = 30) {

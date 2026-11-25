@@ -36,8 +36,7 @@ function fill(current: string, next: string, confirm: string) {
   fireEvent.click(screen.getByRole("button", { name: "Change password" }));
 }
 
-// Toggle independence is RevealableInput's own; here, only that each field is
-// masked and its toggle is wired to it.
+// why: toggle independence is RevealableInput's own; this only checks wiring
 describe("ChangePasswordForm revealable inputs", () => {
   it.each([
     ["Show current password", "current"],

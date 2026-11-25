@@ -37,17 +37,11 @@ import { useHasNoProviders } from "@/hooks/use-has-no-providers";
 import { appRoutes, userRoutes, workspaceRoutes } from "@/lib/routes";
 import { triggerListEntity, type Serialized } from "@/lib/api-write";
 
-/**
- * What a group shows when its read failed: a Retry item in place of the rows,
- * so a failure doesn't read as a workspace with none. An item rather than the
- * lists' `ListError`, so it stays reachable from the keyboard like the rest
- * of the menu; selecting it re-reads without closing the menu.
- */
+// why: an item, not ListError, so Retry stays keyboard-reachable
 function RetryReadItem({
   subject,
   onRetry,
 }: {
-  /** The plural noun named in the failure: "agents". */
   subject: string;
   onRetry: () => void;
 }) {
@@ -70,7 +64,6 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
   const routes = workspaceRoutes(orgId, workspaceId);
   const scope = { orgId, workspaceId };
 
-  // Fetch agents for the workspace
   const {
     data: agentsData,
     results: agents,
@@ -81,7 +74,6 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
   const { pinned: pinnedAgents, unpinned: unpinnedAgents } =
     splitPinned(agents);
 
-  // Fetch boards for the workspace
   const {
     data: boardsData,
     results: boards,
@@ -89,7 +81,6 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
     mutate: mutateBoards,
   } = useScopedList<KanbanBoard>("boards", scope);
 
-  // Fetch triggers for the workspace
   const {
     data: triggersData,
     results: triggers,
@@ -132,8 +123,6 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
       <CommandInput placeholder="Type a command or search..." />
       <CommandList>
         <CommandEmpty>No results found.</CommandEmpty>
-        {/* The Workspace's top-level destinations, so each is one step from
-            anywhere, whatever screen the menu was opened on. */}
         <CommandGroup heading="Go to">
           <CommandItem
             onSelect={() => {
