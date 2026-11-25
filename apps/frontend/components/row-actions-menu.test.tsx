@@ -162,7 +162,6 @@ describe("RowActionsMenu", () => {
     render(<RowActionsMenu name="Bot" edit={{ href: "/edit" }} />);
     await openDropdownMenu();
 
-    // fireEvent returns false when a handler called preventDefault.
     expect(
       fireEvent.click(screen.getByRole("menuitem", { name: "Edit" }), {
         metaKey: true,

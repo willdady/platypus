@@ -24,7 +24,7 @@ function touchAt(clientY: number) {
   return { clientX: 0, clientY };
 }
 
-// Use the real pull-to-refresh component, including its settle period.
+// why: use the real pull-to-refresh, settle period included
 async function pullDown(container: HTMLElement) {
   fireEvent.touchStart(container, { touches: [touchAt(0)] });
   fireEvent.touchMove(container, { touches: [touchAt(10)] });

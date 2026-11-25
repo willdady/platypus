@@ -42,8 +42,6 @@ describe("partitionParts", () => {
     ).toEqual([[0], 1, [2], 3, [4]]);
   });
 
-  // A step boundary draws nothing, so a call in the next step sits right
-  // under the previous one on screen.
   it("does not end a group at a step boundary", () => {
     expect(
       shape([
@@ -83,7 +81,6 @@ describe("advanceVerb", () => {
   });
 
   it("re-picks on a join after the hold, never the same verb twice", () => {
-    // `random` of 0 would land on the current verb, the first in the list.
     const next = advanceVerb(start, 2, 2000, () => 0);
     expect(next.verb).not.toBe(start.verb);
     expect(next).toMatchObject({ count: 2, changedAt: 2000 });

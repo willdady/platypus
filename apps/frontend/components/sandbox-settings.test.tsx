@@ -20,16 +20,11 @@ import { sandboxCreateSchema, sandboxUpdateSchema } from "@platypus/schemas";
 import { expectSentBodyToMatchSchema } from "@/test/test-utils";
 import type { WriteOutcome } from "@/lib/api-write";
 
-// --- Module mocks ------------------------------------------------------------
-
 vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("swr", () => swrMock);
 
 import { SandboxSettings } from "./sandbox-settings";
 
-// --- Helpers -----------------------------------------------------------------
-
-/** The sandbox body the form put on the wire, checked against the strict schema. */
 function savedSandboxBody(
   fetchMock: ReturnType<typeof vi.fn>,
   schema = sandboxUpdateSchema,
@@ -48,11 +43,6 @@ const DOCKER_SANDBOX = {
   hasCredentials: false,
 };
 
-/**
- * Registers the sandbox's three reads. Matching is by URL fragment in
- * registration order, so the networks fragment goes before the backends one it
- * contains.
- */
 function mockReads({
   sandbox,
   backends = [{ backend: "docker", name: "Docker" }],
@@ -62,6 +52,7 @@ function mockReads({
   backends?: Parameters<typeof mockScopedSWR>[0][string];
   networks?: Parameters<typeof mockScopedSWR>[0][string];
 }) {
+  // why: URLs match by fragment in order, so networks goes before backends
   mockScopedSWR(
     {
       "/sandbox-backends/networks": networks,
@@ -83,8 +74,6 @@ function save() {
 }
 
 beforeEach(resetListHarness);
-
-// --- Tests -------------------------------------------------------------------
 
 describe("SandboxSettings loading", () => {
   it("shows the form's placeholder while the sandbox read loads", async () => {
@@ -195,8 +184,6 @@ describe("SandboxSettings read failure", () => {
     expect(mutate).toHaveBeenCalled();
   });
 
-  // `null` is "no sandbox configured", and a failed revalidation over loaded
-  // data must keep the form being edited rather than swap it for an error.
   it("keeps the form when a revalidation fails over loaded data", async () => {
     mockReads({
       sandbox: {
@@ -289,7 +276,6 @@ describe("SandboxSettings save", () => {
       sandbox: {
         data: {
           ...DOCKER_SANDBOX,
-          // Split on the first colon only, so an IPv6 target survives.
           config: { networks: [], extraHosts: ["v6:::1"] },
           adminEnv: { SECRET: "s" },
           userEnv: { FOO: "1" },
@@ -319,7 +305,6 @@ describe("SandboxSettings save", () => {
     });
   });
 
-  // ADR-0006: a Workspace owner manages only the name and their own env.
   it("sends a non-admin's name and env only, showing admin keys read-only", async () => {
     authState.actor = "workspace-owner";
     const fetchMock = stubAcceptedSave({});
@@ -370,9 +355,6 @@ describe("SandboxSettings save", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  // ADR-0012: GET strips the SSH credentials and reports only whether some are
-  // stored, so a stored key shows as "Key stored" and an edit that leaves it
-  // alone must keep it rather than clear it (#1056).
   describe("SSH", () => {
     const SSH_SANDBOX = {
       ...DOCKER_SANDBOX,
@@ -491,8 +473,6 @@ describe("SandboxSettings save", () => {
     });
   });
 
-  // A backend switch tears the old sandbox down first; when that fails the
-  // backend asks for `force=true`, which the reader has to opt into.
   it("offers a forced switch when tearing down the previous sandbox fails", async () => {
     const fetchMock = stubSaveSequence(
       {
@@ -589,8 +569,6 @@ describe("SandboxSettings backend fields", () => {
 });
 
 describe("SandboxSettings generated backend form", () => {
-  // A plugin backend with no bespoke form: the catalog carries its schemas as
-  // JSON Schema, and the form renders them.
   const CLOUD_BACKEND = {
     backend: "test-cloud",
     name: "Test Cloud",
@@ -803,8 +781,6 @@ describe("SandboxSettings delete", () => {
     expect(toastError).not.toHaveBeenCalled();
   });
 
-  // Destroying the sandbox can fail the same way a teardown does, and the
-  // backend again asks for `force=true`.
   it("offers a forced delete when destroying the sandbox fails", async () => {
     const fetchMock = stubSaveSequence(
       {
@@ -887,8 +863,6 @@ describe("SandboxSettings field wiring", () => {
     hasCredentials: false,
   };
 
-  // #1842: the fields carry their help text with the control, so a screen
-  // reader reads it with the field rather than only its label.
   it("describes the fields that carry help text", async () => {
     mockReads({
       sandbox: { data: SSH_SANDBOX },
@@ -913,8 +887,6 @@ describe("SandboxSettings field wiring", () => {
     ).toHaveAccessibleDescription(/Enter a private key first/);
   });
 
-  // Every backend-config field clears the config error the same way, whichever
-  // control (and, after the split, whichever component) edits it.
   it("clears the config error when a Docker config field is edited", async () => {
     stubRejectedSave(
       [{ path: ["config", "extraHosts"], message: "Invalid extra host" }],
@@ -933,8 +905,6 @@ describe("SandboxSettings field wiring", () => {
     expect(screen.queryByText("Invalid extra host")).not.toBeInTheDocument();
   });
 
-  // The network allowlist's error is keyed `config.networks`, so editing it
-  // has to retract that key, not only the slice's root.
   it("clears a network's own error when the allowlist is edited", async () => {
     stubRejectedSave(
       [{ path: ["config", "networks"], message: "Unknown network" }],

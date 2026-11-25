@@ -7,11 +7,8 @@ import { workspaceRoutes } from "@/lib/routes";
 
 type NoMcpEmptyStateProps = {
   orgId: string;
-  /** Absent on the Organization's own settings page, which always passes `action`. */
   workspaceId?: string;
-  /** When false, hide the create CTA (caller lacks permission — ADR-0006). */
   canManage?: boolean;
-  /** Replaces the default CTA, e.g. the settings list's own Add / Attach buttons. */
   action?: ReactNode;
 };
 

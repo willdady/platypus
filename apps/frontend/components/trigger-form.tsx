@@ -68,46 +68,31 @@ const INSTRUCTION_DESCRIPTIONS: Record<TriggerType, string> = {
     "The message sent to the agent on each call. The call's inputs appear above it with their descriptions, so refer to them by name.",
 };
 
-/** What a save answers: a new Inbound Trigger's carries its token, once. */
 export type SavedTrigger = {
   id: string;
   token?: string;
   tokenExpiresAt?: string | null;
 };
 
-/** What every trigger type's fields report, whatever the type. */
 type TriggerTypeFieldsBase = {
-  /** Whether the fields let the trigger save. */
   valid: boolean;
-  /**
-   * Takes over once the save lands, e.g. to show a new token before leaving.
-   * Returns true when it did, so the form doesn't navigate away itself.
-   */
+  // why: true means it took over, so the form must not navigate away
   onSaved?: (saved: SavedTrigger) => boolean;
 };
 
-/** What a trigger type's fields contribute to the save. */
 export type TriggerTypeFields =
   | (TriggerTypeFieldsBase & { type: "cron"; config: CronTriggerConfig })
   | (TriggerTypeFieldsBase & { type: "event"; config: EventTriggerConfig })
   | (TriggerTypeFieldsBase & { type: "inbound"; config: InboundTriggerConfig });
 
-/** The props every trigger type's fields component takes. */
 export type TriggerFieldsProps = {
-  /**
-   * Whether the fields show. Every type's fields stay mounted, so switching
-   * type on a new trigger keeps what was entered under each.
-   */
   active: boolean;
-  /** The saved trigger being edited; absent when creating. */
   trigger?: Serialized<Trigger>;
   scope: { orgId: string; workspaceId: string };
   disabled: boolean;
   errors: FormErrors;
   clearErrors: (...ids: string[]) => void;
-  /** Called with the fields' slice of the save whenever it changes. */
   onChange: (fields: TriggerTypeFields) => void;
-  /** Revalidates the saved trigger. */
   mutateRecord: () => Promise<unknown>;
 };
 
@@ -117,9 +102,7 @@ const TRIGGER_TYPE_FIELDS = {
   inbound: TriggerInboundFields,
 } satisfies Record<TriggerType, React.ComponentType<TriggerFieldsProps>>;
 
-// isOneOff, maxRunsToKeep, search, includeMemories, extractMemories,
-// filterBoardId/filterColumnId, and enabled are deliberately excluded: this
-// form has no field that retracts an error keyed to them.
+// why: no form field retracts an error keyed to these, so they stay set
 const RETRACTABLE_FIELDS = [
   "name",
   "description",
@@ -142,7 +125,6 @@ type TriggerFormData = {
   extractMemories: boolean;
 };
 
-/** The cron layout, which a new trigger opens on and most saved ones use. */
 function TriggerFormSkeleton({ editing }: { editing: boolean }) {
   return (
     <div>
@@ -153,7 +135,6 @@ function TriggerFormSkeleton({ editing }: { editing: boolean }) {
           <FieldSkeleton />
           <FieldSkeleton />
           <TextareaSkeleton counter description={1} />
-          {/* Schedule Mode's button pair */}
           <div className="flex w-full flex-col gap-3">
             <Skeleton className="h-3.5 w-28" />
             <Skeleton className="h-9 w-44" />
@@ -191,17 +172,14 @@ function TriggerForm({
     "agents",
     scope,
   );
-  // A new Trigger runs on the first agent until the user picks another.
-  // Derived rather than written into the form, so a revalidated agent list
-  // can never overwrite the user's pick.
+  // why: derived, not written into the form, so a revalidated list can't overwrite the pick
   const defaultAgentId = triggerId ? "" : (agents[0]?.id ?? "");
 
   const [triggerType, setTriggerType] = useState<TriggerType>("cron");
-  // Each type's slice of the save, as its fields last reported it.
   const [typeFields, setTypeFields] = useState<
     Partial<Record<TriggerType, TriggerTypeFields>>
   >({});
-  // The first config each type reports is its clean value, for `isDirty`.
+  // why: the first config a type reports is its clean value for isDirty
   const [typeBaselines, setTypeBaselines] = useState<
     Partial<Record<TriggerType, unknown>>
   >({});
@@ -216,8 +194,7 @@ function TriggerForm({
     !!selectedFields &&
     !deepEqual(selectedFields.config, typeBaselines[triggerType]);
 
-  // Whether the Organization gate lets this Workspace take calls, so an Owner
-  // is told before they wire up a caller that would only ever get 404.
+  // why: tell an Owner before they wire a caller that would only get 404
   const { data: organization } = useOrganization(orgId);
   const { data: workspace } = useWorkspace(orgId, workspaceId);
 
@@ -280,15 +257,11 @@ function TriggerForm({
         includeMemories: data.includeMemories,
         extractMemories: data.extractMemories,
       };
-      // An update never carries scope, and its config is validated against the
-      // stored Trigger's type.
+      // why: an update never carries scope; the stored type validates the config
       if (triggerId) {
         return { ...base, type: triggerType, config: selectedFields?.config };
       }
-      // The route supplies the Workspace on create, and the create schema
-      // discriminates on `type` with a matching `config`. A union-typed pair
-      // can't satisfy that, so each type comes back from its own arm; the
-      // alternative is a cast.
+      // why: each arm carries its own config type; the alternative is a cast
       switch (selectedFields?.type) {
         case "cron":
           return {
@@ -312,8 +285,6 @@ function TriggerForm({
             config: selectedFields.config,
           };
       }
-      // No type's fields have reported yet, so there is no create body to
-      // send; Save stays disabled until one does.
       return undefined;
     },
     successMessage: () => (triggerId ? "Trigger updated" : "Trigger created"),
@@ -334,14 +305,9 @@ function TriggerForm({
     onSuccess: () => router.push(workspaceRoutes(orgId, workspaceId).root),
   });
 
-  // Until the selected type's fields report, there is nothing to save.
   const typeFieldsValid = selectedFields?.valid ?? false;
 
-  // A fired One-off can be renamed or deleted, never re-armed.
   const scheduleLocked = isSubmitting || !!trigger?.firedAt;
-  // Only once everything the answer depends on has loaded: under `selected`
-  // that includes the Workspace's own flag, and a Workspace still loading (or
-  // failed to load) is unknown, not disallowed.
   const gateClosed =
     organization !== undefined &&
     (organization.inboundTriggerGate !== "selected" ||
@@ -363,7 +329,6 @@ function TriggerForm({
     >
       <FieldSet className="mb-6">
         <FieldGroup>
-          {/* Trigger Type Selector */}
           <FormSelectField
             label="Trigger Type"
             name="trigger-type"

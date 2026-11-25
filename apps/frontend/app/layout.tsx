@@ -28,7 +28,6 @@ export const metadata: Metadata = {
   title: { default: APP_NAME, template: `%s | ${APP_NAME}` },
   description:
     "A rich web interface for interacting with AI chatbots and agents",
-  // Every page but sign-in sits behind auth: nothing here is worth indexing.
   robots: { index: false, follow: false },
   appleWebApp: {
     capable: true,
@@ -47,11 +46,6 @@ export const viewport: Viewport = {
   ],
 };
 
-/**
- * The backend URL is a run-time setting, so it is read per request, behind
- * `connection()`, rather than baked into a prerendered page. Only this subtree
- * waits on the request; the document shell around it stays static.
- */
 async function RuntimeAuthProvider({
   children,
 }: {

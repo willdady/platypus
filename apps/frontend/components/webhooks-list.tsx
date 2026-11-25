@@ -88,7 +88,7 @@ function WebhooksList({
             action={actions}
           />
         }
-        // The URL is the card's second line and nothing follows it.
+        // why: the URL is the card's second line and nothing follows it
         descriptionLines={1}
         href={(webhook) => routes.settings.webhookDetail(webhook.id)}
         badges={(webhook) => !webhook.enabled && <DisabledBadge />}

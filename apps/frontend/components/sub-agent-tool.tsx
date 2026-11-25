@@ -18,23 +18,9 @@ import { toolCallDurationMs } from "@/lib/tool-duration";
 import { toolErrorText } from "@/lib/message-parts";
 import { useMemo } from "react";
 
-/**
- * What the person reading a delegated run is told when the Sub-Agent stopped at
- * its model's output ceiling rather than because it had finished. The Chat
- * counterpart of the marker a cut-short reply carries, one level down: the row
- * shows the delegate's answer verbatim, so an unmarked fragment reads as a
- * finished finding. A constant so tests assert the wording without restating it.
- */
 export const SUB_AGENT_CUT_SHORT_NOTICE =
   "Sub-Agent response cut short at the model's output limit.";
 
-/**
- * The same thing for the other limit: the Sub-Agent's tool-calling loop ran out
- * of steps while it was still working, so what came back is as far as it got —
- * which may be a tool result and no answer at all. The delegate was told on its
- * last step to answer from what it had (issue #1730); its **Max steps** is its
- * own, so raising the parent's changes nothing.
- */
 export const SUB_AGENT_STEP_LIMIT_NOTICE =
   "Sub-Agent response cut short at the step limit. Raise the Sub-Agent's Max steps to let it finish.";
 
@@ -47,14 +33,6 @@ function isSubAgentActivity(output: unknown): output is SubAgentActivity {
   );
 }
 
-/**
- * Extracts the sub-agent name from a pre-dispatcher tool name.
- * e.g., "delegateToDadJokeBot" -> "Dad Joke Bot"
- *
- * Only reachable for parts stored before delegation collapsed into a single
- * `delegate` tool, which is for ever: stored Chat messages carry the tool name
- * that was current when they were written and are never rewritten.
- */
 function extractSubAgentName(toolName: string): string {
   const prefix = "delegateTo";
   if (toolName.startsWith(prefix)) {
@@ -64,14 +42,6 @@ function extractSubAgentName(toolName: string): string {
   return toolName;
 }
 
-/**
- * Whose name to put on the row.
- *
- * A new-shape part names its target in the tool's own input, because one tool
- * serves every sub-agent — there is nothing in `tool-delegate` to un-mangle.
- * The name arrives with the streamed input, so the fallback covers only the
- * sliver of a turn before the model has finished writing the call.
- */
 function subAgentNameOf(toolPart: ToolUIPart): string {
   const toolName = toolPart.type.replace("tool-", "");
   if (toolName !== "delegate") return extractSubAgentName(toolName);
@@ -80,13 +50,7 @@ function subAgentNameOf(toolPart: ToolUIPart): string {
   return target?.trim() || "Sub-Agent";
 }
 
-/**
- * A streamed activity entry in the shape the shared row draws. The yielded
- * vocabulary predates Run events and is stored on every Chat that ever
- * delegated, so it is translated here rather than rewritten: `thinking` is a
- * reasoning stretch and `generating` a text stretch; `failed` — the delegation
- * itself failing — the row still knows how to draw.
- */
+// why: stored Chats still carry the old vocabulary, so it is translated, not rewritten
 function toRowEntry(entry: SubAgentActivityEntry): ActivityRowEntry {
   return {
     type:
@@ -101,12 +65,6 @@ function toRowEntry(entry: SubAgentActivityEntry): ActivityRowEntry {
   };
 }
 
-/**
- * Folds consecutive completed entries with the same type and toolName into a
- * single row with a count (e.g. "createCard ×3"). Running or error entries
- * are never folded — a trailing running entry that matches the preceding
- * completed streak stays on its own line.
- */
 function compactEntries(entries: SubAgentActivityEntry[]): ActivityRowEntry[] {
   const result: ActivityRowEntry[] = [];
 
@@ -129,12 +87,6 @@ function compactEntries(entries: SubAgentActivityEntry[]): ActivityRowEntry[] {
   return result;
 }
 
-/**
- * The delegate's answer. One component for both call sites — with and without
- * an activity log — so a marker can never be shown on one and missed on the
- * other. `notice` is the resolved wording for whichever limit stopped the
- * delegation, absent when it finished on its own.
- */
 function ResponseBlock({ text, notice }: { text: string; notice?: string }) {
   return (
     <div className="flex flex-col gap-2">
@@ -153,18 +105,10 @@ function ResponseBlock({ text, notice }: { text: string; notice?: string }) {
 
 type SubAgentToolProps = {
   toolPart: ToolUIPart;
-  /**
-   * The metadata of the message this invocation sits on, which is where a
-   * duration arrives from mid-turn. Passed in rather than read here: resolving
-   * it needs both carriers, and the composing message already holds them.
-   */
+  // why: resolving a duration needs both carriers, and the message already has them
   messageMetadata?: unknown;
 };
 
-/**
- * Renders a sub-agent tool invocation. Shows a real-time activity log while the
- * sub-agent runs, then the plain-text result when complete.
- */
 export function SubAgentTool({ toolPart, messageMetadata }: SubAgentToolProps) {
   const input = toolPart.input as { task?: string };
   const output = toolPart.output as SubAgentActivity | string | null;
@@ -178,9 +122,7 @@ export function SubAgentTool({ toolPart, messageMetadata }: SubAgentToolProps) {
   const activity = isSubAgentActivity(output) ? output : null;
   const legacyText = typeof output === "string" ? output : null;
   const responseText = activity?.text ?? legacyText;
-  // Which limit ended the delegation, if either did. At most one applies: a
-  // terminal finish names the output ceiling or a loop the model wanted to
-  // continue, never both.
+  // why: a finish names either the output ceiling or a step limit, never both
   const cutShortNotice = activity?.truncatedByTokenLimit
     ? SUB_AGENT_CUT_SHORT_NOTICE
     : activity?.stoppedAtStepLimit
@@ -191,9 +133,6 @@ export function SubAgentTool({ toolPart, messageMetadata }: SubAgentToolProps) {
     [activity],
   );
 
-  // The SDK sets toolPart.state to "output-available" on preliminary (intermediate)
-  // generator yields, so we can't rely on it alone. For activity-based outputs,
-  // the tool is truly complete only when the final text is present.
   const isComplete =
     errorText != null ||
     (activity ? activity.text != null : !isRunning && output != null);
@@ -208,10 +147,6 @@ export function SubAgentTool({ toolPart, messageMetadata }: SubAgentToolProps) {
           ? "input-available"
           : toolPart.state;
 
-  // The shared shell draws the row; `type` picks the Sub-Agent icon, and
-  // `title` names the delegate rather than the tool. Its open state is the
-  // shell's own, so the nested transcript below can hold its own disclosures
-  // without any of them turning this chevron.
   return (
     <Tool>
       <ToolHeader
@@ -226,7 +161,6 @@ export function SubAgentTool({ toolPart, messageMetadata }: SubAgentToolProps) {
       />
 
       <ToolContent>
-        {/* Task input */}
         <div className="flex flex-col gap-2">
           <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
             Task
@@ -236,7 +170,6 @@ export function SubAgentTool({ toolPart, messageMetadata }: SubAgentToolProps) {
           </div>
         </div>
 
-        {/* Activity log, error, working indicator, or response */}
         {errorText ? (
           <div className="flex flex-col gap-2">
             <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">

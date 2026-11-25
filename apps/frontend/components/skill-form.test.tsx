@@ -20,7 +20,6 @@ import {
 
 vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("swr", () => swrMock);
-// The bundle card loads its own files; not under test here.
 vi.mock("@/components/skill-bundle", () => ({ SkillBundleCard: () => null }));
 
 import { SkillForm } from "./skill-form";

@@ -35,13 +35,6 @@ export function useChatSettings(
     maxSteps: undefined,
   });
 
-  // Initialize chat settings from existing chat data (only when no agent is
-  // selected — an agent supplies its own settings). Re-syncs when either the
-  // chat identity or the selected agent changes.
-  //
-  // Keyed on the Chat's id, never the row object: the row is replaced by every
-  // poll flush while a run is live, and re-syncing on those discarded whatever
-  // the user had typed into the settings dialog (issue #869).
   const initializeFromChat = () => {
     if (chatData && !agentId) {
       setSettings({
@@ -62,9 +55,7 @@ export function useChatSettings(
   useResetOnChange(chatData?.id, initializeFromChat);
   useResetOnChange(agentId, initializeFromChat);
 
-  // One object held in state, replaced only by a patch or a re-sync, so the
-  // turn built from it — and the callbacks `ChatMessage` is memoised on —
-  // survive a streamed token (#869).
+  // why: one object in state, so the callback and the memoised ChatMessage survive a token
   const updateSettings = useCallback(
     (patch: Partial<ChatSettings>) =>
       setSettings((prev) => ({ ...prev, ...patch })),

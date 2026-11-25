@@ -7,21 +7,11 @@ import type { ChatTranscriptSummary } from "@/lib/chat-summary";
 import { formatTokenCount } from "@/lib/token-count";
 import { cn } from "@/lib/utils";
 
-/**
- * What the divider says before it is expanded. Plain words on purpose: this is
- * the line a User reads the first time they meet compaction, so it says what
- * happened rather than naming the Context window.
- */
+// why: plain words — this line first meets compaction, before Context window
 export const SUMMARY_DIVIDER_TEXT =
   "Older messages were summarised for the assistant. They stay readable above.";
 
-/**
- * What the summary pass recorded about itself (ADR-0041): the model that wrote
- * the summary and the vendor's token counts. A count at `0` means the Provider
- * reported none (ADR-0018), so that count is left out rather than shown as a
- * real zero; `triggeredFromOccupancy` is a diagnostic, not a cost, and is never
- * shown.
- */
+// why: 0 means unreported, so it is omitted; occupancy is diagnostic, not cost
 function SummaryCost({ stats }: { stats: TranscriptSummaryStats }) {
   const counts: string[] = [];
   if (stats.inputTokens !== 0) {
@@ -39,17 +29,6 @@ function SummaryCost({ stats }: { stats: TranscriptSummaryStats }) {
   );
 }
 
-/**
- * The expandable divider a **Transcript summary** renders at its anchor
- * (ADR-0041, issue #1716): a quiet line in the Transcript that opens to show
- * the summary text and, when the pass recorded it, what the summary cost —
- * which model wrote it and the tokens it used (issue #1733). Every message
- * above it stays fully readable — nothing was deleted, only what the model is
- * sent changed.
- *
- * A divider, not a message: it sits between two messages on the Active path and
- * is never written to the Transcript.
- */
 export function TranscriptSummaryDivider({
   summary,
   className,

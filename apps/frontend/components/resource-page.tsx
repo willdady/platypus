@@ -5,22 +5,16 @@ import { PageHeader } from "@/components/page-header";
 export type ResourcePageVariant = "bare" | "narrow" | "stacked" | "wide";
 
 export type ResourcePageProps = {
-  /**
-   * Draws a labelled Back above the title, landing here when there is no
-   * history. Omitted inside a Workspace, whose header already holds the Back.
-   */
   backFallbackHref?: string;
   title: string;
   children: ReactNode;
   variant?: ResourcePageVariant;
-  /** Page-level actions drawn beside the title, e.g. a link elsewhere. */
   actions?: ReactNode;
 };
 
 const narrowColumnClass = "w-full px-4 md:px-0 md:w-4/5 max-w-3xl";
 
-// Exported so a loading fallback can take the same column as the page it stands
-// in for.
+// why: exported so a loading fallback can take the page's own column
 export const resourcePageLayout: Record<
   ResourcePageVariant,
   { outer?: string; inner: string; back?: string }
@@ -33,7 +27,6 @@ export const resourcePageLayout: Record<
   stacked: {
     outer: "flex justify-center py-8",
     inner: `${narrowColumnClass} flex flex-col gap-8`,
-    // The column's gap already spaces the button from the title.
     back: "mb-0 self-start",
   },
   wide: {

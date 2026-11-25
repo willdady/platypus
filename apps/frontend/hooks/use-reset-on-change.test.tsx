@@ -5,10 +5,8 @@ import { useResetOnChange } from "./use-reset-on-change";
 describe("useResetOnChange", () => {
   it("runs reset on the first render when the key is already present (warm cache)", () => {
     const reset = vi.fn();
-    const agent = { id: "agent-1" }; // identity-stable, as SWR returns
+    const agent = { id: "agent-1" };
     renderHook(() => useResetOnChange(agent, reset));
-    // Previously this failed: prevKey seeded to the first-render value meant the
-    // key never "changed" and reset never fired — an empty form on warm cache.
     expect(reset).toHaveBeenCalledTimes(1);
   });
 
@@ -23,17 +21,15 @@ describe("useResetOnChange", () => {
     const { rerender } = renderHook(({ key }) => useResetOnChange(key, reset), {
       initialProps: { key: undefined as { id: string } | undefined },
     });
-    expect(reset).toHaveBeenCalledTimes(1); // first render
+    expect(reset).toHaveBeenCalledTimes(1);
 
     const agent = { id: "agent-1" };
     rerender({ key: agent });
-    expect(reset).toHaveBeenCalledTimes(2); // key became available
+    expect(reset).toHaveBeenCalledTimes(2);
 
-    // Same identity on re-render must not clobber in-progress edits.
     rerender({ key: agent });
     expect(reset).toHaveBeenCalledTimes(2);
 
-    // A genuinely new source (e.g. navigating to a different agent) re-syncs.
     rerender({ key: { id: "agent-2" } });
     expect(reset).toHaveBeenCalledTimes(3);
   });

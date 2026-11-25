@@ -14,19 +14,12 @@ import {
 import { expectSentBodyToMatchSchema, selectOption } from "@/test/test-utils";
 import { FIX_FORM_ERRORS_MESSAGE } from "@/lib/apply-write-outcome";
 
-// --- Module mocks ------------------------------------------------------------
-
-// `vi.hoisted` so the swr mock below can read this state without tripping the
-// temporal dead zone (vi.mock factories run before the module body).
+// why: vi.hoisted, so the swr mock can read it before the module body runs
 const state = vi.hoisted(() => ({
-  // The record the edit form loads, and the create form's two workspace-read
-  // failures. Set per test before rendering.
   contextData: undefined as unknown,
   orgsError: undefined as Error | undefined,
   workspacesError: undefined as Error | undefined,
-  // The per-organization workspace fan-out still in flight.
   workspacesPending: false,
-  // The signed-in user belongs to no organization.
   noOrgs: false,
 }));
 
@@ -37,14 +30,12 @@ const workspaces = [
   { id: "ws2", name: "Beta", organizationId: "o1" },
 ];
 
-// The form reads four keys, one of them an array of organizations, so it needs
-// more than the harness's suffix-keyed `swrMock` can express. The rest of the
-// harness (navigation, auth, toast, save stubs) is used as-is.
+// why: four keys with an array key — more than the harness's swrMock expresses
 vi.mock("swr", () => ({
   __esModule: true,
   default: (key: unknown) => {
     if (Array.isArray(key)) {
-      // SWR never fetches an empty-array key, so it stays without data.
+      // why: SWR never fetches an empty-array key, so it stays without data
       if (key.length === 0) {
         return {
           data: undefined,
@@ -101,8 +92,6 @@ vi.mock("swr", () => ({
 
 import { WorkspaceContextForm } from "./workspace-context-form";
 
-// --- Helpers -----------------------------------------------------------------
-
 const CONTEXTS_URL = "http://test/users/me/contexts";
 const CONTEXT_URL = `${CONTEXTS_URL}/ctx1`;
 
@@ -116,7 +105,6 @@ function renderEditForm() {
   return render(<WorkspaceContextForm contextId="ctx1" />);
 }
 
-/** Picks the first workspace through the Radix select, as a keyboard user would. */
 function chooseWorkspace() {
   return selectOption(screen.getByRole("combobox"), "Alpha");
 }
@@ -124,8 +112,6 @@ function chooseWorkspace() {
 function submit() {
   return fireEvent.click(screen.getByRole("button", { name: /Save|Update/ }));
 }
-
-// --- Tests -------------------------------------------------------------------
 
 describe("WorkspaceContextForm writes", () => {
   beforeEach(() => {

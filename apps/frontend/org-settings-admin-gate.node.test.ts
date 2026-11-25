@@ -4,13 +4,6 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 
-/**
- * Org settings are for Org Admins only. Each layout under
- * `app/[orgId]/settings` must wrap its pages in
- * `<ProtectedRoute requireOrgAdmin>`, or a nested layout could expose a page
- * to every member.
- */
-
 const SETTINGS_ROOT = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
   "app/[orgId]/settings",
@@ -22,7 +15,6 @@ function layouts(dir: string) {
     .map((entry) => path.join(dir, entry));
 }
 
-/** `requireOrgAdmin` bare, or `requireOrgAdmin={true}`. */
 function requiresOrgAdmin(opening: ts.JsxOpeningLikeElement) {
   return opening.attributes.properties.some(
     (p) =>
@@ -61,7 +53,6 @@ describe("org settings layouts", () => {
   it("all require an Org Admin", () => {
     const files = layouts(SETTINGS_ROOT);
 
-    // A moved directory would otherwise pass with nothing checked.
     expect(files.length).toBeGreaterThan(0);
     expect(
       files

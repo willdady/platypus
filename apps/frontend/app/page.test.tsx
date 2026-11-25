@@ -24,7 +24,6 @@ vi.mock("@/components/auth-provider", () => ({
 
 vi.mock("@/hooks/use-scoped-swr", () => ({
   useScopedSWR: () => ({
-    // A failed read has no data; the page must not read it as an empty list.
     data: state.error ? undefined : { results: state.organizations },
     error: state.error,
     isLoading: false,
@@ -44,8 +43,6 @@ afterEach(() => {
   state.organizations = [];
 });
 
-// The page background flips with the theme, so the spinner must take a theme
-// token for its colour rather than a fixed near-black.
 function expectThemedSpinner() {
   const spinner = screen.getByRole("status", { name: "Loading" });
   expect(spinner).toHaveClass("text-muted-foreground");
@@ -70,8 +67,6 @@ describe("Home", () => {
     expect(screen.getByText("No organizations yet")).toBeInTheDocument();
   });
 
-  // A failed read is not "no organizations": it says which read failed and
-  // offers a retry, in the same page frame as the empty state.
   it("shows a failed organization read with a retry, not an empty page", () => {
     state.error = { status: 500, message: "Server error" };
 

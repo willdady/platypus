@@ -12,22 +12,11 @@ import {
 import { getModelConfigs, getSearchCapability } from "./model-config";
 import type { Serialized } from "./api-write";
 
-/**
- * What a native Provider offers (#1689) — Thinking and every Effort step, no
- * budget — shaped as a map so the controls render it like any other. Its
- * fragments are never sent: the backend sends the SDK's `reasoning` option.
- */
 const NATIVE_REASONING_CONTROLS: ReasoningMap = {
   thinking: { on: {}, off: {} },
   effort: Object.fromEntries(REASONING_EFFORT_STEPS.map((step) => [step, {}])),
 };
 
-/**
- * The Reasoning controls to show for a model: its Reasoning map (ADR-0040)
- * where the Provider honours one — an OpenAI Provider in chat mode — or the
- * native controls (#1689) on any other, so no control shows that would do
- * nothing.
- */
 export function reasoningControlsFor(
   provider: Pick<Provider, "providerType" | "apiMode">,
   entry: { reasoning?: ReasoningMap } | undefined,
@@ -38,44 +27,23 @@ export function reasoningControlsFor(
 }
 
 export type ModelSelectionInput = {
-  /** Omit entirely for a caller (like the Agent form) that never selects by Agent. */
   agentId?: string;
   modelId: string;
   providerId: string;
 };
 
 export type ResolvedModel = {
-  /** What a picker shows for this model — never the storage `alias:` prefix. */
   label: string;
   concreteId: ConcreteModelId;
-  /** The vendor's published total token capacity, or undefined if undeclared (ADR-0018). */
   contextWindow: number | undefined;
-  /** The ceiling on a single reply, or undefined if undeclared (issue #454). */
   maxOutputTokens: number | undefined;
-  /** The media types this model ingests natively (issue #328). */
   passthroughFileTypes: string[];
-  /** Whether a searching turn against this model would serve search tools. */
   canSearch: boolean;
-  /** The Reasoning controls to show — see {@link reasoningControlsFor}. */
   reasoning: ReasoningMap | undefined;
 };
 
-/**
- * The single entry point for "what model will this Chat turn use, and what
- * can it do?" Resolves the current selection — an Agent, or a direct
- * Provider/model pair — to one object carrying every capability a turn cares
- * about, so callers stop composing `resolveModelId` + `getContextWindow` + …
- * by hand at each call site.
- *
- * Returns `null` whenever nothing resolves: no selection made yet, a
- * selected Agent or Provider that no longer exists, or a model reference
- * that names nothing on the resolved Provider (a dangling id, or an alias
- * that was removed). There is no partial result — a Chat turn either has a
- * model or it doesn't.
- */
 export function resolveModel(input: {
   providers: Serialized<Provider>[];
-  /** Omit for a caller (like the Agent form) that never selects by Agent. */
   agents?: Serialized<Agent>[];
   selection: ModelSelectionInput;
 }): ResolvedModel | null {
@@ -96,9 +64,6 @@ export function resolveModel(input: {
 
   if (!provider || !modelReference) return null;
 
-  // Normalise the Provider's model list ONCE and answer every capability from
-  // that one list. Five provider-taking helpers each re-normalised it per
-  // render — on the hot path of every Chat render (issue #869).
   const configs = getModelConfigs(provider);
 
   const concreteId = resolveModelReference(configs, modelReference);

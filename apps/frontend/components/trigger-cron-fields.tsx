@@ -56,7 +56,6 @@ const DEFAULT_SIMPLE_SCHEDULE: SimpleSchedule = {
   dayOfMonth: "1",
 };
 
-/** A Cron Trigger's schedule, timezone and One-off switch. */
 function TriggerCronFields({
   active,
   trigger,
@@ -79,22 +78,18 @@ function TriggerCronFields({
   const [cronExpression, setCronExpression] = useState(
     saved?.cronExpression ?? DEFAULT_CRON_EXPRESSION,
   );
-  // A new Trigger's zone: the User timezone, else the browser's, else UTC
   const [timezone, setTimezone] = useState(
     () => saved?.timezone ?? user?.timezone ?? getBrowserTimezone(),
   );
   const [timezoneTouched, setTimezoneTouched] = useState(false);
   const [isOneOff, setIsOneOff] = useState(saved?.isOneOff ?? false);
 
-  // On a cold load the session lands after mount: move a new Trigger onto the
-  // User timezone once it arrives, unless the User has already picked a zone.
   useResetOnChange(user?.timezone, () => {
     const userTimezone = user?.timezone;
     if (trigger || !userTimezone || timezoneTouched) return;
     setTimezone(userTimezone);
   });
 
-  // A fired One-off can be renamed or deleted, never re-armed.
   const fired = !!trigger?.firedAt;
   const scheduleLocked = disabled || fired;
 
@@ -140,7 +135,6 @@ function TriggerCronFields({
           it can&apos;t be enabled again. Create a new Trigger to run it again.
         </p>
       )}
-      {/* Schedule Mode Toggle */}
       <Field aria-labelledby="trigger-schedule-mode-label">
         <FieldTitle id="trigger-schedule-mode-label">Schedule Mode</FieldTitle>
         <ButtonGroup>
@@ -166,7 +160,6 @@ function TriggerCronFields({
         </ButtonGroup>
       </Field>
 
-      {/* Simple Mode Fields */}
       {scheduleMode === "simple" && (
         <>
           <FormSelectField
@@ -294,7 +287,6 @@ function TriggerCronFields({
         </>
       )}
 
-      {/* Advanced Mode */}
       {scheduleMode === "advanced" && (
         <FormTextField
           label="Cron Expression"

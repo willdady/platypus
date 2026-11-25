@@ -1,7 +1,6 @@
 import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-/** The label a submit button shows while its form is saving. */
 export const PENDING_SUBMIT_TEXT = {
   Save: "Saving...",
   Update: "Updating...",

@@ -62,10 +62,7 @@ type WebhookFormProps = {
   webhookId?: string;
 };
 
-/**
- * The picker's groups. Trigger run events are Webhook-only: an Event Trigger
- * cannot subscribe to them, so only this picker offers them.
- */
+// why: trigger run events are Webhook-only; an Event Trigger cannot subscribe
 const EVENT_GROUPS = [
   {
     label: "Notifications",
@@ -115,7 +112,6 @@ const INITIAL_DATA = {
   headers: [] as KeyValueRow[],
 };
 
-/** A switch beside a single-line label, as the event rows are. */
 function InlineSwitchSkeleton() {
   return (
     <div className="flex items-center gap-3">
@@ -132,7 +128,6 @@ function WebhookFormSkeleton({ editing }: { editing: boolean }) {
         <FormSkeletonGroup>
           <FieldSkeleton />
           <FieldSkeleton description={1} />
-          {/* The Enabled row: a switch beside its label and description. */}
           <SwitchRowSkeleton />
           <div className="flex flex-col gap-3">
             <Skeleton className="h-3.5 w-16" />
@@ -217,7 +212,7 @@ function WebhookForm({ orgId, workspaceId, webhookId }: WebhookFormProps) {
     clearErrors("events");
     setFormData((prev) => {
       const on = !prev.events.includes(event);
-      // The last event stays: a webhook that delivers nothing is not a webhook.
+      // why: the last event stays — a webhook that delivers nothing is no webhook
       if (!on && prev.events.length === 1) return prev;
       return { ...prev, events: toggleInList(prev.events, event, on) };
     });
@@ -248,9 +243,6 @@ function WebhookForm({ orgId, workspaceId, webhookId }: WebhookFormProps) {
 
   const headerRowErrorKey = (key: string) => `headers.${key}`;
 
-  // Retract the whole-field "headers" error (any edit is an attempt to fix
-  // it) and the row-level error keyed to the edited entry, without touching
-  // errors stranded on other rows.
   const changeHeaders = (rows: KeyValueRow[], changed?: KeyValueRow) => {
     if (changed) {
       const keys = ["headers", headerRowErrorKey(changed.key)];
@@ -261,23 +253,17 @@ function WebhookForm({ orgId, workspaceId, webhookId }: WebhookFormProps) {
     setFormData((prev) => ({ ...prev, headers: rows }));
   };
 
-  // parseValidationErrors mirrors any headers.<key> issue onto the bare
-  // "headers" key too, as a fallback for forms with no per-row UI. This form
-  // has one, so once a row is showing that message, repeating it at the
-  // field level would just be a duplicate.
+  // why: the row already shows the message, so don't repeat it at field level
   const hasHeaderRowError = headers.some(
     (header) => !!validationErrors[headerRowErrorKey(header.key)],
   );
 
-  // rowsToRecord builds an object, so a repeated name would silently drop the
-  // earlier value. Refuse the save instead, and keep the casing the user typed.
+  // why: rowsToRecord drops a repeated name, so refuse and keep the typed casing
   const handleSubmit = () => {
     const error = duplicateHeaderError(headers);
     if (error) {
       setValidationErrors((prev) => ({ ...prev, headers: error }));
-      // Same feedback as any other field-level rejection: the headers can be
-      // scrolled out of view, so the toast is what tells the reader why
-      // nothing happened.
+      // why: the headers may be scrolled away, so the toast says why nothing happened
       toast.error(FIX_FORM_ERRORS_MESSAGE);
       return;
     }

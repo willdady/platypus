@@ -215,7 +215,6 @@ describe("WorkspaceForm save", () => {
     });
   });
 
-  // ADR-0030: the Workspace switch only counts under "Selected workspaces".
   it.each(["off", "all"])(
     "locks the Inbound Trigger switch while the organization gate is %s",
     (gate) => {
@@ -242,7 +241,6 @@ describe("WorkspaceForm save", () => {
     ).toBeEnabled();
   });
 
-  // ADR-0006: delegation is the org admin's to grant, not the owner's.
   it("hides the delegation switches from a workspace owner", () => {
     authState.actor = "workspace-owner";
     setDataFor(WORKSPACE_KEY, RESEARCH);

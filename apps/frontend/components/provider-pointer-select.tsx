@@ -9,17 +9,12 @@ import {
   type ProviderModelRole,
 } from "@/lib/provider-model-label";
 
-/** The field each provider pointer is stored in. */
 const POINTER_FIELD = {
   task: "taskModelProviderId",
   memoryExtraction: "memoryExtractionProviderId",
   embedding: "memoryEmbeddingProviderId",
 } as const satisfies Record<ProviderModelRole, string>;
 
-/**
- * The providers a pointer of `kind` may offer: every provider for the task
- * model, and only those declaring the role's model otherwise.
- */
 function providersForPointerKind(
   providers: Serialized<Provider>[],
   kind: ProviderModelRole,
@@ -30,30 +25,19 @@ function providersForPointerKind(
 }
 
 export type ProviderPointerSelectProps = {
-  /** What the pointer is for; picks the eligible providers and the field. */
   kind: ProviderModelRole;
   label: string;
   description?: ReactNode;
-  /** The option that clears the pointer. */
   noneLabel: string;
   value: string | null;
   onChange: (value: string | null) => void;
   error?: string | null;
   disabled?: boolean;
-  /**
-   * Disable the control when no provider qualifies, rather than offering the
-   * none option alone. The Blueprint form uses this; the Workspace form keeps
-   * its selects usable so the none option stays reachable.
-   */
+  // why: Blueprint disables when empty; Workspace keeps None reachable
   disableWhenEmpty?: boolean;
   providers: Serialized<Provider>[];
 };
 
-/**
- * A Workspace/Blueprint provider pointer: one provider, or none. Owns the
- * kind's eligible set, its `name (model id)` labels, and the `"none"` ↔ `null`
- * mapping, so neither form spells any of them out per field.
- */
 export function ProviderPointerSelect({
   kind,
   label,

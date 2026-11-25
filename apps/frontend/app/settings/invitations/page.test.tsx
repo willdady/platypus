@@ -44,7 +44,6 @@ describe("UserInvitationsPage accept", () => {
     expect(accept).toHaveTextContent("Accepting...");
 
     await act(async () => resolve());
-    // The sidebar's Organization list picks up the new membership.
     await waitFor(() =>
       expect(mutate).toHaveBeenCalledWith("http://test/organizations"),
     );

@@ -42,7 +42,6 @@ describe("KeyValueRowsEditor", () => {
     expect(screen.getByLabelText("KEY 1")).toHaveValue("A");
     expect(screen.getByLabelText("KEY 2")).toHaveValue("C");
     expect(screen.getByLabelText("value 2")).toHaveValue("3");
-    // The same DOM node moved up: keyed by id, not by index.
     expect(screen.getByLabelText("KEY 2")).toBe(thirdKey);
     expect(screen.queryByLabelText("KEY 3")).not.toBeInTheDocument();
   });

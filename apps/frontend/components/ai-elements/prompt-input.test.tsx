@@ -157,11 +157,6 @@ describe("PromptInput attachments", () => {
   });
 });
 
-/**
- * Two inputs on one page (issue #710: the composer plus an inline edit
- * surface). The composer claims the window-level drop; the edit surface must
- * still keep a file dropped on itself, and exactly one of them may take it.
- */
 describe("PromptInput drop routing with two inputs", () => {
   const named = (label: string, globalDrop: boolean) => (
     <PromptInput globalDrop={globalDrop} onSubmit={vi.fn()}>
@@ -197,10 +192,6 @@ describe("PromptInput drop routing with two inputs", () => {
       </>,
     ).container.querySelectorAll("form");
 
-  // The defect: the edit surface's own drop never bound (the ref was resolved
-  // by walking up from a span rendered OUTSIDE the form), so the file fell
-  // through to the composer's window-level listener — landing in the composer
-  // and never in the surface it was dropped on.
   it("gives a file dropped on the inline input to that input alone", () => {
     const forms = renderBoth();
 
@@ -230,9 +221,6 @@ describe("PromptInput drop routing with two inputs", () => {
 });
 
 describe("PromptInputAttachment image parts", () => {
-  // issue #579: a part can carry an image media type with nothing a client
-  // can fetch (e.g. Provider-reference-only). It should render as the plain
-  // file card every non-image attachment gets, not a broken <img>.
   it("falls back to a file attachment for an image media type with no URL", () => {
     render(
       <PromptInput onSubmit={vi.fn()}>
@@ -282,10 +270,6 @@ const seededPdf = {
 };
 
 describe("PromptInput initialAttachments", () => {
-  // issue #710: an inline edit surface has to open holding the parts the
-  // message already carries. Without a seed the only way in is `add()`, which
-  // takes `File[]` — something a persisted `FileUIPart` cannot be turned back
-  // into, because its bytes were never in this browser.
   it("opens holding the parts it was seeded with", () => {
     render(
       <PromptInput initialAttachments={[seededPdf]} onSubmit={vi.fn()}>
@@ -302,9 +286,6 @@ describe("PromptInput initialAttachments", () => {
   });
 
   it("submits a seeded part alongside one added afterwards", async () => {
-    // A newly attached file is held as a `blob:` URL and read back through
-    // fetch on submit; jsdom serves no blob URLs, so the read is stubbed with
-    // the Blob it would have returned.
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
@@ -360,9 +341,6 @@ describe("PromptInput initialAttachments", () => {
     expect(onSubmit.mock.calls[0][0].files).toEqual([]);
   });
 
-  // The seed is an opening position, not a binding: re-rendering with a
-  // different array must not throw away what the user has done since. An edit
-  // surface's parent re-renders on every keystroke elsewhere on the page.
   it("keeps the live list when the seed prop changes", () => {
     const view = render(
       <PromptInput initialAttachments={[seededPdf]} onSubmit={vi.fn()}>
@@ -392,9 +370,6 @@ describe("PromptInput initialAttachments", () => {
 });
 
 describe("PromptInputTextarea onKeyDown", () => {
-  // issue #710: an inline edit surface needs Escape to cancel. Spreading a
-  // caller's handler through `props` would replace the built-in one outright,
-  // taking Enter-to-submit and Backspace-removes-attachment with it.
   it("runs a caller's handler and still submits on Enter", async () => {
     const onKeyDown = vi.fn();
     const onSubmit = vi.fn();
@@ -435,10 +410,6 @@ describe("PromptInputTextarea onKeyDown", () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
-  // issue #1938: Backspace removed the last file attachment even when a
-  // Sandbox upload chip sat after it on screen, and did nothing at all when
-  // only Sandbox uploads were attached. It must remove the last chip in
-  // display order — Sandbox uploads render after file attachments.
   describe("Backspace", () => {
     const renderComposer = () =>
       render(
@@ -482,9 +453,6 @@ describe("PromptInputTextarea onKeyDown", () => {
       expect(screen.queryByText("photo.txt")).not.toBeInTheDocument();
     });
 
-    // Sandbox uploads render after file attachments regardless of the order
-    // they were added, so the chip added most recently is not the one shown
-    // last.
     it("removes the Sandbox upload even when a file was attached after it", () => {
       renderComposer();
       attachSandboxFile("sandbox.txt");
@@ -540,12 +508,6 @@ describe("PromptInputTextarea onKeyDown", () => {
   });
 });
 
-/**
- * Issue #869: the blob-URL cleanup effect ran on every change to the
- * attachment list rather than on unmount alone, so adding a second file
- * revoked the first file's `blob:` URL. Submit then read the revoked URL,
- * the rejection was swallowed, and Send appeared dead.
- */
 describe("PromptInput blob-URL lifecycle", () => {
   const originals = {
     createObjectURL: URL.createObjectURL,

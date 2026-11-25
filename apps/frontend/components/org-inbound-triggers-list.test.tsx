@@ -41,7 +41,6 @@ function row(over: Record<string, unknown> = {}) {
 
 beforeEach(resetListHarness);
 
-/** Opens the row's ⋮ menu, picks Revoke token, then confirms the dialog. */
 async function revoke() {
   await chooseRowMenuAction("Ready for AI", "Revoke token");
   const dialog = await screen.findByRole("dialog");
@@ -70,7 +69,7 @@ describe("OrgInboundTriggersList", () => {
 
     const [, dataRow] = screen.getAllByRole("row");
     const badge = within(dataRow).getByText("Disabled");
-    // The badge's Pause icon is decorative, so no accessible query sees it.
+    // why: the badge's Pause icon is decorative, so no accessible query sees it
     // eslint-disable-next-line testing-library/no-node-access
     expect(badge.querySelector("svg")).not.toBeNull();
   });
@@ -149,7 +148,6 @@ describe("OrgInboundTriggersList", () => {
       screen.getByRole("columnheader", { name: "Expires" }),
     ).toBeInTheDocument();
     expect(screen.queryByText("Active")).not.toBeInTheDocument();
-    // The expiry reads as a plain date, like the other date columns.
     expect(screen.queryByText(/Expires \d/)).not.toBeInTheDocument();
   });
 

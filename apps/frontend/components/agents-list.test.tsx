@@ -24,8 +24,6 @@ import {
   setupUser,
 } from "@/test/list-test-harness";
 
-// --- Module mocks ------------------------------------------------------------
-
 vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("swr", () => swrMock);
 
@@ -36,8 +34,6 @@ import {
   stubPendingSave,
 } from "@/test/test-utils";
 import { AgentsList } from "./agents-list";
-
-// --- Fixtures ----------------------------------------------------------------
 
 type AgentWithScope = Agent & { scope?: "organization" | "workspace" };
 
@@ -65,15 +61,12 @@ const workspaceAgent: AgentWithScope = {
   subAgentIds: [],
 } as unknown as AgentWithScope;
 
-/** Renders the Workspace surface with `agents` in the list. */
 function renderAgents(agents: AgentWithScope[], menuItem?: string) {
   mockScopedSWR({ "/agents": agents });
   return renderList(<AgentsList orgId="org1" workspaceId="ws1" />, menuItem);
 }
 
 beforeEach(resetListHarness);
-
-// --- Tests -------------------------------------------------------------------
 
 describe("AgentsList detach", () => {
   it("surfaces the backend's reason and keeps the row when detach is refused", async () => {
@@ -181,7 +174,6 @@ describe("AgentsList clone", () => {
       name: "Name",
     });
     expect(name).toHaveValue("Workspace Agent (copy)");
-    // Named by a visible label, as in other form dialogs.
     expect(name.labels?.[0]).toHaveTextContent("Name");
   });
 
@@ -226,8 +218,6 @@ describe("AgentsList clone", () => {
 
     await confirmDialog("Clone");
 
-    // The copy's name is over the limit: say so on the field, not that the
-    // Agent can't be cloned, and don't send a body the backend refuses.
     expect(screen.getByRole("alert")).toHaveTextContent(
       `${AGENT_NAME_MAX_LENGTH} characters`,
     );
@@ -251,8 +241,7 @@ describe("AgentsList clone", () => {
 
 describe("AgentsList promote", () => {
   it("surfaces blockers from a refused promote", async () => {
-    // Not `stubRejectedSave`: a refused promote carries its blockers beside
-    // the reason, which that helper's `{ error }` body has no room for.
+    // why: a refused promote carries blockers beside the error, which stubRejectedSave cannot send
     const fetchMock = vi.fn().mockResolvedValue(
       jsonResponse(422, {
         error: "Promote blocked",
@@ -376,14 +365,11 @@ describe("AgentsList pinning", () => {
     await waitFor(() =>
       expect(toastError).toHaveBeenCalledWith("Agent not found"),
     );
-    // The optimistic pin reverts.
     expect(
       screen.queryByRole("list", { name: "Pinned agents" }),
     ).not.toBeInTheDocument();
   });
 
-  // The backend refuses a pin from anyone but the Workspace Owner, an Org
-  // Admin included, so offering it would only produce an error.
   it("offers a non-owner no Pin or Unpin", async () => {
     authState.ownsWorkspace = false;
 
@@ -399,7 +385,6 @@ describe("AgentsList pinning", () => {
         key: "Escape",
       });
     }
-    // The pinned grouping is still shown to them.
     expect(namesIn("Pinned agents")).toEqual(["Mia"]);
   });
 });
@@ -659,7 +644,6 @@ describe("AgentsList paging", () => {
     screen.queryByRole("navigation", { name: "Agents pages" });
 
   it("draws Pinned in full and pages only the unpinned agents", async () => {
-    // Three pinned, ten unpinned: the unpinned make two pages of eight.
     await renderAgents([
       ...[1, 2, 3].map((n) => agent(n, true)),
       ...Array.from({ length: 10 }, (_, i) => agent(i + 4)),

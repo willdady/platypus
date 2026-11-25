@@ -18,10 +18,7 @@ export type TextShimmerProps = {
   spread?: number;
 };
 
-// Cache motion components per element type. motion.create() must not run during
-// render (it would create a new component each time); caching keeps the
-// resulting component stable across renders. Typed as a generic HTML motion
-// component (motion.div) so it accepts the common HTML motion props used below.
+// why: motion.create() during render would make a new component on every pass
 const motionComponentCache = new Map<ElementType, typeof motion.div>();
 
 function getMotionComponent(component: ElementType) {
@@ -47,12 +44,8 @@ function ShimmerComponent({
     [children, spread],
   );
 
-  // getMotionComponent returns a stable, module-cached component (keyed by the
-  // `as` element type, which never changes for a mounted instance), so it is
-  // not a new component created during render despite the rule's heuristic.
   const MotionComponent = getMotionComponent(Component);
-  // The sweep loops forever; under reduced motion the text stays put, still
-  // muted so it reads as in progress.
+  // why: under reduced motion the text stays put but muted, so it reads as working
   const reduceMotion = useReducedMotion();
   if (reduceMotion) {
     return (

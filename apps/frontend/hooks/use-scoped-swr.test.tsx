@@ -69,8 +69,6 @@ describe("useScopedSWR", () => {
     expect(capturedKey).toBeNull();
   });
 
-  // Without this a hard refresh reads "loaded, empty" before the session
-  // lands: a blank editable form, a false empty state.
   it("reports loading while the session is still resolving", () => {
     authState.user = null;
     authState.isPending = true;
@@ -81,8 +79,6 @@ describe("useScopedSWR", () => {
     expect(result.current.isLoading).toBe(true);
   });
 
-  // A new Chat's row is seeded `null`: reporting it as loading showed the
-  // existing-Chat transcript skeleton on a hard refresh of a new Chat.
   it("returns a value already cached under the pending key as loaded", () => {
     authState.user = null;
     authState.isPending = true;
@@ -116,7 +112,6 @@ describe("useScopedSWR", () => {
     expect(capturedFetcher).toBe(fetcher);
   });
 
-  // Issue #648: the Chat detail read needs 404-as-absence, and only that read.
   it("lets one read swap its reader without changing the default", () => {
     renderHook(() =>
       useScopedSWR("chat/c1", { orgId: "org1" }, { fetcher: optionalFetcher }),

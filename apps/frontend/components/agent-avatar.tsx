@@ -9,7 +9,6 @@ export function AgentAvatar({
 }: {
   agent: Pick<Agent, "name" | "avatarUrl">;
   className?: string;
-  /** Overrides the image's accessible name; defaults to the agent's name. */
   alt?: string;
 }) {
   return (

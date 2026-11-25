@@ -1,18 +1,10 @@
 import { RefreshCw } from "lucide-react";
 
-/** The sentence a reader sees; also what the documentation quotes. */
+// why: the Chat docs quote this sentence verbatim
 export const CHAT_RECONNECTING_MESSAGE =
   "Connection interrupted. The reply is still being written and will keep filling in here.";
 
-/**
- * The line shown while a Chat has lost its stream to a run that is still going.
- *
- * A dropped connection is not a failed turn — the run outlives the request and
- * the answer keeps arriving from the poll — so it gets a line in the flow of the
- * page rather than the modal a real failure gets (issue #648). Announced
- * politely so a screen reader picks it up without interrupting the reply being
- * read.
- */
+// why: a dropped stream is not a failed turn; a line, not a modal
 export function ChatReconnectingNotice() {
   return (
     <div

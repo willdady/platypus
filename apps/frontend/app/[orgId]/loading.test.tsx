@@ -37,8 +37,6 @@ vi.mock("@/components/auth-provider", () => ({
 
 vi.mock("swr", () => ({ preload: vi.fn(() => Promise.resolve()) }));
 
-// Everything the Organization home reads is already in the client cache, as
-// it is on a switch from another Organization.
 vi.mock("@/hooks/use-scoped-swr", () => ({
   useScopedSWR: (entity: string) => ({
     data:

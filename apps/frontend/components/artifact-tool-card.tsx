@@ -25,10 +25,8 @@ type ArtifactToolPart = Extract<
   { type: "tool-createArtifact" | "tool-updateArtifact" }
 >;
 
-/** One part of a Chat message, as the predicates below receive it. */
 type MessagePart = NonNullable<PlatypusUIMessage["parts"]>[number];
 
-/** The input a `createArtifact` call carries; partial while it streams. */
 type ArtifactInput = Partial<{
   title: string;
   type: ArtifactType;
@@ -36,15 +34,8 @@ type ArtifactInput = Partial<{
   content: string;
 }>;
 
-/** The stored Artifact a completed write call produced. */
 export type StoredArtifact = { id: string; title: string; version: number };
 
-/**
- * One of the two writes that share the Artifact Card: a create (or whole
- * rewrite) or a targeted update. A finished, stored one moves to the reply's
- * tray; a call still streaming, or one that failed, denied or was rejected,
- * stays in the reply body as a card.
- */
 export function isArtifactToolPart(
   part: MessagePart,
 ): part is ArtifactToolPart {
@@ -53,31 +44,21 @@ export function isArtifactToolPart(
   );
 }
 
-/** What the Card asks the Chat to open in the side panel. */
 export type ArtifactOpenTarget =
   { id: string; version: number } | { toolCallId: string };
 
 export const ARTIFACT_DELETED_LABEL = "Artifact deleted";
-/** What a deleted Artifact's Card and tray row say under that label. */
 export const ARTIFACT_DELETED_DETAIL = "This Artifact has been deleted.";
 
 export function artifactInput(toolPart: ArtifactToolPart): ArtifactInput {
-  // An update's input is an id and edits; only a create carries content the
-  // panel can show while it streams.
   return toolPart.type === "tool-createArtifact" ? (toolPart.input ?? {}) : {};
 }
 
-/**
- * The Artifact's type once it is a complete member. A streamed input is parsed
- * from partial JSON, so `type` can be half a word; an unknown value is treated
- * as not yet written rather than shown as a type.
- */
 export function artifactTypeOf(value: unknown): ArtifactType | undefined {
   const parsed = artifactTypeSchema.safeParse(value);
   return parsed.success ? parsed.data : undefined;
 }
 
-/** The stored Artifact a completed write call produced, or `undefined` while it runs. */
 export function storedArtifactOf(
   toolPart: ArtifactToolPart,
 ): StoredArtifact | undefined {
@@ -85,11 +66,6 @@ export function storedArtifactOf(
   return output && "id" in output ? output : undefined;
 }
 
-/**
- * Every Artifact a message wrote, across all its steps: one entry per Artifact,
- * at the highest version that message produced. A write that failed, was denied
- * or was rejected stored nothing, so it offers no entry.
- */
 export function replyArtifacts(
   parts: readonly MessagePart[],
 ): StoredArtifact[] {
@@ -106,7 +82,6 @@ export function replyArtifacts(
   return [...byId.values()];
 }
 
-/** Why a call wrote nothing: a validation error, a rejection or a failure. */
 export function artifactFailureOf(
   toolPart: ArtifactToolPart,
 ): string | undefined {
@@ -117,7 +92,6 @@ export function artifactFailureOf(
   return undefined;
 }
 
-/** Whether the call wrote nothing: it failed, was denied, or was rejected. */
 function partStateFailed(toolPart: ArtifactToolPart): boolean {
   if (toolPart.state === "output-error" || toolPart.state === "output-denied") {
     return true;
@@ -125,12 +99,6 @@ function partStateFailed(toolPart: ArtifactToolPart): boolean {
   return toolPart.state === "approval-responded" && !toolPart.approval.approved;
 }
 
-/**
- * The content a Chat panel shows for a call that has not been stored yet: the
- * partial input while it runs, or the same content held back as failed when the
- * call wrote nothing. A stored version always wins in the viewer, so this is
- * only what fills the panel until that read lands.
- */
 export function artifactLiveFromPart(toolPart: ArtifactToolPart): ArtifactLive {
   const input = artifactInput(toolPart);
   const error = artifactFailureOf(toolPart);
@@ -145,11 +113,6 @@ export function artifactLiveFromPart(toolPart: ArtifactToolPart): ArtifactLive {
   };
 }
 
-/**
- * Finds a `createArtifact` call in the transcript by its id. The Chat keeps
- * only the call id in its open-panel state, so the part it resolves to keeps
- * updating as the call streams and completes.
- */
 export function findArtifactToolPart(
   messages: PlatypusUIMessage[],
   toolCallId: string,
@@ -163,22 +126,12 @@ export function findArtifactToolPart(
   return undefined;
 }
 
-/**
- * The Chat's Artifact Card: a title, its type and the version the call
- * produced, opening the Artifact in the side panel. Both writes — a create (or
- * whole rewrite) and a targeted update — render through this one card. A
- * create can be opened while it streams so the panel follows the content as it
- * arrives; once the call completes, or for an update, the Artifact is read back
- * by id and version, so a later deletion reads as deleted rather than as an
- * error.
- */
 export function ArtifactToolCard({
   toolPart,
   scope,
   onOpen,
 }: {
   toolPart: ArtifactToolPart;
-  /** The Workspace the read is confined to; absent withholds the read. */
   scope?: Scope | null;
   onOpen: (target: ArtifactOpenTarget) => void;
 }) {
@@ -191,8 +144,6 @@ export function ArtifactToolCard({
 
   const title = created?.title ?? input.title;
   const type = artifactTypeOf(input.type) ?? data?.artifact.type;
-  // A streaming update has no content to show and no version yet, so its Card
-  // waits for the result; a create can open its live panel as it writes.
   const canOpen = !deleted && (created !== undefined || !updating);
 
   return (

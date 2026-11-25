@@ -30,7 +30,6 @@ const baseOptions = {
   entity: "skills" as const,
   scope: { orgId: "org1" },
   retractableFields: ["name", "description"],
-  // A Skill create's required body, alongside the form's own fields.
   buildPayload: (data: Data) => ({ ...data, body: "" }),
 };
 
@@ -140,7 +139,6 @@ describe("useEntityForm record read", () => {
         scope: {},
         id: "s1",
         fromRecord: () => ({ content: row.description }),
-        // A global Context names no Workspace.
         buildPayload: (data) => ({ content: data.content, workspaceId: null }),
       }),
     );
@@ -441,7 +439,6 @@ describe("useEntityDelete lifecycle", () => {
     );
   });
 
-  // A form that stays mounted after deleting (the Sandbox) can delete again.
   it("reopens the dialog idle after a successful delete", async () => {
     stubAcceptedSave({});
 
@@ -640,9 +637,6 @@ describe("useEntityForm option types", () => {
     expect(result.current.formData).toEqual({ name: "", description: "" });
   });
 
-  // The three cases below are compile-time claims: their assertion is the
-  // `@ts-expect-error`, which `pnpm typecheck` holds to being an error. They
-  // still render, so a regression to a runtime throw would show here too.
   // eslint-disable-next-line vitest/expect-expect -- the `@ts-expect-error` is the assertion
   it("rejects a form that names neither an entity nor a write", () => {
     renderHook(() =>
@@ -673,8 +667,7 @@ describe("useEntityForm option types", () => {
   // eslint-disable-next-line vitest/expect-expect -- the `@ts-expect-error` is the assertion
   it("checks buildPayload against the entity's request schema", () => {
     renderHook(() =>
-      // @ts-expect-error a Skill has no `nonsense` field; the strict request
-      // schema would refuse it with a 400.
+      // @ts-expect-error a Skill has no `nonsense` field; the strict request schema would refuse it with a 400.
       useEntityForm<Data, unknown>({
         initialData: { name: "", description: "" },
         entity: "skills",

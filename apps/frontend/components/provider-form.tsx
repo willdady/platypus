@@ -95,10 +95,8 @@ import {
   type ProviderTestPayload,
 } from "@/hooks/use-model-test-results";
 
-/** Errors reported against one Model entry, split by the field each belongs to. */
 type ModelEntryErrors = { row?: string; fields: Record<string, string> };
 
-/** What a card says about each optional setting, when it is set. */
 function modelDetails(model: ModelConfigView): string[] {
   const details: string[] = [];
   if (model.contextWindow !== undefined) {
@@ -127,11 +125,6 @@ function modelDetails(model: ModelConfigView): string[] {
   return details;
 }
 
-/**
- * The inline verdict for one model's Test action: the class says what to fix,
- * and the Provider's own message is shown verbatim beneath it. A request that
- * never reached the Provider says so rather than borrowing a failure class.
- */
 function testResultCopy(verdict: ModelTestVerdict): {
   variant: "success" | "destructive" | "warning";
   title: string;
@@ -197,10 +190,6 @@ function testResultCopy(verdict: ModelTestVerdict): {
   }
 }
 
-/**
- * The Test action a model card renders: whether this caller may run one, its
- * in-flight and disabled states, the last verdict, and the click handler.
- */
 type ModelTestAction = {
   canRun: boolean;
   disabled: boolean;
@@ -210,12 +199,6 @@ type ModelTestAction = {
   onDismiss: () => void;
 };
 
-/**
- * One entry in the Models list, view-only: editing happens in
- * `ModelEntryDialog`. A card the server rejected shows why under its title, and
- * a card whose Test action ran shows the verdict inline — never as a toast, so
- * it stays attached to the model it describes.
- */
 function ModelCard({
   model,
   errors,
@@ -361,14 +344,10 @@ type ProviderFormData = Omit<
   headerRows: KeyValueRow[];
 };
 
-/** The header map a save or a test sends. */
 function headersPayload(data: ProviderFormData): Record<string, string> {
-  // An empty map rather than an omitted field: the update replaces the stored
-  // row, so removing the last header row has to clear the headers it held.
   return rowsToRecord(data.headerRows, {});
 }
 
-/** A ModelCard: its title, one line of detail, Edit and Remove. */
 function ModelCardSkeleton() {
   return (
     <div className="flex items-center justify-between gap-2 rounded-md border px-3 py-2">
@@ -399,7 +378,6 @@ function ProviderFormSkeleton({
           <FieldSkeleton />
           <FieldSkeleton />
           <FieldSkeleton description={1} />
-          {/* Models: its label, one card, Add model and the description. */}
           <div className="flex w-full flex-col gap-3">
             <div className="flex h-5 items-center">
               <Skeleton className="h-3.5 w-16" />
@@ -430,11 +408,8 @@ function ProviderForm({
   orgId: string;
   workspaceId?: string;
   providerId?: string;
-  /** Collect the Provider rather than save it (see `FormDraft`). */
   draft?: FormDraft;
 }) {
-  // The API's response shape already carries `scope`, so no intersection is
-  // needed to read a Provider that may be a Shared one.
   type SerializedProvider = Serialized<ProviderResponse>;
 
   const router = useRouter();
@@ -459,10 +434,6 @@ function ProviderForm({
 
   const scope = formScope === "workspace" ? { orgId, workspaceId } : { orgId };
   const collectionUrl = scopedPath("providers", scope);
-  // The same authority the create route enforces: an Org Admin, or a Workspace
-  // Owner only where the Workspace delegates Provider management (ADR-0006).
-  // A viewer without it sees no Test button, rather than a button whose click
-  // comes back as a 403 on the card.
   const { actor } = useAuth();
   const canConfigureInWorkspace = useCanConfigureWorkspaceResource("provider");
   const canTest = workspaceId
@@ -476,8 +447,6 @@ function ProviderForm({
     clearCard: clearTestResult,
   } = useModelTestResults(joinUrl(backendUrl, `${collectionUrl}/test`));
 
-  // A draft collects the Provider for a later write; every other form saves
-  // it through its entity. One hook call, two option sets.
   type SavedProvider = { id: string; aliasRepoints?: unknown } | undefined;
   const sharedOptions = {
     initialData: {
@@ -501,10 +470,7 @@ function ProviderForm({
       embeddingModelId: "",
       embeddingDimensions: "",
     },
-    // The raw Extra Body text, so JSON still being typed (and not yet valid)
-    // counts.
     sideState: { extraBodyString },
-    // The wizard advancing is the feedback for a staged draft.
     successMessage: draft
       ? undefined
       : () => (providerId ? "Provider updated" : "Provider created"),
@@ -512,7 +478,6 @@ function ProviderForm({
     onError: toastGuidanceOrError,
     failureMessage: "Failed to save provider",
     onSuccess: (data: SavedProvider) => {
-      // A draft stays put: the wizard moves on once `write` accepts it.
       if (draft) return;
       reportAliasRepoints(data?.aliasRepoints);
       router.push(listHref);
@@ -520,7 +485,6 @@ function ProviderForm({
   };
   const formOptions: UseEntityFormOptions<
     ProviderFormData,
-    // Undefined only for a draft, whose `write` saves nothing.
     SavedProvider,
     SerializedProvider
   > = draft
@@ -536,10 +500,6 @@ function ProviderForm({
         fromRecord: (provider) => ({
           providerType: provider.providerType,
           name: provider.name,
-          // The API is free to withhold the stored key: it is returned only to a
-          // caller who may manage this Provider (ADR-0006). Anyone else lands here
-          // read-only, so an empty field is the honest rendering — and keeps the
-          // input controlled either way.
           apiKey: provider.apiKey ?? "",
           region: provider.region || "",
           baseUrl: provider.baseUrl || "",
@@ -548,14 +508,6 @@ function ProviderForm({
           organization: provider.organization || "",
           project: provider.project || "",
           apiMode: provider.apiMode ?? "responses",
-          // Held exactly as stored, including a row backfilled to "native"
-          // (ADR-0014) on a Provider with no native tool at all — Bedrock, or
-          // vLLM on the chat API. Rendering that as the built-in search option
-          // would be wrong, but so is rewriting it: `doSubmit` sends this field
-          // on every save, so coercing here would let a save that touched only
-          // the name silently retire a selection the Operator never edited, and
-          // one that starts working again the moment the Provider regains a
-          // native tool. See `nativeSelectedButUnavailable` for what renders.
           searchSource: provider.searchSource ?? SEARCH_SOURCE_NATIVE,
           securityGuardrails: provider.securityGuardrails ?? "",
           modelIds: provider.modelIds ? getModelConfigs(provider) : [],
@@ -605,7 +557,6 @@ function ProviderForm({
       modelIds: data.modelIds,
       taskModelId: data.taskModelId,
       memoryExtractionModelId: data.memoryExtractionModelId,
-      // Null rather than omitted: the update replaces the stored row.
       taskModelSettings: data.taskModelSettings ?? null,
       memoryExtractionModelSettings: data.memoryExtractionModelSettings ?? null,
       embeddingModelId: data.embeddingModelId || null,
@@ -615,11 +566,6 @@ function ProviderForm({
     };
   }
 
-  /**
-   * The Test request's slice of the form: only what opening the connection
-   * reads, so a form that is not yet savable — no Name, no task or memory
-   * models — can still be tested. A blank Name is omitted rather than sent.
-   */
   function buildTestPayload(data: ProviderFormData): ProviderTestPayload {
     return {
       name: data.name.trim() || undefined,
@@ -645,9 +591,7 @@ function ProviderForm({
     guidanceOnForbidden: true,
   });
 
-  // The Web-search backends this deployment has installed (ADR-0014). Org-scoped
-  // rather than workspace-scoped because this form serves both Provider scopes and
-  // `workspaceId` is optional here; the list itself is deployment-wide either way.
+  // why: org-scoped — this form serves both Provider scopes and workspaceId is optional
   const {
     data: webBackendsData,
     error: webBackendsError,
@@ -655,40 +599,15 @@ function ProviderForm({
   } = useScopedSWR<{
     results: Array<{ backend: string; name: string; plugin: string | null }>;
   }>("web-backends", { orgId });
-  // Sorted by display name: the route returns registration order, which follows
-  // `PLATYPUS_PLUGINS` and so reshuffles the dropdown when an Operator edits that
-  // list. Display order is the frontend's to choose.
+  // why: the route returns PLATYPUS_PLUGINS order, which reshuffles when an Operator edits it
   const availableWebBackends = sortByName(webBackendsData?.results ?? []);
-  // An empty list means "this deployment installed none" only once the catalog
-  // actually arrived. While it is in flight or after it failed, the list is empty
-  // for a reason that says nothing about the deployment — so the field must not
-  // hide, and a stored id must not be accused of being uninstalled.
-  //
-  // Errors win over data on purpose. SWR can hold both — cached results plus a
-  // failed revalidation — and in that state the list still renders, but calling a
-  // stored id "not installed" would rest on a catalog we no longer know is current.
   const webBackendsKnown =
     !!webBackendsData && !webBackendsError && !webBackendsLoading;
 
-  // A stored "native" on a Provider with no native tool — a backfilled row
-  // (ADR-0014), or one orphaned by a Provider Type / API Mode change made here.
-  // The option is otherwise offered only while `providerHasNativeSearch` holds,
-  // so without this the select points at a value nothing in the list matches.
-  //
-  // Named rather than silently rendered as None, exactly as a stored backend
-  // whose plugin is gone is: coercing the display instead would leave the value
-  // unclearable, because Radix fires no change when the reader picks the option
-  // already showing. The stored value is never rewritten here — `doSubmit` sends
-  // this field on every save, so a save that touched only the name round-trips
-  // it untouched, and it starts working again if the Provider regains a native
-  // tool.
   const nativeSelectedButUnavailable =
     formData.searchSource === SEARCH_SOURCE_NATIVE &&
     !providerHasNativeSearch(formData);
 
-  // Any Provider-level edit retracts this field's error, the save error, and
-  // every verdict: each described the values now on screen, which have just
-  // changed.
   const beginEdit = (fieldId: string) => {
     clearErrors(fieldId);
     setError(null);
@@ -727,8 +646,6 @@ function ProviderForm({
     setFormData((prevData) => ({ ...prevData, headerRows: rows }));
   };
 
-  // Adapts FormTextField's `onChange(value)` to handleChange's `onChange(e)`
-  // so the centralized clear-error-and-set-formData logic stays in one place.
   const toFieldChange = (id: string) => (value: string) =>
     handleChange({
       target: { id, value },
@@ -748,19 +665,10 @@ function ProviderForm({
     setFormData((prevData) => ({ ...prevData, [id]: value }));
   };
 
-  // --- Per-model config editing (issue #328) ---
-
-  // Retracts the list's error and every entry error under it, so a stale
-  // message doesn't sit on a card the user has already changed.
   const clearModelIdsError = () => {
     clearErrors("modelIds");
   };
 
-  /**
-   * Split the outstanding errors for one entry out of the flat map. An entry
-   * rule reports as `modelIds.<index>.<field>`; `modelIds.<index>` is the
-   * entry as a whole.
-   */
   const errorsForEntry = (index: number): ModelEntryErrors => {
     const prefix = `modelIds.${index}`;
     const result: ModelEntryErrors = { fields: {} };
@@ -772,26 +680,17 @@ function ProviderForm({
     return result;
   };
 
-  // `parseValidationErrors` mirrors every entry error onto `modelIds` as well,
-  // so a form that only knows flat names still shows something. This one knows
-  // better: when a card is showing the message, the list's own slot stays
-  // empty rather than repeating it.
   const hasEntryError = Object.keys(validationErrors).some((key) =>
     key.startsWith("modelIds."),
   );
   const modelIdsError = hasEntryError ? undefined : validationErrors.modelIds;
 
-  // The open Model entry dialog: "new" adds, an index edits that entry.
   const [modelDialog, setModelDialog] = useState<number | "new" | null>(null);
 
   const stageModel = (model: ModelConfigView) => {
     clearModelIdsError();
-    // Editing a card retracts that card's verdict; the others still describe
-    // values nobody has touched.
     if (typeof modelDialog === "number") clearTestResult(modelDialog);
     setFormData((prev) => {
-      // A renamed entry takes the job pointers aimed at it along, so its Job
-      // settings keep matching its Reasoning map.
       const oldId =
         typeof modelDialog === "number"
           ? prev.modelIds[modelDialog]?.id
@@ -813,8 +712,7 @@ function ProviderForm({
 
   const removeModel = (index: number) => {
     clearModelIdsError();
-    // Removing shifts every later card's index, so no verdict can stay
-    // attached to the card it was about.
+    // why: removal shifts every later index, so no verdict can stay attached
     clearTestResults();
     setFormData((prev) => ({
       ...prev,
@@ -822,8 +720,6 @@ function ProviderForm({
     }));
   };
 
-  // rowsToRecord builds an object, so a repeated name would silently drop the
-  // earlier value. Refuse both saving and testing instead.
   const rejectDuplicateHeader = (): boolean => {
     const error = duplicateHeaderError(formData.headerRows);
     if (!error) return false;
@@ -831,22 +727,12 @@ function ProviderForm({
     return true;
   };
 
-  /**
-   * Tests one card's model with the Provider config exactly as the form holds
-   * it — nothing is saved first, so a wrong key or Base URL is reported before
-   * it reaches a Chat. The verdict lands back on the same card.
-   */
   const testModel = (index: number, modelId: string) => {
     if (rejectDuplicateHeader()) return;
     return runModelTest(index, modelId, buildTestPayload(formData));
   };
 
-  /**
-   * Removing or renaming an alias silently rewrites every Agent and Chat that
-   * referenced it back to the concrete model id, so each keeps running against
-   * the model it already used. Those records belong to Workspace Owners who are
-   * not looking at this form, so the edit says what it touched.
-   */
+  // why: repointed records belong to Workspace Owners not looking at this form
   const reportAliasRepoints = (repoints: unknown) => {
     if (!Array.isArray(repoints)) return;
     const count = (n: number, noun: string) =>
@@ -857,8 +743,6 @@ function ProviderForm({
         repoint.chats > 0 ? count(repoint.chats, "Chat") : null,
       ].filter(Boolean);
       if (moved.length === 0) continue;
-      // Phrased so the verb never has to agree with the count: "1 Agent" and
-      // "2 Agents and 1 Chat" both read correctly after "repointed".
       toast.info(
         `Alias "${repoint.alias}" is gone — repointed ${moved.join(" and ")} to ${repoint.modelId}.`,
         { duration: 10000 },
@@ -867,10 +751,9 @@ function ProviderForm({
   };
 
   const hasEmbeddingConfigChanged = (): boolean => {
-    if (!providerId) return false; // New provider, no existing embeddings
+    if (!providerId) return false;
     const currentModelId = formData.embeddingModelId || null;
     const currentDimensions = formData.embeddingDimensions || null;
-    // Only matters if there was a previously saved embedding model
     if (!savedEmbeddingModelId && !currentModelId) return false;
     return (
       currentModelId !== savedEmbeddingModelId ||
@@ -992,10 +875,10 @@ function ProviderForm({
             description="Optional base URL for the provider."
           />
 
-          {/* Invalid only for an error against the list itself: `data-invalid`
-              reddens every descendant, which on an entry error would paint the
-              innocent cards the same colour as the guilty one. */}
-          <Field data-invalid={!!modelIdsError}>
+          <Field
+            // why: data-invalid reddens every descendant, so only the list's own error sets it
+            data-invalid={!!modelIdsError}
+          >
             <FieldLabel htmlFor="modelIds">Models</FieldLabel>
             {formData.modelIds.length === 0 ? (
               <ListState variant="empty">No models yet.</ListState>
@@ -1003,7 +886,7 @@ function ProviderForm({
               <ul className="flex flex-col gap-2">
                 {formData.modelIds.map((model, index) => (
                   <ModelCard
-                    // Index: cards hold no state, and ids may repeat.
+                    // why: key by index — cards hold no state and model ids may repeat
                     key={index}
                     model={model}
                     errors={errorsForEntry(index)}
@@ -1063,7 +946,6 @@ function ProviderForm({
             models={formData.modelIds}
             provider={formData}
             onChange={(value) => {
-              // The field shows the settings' error too; a new model retracts it.
               beginEdit("taskModelSettings");
               handleSelectChange("taskModelId", value);
             }}
@@ -1237,8 +1119,6 @@ function ProviderForm({
                 <>
                   Which search this provider&apos;s chat turns use: none, the
                   vendor&apos;s own tool, or a plugin Web-search backend.
-                  {/* Without this the same empty dropdown means both "none
-                    installed" and "we could not ask". */}
                   {!!webBackendsError && (
                     <span className="block text-destructive">
                       Couldn&apos;t load the installed backends, so this list
@@ -1265,13 +1145,6 @@ function ProviderForm({
                     {b.plugin ? ` (${b.plugin})` : ""}
                   </SelectItem>
                 ))}
-                {/* A stored id the catalog does not list — its plugin was
-                  dropped from `PLATYPUS_PLUGINS`, or the id was set through
-                  the API. It degrades to no search tools server-side, so it
-                  is named here rather than silently reading as "None".
-                  The "(not installed)" verdict needs the catalog to have
-                  actually loaded; while it is in flight or failed, the id is
-                  shown without a claim about it. */}
                 {formData.searchSource !== SEARCH_SOURCE_NONE &&
                   formData.searchSource !== SEARCH_SOURCE_NATIVE &&
                   !availableWebBackends.some(
@@ -1335,15 +1208,7 @@ function ProviderForm({
             type="submit"
             submitText={providerId ? "Update" : "Save"}
             pending={isSubmitting}
-            submitDisabled={
-              isSubmitting || !!extraBodyError
-              // No `canSubmit` gate: several fields here (apiMode, organization,
-              // project) render only for certain provider types, so a
-              // server-returned error can outlive the input that would retract
-              // it. Re-submitting simply re-validates. The Extra Body JSON error
-              // above is different: it is computed here as the user types and
-              // always clears itself.
-            }
+            submitDisabled={isSubmitting || !!extraBodyError}
             deleteVisible={!!providerId}
             deleteDisabled={isSubmitting}
             onDelete={openDeleteDialog}

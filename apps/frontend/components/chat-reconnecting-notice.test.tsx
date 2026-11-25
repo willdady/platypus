@@ -6,9 +6,7 @@ import {
 } from "./chat-reconnecting-notice";
 
 describe("ChatReconnectingNotice", () => {
-  // A dropped connection to a healthy run gets a line in the page, not the
-  // modal a failed turn gets (issue #648). The wording is quoted in the Chat
-  // documentation, so it is pinned here.
+  // why: the Chat docs quote this sentence, so it is pinned here
   it("says the reply is still being written", () => {
     render(<ChatReconnectingNotice />);
 

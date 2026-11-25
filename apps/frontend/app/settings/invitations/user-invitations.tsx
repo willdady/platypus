@@ -42,7 +42,6 @@ function UserInvitationsPage() {
     if (result.outcome === "success") {
       toast.success("Invitation accepted");
       void mutate();
-      // The sidebar's Organization list now has one more.
       void globalMutate(scopedUrl(backendUrl, "organizations", {}));
     } else {
       toast.error(result.message);

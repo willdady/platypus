@@ -39,20 +39,7 @@ import type {
 import { joinUrl } from "./utils";
 import { parseValidationErrors } from "./form-errors";
 
-/**
- * Every entity whose create and/or update body has a shared request schema in
- * `@platypus/schemas`, keyed by the collection name `writeEntity` takes. The
- * backend validates these with `strictRequest`, so an unknown key — a stale
- * `workspaceId` on an Agent, a read-only `isPinned` on a Chat — is a 400. A
- * literal entity name reaches this map and types the body; a dynamic one
- * falls back to `unknown`.
- *
- * Deliberately absent, so their bodies stay loose: sub-resource paths such as
- * `comments` or `attachments/:type`, `notifications` and its actions, and the
- * one-off action endpoints (`inbound-triggers/access`, `a2a/access`,
- * `skill-import/access`, …) that `writeAt` owns. The entity name alone cannot
- * select one of their schemas, and several carry no body at all.
- */
+// why: an entity absent here has no schema from which to type its body
 type EntityRequestSchemas = {
   agents: {
     create: typeof agentCreateSchema;
@@ -114,15 +101,8 @@ type EntityRequestSchemas = {
   };
 };
 
-/**
- * Every collection name whose writes have a shared request schema. A form
- * that names one of these as its `entity` has its payload checked against the
- * matching schema; an entity outside this set can only be written through a
- * form's own `write`, because there is no body type to check.
- */
 export type EntityWithRequestSchemas = keyof EntityRequestSchemas;
 
-/** A schema's accepted input, or `never` when the entity has no such schema. */
 type EntityBody<
   TEntity extends EntityWithRequestSchemas,
   TWrite extends "create" | "update",
@@ -130,42 +110,25 @@ type EntityBody<
   ? z.input<EntityRequestSchemas[TEntity][TWrite]>
   : never;
 
-/** The body an entity's create accepts, or `unknown` without a shared schema. */
 type EntityCreateData<TEntity extends string> =
   TEntity extends EntityWithRequestSchemas
     ? EntityBody<TEntity, "create">
     : unknown;
 
-/** The body an entity's update accepts, or `unknown` without one. */
 type EntityUpdateData<TEntity extends string> =
   TEntity extends EntityWithRequestSchemas
     ? EntityBody<TEntity, "update">
     : unknown;
 
-/**
- * The body a form for this entity may build: whichever of its create or update
- * bodies the write turns out to be. A form that names its entity has
- * `buildPayload` checked against this, so a body the backend's strict request
- * validation would refuse is a compile error rather than a 400.
- */
 export type EntityPayload<TEntity extends string> =
   EntityCreateData<TEntity> | EntityUpdateData<TEntity>;
 
-/**
- * A write's target scope (ADR-0007): an Organization-level (Shared) resource,
- * a resource inside one Workspace, or — when `orgId` itself is omitted — the
- * root `/organizations` collection, for writes to an Organization itself.
- * Presence of `workspaceId` is what distinguishes the scoped two — there is
- * deliberately no separate discriminant to get out of sync with it.
- */
 export type Scope =
   | { readonly orgId?: undefined; readonly workspaceId?: undefined }
   | { readonly orgId: string; readonly workspaceId?: undefined }
   | { readonly orgId: string; readonly workspaceId: string };
 
 export type WriteOptions<TEntity extends string = string> =
-  // A dynamic entity name has no schema to derive the body from; a literal one
-  // outside the map above has none either.
   string extends TEntity
     ? LooseWriteOptions
     : TEntity extends EntityWithRequestSchemas
@@ -173,20 +136,11 @@ export type WriteOptions<TEntity extends string = string> =
       : LooseWriteOptions;
 
 type LooseWriteOptions = {
-  /** Omit to create; provide to update or delete an existing entity. */
   readonly id?: string;
-  /** Omit only when `id` is set and the write is a delete. */
   readonly data?: unknown;
-  /** An update's verb: `PUT` (default) replaces, `PATCH` sends a partial. */
   readonly method?: "PUT" | "PATCH";
 };
 
-/**
- * Split by the presence of `id`, because that is what decides whether the
- * backend validates the body as a create or an update. A create cannot carry
- * an id, and an update's body comes from the update schema — which may differ
- * from the create's (a Chat's title and pin state, a Workspace's resources).
- */
 type EntityWriteOptions<TEntity extends EntityWithRequestSchemas> =
   | {
       readonly id?: undefined;
@@ -199,43 +153,21 @@ type EntityWriteOptions<TEntity extends EntityWithRequestSchemas> =
       readonly method?: "PUT" | "PATCH";
     };
 
-/**
- * What `JSON.parse` makes of `T`: every `Date` arrives as its ISO string.
- * `@platypus/schemas` describes the backend's stored `Date` shape, so a
- * response typed with a schema type goes through this at the fetch seam.
- */
 export type Serialized<T> = T extends Date
   ? string
-  : // A branded primitive (`string & { __brand }`) is still the primitive.
-    T extends string | number | boolean
+  : T extends string | number | boolean
     ? T
-    : // A UI message holds no `Date`, so is already its wire shape; and it is
-      // too deep to map.
+    : // why: a UI message holds no Date and is too deep to map
       T extends PlatypusUIMessage
       ? T
       : T extends object
         ? { [K in keyof T]: Serialized<T[K]> }
         : T;
 
-/**
- * The outcomes the backend's central `onError` (ADR-0010) can produce for a
- * write, plus the field-level shape `validate` returns for a 400 before it
- * ever reaches that seam. A caller destructures `outcome` and TypeScript
- * won't let it skip a case, so the five failure modes this ticket exists to
- * stop callers from re-deriving from a raw status code can't be missed.
- *
- * `forbidden` covers every 403, whether it's a `LockedError` (resource-state,
- * ADR-0010) or a middleware authorization refusal (ADR-0006) — the wire
- * envelope for both is `{ error: string }` with no field distinguishing them
- * (see ADR-0010's "Authorization is unchanged" note), so this outcome can't
- * claim to know which one occurred. Its default message stays neutral; a
- * backend message (locked or otherwise) always passes through unchanged.
- */
 export type WriteOutcome<TResult> =
   | {
       readonly outcome: "success";
       readonly data: Serialized<TResult>;
-      /** SWR keys this write should invalidate — the caller still calls `mutate`. */
       readonly revalidateKeys: readonly string[];
     }
   | { readonly outcome: "notFound"; readonly message: string }
@@ -244,9 +176,7 @@ export type WriteOutcome<TResult> =
   | {
       readonly outcome: "invalid";
       readonly message: string;
-      /** Dot-path keyed, same convention as `parseValidationErrors`. */
       readonly fieldErrors: Record<string, string>;
-      /** Present only for a `FileValidationError` 400 — the offending files. */
       readonly files?: string[];
     }
   | {
@@ -255,12 +185,6 @@ export type WriteOutcome<TResult> =
       readonly httpStatus?: number;
     };
 
-/**
- * Hands a form's payload to `write` instead of saving it, for a form that is
- * one step of a larger write — the Workspace wizard collects a Provider and a
- * Sandbox and creates them with the Workspace. The outcome `write` returns is
- * shown on the form as a save's would be; success keeps the user on it.
- */
 export type FormDraft = {
   write: (payload: Record<string, unknown>) => Promise<WriteOutcome<undefined>>;
   onBack: () => void;
@@ -275,11 +199,6 @@ const DEFAULT_MESSAGES = {
   error: "Request failed",
 } as const;
 
-/**
- * The Organization-vs-Workspace path shape (ADR-0007), exported so a caller
- * resolves it once per component and reuses it for both the list's read and
- * every write, instead of re-deriving the branch at each call site.
- */
 export function scopedPath(entity: string, scope: Scope): string {
   if (!scope.orgId) return `/${entity}`;
   return scope.workspaceId
@@ -287,12 +206,6 @@ export function scopedPath(entity: string, scope: Scope): string {
     : `/organizations/${scope.orgId}/${entity}`;
 }
 
-/**
- * The read-side counterpart to `writeEntity`'s path resolution: the same
- * base URL and Organization-vs-Workspace path shape, for a caller that only
- * needs a key to fetch (typically as an SWR key via `useScopedSWR`) rather
- * than a full write outcome.
- */
 export function scopedUrl(
   backendUrl: string,
   entity: string,
@@ -301,32 +214,16 @@ export function scopedUrl(
   return joinUrl(backendUrl, scopedPath(entity, scope));
 }
 
-/**
- * The two rows the auth shell reads and pages reuse. Named here, beside the
- * path resolution they feed, so the provider's key and a page's key can't
- * drift onto two cache entries.
- */
 export const membershipEntity = "membership";
 
 export function workspaceEntity(workspaceId: string): string {
   return `workspaces/${workspaceId}`;
 }
 
-/**
- * One Organization row, read from the root `/organizations` collection — so
- * it pairs with the `{}` scope, not with `{ orgId }`, which would nest it
- * under the Organization it *is*.
- */
 export function organizationEntity(orgId: string): string {
   return `organizations/${orgId}`;
 }
 
-/**
- * One Shared resource's attachment list, keyed by the query parameters that
- * select it. Four surfaces ask for it — the badge, the manage dialog, and the
- * pre-delete count check on each of the Agent and Skill lists — so the
- * spelling lives here rather than in each of them.
- */
 export function attachmentsEntity(
   resourceType: AttachmentResourceType,
   resourceId: string,
@@ -335,15 +232,8 @@ export function attachmentsEntity(
   return `attachments?${query.toString()}`;
 }
 
-/** The branch of {@link Scope} an Attachment exists in: one Workspace. */
 export type WorkspaceScope = Extract<Scope, { readonly workspaceId: string }>;
 
-/**
- * The write-side counterpart to {@link attachmentsEntity}: attaching a Shared
- * resource POSTs it to the Workspace's attachments collection. The three
- * surfaces that attach or detach share these two helpers so the address and
- * body are spelled once.
- */
 export async function attachResource(
   backendUrl: string,
   scope: WorkspaceScope,
@@ -355,7 +245,6 @@ export async function attachResource(
   });
 }
 
-/** The counterpart to {@link attachResource}: removing one Attachment. */
 export async function detachResource(
   backendUrl: string,
   scope: WorkspaceScope,
@@ -367,13 +256,6 @@ export async function detachResource(
   });
 }
 
-/**
- * The chat list's key, with the query parameters the callers vary it by.
- * Defined here so the sidebar's searched-and-limited read, a page's unpaged
- * count, and the prefix `mutate` that revalidates every variant of it can't
- * drift onto different spellings of the same collection. Parameterless it is
- * exactly that prefix — hence the params appended in a fixed order.
- */
 export function chatListEntity(params?: {
   readonly limit?: number;
   readonly search?: string;
@@ -385,24 +267,12 @@ export function chatListEntity(params?: {
   return suffix ? `chat?${suffix}` : "chat";
 }
 
-/**
- * The trigger list's key, with the one query parameter its readers vary it
- * by. Parameterless it is exactly the prefix every variant shares: the command
- * menu reads the list without fired One-offs, while the Triggers list, the
- * Workspace home and the Trigger runs screen read it with them.
- */
 export function triggerListEntity(params?: {
   readonly includeFired?: boolean;
 }): string {
   return params?.includeFired ? "triggers?includeFired=true" : "triggers";
 }
 
-/**
- * SWR's `mutate` filter for a collection's key: true for the parameterless key
- * and every query-string variant of it. One write can then refresh every
- * reader of a collection, however each spells its own variant. `entity` is the
- * parameterless key builder's output — `chatListEntity()`, `triggerListEntity()`.
- */
 export function matchesCollection(
   key: unknown,
   backendUrl: string,
@@ -440,8 +310,6 @@ async function performWrite<TResult, TData>(
   revalidateKeys: readonly string[],
   extraHeaders?: Record<string, string>,
 ): Promise<WriteOutcome<TResult>> {
-  // A Blob (a picked File) is sent as the raw body, typed by the browser. A
-  // DELETE carries a body only when given one, as Remove from Org is.
   const json = data !== undefined && !(data instanceof Blob);
   let response: Response;
   try {
@@ -512,18 +380,7 @@ async function performWrite<TResult, TData>(
   }
 }
 
-/**
- * Owns a single write (create, update, or delete) to the Platypus API: the
- * base URL, the Organization-vs-Workspace path shape, credentials, the HTTP
- * method, and the outcome mapping that mirrors the backend's ADR-0010 error
- * seam. Callers pass `id`/`data` rather than a method: `id` absent means
- * create (POST), `id` present with `data` means update (PUT), `id` present
- * without `data` means delete (DELETE).
- *
- * The entity type parameter comes first so a caller that names its result
- * type must name the entity too — otherwise supplying only `TResult` would
- * fall back to a `string` entity and silently lose the body check.
- */
+// why: entity first, or naming only TResult silently loses the body check
 export async function writeEntity<
   TEntity extends string = string,
   TResult = unknown,
@@ -551,23 +408,11 @@ export async function writeEntity<
 
 export type WriteAtOptions<TData> = {
   readonly method: "POST" | "PUT" | "PATCH" | "DELETE";
-  /** Omit for a write with no body. A `Blob` is sent as the raw body. */
   readonly data?: TData;
-  /** SWR keys this write should invalidate. Defaults to none. */
   readonly revalidateKeys?: readonly string[];
-  /**
-   * Extra request headers, merged over the JSON `Content-Type`. For the
-   * better-auth admin actions that must echo the browser's `Origin`.
-   */
   readonly headers?: Record<string, string>;
 };
 
-/**
- * Same transport and ADR-0010 outcome mapping as `writeEntity`, for the
- * handful of writes that don't fit its Organization/Workspace scope (ADR-0007)
- * — a user-scoped resource, or a one-off action endpoint. The caller supplies
- * the full URL, so there's no scope or entity path to get out of sync with it.
- */
 export async function writeAt<TResult = unknown, TData = unknown>(
   url: string,
   options: WriteAtOptions<TData>,

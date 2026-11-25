@@ -17,14 +17,10 @@ import {
 } from "@/test/list-test-harness";
 import { openDropdownMenu } from "@/test/test-utils";
 
-// --- Module mocks ------------------------------------------------------------
-
 vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("swr", () => swrMock);
 
 import { BlueprintsList } from "./blueprints-list";
-
-// --- Fixtures ----------------------------------------------------------------
 
 const blueprint: Blueprint = {
   id: "b1",
@@ -39,8 +35,6 @@ function renderBlueprints(blueprints: Blueprint[], menuItem?: string) {
 }
 
 beforeEach(resetListHarness);
-
-// --- Tests -------------------------------------------------------------------
 
 describe("BlueprintsList menu", () => {
   it("puts Edit before Apply to workspace", async () => {

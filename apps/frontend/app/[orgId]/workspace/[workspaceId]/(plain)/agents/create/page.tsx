@@ -13,8 +13,6 @@ async function AgentCreatePage({
 }) {
   const { orgId, workspaceId } = await params;
 
-  // Fetch tool sets from the server. A failed read is reported to the form
-  // rather than thrown, so the page still renders (issue #818).
   const toolSetsResult = await fetchToolSets(
     backendPath`/organizations/${orgId}/workspaces/${workspaceId}/tools`,
   );

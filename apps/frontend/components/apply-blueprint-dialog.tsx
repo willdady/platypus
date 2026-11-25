@@ -20,9 +20,6 @@ import { sortByName } from "@/lib/utils";
 import { useBackendUrl } from "@/components/auth-provider";
 import { useMutation } from "@/hooks/use-mutation";
 
-// Apply a Blueprint to an existing Workspace (ADR-0008). The macro is additive
-// and idempotent, so re-applying only attaches what is missing — we report the
-// outcome rather than treating an all-skipped run as an error.
 export function ApplyBlueprintDialog({
   orgId,
   blueprintId,

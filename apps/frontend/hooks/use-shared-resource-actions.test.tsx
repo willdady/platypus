@@ -17,13 +17,6 @@ import {
   useSharedDetach,
 } from "./use-shared-resource-actions";
 
-/**
- * The lists exercise the detach dialog itself, and the refusals (blockers,
- * attachment counts) through their own UI. These cover the detach flow's own
- * state — its binding, refusal and close — plus the two hook paths no list
- * test reaches: a Promote that lands, and a delete guard whose own check fails.
- */
-
 const skill = { id: "s1", name: "Deploy" };
 const scope = { orgId: "org1", workspaceId: "ws1" };
 
@@ -189,8 +182,6 @@ describe("useSharedDeleteGuard", () => {
     expect(onAllowed).toHaveBeenCalledWith(skill);
   });
 
-  // A refused or failed check says nothing about the attachments: reading it
-  // as "none" would go to a delete the backend then refuses.
   it.each([
     ["is refused", () => stubRejectedSave("Forbidden", 403)],
     ["errors", () => stubRejectedSave("Internal error", 500)],

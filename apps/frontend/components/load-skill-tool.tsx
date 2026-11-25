@@ -9,10 +9,6 @@ import {
   toolRowIconSlotClassName,
 } from "./ai-elements/tool";
 
-/**
- * `loadSkill` and `readSkillFile` are enumerated in `CustomUITools`, so their
- * parts carry real input/output types — no assertion needed to read them.
- */
 type LoadSkillToolPart = Extract<
   ToolUIPart<CustomUITools>,
   { type: "tool-loadSkill" }
@@ -23,11 +19,6 @@ type ReadSkillFileToolPart = Extract<
   { type: "tool-readSkillFile" }
 >;
 
-/**
- * A Skill Tool call is a one-shot status line, not an execution record with a
- * body worth reading, so it borrows the tool disclosure's row and nothing
- * else: no chevron, nothing to expand. Deliberately not a `Tool`.
- */
 function SkillToolRow({
   toolPart,
   label,
@@ -35,7 +26,6 @@ function SkillToolRow({
   toolPart: LoadSkillToolPart | ReadSkillFileToolPart;
   label: string;
 }) {
-  // A result the backend truncated arrives as a string, whatever its type says.
   const output: unknown = toolPart.output;
   const errorText =
     toolPart.errorText ||

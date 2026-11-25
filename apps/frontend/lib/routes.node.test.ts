@@ -311,7 +311,7 @@ describe("sign-in next", () => {
   });
 });
 
-// Must agree with the `(sidebar)` / `(plain)` route groups under a Workspace.
+// why: must agree with the (sidebar) / (plain) route groups under a Workspace
 describe("isWorkspaceSidebarRoute", () => {
   const routes = workspaceRoutes("org1", "ws1");
 

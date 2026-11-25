@@ -31,17 +31,11 @@ const backendSearch: NormalizedWebToolResult = {
   results: [],
 };
 
-/** The card's body is a closed `Collapsible` until clicked open. */
 function openCard() {
   return fireEvent.click(screen.getByRole("button"));
 }
 
-// Issue #469. A plugin search is the tool most likely to take several seconds,
-// so the card that heads it is where the elapsed time is worth reading.
 describe("WebToolCard duration", () => {
-  // Persisted, the figure rides on the part; live, the SDK strips the part's
-  // metadata mid-turn and it comes off the message instead. Both must read the
-  // same — `lib/tool-duration.node.test.ts` covers the formatting itself.
   it.each([
     [
       "recorded on the part",
@@ -72,8 +66,6 @@ describe("WebToolCard duration", () => {
   });
 });
 
-// Issue #525. The card must be uniform whichever search ran, and citations
-// must not widen to native results.
 describe("WebToolCard kinds", () => {
   it("renders null when the part carries no normalized result", () => {
     const { container } = render(

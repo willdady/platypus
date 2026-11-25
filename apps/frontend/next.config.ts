@@ -10,20 +10,11 @@ const basePath = process.env.BASE_PATH || undefined;
 
 const nextConfig: NextConfig = {
   basePath,
-  // `next/link` and the router apply `basePath` themselves; `withBasePath`
-  // reads this for everything else (window.location, absolute links, the
-  // manifest).
-  // `APP_VERSION` is the release, read from the root package.json the release
-  // tooling bumps. Inlined at build; the About page is its only reader.
   env: {
     NEXT_PUBLIC_BASE_PATH: basePath ?? "",
     APP_VERSION: rootPackage.version,
   },
   poweredByHeader: false,
-  // A baseline for every response. `frame-ancestors` is the modern spelling of
-  // X-Frame-Options; both are sent for older browsers. `frame-src 'none'`
-  // keeps the Artifact frame from navigating itself elsewhere; it does not
-  // block `srcDoc` frames, and nothing else on the page embeds one (ADR-0047).
   headers() {
     return Promise.resolve([
       {
@@ -41,10 +32,6 @@ const nextConfig: NextConfig = {
     ]);
   },
   output: "standalone",
-  // @swc/helpers 0.5.23 added a "module-sync" export condition that resolves
-  // ahead of "default". Node >=22.10 honours it for require(), so next/dist
-  // loads the esm/ helpers at runtime while the standalone file tracer still
-  // only follows the cjs/ ones and leaves esm/ out of the image.
   outputFileTracingIncludes: {
     "**/*": [
       "../../node_modules/.pnpm/@swc+helpers@*/node_modules/@swc/helpers/esm/**",

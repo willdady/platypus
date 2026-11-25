@@ -7,10 +7,6 @@ import { Button } from "@/components/ui/button";
 import { RouteFallback } from "@/components/route-error";
 import { orgRoutes } from "@/lib/routes";
 
-/**
- * An Organization settings page that doesn't exist — a deleted record, a
- * stale link — shown inside the settings shell, so the menu stays in reach.
- */
 export function OrgSettingsNotFound() {
   const { orgId } = useParams<{ orgId: string }>();
   return (

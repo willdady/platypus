@@ -31,9 +31,6 @@ const RETRACTABLE_FIELDS = ["email", "workspaceName", "blueprintIds"] as const;
 const INITIAL_DATA = {
   email: "",
   workspaceName: "",
-  // The ordered set of blueprints applied to the provisioned workspace on
-  // accept (ADR-0009). Selection order is application order; on conflicting
-  // settings the later blueprint wins (last-write-wins).
   blueprintIds: [] as string[],
 };
 
@@ -55,12 +52,9 @@ export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
     retractableFields: RETRACTABLE_FIELDS,
     buildPayload: (data) => ({
       email: data.email,
-      // Optional; the workspace provisioned on accept defaults to
-      // "<member name>'s Workspace" when blank (ADR-0008).
       ...(data.workspaceName.trim()
         ? { workspaceName: data.workspaceName.trim() }
         : {}),
-      // The ordered set of blueprints applied on accept (ADR-0009).
       ...(data.blueprintIds.length ? { blueprintIds: data.blueprintIds } : {}),
     }),
     conflictField: "email",
@@ -137,8 +131,6 @@ export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
             />
           </div>
 
-          {/* ADR-0009: the invitation carries an ordered set of blueprints,
-              applied to the provisioned workspace on accept. */}
           <Field data-invalid={!!validationErrors.blueprintIds}>
             <FieldLabel htmlFor="blueprints">Blueprints (optional)</FieldLabel>
             <FieldDescription>

@@ -9,7 +9,6 @@ import {
   stubWideViewport,
 } from "@/test/panel-split-harness";
 
-/** A panel whose state is only local to it, to catch a remount. */
 function PickedVersion() {
   const [version, setVersion] = useState(1);
   return (
@@ -57,7 +56,7 @@ describe("the split's divider", () => {
     divider.focus();
     fireEvent.keyDown(divider, { key: "ArrowLeft" });
 
-    // `toHaveValue` reads form controls; a separator carries `aria-valuenow`.
+    // why: a separator carries aria-valuenow, not a form value
     // eslint-disable-next-line jest-dom/prefer-to-have-value
     expect(divider).not.toHaveAttribute("aria-valuenow", defaultPosition);
 
@@ -69,7 +68,6 @@ describe("the split's divider", () => {
 });
 
 describe("the Chat's place in the row", () => {
-  /** A Chat whose draft is only local to it, to catch a remount. */
   function Draft() {
     const [draft, setDraft] = useState(0);
     return (
@@ -97,8 +95,6 @@ describe("the Chat's place in the row", () => {
       </ChatArtifactSplit>,
     );
 
-    // Same node, still holding its draft: opening the panel puts it inside the
-    // split rather than moving it to another position in the tree.
     expect(screen.getByRole("button", { name: "Draft 1" })).toBe(draft);
 
     rerender(
@@ -115,7 +111,6 @@ describe("the row's sizes", () => {
   const panelFlex = (id: string) =>
     parseFloat(screen.getByTestId(id).style.flexGrow);
 
-  /** Lets the primitive's own observers and the component's frame re-apply. */
   async function settle() {
     await act(async () => {
       await new Promise(requestAnimationFrame);
@@ -140,7 +135,7 @@ describe("the row's sizes", () => {
     );
     await settle();
 
-    // The split's old minimum must not clamp the closed panel back open.
+    // why: the split's old minimum must not clamp the closed panel back open
     expect(panelFlex("chat")).toBeCloseTo(100, 1);
     expect(panelFlex("artifact")).toBeCloseTo(0, 1);
   });
@@ -170,8 +165,6 @@ describe("the split's view of the panel", () => {
       "data-presentation",
       "overlay",
     );
-    // Same node, still reading its picked version: the panel never left the
-    // tree, it only changed presentation.
     expect(screen.getByRole("button", { name: "Version 2" })).toBe(picked);
   });
 });

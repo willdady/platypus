@@ -42,7 +42,6 @@ describe("layoutTimeline", () => {
       ["a", 0],
       ["b", 30],
     ]);
-    // The span ends where the last bar ends — a's 200ms, not b's later start.
     expect(totalMs).toBe(200);
   });
 
@@ -82,8 +81,6 @@ describe("layoutTimeline", () => {
     expect(rows[0].end).toEqual({ kind: "running", durationMs: 750 });
   });
 
-  // The sweep closes a crashed run's events without a duration; nothing can
-  // say when they ended, so no bar is drawn to "now" or anywhere else.
   it("marks a still-open event under a terminal run as unknown-duration", () => {
     const { rows, totalMs } = layoutTimeline(
       [
@@ -189,8 +186,6 @@ describe("nextSinceSeq", () => {
     ).toBe(4);
   });
 
-  // The endpoint filters by sequence number and an event is patched in place
-  // when it closes, so asking from the newest event would never see the patch.
   it("asks from just below the oldest still-running event", () => {
     expect(
       nextSinceSeq([

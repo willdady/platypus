@@ -6,17 +6,9 @@ import {
   TableSkeleton,
 } from "@/components/list-skeletons";
 
-/**
- * What the two Org Admin oversight tables share (#1851): the columns, the
- * loading placeholder and the Workspace/Owner cell. Their revoke hook lives
- * in `hooks/use-org-revoke`. The components stay separate — A2A's nested
- * token rows differ enough that one generic table would be harder to read.
- */
-
-/** The loaded table's width, from its widest row. */
+// why: columns and skeleton shared, tables separate — A2A's nested token rows differ
 export const OVERSIGHT_TABLE_CLASS = "min-w-[720px]";
 
-/** The columns both tables show, with their own subject first. */
 export function oversightColumns(firstHeader: string) {
   return [
     firstHeader,
@@ -28,7 +20,6 @@ export function oversightColumns(firstHeader: string) {
   ] as const;
 }
 
-/** The loading placeholder for either oversight table, headings and all. */
 export function OversightTableSkeleton({
   firstHeader,
 }: {
@@ -61,7 +52,6 @@ export function OversightTableSkeleton({
   );
 }
 
-/** Where the row lives and whose it is: the Owner, not the Admin. */
 export function WorkspaceOwnerCell({
   workspaceName,
   ownerName,
@@ -69,10 +59,9 @@ export function WorkspaceOwnerCell({
   workspaceName: string;
   ownerName: string;
 }) {
+  // why: the Owner, not the Admin — the run acts as them and a revoke notifies them
   return (
     <TableCell>
-      {/* The Owner, not the Admin: the run acts as them and a revoke notifies
-          them. */}
       <div className="flex flex-col">
         <span>{workspaceName}</span>
         <span className="text-xs text-muted-foreground">{ownerName}</span>

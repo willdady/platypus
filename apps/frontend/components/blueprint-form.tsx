@@ -39,13 +39,9 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { orgRoutes } from "@/lib/routes";
 
-// The composer lists every Shared resource the org owns, grouped by type. A
-// Blueprint may only list org-scoped resources, so these org collections are
-// exactly the eligible set (ADR-0008).
 const RESOURCE_GROUPS: {
   type: AttachmentResourceType;
   label: string;
-  /** The plural noun a failed read names: "MCP servers". */
   subject: string;
   collection: string;
   icon: typeof Bot;
@@ -121,10 +117,6 @@ function ResourceGroup({
         </CardTitle>
       </CardHeader>
       <CardContent>
-        {/* Each group reads on its own, so each holds its own placeholder —
-            until its list lands, "none yet" would be a false claim. A failed
-            read says so, and offers to read again, rather than claiming the
-            organization has none. */}
         {isLoading ? (
           <SwitchGridSkeleton rows={2} />
         ) : error && !data ? (
@@ -163,7 +155,6 @@ function ResourceGroup({
   );
 }
 
-/** A section heading and its one-line lede, as the form's `h2` + `p`. */
 function SectionHeadingSkeleton() {
   return (
     <>
@@ -222,7 +213,6 @@ const RETRACTABLE_FIELDS = [
 const INITIAL_DATA = {
   name: "",
   description: "",
-  // Tier 2 pointer-settings stamped onto the workspace on apply (ADR-0008).
   context: "",
   taskModelProviderId: null as string | null,
   memoryExtractionProviderId: null as string | null,
@@ -240,12 +230,9 @@ function BlueprintForm({
 }) {
   const returnPath = orgRoutes(orgId).settings.blueprints;
 
-  // Org-scoped providers — the eligible set for Tier 2 pointer-settings, which
-  // may only reference Shared resources (ADR-0008).
   const { results: providers, isLoading: providersLoading } =
     useScopedList<Provider>("providers", { orgId });
 
-  // Selected items as a Set of `${type}:${id}` keys for cheap toggling.
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const router = useRouter();
@@ -274,7 +261,7 @@ function BlueprintForm({
       memoryExtractionProviderId: blueprint.memoryExtractionProviderId ?? null,
       memoryEmbeddingProviderId: blueprint.memoryEmbeddingProviderId ?? null,
     }),
-    // Sorted keys: deepEqual compares plain values, not Sets.
+    // why: deepEqual compares plain values, so the Set goes in sorted
     sideState: [...selected].sort(),
     onSeed: (blueprint) =>
       setSelected(
@@ -295,8 +282,6 @@ function BlueprintForm({
         name: data.name,
         description: data.description || undefined,
         items,
-        // Tier 2 pointer-settings (ADR-0008). Null clears the slot; on apply a
-        // null slot leaves the workspace's existing value untouched.
         context: data.context || null,
         taskModelProviderId: data.taskModelProviderId,
         memoryExtractionProviderId: data.memoryExtractionProviderId,
@@ -328,9 +313,6 @@ function BlueprintForm({
       else next.delete(key);
       return next;
     });
-    // A Tier 2 pointer-setting can only target a provider this blueprint also
-    // attaches. Removing a provider from the composer clears any Tier 2 slot
-    // pointing at it, so we never stamp a workspace with an unattached provider.
     if (type === "provider" && !on) {
       setFormData((prev) => ({
         ...prev,
@@ -348,11 +330,6 @@ function BlueprintForm({
     }
   };
 
-  // Tier 2 settings may only reference a provider the blueprint attaches (a
-  // selected "provider:<id>" item). The memory slots additionally require the
-  // provider to expose the relevant model, and each select is disabled when it
-  // has no eligible provider, so an empty "Leave unset"-only dropdown never
-  // shows.
   const attachedProviders = providers.filter((p) =>
     selected.has(itemKey("provider", p.id)),
   );
@@ -501,8 +478,6 @@ function BlueprintForm({
   return (
     <DetailFormState
       {...loadState}
-      // The three provider selects resolve their stored ids against this
-      // list; without it they'd render blank over a saved Blueprint.
       isLoading={providersLoading || loadState.isLoading}
       subject="blueprint"
       skeleton={

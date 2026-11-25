@@ -20,15 +20,12 @@ import {
 } from "@/lib/backend-schema-fields";
 
 type SandboxSchemaFieldsProps = {
-  /** `config` or `credentials` — the request slice, and the error-key root. */
   slice: BackendSchemaSlice;
   schema: BackendJsonSchema;
-  /** Seed values (stored config) plus what the form holds. */
   values: Record<string, unknown>;
   onChange: (key: string, value: unknown) => void;
   errors: FormErrors;
   disabled: boolean;
-  /** Credentials are stored and never returned, so blank keeps what is there. */
   hasStoredCredentials?: boolean;
 };
 
@@ -37,7 +34,6 @@ const CONTROL_IDS: Record<BackendSchemaSlice, string> = {
   credentials: "sandbox-credentials",
 };
 
-/** What a field shows before it is first edited: its value, else its default. */
 function displayValue(field: BackendSchemaField, value: unknown): unknown {
   return value === undefined ? field.defaultValue : value;
 }
@@ -132,12 +128,6 @@ function SchemaField({
   );
 }
 
-/**
- * The fields a plugin Sandbox backend declares, rendered from the JSON Schema
- * the catalog carries. Docker and SSH keep their bespoke forms; every other
- * backend gets this one. The supported widgets are string, number, boolean,
- * enum and secret string — a property outside them is not rendered.
- */
 function SandboxSchemaFields({
   slice,
   schema,
@@ -149,8 +139,7 @@ function SandboxSchemaFields({
 }: SandboxSchemaFieldsProps) {
   const fields = fieldsFromSchema(schema, slice);
   const idPrefix = CONTROL_IDS[slice];
-  // An issue rooted at the slice (rather than a field under it) has no input
-  // to sit beside; show it above the fields rather than losing it.
+  // why: a slice-rooted issue has no field to sit beside, so it shows above them
   const fieldMessages = new Set(
     fields
       .map((field) => errors[`${slice}.${field.key}`])

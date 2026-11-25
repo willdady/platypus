@@ -37,13 +37,6 @@ import { ListError, ListState } from "./list-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LoadingRegion } from "./list-skeletons";
 
-/**
- * A `createArtifact` call's content before it is stored. The viewer shows it
- * while the call streams, and keeps showing it until the saved version has been
- * read, so opening or completing the call does not jump the panel from one
- * rendering to another. A failed call never presents its partial content as a
- * saved Artifact.
- */
 export type ArtifactLive = {
   status: "streaming" | "failed";
   title?: string;
@@ -53,7 +46,6 @@ export type ArtifactLive = {
   error?: string;
 };
 
-/** The language a Preview tab's fenced block is rendered as. */
 function previewLanguage(
   type: ArtifactType | undefined,
   language?: string | null,
@@ -71,18 +63,12 @@ function previewLanguage(
     case "svg":
       return "svg";
     default: {
-      // A new ArtifactType must decide its own Preview language, not fall to text.
       const exhaustive: never = type;
       return exhaustive;
     }
   }
 }
 
-/**
- * The language a Code tab's fenced block is highlighted as. A Mermaid block is
- * `text` here rather than `mermaid`, because the renderer draws a `mermaid`
- * fence as a diagram — the opposite of showing its source.
- */
 function codeTabLanguage(
   type: ArtifactType | undefined,
   language?: string | null,
@@ -90,15 +76,6 @@ function codeTabLanguage(
   return type === "mermaid" ? "text" : previewLanguage(type, language);
 }
 
-/**
- * The one Artifact viewer: the Chat's side panel and the full-page view. It
- * owns the Preview and Code tabs, copy and download for every type, the
- * version picker and the read-only mark on an older version. Markdown, code and Mermaid render
- * in the app's own DOM; HTML and SVG run only inside the Artifact frame, so an
- * older version previews by reading that version first. While a `createArtifact`
- * call streams it takes the partial content as `live`; a stored version always
- * wins once read.
- */
 export function ArtifactViewer({
   orgId,
   workspaceId,
@@ -111,20 +88,15 @@ export function ArtifactViewer({
 }: {
   orgId: string;
   workspaceId: string;
-  /** The stored Artifact; absent while a call's content is not yet stored. */
   artifactId?: string;
-  /** The version a Chat Card opens; omitted reads the latest. */
   version?: number;
   live?: ArtifactLive;
   onClose?: () => void;
-  /** The Chat panel's expand toggle; the full-page view has none. */
   fullScreen?: ArtifactFullScreen;
   className?: string;
 }) {
   const scope = { orgId, workspaceId };
-  // A version the reader picks in the panel. It is remembered only for the
-  // Artifact and opening version it was picked against: when a Card opens
-  // another version, the prop wins again without an effect resetting it.
+  // why: a picked version is remembered only for the version it was picked against
   const versionKey = `${artifactId}:${version ?? "latest"}`;
   const [picked, setPicked] = useState<{
     key: string;
@@ -361,30 +333,20 @@ export function ArtifactViewer({
   );
 }
 
-/**
- * A Mermaid Artifact is one diagram, so its block takes the panel's height
- * rather than the renderer's in-message cap. The selectors are the renderer's
- * own `data-streamdown` marks.
- */
 const MERMAID_FILL = cn(
   "flex flex-col",
   "[&_[data-streamdown=mermaid-block]]:my-0 [&_[data-streamdown=mermaid-block]]:min-h-0 [&_[data-streamdown=mermaid-block]]:flex-1",
   "[&_[data-streamdown=mermaid-block]>div:last-child]:min-h-0 [&_[data-streamdown=mermaid-block]>div:last-child]:flex-1",
   "[&_[data-streamdown=mermaid]]:h-full [&_[data-streamdown=mermaid]]:max-h-none",
-  // The pan-and-zoom area sets its height inline to the diagram's own.
   "[&_[data-streamdown=mermaid]>div]:!h-full [&_[data-streamdown=mermaid]>div]:!max-h-none",
 );
 
-/** The same for a code block: it takes the panel's height, not the
- * renderer's 400px cap, before its content scrolls. */
 const CODE_FILL = cn(
   "flex flex-col",
   "[&_[data-streamdown=code-block]]:my-0 [&_[data-streamdown=code-block]]:min-h-0 [&_[data-streamdown=code-block]]:flex-1",
   "[&_[data-streamdown=code-block-body]]:min-h-0 [&_[data-streamdown=code-block-body]]:flex-1 [&_[data-streamdown=code-block-body]]:!max-h-none",
 );
 
-/** Whether there is a Preview to show: not for an unknown type, nor for
- * partial HTML or SVG, which has no complete document to run. */
 function isPreviewAvailable(
   type: ArtifactType | undefined,
   streaming: boolean,
@@ -392,14 +354,6 @@ function isPreviewAvailable(
   return type !== undefined && !(streaming && isFramedArtifactType(type));
 }
 
-/**
- * The Preview and Code panels for one piece of content; their tab controls sit
- * in the frame's header. Markdown, code and Mermaid preview from the first
- * byte. A stored HTML or SVG Artifact runs in the Artifact frame; while a call
- * is still streaming, partial HTML or SVG stays on source — there is no
- * complete document to run, and its approved origins are only known once the
- * saved version is read.
- */
 function ArtifactTabs({
   type,
   language,
@@ -413,7 +367,6 @@ function ArtifactTabs({
   content: string;
   scriptOrigins?: readonly string[];
   storageBaseUrl?: string | null;
-  /** True for a call that has not been saved yet. */
   streaming?: boolean;
 }) {
   const framed = !streaming && type !== undefined && isFramedArtifactType(type);
@@ -434,8 +387,6 @@ function ArtifactTabs({
             scriptOrigins={scriptOrigins}
           />
         ) : type === "markdown" ? (
-          // A reading measure: full screen and the full-page view are far
-          // wider than prose reads well at; the side panel is narrower already.
           <ArtifactMarkdown
             content={content}
             storageBaseUrl={storageBaseUrl}
@@ -461,7 +412,6 @@ function ArtifactTabs({
   );
 }
 
-/** Whether the Chat panel covers the Chat, and the toggle that flips it. */
 export type ArtifactFullScreen = {
   readonly active: boolean;
   readonly onToggle: () => void;
@@ -479,11 +429,6 @@ function ArtifactFrame({
 }: {
   title: string;
   subtitle?: ReactNode;
-  /**
-   * Set while the body is `ArtifactTabs`: the frame then owns the tab state
-   * and draws the Preview and Code controls beside the subtitle, so they cost
-   * no row of their own.
-   */
   tabs?: { type: ArtifactType | undefined; streaming: boolean };
   actions?: ReactNode;
   onClose?: () => void;
@@ -503,13 +448,9 @@ function ArtifactFrame({
           >
             {title}
           </h2>
-          {/* The buttons are taller than the title's line; the negative margin
-          keeps them from growing the row. */}
           <div className="-my-1.5 flex shrink-0 items-center gap-1">
             {actions}
             {fullScreen && (
-              // Below `lg` the panel already covers the Chat, so there is
-              // nothing to expand.
               <Button
                 type="button"
                 size="icon-sm"
@@ -528,8 +469,7 @@ function ArtifactFrame({
                 type="button"
                 size="icon-sm"
                 variant="ghost"
-                // In full screen, Exit full screen is the way out; below `lg`
-                // that button is hidden, so Close stays there.
+                // why: below lg Exit full screen is hidden, so Close stays there
                 className={fullScreen?.active ? "lg:hidden" : undefined}
                 aria-label="Close Artifact"
                 onClick={onClose}

@@ -28,9 +28,6 @@ describe("parseValidationErrors", () => {
     expect(parseValidationErrors({ error: "string" })).toEqual({});
   });
 
-  // A rule over a list reports the row it failed on. Keyed on the first path
-  // segment alone, every row's message landed on the same key and all but one
-  // was lost — two bad rows meant one message and one fix per round-trip.
   it("keys an error inside a list on its full path", () => {
     const result = parseValidationErrors({
       error: [
@@ -43,9 +40,6 @@ describe("parseValidationErrors", () => {
     expect(result["modelIds.2.alias"]).toBe("Alias 'DUP' duplicates");
   });
 
-  // Not every form knows about paths. Each issue also reports under its
-  // top-level field so a form that only reads flat names still shows something
-  // rather than failing silently.
   it("also reports a nested error under its top-level field", () => {
     const result = parseValidationErrors({
       error: [{ path: ["modelIds", 1, "alias"], message: "Alias duplicates" }],
@@ -54,8 +48,6 @@ describe("parseValidationErrors", () => {
     expect(result.modelIds).toBe("Alias duplicates");
   });
 
-  // An error against the list itself is the better message for the list's own
-  // slot, whichever order the two arrive in.
   it("prefers an error on the field itself over one derived from a row", () => {
     const rowFirst = parseValidationErrors({
       error: [
@@ -87,9 +79,6 @@ describe("retractFieldError", () => {
     ).toEqual({ apiKey: "Bad" });
   });
 
-  // The edit that fixes a row is an edit to the field the row lives in, so the
-  // rows' errors have to go with it. A form gating Submit on the error map
-  // stays stuck forever otherwise.
   it("drops errors nested under the field", () => {
     const errors = {
       "modelIds.1.alias": "Duplicate",
@@ -125,8 +114,6 @@ describe("retractExactKeys", () => {
     });
   });
 
-  // Unlike retractFieldError, a row-scoped clear must not sweep siblings
-  // sharing the same top-level field name.
   it("leaves sibling rows under the same top-level field alone", () => {
     const errors = {
       "headers.X-Foo": "Too long",
@@ -160,9 +147,6 @@ describe("canSubmitForm", () => {
     ).toBe(false);
   });
 
-  // The #571 invariant: a server-returned error keyed to a field the form
-  // never declared has no way to be retracted by editing, so it must never
-  // gate Save — the only escape from that would be reloading the page.
   it("never blocks submit on an error whose key no field can retract", () => {
     expect(canSubmitForm({ events: "At least one event required" }, [])).toBe(
       true,
@@ -172,9 +156,6 @@ describe("canSubmitForm", () => {
     );
   });
 
-  // Regression for #559: a Webhook save rejected on `events` — a field the
-  // form declares — must leave Save usable once `events` is edited (i.e. once
-  // its error is retracted), not disabled forever.
   it("mirrors the #559 webhook round trip: retract, then submit is allowed again", () => {
     const retractable = ["name", "url", "enabled", "events", "headers"];
     let errors: FormErrors = { events: "At least one event is required" };

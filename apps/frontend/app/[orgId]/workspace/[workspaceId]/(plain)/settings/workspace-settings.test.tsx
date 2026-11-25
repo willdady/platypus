@@ -1,7 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 
-// The form is its own component with its own tests; this screen only places it.
 vi.mock("@/components/workspace-form", () => ({
   WorkspaceForm: () => <div data-testid="workspace-form" />,
 }));

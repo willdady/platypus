@@ -6,14 +6,8 @@ import { cn } from "@/lib/utils";
 import { ArrowLeft } from "lucide-react";
 
 type BackButtonProps = {
-  /**
-   * Where to land when there is no browser history to go back to (a direct
-   * link). Omitted, the button only ever steps back.
-   */
   fallbackHref?: string;
-  /** `page` is the labelled button above a resource page; `header` is the icon button in a shell header. */
   variant?: "page" | "header";
-  /** Merged onto the `page` variant's button. */
   className?: string;
 };
 
@@ -25,8 +19,6 @@ export function BackButton({
   const router = useRouter();
 
   const handleClick = () => {
-    // If there's no history (e.g. direct link), go to fallback
-    // Otherwise go back
     if (fallbackHref && window.history.length <= 1) {
       router.push(fallbackHref);
     } else {

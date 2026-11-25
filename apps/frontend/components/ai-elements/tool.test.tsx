@@ -10,28 +10,19 @@ import {
   ToolOutput,
 } from "./tool";
 
-// The header label is the only place a tool name is shown as prose, and the names
-// reaching it are not all camelCase: provider-native search and the Web-search
-// backend tools are snake_case by design (ADR-0014), and most MCP servers namespace
-// with underscores too.
 describe("humanizeToolType", () => {
   it.each([
     ["tool-getBoardState", "Get board state"],
     ["tool-web_search", "Web search"],
     ["tool-read_url", "Read url"],
     ["tool-fsRead", "Fs read"],
-    // MCP servers commonly join a namespace with a double underscore.
     ["tool-github__create_issue", "Github create issue"],
-    // The prefix is optional: `dynamic-tool` parts pass a bare tool name.
     ["web_search", "Web search"],
   ])("renders %s as %s", (type, expected) => {
     expect(humanizeToolType(type)).toBe(expected);
   });
 });
 
-// Issue #834. A tool call is an execution record drawn as a Thinking-style
-// disclosure: collapsed until clicked, never opened or closed on the reader's
-// behalf, and safe to nest.
 describe("Tool disclosure", () => {
   const renderTool = (
     props: Partial<ComponentProps<typeof ToolHeader>> = {},
@@ -57,7 +48,6 @@ describe("Tool disclosure", () => {
     expect(screen.getByText("Body")).toBeInTheDocument();
   });
 
-  // Unlike Thinking, a tool that finishes does not open or close itself.
   it("stays collapsed when the call moves from running to completed", () => {
     const { rerender } = render(
       <Tool>
@@ -96,8 +86,6 @@ describe("Tool disclosure", () => {
     expect(container.firstElementChild?.className).not.toMatch(/\bborder\b/);
   });
 
-  // Issue #691: MCP names are long and the row is narrow on a phone. The label
-  // truncates rather than overflowing, and the whole name stays reachable.
   it("truncates a long name and keeps the full name on the element", () => {
     const name = "cloudflare_agent_sandbox__execute_javascript_in_worker";
     renderTool({ title: name });
@@ -108,8 +96,6 @@ describe("Tool disclosure", () => {
     expect(screen.getByRole("button")).toHaveClass("min-w-0");
   });
 
-  // A Sub-Agent's body embeds further disclosures. Each chevron answers only
-  // to its own row: opening the outer one leaves the inner closed and unturned.
   it("keeps a nested disclosure's chevron independent of its parent", () => {
     renderTool(
       { title: "Outer" },
@@ -145,9 +131,6 @@ describe("Tool disclosure", () => {
   });
 });
 
-// Issue #899/#922. The panels are plain `<pre>`s that scroll on their own
-// axis: a long unbroken value used to be clipped by the highlighter's
-// `overflow-hidden` wrappers with no way to reach the rest of it.
 describe("Tool parameter and result panels", () => {
   const longUrl = `https://example.com/${"x".repeat(400)}`;
 
@@ -157,8 +140,6 @@ describe("Tool parameter and result panels", () => {
 
     expect(pre).toHaveTextContent(`"url": "${longUrl}"`);
     expect(pre).toHaveClass("overflow-auto");
-    // The panel's own scroll is only reachable if nothing above it clips:
-    // the section wrapper used to carry `overflow-hidden`.
     expect(pre?.parentElement).not.toHaveClass("overflow-hidden");
   });
 
@@ -172,10 +153,6 @@ describe("Tool parameter and result panels", () => {
     expect(pre).toHaveClass("overflow-auto");
   });
 
-  // The two panels are a pair and must read as one. `ToolContent` mutes its
-  // whole subtree, which is right for the section headings and wrong for the
-  // data; only Result used to say otherwise, so Parameters came out grey
-  // beside a black Result.
   it("draws Parameters and Result in the same colour", () => {
     const { container } = render(
       <Tool defaultOpen>

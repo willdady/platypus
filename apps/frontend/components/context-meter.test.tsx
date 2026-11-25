@@ -59,7 +59,7 @@ describe("ContextMeterEntrance", () => {
   });
 
   it("animates a mobile meter that becomes available without restarting on rerender", async () => {
-    // The 0.5s tween is Motion's to run; where it starts and lands is ours.
+    // why: the tween is Motion's; where it starts and lands is ours
     MotionGlobalConfig.instantAnimations = true;
     const view = renderPresence(false);
 
@@ -72,9 +72,7 @@ describe("ContextMeterEntrance", () => {
     );
 
     const entrance = entranceFor("meter");
-    // The collapsed row starts at the height of its own `-mb-3` bleed, so the
-    // two cancel and it occupies nothing without pulling the toolbar upward.
-    // 0.75rem, which the computed style reports in px.
+    // why: 0.75rem of bleed reports as 12px in the computed style
     expect(entrance).toHaveStyle({ height: "12px", opacity: "0" });
 
     await waitFor(() =>
@@ -138,9 +136,6 @@ describe("ContextMeter", () => {
   });
 
   it("renders nothing when occupancy is unknown", () => {
-    // Absent and null say the same thing — the Provider reported no usage for
-    // the last call of the turn — and neither is a number a reader could
-    // interpret without a denominator.
     for (const occupancy of [undefined, null]) {
       const { container } = render(
         <ContextMeter occupancy={occupancy} contextWindow={128_000} />,
@@ -152,12 +147,10 @@ describe("ContextMeter", () => {
   it("shows the percentage and both token figures", () => {
     render(<ContextMeter occupancy={42_000} contextWindow={128_000} />);
 
-    // Both numbers, not only a bar: 33% of 128k and 33% of 8k are different
-    // situations and a bar alone cannot tell them apart.
     expect(screen.getByText(/42K/)).toBeInTheDocument();
     expect(screen.getByText(/128K/)).toBeInTheDocument();
     expect(screen.getByText(/33%/)).toBeInTheDocument();
-    // A progressbar's value is its aria-valuenow, which toHaveValue does not read.
+    // why: a progressbar's value is aria-valuenow, which toHaveValue can't read
     // eslint-disable-next-line jest-dom/prefer-to-have-value
     expect(screen.getByRole("progressbar")).toHaveAttribute(
       "aria-valuenow",
@@ -166,11 +159,8 @@ describe("ContextMeter", () => {
   });
 
   it("clamps the bar and the percentage but not the figures when occupancy exceeds the window", () => {
-    // Under-declaring is the safe direction and therefore expected, so a
-    // deliberately conservative window must not make the meter look broken.
     render(<ContextMeter occupancy={150_000} contextWindow={128_000} />);
 
-    // A progressbar's value is its aria-valuenow, which toHaveValue does not read.
     // eslint-disable-next-line jest-dom/prefer-to-have-value
     expect(screen.getByRole("progressbar")).toHaveAttribute(
       "aria-valuenow",
@@ -182,9 +172,7 @@ describe("ContextMeter", () => {
     expect(screen.getByText(/128K/)).toBeInTheDocument();
   });
 
-  // Which unit a given figure takes is `formatTokens`' business and tested
-  // there; what matters here is that the meter defers to it rather than
-  // printing a six- or seven-digit number into a strip of the composer.
+  // why: unit choice is formatTokens' business, and it is tested there
   it("writes both figures in units", () => {
     render(<ContextMeter occupancy={1_100} contextWindow={2_000_000} />);
 

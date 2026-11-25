@@ -1,10 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { formatDate, formatDateTime } from "./format-date";
 
-// These render in the viewer's locale, so the assertions pin the shape of each
-// formatter rather than one locale's spelling of it.
 describe("format-date", () => {
-  // Built from local parts so the expected day holds in any time zone.
+  // why: built from local parts, so the expected day holds in any time zone
   const value = new Date(2026, 8, 21, 14, 5);
 
   it("renders a day without a time", () => {

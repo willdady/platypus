@@ -22,7 +22,6 @@ describe("lazyCode", () => {
     expect(tokens.map((t: { content: string }) => t.content).join("")).toBe(
       "const answer = 42;",
     );
-    // Split into more than one coloured run: highlighted, not plain text.
     expect(tokens.length).toBeGreaterThan(1);
   });
 });

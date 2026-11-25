@@ -1,56 +1,22 @@
 import { toast } from "sonner";
 import type { Serialized, WriteOutcome } from "./api-write";
 
-/**
- * The default copy for a rejected write that mapped to fields the form can
- * show, so the "please fix the errors" toast is written once rather than
- * reworded per form.
- */
 export const FIX_FORM_ERRORS_MESSAGE = "Please fix the errors in the form";
 
 export type ApplyWriteOutcomeOptions<TResult> = {
-  /** Revalidates one SWR key — usually `useSWRConfig()`'s `mutate`. */
   readonly mutate: (key: string) => unknown;
   readonly setValidationErrors: (errors: Record<string, string>) => void;
-  /**
-   * Field a `conflict` outcome's message is keyed to (default `"name"`).
-   * Pass `null` when there's no field to key it to (e.g. a delete dialog) —
-   * `conflict` then routes through `onError` like every other failure.
-   * Ignored if `onConflict` is given.
-   */
   readonly conflictField?: string | null;
-  /** Whatever genuinely differs per caller: navigation, dialog close, side-effects. */
   readonly onSuccess?: (data: Serialized<TResult>) => void | Promise<void>;
-  /** Overrides the default `setValidationErrors` + toast-if-no-field-errors handling. */
   readonly onInvalid?: (
     fieldErrors: Record<string, string>,
     message: string,
   ) => void;
-  /** Overrides the default `setValidationErrors({ [conflictField]: message })`. */
   readonly onConflict?: (message: string) => void;
-  /**
-   * Toast shown by the default `invalid` handling when the rejection mapped to
-   * at least one field (so the copy is single-sourced). Ignored if `onInvalid`
-   * is given; when omitted, a mapped rejection stays inline-only at this seam.
-   * `useEntityForm` supplies `FIX_FORM_ERRORS_MESSAGE` by default, and accepts
-   * `null` to opt out for a dialog or inline action.
-   */
   readonly invalidMessage?: string;
-  /**
-   * Covers `forbidden`, `notFound`, and `error`, plus an `invalid` outcome
-   * with no field errors to show. Defaults to `toast.error`. Receives the
-   * outcome so a caller can special-case `forbidden` (e.g. a Shared
-   * resource's lock refusal reads as guidance, not a failure — #570).
-   */
   readonly onError?: (message: string, outcome: WriteOutcome<TResult>) => void;
 };
 
-/**
- * The near-byte-identical `switch (result.outcome)` handler duplicated
- * across the write-backed forms (#598): success revalidates and hands off to
- * the caller, invalid/conflict route to field errors, and every other
- * failure surfaces a message. Callers keep only what genuinely differs.
- */
 export async function applyWriteOutcome<TResult>(
   result: WriteOutcome<TResult>,
   options: ApplyWriteOutcomeOptions<TResult>,
@@ -103,20 +69,11 @@ export async function applyWriteOutcome<TResult>(
 }
 
 export type ApplyDeleteOutcomeOptions<TResult> = {
-  /** Revalidates one SWR key — usually `useSWRConfig()`'s `mutate`. */
   readonly mutate: (key: string) => unknown;
   readonly onSuccess?: (data: Serialized<TResult>) => void | Promise<void>;
-  /** See `ApplyWriteOutcomeOptions.onError` — covers every delete failure. */
   readonly onError?: (message: string, outcome: WriteOutcome<TResult>) => void;
 };
 
-/**
- * `applyWriteOutcome` for a delete: there's no field to validate or key a
- * conflict to (e.g. a 409 "still referenced" delete refusal), so every
- * failure — `conflict` and a body-mapped 400 alike — surfaces through
- * `onError`. A validation message mapped to a field would otherwise land in a
- * `setValidationErrors` nobody reads, and the dialog would say nothing.
- */
 export async function applyDeleteOutcome<TResult>(
   result: WriteOutcome<TResult>,
   options: ApplyDeleteOutcomeOptions<TResult>,
@@ -132,12 +89,6 @@ export async function applyDeleteOutcome<TResult>(
   });
 }
 
-/**
- * The toast.info-for-forbidden, toast.error-otherwise split repeated across
- * every form whose Shared-resource lock refusal reads as guidance, not a
- * failure — the backend's message already says where the resource is
- * actually managed (#570).
- */
 export function toastGuidanceOrError(
   message: string,
   outcome: WriteOutcome<unknown>,
@@ -149,11 +100,6 @@ export function toastGuidanceOrError(
   }
 }
 
-/**
- * Maps an auth-client result to a `WriteOutcome`: an `error` outcome carrying
- * the error's message or a fallback, otherwise a `success` outcome with empty
- * data and no keys to revalidate.
- */
 export function toOutcome(
   error: { message?: string } | null,
   fallback: string,

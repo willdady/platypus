@@ -7,12 +7,6 @@ const mockPush = vi.fn();
 const mockSignOut = vi.fn();
 const mockRefreshSession = vi.fn().mockResolvedValue(undefined);
 
-/**
- * Each test uses a distinct token, so each gets its own SWR cache entry —
- * `useSWR` caches and dedupes by key at module scope, so reusing one token
- * across tests would let a later test observe an earlier test's cached
- * resolution instead of exercising its own mocked fetch.
- */
 let mockToken = "tok_0";
 
 vi.mock("next/navigation", () => ({
@@ -20,7 +14,6 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: mockPush }),
 }));
 
-/** The current session; each test sets it before rendering. */
 let mockUser: { email: string } | null = null;
 
 vi.mock("@/components/auth-provider", () => ({
@@ -38,7 +31,6 @@ const RESOLUTION_BODY = {
   organizationName: "Acme",
 };
 
-/** What the register and accept endpoints return: where the accept landed. */
 const ACCEPT_BODY = {
   message: "Invitation accepted",
   organizationId: "org-9",
@@ -46,10 +38,6 @@ const ACCEPT_BODY = {
 };
 const WORKSPACE_PATH = "/org-9/workspace/ws-9";
 
-/**
- * Stubs `fetch` to answer the link's resolution with `RESOLUTION_BODY`, and
- * `/register` or `/accept` with whatever the test stages for them.
- */
 function stubInvite(
   routes: Partial<Record<"register" | "accept", [number, unknown]>> = {},
 ) {
@@ -134,8 +122,6 @@ describe("InviteTokenPage", () => {
       render(<InviteTokenPage />);
       await fillRegistration();
 
-      // Straight into the Workspace the accept provisioned -- not "/", which
-      // for a member of other Organizations may not resolve to this one.
       await waitFor(() =>
         expect(mockPush).toHaveBeenCalledWith(WORKSPACE_PATH),
       );

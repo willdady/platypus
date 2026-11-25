@@ -16,21 +16,12 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { FormTextField } from "@/components/form-text-field";
 
-/**
- * Each board dialog is mounted only while it is the board's open dialog, so
- * its inputs start fresh every time it opens. `onSubmit` resolves once the
- * write has landed or been refused; the board closes the dialog on success.
- */
+// why: each dialog unmounts when closed, so its inputs reset without an effect
 type BoardDialogProps<Values> = {
   readonly onSubmit: (values: Values) => Promise<void>;
   readonly onClose: () => void;
 };
 
-/**
- * Runs `submit` with the trimmed text once per submit: a double click or
- * Enter held down would otherwise create duplicate columns or cards. Blank
- * text submits nothing.
- */
 function useGuardedSubmit(
   text: string,
   submit: (trimmed: string) => Promise<void>,

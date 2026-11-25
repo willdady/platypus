@@ -44,7 +44,6 @@ function offer(
   } as unknown as MessagePart;
 }
 
-/** A stored write to `artifactId`, at `version`. */
 function write(
   artifactId: string,
   version: number,
@@ -60,7 +59,6 @@ function write(
   } as unknown as MessagePart;
 }
 
-/** What a row's read lands on: one Artifact at one version. */
 function read(version: number, content = "# 1.1") {
   return {
     data: {
@@ -219,7 +217,6 @@ describe("OfferedFiles", () => {
       />,
     );
 
-    // The title is kept, so several deleted rows stay apart.
     expect(screen.getByText("Release notes")).toBeInTheDocument();
     expect(screen.getByText(ARTIFACT_DELETED_DETAIL)).toBeInTheDocument();
     expect(screen.queryByRole("button")).not.toBeInTheDocument();

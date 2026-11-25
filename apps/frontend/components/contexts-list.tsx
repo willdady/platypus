@@ -28,8 +28,7 @@ function ContextsList() {
 
   const workspaceContexts = contexts.filter((c) => c.workspaceId);
 
-  // A section's controls sit below it in every state, so the footer never
-  // blinks out while the list loads or fails.
+  // why: the footer sits below every state, so it never blinks out
   const addContext = (
     <Button variant="outline" asChild>
       <Link href={userRoutes.createContext}>
@@ -56,8 +55,6 @@ function ContextsList() {
         empty={
           <ListState variant="empty">No workspace contexts yet.</ListState>
         }
-        // The Organization name is the card's second line and nothing follows
-        // it.
         descriptionLines={1}
         href={(context) => userRoutes.contextDetail(context.id)}
         menu={(context) => (

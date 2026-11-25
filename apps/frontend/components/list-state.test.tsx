@@ -43,7 +43,6 @@ describe("ListError", () => {
     ).toBeInTheDocument();
   });
 
-  // A validation failure's body carries an object under `error`.
   it("falls back to the error's own message when the body's error isn't text", () => {
     render(
       <ListError

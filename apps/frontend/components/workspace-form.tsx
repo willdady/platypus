@@ -43,9 +43,7 @@ type WorkspaceFormProps = {
   workspaceId: string;
 };
 
-// providerSelfManagement, mcpSelfManagement and inboundTriggersAllowed are
-// deliberately excluded:
-// this form has no field that retracts an error keyed to them.
+// why: no field retracts an error keyed to these, so they stay unlisted
 const RETRACTABLE_FIELDS = [
   "name",
   "context",
@@ -98,12 +96,9 @@ function WorkspaceForm({ orgId, workspaceId }: WorkspaceFormProps) {
   const canTransfer = canTransferWorkspace(actor);
   const router = useRouter();
 
-  // Fetch providers
   const { results: providers, isLoading: providersLoading } =
     useScopedList<Provider>("providers", { orgId, workspaceId });
 
-  // The Workspace's Inbound Trigger switch only counts under the
-  // Organization's "Selected workspaces" gate (ADR-0030).
   const { data: organization } = useOrganization(orgId, {
     enabled: canManageDelegation,
   });
@@ -155,11 +150,8 @@ function WorkspaceForm({ orgId, workspaceId }: WorkspaceFormProps) {
       memoryExtractionProviderId: data.memoryExtractionProviderId,
       memoryEmbeddingProviderId: data.memoryEmbeddingProviderId,
       maxDailySummaries: data.maxDailySummaries,
-      // Admin-only; the backend strips these for non-admins (ADR-0006).
       providerSelfManagement: data.providerSelfManagement,
       mcpSelfManagement: data.mcpSelfManagement,
-      // Admin-only too; read only while the Organization's Inbound Triggers
-      // setting is "Selected workspaces" (ADR-0030).
       inboundTriggersAllowed: data.inboundTriggersAllowed,
     }),
     successMessage: "Workspace updated",
@@ -174,10 +166,7 @@ function WorkspaceForm({ orgId, workspaceId }: WorkspaceFormProps) {
     id: workspaceId,
     successMessage: "Workspace deleted",
     onSuccess: () => {
-      // A full document load, deliberately — see the matching note in
-      // `organization-form.tsx`. The Workspace this view is scoped to is
-      // gone, and a client-side transition would keep the app shell (and its
-      // cached payload for the deleted Workspace) alive around it.
+      // why: a full load, or the deleted Workspace stays cached in the app shell
       hardNavigate(withBasePath(orgRoutes(orgId).root));
     },
   });
@@ -185,8 +174,7 @@ function WorkspaceForm({ orgId, workspaceId }: WorkspaceFormProps) {
   return (
     <DetailFormState
       {...loadState}
-      // The provider selects resolve their values against this list, so
-      // they'd render blank or partial without it.
+      // why: the provider selects resolve against this list, or render blank
       isLoading={providersLoading || loadState.isLoading}
       subject="workspace"
       skeleton={<WorkspaceFormSkeleton delegation={canManageDelegation} />}
@@ -286,9 +274,6 @@ function WorkspaceForm({ orgId, workspaceId }: WorkspaceFormProps) {
               description="Maximum number of daily memory summaries to retain (7-365, default 90 days)."
             />
 
-            {/* Delegation flags (ADR-0006) — admin-only. When off, only org
-              admins may configure the respective resource; when on, the
-              workspace owner may self-manage it. */}
             {canManageDelegation && (
               <>
                 <FormSwitchField

@@ -19,7 +19,6 @@ function BoardSettingsPage({
   const routes = workspaceRoutes(orgId, workspaceId);
   const router = useRouter();
 
-  // The same key the form reads through, so one request serves both.
   const { data: board } = useScopedSWR<KanbanBoard>(`boards/${boardId}`, {
     orgId,
     workspaceId,

@@ -203,8 +203,6 @@ describe("ArtifactViewer", () => {
     expect(screen.getByText("Read-only")).toBeInTheDocument();
   });
 
-  // The full-page view mounts the viewer with no version, so it opens on the
-  // latest version and the picker is the only way to a history entry.
   it("opens on the latest version when mounted without one, and picks an older", async () => {
     artifactHook.mockImplementation(
       (_scope: unknown, _id: string, version?: number) => ({
@@ -279,7 +277,6 @@ describe("ArtifactViewer", () => {
     const frame = screen.getByTitle("Artifact preview");
     expect(frame.tagName).toBe("IFRAME");
     expect(frame).toHaveAttribute("sandbox", "allow-scripts");
-    // No URL on the app or API origin: content travels in `srcdoc` only.
     expect(frame).not.toHaveAttribute("src");
     const doc = frame.getAttribute("srcdoc") ?? "";
     expect(doc).toContain("<h1>Quarterly sales</h1>");
@@ -471,7 +468,6 @@ describe("ArtifactViewer", () => {
     });
 
     const expand = screen.getByRole("button", { name: "View full screen" });
-    // Hidden below `lg`, where the panel already covers the Chat.
     expect(expand).toHaveClass("hidden", "lg:inline-flex");
     fireEvent.click(expand);
     expect(onToggle).toHaveBeenCalledOnce();

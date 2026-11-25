@@ -19,14 +19,9 @@ type UnsavedChangesContextValue = {
   confirmDiscard: (onDiscard: () => void) => void;
 };
 
-// Set by `hardNavigate`, so the unload it starts isn't held.
+// why: hardNavigate sets this, so the unload it starts isn't held
 let leavingDeliberately = false;
 
-/**
- * A full document load the app chose (e.g. after deleting the Organization
- * the view is scoped to). Like `router.push`, it is never held by the
- * `beforeunload` prompt.
- */
 export function hardNavigate(href: string) {
   leavingDeliberately = true;
   window.location.href = href;
@@ -36,12 +31,6 @@ const UnsavedChangesContext = createContext<UnsavedChangesContextValue | null>(
   null,
 );
 
-/**
- * Owns the one "Discard unsaved changes?" dialog, and while any guard is
- * dirty, the `beforeunload` prompt and the capture-phase click listener that
- * holds a same-tab link click until the user confirms. Programmatic
- * navigation (a post-save redirect, a delete) and browser Back pass through.
- */
 export function UnsavedChangesProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const [dirtyKeys, setDirtyKeys] = useState<ReadonlySet<string>>(new Set());
@@ -55,13 +44,13 @@ export function UnsavedChangesProvider({ children }: { children: ReactNode }) {
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
       if (leavingDeliberately) return;
       event.preventDefault();
-      // Older Chromium and Safari show the prompt only with this set.
+      // why: older Chromium and Safari need returnValue to show the prompt
       event.returnValue = "";
     };
     const onClick = (event: MouseEvent) => {
       const href = interceptedHref(event);
       if (href === null) return;
-      // Stopped in the capture phase, so Next's Link never sees the click.
+      // why: capture phase stops Next's Link from ever seeing the click
       event.preventDefault();
       event.stopPropagation();
       setPendingDiscard(() => () => router.push(href));
@@ -111,13 +100,6 @@ export function UnsavedChangesProvider({ children }: { children: ReactNode }) {
   );
 }
 
-/**
- * Registers a surface's dirty state with `UnsavedChangesProvider`, which
- * guards link clicks and unload while any surface is dirty. Returns
- * `confirmDiscard`, for a close the surface owns (a dialog's `onOpenChange`):
- * it runs `onDiscard` at once when clean, otherwise after the user confirms.
- * Without a provider (a test rendering a form alone) nothing is guarded.
- */
 export function useUnsavedChangesGuard(isDirty: boolean) {
   const context = useContext(UnsavedChangesContext);
   const key = useId();

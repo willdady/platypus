@@ -9,12 +9,6 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 
-/**
- * The collapsed "Advanced settings" block the entity forms share: a heading
- * and a toggle, closed until opened, with the caller's fields inside. The
- * toggle is a real button so it is reachable and operable by keyboard, and the
- * heading text is the control's accessible name.
- */
 export function FormAdvancedSection({
   children,
   className,

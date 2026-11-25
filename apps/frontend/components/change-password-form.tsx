@@ -33,8 +33,7 @@ export function ChangePasswordForm() {
   } = useEntityForm<typeof INITIAL_DATA, unknown>({
     initialData: INITIAL_DATA,
     retractableFields: RETRACTABLE_FIELDS,
-    // The password change is an auth-client call, not a REST write — kept
-    // local, mapped onto the shared outcome shape.
+    // why: an auth-client call, not a REST write; kept on the shared outcome shape
     write: async (data) => {
       const { error } = await authClient.changePassword({
         currentPassword: data.currentPassword,

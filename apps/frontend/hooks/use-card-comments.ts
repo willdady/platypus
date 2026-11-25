@@ -15,14 +15,11 @@ import {
 type SerializedComment = Serialized<KanbanCardComment>;
 
 export type CardCommentsOptions = {
-  /** The Organization and Workspace the card's board lives in. */
   readonly scope: Scope;
   readonly boardId: string;
-  /** The card whose thread is read, or null while no card is open. */
   readonly cardId: string | null;
 };
 
-/** The comments section's props, minus the `className` each layout gives it. */
 export type CardCommentsSectionProps = {
   readonly comments: SerializedComment[];
   readonly newCommentBody: string;
@@ -38,43 +35,19 @@ export type CardCommentsSectionProps = {
   ) => void;
   readonly onStartEditComment: (comment: SerializedComment) => void;
   readonly onCancelEditComment: () => void;
-  /**
-   * The comment write in flight — `add` or `edit:<id>` — or null. Every
-   * comment button waits for it; only its own reads as pending.
-   */
   readonly commentAction: string | null;
-  /** A comment delete is running in its confirm dialog. */
   readonly commentDeleting: boolean;
 };
 
 export type CardComments = {
-  /** Props for the comments section, wherever the layout places it. */
   readonly sectionProps: CardCommentsSectionProps;
-  /** The comment delete confirm's props, ready to spread. */
   readonly deleteDialogProps: DeleteDialogProps;
-  /** A draft or an edit is open, so the card dialog is dirty. */
   readonly dirty: boolean;
-  /** Clears the draft and any edit in progress. */
   readonly reset: () => void;
-  /**
-   * The button the comment delete confirm was opened from, while it is still
-   * in the document. A comment's own Delete goes away with the comment it
-   * deleted, so the dialog has a fallback of its own for that case.
-   */
   readonly deleteTrigger: () => HTMLElement | null;
 };
 
-/**
- * A card's comment thread: its read, the draft and the edit being typed, the
- * add and edit writes, and the delete confirm (#1948).
- *
- * The dialog calls this above its layouts rather than the comments section
- * calling it, because the tabbed layout unmounts the tab it leaves — a draft
- * kept inside the section would go with it. The thread is deliberately not
- * reset when the open card is updated server-side: a comment is not derived
- * from the card's fields. `reset` is the caller's to run when the dialog shows
- * a different card or closes.
- */
+// why: the dialog owns this, not the tabbed section, which unmounts and drops a draft
 export function useCardComments({
   scope,
   boardId,
@@ -87,14 +60,11 @@ export function useCardComments({
   const [editingCommentBody, setEditingCommentBody] = useState("");
   const [commentAction, setCommentAction] = useState<string | null>(null);
 
-  // The thread's key, shared by its read and its delete so the two can't drift
-  // onto different spellings. No card yet means nothing is read.
   const commentsEntity = `boards/${boardId}/cards/${cardId ?? ""}/comments`;
   const { results: comments, mutate: mutateComments } =
     useScopedList<KanbanCardComment>(commentsEntity, cardId ? scope : null);
 
-  // One comment write at a time, whichever it is: `action` names the one in
-  // flight so only its own button reads as pending.
+  // why: one comment write at a time, so only its own button reads as pending
   const commentWrite = useMutation(
     async (action: string, write: () => Promise<void>) => {
       setCommentAction(action);
@@ -106,8 +76,6 @@ export function useCardComments({
     },
   );
 
-  // A refused comment delete stays in its dialog, and a successful one
-  // revalidates the thread so the comment disappears.
   const commentDelete = useDeleteFlow<SerializedComment>({
     delete: (comment, url) =>
       writeEntity(url, commentsEntity, scope, { id: comment.id }),
@@ -124,8 +92,6 @@ export function useCardComments({
     cancelEditing();
   };
 
-  // The button a comment's Delete confirm was opened from, for the dialog to
-  // put focus back on when it closes.
   const deleteTrigger = () =>
     deleteTriggerRef.current?.isConnected ? deleteTriggerRef.current : null;
 
@@ -142,9 +108,6 @@ export function useCardComments({
     commentDelete.request(comment);
   };
 
-  // One comment write. A refusal keeps the text it was written from and shows
-  // the backend's reason; a success clears that text and revalidates the
-  // thread so the comment arrives or shows its edit.
   const writeComment = (
     action: string,
     options: WriteOptions,

@@ -12,7 +12,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { cn } from "@/lib/utils";
 
 type ExpandableTextareaProps = {
-  /** The textarea's id; its label, description and error are wired to it. */
   id: string;
   label?: string;
   error?: string;
@@ -55,7 +54,6 @@ function ExpandableTextarea({
     setIsExpanded(true);
   };
 
-  // Every way out — Collapse, Escape, a click outside — keeps the draft.
   const handleOpenChange = (open: boolean) => {
     if (open) return;
     commitDraft();
@@ -129,8 +127,7 @@ function ExpandableTextarea({
           <DialogContent
             showCloseButton={false}
             aria-describedby={undefined}
-            // Opened without a Dialog.Trigger, so Radix has nowhere to send
-            // focus back to; return it to Expand.
+            // why: no Dialog.Trigger, so Radix has no element to return focus to
             onCloseAutoFocus={(event) => {
               event.preventDefault();
               expandButtonRef.current?.focus();

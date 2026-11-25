@@ -37,9 +37,6 @@ function dialog(
 }
 
 describe("ModelSelectorDialog model options", () => {
-  // Issue #869: the picker re-normalised every provider's model list on each
-  // render. The options are a pure function of the provider list, so they are
-  // computed once per provider-list identity.
   it("normalises each provider's models once across re-renders", () => {
     const { provider, reads } = countingProvider();
     const providers = [provider];
@@ -123,8 +120,6 @@ describe("ModelSelectorDialog trigger label", () => {
       />,
     );
 
-  // Issue #1651: a label two Providers offer reads the same either way, so
-  // the trigger names the Provider.
   it("names the Provider when another Provider offers the same label", () => {
     triggerFor(
       [

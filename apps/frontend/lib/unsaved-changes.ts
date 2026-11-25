@@ -1,11 +1,5 @@
 import { stripBasePath } from "@/lib/routes";
 
-/**
- * The in-app path a click would navigate to, or null when the click is one
- * the unsaved-changes guard lets through: a modified or non-primary click, a
- * link that opens elsewhere (`target`, `download`, another origin or outside
- * the base path), or a `#` anchor on the current page.
- */
 export function interceptedHref(event: MouseEvent): string | null {
   if (
     event.defaultPrevented ||
@@ -33,7 +27,7 @@ export function interceptedHref(event: MouseEvent): string | null {
   if (url.hash && url.pathname === here.pathname && url.search === here.search)
     return null;
 
-  // `router.push` adds the base path back, so strip the one the href carries.
+  // why: router.push adds the base path back, so strip the one the href carries
   const path = stripBasePath(url.pathname);
   return path === null ? null : `${path}${url.search}${url.hash}`;
 }

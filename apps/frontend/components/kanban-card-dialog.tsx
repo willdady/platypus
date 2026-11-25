@@ -100,7 +100,6 @@ type CardSaveData = {
 
 type AgentOption = { id: string; name: string; avatarUrl?: string };
 
-/** The card dialog's editable fields, as its own state holds them. */
 type CardFields = {
   title: string;
   body: string;
@@ -111,7 +110,6 @@ type CardFields = {
   columnId: string | null;
 };
 
-/** The values a card's fields start from, with `targetColumnId` as the Column. */
 function fieldsFromCard(
   card: Serialized<KanbanCard>,
   targetColumnId: string | null,
@@ -127,8 +125,7 @@ function fieldsFromCard(
   };
 }
 
-// Labels compared as a set: toggling one off and back on moves it to the end,
-// which is not an edit.
+// why: toggling a label off and on moves it to the end, which is not an edit
 function comparableFields(fields: CardFields): CardFields {
   return { ...fields, labelIds: [...fields.labelIds].sort() };
 }
@@ -246,7 +243,6 @@ function AssigneePicker({
   );
 }
 
-// Rendered next to the card title in both the mobile and desktop layouts.
 function CardTitleActions({
   onCopyLink,
   onCopyMarkdown,
@@ -301,8 +297,6 @@ function CardTitleActions({
   );
 }
 
-// The title row: an inline editor while editing, otherwise the heading with
-// its copy/edit actions. Shared by both layouts.
 function CardTitleSection({
   title,
   isEditing,
@@ -349,8 +343,6 @@ function CardTitleSection({
   );
 }
 
-// The body editor: a textarea while editing, otherwise rendered markdown.
-// Shared by both layouts.
 function CardBodySection({
   body,
   isEditing,
@@ -393,9 +385,6 @@ function CardBodySection({
   );
 }
 
-// The title/body pane. Mobile nests it in the details tab with the metadata
-// below; desktop puts comments and history below it, with the metadata in a
-// sibling sidebar. The container only differs by `className`.
 function CardDetailsPane({
   className,
   title,
@@ -424,8 +413,7 @@ function CardDetailsPane({
   children: ReactNode;
 }) {
   return (
-    // onBlur is delegated focusout from the title and body fields inside, not
-    // an interaction with this wrapper.
+    // why: onBlur is delegated focusout from the fields inside, not this wrapper
     // eslint-disable-next-line jsx-a11y/no-static-element-interactions
     <div
       className={cn("flex flex-col min-h-0 flex-1", className)}
@@ -442,8 +430,6 @@ function CardDetailsPane({
           onEdit={onEdit}
         />
       </div>
-      {/* Children keep their content height: a flex item may shrink, and the
-          body's explicit min-h lets it overflow onto the sections below. */}
       <div
         data-testid="card-details-scroll"
         className="flex-1 overflow-y-auto min-h-0 flex flex-col gap-4 [&>*]:shrink-0"
@@ -460,14 +446,10 @@ function CardDetailsPane({
   );
 }
 
-// Who wrote a comment and when, so each comment's Edit and Delete are told
-// apart by a screen reader rather than all reading "Edit" and "Delete".
 function commentLabel(comment: Serialized<KanbanCardComment>) {
   return `${comment.createdByName ?? "Unknown"}, ${formatRelativeTime(comment.createdAt)}`;
 }
 
-// The comment list and composer. Shared by both layouts, and driven by
-// `useCardComments` so the draft outlives the tab the section is in.
 function CommentsSection({
   className,
   comments,
@@ -582,8 +564,6 @@ function CommentsSection({
   );
 }
 
-// The card's metadata fields. Mobile stacks them under the details pane;
-// desktop puts them in a sidebar. The container only differs by `className`.
 function CardMetadataSection({
   className,
   createdAt,
@@ -675,7 +655,6 @@ function CardMetadataSection({
         </div>
       )}
 
-      {/* Priority */}
       <div>
         <p className="text-xs font-medium text-muted-foreground mb-2">
           Priority
@@ -705,7 +684,6 @@ function CardMetadataSection({
         </Select>
       </div>
 
-      {/* Due Date */}
       <div>
         <p className="text-xs font-medium text-muted-foreground mb-2">
           Due Date
@@ -735,7 +713,6 @@ function CardMetadataSection({
         </Popover>
       </div>
 
-      {/* Assignees */}
       <AssigneePicker
         user={user}
         agents={agents}
@@ -785,7 +762,6 @@ export function KanbanCardDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSave: (cardId: string, data: CardSaveData) => Promise<void> | void;
-  /** Deletes the card and resolves to the write's outcome, for the dialog. */
   onDelete: (cardId: string) => Promise<WriteOutcome<unknown>>;
   orgId: string;
   workspaceId: string;
@@ -807,9 +783,6 @@ export function KanbanCardDialog({
   const [isEditing, setIsEditing] = useState(false);
   const [focusField, setFocusField] = useState<"title" | "body">("title");
 
-  // The card and target column the fields were last seeded from. The fields
-  // are the user's own while they differ from these, which is what tells a
-  // board refresh apart from an edit (#1935).
   const [seeded, setSeeded] = useState<{
     card: Serialized<KanbanCard>;
     columnId: string | null;
@@ -817,16 +790,12 @@ export function KanbanCardDialog({
 
   const cardDeleteTrigger = useRef<HTMLButtonElement | null>(null);
 
-  // Above the layouts, not inside the comments section: the tabbed layout
-  // unmounts the tab it leaves, and a draft must survive a look at the
-  // details.
   const comments = useCardComments({
     scope: { orgId, workspaceId },
     boardId,
     cardId: card?.id ?? null,
   });
 
-  // Fetch workspace agents for assignee picker
   const { results: agents } = useScopedList<AgentOption>("agents", {
     orgId,
     workspaceId,
@@ -837,10 +806,6 @@ export function KanbanCardDialog({
     setIsEditing(true);
   };
 
-  // Re-initialise the card's fields whenever a different card is shown, or a
-  // newer version of this one arrives while the fields hold no unsaved edits.
-  // A dirty dialog keeps what the user typed, and the next version applies once
-  // those edits are gone; saving overwrites it (#1935).
   const fields: CardFields = {
     title,
     body,
@@ -853,15 +818,11 @@ export function KanbanCardDialog({
   const seededFields = seeded
     ? fieldsFromCard(seeded.card, seeded.columnId)
     : null;
-  // A difference from the card is not an edit: a board refresh changes the card
-  // under an untouched dialog. Only a difference from the seeded values is.
   const fieldsEdited =
     !!seededFields &&
     !deepEqual(comparableFields(fields), comparableFields(seededFields));
 
   if (!card) {
-    // Closed: the next card seeds from scratch, rather than reviving the
-    // values a discarded edit left behind.
     if (seeded) setSeeded(null);
   } else {
     const newerVersion =
@@ -886,39 +847,22 @@ export function KanbanCardDialog({
     }
   }
 
-  // A Column the user picked is the one to move the card to; a remote move a
-  // dirty dialog ignored is not the user's edit to send back.
   const columnChanged = !!seeded && selectedColumnId !== seeded.columnId;
 
-  // A comment draft is not derived from the card's data, so a server-side
-  // update to the open card must not clear it. Reset the draft and any
-  // in-progress edit only when the dialog shows a different card or closes.
   useResetOnChange(open ? (card?.id ?? "") : "", comments.reset);
 
-  // Dirty while the fields hold the user's own values, a new comment is
-  // drafted, or a comment is being edited. A save closes the dialog itself, not
-  // through `onOpenChange`, so only a dismissal is held.
   const isDirty = !!card && (fieldsEdited || comments.dirty);
   const confirmDiscard = useUnsavedChangesGuard(isDirty);
 
-  // Save's own guard, so a double click sends nothing twice. The Delete
-  // trigger and the Save button both wait on it and on a card delete: neither
-  // makes sense while the other runs.
   const cardSave = useMutation(async (cardId: string, data: CardSaveData) =>
     onSave(cardId, data),
   );
 
-  // The card's delete confirm. The board owns the write — on success it clears
-  // the `cardId` param and revalidates — so this flow owns only the dialog and
-  // the refusal it shows inline.
   const cardDelete = useDeleteFlow<Serialized<KanbanCard>>({
     delete: (target) => onDelete(target.id),
     mutate: () => {},
   });
 
-  // Closing a confirm puts focus back on the button it was opened from, not
-  // on the body. A comment's own Delete goes away with the comment it deleted,
-  // so that confirm falls back to the card's.
   const restoreDeleteFocus = (event: Event, trigger: HTMLElement | null) => {
     const target = trigger?.isConnected
       ? trigger
@@ -967,8 +911,6 @@ export function KanbanCardDialog({
     }
   };
 
-  // Each section is built once here and placed by whichever layout is showing;
-  // only the container that pads or scrolls it differs.
   const metadataSection = (
     <CardMetadataSection
       className={cn(
@@ -996,8 +938,6 @@ export function KanbanCardDialog({
     />
   );
 
-  // Stacked in the details pane it needs the rule above it; its own tab is
-  // already framed by the layout.
   const commentsSection = (
     <CommentsSection
       className={isMobile ? undefined : "border-t pt-4"}
@@ -1005,7 +945,6 @@ export function KanbanCardDialog({
     />
   );
 
-  // Spaced off the comments where the pane stacks it, flush in its own tab.
   const historySection = (
     <div className={isMobile ? undefined : "mt-2"}>
       <KanbanCardHistory
@@ -1017,9 +956,7 @@ export function KanbanCardDialog({
     </div>
   );
 
-  // The title and body pane. The narrow layout stacks the metadata beneath it;
-  // the wide one puts the comments and history there instead, with the
-  // metadata in a sibling sidebar.
+  // why: the gutter pads the children, so the body's scrollbar sits outside the text
   const detailsSection = (
     <CardDetailsPane
       className={isMobile ? undefined : "min-w-0 [&>*]:pr-6"}
@@ -1037,8 +974,6 @@ export function KanbanCardDialog({
       {isMobile ? (
         metadataSection
       ) : (
-        // The gutter pads the pane's children, not the pane, so the body's
-        // scrollbar sits in the gutter instead of over the text.
         <>
           {commentsSection}
           {historySection}
@@ -1089,9 +1024,7 @@ export function KanbanCardDialog({
           </Tabs>
         ) : (
           <div className="flex flex-row gap-2 min-h-0 flex-1 overflow-hidden">
-            {/* Main content - Title, Body, Comments, and History */}
             {detailsSection}
-            {/* Sidebar - Column, Labels, Assignees, Due Date, Priority, and Metadata */}
             {metadataSection}
           </div>
         )}

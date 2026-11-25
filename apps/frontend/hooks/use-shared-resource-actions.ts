@@ -13,18 +13,11 @@ import { fetcher, joinUrl } from "@/lib/utils";
 import { toast } from "sonner";
 import { useDeleteFlow, type DeleteFlow } from "@/hooks/use-delete-flow";
 
-/** The minimum a row needs to appear in one of the Shared-resource dialogs. */
 export type NamedResource = {
   readonly id: string;
   readonly name: string;
 };
 
-/**
- * The detach half of the Shared-resource actions (#880): the delete flow's
- * confirm dialog, pending flag and inline refusal, with the shared Attachment
- * write bound in. Built on `useDeleteFlow` so a detach refusal is shown by the
- * same code as every other list's delete (#1943).
- */
 export function useSharedDetach<T extends NamedResource>({
   resourceType,
   scope,
@@ -37,11 +30,7 @@ export function useSharedDetach<T extends NamedResource>({
   return useDeleteFlow<T>({
     delete: (target, backendUrl) => {
       const { orgId, workspaceId } = scope;
-      // An Attachment lives on the Workspace route (ADR-0007), and the
-      // Detach row only exists inside a Workspace — but these lists serve
-      // both surfaces, so the workspace scope can't be required in the type.
-      // Without one there is no attachment address to write to, which the
-      // backend would answer as a 404; say the same without the round trip.
+      // why: no workspace means no attachment address; answer 404 without a round trip
       if (!orgId || !workspaceId) {
         return Promise.resolve({ outcome: "notFound", message: "Not found" });
       }
@@ -56,7 +45,6 @@ export function useSharedDetach<T extends NamedResource>({
   });
 }
 
-/** One workspace-private reference that a refused Promote asks the user to fix. */
 export type PromoteBlocker = {
   readonly type: "provider" | "skill" | "subAgent" | "mcp";
   readonly id: string;
@@ -81,19 +69,11 @@ function parseBlockers(body: unknown): PromoteBlocker[] {
   return [];
 }
 
-/**
- * Promote a workspace-private resource to an organization-shared one
- * (ADR-0007). The write stays raw rather than going through `writeEntity`
- * because the backend's 422 fix-this checklist carries a `blockers` array the
- * outcome mapping has nowhere to put; resources whose promote cannot be
- * blocked simply get an empty list.
- */
 export function usePromoteShared<T extends NamedResource>({
   entity,
   scope,
   mutate,
 }: {
-  /** Collection entity as the API spells it: "agents" / "skills". */
   readonly entity: string;
   readonly scope: Scope;
   readonly mutate: () => void | Promise<unknown>;
@@ -122,6 +102,7 @@ export function usePromoteShared<T extends NamedResource>({
     setError(null);
     setBlockers([]);
     try {
+      // why: raw fetch, not writeEntity, because the 422 carries a blockers array
       let response: Response;
       try {
         response = await fetch(
@@ -132,7 +113,6 @@ export function usePromoteShared<T extends NamedResource>({
           { method: "POST", credentials: "include" },
         );
       } catch {
-        // The same failure `writeEntity` reports for an unreachable backend.
         setError("Network request failed");
         return;
       }
@@ -155,20 +135,11 @@ export function usePromoteShared<T extends NamedResource>({
 }
 
 export type DeleteGuard<T> = {
-  /** The row whose delete was blocked, with its live attachment count. */
   readonly blocked: { item: T; count: number } | null;
   readonly clear: () => void;
-  /** Check attachments, then either block or hand the row to the delete flow. */
   readonly request: (item: T) => Promise<void>;
 };
 
-/**
- * A Shared resource can't be deleted while attached (ADR-0007). Check the live
- * attachment count first so the Organization surface explains the blocker up
- * front instead of offering a Delete button that is guaranteed to fail. A check
- * that fails says nothing about the attachments, so it is reported rather than
- * read as "none attached" and handed to a delete the backend would refuse.
- */
 export function useSharedDeleteGuard<T extends NamedResource>({
   resourceType,
   scope,
@@ -176,7 +147,6 @@ export function useSharedDeleteGuard<T extends NamedResource>({
 }: {
   readonly resourceType: AttachmentResourceType;
   readonly scope: Scope;
-  /** Runs when nothing is attached — typically the delete flow's `request`. */
   readonly onAllowed: (item: T) => void;
 }): DeleteGuard<T> {
   const backendUrl = useBackendUrl();
@@ -185,7 +155,6 @@ export function useSharedDeleteGuard<T extends NamedResource>({
   );
 
   const request = async (item: T) => {
-    // Nothing to ask yet: the delete flow, and the backend's own 409, decide.
     if (!backendUrl) {
       onAllowed(item);
       return;

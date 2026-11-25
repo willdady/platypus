@@ -1,7 +1,6 @@
 const DARK_TEXT = "#0a0a0a";
 const LIGHT_TEXT = "#ffffff";
 
-/** The sRGB channels of a `#rgb` or `#rrggbb` colour, or null. */
 function parseHex(color: string): [number, number, number] | null {
   const match = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(color.trim());
   if (!match) return null;
@@ -14,7 +13,6 @@ function parseHex(color: string): [number, number, number] | null {
   ];
 }
 
-/** WCAG relative luminance of an sRGB colour. */
 function luminance([r, g, b]: [number, number, number]): number {
   const [lr, lg, lb] = [r, g, b].map((channel) => {
     const c = channel / 255;
@@ -27,12 +25,6 @@ function contrast(a: number, b: number) {
   return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
 }
 
-/**
- * Dark or light text, whichever contrasts more with `background` — for a
- * user-picked colour such as a Kanban label, where the theme's own text colour
- * may vanish into it. Undefined for a colour that isn't hex, leaving the text
- * to the theme.
- */
 export function readableTextColor(background: string): string | undefined {
   const rgb = parseHex(background);
   if (!rgb) return undefined;

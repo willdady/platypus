@@ -3,12 +3,6 @@ import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-/**
- * Organization and user settings resource pages draw their Back from the
- * shell header. A page or loading file that also passes `backFallbackHref` to
- * `ResourcePage` puts a second, labelled Back above the title.
- */
-
 const settingsRoots = ["app/[orgId]/settings", "app/settings"].map((dir) =>
   path.join(path.dirname(fileURLToPath(import.meta.url)), dir),
 );

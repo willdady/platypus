@@ -26,10 +26,6 @@ import {
 } from "@/components/org-token-oversight";
 import { useOrgRevoke } from "@/hooks/use-org-revoke";
 
-/**
- * One row of `GET /organizations/:orgId/inbound-triggers` (ADR-0030): where
- * the Trigger is, whose it is, and how its token stands. Never the token.
- */
 type OrgInboundTrigger = {
   id: string;
   name: string;
@@ -46,12 +42,6 @@ type OrgInboundTrigger = {
   lastRejectedAt: string | null;
 };
 
-/**
- * Every Inbound Trigger in the Organization, for its Org Admins. The one
- * action is revoking a token: it stops the token at once and notifies the
- * Workspace Owner, who can issue a new one. The Organization's Inbound
- * Triggers setting is the lasting off switch.
- */
 export function OrgInboundTriggersList({ orgId }: { orgId: string }) {
   const scope = { orgId };
   const {

@@ -2,11 +2,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { SWRConfig, type Cache } from "swr";
 
-/**
- * The index route mints a chat id and replaces itself with that chat's URL
- * (issue #966). It renders the chat composer while it does, so a New chat
- * click never paints a frame without one.
- */
 const state = {
   replace: vi.fn(),
   search: "",
@@ -95,8 +90,6 @@ describe("ChatPage", () => {
     expect(cache.get(key)?.data).toBeNull();
   });
 
-  // On a cold load the session is still resolving when the id is minted; an
-  // unseeded row would read as an existing Chat still loading its transcript.
   it("caches the row as absent before the session resolves", () => {
     state.user = null;
     const cache: Cache = new Map();

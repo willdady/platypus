@@ -8,7 +8,6 @@ import {
   useUnsavedChangesGuard,
 } from "./unsaved-changes-guard";
 
-// What `interceptedHref` makes of a click on an anchor with `attrs`.
 function clickResult(attrs: Record<string, string>, init?: MouseEventInit) {
   const anchor = document.createElement("a");
   for (const [name, value] of Object.entries(attrs))

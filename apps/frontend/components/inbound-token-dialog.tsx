@@ -4,12 +4,10 @@ import { formatDateTime } from "@/lib/format-date";
 import { CopyRow } from "@/components/copy-row";
 import { TokenDialog } from "@/components/bearer-token";
 
-/** The fire endpoint an external caller POSTs to (ADR-0030). */
 export function inboundEndpointUrl(backendUrl: string, triggerId: string) {
   return `${backendUrl.replace(/\/+$/, "")}/hooks/triggers/${triggerId}`;
 }
 
-/** A ready-to-run test call, each declared input filled with a placeholder. */
 export function inboundCurlCommand(
   endpointUrl: string,
   token: string,
@@ -24,7 +22,6 @@ export function inboundCurlCommand(
   ].join("\n");
 }
 
-/** Shows an Inbound Trigger's token once, with how to call it. */
 export function InboundTokenDialog({
   token,
   endpointUrl,

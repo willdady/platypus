@@ -15,12 +15,6 @@ import {
 import { WorkspaceSwitcher } from "@/components/workspace-switcher";
 import { workspaceRoutes } from "@/lib/routes";
 
-/**
- * The phone sheet's Workspace navigation: the switcher, then Home, Boards and
- * Artifacts as labelled rows. The app sidebar's sheet draws this above the
- * Chat list; a screen without the app sidebar draws it in a sheet of its own.
- * Picking a destination closes the sheet.
- */
 export function WorkspaceSheetNavigation({
   orgId,
   workspaceId,

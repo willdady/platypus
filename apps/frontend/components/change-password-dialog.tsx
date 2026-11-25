@@ -45,9 +45,7 @@ export function ChangePasswordDialog({
     initialData: INITIAL_DATA,
     guardUnsavedChanges: false,
     retractableFields: RETRACTABLE_FIELDS,
-    // An admin auth-client call, not a REST write — mapped onto the shared
-    // outcome shape. The server owns the length rule; its 400 lands on the
-    // field.
+    // why: an admin auth-client call, not a REST write; the server owns the length rule
     write: async ({ newPassword }) => {
       const { error } = await authClient.admin.setUserPassword({
         userId: user.id,
@@ -64,7 +62,7 @@ export function ChangePasswordDialog({
       return toOutcome(error, "Failed to update password");
     },
     successMessage: () => `Password updated successfully for ${user.name}`,
-    // The dialog's field errors are already in view.
+    // why: the dialog's field errors are already in view
     invalidMessage: null,
     onSuccess: () => {
       setFormData(INITIAL_DATA);

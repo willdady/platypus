@@ -4,14 +4,6 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 
-/**
- * An icon-only button has no text, so without an `aria-label` a screen reader
- * announces it only as "button" (issue #1137). Every `<Button size="icon">`,
- * and every raw `<button>` whose only children are components (icons), must
- * carry `aria-label` / `aria-labelledby`, or a `sr-only` text child, in the
- * source — `title` alone is not enough.
- */
-
 const APP_ROOT = path.dirname(fileURLToPath(import.meta.url));
 
 function tsxFiles(dir: string): string[] {
@@ -39,7 +31,6 @@ function isIconButton(opening: ts.JsxOpeningLikeElement) {
   return !!size && ts.isStringLiteral(size) && size.text.startsWith("icon");
 }
 
-/** A raw `<button>` whose children are all self-closing components, e.g. `<X />`. */
 function isIconOnlyRawButton(node: ts.Node) {
   if (!ts.isJsxElement(node)) return false;
   if (node.openingElement.tagName.getText() !== "button") return false;
@@ -69,7 +60,6 @@ function hasSrOnlyChild(element: ts.JsxElement): boolean {
   return found;
 }
 
-/** A present, non-empty `aria-label` / `aria-labelledby`. */
 function hasNameAttr(opening: ts.JsxOpeningLikeElement) {
   return ["aria-label", "aria-labelledby"].some((name) => {
     const a = attr(opening, name);

@@ -41,11 +41,9 @@ import { parseValidationErrors, type FormErrors } from "@/lib/form-errors";
 import type { ModelConfigView } from "@/lib/model-config";
 import { reasoningControlsFor } from "@/lib/resolve-model";
 
-/** The Select's stand-in for an empty id, which turns the job off. Not "none":
- *  model ids are free text, and Radix rejects an empty item value. */
+// why: Radix rejects an empty item value, and model ids are free text
 const NO_MODEL = "__none__";
 
-/** Job settings as the controls hold them: unset is `undefined`, never null. */
 type JobSettingsDraft = {
   [K in keyof JobSettings]?: NonNullable<JobSettings[K]>;
 };
@@ -56,12 +54,6 @@ function toDraft(settings: JobSettings | null): JobSettingsDraft {
   );
 }
 
-/**
- * One of a Provider's own job models (ADR-0045): a Select over the Provider's
- * Model entries, and the Job settings sent with it. An id that is not in the
- * list — saved before the field was a Select — stays selected and is flagged
- * rather than dropped, so a save that touches something else keeps it.
- */
 export function JobModelField({
   label,
   name,
@@ -87,7 +79,6 @@ export function JobModelField({
   onSettingsChange: (settings: JobSettings | null) => void;
   error?: string | null;
   disabled?: boolean;
-  /** Settings can still be opened, to read them. */
   readOnly?: boolean;
 }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -190,8 +181,7 @@ function JobSettingsDialog({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // React bubbles synthetic events through the portal, so without this the
-    // submit would reach the provider form the dialog is rendered in.
+    // why: React bubbles the submit through the portal into the provider form
     e.stopPropagation();
     const set = toDraft(draft);
     const result = jobSettingsSchema.safeParse(set);
@@ -199,7 +189,6 @@ function JobSettingsDialog({
       setErrors(parseValidationErrors({ error: result.error.issues }));
       return;
     }
-    // Nothing set is stored as no block at all, as before Job settings.
     onSubmit(Object.keys(set).length > 0 ? set : null);
   };
 
@@ -212,7 +201,6 @@ function JobSettingsDialog({
             For {modelId}. Nothing is stored until you save the provider.
           </DialogDescription>
         </DialogHeader>
-        {/* noValidate: the schema owns every message, as in the Model dialog. */}
         <form
           noValidate
           onSubmit={handleSubmit}

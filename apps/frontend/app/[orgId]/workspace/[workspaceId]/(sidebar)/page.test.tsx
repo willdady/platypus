@@ -21,8 +21,6 @@ import Workspace from "./page";
 
 const WORKSPACE = { id: "ws1", organizationId: "org1", name: "Research" };
 
-// Registered after the Workspace's own lists: every one of their URLs also
-// contains the Workspace's, and the harness matches in insertion order.
 const workspaceRead = { "/workspaces/ws1": { data: WORKSPACE } };
 
 beforeEach(() => {
@@ -153,7 +151,6 @@ describe("Workspace home", () => {
       .closest("[data-slot='card']") as HTMLElement;
     expect(within(triggersCard).getByText("1")).toBeInTheDocument();
 
-    // Showing the fired One-off in the list leaves the count alone.
     fireEvent.click(screen.getByRole("button", { name: /Triggers/ }));
     expect(screen.queryByText("Launch reminder")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("switch", { name: "Show fired" }));
@@ -189,7 +186,6 @@ describe("Workspace home", () => {
   });
 
   it("leaves the Boards section out of the loading skeleton", async () => {
-    // The section used to be drawn, body and all, when it was last left open.
     localStorage.setItem("section:boards:open", "true");
     mockScopedSWR({
       "/providers": { isLoading: true },
@@ -198,8 +194,6 @@ describe("Workspace home", () => {
     await renderList(<Workspace />);
 
     const region = screen.getByRole("status", { name: "Loading workspace" });
-    // Agents, Skills and Triggers remain: two dividers, one per section after
-    // Agents. The Boards section's divider is gone with it.
     expect(region.querySelectorAll("[data-slot='separator']")).toHaveLength(2);
   });
 

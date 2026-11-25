@@ -8,11 +8,6 @@ import {
   toolRowIconSlotClassName,
 } from "./ai-elements/tool";
 
-/**
- * A tool call a Tool gate stopped to ask about (issue #1256): what would run,
- * the gate's reason in its own words, and the User's answer. Open, never
- * collapsed — the call is waiting on the reader.
- */
 export function ToolApprovalCard({
   name,
   type,
@@ -21,14 +16,10 @@ export function ToolApprovalCard({
   onRespond,
 }: {
   name: string;
-  /** The part's `type`, for its icon. */
   type: string;
   input: unknown;
   reason?: string;
-  /**
-   * Answers the call. Absent where the reply cannot be resumed: off the
-   * Active leaf, or while a turn is running.
-   */
+  // why: absent off the Active leaf or mid-turn — a reply there cannot be resumed
   onRespond?: (approved: boolean) => void;
 }) {
   return (

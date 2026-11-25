@@ -15,12 +15,7 @@ import { useBackendUrl } from "@/components/auth-provider";
 import { useMutation } from "@/hooks/use-mutation";
 import type { WriteOutcome } from "@/lib/api-write";
 
-/**
- * The Clone dialog of the `card-conventions` Clone section: names the copy
- * `<name> (copy)`, editable, and keeps a failed create's reason inline with the
- * dialog open. Render it only while a Clone is under way, so each one starts
- * from its item's name.
- */
+// why: render only while cloning, so each dialog starts from its item's name
 export function CloneDialog({
   noun,
   original,
@@ -31,33 +26,19 @@ export function CloneDialog({
   nameMaxLength,
   disabled = false,
 }: {
-  /** The item's kind, lowercase, as in "Clone agent". */
   noun: string;
-  /** The name of the item being cloned. */
   original: string;
   onClose: () => void;
-  /**
-   * Sends the create for a clone with this name. The base URL is passed in so
-   * the caller never has to non-null-assert the auth context.
-   */
+  // why: the base URL is passed in so the caller never asserts the auth context
   create: (
     name: string,
     backendUrl: string,
   ) => Promise<WriteOutcome<{ id: string }>>;
-  /** After a successful create, the dialog closed: revalidate and navigate. */
   onCreated: (id: string) => void;
-  /** Shown above the name, such as what the copy leaves out. */
   note?: ReactNode;
-  /**
-   * The create schema's Name limit. The `(copy)` suffix can push an
-   * already-near-limit name over it, so the field enforces it and can say so.
-   */
+  // why: the (copy) suffix can push a near-limit name over the schema's limit
   nameMaxLength: number;
-  /**
-   * Whether Clone is unavailable. A caller that cannot assemble the copy's
-   * references (a read still loading, or failed) passes this rather than
-   * creating a clone with them silently dropped.
-   */
+  // why: a caller that can't assemble the copy's references disables Clone instead
   disabled?: boolean;
 }) {
   const backendUrl = useBackendUrl();
@@ -67,16 +48,12 @@ export function CloneDialog({
   const inputId = `clone-${noun}-name`;
   const nounLabel = noun.charAt(0).toUpperCase() + noun.slice(1);
 
-  // The ref guard inside drops a second confirm — a double click, or Enter
-  // twice — sent while the first create is still in flight.
+  // why: the ref guard drops a second confirm while the first is in flight
   const { run: confirm, pending } = useMutation(async () => {
     if (!backendUrl) return;
     const outcome = await create(name, backendUrl);
     if (outcome.outcome !== "success") {
-      // The schema refused the copy's name itself: say so on the field, so the
-      // user can shorten it rather than reading that the entity can't be
-      // cloned. Every other failure keeps the entity's refusal, as does a body
-      // that fails on the name and something else at once.
+      // why: a refused name goes on the field; every other failure keeps the message
       const fieldErrors =
         outcome.outcome === "invalid" ? outcome.fieldErrors : {};
       const nameIssue = fieldErrors.name;

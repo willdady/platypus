@@ -1,10 +1,6 @@
 import { MAIN_CONTENT_ID } from "@/components/skip-link";
 import { cn } from "@/lib/utils";
 
-/**
- * The centered card every invitation state renders inside. `className` sets
- * the spacing and text alignment that differ between states.
- */
 export function InviteShell({
   className,
   children,

@@ -30,14 +30,6 @@ function noticeFor(subject: string, error: unknown) {
   }
 }
 
-/**
- * The notice a failed record read shows in place of the record: what went
- * wrong — gone, forbidden, or anything else — and the way back. Shared by
- * `DetailFormState` and the pages that gate on one record (the Workspace
- * home, `ProtectedRoute`). Given
- * `onRetry` (the read's `mutate`), anything else also offers to read again;
- * a 403 or 404 doesn't, since reading again won't change the answer.
- */
 export function FetchErrorNotice({
   error,
   subject,
@@ -47,9 +39,7 @@ export function FetchErrorNotice({
   onRetry,
 }: {
   error: unknown;
-  /** What the record is, for the messages: "provider", "workspace". */
   subject: string;
-  /** Replaces the default description when the record explains itself. */
   description?: ReactNode;
   backHref: string;
   backLabel: string;

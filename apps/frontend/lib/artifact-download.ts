@@ -10,12 +10,7 @@ const TYPE_MEDIA: Record<Artifact["type"], string> = {
   svg: "image/svg+xml",
 };
 
-/**
- * Downloads one version's content as a file, built in the browser from text
- * the caller already holds. There is no download route: the extension comes
- * from the type (or the language, for code), and a browser that refuses the
- * blob says so rather than failing silently.
- */
+// why: no download route; the browser builds the file from content it has
 export function downloadArtifactContent(
   artifact: Pick<Artifact, "title" | "type" | "language">,
   content: string,

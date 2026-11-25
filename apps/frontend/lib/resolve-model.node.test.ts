@@ -149,7 +149,6 @@ describe("resolveModel", () => {
     expect(resolved?.canSearch).toBe(false);
   });
 
-  // No Provider-type default (ADR-0039).
   it("gives a model that declares no passthrough types none, even on Anthropic", () => {
     const p = provider({
       providerType: "Anthropic" as Provider["providerType"],
@@ -163,8 +162,6 @@ describe("resolveModel", () => {
     expect(resolved?.passthroughFileTypes).toEqual([]);
   });
 
-  // Issue #1689: a native Provider ignores any map and offers Thinking and
-  // every Effort step, with no budget; OpenAI chat mode offers only its map.
   it("gives a native model Thinking and every Effort step, but no budget", () => {
     const resolved = resolveModel({
       providers: [
@@ -202,9 +199,6 @@ describe("resolveModel", () => {
     expect(resolved?.reasoning).toBeUndefined();
   });
 
-  // Issue #869: five helpers each re-normalised the provider's model list per
-  // render. The list is read through a getter here, so the count is exactly
-  // how many times the list was normalised.
   it("normalises the provider's model list once per invocation", () => {
     let reads = 0;
     const counting = {

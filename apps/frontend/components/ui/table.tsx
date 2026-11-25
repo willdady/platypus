@@ -9,7 +9,6 @@ function Table({
   bordered = false,
   ...props
 }: React.ComponentProps<"table"> & {
-  /** Frames the table in a rounded border, as a standalone list draws it. */
   bordered?: boolean;
 }) {
   return (

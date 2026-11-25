@@ -34,15 +34,10 @@ import { formatSize, githubTreeUrl } from "@/components/skill-bundle";
 import { useSkillImportAllowed } from "@/hooks/use-skill-import-allowed";
 import { scopedUrl, writeAt, type Scope } from "@/lib/api-write";
 
-/**
- * The warning before taking a GitHub bundle whose scripts only a Sandbox can
- * run: they're a third party's, and run with the Workspace's environment.
- */
 export function ThirdPartyScriptsAlert({
   subject,
   action,
 }: {
-  /** What includes the scripts, e.g. "1 selected Skill includes". */
   subject: string;
   action: "installing" | "updating";
 }) {
@@ -60,7 +55,6 @@ export function ThirdPartyScriptsAlert({
   );
 }
 
-/** Why a discovered Skill can't be picked, or null when it can. */
 function unselectableReason(skill: SkillGithubCandidate) {
   return (
     skill.error ??
@@ -77,12 +71,10 @@ function CandidateRow({
   commitSha,
 }: {
   skill: SkillGithubCandidate;
-  /** `owner/repo`, for the link to the Skill's directory. */
   repo: string;
   commitSha: string;
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
-  /** The most one install takes are already picked. */
   full: boolean;
 }) {
   const reason = unselectableReason(skill);
@@ -165,20 +157,13 @@ function CandidateRow({
   );
 }
 
-/**
- * Install Skills from GitHub (ADR-0037): a source, then a review of every
- * Skill it holds at the commit its ref resolved to, then the install of the
- * ones picked, at that same commit, with how each one went.
- */
 export function SkillGithubInstall({
   scope,
   skillsHref,
   skillHrefBase,
 }: {
   scope: Scope;
-  /** Where the Skills list is. */
   skillsHref: string;
-  /** Where installed Skills' own pages are, each at `<base>/<skillId>`. */
   skillHrefBase: string;
 }) {
   const backendUrl = useBackendUrl();
@@ -283,7 +268,6 @@ export function SkillGithubInstall({
   const pickable = preview?.skills.filter(
     (skill) => unselectableReason(skill) === null,
   );
-  // One install takes at most this many.
   const selectAll = pickable?.slice(0, SKILL_GITHUB_INSTALL_MAX) ?? [];
   const needsSandbox =
     preview?.skills.filter(

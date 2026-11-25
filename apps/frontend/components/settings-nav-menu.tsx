@@ -15,7 +15,6 @@ import type { ReactNode } from "react";
 
 type SettingsNavMenuProps = {
   links: SettingsNavLink[];
-  /** Rendered above the links, inside the same sidebar group. */
   children?: ReactNode;
 };
 

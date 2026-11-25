@@ -46,17 +46,11 @@ import { workspaceRoutes } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 import type { Serialized } from "@/lib/api-write";
 
-/**
- * What the runs list says about a firing the run-rate breaker dropped before it
- * started. A constant so tests assert the wording without restating the prose.
- */
 export const RUN_SUPPRESSED_NOTICE =
   "Suppressed: this trigger ran too often for this record, so no Agent was started.";
 
-/** The accessible name of a run's warnings, for tests to find them by. */
 export const RUN_WARNINGS_LABEL = "Run warnings";
 
-/** What the runs list says about a run that switched to its Fallback model. */
 export function fallbackNotice(from: string, to: string): string {
   return `Fell back from ${from} to ${to} after the primary Provider failed.`;
 }
@@ -69,10 +63,6 @@ const UNLOADED_REASON_LABELS: Record<UnloadedToolSetReason, string> = {
   unreachable: "unreachable",
 };
 
-/**
- * One granted Tool set or MCP that served the run no tools (#1184), by its
- * display name — or its id when the id names nothing any more.
- */
 function unloadedToolSetNotice({ toolSetId, name, reason }: UnloadedToolSet) {
   return `'${name ?? toolSetId}' loaded no tools: ${UNLOADED_REASON_LABELS[reason]}`;
 }
@@ -98,8 +88,6 @@ export function statusBadge(status: TriggerRunStatus) {
           {TRIGGER_RUN_STATUS_LABELS.running}
         </Badge>
       );
-    // Not a failure: someone stopped it, nothing faulted (#647). Drawn in the
-    // neutral variant so it never reads as a crash.
     case "cancelled":
       return (
         <Badge variant="outline">
@@ -129,19 +117,16 @@ const STATUS_ICONS: Record<
   success: { icon: CircleCheck, className: "text-success" },
   failed: { icon: CircleX, className: "text-destructive" },
   running: { icon: Loader2, className: "animate-spin" },
-  // Neutral, like its badge: a cancel is not a crash (#647).
   cancelled: { icon: Ban, className: "" },
   suppressed: { icon: Ban, className: "text-destructive" },
   pending: { icon: Clock, className: "" },
 };
 
-/** A run status as a colored icon, named by its label, for tight spaces. */
 export function StatusIcon({ status }: { status: TriggerRunStatus }) {
   const { icon: Icon, className } =
     STATUS_ICONS[status] ?? STATUS_ICONS.pending;
   const label = TRIGGER_RUN_STATUS_LABELS[status];
-  // translate-y-px: centered on the line box, the icon reads high beside
-  // lowercase text; 1px down lines it up with the letters.
+  // why: 1px down centres the icon on lowercase text
   return (
     <span
       role="img"
@@ -154,7 +139,6 @@ export function StatusIcon({ status }: { status: TriggerRunStatus }) {
   );
 }
 
-/** The run detail page's address, where the list's rows lead. */
 export function triggerRunDetailHref(
   orgId: string,
   workspaceId: string,
@@ -163,15 +147,6 @@ export function triggerRunDetailHref(
   return workspaceRoutes(orgId, workspaceId).triggerRuns.detail(runId);
 }
 
-/**
- * One run in the workspace-wide Trigger runs list. The list mixes runs from
- * every Trigger, so the row names the Trigger it came from; everything else is
- * the per-run detail an Operator already reads. In the list the whole row is
- * the link to the run, as a Workspace home Trigger card is to its Trigger, and
- * the ⋮ menu holds the rest. The same row heads the run detail page, which
- * turns `linkToDetail` off: the row is then no link, and its menu gains a way
- * back to the Trigger's other runs.
- */
 export function TriggerRunRow({
   run,
   orgId,
@@ -181,27 +156,22 @@ export function TriggerRunRow({
   run: Serialized<TriggerRunWithTrigger>;
   orgId: string;
   workspaceId: string;
-  /** Whether the row links to the run's page. Off on that page itself. */
   linkToDetail?: boolean;
 }) {
   const stats = run.stats;
 
   const routes = workspaceRoutes(orgId, workspaceId);
   const handleCopyRunId = () => void copyWithToast(run.id);
-  // A suppressed firing never ran, so it has no timeline to open.
   const isLink = linkToDetail && run.status !== "suppressed";
 
   const toolCallCount =
     stats?.toolCalls.reduce((sum, tc) => sum + tc.count, 0) ?? 0;
 
+  // why: min-w-0, or a long name pushes the actions off the right edge
+  // why: cached input is a breakdown of the in figure, never subtracted
+  // why: last step's occupancy, a different quantity from the cross-step sums
   const rowBody = (
     <div className="flex items-center gap-4 justify-between">
-      {/* Two columns: text, then actions. The badge sits under the name
-          rather than in a column of its own, which squeezed the text on a
-          phone (#1410). `min-w-0`: a flex item's minimum is otherwise its
-          content's, so a long Trigger name, an error message or the stats
-          line would widen the column past the row and push the actions off
-          the right edge. */}
       <div className="min-w-0 flex-1">
         <p className="font-medium break-words">{run.triggerName}</p>
         <div className="my-1 flex">{statusBadge(run.status)}</div>
@@ -253,11 +223,6 @@ export function TriggerRunRow({
                 <Wrench className="size-3" />0 tool calls
               </span>
             )}
-            {/* Cached input is a breakdown of the in figure above, which
-                already includes it — never subtracted (issue #734). A tooltip
-                on a cache icon so the token line stays as tight as it was:
-                absent means the Provider reported no cache detail, which is
-                never rendered as zero. */}
             {stats.cacheReadTokens !== undefined ||
             stats.cacheWriteTokens !== undefined ? (
               <Tooltip>
@@ -284,10 +249,6 @@ export function TriggerRunRow({
                 {formatTokens(stats.outputTokens)} out
               </span>
             )}
-            {/* How full the context got on the run's LAST step, which is a
-                different quantity from the cross-step sums above (ADR-0018).
-                Absent where the Provider reported no usage — occupancy is
-                then unknown and nothing is estimated. */}
             {stats.contextOccupancy !== undefined && (
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -314,9 +275,6 @@ export function TriggerRunRow({
             {fallbackNotice(stats.fallback.from.model, stats.fallback.to.model)}
           </TurnNotice>
         )}
-        {/* Warnings, never a status: a run that went without some of its
-            tools, or whose tool calls failed, can still end `success`
-            (#1184). Nothing extra for a clean run. */}
         {(run.unloadedToolSets.length > 0 || run.failedToolCalls > 0) && (
           <div role="group" aria-label={RUN_WARNINGS_LABEL}>
             {run.unloadedToolSets.map((unloaded) => (

@@ -62,7 +62,6 @@ export function BlueprintsList({ orgId }: { orgId: string }) {
           <>
             <CardGridSkeleton
               extra={
-                // The "N shared resources" count.
                 <SkeletonLine lineClassName="mt-1 h-4" className="h-3 w-28" />
               }
             />

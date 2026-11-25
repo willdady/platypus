@@ -6,31 +6,20 @@ import { RefreshCw } from "lucide-react";
 import { useTimeout } from "@/hooks/use-timeout";
 import { cn } from "@/lib/utils";
 
-/** How far the finger must travel before releasing triggers a refresh. */
 const REFRESH_THRESHOLD = 80;
-/** The furthest the indicator is dragged, however far the finger goes. */
 const MAX_PULL_DISTANCE = 120;
 
-// The finger must remain within this many pixels of the start point for the
-// duration of SETTLE_PERIOD_MS. If the finger moves further before the settle
-// period elapses, the entire gesture is disqualified from pull-to-refresh.
 const SETTLE_DISTANCE = 15;
 const SETTLE_PERIOD_MS = 100;
 
 type PullToRefreshProps = {
-  /** Must not reject: callers pass SWR revalidation, which reports failure
-   * through the hook. */
+  // why: must not reject — callers pass SWR revalidation, which reports failure
   onRefresh: () => Promise<void>;
   disabled?: boolean;
   className?: string;
   children: React.ReactNode;
 };
 
-/**
- * A touch gesture that refreshes by pulling down from the top of a scroll
- * container. The gesture handling and the indicator it drives live together
- * here because they are one behaviour with one caller.
- */
 export function PullToRefresh({
   onRefresh,
   disabled = false,
@@ -50,11 +39,8 @@ export function PullToRefresh({
   const isHorizontalRef = useRef(false);
   const firstMoveRef = useRef(true);
   const startTimeRef = useRef(0);
-  // Whether the gesture has been permanently disqualified (moved too fast)
   const disqualifiedRef = useRef(false);
-  // Whether the settle period has passed and the gesture is qualified
   const settledRef = useRef(false);
-  // Ref mirrors so callbacks never read stale state
   const pullDistanceRef = useRef(0);
 
   const handleTouchStart = useCallback((e: TouchEvent) => {
@@ -90,21 +76,16 @@ export function PullToRefresh({
       if (startScrollTopRef.current !== 0) return;
       if (deltaY <= 0) return;
 
-      // During the settle period, check if the finger has moved too far.
-      // If so, permanently disqualify this gesture.
       if (!settledRef.current) {
         const elapsed = Date.now() - startTimeRef.current;
         const totalDelta = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
         if (totalDelta > SETTLE_DISTANCE) {
-          // Finger moved too far before settle period elapsed — disqualify
           disqualifiedRef.current = true;
           return;
         }
         if (elapsed >= SETTLE_PERIOD_MS) {
-          // Finger stayed still long enough — gesture is qualified
           settledRef.current = true;
         } else {
-          // Still within settle period and within distance — wait
           return;
         }
       }
@@ -132,9 +113,7 @@ export function PullToRefresh({
       setPullDistance(0);
       try {
         await onRefresh();
-        // Linger so the spinner is visible before the indicator exits. On
-        // unmount the timer is dropped and this never settles, which is what
-        // we want: nothing is left to reset.
+        // why: linger 600ms so the spinner is seen; an unmount drops the timer
         await new Promise<void>((resolve) => scheduleLinger(resolve, 600));
       } finally {
         isRefreshingRef.current = false;

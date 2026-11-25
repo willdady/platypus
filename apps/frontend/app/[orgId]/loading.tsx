@@ -32,8 +32,6 @@ function ContentSkeleton() {
   );
 }
 
-// Stands in for the Add Workspace page and the first step of its wizard,
-// placeholder for placeholder, so nothing jumps when the wizard arrives.
 function AddWorkspaceSkeleton() {
   return (
     <div className="h-dvh overflow-y-auto pb-4">
@@ -57,7 +55,6 @@ function AddWorkspaceSkeleton() {
             ))}
           </div>
           <div className="mb-6 flex flex-col gap-7">
-            {/* Name, then Owner with its description */}
             {[false, true].map((described, i) => (
               <div key={i} className="flex flex-col gap-3">
                 <Skeleton className="h-5 w-20" />
@@ -65,7 +62,6 @@ function AddWorkspaceSkeleton() {
                 {described && <Skeleton className="h-5 w-3/4" />}
               </div>
             ))}
-            {/* Context: label and expand button, textarea, counter, description */}
             <div className="flex flex-col gap-3">
               <div className="flex flex-col">
                 <div className="mb-2 flex items-center justify-between">
@@ -85,12 +81,7 @@ function AddWorkspaceSkeleton() {
   );
 }
 
-// The Organization settings layout awaits the organization on the server, and
-// a segment's own `loading` can't cover its layout — so the fallback lives
-// here, one segment up. That makes it the boundary for every Organization
-// child (home, settings, create, the Workspace shell), and it is what the
-// router shows the moment any of them is entered, so it takes the shape of
-// the one being entered rather than one shape for all.
+// why: a segment's own loading can't cover its layout, so this sits one segment up
 export default function OrganizationLoading() {
   const pathname = usePathname();
   const { orgId } = useParams<{ orgId: string }>();
@@ -124,9 +115,6 @@ export default function OrganizationLoading() {
     return <AddWorkspaceSkeleton />;
   }
 
-  // The Organization home draws itself: it reads only client-cached data, so
-  // a switch between Organizations repaints nothing, and a cold entry shows
-  // the home's own placeholders.
   return (
     <SettingsShell
       menu={<OrgListSidebar currentOrgId={orgId} />}

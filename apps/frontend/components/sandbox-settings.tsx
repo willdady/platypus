@@ -78,50 +78,28 @@ import {
 type SandboxBackend = {
   backend: string;
   name: string;
-  // The backend's config and credentials schemas as JSON Schema, absent when
-  // it declares no fields. A backend with no bespoke form gets its fields
-  // generated from these.
   configSchema?: BackendJsonSchema;
   credentialsSchema?: BackendJsonSchema;
 };
 
-// The docker reference backend exposes host reachability via these two config
-// fields. See ADR-0005. Other backends ignore them.
 const DOCKER_BACKEND = "docker";
 
-// The SSH reference backend (ADR-0012) attaches to a pre-existing host. Its
-// config (host/port/user/rootDir) and credentials (privateKey/passphrase) are
-// all admin-only, inherited from the existing requireSandboxAdmin gating.
 const SSH_BACKEND = "ssh";
 
-/**
- * The form's values. Exported for the per-backend field components, which read
- * and write the backend-config fields through `setConfigField`.
- */
 export type SandboxFormData = {
   name: string;
   backend: string;
-  // Two-tier env (ADR-0006): admin-managed vs owner-managed.
   adminEnv: KeyValueRow[];
   userEnv: KeyValueRow[];
-  // Docker host reachability (ADR-0005), admin-only.
   networks: string[];
-  extraHosts: KeyValueRow[]; // key = hostname, value = ip / host-gateway
-  // SSH connection (ADR-0012), admin-only. Port is kept as a string for the
-  // input and parsed on save. privateKey/passphrase are credentials: GET never
-  // returns them (only `hasCredentials`), so blank means "keep the stored key".
+  extraHosts: KeyValueRow[];
   sshHost: string;
   sshPort: string;
   sshUser: string;
   sshRootDir: string;
-  // Optional host-key pin (ADR-0012). Part of config, not credentials — returned
-  // by GET like the rest of the SSH config.
   sshHostKey: string;
   sshPrivateKey: string;
   sshPassphrase: string;
-  // Fields generated from a plugin backend's config and credentials schemas
-  // (a backend with no bespoke form). Config seeds from the stored row;
-  // credentials always start blank because GET never returns them.
   configValues: Record<string, unknown>;
   credentialsValues: Record<string, unknown>;
 };
@@ -144,7 +122,6 @@ const DEFAULT_FORM: SandboxFormData = {
   credentialsValues: {},
 };
 
-/** The fields that travel in the backend's `config`, which share one error key. */
 type SandboxConfigField =
   | "networks"
   | "extraHosts"
@@ -156,13 +133,11 @@ type SandboxConfigField =
   | "sshPrivateKey"
   | "sshPassphrase";
 
-/** Sets one backend-config field, retracting its errors as it lands. */
 type SetConfigField = <K extends SandboxConfigField>(
   field: K,
   value: SandboxFormData[K],
 ) => void;
 
-/** What a per-backend config field component takes. */
 export type SandboxConfigFieldsProps = {
   formData: SandboxFormData;
   setConfigField: SetConfigField;
@@ -170,8 +145,6 @@ export type SandboxConfigFieldsProps = {
   disabled: boolean;
 };
 
-// extraHosts travel as `["hostname:target", ...]`. Split on the first colon so
-// IPv6 targets (which contain colons) survive intact.
 function extraHostsToRows(entries: string[] | undefined): KeyValueRow[] {
   return (entries ?? []).map((entry) => {
     const idx = entry.indexOf(":");
@@ -190,7 +163,6 @@ function rowsToExtraHosts(rows: KeyValueRow[]): string[] {
 const SAVED_MESSAGE = "Sandbox configured";
 const DELETED_MESSAGE = "Sandbox deleted";
 
-// A teardown the backend could not finish asks to be retried with `force=true`.
 function isForceRetry(outcome: WriteOutcome<unknown>): boolean {
   return (
     outcome.outcome === "error" &&
@@ -199,8 +171,6 @@ function isForceRetry(outcome: WriteOutcome<unknown>): boolean {
   );
 }
 
-// Mirrors the configured-sandbox form — the shape most workspaces land on —
-// rather than the Empty card: name, backend, the env editors, then Save.
 function SandboxSettingsSkeleton({ canConfigure }: { canConfigure: boolean }) {
   return (
     <LoadingRegion label="Loading sandbox">
@@ -217,19 +187,13 @@ function SandboxSettingsSkeleton({ canConfigure }: { canConfigure: boolean }) {
   );
 }
 
-/**
- * A teardown the backend could not finish, offered as a forced retry in its own
- * dialog: the write it retries, and what a successful retry does.
- */
 type ForceRetry = {
   title: string;
   message: string;
   confirmLabel: string;
-  /** Toast shown once the forced write succeeds. */
   successMessage: string;
-  /** The forced write the dialog confirms. */
   retry: () => Promise<WriteOutcome<unknown>>;
-  /** Runs once the forced write succeeds, before its toast. */
+  // why: onSuccess runs before the toast, so the list is right when it appears
   onSuccess: () => Promise<void>;
 };
 
@@ -239,20 +203,16 @@ function SandboxSettings({
   draft,
 }: {
   orgId: string;
-  /** Absent only for a draft, whose Workspace does not exist yet. */
   workspaceId?: string;
-  /** Collect the Sandbox rather than save it (see `FormDraft`). */
   draft?: FormDraft;
 }) {
   const { actor } = useAuth();
   const backendUrl = useBackendUrl();
-  // Credential- and reach-bearing sandbox config is admin-managed (ADR-0006).
   const canConfigure = canConfigureSandbox(actor);
 
   const scope = { orgId, workspaceId };
 
-  // The same URL the reads above key on, so a write and its revalidation
-  // can't drift apart.
+  // why: the write and its revalidation share one URL, so they cannot drift
   const sandboxUrl = scopedUrl(backendUrl, "sandbox", scope);
 
   const { data, error, isLoading, mutate } = useScopedSWR<Sandbox | null>(
@@ -270,8 +230,6 @@ function SandboxSettings({
   } = useScopedList<SandboxBackend>("sandbox-backends", { orgId });
 
   const [isConfiguring, setIsConfiguring] = useState(false);
-  // Whether the admin chose to replace a stored SSH key, revealing the textarea
-  // in place of the "Key stored" state.
   const [isReplacingKey, setIsReplacingKey] = useState(false);
 
   const [forceDialog, setForceDialog] = useState<
@@ -282,8 +240,7 @@ function SandboxSettings({
     setForceDialog({ ...retry, error: null });
   }
 
-  // A sandbox is the Workspace's singleton, read from the collection path
-  // itself with no id, so the hook only writes and the read above seeds.
+  // why: a sandbox is a singleton, so the hook only writes and the read seeds
   const {
     formData,
     setFormData,
@@ -297,7 +254,6 @@ function SandboxSettings({
   } = useEntityForm<SandboxFormData>({
     initialData: DEFAULT_FORM,
     write: () => writeSandbox(),
-    // A rejected save toasts, as there is no one field to key a conflict to.
     conflictField: null,
     onError: (message, outcome) => {
       if (!isForceRetry(outcome)) {
@@ -315,7 +271,6 @@ function SandboxSettings({
       });
     },
     failureMessage: "Failed to save sandbox",
-    // A draft stays put: the wizard moves on once `write` accepts it.
     successMessage: draft ? undefined : SAVED_MESSAGE,
     onSuccess: draft ? undefined : () => reseedFromServer(),
   });
@@ -327,8 +282,6 @@ function SandboxSettings({
       id: data?.id,
       successMessage: DELETED_MESSAGE,
       write: () => deleteSandbox(),
-      // A failed destroy is offered as a forced retry in its own dialog; every
-      // other refusal stays inline.
       onError: (_message, outcome) => {
         if (!isForceRetry(outcome)) return false;
         setIsDeleteDialogOpen(false);
@@ -348,9 +301,6 @@ function SandboxSettings({
       },
     });
 
-  // Backend config fields key their server error to `config`, so they share one
-  // setter that retracts it — and the field's own key, which `networks` uses.
-  // A top-level field's own name is the key, so it goes through `setField`.
   const setConfigField: SetConfigField = useCallback(
     <K extends SandboxConfigField>(field: K, value: SandboxFormData[K]) => {
       setValidationErrors((prev) =>
@@ -361,9 +311,7 @@ function SandboxSettings({
     [setValidationErrors, setFormData],
   );
 
-  // One generated field. Its server error is keyed `config.<key>` or
-  // `credentials.<key>`, so only that key and the slice's own root are
-  // retracted — a sibling field's error stays until that field is edited.
+  // why: retract only this field's key, so a sibling's error stays until edited
   const setSchemaValue = useCallback(
     (slice: BackendSchemaSlice, key: string, value: unknown) => {
       setValidationErrors((prev) =>
@@ -380,10 +328,6 @@ function SandboxSettings({
     [setValidationErrors, setFormData],
   );
 
-  // Generated values belong to the backend that declared them, so switching
-  // backend drops them rather than carrying one backend's fields into another —
-  // and coming back to the saved backend re-seeds what the row holds. Every
-  // error under either slice goes with them.
   const selectBackend = useCallback(
     (backend: string) => {
       setValidationErrors((prev) =>
@@ -422,29 +366,20 @@ function SandboxSettings({
       userEnv: recordToRows(record.userEnv),
       networks: config.networks ?? [],
       extraHosts: extraHostsToRows(config.extraHosts),
-      // SSH config. The key and passphrase stay blank: GET strips them, and an
-      // edit that doesn't enter a new key preserves the stored one.
       sshHost: config.host ?? "",
       sshPort: config.port ? String(config.port) : DEFAULT_SSH_PORT,
       sshUser: config.user ?? "",
       sshRootDir: config.rootDir ?? "",
       sshHostKey: config.hostKey ?? "",
-      // A plugin backend's generated fields seed from whatever config the row
-      // holds; credentials are never returned, so they start blank.
       configValues: record.config ?? {},
     });
   }
 
-  // Keyed on the id, not the record: SWR hands back a new object on every
-  // revalidation, and re-seeding on that would overwrite the edit in progress.
-  // A save re-seeds explicitly from what it wrote back.
   useResetOnChange(data ? data.id : data, () => {
     setIsReplacingKey(false);
     if (data) seedFrom(data);
   });
 
-  // When creating (no existing record), default the backend to the first
-  // available one until the user picks another.
   useResetOnChange(backends, () => {
     if (!data && backends.length > 0) {
       seedFormData((prev) =>
@@ -455,8 +390,6 @@ function SandboxSettings({
 
   const isDocker = formData.backend === DOCKER_BACKEND;
   const isSsh = formData.backend === SSH_BACKEND;
-  // Docker and SSH keep their bespoke forms; every other backend renders the
-  // fields its own schemas declare.
   const isGenerated = !isDocker && !isSsh;
   const selectedBackend = backends.find(
     (option) => option.backend === formData.backend,
@@ -467,9 +400,6 @@ function SandboxSettings({
   const credentialFields = isGenerated
     ? fieldsFromSchema(selectedBackend?.credentialsSchema, "credentials")
     : [];
-  // A stored credential (GET reports only that one exists) can be kept by
-  // leaving the field blank — but not across a backend switch, which starts
-  // the new backend's credentials from scratch.
   const backendChanged = !!data && data.backend !== formData.backend;
   const hasStoredCredentials = !!data?.hasCredentials && !backendChanged;
 
@@ -481,9 +411,6 @@ function SandboxSettings({
     const url =
       isCreate || !options.force ? sandboxUrl : `${sandboxUrl}?force=true`;
 
-    // Backend-specific config. Docker carries host reachability (ADR-0005); SSH
-    // carries the connection target (ADR-0012). Every other backend's config
-    // is built from the fields its own schema declared.
     const config = isDocker
       ? {
           networks: formData.networks,
@@ -494,13 +421,11 @@ function SandboxSettings({
             host: formData.sshHost.trim(),
             port: Number(formData.sshPort) || Number(DEFAULT_SSH_PORT),
             user: formData.sshUser.trim(),
-            // rootDir is optional — omit when blank so the backend applies its
-            // `$HOME/platypus-workspace` default.
+            // why: omit rootDir when blank, or the backend's $HOME default never applies
             ...(formData.sshRootDir.trim()
               ? { rootDir: formData.sshRootDir.trim() }
               : {}),
-            // hostKey is optional — omit when blank so the backend connects with
-            // the MITM warning rather than pinning.
+            // why: omit a blank hostKey, so the backend connects unverified not pinned
             ...(formData.sshHostKey.trim()
               ? { hostKey: formData.sshHostKey.trim() }
               : {}),
@@ -511,14 +436,6 @@ function SandboxSettings({
             formData.configValues,
           );
 
-    // The `credentials` slice of the payload (spread below). For SSH (ADR-0012)
-    // we only send credentials when a private key was entered: omitting
-    // `credentials` preserves the stored value server-side rather than clearing
-    // it. The passphrase travels only with a key, so it is never dropped
-    // silently. A generated backend follows the same rule on an edit: send the
-    // credentials only when a field was filled, or the backend changed and the
-    // stored material no longer applies. Docker sends an empty object, as
-    // before.
     const credentialsEntered = credentialFields.some((field) => {
       const value = formData.credentialsValues[field.key];
       return field.kind === "boolean"
@@ -535,7 +452,7 @@ function SandboxSettings({
                 : {}),
             },
           }
-        : {} // omit credentials — preserve stored
+        : {}
       : isDocker
         ? { credentials: {} }
         : isCreate || backendChanged || credentialsEntered
@@ -546,10 +463,8 @@ function SandboxSettings({
                 formData.credentialsValues,
               ),
             }
-          : {}; // omit credentials — preserve stored
+          : {};
 
-    // Non-admin owners may only change name + userEnv (ADR-0006); everything
-    // else is admin-controlled and ignored server-side, so we don't send it.
     const payload = canConfigure
       ? {
           ...(isCreate && workspaceId ? { workspaceId } : {}),
@@ -612,8 +527,6 @@ function SandboxSettings({
       try {
         const outcome = await forceDialog.retry();
         if (outcome.outcome !== "success") {
-          // A refused force stays in the open dialog with the backend's
-          // message, so it can be read and retried.
           setForceDialog((prev) => prev && { ...prev, error: outcome.message });
           return;
         }
@@ -621,8 +534,7 @@ function SandboxSettings({
         await forceDialog.onSuccess();
         toast.success(forceDialog.successMessage);
       } catch (err) {
-        // A thrown failure is not a refusal with a backend message, so it keeps
-        // the plain toast rather than posing as one inline.
+        // why: a thrown failure is not a refusal, so it keeps the toast, not inline
         console.error("Force retry error:", err);
         toast.error("Operation failed");
       }
@@ -633,8 +545,6 @@ function SandboxSettings({
     return <SandboxSettingsSkeleton canConfigure={canConfigure} />;
   }
 
-  // Only a cold failure replaces the form; a failed revalidation keeps the
-  // loaded sandbox (or the "none configured" state) on screen.
   if (error && data === undefined) {
     return (
       <EmptyCard
@@ -647,8 +557,6 @@ function SandboxSettings({
   }
 
   const hasSandbox = !!data;
-  // A stored key stays "stored" until the admin opts to replace it; with none
-  // stored the field starts empty and offers no stored state.
   const keyState: SandboxKeyState =
     data?.backend === SSH_BACKEND && data.hasCredentials
       ? isReplacingKey
@@ -660,9 +568,6 @@ function SandboxSettings({
   const backendsFailed = Boolean(backendsError && !backendsData);
 
   if (!showForm) {
-    // Without the backends list there is no telling a server with none
-    // registered from one whose list didn't load, so neither the "add a
-    // backend" prompt nor a disabled Configure button is shown.
     if (backendsFailed) {
       return (
         <ListError
@@ -744,7 +649,6 @@ function SandboxSettings({
             </SelectGroup>
           </FormSelectField>
 
-          {/* Host reachability (ADR-0005) — admin-only, docker backend only. */}
           {canConfigure && isDocker && (
             <SandboxDockerFields
               orgId={orgId}
@@ -755,7 +659,6 @@ function SandboxSettings({
             />
           )}
 
-          {/* SSH connection (ADR-0012) — admin-only, ssh backend only. */}
           {canConfigure && isSsh && (
             <SandboxSshFields
               formData={formData}
@@ -767,8 +670,6 @@ function SandboxSettings({
             />
           )}
 
-          {/* Every other backend's config and credentials, generated from the
-              schemas it registered — admin-only like the rest of the config. */}
           {canConfigure && isGenerated && selectedBackend?.configSchema && (
             <SandboxSchemaFields
               slice="config"
@@ -796,7 +697,6 @@ function SandboxSettings({
               />
             )}
 
-          {/* Admin-managed env (ADR-0006). */}
           {canConfigure && (
             <Field
               aria-labelledby="sandbox-admin-env-label"
@@ -826,7 +726,6 @@ function SandboxSettings({
             </Field>
           )}
 
-          {/* Owner-managed env (ADR-0006). Visible/editable to owner + admin. */}
           <Field
             aria-labelledby="sandbox-user-env-label"
             data-invalid={!!validationErrors.userEnv}
@@ -839,8 +738,6 @@ function SandboxSettings({
               Values are kept server-side and never sent to the model. Cannot
               override an admin-managed key.
             </FieldDescription>
-            {/* Admin keys are shown read-only so the owner knows which names
-                are reserved (values are never returned to non-admins). */}
             {!canConfigure && formData.adminEnv.length > 0 && (
               <div className="mb-2">
                 <p className="text-xs text-muted-foreground mb-1">

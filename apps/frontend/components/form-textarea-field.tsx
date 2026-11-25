@@ -26,9 +26,6 @@ export type FormTextareaFieldProps = {
   textareaClassName?: string;
 };
 
-// Composes the ui/field + ui/textarea atoms so the
-// Field/FieldLabel/Textarea/FieldError block doesn't have to be hand-wired at
-// every call site, matching `FormTextField`.
 export function FormTextareaField({
   label,
   name,

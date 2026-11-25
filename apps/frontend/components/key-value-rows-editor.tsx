@@ -6,14 +6,9 @@ import { FieldError } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
-// Rows are kept as an ordered array (not a Record) so a user can edit keys, add
-// empties, and tolerate duplicate-during-edit without the UI reshuffling on
-// every keystroke. The id is the React key: keyed by index, removing row N
-// would hand row N's DOM and local state to row N+1 (#1468).
 export type KeyValueRow = { id: string; key: string; value: string };
 
-// A counter, not crypto.randomUUID: that needs a secure context, and a
-// self-hosted install may be served over plain http.
+// why: crypto.randomUUID needs a secure context, and a self-host may serve plain http
 let lastRowId = 0;
 
 export function newRow(key = "", value = ""): KeyValueRow {
@@ -30,7 +25,6 @@ export function recordToRows(
   return Object.entries(rec ?? {}).map(([key, value]) => newRow(key, value));
 }
 
-/** Trims keys and drops rows without one; `empty` is returned when none remain. */
 export function rowsToRecord<E>(
   rows: KeyValueRow[],
   empty: E,
@@ -44,14 +38,6 @@ export function rowsToRecord<E>(
   return Object.keys(out).length > 0 ? out : empty;
 }
 
-/**
- * Returns the first name that appears on more than one row, or null when every
- * name is unique. Blank rows are ignored, matching `rowsToRecord`.
- *
- * HTTP header names are case-insensitive, so header fields pass
- * `{ caseSensitive: false }`; environment variable names are case-sensitive and
- * keep the default.
- */
 export function findDuplicateKey(
   rows: KeyValueRow[],
   { caseSensitive = true }: { caseSensitive?: boolean } = {},
@@ -67,11 +53,6 @@ export function findDuplicateKey(
   return null;
 }
 
-/**
- * The error for a header field whose rows repeat a name, or null when every
- * name is unique. Header names are compared case-insensitively, as HTTP does;
- * the message keeps the casing the user typed so they can find the row.
- */
 export function duplicateHeaderError(rows: KeyValueRow[]): string | null {
   const duplicate = findDuplicateKey(rows, { caseSensitive: false });
   return duplicate
@@ -105,13 +86,11 @@ export function KeyValueRowsEditor({
   rowError,
 }: {
   rows: KeyValueRow[];
-  /** `changed` is the edited or removed row as it was before; absent on add. */
   onChange: (rows: KeyValueRow[], changed?: KeyValueRow) => void;
   disabled?: boolean;
   readOnly?: boolean;
   keyPlaceholder: string;
   valuePlaceholder: string;
-  /** Defaults to the placeholder and row number, and "Remove row N". */
   labels?: RowAriaLabels;
   addLabel: string;
   maskValue?: boolean;

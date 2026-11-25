@@ -30,7 +30,6 @@ import type { ChatSettings } from "@/hooks/use-chat-settings";
 
 type ChatSettingsDialogProps = {
   settings: ChatSettings;
-  /** The selected model's Reasoning map, where its Provider honours one. */
   reasoning?: ReasoningMap;
   onChange: (patch: Partial<ChatSettings>) => void;
   onClose?: () => void;
@@ -53,13 +52,10 @@ export function ChatSettingsDialog({
     maxSteps,
   } = settings;
 
-  // Derived from the value, not stored: a flag would reset when the dialog
-  // remounts while an out-of-range value stayed in state. Judged by the schema
-  // that will judge the request, not by a copy of its bounds.
+  // why: derived from the value, so a remount can't keep a stale flag
   const maxStepsInvalid = !isValidChatMaxSteps(maxSteps);
 
-  // Judged the same way, so a value saved before the bounds existed shows
-  // here before it can refuse a turn (#1177).
+  // why: the same judge as the send guard, so a stored value is flagged early
   const samplingError = (
     field: ChatSamplingField,
     value: number | undefined,
@@ -122,8 +118,6 @@ export function ChatSettingsDialog({
             errors={errors}
             className="gap-4"
           />
-          {/* Half-width like the sampling fields it follows, as when the two
-              shared one grid. */}
           <FieldGroup className="grid grid-cols-2">
             <FormTextField
               label="Max steps"

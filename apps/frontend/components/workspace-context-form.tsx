@@ -52,7 +52,6 @@ const INITIAL_DATA: { content: string; workspaceId: string | null } = {
   workspaceId: null,
 };
 
-/** An edit shows the fixed Organization and Workspace as plain text. */
 function ReadOnlyFieldSkeleton() {
   return (
     <div className="flex w-full flex-col gap-3">
@@ -99,7 +98,7 @@ export function WorkspaceContextForm({ contextId }: { contextId?: string }) {
     submit,
   } = useEntityForm<typeof INITIAL_DATA, Context, Context>({
     initialData: INITIAL_DATA,
-    // User-scoped, so the root scope: `/users/me/contexts`.
+    // why: contexts are user-scoped, so the root scope
     entity: "users/me/contexts",
     scope: {},
     id: contextId,
@@ -108,13 +107,12 @@ export function WorkspaceContextForm({ contextId }: { contextId?: string }) {
       workspaceId: context.workspaceId,
     }),
     retractableFields: RETRACTABLE_FIELDS,
-    // The Workspace is fixed once the context exists.
+    // why: the Workspace is fixed once the context exists
     buildPayload: (data) =>
       contextId
         ? { content: data.content }
         : { content: data.content, workspaceId: data.workspaceId },
-    // A create's 409 is "you already have a context for this workspace", so
-    // it belongs on the Workspace field; an update has no such field.
+    // why: a create's 409 means one context per Workspace, so it lands on the field
     conflictField: contextId ? null : "workspaceId",
     successMessage: () =>
       contextId ? "Workspace context updated" : "Workspace context created",
@@ -129,7 +127,6 @@ export function WorkspaceContextForm({ contextId }: { contextId?: string }) {
     onSuccess: () => router.push(userRoutes.contexts),
   });
 
-  // Fetch organizations
   const {
     data: orgsData,
     results: orgs,
@@ -137,18 +134,13 @@ export function WorkspaceContextForm({ contextId }: { contextId?: string }) {
     mutate: mutateOrgs,
   } = useScopedList<Organization>("organizations", {});
 
-  // Fetch all contexts to filter out workspaces that already have contexts
   const {
     data: allContextsData,
     results: allContexts,
     error: allContextsError,
   } = useScopedList<Context>("users/me/contexts", {});
 
-  // Every workspace across every organization the user belongs to. The API has
-  // no user-scoped workspace route, so the per-organization fan-out lives in
-  // one SWR fetcher: the organization list is the key, so a changed list is a
-  // new request, and a failure reaches the form as `error` rather than a
-  // `console.error` in an effect that cannot cancel itself.
+  // why: no user-scoped route, so the org list keys one fan-out request
   const fetchOrgWorkspaces = async (
     organizations: Serialized<Organization>[] | null,
   ): Promise<WorkspaceWithOrg[]> => {
@@ -168,7 +160,7 @@ export function WorkspaceContextForm({ contextId }: { contextId?: string }) {
     return perOrg.flat();
   };
 
-  // Raw `useSWR`: keyed on the org list, which `useScopedSWR` already gated.
+  // why: raw useSWR, keyed on the org list useScopedSWR already gated
   const {
     data: workspacesData,
     error: workspacesError,
@@ -179,15 +171,9 @@ export function WorkspaceContextForm({ contextId }: { contextId?: string }) {
   );
   const workspaces = workspacesData ?? [];
 
-  // The picker depends on two reads — the organizations and their workspaces —
-  // and a failure in either leaves it with nothing to offer, so both surface
-  // the same notice and Retry.
+  // why: either read failing leaves the picker empty, so both show one notice
   const workspacesLoadError = orgsError ?? workspacesError;
-  // Until both the workspaces and the contexts that filter them land, the
-  // picker would offer nothing (or too much) with no hint why. Keyed on data,
-  // not `isLoading`: the fan-out's key stays null until the organizations
-  // arrive, and SWR reports a null key as not loading. No organizations means
-  // no fan-out at all (SWR never fetches an empty-array key), so nothing to wait on.
+  // why: keyed on data — SWR reports a null fan-out key as not loading
   const workspacesLoading =
     !workspacesLoadError &&
     (orgsData === undefined ||
@@ -198,7 +184,6 @@ export function WorkspaceContextForm({ contextId }: { contextId?: string }) {
     void mutateWorkspaces();
   };
 
-  // Filter out workspaces that already have contexts (unless we're editing that context)
   const existingWorkspaceIds = new Set(
     allContexts
       .filter((c) => c.workspaceId && c.id !== contextId)

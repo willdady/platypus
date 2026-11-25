@@ -6,10 +6,6 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useOrganization } from "@/hooks/use-organization";
 import { useWorkspace } from "@/hooks/use-workspace";
 
-/**
- * Tells the Owner when the Organization's gate excludes this Workspace, so
- * its A2A endpoints don't answer at all.
- */
 export function A2aEndpointNotices({
   orgId,
   workspaceId,
@@ -19,8 +15,6 @@ export function A2aEndpointNotices({
 }) {
   const { data: organization } = useOrganization(orgId);
   const { data: workspace } = useWorkspace(orgId, workspaceId);
-  // Only once everything the answer depends on has loaded: a Workspace still
-  // loading is unknown, not excluded.
   const gateClosed =
     organization !== undefined &&
     (organization.a2aGate !== "selected" || workspace !== undefined) &&

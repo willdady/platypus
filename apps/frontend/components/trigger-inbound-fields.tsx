@@ -42,17 +42,13 @@ import type {
   TriggerFieldsProps,
 } from "@/components/trigger-form";
 
-/** One declared input as the form edits it; saved as `inputs[]` (ADR-0030). */
 type InboundInputDraft = {
   name: string;
   required: boolean;
   description: string;
 };
 
-/**
- * What stops the declared inputs from saving, if anything. The backend checks
- * the same rules; this only moves the message next to the rows.
- */
+// why: the backend checks the same rules; this only moves the message by the rows
 function inboundInputsProblem(inputs: InboundInputDraft[]): string | null {
   const names = inputs.map((input) => input.name.trim());
   if (names.some((name) => name === "")) return "Every input needs a name.";
@@ -67,7 +63,6 @@ function inboundInputsProblem(inputs: InboundInputDraft[]): string | null {
   return null;
 }
 
-/** A token being shown in the one-time dialog, and where to go after. */
 type ShownToken = {
   token: string;
   triggerId: string;
@@ -75,19 +70,13 @@ type ShownToken = {
   leaveOnClose: boolean;
 };
 
-/** The token lifetimes the picker offers. */
 type TokenExpiryDays = (typeof BEARER_TOKEN_EXPIRY_DAYS)[number];
 
-/** What regenerating answers: the new token, shown once, and when it expires. */
 type IssuedInboundToken = {
   token: string;
   tokenExpiresAt: string;
 };
 
-/**
- * An Inbound Trigger's declared inputs, record key and token lifetime, and,
- * once saved, its token: status, regenerate, and the one-time token dialog.
- */
 function TriggerInboundFields({
   active,
   trigger,
@@ -119,8 +108,6 @@ function TriggerInboundFields({
   const requiredInputNames = inboundInputs
     .filter((input) => input.required && input.name.trim())
     .map((input) => input.name.trim());
-  // The record key names an input, so renaming, removing or un-requiring that
-  // input unmarks it rather than saving a key that names nothing.
   const effectiveRecordKey = requiredInputNames.includes(recordKey)
     ? recordKey
     : "";
@@ -133,8 +120,6 @@ function TriggerInboundFields({
   const tokenStatus = trigger?.tokenStatus ?? "none";
   const hasToken = tokenStatus !== "none";
 
-  // A new Inbound Trigger's token is in the save's response and never again,
-  // so it is shown before leaving the page.
   const handleSaved = useCallback((result: SavedTrigger) => {
     if (!result?.token) return false;
     setShownToken({
@@ -187,8 +172,6 @@ function TriggerInboundFields({
       prev.map((input, i) => (i === index ? { ...input, ...patch } : input)),
     );
 
-  // The response carries the new token, which is shown once and never read
-  // back, so the confirmation hands it straight to the token dialog.
   const regenerateToken = useConfirmFlow<
     Serialized<Trigger>,
     IssuedInboundToken
@@ -221,8 +204,6 @@ function TriggerInboundFields({
 
   return (
     <>
-      {/* The dialogs outlive the fields, so a gate that closes while a new
-          token is on screen can't take the token with it. */}
       {active && (
         <>
           <Field

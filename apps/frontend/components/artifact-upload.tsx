@@ -15,13 +15,6 @@ import {
 import { workspaceRoutes } from "@/lib/routes";
 import { Button } from "./ui/button";
 
-/**
- * The Artifacts page's Upload action. The browser reads the picked file, so
- * the refusal for a file over the limit or one that is not text lands without
- * a request; the create route checks both again, so a client that skipped the
- * checks cannot store a truncated or mangled document either. On success the
- * User lands on the new Artifact's page.
- */
 export function ArtifactUploadButton({
   orgId,
   workspaceId,
@@ -31,7 +24,6 @@ export function ArtifactUploadButton({
   orgId: string;
   workspaceId: string;
   variant?: ComponentProps<typeof Button>["variant"];
-  /** Run after a successful create, before leaving for the new Artifact. */
   onUploaded: () => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);

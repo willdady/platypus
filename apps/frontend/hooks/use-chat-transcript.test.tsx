@@ -12,18 +12,6 @@ import { CHAT_POLL_INTERVAL_MS } from "@/lib/chat-recovery";
 import { optionalFetcher } from "@/lib/utils";
 import { useChatTranscript } from "./use-chat-transcript";
 
-/**
- * The client side of ADR-0026, at the hook's own interface.
- *
- * The pure decisions have their own tests in `lib/chat-recovery.test.ts`; what
- * those cannot see — and what this hook exists to own — is how they are
- * sequenced: when the row is read, whether a fetched snapshot may land, how a
- * switch between Alternatives is made one request at a time, and which of the
- * two error surfaces a run belief selects. The seam is HTTP (`writeAt` plus
- * `useScopedSWR`) and the `useChat` state the hook is handed, so both are faked
- * here and no component is involved.
- */
-
 const CHAT_ID = "chat-1";
 const CHAT_URL = `http://test/organizations/org1/workspaces/ws1/chat/${CHAT_ID}`;
 
@@ -54,7 +42,6 @@ vi.mock("@/hooks/use-scoped-swr", () => ({
   },
 }));
 
-// The real module's types and path helpers stay; only the transport is faked.
 vi.mock("@/lib/api-write", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api-write")>()),
   writeAt: writeAtMock,
@@ -110,7 +97,6 @@ function setup(
     setMessages,
     result: rendered.result,
     rerender,
-    /** A read landing: the row the hook's next render sees. */
     readLands(data: unknown) {
       read.data = data;
       rerender();
@@ -120,7 +106,6 @@ function setup(
       state.error = nextError;
       rerender();
     },
-    /** Walks the local turn through a status sequence, as the chat hook does. */
     through(...statuses: ChatStatus[]) {
       for (const next of statuses) {
         this.setStatus(next, next === "error" ? DROPPED_ERROR : undefined);
@@ -132,12 +117,9 @@ function setup(
 type Harness = ReturnType<typeof setup>;
 
 const DROPPED_ERROR = new Error("Failed to fetch");
-/** A turn that was streaming when the browser tore the connection down. */
 const DROPPED: ChatStatus[] = ["submitted", "streaming", "error"];
-/** A turn the server refused before any of it arrived. */
 const REFUSED: ChatStatus[] = ["submitted", "error"];
 
-/** The updater the hydrate effect last handed `setMessages`. */
 function applied(h: Harness, held: PlatypusUIMessage[]) {
   const update = h.setMessages.mock.calls.at(-1)?.[0] as
     ((held: PlatypusUIMessage[]) => PlatypusUIMessage[]) | undefined;
@@ -145,14 +127,12 @@ function applied(h: Harness, held: PlatypusUIMessage[]) {
   return update!(held);
 }
 
-/** What the Chat read was last configured with. */
 function chatRead() {
   const call = read.calls.at(-1);
   if (!call) throw new Error("the Chat read was never made");
   return call;
 }
 
-/** What the interval predicate answers for a given fetched row. */
 function pollFor(row: { status: string } | null) {
   const refreshInterval = chatRead().config?.refreshInterval as (
     data: unknown,
@@ -176,9 +156,6 @@ beforeEach(() => {
 });
 
 describe("the Chat detail read", () => {
-  // A brand-new Chat is read before its row exists. `fetcher` throwing on that
-  // 404 is what put an error in the cache, and SWR does not revalidate on an
-  // interval while one is there.
   it("reads the scoped row through the fetcher that treats a missing row as absence", () => {
     setup();
 
@@ -187,9 +164,6 @@ describe("the Chat detail read", () => {
     expect(chatRead().config?.fetcher).toBe(optionalFetcher);
   });
 
-  // The trap the original code fell into: focus and reconnect revalidation were
-  // switched off, which removed the only two triggers left once the interval
-  // was inert. They are the "user came back" and "network returned" signals.
   it("leaves focus and reconnect revalidation on", () => {
     setup();
 
@@ -199,8 +173,6 @@ describe("the Chat detail read", () => {
   });
 });
 
-// Under this tab's own stream nothing polls; the read taken when the turn ends
-// is what a dropped stream resumes from.
 describe("polling a live run", () => {
   it.each([
     ["submitted", { status: "succeeded" }],
@@ -216,9 +188,6 @@ describe("polling a live run", () => {
     },
   );
 
-  // The row still reads the previous turn's `succeeded` when the stream drops.
-  // The read taken as the turn ends learns the run is still going, and the
-  // poll picks up from there.
   it("resumes polling from the read taken when a stream drops", () => {
     read.data = { status: "succeeded", messages: [] };
     const h = setup();
@@ -235,8 +204,6 @@ describe("polling a live run", () => {
     expect(pollFor({ status: "running" })).toBe(CHAT_POLL_INTERVAL_MS);
   });
 
-  // The recovery itself. A dropped stream leaves the turn at `error` while the
-  // run carries on, and this is the reading that gets the answer moving again.
   it("keeps polling after a stream drops while the run is still going", () => {
     read.data = { status: "running", messages: [] };
     const h = setup();
@@ -245,8 +212,6 @@ describe("polling a live run", () => {
     expect(pollFor({ status: "running" })).toBe(CHAT_POLL_INTERVAL_MS);
   });
 
-  // Nothing streamed, so the server never took a run: polling for an outcome
-  // that will never come would spin for the life of the page.
   it("does not poll a turn the server refused", () => {
     const h = setup();
     h.through(...REFUSED);
@@ -261,9 +226,6 @@ describe("polling a live run", () => {
   });
 });
 
-// Monotonic hydration, at the seam: the effect reads the fetched row and hands
-// `setMessages` an updater rather than a list, so what lands is decided against
-// whatever is on screen at that moment.
 describe("applying a fetched snapshot", () => {
   it("hydrates an empty transcript from the row", () => {
     const snapshot = [message("u1", "q"), message("a1", "an answer")];
@@ -273,8 +235,6 @@ describe("applying a fetched snapshot", () => {
     expect(applied(h, [])).toBe(snapshot);
   });
 
-  // The row is written on a flush interval, so a snapshot fetched mid-run lags
-  // the stream. Applying it would make the answer visibly shorten.
   it("refuses a snapshot behind what is on screen", () => {
     read.data = {
       status: "running",
@@ -304,7 +264,6 @@ describe("applying a fetched snapshot", () => {
     );
   });
 
-  // Deleting every message reaches other tabs, and a reload too.
   it("applies an emptied Chat", () => {
     read.data = { status: "succeeded", messages: [] };
     const h = setup();
@@ -312,7 +271,6 @@ describe("applying a fetched snapshot", () => {
     expect(applied(h, [message("u1", "q")])).toEqual([]);
   });
 
-  // A live stream is left alone entirely — the guard that predates this change.
   it("does not touch the transcript while this tab is streaming", () => {
     read.data = { status: "running", messages: [message("u1", "q")] };
     const h = setup({ status: "streaming" });
@@ -321,8 +279,6 @@ describe("applying a fetched snapshot", () => {
   });
 });
 
-// The server owns the Transcript (ADR-0026): a delete is stored the moment it
-// is clicked, and what the server now holds is what lands.
 describe("writing to the server-owned Transcript", () => {
   it("deletes on the server, then reads the row back", async () => {
     const h = setup({ messages: [message("u1", "q"), message("a1", "a")] });
@@ -333,7 +289,6 @@ describe("writing to the server-owned Transcript", () => {
     expect(writeAtMock).toHaveBeenCalledWith(`${CHAT_URL}/messages/u1`, {
       method: "DELETE",
     });
-    // Nothing is cut locally: what the server now holds is what lands.
     expect(h.setMessages).not.toHaveBeenCalled();
   });
 
@@ -354,7 +309,6 @@ describe("writing to the server-owned Transcript", () => {
     expect(read.mutate).not.toHaveBeenCalled();
   });
 
-  // `/compact` takes a Transcript summary and writes no message (issue #1111).
   it("posts a /compact with its instruction, and sends no message", async () => {
     const h = setup();
 
@@ -368,9 +322,6 @@ describe("writing to the server-owned Transcript", () => {
   });
 });
 
-// Which of the two error surfaces a belief selects. The reported symptom was a
-// modal telling the user their turn had failed while the run was healthy and
-// still going.
 describe("routing a chat error", () => {
   it("recovers a dropped connection to a run that is still going", () => {
     read.data = { status: "running", messages: [] };
@@ -380,8 +331,6 @@ describe("routing a chat error", () => {
     expect(h.result.current.errorTreatment).toBe("recovering");
   });
 
-  // The run finished while the connection was gone, so there is nothing to
-  // report and nothing to wait for — the snapshot already holds the answer.
   it("says nothing once the run has finished behind the drop", () => {
     read.data = { status: "succeeded", messages: [] };
     const h = setup();
@@ -398,8 +347,6 @@ describe("routing a chat error", () => {
     expect(h.result.current.errorTreatment).toBe("failure");
   });
 
-  // Nothing streamed, so the server never took a run: a rejected attachment, a
-  // refused submission. The user has to be told.
   it("fails a request that never established", () => {
     read.data = { status: "succeeded", messages: [] };
     const h = setup();
@@ -415,11 +362,6 @@ describe("routing a chat error", () => {
   });
 });
 
-/**
- * Whether the turn's stream ever established, judged per turn. The refused case
- * is covered above; this pins the reset, so a second turn is not judged on the
- * first turn's stream.
- */
 describe("turn establishment", () => {
   it("judges a second turn on its own stream, not an earlier turn's", () => {
     read.data = { status: "succeeded", messages: [] };
@@ -429,8 +371,6 @@ describe("turn establishment", () => {
     expect(h.result.current.errorTreatment).toBe("failure");
   });
 
-  // Once established, it stays established while the broken turn sits there:
-  // repeated `error` renders must not re-classify the drop as a failure.
   it("keeps the answer while a broken turn sits there", () => {
     read.data = { status: "running", messages: [] };
     const h = setup();
@@ -440,8 +380,6 @@ describe("turn establishment", () => {
   });
 });
 
-// The composer guard. The old predicate required the local status to be `ready`,
-// which is the one reading a dropped stream never has.
 describe("the run belief", () => {
   it("holds the composer for a dropped stream mid-run", () => {
     read.data = { status: "running", messages: [] };
@@ -459,8 +397,6 @@ describe("the run belief", () => {
     expect(h.result.current.runHeldElsewhere).toBe(true);
   });
 
-  // Once the run is over the composer comes back, and the submit button must
-  // not keep a failure icon on it — the local status is still `error`.
   it("releases it once the run is over, with no failure on the button", () => {
     read.data = { status: "succeeded", messages: [] };
     const h = setup();
@@ -479,8 +415,6 @@ describe("the run belief", () => {
   });
 });
 
-// Moving between Alternatives (#712): a local swap straight away, then the
-// server's path. Nothing fetched in between may drag the view back.
 describe("switching between Alternatives", () => {
   const SWITCH_URL = `${CHAT_URL}/active-leaf`;
 
@@ -490,7 +424,6 @@ describe("switching between Alternatives", () => {
   const row = (messages: PlatypusUIMessage[]) =>
     alternativesRow(messages, CHAT_ID);
 
-  /** What is on screen: the driven messages, updated as the hook sets them. */
   const onScreen = (h: Harness) => h.state.messages.map((m) => m.id);
 
   function showing(held: PlatypusUIMessage[]) {
@@ -498,7 +431,6 @@ describe("switching between Alternatives", () => {
     return setup({ messages: held });
   }
 
-  /** A write that answers only when the test says so. */
   function deferredWrite() {
     const answers: ((outcome: unknown) => void)[] = [];
     writeAtMock.mockImplementation(
@@ -538,7 +470,6 @@ describe("switching between Alternatives", () => {
         void h.result.current.switchAlternative(fromId, targetId);
       });
 
-      // Straight away, without waiting on the server.
       expect(onScreen(h)).toEqual(["u1", "a1", targetId]);
       expect(writeAtMock).toHaveBeenCalledWith(
         SWITCH_URL,
@@ -557,7 +488,6 @@ describe("switching between Alternatives", () => {
         revalidateKeys: [],
       });
       await waitFor(() => expect(onScreen(h)).toEqual(to.map((m) => m.id)));
-      // Written into the read, so the next poll and the screen agree.
       const [update, options] = read.mutate.mock.calls.at(-1)! as [
         (current: unknown) => unknown,
         { revalidate: boolean },
@@ -565,7 +495,6 @@ describe("switching between Alternatives", () => {
       expect(options).toEqual({ revalidate: false });
       expect(update(row(from))).toEqual(row(to));
 
-      // Released: a later poll lands as any other would.
       h.readLands(row(edited));
       expect(onScreen(h)).toEqual(edited.map((m) => m.id));
     },
@@ -624,11 +553,9 @@ describe("switching between Alternatives", () => {
       void h.result.current.switchAlternative("u2b", "u2c");
     });
 
-    // One request at a time, so the server saves them in click order.
     expect(writeAtMock).toHaveBeenCalledTimes(1);
     expect(onScreen(h)).toEqual(["u1", "a1", "u2c"]);
 
-    // The earlier one answering changes nothing on screen.
     writes.answer({
       outcome: "success",
       data: { messages: edited, tree: alternativesTree },
@@ -701,11 +628,42 @@ describe("switching between Alternatives", () => {
   });
 });
 
-/**
- * Issue #869: `ChatMessage` is memoised, so what defeats it is a prop changing
- * identity — which is what a callback that closes over `messages` would do on
- * every streamed token.
- */
+describe("regenerate and the loading gap", () => {
+  function shown(messages: PlatypusUIMessage[]) {
+    read.data = alternativesRow(messages, CHAT_ID);
+    return setup({ messages });
+  }
+
+  it("offers Regenerate only from the reply's own parent in the tree", () => {
+    const h = shown([message("u1", "q"), message("a1", "a")]);
+    expect(h.result.current.parentOf.get("a2b")).toBe("u2b");
+    expect(h.result.current.isRegenerable(1)).toBe(true);
+
+    const wrongParent = shown([message("u1", "q"), message("a2b", "a")]);
+    expect(wrongParent.result.current.isRegenerable(1)).toBe(false);
+
+    const notInTree = shown([message("u1", "q"), message("a9", "a")]);
+    expect(notInTree.result.current.isRegenerable(1)).toBe(true);
+
+    const noReplyToAnswer = shown([message("u1", "q"), message("u2", "q")]);
+    expect(noReplyToAnswer.result.current.isRegenerable(1)).toBe(false);
+  });
+
+  it("starts pending only until the first messages reach the screen", () => {
+    read.isLoading = true;
+    const loading = setup();
+    expect(loading.result.current.isTranscriptPending).toBe(true);
+
+    read.isLoading = false;
+    const arrived = shown([message("u1", "q")]);
+    expect(arrived.result.current.isTranscriptPending).toBe(false);
+
+    arrived.readLands(alternativesRow([], CHAT_ID));
+    arrived.rerender();
+    expect(arrived.result.current.isTranscriptPending).toBe(false);
+  });
+});
+
 describe("transcript stability", () => {
   it("keeps the transcript callbacks stable across renders", () => {
     const h = setup({ messages: [message("u1", "q"), message("a1", "a")] });

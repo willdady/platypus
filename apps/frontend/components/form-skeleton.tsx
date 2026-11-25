@@ -2,14 +2,8 @@ import type { ReactNode } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
-// Loading placeholders shaped like the ui/field + ui/card atoms a form is
-// built from, so a form's skeleton can mirror its loaded layout block for
-// block and the swap to the real form doesn't shift the page. Each block
-// reproduces its atom's box: a FieldLabel line is ~20px (text-sm,
-// leading-snug), an Input/SelectTrigger/Button h-9, a Field's gap-3, a
-// FieldGroup's gap-7, a FieldSet's gap-6.
+// why: each block mirrors its atom's box, so the swap never shifts the page
 
-/** A FieldLabel's line. */
 function LabelSkeleton({ className }: { className?: string }) {
   return (
     <div className="flex h-5 items-center">
@@ -18,7 +12,6 @@ function LabelSkeleton({ className }: { className?: string }) {
   );
 }
 
-/** A FieldDescription's line or lines. */
 function DescriptionSkeleton({ lines = 1 }: { lines?: number }) {
   return (
     <div className="flex flex-col gap-1.5">
@@ -33,7 +26,6 @@ function DescriptionSkeleton({ lines = 1 }: { lines?: number }) {
   );
 }
 
-/** The FieldSet a form's fields sit in (`gap-6`, `mb-6` above the footer). */
 export function FormSkeletonSet({
   className,
   children,
@@ -46,7 +38,6 @@ export function FormSkeletonSet({
   );
 }
 
-/** A FieldGroup (`gap-7` between fields). */
 export function FormSkeletonGroup({
   className,
   children,
@@ -61,10 +52,6 @@ export function FormSkeletonGroup({
   );
 }
 
-/**
- * A label over an Input or SelectTrigger, with optional description lines —
- * FormTextField's shape, and a Select field's.
- */
 export function FieldSkeleton({
   className,
   labelClassName,
@@ -73,9 +60,7 @@ export function FieldSkeleton({
 }: {
   className?: string;
   labelClassName?: string;
-  /** How many FieldDescription lines follow the control. */
   description?: number;
-  /** Whether a `0/100` counter row follows (FormTextField `trailing`). */
   counter?: boolean;
 }) {
   return (
@@ -88,7 +73,6 @@ export function FieldSkeleton({
   );
 }
 
-/** The `0/500` character counter row under a field. */
 function CounterSkeleton() {
   return (
     <div className="mt-1 flex h-4 items-center justify-end">
@@ -97,7 +81,6 @@ function CounterSkeleton() {
   );
 }
 
-/** A label over a Textarea, optionally with the character counter row. */
 export function TextareaSkeleton({
   className,
   heightClassName = "h-16",
@@ -105,15 +88,13 @@ export function TextareaSkeleton({
   description = 0,
 }: {
   className?: string;
-  /** The loaded textarea's height, e.g. `h-16` (its min) or `h-40`. */
   heightClassName?: string;
-  /** Whether a `0/500` counter row follows (ExpandableTextarea `maxLength`). */
   counter?: boolean;
   description?: number;
 }) {
   return (
+    // why: ExpandableTextarea's label sits in its own mb-2 row, not the gap
     <div className={cn("flex w-full flex-col gap-3", className)}>
-      {/* ExpandableTextarea puts its label in a mb-2 row, not the Field gap. */}
       <div className="flex flex-col">
         <div className="mb-2 flex h-6 items-center">
           <Skeleton className="h-3.5 w-24" />
@@ -126,17 +107,10 @@ export function TextareaSkeleton({
   );
 }
 
-/** A Switch's box: the rounded track every switch skeleton stands in for. */
 export function SwitchToggleSkeleton() {
   return <Skeleton className="h-[1.15rem] w-8 shrink-0 rounded-full" />;
 }
 
-/**
- * A horizontal Switch + label row, with its description line — the shape
- * `FormSwitchField` lays out, so a loading form does not shift when the
- * switches land. `align` mirrors that prop: the switch sits before the text,
- * or after it on a settings row.
- */
 export function SwitchRowSkeleton({
   className,
   description = true,
@@ -165,19 +139,13 @@ export function SwitchRowSkeleton({
   );
 }
 
-/**
- * A Card with a title over a two-column grid of switch rows — the Tools,
- * Skills and Sub-Agents cards, and a Blueprint's resource groups.
- */
 export function SwitchCardSkeleton({
   className,
   rows = 4,
   description = false,
 }: {
   className?: string;
-  /** Switch rows in the grid. */
   rows?: number;
-  /** Whether a FieldDescription sits above the grid. */
   description?: boolean;
 }) {
   return (
@@ -202,7 +170,6 @@ export function SwitchCardSkeleton({
   );
 }
 
-/** A two-column grid of switch rows, as a FieldGroup lays them out. */
 export function SwitchGridSkeleton({
   className,
   rows = 4,
@@ -219,7 +186,6 @@ export function SwitchGridSkeleton({
   );
 }
 
-/** A closed Collapsible's trigger row: a label and an icon button. */
 export function CollapsibleSkeleton({ className }: { className?: string }) {
   return (
     <div className={cn("flex h-8 items-center justify-between", className)}>
@@ -229,7 +195,6 @@ export function CollapsibleSkeleton({ className }: { className?: string }) {
   );
 }
 
-/** FormFooterButtons: Save/Update, plus Delete on an edit form. */
 export function FooterSkeleton({
   className,
   buttons = 1,
@@ -246,7 +211,6 @@ export function FooterSkeleton({
   );
 }
 
-/** An avatar picker: a rounded square over the h-7 Remove row. */
 export function AvatarSkeleton({ className }: { className?: string }) {
   return (
     <div className={cn("flex flex-col items-center", className)}>
@@ -256,7 +220,6 @@ export function AvatarSkeleton({ className }: { className?: string }) {
   );
 }
 
-/** The fallback for a form without its own skeleton: a few fields and Save. */
 export function DefaultFormSkeleton() {
   return (
     <>

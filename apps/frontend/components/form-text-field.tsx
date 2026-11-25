@@ -30,23 +30,10 @@ export type FormTextFieldProps = {
   step?: string | number;
   maxLength?: number;
   onKeyDown?: React.KeyboardEventHandler<HTMLInputElement>;
-  /**
-   * Render a secret field with a show/hide control, masked until revealed. The
-   * `type` prop does not apply: the control owns it.
-   */
   revealable?: boolean;
-  /**
-   * What the reveal control calls the secret, e.g. "API key". Give each
-   * revealable field on a screen its own, so two controls never announce the
-   * same name.
-   */
   revealLabel?: string;
 };
 
-// Composes the ui/field + ui/input atoms so the six-line
-// Field/FieldLabel/Input/FieldError block doesn't have to be hand-wired at
-// every call site. `trailing` renders alongside the error (e.g. a character
-// counter) instead of after it, matching skill-form's layout.
 export function FormTextField({
   label,
   name,
@@ -72,9 +59,6 @@ export function FormTextField({
   revealLabel,
 }: FormTextFieldProps) {
   const ids = formFieldIds(name, { description, error });
-  // One set of control props, so the revealable and plain inputs cannot drift
-  // in what the field wires up. `RevealableInput` owns `type`, overriding
-  // whatever the field passes.
   const control = {
     id: name,
     type,

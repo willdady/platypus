@@ -54,9 +54,6 @@ export default function SignUpPage() {
       className="flex min-h-screen items-center justify-center"
     >
       <div className="w-full max-w-md flex flex-col gap-8 p-8">
-        {/* The Operator requires an invitation (#550, ADR-0019): say so rather
-            than offer a form the backend would refuse. The route stays — a 404
-            would read as a broken deployment, not a closed door. */}
         {signUpOpen === false && (
           <div className="text-center">
             <h1 className="text-2xl font-bold">Sign-up is by invitation</h1>
@@ -68,8 +65,6 @@ export default function SignUpPage() {
           </div>
         )}
 
-        {/* The form waits for the backend to confirm sign-up is open: a form
-            that appears and then vanishes is the dead end this avoids. */}
         {signUpOpen && (
           <>
             <div className="text-center">

@@ -70,17 +70,11 @@ import { useListParams } from "@/hooks/use-list-params";
 import { useOptimisticRows } from "@/hooks/use-optimistic-rows";
 import { orgRoutes, workspaceRoutes } from "@/lib/routes";
 
-// The Agent is shown either in a Workspace, where it may be a workspace-scoped
-// Agent or an attached org-scoped (Shared) Agent rendered with an Organization
-// badge (ADR-0007). The API's response shape always carries `scope`.
 type SerializedAgent = Serialized<AgentResponse>;
 
-// The card's New chat + menu sit beside the content from `xl`, and wrap to a
-// full-width row under it (indented past the avatar) below that.
 const agentCardActionsClassName =
   "basis-full justify-between pl-16 xl:basis-auto xl:pl-0";
 
-/** The agent cards as they load; the workspace home draws them too. */
 export function AgentCardsSkeleton({ cards }: { cards?: number }) {
   return (
     <CardGridSkeleton
@@ -88,7 +82,6 @@ export function AgentCardsSkeleton({ cards }: { cards?: number }) {
       media
       className="items-stretch"
       extra={
-        // The tool set / skill / sub-agent counts.
         <div className="flex gap-3 mt-auto">
           {["w-16", "w-14", "w-20"].map((width) => (
             <SkeletonLine
@@ -109,7 +102,6 @@ export function AgentCardsSkeleton({ cards }: { cards?: number }) {
   );
 }
 
-/** Unpinned agents per page; the Pinned group is always drawn in full. */
 const AGENTS_PAGE_SIZE = 8;
 
 export function AgentsList({
@@ -127,9 +119,6 @@ export function AgentsList({
   );
   const { page: pageItems } = useListParams("agentsPage");
 
-  // Resolved once per render and reused for the list's reads and every write
-  // below, rather than re-deriving the Organization-vs-Workspace branch at
-  // each call site.
   const scope: Scope = { orgId, workspaceId };
   const routes = workspaceRoutes(orgId, workspaceId);
 
@@ -167,8 +156,6 @@ export function AgentsList({
     mutate,
   });
 
-  // A pin shows at once and reverts if refused; each agent's Pin item is
-  // disabled only while its own write runs.
   const pins = useOptimisticRows<SerializedAgent>();
   const togglePin = (agent: SerializedAgent) => {
     if (!backendUrl) return;
@@ -184,13 +171,10 @@ export function AgentsList({
   };
 
   const agents = sortByName(pins.apply(allAgents));
-  // A Pinned Agent shows only in the Pinned group, above the rest.
   const { pinned: pinnedAgents, unpinned: unpinnedAgents } =
     splitPinned(agents);
   const page = pageItems(unpinnedAgents, AGENTS_PAGE_SIZE);
 
-  // Attach, detach, and Promote a Shared resource are the same rule
-  // (ADR-0007), asked of the auth module instead of re-derived here.
   const canManageShared = canManageSharedResource(actor, workspaceId);
   const canPin = canPinAgent(ownsWorkspace);
   const canClone = canCreateAgent(ownsWorkspace);
@@ -226,9 +210,6 @@ export function AgentsList({
     deleteFlow.request(agent);
   };
 
-  // A clone keeps only the references visible in this workspace: a Shared
-  // Agent may point at Shared resources never attached here (ADR-0007),
-  // which the create refuses (sub-agents) or keeps as dead references.
   const cloneReferences = (agent: SerializedAgent) => {
     const keep = (ids: string[] | undefined, visible: { id: string }[]) =>
       ids?.filter((id) => visible.some((resource) => resource.id === id));
@@ -258,8 +239,6 @@ export function AgentsList({
     cloneName: string,
     url: string,
   ) => {
-    // Exactly the create's own fields, so an identity, the list's per-Workspace
-    // pin state, or a scope the strict create refuses cannot ride along.
     const sanitizedData = Object.fromEntries(
       Object.entries({
         ...pickKeys(agent, agentCreateSchema.shape),
@@ -268,9 +247,7 @@ export function AgentsList({
       }).map(([key, value]) => [key, value === null ? undefined : value]),
     );
 
-    // `Object.fromEntries` erases its keys, so the compiler can't see the
-    // body. Check it against the same strict schema the backend validates the
-    // create with, then pass the parsed body on.
+    // why: Object.fromEntries erases its keys, so re-parse against the strict create schema
     const parsed = parseCloneBody(
       agentCreateSchema,
       sanitizedData,
@@ -283,8 +260,6 @@ export function AgentsList({
     });
   };
 
-  // A clone keeps only references found in lists that have actually landed:
-  // filtering against a failed or in-flight read would drop every one of them.
   const referencesReady =
     !isLoadingToolSets && !isLoadingSkills && !toolSetsError && !skillsError;
 
@@ -302,9 +277,6 @@ export function AgentsList({
       : [];
 
     if (isOrgScoped) {
-      // A Shared Agent is locked in the Workspace; only an Org Admin can
-      // open it in the org settings editor or detach it here (ADR-0007). The
-      // Owner can Clone it into a Workspace Agent of their own.
       return (
         <RowActionsMenu
           name={agent.name}
@@ -349,14 +321,11 @@ export function AgentsList({
     );
   };
 
-  // Count and list only references that actually resolve in this workspace,
-  // so the badge count matches the tooltip — a detached shared resource drops
-  // out of both (it is no longer active here).
+  // why: only references that resolve here — a detached one must drop out of count and tooltip
   const renderMeta = (agent: SerializedAgent) => {
     const toolSetNames = getToolSetNames(agent.toolSetIds);
     const skillNames = getSkillNames(agent.skillIds);
     const subAgentNames = getSubAgentNames(agent.subAgentIds);
-    // One line: the counts clip rather than wrap.
     return (
       <div className="flex gap-3 mt-auto overflow-hidden text-xs text-muted-foreground">
         <CountTooltip
@@ -444,8 +413,6 @@ export function AgentsList({
           />
         }
         aria-label="Agents"
-        // The counts sit on the card's bottom edge, as the stacked layout
-        // intends; the card must stretch to place them there.
         wrap={(agent, card) => card({ className: "items-stretch" })}
         media={(agent) => (
           <AgentAvatar agent={agent} className="size-12 self-start" />

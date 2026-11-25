@@ -58,7 +58,6 @@ beforeEach(() => {
 });
 
 describe("MembersList", () => {
-  // A Super Admin's org role is overridden, so the badge says so instead.
   it("shows each member with their role, Super Admin over the org role", async () => {
     await renderMembers([nina, sam]);
 
@@ -68,7 +67,6 @@ describe("MembersList", () => {
     expect(screen.queryByText("admin")).not.toBeInTheDocument();
   });
 
-  // A Super Admin's membership isn't the org's to change, so it has no menu.
   it("offers no actions for a Super Admin", async () => {
     await renderMembers([sam]);
 
@@ -88,7 +86,6 @@ describe("MembersList", () => {
     expect(screen.getByRole("separator")).toBeInTheDocument();
   });
 
-  // The list rereads once a role change lands, and the dialog goes away.
   it("opens the role editor and rereads the list after a save", async () => {
     stubAcceptedSave({ id: "m-u-nina", role: "admin" });
     await renderMembers([nina]);

@@ -19,7 +19,6 @@ import {
   OAUTH_MCP_ERROR_EVENT,
 } from "@/lib/constants";
 
-/** Post a message to the opener window (if any) and close this popup. */
 function notifyOpenerAndClose(data: Record<string, unknown>): boolean {
   const opener = window.opener as Window | null;
   if (opener && !opener.closed) {
@@ -38,14 +37,10 @@ export function OAuthCallbackHandler({
 }: {
   code?: string;
   state?: string;
-  /** The provider's `?error=`, sent instead of a code when it refuses. */
   error?: string;
   errorDescription?: string;
 }) {
   const backendUrl = useBackendUrl();
-  // The URL params are fixed for the lifetime of this view, so an error they
-  // already carry is derived at init rather than set in an effect. A provider
-  // refusal names its own reason; it is not a missing code.
   const providerMessage = providerError
     ? `Authorization was refused: ${errorDescription || providerError}`
     : null;
@@ -55,8 +50,6 @@ export function OAuthCallbackHandler({
   const [error, setError] = useState<string | null>(initialError);
   const [isProcessing, setIsProcessing] = useState(!initialError);
   const router = useRouter();
-  // The code is single-use: a second POST (StrictMode's double effect, or a
-  // `backendUrl` change) fails, and its failure could overwrite the success.
   const startedRef = useRef(false);
 
   useEffect(() => {
@@ -87,7 +80,6 @@ export function OAuthCallbackHandler({
       if (outcome.outcome === "success") {
         const data = outcome.data;
 
-        // If opened as a popup, notify the opener and close
         if (
           notifyOpenerAndClose({
             type: OAUTH_MCP_SUCCESS_EVENT,
@@ -96,10 +88,6 @@ export function OAuthCallbackHandler({
         )
           return;
 
-        // Fallback: if not a popup (e.g. popup was blocked and we fell
-        // back to same-window redirect), navigate to the MCP edit page. An
-        // org-scoped (Shared) MCP has no workspaceId, so it edits under the
-        // organization settings surface.
         const mcpEditPath = data.workspaceId
           ? workspaceRoutes(data.orgId, data.workspaceId).settings.mcpDetail(
               data.mcpId,
@@ -111,7 +99,6 @@ export function OAuthCallbackHandler({
 
       const message = outcome.message;
 
-      // Notify opener of failure if in a popup
       if (notifyOpenerAndClose({ type: OAUTH_MCP_ERROR_EVENT, message }))
         return;
 

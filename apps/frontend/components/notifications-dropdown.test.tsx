@@ -26,11 +26,8 @@ type SwrCall = {
 
 const { swrCalls, feeds, mutate, mutatedKeys, toastError } = vi.hoisted(() => ({
   swrCalls: [] as SwrCall[],
-  // What each read returns, keyed by the tail of its URL.
   feeds: {} as Record<string, unknown>,
   mutate: vi.fn(),
-  // Which read's own `mutate` was called, so a test can tell the badge's
-  // count read from the list beside it.
   mutatedKeys: [] as (string | null)[],
   toastError: vi.fn(),
 }));
@@ -133,9 +130,6 @@ describe("NotificationsDropdown polling", () => {
     ).toBe(true);
   });
 
-  // A page restored from the back/forward cache was frozen, so the count read
-  // did not poll and the badge still shows what it showed when the page was
-  // put away.
   it("revalidates the unread count when the page is restored", () => {
     render(<NotificationsDropdown orgId="org1" workspaceId="ws1" />);
 
@@ -236,7 +230,7 @@ describe("NotificationsDropdown feed", () => {
     expect(
       screen.getByRole("button", {
         name: "Notifications (1)",
-        // Radix hides the trigger from the a11y tree while the menu is open.
+        // why: Radix hides the trigger from the a11y tree while the menu is open
         hidden: true,
       }),
     ).toBeInTheDocument();
@@ -318,7 +312,7 @@ describe("NotificationsDropdown feed", () => {
 });
 
 describe("NotificationsDropdown avatar", () => {
-  // jsdom never loads remote images. Model the image status that Radix reads.
+  // why: jsdom never loads images, so model the image status Radix reads
   class TestImage extends EventTarget {
     src = "";
     complete = true;
@@ -424,7 +418,6 @@ describe("NotificationsDropdown body", () => {
     await openDropdownMenu();
   };
 
-  // The body's renderer loads on demand, so each read waits for it.
   it("renders an unordered list with every item", async () => {
     await renderBody("Acceptance criteria:\n- item one\n- item two\n\nSize: S");
 

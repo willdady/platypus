@@ -21,9 +21,6 @@ describe("useChatSettings", () => {
     expect(result.current.settings.temperature).toBe(0.5);
   });
 
-  // Issue #869: the settings dialog lost unsaved edits while a run streamed.
-  // The chat row is polled during a run and SWR hands back a fresh object each
-  // flush; re-syncing on the object discarded whatever the user had typed.
   it("keeps unsaved edits when a poll flush replaces the row", () => {
     const { result, rerender } = renderHook(
       ({ data }: { data: Serialized<Chat> }) => useChatSettings(data, ""),

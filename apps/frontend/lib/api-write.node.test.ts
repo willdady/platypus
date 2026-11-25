@@ -16,7 +16,6 @@ import { jsonResponse } from "@/test/test-utils";
 
 const BACKEND_URL = "http://localhost:4000";
 
-/** An Agent body the shared create schema accepts, for transport tests. */
 const agentBody = {
   name: "Bot",
   description: "A test Agent",
@@ -24,7 +23,6 @@ const agentBody = {
   modelId: "gpt-4o",
 };
 
-/** A Provider body the shared create schema accepts, for transport tests. */
 const providerBody = {
   name: "OpenAI",
   providerType: "OpenAI" as const,
@@ -36,7 +34,6 @@ const providerBody = {
   memoryExtractionModelId: "gpt-4o",
 };
 
-/** Stubs `fetch` to answer every request with `status` and `body`. */
 function respond(status: number, body: unknown = {}) {
   const fetchMock = vi.fn().mockResolvedValue(jsonResponse(status, body));
   vi.stubGlobal("fetch", fetchMock);
@@ -81,8 +78,7 @@ describe("writeEntity — transport", () => {
       { orgId: "org1" },
       {
         data: {
-          // @ts-expect-error `workspaceId` is not an Agent create field; the
-          // path carries the scope, and the strict schema refuses it.
+          // @ts-expect-error `workspaceId` is not an Agent create field
           workspaceId: "ws1",
           name: "Bot",
           description: "A test Agent",
@@ -105,8 +101,7 @@ describe("writeEntity — transport", () => {
       {
         id: "ws1",
         data: {
-          // @ts-expect-error a Provider is created with the Workspace; an
-          // update cannot carry one.
+          // @ts-expect-error a Provider is created with the Workspace
           provider: { name: "OpenAI" },
         },
       },
@@ -419,7 +414,6 @@ describe("writeEntity — outcomes", () => {
     });
   });
 
-  // One row per backend error class, and the neutral default a bare body gets.
   it.each([
     [
       "404 (NotFoundError)",

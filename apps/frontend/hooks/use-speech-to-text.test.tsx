@@ -8,7 +8,6 @@ import {
 import { useSpeechToText } from "./use-speech-to-text";
 
 describe("useSpeechToText", () => {
-  /** The session the hook most recently constructed. */
   let recognition: ReturnType<typeof installSpeechRecognition>;
 
   beforeEach(() => {
@@ -73,10 +72,6 @@ describe("useSpeechToText", () => {
 
     act(() => result.current.toggleListening());
 
-    // The stream Chrome for Android produces for "hello world" then "how are
-    // you": one more `isFinal` entry per partial update, each carrying the
-    // whole utterance so far. Concatenating the list writes every word again
-    // for every entry it appears in (issue #752).
     const stream = [
       "hello",
       "hello world",
@@ -121,7 +116,6 @@ describe("useSpeechToText", () => {
     );
     expect(textarea.value).toBe("one");
 
-    // The engine re-sends the finalised "one" alongside the new " two".
     act(() =>
       recognition()?.emitResults([
         { transcript: "one", isFinal: true },
@@ -141,9 +135,6 @@ describe("useSpeechToText", () => {
 
     act(() => result.current.toggleListening());
 
-    // "yes" opening "yes please" reads as a restatement, so that phrase is
-    // spoken once. Judging each entry against its neighbour keeps the mistake
-    // to the pair - the unrelated segment after it still lands.
     act(() =>
       recognition()?.emitResults([
         { transcript: "yes", isFinal: true },
@@ -197,8 +188,6 @@ describe("useSpeechToText", () => {
     );
     expect(textarea.value).toBe("one two");
 
-    // Android drops `continuous` and ends the session after an utterance; the
-    // next one starts a result list of its own.
     act(() => result.current.toggleListening());
     act(() => result.current.toggleListening());
     act(() =>
@@ -259,7 +248,6 @@ describe("useSpeechToText", () => {
     const { result } = renderHook(() => useSpeechToText());
 
     expect(result.current.isSupported).toBe(false);
-    // No recognition object is built at all, so nothing can be started.
     expect(recognition()).toBeNull();
 
     act(() => result.current.toggleListening());

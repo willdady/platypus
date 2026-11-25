@@ -15,7 +15,6 @@ vi.mock("swr", () => swrMock);
 import BoardsPage from "./boards-page";
 
 async function renderPage() {
-  // `params` is unwrapped with `use`, so the first render suspends.
   await act(async () => {
     render(
       <Suspense>

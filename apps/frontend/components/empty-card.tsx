@@ -9,12 +9,6 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 
-/**
- * The dashed card a screen shows in place of content it has none of (or
- * couldn't load): an icon, a title, what the thing is for, and the buttons
- * that fix it. One frame, so the cards stop drifting apart. A one-line empty
- * state (filtered to nothing, a section within a page) is `ListState` instead.
- */
 export function EmptyCard({
   icon,
   title,
@@ -22,11 +16,9 @@ export function EmptyCard({
   action,
   className,
 }: {
-  /** A bare Lucide icon; the frame sizes it. */
   icon: ReactNode;
   title: ReactNode;
   description?: ReactNode;
-  /** The buttons, main one first, laid out in a row. */
   action?: ReactNode;
   className?: string;
 }) {

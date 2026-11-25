@@ -5,36 +5,20 @@ import { TriangleAlertIcon } from "lucide-react";
 import { reportClientError } from "@/lib/error-reporting";
 
 type Props = {
-  /**
-   * Renders the part. A function rather than children so a throw while
-   * building the part's elements is caught here too, not only one inside them.
-   */
   render: () => ReactNode;
-  /**
-   * The part itself. A new value (the part streaming on) clears a caught
-   * error and tries again, since the part may now be whole.
-   */
   resetKey: unknown;
 };
 
 type State = { failed: boolean };
 
+// why: a render prop, so a throw while building the elements is caught too
 function RenderPart({ render }: { render: () => ReactNode }) {
   return <>{render()}</>;
 }
 
-/**
- * Wraps one Chat message part, so a part that fails to render — a malformed
- * tool result, an input no renderer expected — costs only that part, not
- * the whole message or the Chat around it.
- */
 export class MessagePartBoundary extends Component<Props, State> {
   override state: State = { failed: false };
 
-  /**
-   * The last failure reported. A part that stays malformed while it streams
-   * throws the same error on every chunk; it is reported once, not per chunk.
-   */
   private lastReported: string | null = null;
 
   static getDerivedStateFromError(): State {

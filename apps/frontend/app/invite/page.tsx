@@ -3,11 +3,6 @@ import { InviteShell } from "./invite-shell";
 
 export const metadata: Metadata = { title: "Invitation" };
 
-/**
- * The bare `/invite` address. An invitation page scrubs its token from the
- * address bar once it has resolved it (#549, ADR-0019), so a reload or a
- * restored tab lands here rather than on the invitation it came from.
- */
 export default function InvitePage() {
   return (
     <InviteShell className="flex flex-col gap-4 text-center">

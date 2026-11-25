@@ -29,7 +29,7 @@ function WorkspaceList({
     { orgId },
   );
 
-  // Only a cold failure replaces the list; a failed revalidation keeps it.
+  // why: only a cold failure replaces the list; a failed revalidation keeps it
   if (error && !data) {
     return (
       <ListError
@@ -47,7 +47,6 @@ function WorkspaceList({
           {Array.from({ length: 3 }).map((_, i) => (
             <Item key={i} variant="outline" className="mb-2">
               <ItemContent>
-                {/* The 18px folder icon beside one line of title text. */}
                 <ItemTitle>
                   <Skeleton className="size-[18px] shrink-0 rounded" />
                   <span className="flex h-lh items-center">

@@ -34,27 +34,21 @@ import {
   setupUser,
 } from "@/test/test-utils";
 
-// --- Module mocks ------------------------------------------------------------
-
 vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("swr", () => swrMock);
-// The list renders the stored `nextRunAt` through this formatter; stubbing it
-// keeps the assertion independent of the viewer's locale and time zone.
+// why: stub the formatter so the assertion doesn't move with the locale
 vi.mock("@/lib/format-date", () => ({
   formatDateTime: (value: Date | string | number) =>
     `formatted:${new Date(value).toISOString()}`,
 }));
 
-// Likewise for the last run's relative time, which would otherwise move with
-// the clock.
+// why: stub relative time, or the assertion moves with the clock
 vi.mock("@/lib/relative-time", () => ({
   formatRelativeTime: (value: Date | string | number) =>
     `relative:${new Date(value).toISOString()}`,
 }));
 
 import { TriggerList } from "./trigger-list";
-
-// --- Fixtures ----------------------------------------------------------------
 
 const cronTrigger: Trigger = {
   id: "t1",
@@ -78,8 +72,6 @@ function renderTriggers(triggers: Trigger[], menuItem?: string) {
 
 beforeEach(resetListHarness);
 
-// --- Tests -------------------------------------------------------------------
-
 describe("TriggerList delete", () => {
   it("deletes through the request module and revalidates on success", async () => {
     const fetchMock = stubAcceptedSave();
@@ -102,13 +94,11 @@ describe("TriggerList delete", () => {
 
     expect(await screen.findByText("Trigger is in use")).toBeInTheDocument();
     expect(mutate).not.toHaveBeenCalled();
-    // The dialog stays open on a refused delete, letting the user retry.
     expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
   });
 });
 
 describe("TriggerList clone", () => {
-  // Run and token state a stored Trigger carries, none of which a clone may.
   const runState = {
     workspaceId: "ws1",
     description: null,
@@ -138,7 +128,6 @@ describe("TriggerList clone", () => {
     lastRejectedAt: null,
   } as unknown as Trigger;
 
-  /** The create variant `type` is validated against. */
   const createShape = (type: Trigger["type"]) => {
     const option = triggerCreateSchema.options.find(
       (candidate) => candidate.shape.type.value === type,
@@ -147,10 +136,6 @@ describe("TriggerList clone", () => {
     return option.shape;
   };
 
-  /**
-   * The keys a clone must send: the create's own keys the original carries,
-   * plus the clone's own Inbound `issueToken` override.
-   */
   const cloneKeys = (original: Trigger) =>
     [
       ...Object.keys(createShape(original.type)).filter((key) =>
@@ -171,7 +156,6 @@ describe("TriggerList clone", () => {
   it("creates a disabled Cron copy without run state, then opens it", async () => {
     const fetchMock = stubAcceptedSave({ id: "t9" }, 201);
 
-    // A fired One-off: its clone is a pending One-off, unfired.
     const firedOneOff = {
       ...cronTrigger,
       ...runState,
@@ -393,7 +377,6 @@ describe("TriggerList cron schedule", () => {
 });
 
 describe("TriggerList empty states", () => {
-  // No controls with nothing to filter.
   it("says so, without controls, when the workspace has no triggers", async () => {
     await renderTriggers([]);
 
@@ -407,7 +390,6 @@ describe("TriggerList empty states", () => {
     ).not.toBeInTheDocument();
   });
 
-  // Fired One-offs are hidden by default; Show fired must stay reachable.
   it("keeps the controls when only fired One-offs exist, and Show fired lists them", async () => {
     await renderTriggers([
       {
@@ -428,8 +410,6 @@ describe("TriggerList empty states", () => {
 });
 
 describe("TriggerList re-read", () => {
-  // A revalidation keeps the list it has rather than flashing to the
-  // skeleton and back.
   it("keeps the list it has while a re-read is in flight", async () => {
     mockScopedSWR({
       "/triggers": { data: { results: [cronTrigger] }, isLoading: true },
@@ -617,7 +597,6 @@ describe("TriggerList type filter", () => {
     expect(showFired).toBeEnabled();
   });
 
-  // A filter that matches nothing must say so, and leave the way back visible.
   it("says nothing matches and keeps the controls when no trigger has the type", async () => {
     await renderTriggers([cronTrigger]);
 
@@ -833,7 +812,6 @@ describe("TriggerList card", () => {
 });
 
 describe("TriggerList paging", () => {
-  // Eight Cron triggers, "trigger-1" … "trigger-8": two pages of six.
   const eight = Array.from({ length: 8 }, (_, i) => ({
     ...cronTrigger,
     id: `t${i + 1}`,

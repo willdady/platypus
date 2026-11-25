@@ -144,9 +144,6 @@ describe("isAllowedArtifactImageSource", () => {
     ).toBe(false);
   });
 
-  // The decision is made on the URL the browser will actually request, not on
-  // the prefix as written: a path that climbs out of `/files/` reaches another
-  // backend route.
   it.each([
     "/files/../auth/x",
     "/files/a/../../auth/x",
@@ -173,8 +170,6 @@ describe("isAllowedArtifactImageSource", () => {
   });
 });
 
-// A deployment with a bucket or CDN in front serves stored files from that
-// base instead of `/files`, and the Artifact read response carries it.
 describe("isAllowedArtifactImageSource with a storage base", () => {
   const backend = "https://app.example.com";
   const storage = "https://cdn.example.com";
@@ -214,7 +209,6 @@ describe("isAllowedArtifactImageSource with a storage base", () => {
         "https://cdn.example.com/bucket",
       ),
     ).toBe(true);
-    // A trailing slash on the configured base names the same path.
     expect(
       isAllowedArtifactImageSource(
         "https://cdn.example.com/bucket/org/ws/0-a.png",
@@ -259,7 +253,6 @@ describe("isAllowedArtifactImageSource with a storage base", () => {
         "https://cdn.example.com/bucket",
       ),
     ).toBe(false);
-    // A host hidden in the userinfo is the look-alike host, not the base.
     expect(
       isAllowedArtifactImageSource(
         "https://cdn.example.com@evil.test/bucket/0-a.png",

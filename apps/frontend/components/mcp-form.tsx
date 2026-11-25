@@ -57,8 +57,6 @@ import {
 } from "@/lib/constants";
 import { orgRoutes, workspaceRoutes } from "@/lib/routes";
 
-// The API's response shape already carries the OAuth state, the request
-// credentials' optional values, and the scope.
 type McpResponseView = Serialized<McpResponse>;
 
 type McpFormData = Omit<
@@ -93,7 +91,6 @@ function McpFormSkeleton({
           <div className="grid grid-cols-3 gap-4">
             <FieldSkeleton className="col-span-1" />
           </div>
-          {/* Custom Headers: label, description, Add header */}
           <div className="flex flex-col gap-3">
             <div className="flex flex-col gap-1">
               <Skeleton className="h-3.5 w-28" />
@@ -122,8 +119,6 @@ function McpForm({
 }) {
   const backendUrl = useBackendUrl();
 
-  // An MCP is scoped to either a Workspace or the Organization (ADR-0007).
-  // The scope determines the backend collection and the settings/edit paths.
   const scope = workspaceId ? { orgId, workspaceId } : { orgId };
   const collectionUrl = scopedPath("mcps", scope);
   const listPath = workspaceId
@@ -141,17 +136,12 @@ function McpForm({
     error?: string;
   } | null>(null);
   const [isAuthorizing, setIsAuthorizing] = useState(false);
-  // Polls the OAuth popup until it closes. One at a time, and never past
-  // unmount.
   const popupPollRef = useRef<ReturnType<typeof setInterval>>(undefined);
   const stopPopupPoll = () => {
     clearInterval(popupPollRef.current);
     popupPollRef.current = undefined;
   };
   useEffect(() => stopPopupPoll, []);
-  // The Client ID the form was seeded with or last saved; only an edit of it
-  // is saved. A sign-in may since have registered a client this form never
-  // saw, and saving the stale value over it would sign the MCP out.
   const seededClientId = useRef("");
 
   const router = useRouter();
@@ -188,8 +178,6 @@ function McpForm({
     entity: "mcps",
     scope,
     id: mcpId,
-    // OAuth status is read from `mcp` itself, not seeded: Authorize/Revoke
-    // revalidate the record, and that must not wipe unsaved edits.
     fromRecord: (mcp) => ({
       name: mcp.name,
       url: mcp.url || "",
@@ -238,19 +226,13 @@ function McpForm({
     guidanceOnForbidden: true,
   });
 
-  // A field edit sets the value and retracts that field's error; the test
-  // result describes values that have just changed, so it clears too.
   const toFieldChange = (id: string) => (value: string) => {
     toFieldChangeBase(id)(value);
-    // Clear test result when form changes
     setTestResult(null);
   };
 
   const handleSelectChange = (id: string, value: string) => {
-    // Clear the error for this field, including any reported against a path
-    // inside it. Switching authType away from bearer also retracts a stale
-    // bearerToken error: that field disappears from the form, so nothing
-    // could otherwise clear it.
+    // why: a field that disappears can't clear its error, so authType retracts it here
     if (id === "authType") clearErrors(id, "bearerToken");
     else clearErrors(id);
 
@@ -259,13 +241,9 @@ function McpForm({
       [id]: value,
     }));
 
-    // Clear test result when form changes
     setTestResult(null);
   };
 
-  // rowsToRecord builds an object, so a repeated name would silently drop the
-  // earlier value and Test connection would send the collapsed set. Both paths
-  // refuse instead.
   const rejectDuplicateHeader = (): boolean => {
     const error = duplicateHeaderError(formData.headerRows);
     if (!error) return false;
@@ -273,20 +251,12 @@ function McpForm({
     return true;
   };
 
-  /**
-   * Saves the MCP (create or update). Returns the saved record's ID on
-   * success, or null on failure. A normal submit toasts success; the OAuth
-   * authorize path passes `silent` because the authorization that follows is
-   * the feedback.
-   */
+  // why: silent — the OAuth redirect that follows is the feedback, so no save toast
   const saveMcp = async ({
     silent = false,
   }: { silent?: boolean } = {}): Promise<string | null> => {
     if (rejectDuplicateHeader()) return null;
     const saved = await submit({ silent });
-    // The form stays open after Authorize's save, so it takes the Client ID
-    // the backend stored, not the one it sent: a new URL clears the client
-    // while the field still shows it.
     if (saved) {
       const stored = saved.oauthClientId ?? "";
       seededClientId.current = stored;
@@ -296,12 +266,8 @@ function McpForm({
   };
 
   const handleSubmit = async () => {
-    // A duplicate-header refusal is a rejected Save like any other: the
-    // headers can be scrolled out of view, so the toast is what tells the
-    // reader why nothing happened. Test connection stays silent — its error
-    // is already in view — and OAuth authorize stays silent — the
-    // authorization that follows is the feedback.
     if (rejectDuplicateHeader()) {
+      // why: a rejected Save toasts; Test and Authorize show their own feedback in view
       toast.error(FIX_FORM_ERRORS_MESSAGE);
       return;
     }
@@ -322,13 +288,9 @@ function McpForm({
         authType: formData.authType,
         bearerToken:
           formData.authType === "Bearer" ? formData.bearerToken : undefined,
-        // So the backend can report the tool-namespace-prefixed names this MCP
-        // will actually contribute once saved (issue #467).
         name: formData.name,
       };
 
-      // A stored MCP is addressed in the path, so its saved OAuth tokens and
-      // name are available; an unsaved one is the anonymous test.
       const testUrl = mcpId
         ? joinUrl(backendUrl, `${collectionUrl}/${mcpId}/test`)
         : joinUrl(backendUrl, `${collectionUrl}/test`);
@@ -363,7 +325,6 @@ function McpForm({
     },
   );
 
-  // Listen for OAuth completion messages from the popup window
   useEffect(() => {
     const onMessage = (
       event: MessageEvent<{ type?: string; message?: string } | null>,
@@ -386,18 +347,14 @@ function McpForm({
     setIsAuthorizing(true);
 
     try {
-      // If the MCP hasn't been saved yet, save it first
       let resolvedMcpId = mcpId;
       if (!resolvedMcpId) {
         resolvedMcpId = (await saveMcp({ silent: true })) ?? undefined;
         if (!resolvedMcpId) {
-          // Validation errors were set by saveMcp
           setIsAuthorizing(false);
           return;
         }
       } else {
-        // Save any pending changes (e.g. newly entered client credentials).
-        // Quiet: the authorization that follows is the feedback.
         const savedId = await saveMcp({ silent: true });
         if (!savedId) {
           setIsAuthorizing(false);
@@ -405,11 +362,6 @@ function McpForm({
         }
       }
 
-      // When the MCP already holds an access token, ask the backend to wipe
-      // it before running mcpAuth so the OAuth flow is always entered. Without
-      // ?force=true a valid refresh token causes mcpAuth to silently rotate
-      // and return alreadyAuthorized — which is fine on a normal page load
-      // but surprising when the user just clicked "Reauthorize".
       const authorizeUrl = joinUrl(
         backendUrl,
         `${collectionUrl}/${resolvedMcpId}/oauth/authorize${
@@ -433,8 +385,6 @@ function McpForm({
       const data = outcome.data;
 
       if (data.alreadyAuthorized) {
-        // Backend silently refreshed via stored refresh_token. Treat as
-        // success rather than an error toast.
         toast.success("Already authorized");
         void mutateMcp();
         setIsAuthorizing(false);
@@ -442,16 +392,11 @@ function McpForm({
       }
 
       if (data.authorizationUrl) {
-        // If we just created the MCP, redirect to the edit page so the URL
-        // reflects the new mcpId and any later actions (retries, save,
-        // re-authorize) update the existing record instead of creating
-        // duplicates.
+        // why: adopt the edit URL after creating, so a retry updates it instead of duplicating
         if (!mcpId && resolvedMcpId) {
           router.replace(editPath(resolvedMcpId));
         }
-        // Open OAuth in a popup so the main page is never navigated away.
-        // This avoids bfcache issues where the browser restores stale auth
-        // state when the user clicks the Back button.
+        // why: a popup, not a redirect — Back would restore stale auth state from bfcache
         const width = 600;
         const height = 700;
         const left = window.screenX + (window.outerWidth - width) / 2;
@@ -462,12 +407,10 @@ function McpForm({
           `width=${width},height=${height},left=${left},top=${top},popup=yes`,
         );
 
-        // If the popup was blocked, fall back to same-window redirect
         if (!popup) {
           window.location.replace(data.authorizationUrl);
         } else {
-          // Reset Authorize button when popup closes without success
-          // (e.g. upstream provider rejects with 400 — no postMessage fires).
+          // why: poll for close — a provider 400 closes the popup without a postMessage
           stopPopupPoll();
           popupPollRef.current = setInterval(() => {
             if (popup.closed) {
@@ -479,8 +422,6 @@ function McpForm({
       } else {
         toast.error(data.error || "Failed to start OAuth authorization");
 
-        // If we just created the MCP, redirect to the edit page so
-        // subsequent actions (e.g. re-authorize) use the correct mcpId
         if (!mcpId && resolvedMcpId) {
           router.replace(editPath(resolvedMcpId));
         }
@@ -582,7 +523,6 @@ function McpForm({
             )}
           </FieldGroup>
 
-          {/* OAuth Client Credentials */}
           {formData.authType === "OAuth" && (
             <FieldGroup className="grid grid-cols-2 gap-4">
               <FormTextField
@@ -626,7 +566,6 @@ function McpForm({
             </FieldGroup>
           )}
 
-          {/* Custom Headers */}
           <div
             role="group"
             aria-labelledby="mcp-headers-label"
@@ -644,7 +583,7 @@ function McpForm({
               onChange={(rows, changed) => {
                 clearErrors("headers");
                 setFormData((prev) => ({ ...prev, headerRows: rows }));
-                // An empty new row changes nothing that was tested.
+                // why: a new empty header row changes nothing, so it keeps the test result
                 if (changed) setTestResult(null);
               }}
               disabled={isSubmitting}
@@ -658,7 +597,6 @@ function McpForm({
             )}
           </div>
 
-          {/* OAuth Authorization Section */}
           {formData.authType === "OAuth" && (
             <div className="flex flex-col gap-3">
               {oauthAuthorized ? (
@@ -711,7 +649,6 @@ function McpForm({
           )}
         </FieldGroup>
 
-        {/* Test Connection Section */}
         <div className="flex flex-col gap-3">
           <Button
             className="self-start"
@@ -729,7 +666,6 @@ function McpForm({
             {isTesting ? "Testing..." : "Test connection"}
           </Button>
 
-          {/* Display test results */}
           {testResult && (
             <Alert variant={testResult.success ? "success" : "destructive"}>
               {testResult.success ? <Check /> : <X />}
