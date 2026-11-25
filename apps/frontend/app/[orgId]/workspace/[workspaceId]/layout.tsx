@@ -35,10 +35,6 @@ export default async function WorkspaceLayout({
   if (!workspace.ok && workspace.status === 404) {
     notFound();
   }
-  // Any other failure — a timeout included — goes to the error boundary,
-  // which offers to try again, rather than rendering the Workspace over a read
-  // that failed. A 401 or 403 is left to `ProtectedRoute`, which signs the
-  // caller in or says why they are turned away.
   if (!workspace.ok && workspace.status !== 401 && workspace.status !== 403) {
     throw new Error(`Workspace read failed: ${workspace.status}`);
   }

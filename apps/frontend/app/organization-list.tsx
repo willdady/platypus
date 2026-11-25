@@ -27,7 +27,6 @@ export default function Home() {
     mutate,
   } = useScopedList<Organization>("organizations", {});
 
-  // Redirect to first organization if available
   useEffect(() => {
     if (organizations.length > 0) {
       router.replace(orgRoutes(organizations[0].id).root);
@@ -38,8 +37,6 @@ export default function Home() {
     return <PageSpinner />;
   }
 
-  // A failed read is not "no organizations": name the read, offer another,
-  // and keep the page frame the empty state uses.
   if (error && !data) {
     return (
       <ProtectedRoute>
@@ -62,7 +59,6 @@ export default function Home() {
     );
   }
 
-  // Only show empty state if no organizations
   if (organizations.length === 0) {
     return (
       <ProtectedRoute>
@@ -91,6 +87,5 @@ export default function Home() {
     );
   }
 
-  // Show loading while redirecting
   return <PageSpinner />;
 }

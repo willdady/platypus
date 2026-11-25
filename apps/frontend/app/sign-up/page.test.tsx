@@ -20,7 +20,6 @@ vi.mock("@/components/auth-provider", () => ({
   }),
 }));
 
-/** What the backend's sign-up availability endpoint answers. */
 function stubSignUpAvailability(open: boolean) {
   vi.stubGlobal(
     "fetch",
@@ -32,10 +31,6 @@ function stubSignUpAvailability(open: boolean) {
   );
 }
 
-/**
- * Renders the page with an SWR cache of its own, so no test sees another's
- * answer to the availability read.
- */
 function renderPage() {
   return render(
     <SWRConfig value={{ provider: () => new Map(), fetcher }}>
@@ -44,7 +39,6 @@ function renderPage() {
   );
 }
 
-/** Renders the page on a deployment with open sign-up, form shown. */
 async function renderOpen() {
   stubSignUpAvailability(true);
   const utils = renderPage();
@@ -88,7 +82,6 @@ describe("SignUpPage form", () => {
     fireEvent.submit(container.querySelector("form")!);
   };
 
-  // The reveal toggle itself is covered in components/ui/revealable-input.
   it("masks the password field", async () => {
     await renderOpen();
 

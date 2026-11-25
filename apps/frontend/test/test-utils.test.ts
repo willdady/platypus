@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 import { agentCreateSchema } from "@platypus/schemas";
 import { expectSentBodyToMatchSchema } from "./test-utils";
 
-/** A fetch stub carrying one JSON request body, as the helper reads it. */
 function fetchMockWith(body: unknown) {
   return {
     mock: {

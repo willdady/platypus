@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { Chat } from "@/components/chat";
 import { ChatDocumentTitle } from "./chat-document-title";
 
-// The Chat's own name is set from the browser, which follows it as it changes.
 export const metadata: Metadata = { title: "Chat" };
 
 async function ChatWithIdPage({

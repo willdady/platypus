@@ -4,13 +4,6 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 
-/**
- * A raw `<button>` skips everything `Button` gives for free. Without `type` it
- * submits any form it lands in, and without a `focus-visible:` style a keyboard
- * user gets only the browser's faint default outline (issue #1480). Every raw
- * `<button>` outside `components/ui` must set both, or use `Button`.
- */
-
 const APP_ROOT = path.dirname(fileURLToPath(import.meta.url));
 
 function tsxFiles(dir: string): string[] {

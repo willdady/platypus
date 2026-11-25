@@ -5,19 +5,8 @@ import path from "node:path";
 
 type LintResult = ESLint.LintResult;
 
-/**
- * The frontend's `no-restricted-syntax` rules point a mechanical convention
- * violation at the primitive that replaces it (#1868). Each probe reintroduces
- * one pattern the review kept finding by hand and must fail with the message
- * that names the primitive. The primitive's own module, and each legitimate
- * different use, must stay exempt.
- */
-
 const APP_ROOT = import.meta.dirname;
 
-// A real component path the probes are linted through. Any non-exempt path
-// works; the rules under test are syntactic, so the file's own types don't
-// matter.
 const PROBE_FILE = path.join(APP_ROOT, "components", "plugins-list.tsx");
 
 const PROBES = [
@@ -93,8 +82,6 @@ export function NameSortProbe({ rows }: { rows: { name: string }[] }) {
       "Sort by name with sortByName() from lib/utils, not an inline comparator.",
   },
   {
-    // Not a #1868 rule, but it shares the `no-restricted-syntax` block these
-    // rules joined, so a refactor that drops it fails here (#563, ADR-0010).
     name: "a raw write fetch",
     source: `
 export async function RawWriteProbe() {
@@ -106,8 +93,6 @@ export async function RawWriteProbe() {
   },
 ] as const;
 
-// Each module that draws the pattern by definition, so its own rule leaves it
-// alone; the config block beside each name carries the reason.
 const EXEMPT_PRIMITIVES = [
   {
     file: "components/disabled-badge.tsx",
@@ -127,7 +112,6 @@ const EXEMPT_PRIMITIVES = [
   },
 ] as const;
 
-// A legitimately different use, exempted with a one-line reason in the config.
 const EXEMPT_LEGITIMATE_USES = [
   {
     reason: "the chat sidebar row, not a card",
@@ -209,9 +193,6 @@ describe("frontend convention lint rules", () => {
 
   beforeAll(async () => {
     eslint = new ESLint({ cwd: APP_ROOT });
-    // Probes lint text under a real file's path. With type information the
-    // parser can hand back that file's on-disk AST instead of the probe's,
-    // crashing other rules; the rules under test are syntactic, so drop it.
     probeEslint = new ESLint({
       cwd: APP_ROOT,
       overrideConfig: {

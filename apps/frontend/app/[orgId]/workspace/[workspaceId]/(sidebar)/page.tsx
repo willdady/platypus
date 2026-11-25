@@ -42,13 +42,11 @@ import { useOrganization } from "@/hooks/use-organization";
 import { useWorkspace } from "@/hooks/use-workspace";
 import type { Trigger } from "@platypus/schemas";
 
-/** Where each collapsible section persists its open state. */
 const SECTION_KEYS = {
   skills: "section:skills:open",
   triggers: "section:triggers:open",
 } as const;
 
-/** A section heading: the h2 over its one-line description. */
 function SectionHeaderSkeleton({
   titleWidth,
   descriptionWidth,
@@ -64,11 +62,6 @@ function SectionHeaderSkeleton({
   );
 }
 
-/**
- * A collapsible section as it will load: its header and chevron, and — only
- * if the section was last left open — its body. A collapsed section is just
- * the header, so the placeholder doesn't draw a list the page then hides.
- */
 function CollapsibleSectionSkeleton({
   storageKey,
   titleWidth,
@@ -95,19 +88,12 @@ function CollapsibleSectionSkeleton({
   );
 }
 
-/**
- * The workspace home while its reads are in flight, drawn on the loaded
- * page's frame — header, stat cards, then the five sections in order, each
- * collapsible one collapsed or expanded as it was last left — so the page
- * lands without shifting.
- */
 function WorkspaceSkeleton() {
   return (
     <LoadingRegion
       label="Loading workspace"
       className="flex flex-col gap-8 px-4 md:px-8 py-8 pb-32 max-w-6xl mx-auto"
     >
-      {/* Header: org name, then icon + workspace name, settings link */}
       <div className="flex flex-col">
         <SkeletonLine lineClassName="h-5 mb-1" className="w-24" />
         <div className="flex items-center justify-between">
@@ -121,20 +107,17 @@ function WorkspaceSkeleton() {
         </div>
       </div>
 
-      {/* Stats Cards - mobile */}
       <div className="flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden pb-1 lg:hidden">
         {Array.from({ length: 5 }).map((_, i) => (
           <Skeleton key={i} className="h-[46px] w-24 shrink-0 rounded-xl" />
         ))}
       </div>
-      {/* Stats Cards - desktop */}
       <div className="hidden lg:grid gap-4 grid-cols-5">
         {Array.from({ length: 5 }).map((_, i) => (
           <Skeleton key={i} className="h-[106px] w-full rounded-xl" />
         ))}
       </div>
 
-      {/* Agents Section (not collapsible) */}
       <div className="flex flex-col gap-4">
         <SectionHeaderSkeleton titleWidth="w-28" descriptionWidth="w-80" />
         <div>
@@ -168,7 +151,6 @@ function WorkspaceSkeleton() {
   );
 }
 
-/** One stat card: its count, and the read it came from. */
 type Stat = {
   label: string;
   description: string;
@@ -177,7 +159,6 @@ type Stat = {
   count: number | undefined;
 };
 
-/** A list read's row count, once it has landed — of the rows `counted` keeps, when given. */
 function listCount<T>(
   list: { data?: unknown; results: T[] },
   counted?: (row: T) => boolean,
@@ -187,10 +168,6 @@ function listCount<T>(
     : undefined;
 }
 
-/**
- * A stat's number, or — while its read is in flight or after it failed — a
- * placeholder, so a count that didn't load never reads as 0.
- */
 function StatValue({ stat, className }: { stat: Stat; className: string }) {
   if (stat.count !== undefined) {
     return <span className={cn("block", className)}>{stat.count}</span>;
@@ -239,9 +216,7 @@ function Workspace() {
 
   const { data: orgData, isLoading: isLoadingOrg } = useOrganization(orgId);
 
-  // Each count reads the same key as the section below that lists it, so
-  // the two share one request. Chats has no section here, so it reads a
-  // single row for its `totalCount`.
+  // why: each count reads the same key as its list, so the two share one request
   const chats = useScopedSWR<{ results: []; totalCount: number }>(
     chatListEntity({ limit: 1 }),
     scope,
@@ -249,8 +224,6 @@ function Workspace() {
   const agents = useScopedList<unknown>("agents", scope);
   const skills = useScopedList<unknown>("skills", scope);
   const boards = useScopedList<unknown>("boards", scope);
-  // Fired One-offs ride along for the list's "Show fired" toggle, but not for
-  // the count.
   const triggers = useScopedList<Trigger>(
     triggerListEntity({ includeFired: true }),
     scope,
@@ -327,7 +300,6 @@ function Workspace() {
 
   return (
     <div className="flex flex-col gap-8 px-4 md:px-8 py-8 pb-32 max-w-6xl mx-auto">
-      {/* Header Section */}
       <div className="flex flex-col">
         <span className="text-sm font-medium text-muted-foreground mb-1">
           {orgData?.name}
@@ -341,9 +313,6 @@ function Workspace() {
       </div>
 
       {providersError && !providersData ? (
-        // Without the count there is no telling a workspace with no
-        // providers from one whose providers didn't load, so neither the
-        // "add a provider" prompt nor the page behind it is shown.
         <ListError
           error={providersError}
           subject="providers"
@@ -353,7 +322,6 @@ function Workspace() {
         <NoProvidersEmptyState orgId={orgId} workspaceId={workspaceId} />
       ) : (
         <>
-          {/* Stats Overview - compact on mobile, full cards on desktop */}
           <div className="flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden pb-1 lg:hidden">
             {stats.map((stat) => (
               <Card
@@ -387,7 +355,6 @@ function Workspace() {
             ))}
           </div>
 
-          {/* Agents List Section */}
           <div className="flex flex-col gap-4">
             <div className="flex items-center justify-between">
               <div className="flex flex-col">
@@ -399,13 +366,11 @@ function Workspace() {
                 </p>
               </div>
             </div>
-            {/* AgentsList renders the Create / Attach buttons and empty states */}
             <AgentsList orgId={orgId} workspaceId={workspaceId} />
           </div>
 
           <Separator />
 
-          {/* Skills List Section */}
           <CollapsibleSection
             title={
               <>
@@ -420,7 +385,6 @@ function Workspace() {
 
           <Separator />
 
-          {/* Triggers List Section */}
           <CollapsibleSection
             title={
               <>

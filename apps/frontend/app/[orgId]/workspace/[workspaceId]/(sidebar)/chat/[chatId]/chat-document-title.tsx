@@ -7,13 +7,7 @@ import { useWorkspace } from "@/hooks/use-workspace";
 import { useDocumentTitle } from "@/hooks/use-document-title";
 import { optionalFetcher } from "@/lib/utils";
 
-/**
- * Titles the tab after the Chat. A new Chat is named only after its first
- * turn, so this follows the row `Chat` already reads and polls (same key, one
- * request) rather than a title fixed on the server. The Workspace row is read
- * here too, not awaited by the page: a server await suspends every navigation
- * into a Chat, flashing a skeleton over a new Chat's centred composer.
- */
+// why: a server await would suspend every navigation into a Chat, flashing a skeleton
 export function ChatDocumentTitle({
   orgId,
   workspaceId,

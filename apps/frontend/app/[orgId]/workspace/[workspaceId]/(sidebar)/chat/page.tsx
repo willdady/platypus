@@ -19,13 +19,6 @@ function ChatPage() {
   const backendUrl = useBackendUrl();
   const { mutate } = useSWRConfig();
 
-  // A freshly minted id has no Chat row, so cache it as absent before `Chat`
-  // first reads it. Otherwise the row read is in flight on the first frames of
-  // both this render and the detail page's, and the composer shows its default
-  // placeholder and a pending picker until it 404s (issue #966). Not gated on
-  // the signed-in user the way the read is: on a cold load the session is still
-  // resolving here, and an unseeded row would show the transcript skeleton of an
-  // existing Chat until the read came back empty.
   const [chatId] = useState(() => {
     const id = nanoid();
     if (backendUrl) {
@@ -41,15 +34,12 @@ function ChatPage() {
   useEffect(() => {
     if (!orgId || !workspaceId) return;
 
-    // Redirect to the chat page for the ID generated above
     const queryString = searchParams.toString();
     const chatPath = workspaceRoutes(orgId, workspaceId).chat.detail(chatId);
     const redirectUrl = queryString ? `${chatPath}?${queryString}` : chatPath;
     router.replace(redirectUrl);
   }, [orgId, workspaceId, router, searchParams, chatId]);
 
-  // Render the chat while the redirect lands, so the composer never blanks
-  // (issue #966). The detail page renders the same chat under this ID.
   return (
     <Chat
       orgId={orgId}

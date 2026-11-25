@@ -15,7 +15,6 @@ describe("RootLayout metadata", () => {
     });
   });
 
-  // Everything but sign-in sits behind auth, so there is nothing to index.
   it("asks search engines not to index or follow any page", () => {
     expect(metadata.robots).toEqual({ index: false, follow: false });
   });

@@ -9,8 +9,6 @@ import {
   toastSuccess,
 } from "@/test/test-utils";
 
-// --- Module mocks ------------------------------------------------------------
-
 vi.mock("@/components/auth-provider", () => ({
   useBackendUrl: () => "http://test",
   useAuth: () => ({ user: { id: "u1" } }),
@@ -20,9 +18,6 @@ vi.mock("@/components/contexts-list", () => ({
   ContextsList: () => null,
 }));
 
-// Defaults to a *warm* SWR cache: the fetched global context is already
-// present on the very first render, as happens when navigating back from the
-// Edit Workspace Context screen (which subscribes to the same SWR key).
 const WARM = {
   data: {
     results: [
@@ -45,8 +40,6 @@ vi.mock("swr", () => ({
 }));
 
 import ContextsPage from "./page";
-
-// --- Tests -------------------------------------------------------------------
 
 describe("ContextsPage global context field", () => {
   beforeEach(() => {
@@ -95,7 +88,6 @@ describe("ContextsPage revalidation", () => {
     fireEvent.change(screen.getByRole("textbox"), {
       target: { value: "half-typed" },
     });
-    // A focus revalidation: a new array identity holding the same row.
     swrState.response = {
       ...WARM,
       data: { results: [...WARM.data.results.map((c) => ({ ...c }))] },

@@ -5,7 +5,6 @@ vi.mock("next/navigation", () => ({ redirect: redirectSpy }));
 
 import TriggerRunsRedirect from "./page";
 
-// The per-trigger runs page is gone, but links and bookmarks to it are not.
 describe("Per-trigger runs redirect", () => {
   it("sends an old link to the consolidated page with its trigger pre-selected", async () => {
     await TriggerRunsRedirect({

@@ -16,7 +16,6 @@ async function WorkspaceCreatePage({
 
   return (
     <ProtectedRoute requireOrgAdmin>
-      {/* No shell wraps this page, and the body doesn't scroll. */}
       <main id={MAIN_CONTENT_ID} className="h-dvh overflow-y-auto pb-4">
         <ResourcePage
           backFallbackHref={orgRoutes(orgId).root}

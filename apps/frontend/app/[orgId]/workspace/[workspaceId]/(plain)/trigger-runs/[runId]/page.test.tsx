@@ -9,13 +9,6 @@ import {
 import { Suspense } from "react";
 import type { RunEvent, TriggerRunDetail } from "@platypus/schemas";
 
-/**
- * The page reads one run through `useSWR` with its own incremental fetcher.
- * The mock below stands in for SWR: it calls the page's fetcher against a
- * staged sequence of responses, so the test sees both what the page asked
- * for (the `sinceSeq` it computed) and what it rendered after folding the
- * answers together.
- */
 const state = {
   responses: [] as { run: TriggerRunDetail; events: RunEvent[] }[],
   urls: [] as string[],
@@ -24,7 +17,6 @@ const state = {
   error: undefined as Error | undefined,
   isLoading: false,
   mutate: vi.fn(),
-  /** The page's own fetcher and key, captured so a test can run a poll. */
   key: null as string | null,
   fetcher: undefined as ((url: string) => Promise<unknown>) | undefined,
 };
@@ -50,7 +42,6 @@ vi.mock("swr", () => ({
 
 let rerender: (() => void) | undefined;
 
-/** One poll, as SWR would run it: the page's fetcher against its key. */
 async function poll() {
   await waitFor(() => expect(state.fetcher).toBeDefined());
   state.data = await state.fetcher!(state.key!);
@@ -131,8 +122,6 @@ const params = Promise.resolve({
 });
 
 async function renderPage() {
-  // `params` is a promise the page unwraps with `use`, so the first render
-  // suspends; flush it before asserting.
   let view!: ReturnType<typeof render>;
   await act(async () => {
     view = render(
@@ -184,12 +173,9 @@ describe("TriggerRunDetailPage", () => {
     expect(screen.getByText("search")).toBeInTheDocument();
     expect(screen.getByText("Generating response…")).toBeInTheDocument();
     expect(screen.getByText("Three cards moved to Done.")).toBeInTheDocument();
-    // The first read asks for the whole timeline.
     expect(state.urls[0]).toBe(
       "https://backend.example/organizations/org-1/workspaces/ws-1/trigger-runs/run-1",
     );
-    // The row heading the page does not link to the page it is on, nor does
-    // its Trigger name link anywhere.
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
   });
 
@@ -201,7 +187,6 @@ describe("TriggerRunDetailPage", () => {
     const row = screen.getByText("Nightly digest");
     const response = screen.getByRole("heading", { name: "Response" });
     const timeline = screen.getByRole("heading", { name: "Timeline" });
-    // Response is the first thing to read; the Timeline explains why.
     expect(row.compareDocumentPosition(response)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
@@ -268,11 +253,7 @@ describe("TriggerRunDetailPage", () => {
     await poll();
 
     expect(screen.getByText("Generating response…")).toBeInTheDocument();
-    // Second read: from just below `b` (seq 1), the oldest event still open —
-    // not from `b` itself, or its patch would never arrive.
     expect(state.urls[1]).toMatch(/sinceSeq=0$/);
-    // `b` is shown once, in its patched state; `first` was kept from the
-    // first read.
     expect(screen.getAllByText("slow")).toHaveLength(1);
     expect(screen.getByText("900ms")).toBeInTheDocument();
     expect(screen.getByText("first")).toBeInTheDocument();
@@ -292,8 +273,6 @@ describe("TriggerRunDetailPage", () => {
     expect(refresh({ run: run({ status: "cancelled" }) })).toBe(0);
   });
 
-  // A restored page's poll was frozen the whole time it was away, so the run
-  // on screen is as old as the moment the page was put away.
   it("revalidates when the page is restored from the back/forward cache", async () => {
     state.data = { run: run(), events: [] };
     await renderPage();
@@ -358,8 +337,6 @@ describe("TriggerRunDetailPage", () => {
     expect(screen.getByText(RUN_DETAIL_ERROR_NOTICE)).toBeInTheDocument();
   });
 
-  // A failed read for any reason other than gone/forbidden may clear on its
-  // own, so it offers another read and a way back to the run list.
   it("offers a retry and a way back when the run read fails transiently", async () => {
     state.error = Object.assign(new Error("boom"), { status: 500 });
 
@@ -373,8 +350,6 @@ describe("TriggerRunDetailPage", () => {
     );
   });
 
-  // A pruned or inaccessible run won't come back, so a retry would only
-  // pretend there is a way forward. The way back stays.
   it.each([404, 403])(
     "offers no retry when the run read answers %i",
     async (status) => {

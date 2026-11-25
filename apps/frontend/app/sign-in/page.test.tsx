@@ -22,7 +22,6 @@ vi.mock("@/components/auth-provider", () => ({
   }),
 }));
 
-/** What the backend's sign-up availability endpoint answers. */
 function stubSignUpAvailability(open: boolean) {
   vi.stubGlobal(
     "fetch",
@@ -34,12 +33,6 @@ function stubSignUpAvailability(open: boolean) {
   );
 }
 
-/**
- * Renders the page with an SWR cache of its own, so no test sees another's
- * answer to the availability read, and returns a wait for that read to have
- * landed — the point after which "the link is not there" means the page chose
- * not to show it, rather than that it has not heard yet.
- */
 function renderPage() {
   const onSuccess = vi.fn();
   const utils = render(
@@ -72,7 +65,6 @@ describe("SignInPage sign-up link", () => {
     expect(
       screen.queryByRole("link", { name: "Sign up" }),
     ).not.toBeInTheDocument();
-    // Signing in is untouched by the requirement.
     expect(screen.getByRole("button", { name: "Sign in" })).toBeInTheDocument();
   });
 });
@@ -95,7 +87,6 @@ describe("SignInPage form", () => {
     fireEvent.submit(container.querySelector("form")!);
   };
 
-  // The reveal toggle itself is covered in components/ui/revealable-input.
   it("masks the password field", () => {
     renderPage();
 
@@ -174,7 +165,6 @@ describe("SignInPage form", () => {
   });
 });
 
-// The form is for signing in; a reader who already is goes into the app.
 describe("SignInPage with a session", () => {
   beforeEach(() => {
     stubSignUpAvailability(true);
@@ -188,7 +178,6 @@ describe("SignInPage with a session", () => {
     expect(mockReplace).toHaveBeenCalledWith("/");
   });
 
-  // Also what a failed session read leaves: no user to go on.
   it("shows the form while signed out", () => {
     renderPage();
 

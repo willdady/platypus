@@ -100,10 +100,6 @@ export default function SignInPage() {
           </Button>
         </form>
 
-        {/* Offered only once the backend has said sign-up is open (#550):
-            where the Operator requires an invitation there is no form to
-            link to, and a link that appears and then turns out dead is the
-            dead end this avoids. */}
         {signUpOpen && (
           <p className="text-center text-sm text-muted-foreground">
             Don&apos;t have an account?{" "}
