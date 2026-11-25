@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { FormTextField } from "@/components/form-text-field";
 import { FormTextareaField } from "@/components/form-textarea-field";
 import { Button } from "@/components/ui/button";
-import { FieldTitle } from "@/components/ui/field";
+import { FieldTitle, FieldError } from "@/components/ui/field";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
 import { DetailFormState } from "@/components/detail-form-state";
 import {
@@ -29,8 +29,7 @@ import { workspaceRoutes } from "@/lib/routes";
 
 const DEFAULT_COLOR = KANBAN_LABEL_COLORS[5].value;
 
-// why: nothing retracts a label's error, so listing it would disable Save forever
-const RETRACTABLE_FIELDS = ["name", "description"] as const;
+const RETRACTABLE_FIELDS = ["name", "description", "labels"] as const;
 
 type BoardFormData = {
   name: string;
@@ -68,6 +67,7 @@ export function KanbanBoardForm({
     isSubmitting,
     canSubmit,
     toFieldChange,
+    clearErrors,
     submit,
   } = useEntityForm<BoardFormData, { id: string }, KanbanBoard>({
     initialData: { name: "", description: "", labels: [] },
@@ -100,6 +100,7 @@ export function KanbanBoardForm({
   const { labels } = formData;
 
   const handleAddLabel = () => {
+    clearErrors("labels");
     setFormData((prev) => ({
       ...prev,
       labels: [
@@ -110,6 +111,7 @@ export function KanbanBoardForm({
   };
 
   const handleLabelNameChange = (id: string, value: string) => {
+    clearErrors("labels");
     setFormData((prev) => ({
       ...prev,
       labels: prev.labels.map((l) => (l.id === id ? { ...l, name: value } : l)),
@@ -117,6 +119,7 @@ export function KanbanBoardForm({
   };
 
   const handleLabelColorChange = (id: string, color: string) => {
+    clearErrors("labels");
     setFormData((prev) => ({
       ...prev,
       labels: prev.labels.map((l) => (l.id === id ? { ...l, color } : l)),
@@ -124,6 +127,7 @@ export function KanbanBoardForm({
   };
 
   const handleDeleteLabel = (id: string) => {
+    clearErrors("labels");
     setFormData((prev) => ({
       ...prev,
       labels: prev.labels.filter((l) => l.id !== id),
@@ -182,6 +186,9 @@ export function KanbanBoardForm({
           className="flex flex-col gap-2"
         >
           <FieldTitle id="kanban-board-labels-label">Labels</FieldTitle>
+          {validationErrors.labels && (
+            <FieldError>{validationErrors.labels}</FieldError>
+          )}
           {labels.map((label) => (
             <div key={label.id} className="flex items-center gap-2">
               <Input
