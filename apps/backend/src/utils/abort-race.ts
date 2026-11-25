@@ -5,10 +5,6 @@ const rejectOnAbort = (
   const promise = new Promise<never>((_resolve, reject) => {
     const onAbort = () =>
       reject(new Error("aborted", { cause: signal.reason }));
-    if (signal.aborted) {
-      onAbort();
-      return;
-    }
     signal.addEventListener("abort", onAbort, { once: true });
     release = () => signal.removeEventListener("abort", onAbort);
   });
