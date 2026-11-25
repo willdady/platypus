@@ -110,7 +110,6 @@ import { composeToolSet, hasToolSet, registerToolSet } from "../tools/index.ts";
 import { logger } from "../logger.ts";
 import { orgScope, workspaceScope } from "../scope.ts";
 import { FileValidationError } from "./file-gate.ts";
-import { resetExtractedTextCache } from "./file-extraction.ts";
 import { buildTestPdf } from "./file-extraction.test-fixtures.ts";
 import { createInMemoryChatTurnQueries } from "./chat-execution.test-fixtures.ts";
 import type { ChatTurnQueries } from "./chat-execution.ts";
@@ -2018,10 +2017,6 @@ describe("chat-execution", () => {
             providers: [provider],
           }),
         );
-
-      beforeEach(() => {
-        resetExtractedTextCache();
-      });
 
       it("sends a non-native PDF to the model as annotated extracted text", async () => {
         const turn = await turnWithProvider(baseProvider, pdfMessages());

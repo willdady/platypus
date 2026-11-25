@@ -6,16 +6,21 @@ const extractText = vi.fn(() =>
 );
 vi.mock("unpdf", () => ({ extractText }));
 
-const { extractDocumentText, resetExtractedTextCache } =
-  await import("./file-extraction.ts");
+// why: the cache is module state, so a fresh module is the only way to start empty
+const freshModule = async () => {
+  vi.resetModules();
+  return import("./file-extraction.ts");
+};
 
 const pdf = { mediaType: "application/pdf", filename: "a.pdf" };
 
 const cap = { maxChars: DEFAULT_MAX_EXTRACTED_TEXT_CHARS };
 
 describe("extracted-text cache", () => {
-  beforeEach(() => {
-    resetExtractedTextCache();
+  let extractDocumentText: (typeof import("./file-extraction.ts"))["extractDocumentText"];
+
+  beforeEach(async () => {
+    ({ extractDocumentText } = await freshModule());
     extractText.mockClear();
   });
 
@@ -51,11 +56,13 @@ describe("extracted-text cache", () => {
     expect(extractText).toHaveBeenCalledTimes(1);
   });
 
-  it("re-parses after the cache is reset", async () => {
+  it("does not share the cache with a fresh module", async () => {
     const bytes = new Uint8Array([1, 2, 3]);
     await extractDocumentText(bytes, pdf, cap);
-    resetExtractedTextCache();
-    await extractDocumentText(bytes, pdf, cap);
+
+    const fresh = await freshModule();
+    await fresh.extractDocumentText(bytes, pdf, cap);
+
     expect(extractText).toHaveBeenCalledTimes(2);
   });
 });

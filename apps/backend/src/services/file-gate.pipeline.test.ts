@@ -7,7 +7,6 @@ import {
   rewriteStorageUrls,
 } from "../storage/utils.ts";
 import { assertFilePartsSupported, normalizeFileParts } from "./file-gate.ts";
-import { resetExtractedTextCache } from "./file-extraction.ts";
 import {
   buildTestDocx,
   buildTestPdf,
@@ -47,10 +46,6 @@ const cap = { maxExtractedTextChars: DEFAULT_MAX_EXTRACTED_TEXT_CHARS };
 
 describe("attachment pipeline (gate → store → inline → normalize)", () => {
   useTempDiskStorage();
-
-  beforeEach(() => {
-    resetExtractedTextCache();
-  });
 
   const roundTrip = async (message: PlatypusUIMessage) => {
     await assertFilePartsSupported([message], ["image/*"]);
