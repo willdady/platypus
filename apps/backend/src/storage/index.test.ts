@@ -1,14 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
-vi.mock("./s3.ts", () => {
-  class MockS3Storage {
-    put = vi.fn();
-    get = vi.fn();
-    delete = vi.fn();
-  }
-  return { S3Storage: MockS3Storage };
-});
-
 const loadBackends = async () => {
   const [disk, s3] = await Promise.all([
     import("./disk.ts"),
