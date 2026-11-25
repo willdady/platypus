@@ -37,11 +37,6 @@ const INITIAL_DATA = {
   extractMemories: false,
 };
 
-/**
- * Creates or edits an A2A endpoint (ADR-0032), and on an existing one shows
- * its card URL and manages its tokens. Only the Workspace Owner edits; an Org
- * Admin sees it read-only.
- */
 function A2aEndpointForm({
   orgId,
   workspaceId,
@@ -86,8 +81,6 @@ function A2aEndpointForm({
       extractMemories: record.extractMemories,
     }),
     retractableFields: ["agentId", "name", "description", "enabled"],
-    // On create, a blank name or description is left for the backend to copy
-    // from the Agent; the Agent can't change once the endpoint exists.
     buildPayload: (data) =>
       isEditMode
         ? {
@@ -109,8 +102,6 @@ function A2aEndpointForm({
           },
     successMessage: () =>
       isEditMode ? "A2A endpoint updated" : "A2A endpoint created",
-    // A new endpoint lands on its own page, scrolled to where its tokens
-    // are issued.
     onSuccess: (saved) =>
       router.push(
         isEditMode
@@ -127,8 +118,6 @@ function A2aEndpointForm({
     onSuccess: () => router.push(routes.a2aEndpoints),
   });
 
-  // Picking an Agent fills the name and description, unless the Owner has
-  // typed their own over what the previous pick filled in.
   const selectAgent = (agentId: string) => {
     const previous = agents.find((a) => a.id === formData.agentId);
     const next = agents.find((a) => a.id === agentId);
@@ -208,7 +197,6 @@ function A2aEndpointForm({
             disabled={isSubmitting || readOnly}
           />
 
-          {/* Both off by default: whoever holds a token may not be you. */}
           <FormSwitchField
             name="includeMemories"
             label="Include Memories"

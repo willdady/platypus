@@ -25,7 +25,6 @@ function StatusBadge({ children }: { children: ReactNode }) {
   return <Badge variant="pill">{children}</Badge>;
 }
 
-/** A Workspace's A2A endpoints (ADR-0032). Only the Owner adds or edits one. */
 function A2aEndpointsList({
   orgId,
   workspaceId,
@@ -92,7 +91,6 @@ function A2aEndpointsList({
             action={actions}
           />
         }
-        // The agent name is the card's second line and nothing follows it.
         descriptionLines={1}
         href={(endpoint) => routes.settings.a2aEndpointDetail(endpoint.id)}
         badges={(endpoint) => (
@@ -104,8 +102,6 @@ function A2aEndpointsList({
           </>
         )}
         menu={(endpoint) => (
-          // Only the Owner writes an endpoint; anyone else gets Edit,
-          // which opens the form read-only.
           <RowActionsMenu
             name={endpoint.name}
             edit={{

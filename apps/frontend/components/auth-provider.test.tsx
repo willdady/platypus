@@ -43,8 +43,7 @@ const { swrCalls, membership, workspace, reads } = vi.hoisted(() => {
     swrCalls: [] as string[],
     membership,
     workspace,
-    // What each access read answers; a test swaps one for a failure. Built
-    // once, so a render doesn't churn the identities the context memoises on.
+    // why: built once — a new identity each render would churn the memoised context
     reads: {
       membership: {
         data: membership as unknown,
@@ -161,8 +160,6 @@ describe("AuthProvider", () => {
     expect(screen.getByText("org-admin|true|true|admin")).toBeInTheDocument();
   });
 
-  // Neither the session nor the Workspace row is known yet, and `undefined ===
-  // undefined` used to answer that question with "yes".
   it("reports no owner while the session is still loading", () => {
     sessionState.data = null;
     sessionState.isPending = true;
@@ -176,9 +173,6 @@ describe("AuthProvider", () => {
     expect(screen.getByText(/\|false\|/)).toBeInTheDocument();
   });
 
-  // What a protected page mounting straight after sign-in reads first. A value
-  // that lagged here would still say signed out, and the page would redirect
-  // to /sign-in.
   it("hands a page mounted as the session lands the new session", () => {
     sessionState.data = null;
     function Mounted() {
@@ -232,7 +226,6 @@ describe("AuthProvider static backend context", () => {
       onBackendRender();
       return <p>{backendUrl}</p>;
     });
-    // A fresh element each time: React skips re-rendering an identical one.
     const tree = () => (
       <AuthProvider backendUrl="http://test">
         <BackendReader />
@@ -250,7 +243,6 @@ describe("AuthProvider static backend context", () => {
     };
     view.rerender(tree());
 
-    // The auth consumer saw both changes; the backend reader saw neither.
     expect(onRender).toHaveBeenCalledTimes(3);
     expect(onBackendRender).toHaveBeenCalledTimes(1);
     expect(screen.getByText("http://test")).toBeInTheDocument();
@@ -297,8 +289,6 @@ describe("AuthProvider access read failures", () => {
       </AuthProvider>,
     );
 
-  // A 5xx leaves no membership row, which the gate would otherwise read as
-  // not being a member at all.
   it.each(["membership", "workspace"] as const)(
     "reports a %s read that failed for a reason other than access",
     (read) => {
@@ -327,7 +317,6 @@ describe("AuthProvider access read failures", () => {
     },
   );
 
-  // Not a member is the answer, whatever else failed to load.
   it("leaves a refused membership to the access gate even when the Workspace read fails", () => {
     reads.membership = {
       data: undefined,
@@ -344,8 +333,6 @@ describe("AuthProvider access read failures", () => {
     expect(screen.getByText("access read ok")).toBeInTheDocument();
   });
 
-  // SWR retries a failed read on its own; the gate keeps showing the failure
-  // meanwhile instead of flickering back to the page each attempt.
   it("keeps reporting the failure, not loading, while SWR retries the read", () => {
     reads.membership = {
       data: undefined,
@@ -382,8 +369,6 @@ describe("AuthProvider access read failures", () => {
     expect(reads.mutateWorkspace).toHaveBeenCalled();
   });
 
-  // A dropped or failed session read is not an answer about the session, and
-  // reading it as signed out sent the reader to /sign-in (#1204).
   it("reports a session read that failed with no session in hand", () => {
     sessionState.data = null;
     sessionState.error = { status: 500 };
@@ -392,7 +377,6 @@ describe("AuthProvider access read failures", () => {
     expect(screen.getByText("access read failed")).toBeInTheDocument();
   });
 
-  // better-auth clears the session on a 401: that is the server saying signed out.
   it("leaves a 401 session read to the sign-in redirect", () => {
     sessionState.data = null;
     sessionState.error = { status: 401 };

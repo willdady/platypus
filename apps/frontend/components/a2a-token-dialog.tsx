@@ -3,11 +3,6 @@
 import { CopyRow } from "@/components/copy-row";
 import { TokenDialog } from "@/components/bearer-token";
 
-/**
- * Shows an A2A token once, beside the card URL the client needs with it. With
- * no backend URL configured there is no card URL to give yet, but the token
- * still shows: closing this is the last chance to copy it.
- */
 export function A2aTokenDialog({
   token,
   cardUrl,

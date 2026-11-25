@@ -29,19 +29,11 @@ import {
 } from "@/test/form-test-harness";
 import { expectSentBodyToMatchSchema, selectOption } from "@/test/test-utils";
 
-// --- Module mocks ------------------------------------------------------------
-
 vi.mock("@/components/auth-provider", () => authMock);
-// useSWR is called for providers, skills, agents, and (when editing) the
-// agent. The harness keys its responses off the request URL suffix, so
-// each call gets the right payload; a key with no matcher (skills, the
-// agents list) falls back to the default set below.
 vi.mock("swr", () => swrMock);
 
 import { AgentForm } from "./agent-form";
 import { FIX_FORM_ERRORS_MESSAGE } from "@/lib/apply-write-outcome";
-
-// --- Helpers -----------------------------------------------------------------
 
 const provider: Provider = {
   id: "p1",
@@ -51,8 +43,7 @@ const provider: Provider = {
   modelIds: [{ id: "gpt-4o", passthroughFileTypes: [] }],
 } as unknown as Provider;
 
-// Registered fresh in each test's beforeEach (below) since resetFormHarness
-// clears the harness's data-fetching registrations along with its spies.
+// why: resetFormHarness clears the harness's reads and spies, so this runs after it
 function registerSwrData() {
   setData({ results: [] });
   setDataFor("/providers", { results: [provider] });
@@ -63,8 +54,6 @@ function renderCreateForm() {
     <AgentForm orgId="org1" workspaceId="ws1" toolSets={[]} agents={[]} />,
   );
 }
-
-// --- Tests -------------------------------------------------------------------
 
 describe("AgentForm validation error surfacing", () => {
   beforeEach(() => {
@@ -81,11 +70,9 @@ describe("AgentForm validation error surfacing", () => {
 
     expect(await screen.findByText("Model is required")).toBeInTheDocument();
 
-    // The Model select trigger is marked invalid for assistive tech.
     const trigger = screen.getByRole("combobox", { name: "Model" });
     expect(trigger).toHaveAttribute("aria-invalid", "true");
 
-    // A validation failure is never silent.
     expect(toastError).toHaveBeenCalledWith(FIX_FORM_ERRORS_MESSAGE);
   });
 
@@ -112,11 +99,8 @@ describe("AgentForm validation error surfacing", () => {
     fireEvent.click(saveButton);
 
     expect(await screen.findByText("Invalid max steps")).toBeInTheDocument();
-    // An unshown error must not silently disable the button — but a shown one
-    // does, until the user corrects the field.
     expect(saveButton).toBeDisabled();
 
-    // Editing the offending field clears its error and re-enables Save.
     fireEvent.change(screen.getByLabelText("Max steps"), {
       target: { value: "10" },
     });
@@ -143,8 +127,6 @@ describe("AgentForm validation error surfacing", () => {
     ).toBeInTheDocument();
     expect(saveButton).toBeDisabled();
 
-    // The shared SamplingControls reports a patch, so the form itself must
-    // retract the error keyed to the field that changed (#1941).
     fireEvent.change(screen.getByLabelText("Temperature"), {
       target: { value: "0.5" },
     });
@@ -157,8 +139,6 @@ describe("AgentForm validation error surfacing", () => {
     expect(saveButton).toBeEnabled();
   });
 
-  // #571: toolSetIds has no field that retracts its error, so gating Save on
-  // it would disable Save forever with no way out but reloading.
   it("never disables Save on a rejection keyed to a field with no retracting input", async () => {
     stubRejectedSave([{ path: ["toolSetIds"], message: "Unknown tool set" }]);
 
@@ -174,7 +154,6 @@ describe("AgentForm validation error surfacing", () => {
   });
 });
 
-// #1840: a real form means Enter in a single-line field saves once.
 describe("AgentForm form submission", () => {
   beforeEach(() => {
     resetFormHarness();
@@ -247,8 +226,6 @@ describe("AgentForm form submission", () => {
     });
   });
 
-  // The schema owns validation, so the browser's own step/type checks must not
-  // block a save now that these fields live in a real form.
   it("does not let browser constraint validation block a schema-valid save", async () => {
     const fetchMock = stubSaveSequence({ status: 200, body: { id: "a1" } });
     renderEditForm();
@@ -269,8 +246,6 @@ describe("AgentForm form submission", () => {
   });
 });
 
-// #1845: every save and delete toasts success, including those that navigate
-// away; arriving on the list is not feedback enough.
 describe("AgentForm success feedback", () => {
   beforeEach(() => {
     resetFormHarness();
@@ -359,9 +334,6 @@ describe("AgentForm success feedback", () => {
   });
 });
 
-// #595: the Agent itself already saved by the time either avatar write runs,
-// so a refused avatar write is a partial success — it must toast, not block
-// navigation or silently look like it worked.
 describe("AgentForm avatar write partial-success handling", () => {
   beforeEach(() => {
     resetFormHarness();
@@ -604,8 +576,6 @@ describe("AgentForm loading gate", () => {
 
     renderCreateForm();
 
-    // A create page waits only on its lists, so it doesn't claim to be
-    // loading an agent.
     expect(screen.getByLabelText("Loading form")).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Save" }),
@@ -767,7 +737,6 @@ describe("AgentForm Skills search", () => {
   });
 });
 
-// Issue #1521: the Reasoning section follows the selected model's map.
 describe("AgentForm Reasoning section", () => {
   const thinkingProvider = {
     ...provider,
@@ -823,8 +792,6 @@ describe("AgentForm Reasoning section", () => {
     expect(screen.queryByText("Reasoning")).not.toBeInTheDocument();
   });
 
-  // Issue #1689: a native model has no map, but still offers Thinking and
-  // Effort; the budget needs a map.
   it("offers Thinking and Effort, but no budget, on a native model", async () => {
     setDataFor("/providers", {
       results: [{ ...provider, providerType: "Anthropic" }],
@@ -870,7 +837,6 @@ describe("AgentForm Reasoning section", () => {
   });
 });
 
-// Issue #1803 / ADR-0043: an Agent may carry a Fallback model.
 describe("AgentForm Fallback model", () => {
   const fallbackProvider = {
     ...provider,

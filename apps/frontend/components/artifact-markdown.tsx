@@ -12,11 +12,7 @@ import {
   type MessageResponseProps,
 } from "./ai-elements/message";
 
-/**
- * Elements that make the browser request a URL by themselves. The default
- * schema allows `picture`/`source` and their `srcSet`, which no `img` renderer
- * sees — a remote image there would load without passing the image rule below.
- */
+// why: picture/source srcSet loads without the image rule, so those tags are dropped whole
 const REQUEST_TRIGGERING_ELEMENTS = new Set([
   "audio",
   "base",
@@ -33,14 +29,6 @@ const REQUEST_TRIGGERING_ELEMENTS = new Set([
   "video",
 ]);
 
-/**
- * Streamdown's own chain blocks a `data:` image before any renderer sees it.
- * This is the same sanitisation without that one rule: the image component
- * below is the decision point, and every other tag and attribute still goes
- * through the default schema. Connectors that bypass that renderer — `source`
- * and `picture`, a media element, a frame — are dropped whole. Links keep
- * their protocol rules.
- */
 export const artifactSchema = {
   ...defaultSchema,
   tagNames: (defaultSchema.tagNames ?? []).filter(
@@ -55,17 +43,10 @@ const artifactRehypePlugins: NonNullable<
   MessageResponseProps["rehypePlugins"]
 > = [rehypeRaw, [rehypeSanitize, artifactSchema]];
 
-/** The props Streamdown hands an `img` renderer. */
 type ArtifactImageProps = ClassAttributes<HTMLImageElement> &
   ImgHTMLAttributes<HTMLImageElement> &
   ExtraProps;
 
-/**
- * An image inside a markdown Artifact. Only `data:` URIs and this deployment's
- * own stored files are given a `src`, so any other host is never contacted.
- * A blocked image keeps its URL visible as a link, because a silently missing
- * picture is worse than one the reader can open deliberately.
- */
 function ArtifactImage({
   storageBaseUrl,
   ...props
@@ -113,15 +94,6 @@ function ArtifactImage({
   );
 }
 
-/**
- * Markdown rendered the way a Chat message is, with the Artifact's own image
- * rule applied. Markdown, code and Mermaid Artifacts all reach the same
- * renderer; a code Artifact is wrapped in a fenced block so it highlights.
- * `storageBaseUrl` is the base the Artifact read named for this deployment's
- * stored files (a bucket or CDN when one is configured), so an image served
- * from there loads; while a call is still streaming there is no read to carry
- * it, and such an image stays blocked until the stored version is read.
- */
 export function ArtifactMarkdown({
   content,
   storageBaseUrl,
@@ -145,9 +117,6 @@ export function ArtifactMarkdown({
       className={className}
       components={components}
       rehypePlugins={artifactRehypePlugins}
-      // The sanitised source is handed over unchanged: the renderer above is
-      // what decides which ones become a request, and a blocked one renders
-      // as a placeholder rather than disappearing.
       urlTransform={(url) => url}
     >
       {content}
@@ -155,7 +124,6 @@ export function ArtifactMarkdown({
   );
 }
 
-/** A fenced code block whose fence outruns any backticks in the content. */
 export function fencedCode(content: string, language: string): string {
   const longestRun = Math.max(
     2,

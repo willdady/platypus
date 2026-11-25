@@ -97,10 +97,6 @@ describe("ArtifactMarkdown images", () => {
 });
 
 describe("the Artifact markdown schema", () => {
-  // Some elements make the browser request a URL without the image rule
-  // seeing it — `source`'s srcSet is the reproduction that mattered. The
-  // schema drops them whole, so no element but a sanitiser-approved `img` can
-  // start a fetch.
   it.each([
     "audio",
     "base",

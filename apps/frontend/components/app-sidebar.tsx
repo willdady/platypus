@@ -89,12 +89,9 @@ export function AppSidebar() {
   }>();
   const backendUrl = useBackendUrl();
   const { ownsWorkspace } = useAuth();
-  // Chats belong to the Workspace Owner; everyone else reads them, so the
-  // row menu offers nobody else an action the backend would refuse.
   const canChange = canChangeChat(ownsWorkspace);
   const isMobile = useIsMobile();
   const { setOpenMobile } = useSidebar();
-  /** Navigation inside the phone sheet dismisses it. */
   const closeSheet = () => setOpenMobile(false);
 
   const routes = workspaceRoutes(orgId, workspaceId);
@@ -121,7 +118,6 @@ export function AppSidebar() {
     return () => clearTimeout(timer);
   }, [searchInput]);
 
-  // Helper to revalidate the chat list (handles query params in SWR key)
   const revalidateChatList = () =>
     mutate((key: unknown) =>
       matchesCollection(key, backendUrl, chatListEntity(), scope),
@@ -130,15 +126,7 @@ export function AppSidebar() {
   const { data: chatData, isLoading: isChatListLoading } = useScopedSWR<{
     results: ChatListItem[];
   }>(chatListEntity({ limit: 100, search: debouncedSearch }), scope, {
-    // Nothing else revalidates this list: not the per-chat spinner rendered
-    // off it, not the chat row the backend creates when a run starts, not
-    // the title written after that run ends. See `lib/chat-list-poll` for
-    // what each poll waits on and how it stops.
-    //
-    // SWR calls this when it arms the next timer — on every render and after
-    // every fetch — which is also when the set of chats being waited on is
-    // worth recomputing: a route change is a render, and a chat arriving is
-    // a fetch.
+    // why: SWR arms this on every render and fetch, which is when the watched set changes
     refreshInterval: (latest) => {
       const { watched, intervalMs } = chatListPoll({
         watched: watchedChatsRef.current,
@@ -155,11 +143,6 @@ export function AppSidebar() {
   const hasNoProviders = useHasNoProviders(scope);
   const canAddProvider = useCanConfigureWorkspaceResource("provider");
 
-  // Each search is its own SWR key, so the list would blank (and falsely read
-  // as "no matches") on every debounced keystroke. Keep showing the last
-  // settled list until the new one lands — but only within this Workspace:
-  // the sidebar outlives a Workspace switch, and SWR's `keepPreviousData`
-  // would show the old Workspace's chats under the new one's routes.
   const chatListScopeKey = `${orgId}/${workspaceId}`;
   const [settledChatList, setSettledChatList] = useState<{
     scopeKey: string;
@@ -178,11 +161,9 @@ export function AppSidebar() {
 
   const chats = pins.apply(shownChatList?.data.results ?? []);
 
-  // Separate pinned chats from regular chats
   const pinnedChats = chats.filter((chat) => chat.isPinned);
   const regularChats = chats.filter((chat) => !chat.isPinned);
 
-  // Group regular chats by time periods
   const now = new Date();
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
@@ -228,13 +209,11 @@ export function AppSidebar() {
       ...data,
       isPinned: chats.find((chat) => chat.id === renameChatId)?.isPinned,
     }),
-    // A chat has no field a conflict could key to.
     conflictField: null,
-    // The rename input's error is already in view.
     invalidMessage: null,
     onSuccess: async () => {
       setRenameChatId(null);
-      // The list is read under query params the write's own keys don't cover.
+      // why: the list is read under query params the write's own keys do not cover
       await revalidateChatList();
     },
   });
@@ -243,7 +222,6 @@ export function AppSidebar() {
     delete: (chatId) => writeEntity(backendUrl, "chat", scope, { id: chatId }),
     mutate: revalidateChatList,
     onSuccess: (chatId) => {
-      // Leave the deleted chat if it is the one open.
       if (pathname.startsWith(routes.chat.detail(chatId))) {
         router.push(routes.chat.root);
       }
@@ -262,8 +240,6 @@ export function AppSidebar() {
 
   return (
     <>
-      {/* The Workspace rail holds the window's left edge; the open sidebar
-          starts to its right. Collapsed, it slides away as before. */}
       <Sidebar className="group-data-[state=expanded]:left-(--workspace-rail-width)">
         {isMobile && (
           <WorkspaceSheetNavigation
@@ -277,9 +253,8 @@ export function AppSidebar() {
             <SidebarMenu>
               <SidebarMenuItem>
                 {hasNoProviders ? (
+                  // why: a disabled button fires no pointer or focus events, so the span opens it
                   <Tooltip>
-                    {/* A disabled button fires no pointer or focus events, so
-                      the wrapper is what opens the tooltip. */}
                     <TooltipTrigger asChild>
                       <span tabIndex={0} className="block">
                         <Button disabled className="w-full">
@@ -316,8 +291,6 @@ export function AppSidebar() {
           <div className="relative min-h-0 flex flex-col flex-1 overflow-hidden">
             <SidebarContent className="pb-16">
               {!shownChatList && isChatListLoading && <ChatHistorySkeleton />}
-              {/* Names the search the shown list answered, not the one in
-                flight, so a pending search never reads as "no matches". */}
               {chatGroups.length === 0 && shownChatList?.search && (
                 <div className="p-2">
                   <ListState variant="empty">
@@ -427,7 +400,6 @@ export function AppSidebar() {
         </nav>
       </Sidebar>
 
-      {/* Rename Chat Dialog */}
       <Dialog
         open={!!renameChatId}
         onOpenChange={(open) => !open && setRenameChatId(null)}
@@ -483,7 +455,6 @@ export function AppSidebar() {
   );
 }
 
-/** Stands in for the first chat-history group until the list first loads. */
 function ChatHistorySkeleton() {
   return (
     <LoadingRegion label="Loading chats">

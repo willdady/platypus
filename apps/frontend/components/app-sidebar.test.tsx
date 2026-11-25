@@ -12,8 +12,6 @@ import { chatUpdateSchema } from "@platypus/schemas";
 import { expectSentBodyToMatchSchema, jsonResponse } from "@/test/test-utils";
 import type { Actor } from "@/lib/authorization";
 
-// --- Module mocks ------------------------------------------------------------
-
 const { params, reads, auth } = vi.hoisted(() => ({
   params: { orgId: "org1", workspaceId: "ws1" },
   auth: {
@@ -21,9 +19,7 @@ const { params, reads, auth } = vi.hoisted(() => ({
     ownsWorkspace: true,
     workspaceDelegation: null as { providerSelfManagement: boolean } | null,
   },
-  // Keyed by `${workspaceId}|${entity}`. Each entry is handed back by
-  // reference, as SWR does, so a read's `data` identity is stable across
-  // renders.
+  // why: handed back by reference, as SWR does, so a read's data identity stays stable
   reads: new Map<string, { data: unknown; isLoading: boolean }>(),
 }));
 
@@ -43,14 +39,11 @@ vi.mock("swr", () => ({ useSWRConfig: () => ({ mutate: vi.fn() }) }));
 const LOADING = { data: undefined, isLoading: true };
 
 vi.mock("@/hooks/use-scoped-swr", () => ({
-  // A null scope is a skipped read — the edit dialog's form reads nothing.
   useScopedSWR: (entity: string, scope: { workspaceId?: string } | null) =>
     reads.get(`${scope?.workspaceId ?? ""}|${entity}`) ?? LOADING,
 }));
 
 import { AppSidebar } from "./app-sidebar";
-
-// --- Helpers -----------------------------------------------------------------
 
 const CHAT_LIST = "chat?limit=100";
 
@@ -88,7 +81,7 @@ function renderSidebar() {
   );
 }
 
-/** `useIsMobile` and the sidebar both read the 768px breakpoint from here. */
+// why: useIsMobile and the sidebar both read the 768px breakpoint from here
 function setViewport(mobile: boolean) {
   window.matchMedia = vi.fn((query: string) => ({
     matches: mobile && query === "(max-width: 767px)",
@@ -110,8 +103,6 @@ function search(value: string) {
     vi.advanceTimersByTime(300);
   });
 }
-
-// --- Tests -------------------------------------------------------------------
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -140,7 +131,7 @@ describe("AppSidebar New chat", () => {
 
   describe("hint", () => {
     beforeEach(() => {
-      // Radix opens the tooltip on real timers and measures it.
+      // why: Radix opens the tooltip on real timers and measures it
       vi.useRealTimers();
     });
 
@@ -305,7 +296,7 @@ describe("AppSidebar workspace switcher", () => {
 
 describe("AppSidebar mobile sheet", () => {
   beforeEach(() => {
-    // Radix opens the sheet on real timers.
+    // why: Radix opens the sheet on real timers
     vi.useRealTimers();
     setViewport(true);
     seedHeader();
@@ -389,11 +380,9 @@ describe("AppSidebar mobile sheet", () => {
 
 describe("AppSidebar chat actions", () => {
   beforeEach(() => {
-    // The writes resolve on real promises; nothing here needs the debounce.
     vi.useRealTimers();
   });
 
-  /** Opens a chat row's menu. */
   const openChatMenu = (title: string) => {
     const trigger = within(screen.getByText(title).closest("li")!).getByRole(
       "button",
@@ -408,7 +397,6 @@ describe("AppSidebar chat actions", () => {
   it("orders Edit, Pin, then a destructive Delete", () => {
     seedHeader();
     setRead("ws1", CHAT_LIST, {
-      // A stale tag in a response is no longer rendered in the menu.
       results: [{ ...chat("c1", "First chat"), tags: ["ops"] }],
     });
     renderSidebar();
@@ -445,8 +433,6 @@ describe("AppSidebar chat actions", () => {
     ).toBeInTheDocument();
   });
 
-  // A field left out of the update is left unchanged, so pinning sends only
-  // the pin: resending the title would 400 on one shorter than the minimum.
   it("pins a chat, sending only the pin", async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, {}));
     vi.stubGlobal("fetch", fetchMock);
@@ -520,8 +506,6 @@ describe("AppSidebar chat actions", () => {
     );
   });
 
-  // The backend refuses every one of these to anyone but the Workspace Owner
-  // — an Org Admin included — so offering them would only produce an error.
   it("offers a non-owner no chat actions", () => {
     auth.ownsWorkspace = false;
     seedHeader();

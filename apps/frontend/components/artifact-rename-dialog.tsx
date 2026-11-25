@@ -14,12 +14,6 @@ import { FormTextField } from "@/components/form-text-field";
 import { useEntityForm } from "@/hooks/use-entity-form";
 import type { Scope, Serialized } from "@/lib/api-write";
 
-/**
- * Renames one Artifact. The title is checked by the shared schema at the
- * backend, so an over-long one is refused and shown on the field rather than
- * quietly trimmed. The dialog closes on success and the list behind it
- * refreshes.
- */
 export function ArtifactRenameDialog({
   artifact,
   scope,
@@ -42,9 +36,7 @@ export function ArtifactRenameDialog({
       id: artifact.id,
       method: "PATCH",
       buildPayload: (data) => ({ title: data.title }),
-      // A rename has no field a conflict could key to.
       conflictField: null,
-      // The title's error is already in view.
       invalidMessage: null,
       successMessage: "Artifact renamed",
       onSuccess: () => {

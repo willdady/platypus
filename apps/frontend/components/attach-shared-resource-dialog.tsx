@@ -27,11 +27,6 @@ const COLLECTION: Record<AttachmentResourceType, string> = {
   agent: "agents",
 };
 
-/**
- * Admin-only picker for attaching an org-scoped Shared resource to a Workspace
- * (ADR-0007 / #154). Lists the organization's resources that are not yet
- * attached here; attaching one makes it appear in the workspace as a locked card.
- */
 function AttachSharedResourceDialog({
   open,
   onOpenChange,
@@ -100,8 +95,6 @@ function AttachSharedResourceDialog({
           </p>
         )}
         {isLoading ? (
-          // Rows shaped like the loaded ones, in place of the false "none
-          // available" while the list is still loading.
           <LoadingRegion label={`Loading shared ${label}s`}>
             <ul>
               {[0, 1, 2].map((i) => (

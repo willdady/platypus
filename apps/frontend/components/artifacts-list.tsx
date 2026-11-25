@@ -42,41 +42,27 @@ import { ALL } from "@/lib/search-params";
 import { ArtifactRenameDialog } from "./artifact-rename-dialog";
 import { ArtifactUploadButton } from "./artifact-upload";
 
-/** Artifacts per page. The route caps a request at 100. */
 const PAGE_SIZE = 20;
-/** The URL param holding the title search. */
 const QUERY_PARAM = "artifactQuery";
-/** The URL param holding the type filter. */
 const TYPE_PARAM = "artifactType";
-/** The URL param holding the page. */
 const PAGE_PARAM = "artifactsPage";
 
-/** A list row plus the fields `EntityCardList` reads. */
 type ArtifactCard = Serialized<Artifact> & {
   readonly name: string;
   readonly description: string;
 };
 
-/** The type a URL value names, or undefined for no filter. */
 function typeFromParam(value: string | null): ArtifactType | undefined {
   const candidate = artifactTypeSchema.options.find((type) => type === value);
   return candidate;
 }
 
-/** A failed read's response body, where `fetchError` keeps the backend's reason. */
 function errorInfo(error: unknown): unknown {
   return error && typeof error === "object" && "info" in error
     ? error.info
     : undefined;
 }
 
-/**
- * The Workspace's Artifacts, newest change first. The route pages, searches
- * and filters, so this list asks for one page at a time and the URL keeps
- * what the reader is looking at. A card opens the full-page viewer; its menu
- * renames, downloads, opens the source Chat when there still is one, or
- * deletes.
- */
 export function ArtifactsList({
   orgId,
   workspaceId,
@@ -101,10 +87,6 @@ export function ArtifactsList({
     Number.parseInt(get(PAGE_PARAM) ?? "", 10) || 1,
     1,
   );
-  // The count the last page landed with. The first render has none, so it asks
-  // for page 1; a deep link to a later page asks for the real page on the
-  // render after that. Clamping the request itself keeps a URL a deletion made
-  // too large from fetching — and labelling — a page that no longer exists.
   const [knownTotal, setKnownTotal] = useState(0);
   const bounds = pageBounds(requestedPage, knownTotal, PAGE_SIZE);
   const query = new URLSearchParams({
@@ -115,19 +97,14 @@ export function ArtifactsList({
   if (term) query.set("search", term);
   if (type) query.set("type", type);
 
-  // `useScopedList` unwraps the envelope; this page needs its `totalCount` to
-  // name the last page, so it reads the envelope and takes `results` itself.
+  // why: the envelope's totalCount names the last page, which useScopedList unwraps away
   const { data, error, isLoading, mutate } = useScopedSWR<ArtifactList>(
     `artifacts?${query.toString()}`,
     scope,
-    // Keep the page already on screen while the next one loads, so the page
-    // number (read from the response's total) doesn't fall back to 1 mid-fetch.
     { keepPreviousData: true },
   );
 
-  // Adjusting state during render is React's pattern for state derived from a
-  // read that has just landed; it re-renders before the browser paints, so the
-  // clamped page and its request take effect together.
+  // why: derived during render — an effect would paint the unclamped page first
   if (data && data.totalCount !== knownTotal) {
     setKnownTotal(data.totalCount);
   }
@@ -139,10 +116,6 @@ export function ArtifactsList({
   const isFiltered = term !== "" || type !== undefined;
   const hasRows = totalCount > 0;
 
-  // One element, placed by emptiness: inside the empty card while there are no
-  // Artifacts, and below the list — outline, like a footer's other controls —
-  // once there are rows or a filter matched nothing. Upload is the Owner's,
-  // like rename and delete.
   const upload = canManage ? (
     <ArtifactUploadButton
       orgId={orgId}
@@ -180,7 +153,6 @@ export function ArtifactsList({
   const cards: ArtifactCard[] = rows.map((row) => ({
     ...row,
     name: row.title,
-    // The line a card always reserves, so it carries the last change.
     description: `Updated ${formatRelativeTime(row.updatedAt)}`,
   }));
 
@@ -239,7 +211,6 @@ export function ArtifactsList({
           )
         }
         href={(card) => routes.artifacts.detail(card.id)}
-        // The viewer's own type badge, so a card reads like the Artifact it opens.
         badges={(card) => (
           <Badge variant="secondary">{artifactTypeLabel(card.type)}</Badge>
         )}
