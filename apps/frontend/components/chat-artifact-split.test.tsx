@@ -2,11 +2,6 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 
-/**
- * The split's own seam: the primitive is stubbed to the props and callbacks
- * this component hands it, so the pixel rules and the remembered width can be
- * pinned without laying out a browser.
- */
 const { group } = vi.hoisted(() => ({
   group: {
     setLayout: vi.fn(),

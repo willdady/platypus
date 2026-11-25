@@ -20,7 +20,6 @@ type ConfirmDialogProps = {
   title: string;
   description: ReactNode;
   confirmLabel?: string;
-  // Shown on the confirm button in place of confirmLabel while loading is true.
   loadingLabel?: string;
   confirmVariant?: "default" | "destructive" | "outline" | "ghost";
   cancelLabel?: string;
@@ -28,15 +27,9 @@ type ConfirmDialogProps = {
   onCancel?: () => void;
   loading?: boolean;
   error?: string | null;
-  // When set, the confirm button stays disabled until the user types this
-  // phrase (case-insensitively) into an input rendered in the dialog.
   confirmPhrase?: string;
-  // Keeps the confirm button disabled, e.g. while the action is not allowed.
   confirmDisabled?: boolean;
-  /**
-   * Where focus lands when the dialog closes. A dialog with no trigger of its
-   * own otherwise drops focus to the body.
-   */
+  // why: a dialog with no trigger drops focus to the body when it closes
   onCloseAutoFocus?: (event: Event) => void;
 };
 

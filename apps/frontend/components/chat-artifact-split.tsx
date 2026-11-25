@@ -23,43 +23,18 @@ import {
 } from "@/lib/artifact-panel-split";
 import { cn } from "@/lib/utils";
 
-/** Tailwind's `lg`: the width at which the panel sits beside the Chat. */
 const SIDE_PANEL_QUERY = "(min-width: 1024px)";
-/** The row that holds the Chat and the panel; measured, not the viewport. */
 const ROW_CLASS = "relative flex size-full min-h-0 overflow-hidden";
 const CHAT_PANEL_ID = "chat";
 const ARTIFACT_PANEL_ID = "artifact";
 
-/**
- * The Chat and an open Artifact panel in one row. From `lg` up, on a row wide
- * enough for both minimums, the two share the row with a divider between them:
- * the Chat starts at `min(896, rowWidth − 400)` and the panel takes the rest,
- * and either can be dragged between the minimums, remembered in this browser,
- * and reset with a double-click. Below `lg`, or on a row too narrow to hold
- * both minimums, the panel covers the Chat, exactly as it did before the split
- * existed.
- *
- * The row keeps one tree shape for every state, panel or no panel: the same
- * two panels are mounted for as long as this component is, and picking between
- * the split and the overlay changes only their sizes and the panel's classes.
- * The divider joins them only while there is a split to move. Moving the Chat
- * or the panel between tree positions — as a branch that returned one of them
- * outside the group would — remounts its subtree: the Viewer would drop the
- * version and tab the reader picked whenever the window or the row crosses a
- * threshold, and the Chat would drop the composer's draft, its attached files,
- * the transcript's scroll position and any open inline editor every time the
- * panel opens or closes.
- */
 export function ChatArtifactSplit({
   panel,
   fullScreen,
   children,
 }: {
-  /** The Artifact panel's content; `null` while no Artifact is open. */
   panel: ReactNode | null;
-  /** The panel covers the whole window rather than sharing the row. */
   fullScreen: boolean;
-  /** The Chat's own column. */
   children: ReactNode;
 }) {
   const wide = useMediaQuery(SIDE_PANEL_QUERY);
@@ -67,8 +42,7 @@ export function ChatArtifactSplit({
   const rowRef = useRef<HTMLDivElement>(null);
   const groupRef = useRef<GroupImperativeHandle | null>(null);
   const [rowWidth, setRowWidth] = useState(0);
-  // The width the User dragged to, or read from this browser. `null` means the
-  // default split, which follows the row's width.
+  // why: null means the default split, which follows the row's width
   const chosenWidth = useRef<number | null>(null);
 
   useLayoutEffect(() => {
@@ -82,28 +56,17 @@ export function ChatArtifactSplit({
   }, []);
 
   const splitting = wide && rowFitsSplit(rowWidth);
-  // Until the row is measured there is nowhere to put the panel: drawing it
-  // first would mount the Viewer once as an overlay and again beside the Chat,
-  // resetting its tabs and version. Only the split needs the measurement.
+  // why: an unmeasured row would mount the Viewer twice and reset its tabs
   const showPanel = panelOpen && (!wide || rowWidth > 0);
   const splitShown = showPanel && splitting;
   const overlay = showPanel && !splitting;
 
-  // Apply the sizes whenever the panel joins the row or the row changes size,
-  // so a wider window hands the spare width to the panel rather than growing
-  // the Chat past its default and a remembered width holds its pixels. The
-  // overlay is 0/100: the panel takes the whole row and the Chat sits behind
-  // it, still mounted.
+  // why: a wider row gives spare width to the panel, not past the Chat's default
   const wasSplitting = useRef(false);
   useLayoutEffect(() => {
     if (!panelOpen) {
       wasSplitting.current = false;
-      // The group stays mounted, so its sizes are not back at their defaults
-      // after a close: hand the whole row back to the Chat rather than leave
-      // the closed panel's width empty. Applied twice for the same reason as
-      // the split below — the closed panel's 0% minimum may land in the
-      // primitive's constraints a frame after this effect, and until then the
-      // split's minimum would clamp the panel back to its old width.
+      // why: applied twice; the closed panel's 0% minimum lands a frame later
       const reset = () =>
         groupRef.current?.setLayout({
           [CHAT_PANEL_ID]: 100,
@@ -138,10 +101,7 @@ export function ChatArtifactSplit({
       });
     };
     apply();
-    // The primitive derives its percentage constraints from the row's new
-    // width in its own observer, which may land after this effect. A frame
-    // later the split is applied again against those fresh constraints, so a
-    // remembered pixel width is not clamped to the old row's minimum.
+    // why: applied again a frame later so a remembered width isn't clamped
     const frame = requestAnimationFrame(apply);
     return () => cancelAnimationFrame(frame);
   }, [panelOpen, wide, rowWidth, splitting]);
@@ -157,8 +117,7 @@ export function ChatArtifactSplit({
     [rowWidth],
   );
 
-  // The split primitive resets on a double-click too; its reset is off so the
-  // stored width is cleared here rather than written back by the reset.
+  // why: reset is off, so a double-click clears the stored width instead of rewriting it
   const resetSplit = useCallback(() => {
     chosenWidth.current = null;
     clearStoredChatWidth();
@@ -201,6 +160,7 @@ export function ChatArtifactSplit({
     </aside>
   );
 
+  // why: the divider mounts only while split; a hidden one is still focusable
   return (
     <div ref={rowRef} className={ROW_CLASS}>
       <ResizablePanelGroup
@@ -217,8 +177,6 @@ export function ChatArtifactSplit({
         >
           {children}
         </ResizablePanel>
-        {/* Mounted only while it has a split to move: a hidden divider is
-            still a focusable control, and the overlay has no gap to drag. */}
         {splitShown && (
           <ResizableHandle
             withHandle

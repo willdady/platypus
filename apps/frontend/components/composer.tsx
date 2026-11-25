@@ -39,37 +39,20 @@ import type { SelectionSubstitution } from "@/lib/restore-selection";
 import { ModelSelectorDialog } from "./model-selector-dialog";
 import type { Serialized } from "@/lib/api-write";
 
-/**
- * What a composer needs to render the model picker. The pieces travel together
- * only to reach `ModelSelectorDialog`, so they are bundled rather than threaded
- * individually through every surface (issue #724).
- *
- * Distinct from `useModelSelection`'s `ModelSelection`, which is only the
- * chosen Agent, model and Provider ids (issue #1976).
- */
+// why: bundled to reach ModelSelectorDialog, not threaded through every surface
 export type ModelPickerConfig = {
   agents: Serialized<Agent>[];
   providers: Serialized<Provider>[];
   agentId: string;
   modelId: string;
   providerId: string;
-  /** Whether the selection is settled; see `ModelSelectorDialog` (issue #799). */
   isResolved: boolean;
   onModelChange: (value: string) => void;
-  /** The resolved model's Output ceiling, for the picker's tooltip. */
   maxOutputTokens?: number;
-  /** Why the restored selection is a stand-in, when it is one. */
   substitution?: SelectionSubstitution;
 };
 
-/**
- * The textarea's own controls, which are the one truly per-surface part.
- *
- * `AriaAttributes` and `role` are widened in rather than listed one by one: a
- * surface that turns the textarea into a combobox (the slash-command picker,
- * issue #649) supplies its ARIA as one bag, and that bag has to stay the
- * picker's business rather than becoming a list here that can drift from it.
- */
+// why: ARIA travels as one bag, so the picker's set can't drift from a list here
 export type ComposerTextareaProps = {
   ref: RefObject<HTMLTextAreaElement | null>;
   value: string;
@@ -84,36 +67,21 @@ export type ComposerTextareaProps = {
 } & AriaAttributes;
 
 type ComposerProps = {
-  /** A rejected promise keeps the attachments, so the user can retry. */
+  // why: a rejected promise keeps the attachments, so the user can retry
   onSubmit: (message: PromptInputMessage) => void | Promise<void>;
-  /**
-   * Whether the action menu offers Upload to Sandbox: the Workspace has a
-   * Sandbox that accepts uploads and the Agent has the `sandbox` Tool set.
-   */
   canUploadToSandbox?: boolean;
   passthroughFileTypes: string[];
   modelSelection: ModelPickerConfig;
   textarea: ComposerTextareaProps;
-  /** What dictation writes into the textarea. */
   onTranscriptionChange: (text: string) => void;
   className?: string;
   initialAttachments?: FileUIPart[];
   globalDrop?: boolean;
-  /** Extra tools, rendered after the model picker (search toggle, dialogs). */
   tools?: ReactNode;
-  /** Rendered between the tools and the submit control (the context meter). */
   footerContent?: ReactNode;
-  /** The submit control, and anything beside it (the editor's Cancel). */
   submit: ReactNode;
 };
 
-/**
- * The stack every message-composing surface shares (issue #724): the
- * attachments strip, the compatibility notice, the textarea, the tool row —
- * action menu, dictation and model picker — and whatever submit control the
- * caller supplies. What differs between surfaces is passed in: the textarea's
- * own props, extra tools, the context meter and the submit control.
- */
 export function Composer({
   onSubmit,
   canUploadToSandbox,
@@ -128,8 +96,7 @@ export function Composer({
   footerContent,
   submit,
 }: ComposerProps) {
-  // The picker's own open state: sharing it across surfaces would open both
-  // dialogs at once.
+  // why: one open state per surface, or both dialogs open at once
   const [isModelSelectorOpen, setIsModelSelectorOpen] = useState(false);
   const { ref: textareaRef, ...textareaProps } = textarea;
 
@@ -149,7 +116,7 @@ export function Composer({
         <PromptInputTextarea
           ref={textareaRef}
           {...textareaProps}
-          // After the spread: the name holds whatever a surface passes.
+          // why: after the spread, so a surface can't take the name
           aria-label="Message"
         />
       </PromptInputBody>
@@ -186,12 +153,7 @@ export function Composer({
             isResolved={modelSelection.isResolved}
             isOpen={isModelSelectorOpen}
             onOpenChange={setIsModelSelectorOpen}
-            // Closing the picker returns to the textarea, so a model switch
-            // doesn't interrupt typing. Radix would first hand focus back to
-            // the trigger button; letting it do so and then moving focus on
-            // again is two focus changes, which on mobile dismisses the
-            // on-screen keyboard and reopens it a moment later (issue #749).
-            // Taking over the close focus keeps it to a single move.
+            // why: take the close focus, or mobile flaps the keyboard twice
             onCloseAutoFocus={(event) => {
               event.preventDefault();
               textareaRef.current?.focus();
@@ -208,11 +170,7 @@ export function Composer({
   );
 }
 
-/**
- * The model picker, locked while the composer holds a Sandbox upload: the
- * upload was offered because this Agent has the `sandbox` Tool set, and
- * another selection may not.
- */
+// why: lock the picker while a Sandbox upload is held; another Agent may not allow it
 function ComposerModelSelector(
   props: Omit<ComponentProps<typeof ModelSelectorDialog>, "lockedReason">,
 ) {

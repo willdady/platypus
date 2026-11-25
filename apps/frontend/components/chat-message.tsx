@@ -89,38 +89,18 @@ import {
 import { ToolCallGroup, partitionParts } from "./tool-call-group";
 import type { Serialized } from "@/lib/api-write";
 
-/**
- * What the person reading a reply is told when it stopped at the model's
- * output ceiling rather than because the model was finished. A constant so
- * tests assert the wording without restating the prose.
- */
 export const CUT_SHORT_NOTICE =
   "Response cut short at the model's output limit.";
 
-/**
- * The same thing for the other limit: the turn's tool-calling loop ran out of
- * steps while the model was still working, so the reply is whatever it had
- * produced by then — often nothing after the last tool row. The model was told
- * on its last step to answer from what it had (issue #1730), so this means it
- * called a tool again instead. **Max steps** is the remedy on every turn that
- * shows it: an Agent has the field, and a direct Chat has the same setting in
- * Chat settings.
- */
 export const STEP_LIMIT_NOTICE =
   "Response cut short at the step limit. Raise Max steps to let it finish.";
 
-/**
- * What the person reading a reply is told when they turned search on and the
- * turn served none — the backend the Provider names is gone, or it failed to
- * start. The model was never told, so the reply reads as if it simply had
- * nothing to look up; this is the only place that difference is visible.
- */
+// why: the model is never told search failed; this is the only sign
 export const SEARCH_UNAVAILABLE_NOTICE =
   "Search was unavailable — this reply was written without it.";
 
 type MessagePart = NonNullable<PlatypusUIMessage["parts"]>[number];
 
-/** A tool part of a Chat message, typed by `CustomUITools`. */
 type MessageToolPart = ToolUIPart<CustomUITools>;
 
 type PartOfType<T extends MessagePart["type"]> = Extract<
@@ -128,9 +108,7 @@ type PartOfType<T extends MessagePart["type"]> = Extract<
   { type: T }
 >;
 
-// A user types plain text, where Enter means a new line; Markdown would fold a
-// single newline into a space. Passing `remarkPlugins` replaces Streamdown's
-// defaults, so they are kept alongside.
+// why: remark-breaks needs Streamdown's defaults kept, since passing plugins replaces them
 const userRemarkPlugins = [
   ...Object.values(defaultRemarkPlugins),
   remarkBreaks,
@@ -166,12 +144,6 @@ function isReadSkillFilePart(
   return part.type === "tool-readSkillFile";
 }
 
-/**
- * Both shapes a delegation is stored in. `tool-delegate` is what every new one
- * writes; `tool-delegateTo<Name>` is what Chats written before the single
- * dispatcher hold, permanently — stored messages are never rewritten, so this
- * predicate matches the old shape IN ADDITION to the new one, for ever.
- */
 function isSubAgentToolPart(part: MessagePart): part is MessageToolPart {
   return (
     isToolUIPart(part) &&
@@ -179,10 +151,7 @@ function isSubAgentToolPart(part: MessagePart): part is MessageToolPart {
   );
 }
 
-// An offered file shows in the tray under the finished reply, not in place, so
-// a call on its way to an offer draws nothing here. A failed, denied or held
-// download has nothing to offer, so it falls through to the generic renderer
-// like any other tool call.
+// why: only a call that reached output has a file to offer; others fall through
 const OFFER_STATES = new Set([
   "input-streaming",
   "input-available",
@@ -198,25 +167,12 @@ function isWebToolPart(part: MessagePart): part is MessageToolPart {
   return isToolUIPart(part) && isNormalizedWebToolPart(part);
 }
 
-/**
- * A stored Artifact write: the kind that moves to the tray once the reply is
- * finished. A write still streaming, or one that failed, was denied or was
- * rejected, stored nothing and stays in the reply body as a card.
- */
+// why: a write that stored nothing stays in the body as a card
 function isStoredArtifactPart(part: MessagePart): boolean {
   return isArtifactToolPart(part) && storedArtifactOf(part) !== undefined;
 }
 
-/**
- * Every tool-shaped part that has its own specialised renderer below. Kept as
- * one list so the generic renderer's exclusion (`isGenericToolPart`) can be
- * built from it directly, rather than restated by hand — a part can render
- * through at most one of a specialised card or the generic renderer no
- * matter what order `partRenderers` lists them in, because the generic
- * predicate itself can never be true for a part one of these already claims.
- * Adding a renderer for a new tool-shaped part means adding its predicate
- * here; nothing about where it sits in `partRenderers` matters.
- */
+// why: one list, so isGenericToolPart excludes these without restating them
 const specializedToolMatchers: Array<(part: MessagePart) => boolean> = [
   isLoadSkillPart,
   isReadSkillFilePart,
@@ -226,16 +182,6 @@ const specializedToolMatchers: Array<(part: MessagePart) => boolean> = [
   isOfferedFilePart,
 ];
 
-/**
- * Plugin- and MCP-contributed tools aren't enumerated in the part union (see
- * `CustomUITools`), so they land here by elimination — anything tool-shaped
- * that no specialised renderer above has already claimed.
- *
- * Exported so a test can assert the exclusion directly: a Web tool block part
- * or Sub-Agent part must never also satisfy this, or its raw JSON body would
- * repeat what the specialised card (and, for search, the Sources row above
- * the parts loop) already shows.
- */
 export function isGenericToolPart(part: MessagePart): part is MessageToolPart {
   return (
     isToolUIPart(part) &&
@@ -243,12 +189,7 @@ export function isGenericToolPart(part: MessagePart): part is MessageToolPart {
   );
 }
 
-/**
- * Tool calls that sit in a Tool call group. A Sub-Agent delegation has
- * interactive UI of its own, an Artifact Card has its own click target, and a
- * call waiting on the User's approval must be seen, so each stands alone and
- * ends the group around it.
- */
+// why: sub-agent, artifact and approval cards stand alone; each ends the group
 function isGroupableToolPart(
   part: MessagePart,
 ): part is MessageToolPart | DynamicToolUIPart {
@@ -260,17 +201,15 @@ function isGroupableToolPart(
   );
 }
 
-/** A call's name in its group's header: the Tool's name, not its row's label. */
 function toolCallName(part: MessageToolPart | DynamicToolUIPart): string {
   if (isDynamicToolPart(part)) return part.toolName;
   const web = normalizedWebTool(part);
   return web ? webToolTitle(web.kind) : humanizeToolType(part.type);
 }
 
-/** Whether a call's own row shows it as failed. */
 function toolCallErrored(part: MessagePart): boolean {
   if (isLoadSkillPart(part) || isReadSkillFilePart(part)) {
-    // A result the backend truncated arrives as a string, whatever its type says.
+    // why: a truncated result arrives as a string, whatever its type says
     const output: unknown = part.output;
     return !!(
       part.errorText ||
@@ -286,11 +225,7 @@ function toolCallErrored(part: MessagePart): boolean {
   );
 }
 
-/**
- * A call the User denied reads as **Denied**, like one a gate denied. One
- * denied by a newer message keeps its answered state for good: no turn ever
- * resumes the reply it sits on.
- */
+// why: a denial answered by a newer message keeps its answered state for good
 function shownAsDenied(part: MessagePart): MessagePart {
   return isToolUIPart(part) &&
     part.state === "approval-responded" &&
@@ -308,11 +243,6 @@ type PartRenderer = {
   render: (part: MessagePart, i: number) => ReactNode;
 };
 
-/**
- * Pairs a type guard with a renderer that takes the part it guards, so
- * `render` needs no cast. The guard runs again inside `render`, which keeps
- * the entry honest if it is ever called for a part `matches` did not claim.
- */
 function partRenderer<P extends MessagePart>(
   matches: (part: MessagePart) => part is P,
   render: (part: P, i: number) => ReactNode,
@@ -324,27 +254,14 @@ function partRenderer<P extends MessagePart>(
 }
 
 type ToolPartCardProps = {
-  /** The dynamic (MCP) or generic tool part to draw. */
   part: MessageToolPart | DynamicToolUIPart;
-  /** The message's metadata, which carries the duration mid-turn. */
   messageMetadata: PlatypusUIMessage["metadata"];
-  /**
-   * The row's title, shown verbatim. An MCP tool's name is its identity —
-   * namespace and all — so it is passed rather than humanised; `ToolHeader`
-   * truncates it because a name can be long (issue #691).
-   */
+  // why: an MCP name is its identity; ToolHeader truncates a long one
   title?: string;
-  /** A human-readable label shown after the name. */
   label?: string;
-  /** Whether clearing would leave this result or input out of the next call. */
   cleared?: boolean;
 };
 
-/**
- * One tool call's disclosure. The dynamic (MCP) and generic renderers draw the
- * same tree; they differ only in what the row is called and whether clearing
- * applies.
- */
 function ToolPartCard({
   part,
   messageMetadata,
@@ -375,63 +292,27 @@ function ToolPartCard({
 }
 
 type ChatMessageProps = {
-  /** The message object to render */
   message: PlatypusUIMessage;
-  /** Whether this is the last message in the conversation */
   isLastMessage: boolean;
-  /** Current chat status from useChat hook */
   status: ChatStatus;
-  /**
-   * Whether the reader may write to this Chat — the same condition that gates
-   * the composer. Every action that changes the transcript hangs off it; Copy
-   * and the metrics popover do not (issue #710).
-   */
+  // why: gates transcript writes; Copy and metrics are reads
   canSendMessages: boolean;
-  /**
-   * The edit surface for this message, when it is the one being edited. It
-   * replaces the message entirely — its parts, its attachments and its action
-   * bar — because the surface shows all three itself.
-   */
+  // why: the editor replaces the message; it shows parts, attachments and actions itself
   editor?: ReactNode;
-  /** Available agents for resolving avatars */
   agents: Serialized<Agent>[];
-  /** Callback when user starts editing a message */
   onEditStart: (messageId: string) => void;
-  /** Callback when user deletes a message */
   onMessageDelete: (messageId: string) => void;
-  /**
-   * Regenerates this reply. Passed only to a reply that can be regenerated:
-   * one whose message is still in the Chat, right above it.
-   */
   onRegenerate?: (messageId: string) => void;
-  /** Where this message sits among its Alternatives, when it has any. */
   alternatives?: AlternativePosition;
-  /** Shows the Alternative `toId` in place of the message `fromId`. */
   onSwitchAlternative: (fromId: string, toId: string) => void;
-  /** Callback when user copies message content */
   onCopyMessage: (content: string, messageId: string) => void;
-  /**
-   * Whether this message is the one recently copied. Per message rather than
-   * the copied id, so copying one message leaves every other one's props
-   * unchanged and its memo intact.
-   */
+  // why: per message, so copying one leaves every other memo intact
   copied: boolean;
-  /**
-   * `toolCallId`s whose result Tool-result clearing (ADR-0018 Notes, issue
-   * #524), or whose input Tool-input clearing (issue #1722), would leave out
-   * of the NEXT model call — derived per render from
-   * the current Context occupancy reading, never persisted. Absent/empty
-   * renders every tool part exactly as before.
-   */
+  // why: derived per render from occupancy, never persisted (ADR-0018)
   staleToolCallIds?: ReadonlySet<string>;
-  /**
-   * Answers one of the reply's tool approvals. Passed only to the Active leaf
-   * while no turn is running, the one place an answer can resume the reply.
-   */
+  // why: only the Active leaf with no turn running can resume the reply
   onApprovalResponse?: (approvalId: string, approved: boolean) => void;
-  /** The Workspace an Artifact Card reads its Artifact back from. */
   artifactScope?: { orgId: string; workspaceId: string };
-  /** Opens an Artifact in the Chat's side panel beside this transcript. */
   onOpenArtifact?: (target: ArtifactOpenTarget) => void;
 };
 
@@ -454,9 +335,7 @@ export const ChatMessage = memo(function ChatMessage({
   artifactScope,
   onOpenArtifact,
 }: ChatMessageProps) {
-  // An edit takes the message's place rather than sitting inside it: the
-  // surface holds the text, the attachments and its own Save/Cancel, so
-  // rendering the stored parts alongside it would show each of those twice.
+  // why: the editor shows them itself, so rendering them here duplicates them
   if (editor) {
     return (
       <div key={message.id} className="w-full">
@@ -469,8 +348,7 @@ export const ChatMessage = memo(function ChatMessage({
   const messageAgent = messageAgentId
     ? agents.find((a) => a.id === messageAgentId)
     : undefined;
-  // Every text and image part carries the avatar, but only the first names
-  // the agent: a screen reader would otherwise repeat it before each part.
+  // why: only the first part names the agent, or a screen reader repeats it per part
   const firstAvatarPart = message.parts?.findIndex(
     (part) => part.type === "text" || isImageFilePart(part),
   );
@@ -489,31 +367,14 @@ export const ChatMessage = memo(function ChatMessage({
     (part): part is FileUIPart =>
       part.type === "file" && !isImageFilePart(part),
   );
-  // Scheme-checked with the same predicate a plugin result's URL goes through.
-  // A vendor is more trusted than a Web-search backend, but the pill is titled by
-  // the vendor's own title now, so a `javascript:` or `data:` citation would render
-  // as an ordinary-looking link with nothing on screen to give it away — the raw URL
-  // used to be the label, which was the only thing making one visible.
+  // why: titled by the vendor, a javascript: or data: citation would look ordinary
   const sourceUrlParts = message.parts?.filter(
     (part): part is SourceUrlUIPart =>
       part.type === "source-url" && isPresentableUrl(part.url),
   );
-  // Citations from a Web-search backend's client-executed `web_search`, which
-  // arrive as a tool result rather than as `source-url` parts. Merged into the one
-  // Sources row below so the same Chat toggle presents its results the same way on
-  // a vLLM Provider as on Anthropic (ADR-0014).
+  // why: backend search citations join the one Sources row (ADR-0014)
   const pluginSearchSources = webSearchSources(message.parts);
-  // A page named by both rows is one pill. Not reachable through search
-  // resolution — a turn resolves to a backend or to native search, never both
-  // (ADR-0014) — but a vendor emits `source-url` parts for citations that are not
-  // search results, and those can land in the same message as a backend search.
-  //
-  // The plugin entry is the one kept: both rows carry a real title, but the plugin
-  // URL has been through core's own presentability rules on the way in, so where the
-  // two disagree the vetted copy is the safer pill. Compared as exact strings, so a
-  // vendor URL differing by a trailing slash or a tracking parameter still reads as
-  // a second page — normalising URLs is a judgement call of its own and belongs
-  // with whoever asks for it.
+  // why: the vetted plugin pill wins; exact strings, so no URL normalising
   const pluginSearchUrls = new Set(pluginSearchSources.map((s) => s.url));
   const nativeSourceParts = sourceUrlParts?.filter(
     (part) => !pluginSearchUrls.has(part.url),
@@ -524,20 +385,13 @@ export const ChatMessage = memo(function ChatMessage({
   const textContent = messageText(message.parts);
   const sandboxUploads = messageSandboxUploads(message.parts);
 
-  // Each entry's `matches` is mutually exclusive with every other entry's by
-  // construction (see `isGenericToolPart`), so this list can be extended or
-  // reordered freely — the first (and only) match wins regardless of
-  // position.
+  // why: matches are mutually exclusive, so order doesn't matter
   const isTurnInFlight = isInFlight(status);
   const isAwaitedReply =
     message.role === "assistant" && isLastMessage && isTurnInFlight;
 
   const partRenderers: PartRenderer[] = [
-    // The turn's own status row (ADR-0023, ADR-0041): the wait it streamed
-    // before the reply, drawn where the reply will be. Only the in-flight
-    // turn shows it — once the turn is over it is about a wait that has
-    // ended, and the sink never persists it anyway. The composer above the
-    // input is this row's live region, so the transcript copy stays visual.
+    // why: only the in-flight turn shows it; the composer is the live region (ADR-0023)
     partRenderer(isTranscriptSummaryStatusPart, (statusPart, i) =>
       isAwaitedReply ? (
         <TurnStatus
@@ -631,6 +485,7 @@ export const ChatMessage = memo(function ChatMessage({
         />
       );
     }),
+    // why: a backend or data: URL can't go through the Next image optimizer
     partRenderer(isImageFilePart, (filePart, i) => (
       <Message
         key={`${message.id}-${i}`}
@@ -638,10 +493,6 @@ export const ChatMessage = memo(function ChatMessage({
         avatar={assistantAvatar(i)}
       >
         <MessageContent className="max-w-full">
-          {/* Generated/uploaded image served from a backend or data: URL;
-              not routable through the Next image optimizer. Its size is
-              unknown until it loads. Lazy further up the transcript; the
-              newest message's is the one being looked at. */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={filePart.url}
@@ -655,8 +506,7 @@ export const ChatMessage = memo(function ChatMessage({
     )),
   ];
 
-  // A call waiting on the User is drawn the same way whatever the tool: its
-  // own renderer has nothing to show until it has run.
+  // why: a held call has nothing to show until it runs, whatever the tool
   const renderApproval = (part: MessagePart) => {
     if (!isToolUIPart(part) || part.state !== "approval-requested") return null;
     const approvalId = part.approval.id;
@@ -688,9 +538,7 @@ export const ChatMessage = memo(function ChatMessage({
       />
     ) : null;
   };
-  // A stored Artifact write moves to the tray only once the reply is finished,
-  // which is the same gate the offered files use: while the reply is still
-  // being written, its Card stays where the call happened.
+  // why: an artifact moves to the tray only once the reply is finished
   const hiddenFromBody = (part: MessagePart) =>
     isOfferedFilePart(part) || (!isAwaitedReply && isStoredArtifactPart(part));
   const segments = partitionParts(
@@ -700,7 +548,7 @@ export const ChatMessage = memo(function ChatMessage({
   );
   const files = offeredFiles(message.parts ?? []);
   const artifacts = replyArtifacts(message.parts ?? []);
-  // Named for what it sits under, never "version" or "branch" (ADR-0026).
+  // why: named for what it sits under, never version or branch (ADR-0026)
   const alternativeNoun = message.role === "user" ? "Message" : "Response";
   const alternativeLabel =
     alternatives &&
@@ -716,8 +564,7 @@ export const ChatMessage = memo(function ChatMessage({
         </MessageAttachments>
       )}
       {sandboxUploads.length > 0 && (
-        // No download link: it would serve whatever the path holds now, not
-        // what was uploaded (ADR-0028).
+        // why: a link would serve the path's current bytes, not the upload (ADR-0028)
         <MessageAttachments key={`${message.id}-sandbox-uploads`}>
           {sandboxUploads.map((upload, i) => (
             <div
@@ -741,19 +588,11 @@ export const ChatMessage = memo(function ChatMessage({
           <SourcesTrigger count={sourceCount} />
           {nativeSourceParts?.map((part, i) => (
             <SourcesContent key={`${message.id}-${i}`}>
-              {/* A `source-url` part carries an optional title and Anthropic
-              sends one; the URL is the fallback for a vendor that does not, not
-              the label. Without this a native Provider shows raw URLs where a
-              backend Provider shows real titles, in the same row.
-              `||`, not `??`: a vendor sending an empty title would otherwise
-              render a pill with no label at all. */}
               <Source href={part.url} title={part.title || part.url} />
             </SourcesContent>
           ))}
           {pluginSearchSources.map((source) => (
             <SourcesContent key={`${message.id}-search-${source.url}`}>
-              {/* Already URL-or-title resolved by `webSearchSources`, which
-              falls back the same way the native pills above do. */}
               <Source href={source.url} title={source.title} />
             </SourcesContent>
           ))}
@@ -774,8 +613,6 @@ export const ChatMessage = memo(function ChatMessage({
           </ToolCallGroup>
         );
       })}
-      {/* How the reply was produced, then how it ended — both rows render when
-      both apply, in that order. */}
       {message.role === "assistant" && (
         <>
           {message.metadata?.searchUnavailable && (
@@ -799,12 +636,6 @@ export const ChatMessage = memo(function ChatMessage({
           onOpen={onOpenArtifact}
         />
       )}
-      {/* The wait covers the whole turn, not only the chunks: between send and
-      the first chunk the reply exists with nothing to show, and its controls
-      would sit alone where the answer is about to appear. It is the REPLY that
-      waits — a user message is whole when it renders, but it holds the last
-      position until the reply arrives, which is what used to hold its own
-      controls back with it (issue #918). */}
       {!isAwaitedReply && (
         <MessageActions
           className={message.role === "user" ? "justify-end" : "pl-8"}
@@ -845,16 +676,9 @@ export const ChatMessage = memo(function ChatMessage({
             </div>
           )}
           {message.role === "assistant" && (
-            // Before Copy, and deliberately not adjacent to Delete — a
-            // frequently-poked new control beside an undoable action invites
-            // mis-clicks (issue #354).
+            // why: not beside Delete, so a frequent control doesn't invite mis-clicks
             <ResponseMetricsPopover metadata={message.metadata} />
           )}
-          {/* Edit, Delete and Regenerate all change the transcript, so all
-          three hang off the same condition as the composer. Delete is the one
-          that made the gap visible: it mutates the local transcript with no
-          server call to refuse it, so an ungated button was a real write for
-          anyone who could reach the Chat (issue #710). */}
           {canSendMessages && message.role === "user" && (
             <MessageAction
               className="text-muted-foreground"
@@ -889,8 +713,7 @@ export const ChatMessage = memo(function ChatMessage({
           {canSendMessages && message.role === "assistant" && onRegenerate && (
             <MessageAction
               className="text-muted-foreground"
-              // A second turn cannot start while one is running, and starting
-              // it would first cut this tab's reply off the screen.
+              // why: a second turn can't start while one runs, and would cut this reply off
               disabled={isTurnInFlight}
               onClick={() => onRegenerate(message.id)}
               variant="ghost"

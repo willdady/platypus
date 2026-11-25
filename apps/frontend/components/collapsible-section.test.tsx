@@ -23,8 +23,7 @@ describe("CollapsibleSection", () => {
     expect(screen.queryByText("Section body")).not.toBeInTheDocument();
   });
 
-  // Read during render, not in an effect: a section restored open paints open
-  // on its first frame rather than closed and then animating open.
+  // why: read during render, so a restored-open section paints open on its first frame
   it("opens on its first render when it was last left open", () => {
     localStorage.setItem(KEY, "true");
     renderSection();

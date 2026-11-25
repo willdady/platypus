@@ -3,34 +3,19 @@ import { LoadingRegion } from "@/components/list-skeletons";
 import { chatColumnClass } from "@/lib/artifact-panel-split";
 import { cn } from "@/lib/utils";
 
-// Line widths for each placeholder assistant reply, and the width of the user
-// message before it. Fixed rather than random so every load draws the same
-// shapes and the pulse reads as one surface, not as flicker.
+// why: fixed widths, so every load draws the same shapes instead of flicker
 const TURNS = [
   { user: "w-2/5", reply: ["w-full", "w-11/12", "w-3/5"] },
   { user: "w-1/3", reply: ["w-full", "w-4/5"] },
   { user: "w-1/2", reply: ["w-full", "w-full", "w-2/3"] },
 ];
 
-/**
- * What `Chat` shows until it can render for real: providers still loading, or
- * an existing Chat whose transcript has not landed yet.
- *
- * Mirrors `Chat`'s own containers — the same column widths, the composer's
- * resting height and where it sits — so the swap to the loaded page does not
- * move anything. The column is always the centred reading measure: this draws
- * before `ChatArtifactSplit` exists, so an Artifact open in the URL has no
- * panel beside it yet and a filled column would stretch past the measure it
- * lands at. `transcript` picks between the two resting layouts: a docked
- * composer under placeholder messages (an existing Chat), or the composer
- * centred on its own (a new one, which has nothing to wait for).
- */
+// why: mirrors Chat's containers, so the swap to the loaded page moves nothing
 export function ChatSkeleton({
   transcript,
   readOnly,
 }: {
   transcript: boolean;
-  /** The Viewer's read-only notice stands where the composer would. */
   readOnly: boolean;
 }) {
   return (
@@ -68,14 +53,10 @@ export function ChatSkeleton({
         <div className="flex justify-center min-w-0">
           <div className={cn("relative min-w-0", chatColumnClass(false))}>
             {readOnly ? (
-              // The read-only notice's box: one line of `text-sm` in `py-4`.
               <div className="flex items-center justify-center py-4 px-6 border rounded-lg bg-muted/50">
                 <Skeleton className="h-5 w-72 max-w-full" />
               </div>
             ) : (
-              // The composer's box: the textarea at its resting height (taller
-              // while the Chat is empty, as `Chat` makes it), then the footer
-              // row of tool buttons, model picker and Send.
               <div className="border-input dark:bg-input/30 w-full rounded-md border shadow-xs">
                 <div className={cn("p-3", transcript ? "h-16" : "h-24")}>
                   <Skeleton className="h-4 w-48 max-w-full" />

@@ -24,29 +24,6 @@ vi.mock("sonner", () => ({
   toast: { error: vi.fn() },
 }));
 
-/**
- * Issue #749: switching models dropped the Android on-screen keyboard and
- * brought it back a moment later. Chrome shows the keyboard while an editable
- * element has focus, so anything that parks focus elsewhere in between is a
- * flap, and the picker did it twice.
- *
- * The first pass fixed the tail: Radix returned focus to the trigger button on
- * close and a 250ms timer then moved it to the textarea, so the picker now
- * takes over the close and focuses the textarea itself. That alone was not
- * enough — a press inside the picker focuses the nearest focusable ancestor
- * first, which is the trigger button on the way in and cmdk's scrolling list on
- * the way out, and the list held focus for the dialog's whole exit animation.
- * The picker suppresses the browser's focus-on-press for both.
- *
- * jsdom has no virtual keyboard and does not move focus on a press, so it
- * cannot show either symptom. These tests pin what the fix rests on instead:
- * the press is default-prevented, focus lands on the textarea in a single move,
- * and neither opening nor selecting broke. The focus timeline it produces in a
- * real browser was measured under mobile emulation; the keyboard itself needs a
- * physical device.
- */
-
-/** The session the composer most recently constructed. */
 let recognition: ReturnType<typeof installSpeechRecognition>;
 
 function renderComposer({
@@ -109,7 +86,6 @@ function openPicker(trigger: HTMLElement) {
   return screen.getByText("gpt-4o");
 }
 
-/** Records every element that takes focus from this point on, in order. */
 function recordFocus() {
   const targets: EventTarget[] = [];
   document.addEventListener("focusin", (e) => targets.push(e.target!));
@@ -157,21 +133,15 @@ describe("Composer model picker focus", () => {
     const { textarea, trigger } = renderComposer();
 
     const item = openPicker(trigger);
-    // Only the close is under test; opening the picker legitimately moves
-    // focus into it.
     const focused = recordFocus();
     fireEvent.click(item);
     await waitFor(() => expect(textarea).toHaveFocus());
 
-    // One move, straight to the textarea. Landing on the trigger first is the
-    // regression: on mobile it drops the keyboard before the textarea reopens it.
     expect(focused).toEqual([textarea]);
     expect(focused).not.toContain(trigger);
   });
 
-  // A press that is default-prevented never moves focus, so the textarea keeps
-  // it while the picker opens and the search box keeps it while the picker
-  // closes. `fireEvent` returns false for exactly that.
+  // why: fireEvent returns false when the press was default-prevented
   it("does not let a press on the trigger take focus off the composer", () => {
     const { trigger } = renderComposer();
 
@@ -188,8 +158,6 @@ describe("Composer model picker focus", () => {
   it("still opens and switches model when the picker is pressed, not just clicked", async () => {
     const { textarea, trigger, onModelChange } = renderComposer();
 
-    // Selection runs off `click`, which a prevented `mousedown` does not stop —
-    // press both the trigger and the model the way a real tap does.
     fireEvent.mouseDown(trigger);
     fireEvent.mouseUp(trigger);
     fireEvent.click(trigger);
@@ -204,17 +172,6 @@ describe("Composer model picker focus", () => {
   });
 });
 
-/**
- * Issue #752: the mic button wrote its own `onClick` before spreading caller
- * props, so the `onClick` that Radix's TooltipTrigger injects through `asChild`
- * replaced it. The tap closed the tooltip and did nothing else, so dictation
- * never started - on any platform, not just the Android one it was reported on.
- *
- * These drive the composer as a user meets it, mic inside its tooltip trigger,
- * because that wrapper is the whole defect. Asserting on a transcript alone
- * cannot catch it: recognition is constructed on mount, so a test that emits a
- * result directly on it passes whether or not the click ever landed.
- */
 describe("Composer dictation", () => {
   it("starts recognition when the mic is clicked", () => {
     const { mic } = renderComposer();
@@ -241,23 +198,14 @@ describe("Composer dictation", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Microphone" }));
 
-    // Both run: the wrapper keeps its behaviour - a tooltip still closes on
-    // tap - and the button keeps its own.
     expect(onClick).toHaveBeenCalled();
     expect(recognition()?.start).toHaveBeenCalled();
   });
 });
 
-/**
- * Issue #768: a recognition failure only reached `console.error`. On a phone
- * there is no console short of `chrome://inspect` over USB, so permission
- * denial, an unavailable speech service and a tap that never landed all
- * presented the same way - as nothing happening.
- */
 describe("Composer dictation failures", () => {
   it("says why voice input cannot run outside a secure context", () => {
-    // A LAN address over plain http: the constructor is still on `window`, so
-    // the API looks available, but no browser grants a microphone here.
+    // why: a LAN http origin has the API on window, but no browser grants a mic
     setSecureContext(false);
 
     const { mic } = renderComposer();
@@ -294,8 +242,7 @@ describe("Composer dictation failures", () => {
 
     const { mic } = renderComposer();
 
-    // A disabled button takes no pointer events, so its tooltip never opens
-    // and the reason never reaches anyone.
+    // why: a disabled button takes no pointer events, so its tooltip can't explain
     expect(mic).toBeEnabled();
 
     fireEvent.click(mic);
@@ -306,12 +253,6 @@ describe("Composer dictation failures", () => {
   });
 });
 
-/**
- * Issue #799: the picker used to paint "Select model" — which reads as "you
- * have nothing selected" — for as long as the restore ladder took to produce a
- * result, then swap to the Agent the reader had selected in the previous chat.
- * While the selection is unsettled the trigger says nothing at all.
- */
 describe("Composer model picker — unsettled selection", () => {
   const renderPicker = (isResolved: boolean) => {
     const textareaRef = { current: null };
@@ -487,8 +428,6 @@ describe("Composer Sandbox uploads", () => {
     expect(trigger).toBeEnabled();
   });
 
-  // The owner clears the text once a Send succeeds; a failed one must leave
-  // it where it was.
   it("keeps the typed text when the Send fails", async () => {
     const onSubmit = vi.fn().mockRejectedValue(new Error("upload failed"));
     const { textarea } = renderComposer({ canUploadToSandbox: true, onSubmit });

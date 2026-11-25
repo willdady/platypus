@@ -8,7 +8,6 @@ import { Copy } from "lucide-react";
 import { toast } from "sonner";
 import { copyToClipboard } from "@/lib/clipboard";
 
-/** A read-only value with a button that copies it. */
 export function CopyRow({
   id,
   label,
@@ -48,7 +47,7 @@ export function CopyRow({
             if (await copyToClipboard(value)) {
               toast.success(copiedMessage);
             } else {
-              // Leave the value selected so Ctrl+C still gets it.
+              // why: select on failure so Ctrl+C still gets the value
               const input = document.getElementById(id);
               if (
                 input instanceof HTMLInputElement ||

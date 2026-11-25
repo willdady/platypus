@@ -14,8 +14,7 @@ function renderDialog(
   openAdvanced = true,
 ) {
   const onChange = vi.fn();
-  // A stateful parent: the dialog is a controlled component, so its derived
-  // validation state only moves when the value round-trips through state.
+  // why: validation is derived, so the value must round-trip through state
   const Harness = () => {
     const [settings, setSettings] = useState<ChatSettings>({
       instructions: "",
@@ -45,15 +44,11 @@ function renderDialog(
     );
   };
   render(<Harness />);
-  // The step ceiling sits beside the sampling settings under the collapsed
-  // "Advanced settings" disclosure.
   if (openAdvanced) fireEvent.click(screen.getByText("Advanced settings"));
   return onChange;
 }
 
 describe("ChatSettingsDialog", () => {
-  // Issue #1058: Skills and Sub-Agents come from an Agent, so an agentless
-  // Chat never receives them. The helper text must not promise them.
   it("does not promise Skills or Sub-Agents in the Instructions helper", () => {
     renderDialog();
 
@@ -61,9 +56,7 @@ describe("ChatSettingsDialog", () => {
     expect(helper).not.toHaveTextContent(/Skills|Sub-Agents/);
   });
 
-  // Issue #1440: `field-sizing-content` lets the field grow to fit pasted
-  // text, so both it and the dialog need a height cap to stay on screen.
-  // jsdom computes no layout, so the classes are all a test can see.
+  // why: jsdom computes no layout, so the classes are all a test can see
   it("caps the Instructions field and the dialog height", () => {
     renderDialog();
 
@@ -74,8 +67,6 @@ describe("ChatSettingsDialog", () => {
     );
   });
 
-  // #1941: the Advanced section is the entity forms' FormAdvancedSection, so
-  // it still starts closed and toggles on its heading.
   it("opens and closes the Advanced section", () => {
     renderDialog({}, undefined, false);
     expect(screen.queryByLabelText("Temperature")).not.toBeInTheDocument();
@@ -88,8 +79,6 @@ describe("ChatSettingsDialog", () => {
     expect(screen.queryByLabelText("Temperature")).not.toBeInTheDocument();
   });
 
-  // Issue #539: the per-chat step ceiling lives beside the sampling settings,
-  // labelled like the Agent form's field.
   it("renders a Max steps input", () => {
     renderDialog({ maxSteps: 25 });
 
@@ -150,8 +139,6 @@ describe("ChatSettingsDialog", () => {
     expect(input).not.toHaveAttribute("aria-invalid", "true");
   });
 
-  // #1177: the sampling inputs are judged like Max steps, with the string the
-  // send guard would refuse with.
   it.each([
     ["temperature", "Temperature", "-1"],
     ["topP", "Top-p", "1.5"],
@@ -168,7 +155,7 @@ describe("ChatSettingsDialog", () => {
     expect(screen.getByText(CHAT_SAMPLING_ERRORS[field])).toBeInTheDocument();
   });
 
-  // A stored pre-3.14.0 value can be fractional even though typing parses ints.
+  // why: a stored value can be fractional even though typing parses ints
   it.each([
     ["topK", "Top-k"],
     ["seed", "Seed"],
@@ -197,8 +184,6 @@ describe("ChatSettingsDialog", () => {
     }
   });
 
-  // #1842: the fields carry their help text and error with the control, so a
-  // screen reader reads them with the field rather than only its red state.
   it("describes the Instructions field with its helper text", () => {
     renderDialog();
 
@@ -240,8 +225,6 @@ describe("ChatSettingsDialog inputs", () => {
     ["Frequency Penalty", "frequencyPenalty", "-0.5", -0.5],
   ] as const;
 
-  // Each setting reaches the Chat as a number of the kind the schema expects:
-  // floats for the continuous ones, whole numbers for the counts.
   it.each(numberFields)(
     "forwards a typed %s as a number",
     (label, field, value, parsed) => {
@@ -253,7 +236,6 @@ describe("ChatSettingsDialog inputs", () => {
     },
   );
 
-  // Emptying a field unsets it, so the Provider's default applies again.
   it.each(numberFields)("clears %s when emptied", (label, field) => {
     const onChange = renderDialog({ [field]: 1 });
 
@@ -272,7 +254,6 @@ describe("ChatSettingsDialog inputs", () => {
     expect(onChange).toHaveBeenCalledWith({ instructions: "Be terse." });
   });
 
-  // Issue #1521: the controls follow the selected model's Reasoning map.
   describe("Reasoning controls", () => {
     const MAP: ReasoningMap = {
       thinking: { on: {}, off: {} },

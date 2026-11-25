@@ -12,16 +12,8 @@ import {
 } from "@/test/test-utils";
 import { Chat } from "./chat";
 
-/**
- * The one test that runs the real `useChat`, the transport `Chat` builds and
- * the real message rendering together: `chat.test.tsx` stubs the chat hook and
- * the presentational tree to pin the wiring seams, so nothing else would catch
- * a request body the server cannot read or a stream that never reaches the
- * screen. Only the network is faked, at `fetch`.
- */
+// why: the only test with the real useChat and transport; chat.test.tsx stubs both
 
-// The real provider resolves a better-auth session over the network; the
-// signed-in owner is all the Chat needs from it.
 vi.mock("@/components/auth-provider", () => authMock);
 
 const BASE = "http://test/organizations/org1/workspaces/ws1";
@@ -80,7 +72,6 @@ beforeEach(() => {
     if (init?.method === "POST" && url === `${BASE}/chat/${CHAT_ID}/turns`) {
       return Promise.resolve(sseResponse());
     }
-    // A new Chat's row and the Workspace's Sandbox do not exist yet.
     return Promise.resolve(
       url in reads ? jsonResponse(200, reads[url]) : jsonResponse(404, {}),
     );
