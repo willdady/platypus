@@ -17,18 +17,6 @@ import {
 import type { AlternativePosition } from "@/lib/chat-alternatives";
 import type { ArtifactOpenTarget } from "./artifact-tool-card";
 
-/**
- * What the Chat component wires, not what the transcript read decides.
- *
- * The recovery decisions, the server-owned Transcript and the tree now live in
- * `hooks/use-chat-transcript.ts` and are tested there; what this file can see is
- * that the Chat hands those pieces to the presentational tree correctly — which
- * composer state a run belief produces, which of the two error surfaces a given
- * state selects, and that an edit, a send and a Regenerate reach `useChatTurn`.
- * The presentational tree is stubbed down to the props under test — this is not
- * a rendering test.
- */
-
 type SwrCall = {
   key: string;
   fetcher: unknown;
@@ -38,9 +26,7 @@ type SwrCall = {
 const { harness } = vi.hoisted(() => ({
   harness: {
     swrCalls: [] as SwrCall[],
-    /** Response bodies by key suffix. */
     data: new Map<string, unknown>(),
-    /** Built once per key so the identity a hydrate effect keys off is stable. */
     responses: new Map<string, unknown>(),
     auth: { user: { id: "u1" }, ownsWorkspace: true, isAuthLoading: false },
     turn: {
@@ -55,11 +41,9 @@ const { harness } = vi.hoisted(() => ({
     stop: vi.fn(),
     toastError: vi.fn(),
     toastInfo: vi.fn(),
-    /** The Sandbox uploads the stubbed composer sends with its message. */
     sandboxFiles: [] as File[],
     chatMutate: vi.fn(),
     agentsMutate: vi.fn(),
-    /** What the Chat configured the chat hook with. */
     chatOptions: undefined as
       | undefined
       | {
@@ -70,9 +54,6 @@ const { harness } = vi.hoisted(() => ({
   },
 }));
 
-// The render counters live outside `harness` so the stub below calls a plain
-// function instead of writing through the hoisted object — the immutability
-// rule has no way to tell that write apart from a render-time mutation.
 let chatMessageRenders = 0;
 let chatMessageRendersById: Record<string, number> = {};
 function countChatMessageRender(messageId: string) {
@@ -152,9 +133,6 @@ vi.mock("sonner", () => ({
 }));
 vi.mock("@/lib/clipboard", () => ({ copyWithToast: async () => true }));
 
-// The presentational tree, stubbed to the props under test. `PromptInputTextarea`
-// and `PromptInputSubmit` keep theirs, because the composer guard is one of the
-// behaviours being pinned.
 vi.mock("@/components/ai-elements/conversation", () => ({
   Conversation: ({ children }: { children?: React.ReactNode }) => (
     <div>{children}</div>
@@ -166,8 +144,6 @@ vi.mock("@/components/ai-elements/conversation", () => ({
 }));
 
 vi.mock("@/components/ai-elements/prompt-input", () => ({
-  // A form handing back a fixed message, so a composer send can be driven
-  // without the real input's state.
   PromptInput: ({
     children,
     onSubmit,
@@ -182,7 +158,6 @@ vi.mock("@/components/ai-elements/prompt-input", () => ({
     <form
       onSubmit={(event) => {
         event.preventDefault();
-        // The real input swallows a rejected Send and keeps the composer.
         void Promise.resolve(
           onSubmit({
             text: "Hello",
@@ -262,13 +237,7 @@ vi.mock("@/components/ai-elements/prompt-input", () => ({
   ),
 }));
 
-// Stubbed to the edit seam: an Edit button per message, a Regenerate wherever
-// the Chat hands one down, arrows wherever it hands down Alternatives, and
-// whatever edit surface the Chat hands down for the one being edited. The
-// transcript itself is `chat-message`'s own test's business.
 vi.mock("./chat-message", () => ({
-  // Memoised like the real one: whether a prop change reaches this stub is
-  // exactly what the transcript-stability tests below are about.
   ChatMessage: memo(function ChatMessageStub({
     message,
     editor,
@@ -382,8 +351,6 @@ vi.mock("./chat-message", () => ({
   }),
 }));
 
-// Stubbed to what the Chat hands the edit surface, and to the one thing the
-// surface hands back: the whole message, attachments included.
 vi.mock("./message-editor", () => ({
   MessageEditor: ({
     initialText,
@@ -606,7 +573,6 @@ describe("Chat Artifact panel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open artifact a1" }));
     expect(window.location.search).toBe("?artifact=artifact-1%3A1");
 
-    // A refresh: a fresh mount reading the same URL.
     first.unmount();
     renderChat();
     expect(
@@ -641,7 +607,6 @@ describe("Chat Artifact panel", () => {
     expect(
       screen.getByText("Artifact panel artifact-1 v1"),
     ).toBeInTheDocument();
-    // The streamed content stays under the saved read until it lands.
     expect(screen.getByText("Live streaming # Half")).toBeInTheDocument();
   });
 
@@ -681,7 +646,6 @@ describe("Chat Artifact panel", () => {
   });
 });
 
-/** Two Providers differing only in whether they can search. */
 const searchProvider = {
   id: "ps",
   name: "Searchable",
@@ -712,11 +676,6 @@ const searchAgents = [
   agentOn("ap", "pp", "mp"),
 ];
 
-/**
- * Renders the Chat pointed at one of `searchAgents` via `?agentId=`, so the
- * resolved model — and with it the search toggle — can be switched between
- * renders by changing that prop.
- */
 function renderWithAgent(agentId: string) {
   harness.data.set("/providers", {
     results: [searchProvider, plainProvider],
@@ -733,9 +692,6 @@ function renderWithAgent(agentId: string) {
 }
 
 describe("a Transcript summary", () => {
-  // ADR-0041, issue #1716: the divider renders at the anchor of the summary the
-  // Chat actually reads, and opens to its text; the composer meter reads "—"
-  // until the next turn reports a reading taken through it.
   const turns = (): PlatypusUIMessage[] => [
     { id: "u1", role: "user", parts: [{ type: "text", text: "u1" }] },
     { id: "a1", role: "assistant", parts: [{ type: "text", text: "a1" }] },
@@ -788,7 +744,6 @@ describe("a Transcript summary", () => {
     expect(
       screen.getByText("The condensed earlier conversation."),
     ).toBeInTheDocument();
-    // Every message above the divider is still on screen.
     expect(screen.getByRole("button", { name: "Edit u1" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Edit a1" })).toBeInTheDocument();
   });
@@ -796,7 +751,6 @@ describe("a Transcript summary", () => {
   it("does not render the divider for a summary a Delete made unusable", async () => {
     renderWith([summaryRow({ coveredIds: ["gone", "a1"] })]);
 
-    // Wait for the transcript, then assert the absence.
     await screen.findByRole("button", { name: "Edit u1" });
     expect(
       screen.queryByRole("button", { name: /Older messages were summarised/ }),
@@ -833,8 +787,6 @@ describe("a Transcript summary", () => {
       ],
     );
 
-    // The transcript's copy is `chat-message`'s own test's business; this stub
-    // renders only the composer's.
     expect(
       await screen.findByText("Summarising earlier messages…"),
     ).toBeInTheDocument();
@@ -955,8 +907,6 @@ describe("Upload to Sandbox", () => {
     expect(screen.queryByText("Upload to Sandbox")).not.toBeInTheDocument();
   });
 
-  // The message goes only once its uploads land (ADR-0028), so the wait in
-  // between reads as a sent turn, and a second Send is turned away out loud.
   it("shows Send busy while uploads run and refuses a second Send", async () => {
     const { fetchMock, resolve } = stubPendingSave();
     harness.sandboxFiles = [new File(["a,b"], "a.csv")];
@@ -982,7 +932,6 @@ describe("Upload to Sandbox", () => {
     expect(submit).toHaveAttribute("data-status", "ready");
   });
 
-  // The turn has not started, so Escape has nothing to stop (issue #1604).
   it("leaves Escape alone while uploads run", async () => {
     const { fetchMock } = stubPendingSave();
     harness.sandboxFiles = [new File(["a,b"], "a.csv")];
@@ -1014,7 +963,6 @@ describe("Upload to Sandbox", () => {
   });
 });
 
-/** The search toggle's Globe control, present only when the model can search. */
 function searchToggle() {
   return screen.queryByRole("button", { name: "Search" });
 }
@@ -1022,12 +970,6 @@ function searchIsOn() {
   return searchToggle()?.getAttribute("data-variant") === "default";
 }
 
-/**
- * Renders, then walks the local turn through a status sequence the way the chat
- * hook would. The sequence matters: whether a turn ever reached `streaming` is
- * what tells a dropped connection from a request the server refused, so a test
- * that jumped straight to `error` would be describing a different failure.
- */
 function renderThrough(...statuses: ChatStatus[]) {
   const view = renderChat();
   for (const status of statuses) {
@@ -1038,10 +980,8 @@ function renderThrough(...statuses: ChatStatus[]) {
   return view;
 }
 
-/** A turn that was streaming when the browser tore the connection down. */
 const DROPPED: ChatStatus[] = ["submitted", "streaming", "error"];
 
-/** A turn the server refused before any of it arrived. */
 const REFUSED: ChatStatus[] = ["submitted", "error"];
 
 beforeEach(() => {
@@ -1076,9 +1016,6 @@ beforeEach(() => {
 });
 
 describe("Chat detail read", () => {
-  // Every other read keeps the throwing contract; the concession is per-key.
-  // The Sandbox read has it too: a Workspace may have no Sandbox. The Chat row's
-  // own read lives behind `useChatTranscript`; it is pinned there.
   it("leaves the other reads on the shared fetcher", () => {
     renderChat();
 
@@ -1092,8 +1029,6 @@ describe("Chat detail read", () => {
   });
 });
 
-// A streamed reply arrives a chunk at a time; the Chat must not redo its
-// per-render work for each one.
 describe("streaming renders", () => {
   it("batches streamed chunks into at most one update per 50ms", () => {
     renderChat();
@@ -1110,8 +1045,6 @@ describe("streaming renders", () => {
     expect(harness.chatOptions!.transport).toBe(first);
   });
 
-  // The body shaping is `lib/chat-transport.test.ts`'s business; what this can
-  // see is that the Chat hands its transport the function that does it.
   it("shapes each turn's body with the server-owned Transcript request", () => {
     renderChat();
 
@@ -1123,8 +1056,6 @@ describe("streaming renders", () => {
   });
 });
 
-// Which surface an error selects. The reported symptom was a modal telling the
-// user their turn had failed while the run was healthy and still going.
 describe("routing a chat error", () => {
   const RECOVERING = /Connection interrupted/;
 
@@ -1136,8 +1067,6 @@ describe("routing a chat error", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  // The run finished while the connection was gone, so there is nothing to
-  // report and nothing to wait for — the snapshot already holds the answer.
   it("says nothing once the run has finished behind the drop", () => {
     harness.data.set(`/chat/${CHAT_ID}`, { status: "succeeded", messages: [] });
     const { container } = renderThrough(...DROPPED);
@@ -1154,8 +1083,6 @@ describe("routing a chat error", () => {
     expect(container).not.toHaveTextContent(RECOVERING);
   });
 
-  // Nothing streamed, so the server never took a run: a rejected attachment, a
-  // refused submission. The user has to be told.
   it("opens the modal for a request that never established", () => {
     harness.data.set(`/chat/${CHAT_ID}`, { status: "succeeded", messages: [] });
     const { container } = renderThrough(...REFUSED);
@@ -1172,8 +1099,6 @@ describe("routing a chat error", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  // Keyed on the error so the modal can be dismissed while the error persists;
-  // a later, different error still reopens it.
   it("reopens for a second, different failure after being dismissed", () => {
     harness.data.set(`/chat/${CHAT_ID}`, { status: "failed", messages: [] });
     const view = renderThrough(...DROPPED);
@@ -1189,12 +1114,6 @@ describe("routing a chat error", () => {
   });
 });
 
-/**
- * Whether the turn's stream ever established, judged per turn. The belief is
- * `useChatTranscript`'s and is pinned there; what this sees is that a second
- * turn's refused request still opens the modal rather than being read as a
- * dropped connection to the first turn's stream.
- */
 describe("turn establishment", () => {
   it("judges a second turn on its own stream, not an earlier turn's", () => {
     harness.data.set(`/chat/${CHAT_ID}`, { status: "succeeded", messages: [] });
@@ -1204,13 +1123,6 @@ describe("turn establishment", () => {
   });
 });
 
-/**
- * The search toggle's invariant (issue #624): search may not be on when the
- * resolved selection cannot search. The control only ever forces the toggle
- * off, and only when the resolved model's `canSearch` actually changes — not
- * on every Agent/Provider/model identity change, and not while resolution is
- * briefly unknown.
- */
 describe("the search toggle", () => {
   it("starts off", () => {
     renderWithAgent("as");
@@ -1243,7 +1155,6 @@ describe("the search toggle", () => {
     fireEvent.click(searchToggle()!);
     expect(searchIsOn()).toBe(true);
 
-    // The non-searching selection has no Globe at all.
     view.rerender(
       <Chat
         orgId="org1"
@@ -1254,7 +1165,6 @@ describe("the search toggle", () => {
     );
     expect(searchToggle()).toBeNull();
 
-    // Back on a searching selection, the toggle was forced off, not restored.
     view.rerender(
       <Chat
         orgId="org1"
@@ -1289,7 +1199,6 @@ describe("the search toggle", () => {
     fireEvent.click(searchToggle()!);
     expect(searchIsOn()).toBe(true);
 
-    // A brief loading/revalidation gap: nothing resolves, so no Globe.
     harness.data.set("/providers", { results: [] });
     harness.responses = new Map();
     view.rerender(
@@ -1302,7 +1211,6 @@ describe("the search toggle", () => {
     );
     expect(searchToggle()).toBeNull();
 
-    // Providers return; the User's setting must survive the gap.
     harness.data.set("/providers", {
       results: [searchProvider, plainProvider],
     });
@@ -1320,8 +1228,6 @@ describe("the search toggle", () => {
   });
 });
 
-// The composer guard. The old predicate required the local status to be `ready`,
-// which is the one reading a dropped stream never has.
 describe("holding the composer", () => {
   it("holds it after a stream drops mid-run", () => {
     harness.data.set(`/chat/${CHAT_ID}`, { status: "running", messages: [] });
@@ -1341,8 +1247,6 @@ describe("holding the composer", () => {
     expect(screen.getByPlaceholderText("Run in progress…")).toBeDisabled();
   });
 
-  // Once the run is over the composer comes back, and the submit button must
-  // not keep a failure icon on it — the local status is still `error`.
   it("releases it once the run is over, with no failure on the button", () => {
     harness.data.set(`/chat/${CHAT_ID}`, { status: "succeeded", messages: [] });
     renderThrough(...DROPPED);
@@ -1367,13 +1271,6 @@ describe("holding the composer", () => {
   });
 });
 
-/**
- * The wiring an edit runs through (issue #710). The pieces have their own
- * tests; what those cannot see is whether the Chat actually hands the edit
- * surface the message's parts and resubmits what comes back. The original
- * defect was exactly here: the surface was handed a string, so a message with
- * a file resubmitted without it.
- */
 describe("editing a message", () => {
   const withAttachment = (): PlatypusUIMessage => ({
     id: "u1",
@@ -1428,8 +1325,6 @@ describe("editing a message", () => {
     );
   });
 
-  // u2 answers a1, which was deleted: on screen u1 is above u2, but the edit
-  // belongs beside u2, under a1.
   it("sends the edit under the edited message's own parent", () => {
     harness.data.set(`/chat/${CHAT_ID}`, {
       status: "succeeded",
@@ -1468,11 +1363,6 @@ describe("editing a message", () => {
   });
 });
 
-/**
- * Every entry point starts its turn through `useChatTurn` (issue #971); the
- * rules themselves are pinned there. What this file can see is that the Chat
- * actually routes Regenerate and the composer through it.
- */
 describe("starting a turn", () => {
   const directRow = (maxSteps: number) => ({
     id: CHAT_ID,
@@ -1509,9 +1399,6 @@ describe("starting a turn", () => {
     expect(harness.chatMutate).toHaveBeenCalledTimes(1);
   });
 
-  // The turn's rows, and with them the tree that gives a new Alternative its
-  // arrows, reach this tab only through the Chat read. A turn that ends inside
-  // one poll interval leaves nothing else to re-read it.
   it.each(["ready", "error"] as const)(
     "re-reads the row when this tab's turn ends at %s",
     (end) => {
@@ -1528,7 +1415,6 @@ describe("starting a turn", () => {
     },
   );
 
-  // Issue #1256: the last answer sends every answer, with the turn's body.
   it("answers an approval with the turn's body, sending once all are answered", () => {
     harness.data.set(`/chat/${CHAT_ID}`, directRow(10));
     harness.turn.messages = [message("u1", "q"), message("a1", "a")];
@@ -1579,8 +1465,6 @@ describe("starting a turn", () => {
     expect(harness.chatMutate).not.toHaveBeenCalled();
   });
 
-  // The reply's message was deleted: there is nothing to answer, and the
-  // server refuses the regenerate (409).
   it("offers no Regenerate once the reply's message has left the Chat", () => {
     harness.data.set(`/chat/${CHAT_ID}`, {
       ...directRow(10),
@@ -1638,7 +1522,6 @@ describe("starting a turn", () => {
     ).toBeInTheDocument();
   });
 
-  // The #648 refresh: the row has to learn the new turn's status at submit.
   it("refreshes the row after a composer send", async () => {
     harness.data.set(`/chat/${CHAT_ID}`, directRow(10));
     renderChat();
@@ -1654,9 +1537,6 @@ describe("starting a turn", () => {
   });
 });
 
-// Moving between Alternatives (#712): the switch itself is
-// `useChatTranscript`'s, and is pinned in its own test. What this sees is that
-// the Chat hands each message the position the hook worked out.
 describe("switching between Alternatives", () => {
   const edited = ["u1", "a1", "u2b", "a2b"].map((id) => message(id, id));
 
@@ -1670,9 +1550,6 @@ describe("switching between Alternatives", () => {
     return renderChat();
   };
 
-  // The switch itself — the local swap, one request at a time, the rollback —
-  // is `useChatTranscript`'s and is pinned there. What this sees is that the
-  // Chat hands each message the position the hook worked out.
   it("hands each message its position among its Alternatives", () => {
     showing(edited);
 
@@ -1681,13 +1558,6 @@ describe("switching between Alternatives", () => {
   });
 });
 
-/**
- * Issue #869: the transcript re-rendered on every streamed token and every
- * composer keystroke. `ChatMessage` is memoised, so what defeated it was the
- * props changing identity — the cleared-tool-call Set and the delete callback
- * — and the composer's input state living in `Chat`, so a keystroke re-rendered
- * the whole tree.
- */
 describe("transcript stability", () => {
   it("keeps the stale tool-call set and the callbacks stable across renders", () => {
     harness.turn.messages = [message("u1", "q"), message("a1", "a")];
@@ -1728,8 +1598,6 @@ describe("transcript stability", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Copy a1" }));
 
-    // The copy lands asynchronously, so wait for the message it was for to
-    // render again before reading which of the others did.
     await waitFor(() => {
       expect(chatMessageRendersById.a1).toBe(1);
     });
@@ -1738,10 +1606,6 @@ describe("transcript stability", () => {
     expect(chatMessageRendersById.a2).toBeUndefined();
   });
 
-  // With clearing ACTIVE the set is non-empty, and the function rebuilds it
-  // from `messages` — which changes on every streamed token. Identity has to
-  // survive that too, or every token re-renders the transcript exactly when a
-  // long chat (the reason clearing exists) is streaming (issue #869).
   it("keeps the cleared tool-call set stable while a reply streams", () => {
     harness.data.set(`/chat/${CHAT_ID}`, {
       id: CHAT_ID,
@@ -1766,8 +1630,6 @@ describe("transcript stability", () => {
           ],
           metadata: {
             readOnlyToolNames: ["read_url"],
-            // 950/1000 is past the clearing threshold; the batch boundary
-            // clears the four oldest and the four newest stay.
             contextOccupancy: { inputTokens: 950, outputTokens: 0 },
           },
         }) as unknown as PlatypusUIMessage,
@@ -1787,11 +1649,6 @@ describe("transcript stability", () => {
   });
 });
 
-// An Agent carrying the agent-management tools can rewrite its own row mid-chat,
-// and the write lands on the server: this read is not told, and no interval or
-// mutate anywhere else touches it. The info dialog is the only place that
-// configuration is shown, so opening it is the moment worth spending a request
-// on (issue #920).
 describe("the Agent behind the info dialog", () => {
   const openInfoDialog = () =>
     fireEvent.click(screen.getByRole("button", { name: "Agent info" }));
@@ -1812,9 +1669,6 @@ describe("the Agent behind the info dialog", () => {
     expect(harness.agentsMutate).toHaveBeenCalledTimes(1);
   });
 
-  // The trigger is the open transition, not the render. A Chat re-renders on
-  // every streamed chunk, and a request per chunk for a dialog that is already
-  // showing the answer would be worse than the staleness it fixes.
   it("re-reads once, however many times it re-renders while open", () => {
     const view = renderWithAgent("as");
     openInfoDialog();
@@ -1849,9 +1703,6 @@ describe("the Agent behind the info dialog", () => {
     expect(harness.agentsMutate).toHaveBeenCalledTimes(2);
   });
 
-  // The dialog keeps showing the cached row when the re-read fails, which is
-  // what it does without the re-read at all. Nothing to report, nothing to
-  // leave unhandled.
   it("swallows a failed re-read", async () => {
     harness.agentsMutate.mockRejectedValue(new Error("offline"));
     renderWithAgent("as");
@@ -1861,12 +1712,6 @@ describe("the Agent behind the info dialog", () => {
   });
 });
 
-/**
- * A new Chat's row is cached as absent by the index route, but SWR still
- * reports the key's first mount as loading. The selection must not wait on
- * that, or every New chat click paints the default placeholder and a pending
- * picker until the read settles (issue #966).
- */
 describe("restoring the selection on a new Chat", () => {
   it("resolves the stored Agent while a cached absent row reads as loading", () => {
     harness.data.set("/agents", {
@@ -1891,12 +1736,6 @@ describe("restoring the selection on a new Chat", () => {
   });
 });
 
-/**
- * What stands in for the Chat until it can render for real. An existing Chat
- * must not paint the empty-chat layout (composer centred) while its transcript
- * is on the way, or the composer drops to the bottom once the messages land.
- * A new Chat has nothing to wait for and keeps the centred composer.
- */
 describe("loading", () => {
   const PROVIDERS_KEY =
     "http://test/organizations/org1/workspaces/ws1/providers";
@@ -1929,9 +1768,6 @@ describe("loading", () => {
   });
 
   it("keeps the skeleton's centred column while an Artifact is open", () => {
-    // A refresh of a Chat URL carrying an open Artifact: the panel is not drawn
-    // until the Chat is, so the skeleton must keep its reading measure rather
-    // than stretch across the row the panel will take.
     rowInFlight();
     window.history.replaceState(null, "", "?artifact=artifact-1%3A1");
 
@@ -1967,7 +1803,6 @@ describe("loading", () => {
       isLoading: false,
       mutate: harness.agentsMutate,
     });
-    // An Agent-bound Chat cannot resolve its selection without the Agent list.
     harness.data.set(`/chat/${CHAT_ID}`, {
       status: "succeeded",
       messages: [],
@@ -2013,9 +1848,6 @@ describe("loading", () => {
     expect(composer()).toBeInTheDocument();
   });
 
-  // Until the row is read back after a delete, it still holds the messages the
-  // screen has dropped; reading "row has messages, screen has none" as loading
-  // would never let go.
   it("does not come back when every message is deleted", () => {
     const messages = [message("u1", "q")];
     harness.data.set(`/chat/${CHAT_ID}`, { status: "succeeded", messages });
@@ -2038,9 +1870,6 @@ describe("loading", () => {
     expect(composer()).toBeInTheDocument();
   });
 
-  // Until the session and the Workspace row land, nobody knows whether the
-  // reader may send. Guessing read-only and swapping to the composer is the
-  // flicker a reload showed.
   describe("while ownership is unknown", () => {
     const messages = [message("u1", "q"), message("a1", "answer")];
     beforeEach(() => {
@@ -2079,10 +1908,6 @@ describe("loading", () => {
   });
 });
 
-/**
- * Escape is the stop button's shortcut (issue #1604): the same `turn.cancel()`,
- * so the server-side run stops too, not just the local stream.
- */
 describe("Escape", () => {
   const pressEscape = (target: Element = document.body, init = {}) =>
     fireEvent.keyDown(target, { key: "Escape", ...init });
