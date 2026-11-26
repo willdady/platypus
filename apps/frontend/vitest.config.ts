@@ -29,6 +29,18 @@ export default defineConfig({
           exclude: ["**/node_modules/**"],
         },
       },
+      {
+        extends: true,
+        test: {
+          name: "types",
+          include: [],
+          typecheck: {
+            enabled: true,
+            only: true,
+            tsconfig: "./tsconfig.test.json",
+          },
+        },
+      },
     ],
     setupFiles: ["./vitest.setup.ts"],
     clearMocks: true,
@@ -46,7 +58,7 @@ export default defineConfig({
         "lib/**/*.{ts,tsx}",
         "instrumentation*.ts",
       ],
-      exclude: ["**/*.test.ts", "**/*.test.tsx", "test/**"],
+      exclude: ["**/*.test.ts", "**/*.test.tsx", "**/*.test-d.ts", "test/**"],
       thresholds: {
         statements: 79,
         branches: 76,

@@ -11,6 +11,7 @@
     "next-env.d.ts",
     "**/*.test.ts",
     "**/*.test.tsx",
+    "**/*.test-d.ts",
     "test/**/*.ts",
     "test/**/*.tsx",
     "vitest.setup.ts"
