@@ -2,17 +2,24 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { ProtectedRoute } from "./protected-route";
 
-const { auth, replace } = vi.hoisted(() => ({
-  auth: {
-    user: { id: "u1" } as { id: string } | null,
+const { auth, replace } = vi.hoisted(() => {
+  const auth: {
+    user: { id: string } | null;
+    isAuthLoading: boolean;
+    orgMembership: { role: string } | null;
+    actor: string;
+    accessReadError: unknown;
+    retryAccessReads: ReturnType<typeof vi.fn>;
+  } = {
+    user: { id: "u1" },
     isAuthLoading: false,
-    orgMembership: { role: "member" } as { role: string } | null,
+    orgMembership: { role: "member" },
     actor: "org-member",
-    accessReadError: null as unknown,
+    accessReadError: null,
     retryAccessReads: vi.fn(),
-  },
-  replace: vi.fn(),
-}));
+  };
+  return { auth, replace: vi.fn() };
+});
 
 vi.mock("@/components/auth-provider", () => ({ useAuth: () => auth }));
 vi.mock("next/navigation", () => ({

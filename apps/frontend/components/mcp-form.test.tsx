@@ -35,6 +35,12 @@ function savedMcpBody(fetchMock: ReturnType<typeof vi.fn>) {
   return expectSentBodyToMatchSchema(fetchMock, mcpUpdateSchema);
 }
 
+type FetchCall = [url: string, init: RequestInit];
+
+function fetchCalls(fetchMock: ReturnType<typeof vi.fn>) {
+  return fetchMock.mock.calls as FetchCall[];
+}
+
 describe("McpForm secret reveal", () => {
   afterEach(() => {
     resetFormHarness();
@@ -501,7 +507,7 @@ describe("McpForm OAuth", () => {
     await waitFor(() =>
       expect(toast.success).toHaveBeenCalledWith("Already authorized"),
     );
-    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+    expect(fetchCalls(fetchMock).map(([url]) => url)).toEqual([
       "http://test/organizations/org1/workspaces/ws1/mcps/m1",
       "http://test/organizations/org1/workspaces/ws1/mcps/m1/oauth/authorize?force=true",
     ]);
@@ -570,11 +576,11 @@ describe("McpForm OAuth", () => {
     vi.stubGlobal("open", openMock);
     const setIntervalSpy = vi.spyOn(globalThis, "setInterval");
     const clearIntervalSpy = vi.spyOn(globalThis, "clearInterval");
-    const polls = () =>
+    const polls = (): ReturnType<typeof setInterval>[] =>
       setIntervalSpy.mock.results
         .filter((_, i) => setIntervalSpy.mock.calls[i][1] === 500)
-        .map((r) => r.value);
-    const live = () =>
+        .map((r) => r.value as ReturnType<typeof setInterval>);
+    const live = (): ReturnType<typeof setInterval>[] =>
       polls().filter(
         (id) => !clearIntervalSpy.mock.calls.some(([c]) => c === id),
       );

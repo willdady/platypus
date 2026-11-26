@@ -37,9 +37,11 @@ describe("useDocumentTitle", () => {
   });
 
   it("puts the route's title back when the entity loses its name", () => {
-    const { rerender } = renderHook(
-      ({ name }: { name?: string }) => useDocumentTitle(name, "Research"),
-      { initialProps: { name: "Trip planning" as string | undefined } },
+    const { rerender } = renderHook<void, { name?: string }>(
+      ({ name }) => useDocumentTitle(name, "Research"),
+      {
+        initialProps: { name: "Trip planning" },
+      },
     );
 
     rerender({ name: undefined });

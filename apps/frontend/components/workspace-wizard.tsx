@@ -258,7 +258,7 @@ export function WorkspaceWizard({ orgId }: { orgId: string }) {
                 setName(value);
               }}
               error={workspaceErrors.name}
-              autoFocus
+              initialFocus
             />
 
             <FormSelectField

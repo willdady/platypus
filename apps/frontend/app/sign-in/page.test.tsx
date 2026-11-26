@@ -77,14 +77,14 @@ describe("SignInPage form", () => {
     window.history.replaceState(null, "", "/");
   });
 
-  const submit = (container: HTMLElement) => {
+  const submit = () => {
     fireEvent.change(screen.getByLabelText("Email"), {
       target: { value: "user@example.com" },
     });
     fireEvent.change(screen.getByLabelText("Password"), {
       target: { value: "super-secret-123" },
     });
-    fireEvent.submit(container.querySelector("form")!);
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
   };
 
   it("masks the password field", () => {
@@ -98,9 +98,9 @@ describe("SignInPage form", () => {
 
   it("submits the credentials and enters the app", async () => {
     mockSignInEmail.mockResolvedValue({});
-    const { container } = renderPage();
+    renderPage();
 
-    submit(container);
+    submit();
 
     await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/"));
     expect(mockSignInEmail).toHaveBeenCalledWith({
@@ -112,9 +112,9 @@ describe("SignInPage form", () => {
   it("returns to the page that asked for sign-in", async () => {
     window.history.replaceState(null, "", "/sign-in?next=%2Forg1%3Ftab%3Da");
     mockSignInEmail.mockResolvedValue({});
-    const { container } = renderPage();
+    renderPage();
 
-    submit(container);
+    submit();
 
     await waitFor(() =>
       expect(mockReplace).toHaveBeenCalledWith("/org1?tab=a"),
@@ -128,9 +128,9 @@ describe("SignInPage form", () => {
       "/sign-in?next=%2F%2Fevil.example%2Forg1",
     );
     mockSignInEmail.mockResolvedValue({});
-    const { container } = renderPage();
+    renderPage();
 
-    submit(container);
+    submit();
 
     await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/"));
   });
@@ -155,9 +155,9 @@ describe("SignInPage form", () => {
     ],
   ])("shows %s and stays on the page", async (_name, impl, message) => {
     mockSignInEmail.mockImplementation(async () => impl());
-    const { container } = renderPage();
+    renderPage();
 
-    submit(container);
+    submit();
 
     expect(await screen.findByText(message)).toBeInTheDocument();
     expect(mockReplace).not.toHaveBeenCalled();

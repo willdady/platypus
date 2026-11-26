@@ -72,12 +72,11 @@ describe("ModelSelectorDialog agent groups", () => {
 
     expect(namesIn("Pinned")).toEqual(["Writer"]);
     expect(namesIn("Agents")).toEqual(["Triage", "Coder"]);
-    const [first, second] = screen
-      .getAllByRole("group")
-      .map((group) => group.getAttribute("aria-labelledby"));
+    const pinned = screen.getByRole("group", { name: "Pinned" });
+    const agents = screen.getByRole("group", { name: "Agents" });
     expect(
-      [first, second].map((id) => document.getElementById(id!)?.textContent),
-    ).toEqual(["Pinned", "Agents"]);
+      pinned.compareDocumentPosition(agents) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("shows only the Agents group when nothing is pinned", () => {

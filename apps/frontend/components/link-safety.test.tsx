@@ -16,9 +16,10 @@ function Card({ body }: { body: string }) {
   );
 }
 
-function clickLink(name: string) {
-  return act(async () => {
-    fireEvent.click(screen.getByRole("button", { name }));
+async function clickLink(name: string) {
+  fireEvent.click(screen.getByRole("button", { name }));
+  await act(async () => {
+    await Promise.resolve();
   });
 }
 

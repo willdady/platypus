@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { screen, fireEvent, waitFor } from "@testing-library/react";
+import { screen, fireEvent, waitFor, within } from "@testing-library/react";
 import type { ComponentType } from "react";
 import {
   attachmentCreateSchema,
@@ -134,7 +134,11 @@ describe.each(RESOURCES)(
     it("links each workspace row to its workspace settings page", async () => {
       await renderRows([workspaceItem]);
 
-      expect(screen.getByText(workspaceItem.name).closest("a")).toHaveAttribute(
+      expect(
+        screen.getByRole("link", {
+          name: new RegExp(workspaceItem.name),
+        }),
+      ).toHaveAttribute(
         "href",
         `/org1/workspace/ws1/${settingsPath}/${workspaceItem.id}`,
       );
@@ -300,8 +304,11 @@ describe.each(RESOURCES)(
       await renderRows([item]);
       fireEvent.click(screen.getByText(item.name));
       expect(screen.queryByText(dialogTitle)).not.toBeInTheDocument();
-      const name = screen.getByText(item.name);
-      expect(name.closest("a")).toBeNull();
+      expect(
+        within(screen.getByRole("group", { name: item.name })).queryByRole(
+          "link",
+        ),
+      ).not.toBeInTheDocument();
 
       await openDropdownMenu();
       expect(menuItemLabels()).toEqual(["Edit in org settings", "Detach"]);
@@ -409,7 +416,7 @@ describe.each(RESOURCES)(
           screen.getByText("Not attached to any workspaces."),
         ).toBeInTheDocument();
         expect(
-          screen.getByText(item.name).closest('[data-slot="item"]'),
+          screen.getByRole("link", { name: new RegExp(item.name) }),
         ).toHaveClass("border-warning");
       });
 
@@ -424,7 +431,7 @@ describe.each(RESOURCES)(
           screen.queryByText("Not attached to any workspaces."),
         ).not.toBeInTheDocument();
         expect(
-          screen.getByText(item.name).closest('[data-slot="item"]'),
+          screen.getByRole("link", { name: new RegExp(item.name) }),
         ).not.toHaveClass("border-warning");
       });
 
@@ -437,7 +444,7 @@ describe.each(RESOURCES)(
           screen.queryByText("Not attached to any workspaces."),
         ).not.toBeInTheDocument();
         expect(
-          screen.getByText(item.name).closest('[data-slot="item"]'),
+          screen.getByRole("link", { name: new RegExp(item.name) }),
         ).not.toHaveClass("border-warning");
       });
 

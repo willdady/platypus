@@ -246,7 +246,7 @@ describe("SkillsList agent read", () => {
 
 describe("SkillsList unattached warning", () => {
   const card = () =>
-    screen.getByText(orgSkill.name).closest('[data-slot="item"]');
+    screen.getByRole("link", { name: new RegExp(orgSkill.name) });
 
   it("warns about a Skill attached to no Workspaces on the Organization surface", async () => {
     mockScopedSWR({ "/attachments?": [] });
@@ -519,9 +519,7 @@ describe("SkillsList empty states", () => {
 describe("SkillsList footer", () => {
   const createSkill = () =>
     screen.queryByRole("link", { name: /Create skill/ });
-  const footer = () =>
-    // eslint-disable-next-line testing-library/no-node-access
-    createSkill()?.closest('[data-slot="list-footer"]');
+  const footer = () => screen.getByTestId("list-footer");
 
   it("shows Create skill outlined under the Workspace section while it loads", async () => {
     mockScopedSWR({ "/skills": { isLoading: true }, "/agents": [] });

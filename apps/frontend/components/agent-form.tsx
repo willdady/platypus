@@ -577,6 +577,7 @@ function AgentForm({
             ref={avatarInputRef}
             type="file"
             accept="image/*"
+            aria-label="Avatar"
             onChange={handleAvatarChange}
             className="hidden"
             disabled={isSubmitting || readOnly}
@@ -592,7 +593,7 @@ function AgentForm({
             onChange={toFieldChange("name")}
             disabled={isSubmitting || readOnly}
             error={validationErrors.name}
-            autoFocus
+            initialFocus
           />
           <ExpandableTextarea
             id="description"

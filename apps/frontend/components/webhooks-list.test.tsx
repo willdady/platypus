@@ -44,7 +44,7 @@ describe("WebhooksList", () => {
     mockScopedSWR({ webhooks: [webhook] }, { strict: true });
     await render();
 
-    expect(screen.getByText("Deploy hook").closest("a")).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /Deploy hook/ })).toHaveAttribute(
       "href",
       "/org1/workspace/ws1/settings/webhooks/wh1",
     );

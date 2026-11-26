@@ -101,14 +101,14 @@ describe("FormTextField", () => {
     expect(input).toBeRequired();
   });
 
-  it("respects autoFocus", () => {
+  it("respects initialFocus", () => {
     render(
       <FormTextField
         label="Name"
         name="name"
         value=""
         onChange={vi.fn()}
-        autoFocus
+        initialFocus
       />,
     );
 

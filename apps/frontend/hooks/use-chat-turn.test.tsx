@@ -243,7 +243,7 @@ describe("useChatTurn cancelling a turn", () => {
 
     expect(h.stop).toHaveBeenCalled();
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    const [url, init] = fetchMock.mock.calls[0];
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe(
       "http://test/organizations/org1/workspaces/ws1/chat/chat-1/cancel",
     );

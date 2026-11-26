@@ -29,6 +29,7 @@ import {
 } from "@/test/form-test-harness";
 import { expectSentBodyToMatchSchema, selectOption } from "@/test/test-utils";
 import { FIX_FORM_ERRORS_MESSAGE } from "@/lib/apply-write-outcome";
+import type { FormDraft } from "@/lib/api-write";
 
 vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("swr", () => swrMock);
@@ -52,7 +53,7 @@ function renderEditForm(
     taskModelId: "gpt-4o",
     memoryExtractionModelId: "gpt-4o",
     ...overrides,
-  } as unknown as Provider);
+  });
   return render(<ProviderForm orgId="org1" providerId="p1" />, {
     wrapper: UnsavedChangesProvider,
   });
@@ -515,7 +516,7 @@ describe("ProviderForm model cards", () => {
       modelIds: [{ id: "gpt-4o", passthroughFileTypes: [] }],
       taskModelId: "gpt-4o",
       memoryExtractionModelId: "gpt-4o",
-    } as unknown as Provider);
+    });
     render(<ProviderForm orgId="org1" workspaceId="ws1" providerId="p1" />);
 
     expect(modelCard("gpt-4o")).toBeInTheDocument();
@@ -653,7 +654,7 @@ describe("ProviderForm model dialog", () => {
       modelIds: [{ id: "gpt-4o", passthroughFileTypes: [] }],
       taskModelId: "gpt-4o",
       memoryExtractionModelId: "gpt-4o",
-    } as unknown as Provider);
+    });
     render(<ProviderForm orgId="org1" providerId="p1" />);
 
     const dialog = openEditDialog("gpt-4o");
@@ -719,7 +720,10 @@ describe("ProviderForm model dialog", () => {
     ],
     [
       "Esc",
-      () => fireEvent.keyDown(document.activeElement!, { key: "Escape" }),
+      (dialog: HTMLElement) =>
+        fireEvent.keyDown(within(dialog).getByLabelText("Model ID"), {
+          key: "Escape",
+        }),
     ],
   ])("discards the dialog's edits on %s, with no prompt", (_, close) => {
     renderEditForm([{ id: "gpt-4o", passthroughFileTypes: [] }]);
@@ -906,7 +910,7 @@ describe("ProviderForm model dialog", () => {
   });
 
   it("stages a model from the wizard's draft step", async () => {
-    const write = vi.fn().mockResolvedValue({
+    const write = vi.fn<FormDraft["write"]>().mockResolvedValue({
       outcome: "success",
       data: undefined,
       revalidateKeys: [],
@@ -942,7 +946,7 @@ describe("ProviderForm switching Providers", () => {
       modelIds: [{ id: "gpt-4o", passthroughFileTypes: [] }],
       taskModelId: "gpt-4o",
       memoryExtractionModelId: "gpt-4o",
-    } as unknown as Provider);
+    });
     const { rerender } = render(<ProviderForm orgId="org1" providerId="p1" />);
 
     expect(screen.getByLabelText("Name")).toHaveValue("OpenAI provider");
@@ -958,7 +962,7 @@ describe("ProviderForm switching Providers", () => {
       modelIds: [{ id: "claude-opus", passthroughFileTypes: [] }],
       taskModelId: "claude-opus",
       memoryExtractionModelId: "claude-opus",
-    } as unknown as Provider);
+    });
     rerender(<ProviderForm orgId="org1" providerId="p2" />);
 
     expect(screen.getByLabelText("Name")).toHaveValue("Anthropic provider");
@@ -1208,9 +1212,10 @@ describe("ProviderForm headers", () => {
         'Duplicate header name "x-trace". Header names are case-insensitive, so each one may appear once.',
       ),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText("Headers").closest("[data-invalid]"),
-    ).toHaveAttribute("data-invalid", "true");
+    expect(screen.getByRole("group", { name: "Headers" })).toHaveAttribute(
+      "data-invalid",
+      "true",
+    );
 
     fireEvent.change(headerName(2), { target: { value: "X-Request-Id" } });
 
@@ -1314,7 +1319,7 @@ describe("ProviderForm Web search selector", () => {
       taskModelId: "qwen",
       memoryExtractionModelId: "qwen",
       ...overrides,
-    } as unknown as Provider);
+    });
     const result = render(<ProviderForm orgId="org1" providerId="p1" />);
     fireEvent.click(screen.getByRole("button", { name: "Toggle" }));
     return result;
@@ -1327,13 +1332,13 @@ describe("ProviderForm Web search selector", () => {
     setDataFor("/web-backends", { results: CATALOG });
     renderWithAdvancedOpen({
       searchSource: "acme-search.searx",
-    } as Partial<Provider>);
+    });
 
     expect(searchSelect()).toHaveTextContent("SearXNG (acme-search)");
   });
 
   it("omits the built-in search option for a Provider with no native search", () => {
-    renderWithAdvancedOpen({ searchSource: "none" } as Partial<Provider>);
+    renderWithAdvancedOpen({ searchSource: "none" });
 
     expect(searchSelect()).not.toHaveTextContent("built-in search");
   });
@@ -1344,11 +1349,11 @@ describe("ProviderForm Web search selector", () => {
     expect(searchSelect()).toHaveTextContent("The provider's built-in search");
   });
 
-  it.each([
+  it.each<{ name: string; overrides: Partial<Provider> }>([
     { name: "a chat-mode OpenAI Provider", overrides: {} },
     {
       name: "Bedrock",
-      overrides: { providerType: "Bedrock" } as Partial<Provider>,
+      overrides: { providerType: "Bedrock" },
     },
   ])(
     "names a stale native selection as unavailable, for $name",
@@ -1406,7 +1411,7 @@ describe("ProviderForm Web search selector", () => {
   });
 
   it("shows a stored backend the catalog no longer lists, and names it as missing", () => {
-    renderWithAdvancedOpen({ searchSource: "gone.searx" } as Partial<Provider>);
+    renderWithAdvancedOpen({ searchSource: "gone.searx" });
 
     expect(searchSelect()).toHaveTextContent("gone.searx (not installed)");
   });
@@ -1425,7 +1430,7 @@ describe("ProviderForm Web search selector", () => {
     setError(new Error("500"), "/web-backends");
     renderWithAdvancedOpen({
       searchSource: "acme-search.searx",
-    } as Partial<Provider>);
+    });
 
     expect(searchSelect()).toHaveTextContent("acme-search.searx");
     expect(searchSelect()).not.toHaveTextContent("not installed");
@@ -1437,7 +1442,7 @@ describe("ProviderForm Web search selector", () => {
       setDataFor("/web-backends", { results: CATALOG });
       const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
 
-      renderWithAdvancedOpen({ searchSource } as Partial<Provider>);
+      renderWithAdvancedOpen({ searchSource });
       save();
 
       await waitFor(() => expect(fetchMock).toHaveBeenCalled());

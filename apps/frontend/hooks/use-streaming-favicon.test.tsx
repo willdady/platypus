@@ -20,7 +20,9 @@ function icon() {
 }
 
 function flush() {
-  return act(async () => {});
+  return act(async () => {
+    await Promise.resolve();
+  });
 }
 
 describe("useStreamingFavicon", () => {
@@ -111,7 +113,7 @@ describe("useStreamingFavicon", () => {
   });
 
   it("leaves the static icon alone when there is no 2D context", async () => {
-    vi.mocked(HTMLCanvasElement.prototype.getContext).mockReturnValue(null);
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
     renderHook(() => useStreamingFavicon(true));
     await flush();
     act(() => {

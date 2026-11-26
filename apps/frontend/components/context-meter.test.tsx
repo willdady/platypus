@@ -43,12 +43,12 @@ describe("ContextMeterEntrance", () => {
       </AnimatePresence>,
     );
 
-  const entranceFor = (label: string) => screen.getByText(label).closest("div");
+  const entranceFor = () => screen.getByTestId("context-meter-entrance");
 
   it("shows a meter present on the first render at its natural height", () => {
     renderPresence(true);
 
-    const entrance = entranceFor("meter");
+    const entrance = entranceFor();
     expect(entrance).toHaveStyle({ height: "auto", opacity: "1" });
     expect(entrance).toHaveClass(
       "shrink-0",
@@ -71,7 +71,7 @@ describe("ContextMeterEntrance", () => {
       </AnimatePresence>,
     );
 
-    const entrance = entranceFor("meter");
+    const entrance = entranceFor();
     // why: 0.75rem of bleed reports as 12px in the computed style
     expect(entrance).toHaveStyle({ height: "12px", opacity: "0" });
 
@@ -86,7 +86,7 @@ describe("ContextMeterEntrance", () => {
         </ContextMeterEntrance>
       </AnimatePresence>,
     );
-    expect(entranceFor("updated meter")).toHaveStyle({
+    expect(entranceFor()).toHaveStyle({
       height: "auto",
       opacity: "1",
     });
@@ -108,7 +108,7 @@ describe("ContextMeterEntrance", () => {
       </AnimatePresence>,
     );
 
-    expect(entranceFor("meter")).toHaveStyle({
+    expect(entranceFor()).toHaveStyle({
       height: "auto",
       opacity: "1",
     });
@@ -131,16 +131,14 @@ describe("ContextWindowHint", () => {
 
 describe("ContextMeter", () => {
   it("renders nothing when no Context window is declared", () => {
-    const { container } = render(<ContextMeter occupancy={42_000} />);
-    expect(container).toBeEmptyDOMElement();
+    render(<ContextMeter occupancy={42_000} />);
+    expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
   });
 
   it("renders nothing when occupancy is unknown", () => {
     for (const occupancy of [undefined, null]) {
-      const { container } = render(
-        <ContextMeter occupancy={occupancy} contextWindow={128_000} />,
-      );
-      expect(container).toBeEmptyDOMElement();
+      render(<ContextMeter occupancy={occupancy} contextWindow={128_000} />);
+      expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
     }
   });
 

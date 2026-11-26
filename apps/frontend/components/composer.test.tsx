@@ -28,7 +28,7 @@ let recognition: ReturnType<typeof installSpeechRecognition>;
 
 function renderComposer({
   canUploadToSandbox = false,
-  onSubmit = vi.fn(),
+  onSubmit = vi.fn<(message: PromptInputMessage) => void>(),
   placeholder = "Ask anything",
 }: {
   canUploadToSandbox?: boolean;
@@ -76,14 +76,14 @@ function renderComposer({
   return {
     onModelChange,
     textarea: screen.getByRole("textbox", { name: "Message" }),
-    trigger: screen.getByText("Select model").closest("button")!,
+    trigger: screen.getByRole("button", { name: "Select model" }),
     mic: screen.getByRole("button", { name: "Microphone" }),
   };
 }
 
 function openPicker(trigger: HTMLElement) {
   fireEvent.click(trigger);
-  return screen.getByText("gpt-4o");
+  return screen.getByRole("option", { name: "gpt-4o" });
 }
 
 function recordFocus() {
@@ -123,7 +123,7 @@ describe("Composer model picker focus", () => {
     const { textarea, trigger, onModelChange } = renderComposer();
 
     openPicker(trigger);
-    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+    fireEvent.keyDown(screen.getByRole("combobox"), { key: "Escape" });
 
     expect(onModelChange).not.toHaveBeenCalled();
     await waitFor(() => expect(textarea).toHaveFocus());
@@ -150,7 +150,7 @@ describe("Composer model picker focus", () => {
 
   it("does not let a press on a model take focus off the search box", () => {
     const { trigger } = renderComposer();
-    const item = openPicker(trigger).closest("[cmdk-item]")!;
+    const item = openPicker(trigger);
 
     expect(fireEvent.mouseDown(item)).toBe(false);
   });
@@ -409,7 +409,7 @@ describe("Composer Sandbox uploads", () => {
 
     pickForSandbox(csv());
 
-    const picker = () => screen.getByText("Select model").closest("button");
+    const picker = () => screen.getByRole("button", { name: "Select model" });
     expect(picker()).toBeDisabled();
     fireEvent.click(
       screen.getByRole("button", { name: "Remove Sandbox upload" }),
@@ -434,7 +434,7 @@ describe("Composer Sandbox uploads", () => {
 
     fireEvent.change(textarea, { target: { value: "Summarise it" } });
     pickForSandbox(csv());
-    fireEvent.submit(textarea.closest("form")!);
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalled());
     expect(textarea).toHaveValue("Summarise it");
@@ -443,11 +443,11 @@ describe("Composer Sandbox uploads", () => {
 
   it("submits the Sandbox files beside the File parts", async () => {
     const onSubmit = vi.fn();
-    const { textarea } = renderComposer({ canUploadToSandbox: true, onSubmit });
+    renderComposer({ canUploadToSandbox: true, onSubmit });
     const file = csv();
 
     pickForSandbox(file);
-    fireEvent.submit(textarea.closest("form")!);
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalled());
     expect(onSubmit.mock.calls[0][0]).toMatchObject({

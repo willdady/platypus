@@ -159,12 +159,14 @@ it("lets an existing account sign in and accept without losing or restoring the 
   fireEvent.click(accept);
   await waitFor(() => expect(push).toHaveBeenCalledWith(WORKSPACE_PATH));
   const calls = vi.mocked(fetch).mock.calls;
+  const callUrl = (url: RequestInfo | URL): string =>
+    typeof url === "string" ? url : url instanceof Request ? url.url : url.href;
   expect(
     calls.some(([url]) =>
-      String(url).endsWith(`/session-test-${sequence}/accept`),
+      callUrl(url).endsWith(`/session-test-${sequence}/accept`),
     ),
   ).toBe(true);
-  expect(calls.some(([url]) => String(url).endsWith("/register"))).toBe(false);
+  expect(calls.some(([url]) => callUrl(url).endsWith("/register"))).toBe(false);
 });
 
 it("offers inline sign-in after a registration conflict and retains the invitation after a failed password", async () => {

@@ -38,12 +38,14 @@ export function SettingsColumns({
   const Content = isMain ? "main" : "div";
   return (
     <div
+      data-testid="settings-columns"
       className={cn(
         "flex flex-col md:flex-row w-full py-8 px-4 md:px-0",
         columnWidthClass[columnWidth],
       )}
     >
       <div
+        data-testid="settings-menu"
         className={cn(
           "w-full pt-4 mb-8 md:mb-0 md:fixed md:top-16",
           menuWidthClass[menuWidth].width,
@@ -53,6 +55,7 @@ export function SettingsColumns({
       </div>
       <Content
         id={isMain ? MAIN_CONTENT_ID : undefined}
+        data-testid="settings-content"
         className={cn(
           "flex-1 min-w-0",
           menuWidthClass[menuWidth].offset,

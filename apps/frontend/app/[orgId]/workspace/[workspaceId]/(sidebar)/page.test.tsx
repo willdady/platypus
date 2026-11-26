@@ -146,9 +146,7 @@ describe("Workspace home", () => {
     });
     await renderList(<Workspace />);
 
-    const triggersCard = screen
-      .getByText("Automated agent runs")
-      .closest("[data-slot='card']") as HTMLElement;
+    const triggersCard = screen.getByRole("group", { name: "Triggers" });
     expect(within(triggersCard).getByText("1")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Triggers/ }));
@@ -169,9 +167,7 @@ describe("Workspace home", () => {
     });
     await renderList(<Workspace />);
 
-    const boardsCard = screen
-      .getByText("Visual work management")
-      .closest("[data-slot='card']") as HTMLElement;
+    const boardsCard = screen.getByRole("group", { name: "Boards" });
     expect(within(boardsCard).getByText("2")).toBeInTheDocument();
 
     expect(
@@ -194,7 +190,7 @@ describe("Workspace home", () => {
     await renderList(<Workspace />);
 
     const region = screen.getByRole("status", { name: "Loading workspace" });
-    expect(region.querySelectorAll("[data-slot='separator']")).toHaveLength(2);
+    expect(within(region).getAllByRole("separator")).toHaveLength(2);
   });
 
   it("shows a failed count as an error, not as 0", async () => {

@@ -570,6 +570,8 @@ export const ChatMessage = memo(function ChatMessage({
             <div
               key={`${message.id}-sandbox-${i}`}
               className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm"
+              role="group"
+              aria-label={`Sandbox upload ${upload.path}`}
             >
               <FileIcon className="size-4 shrink-0 text-muted-foreground" />
               <span className="font-mono font-medium">{upload.path}</span>

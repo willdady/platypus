@@ -40,8 +40,8 @@ describe("PullToRefresh", () => {
     const { container } = renderPullToRefresh(onRefresh);
 
     pullDown(container, 200);
+    fireEvent.touchEnd(container);
     await act(async () => {
-      fireEvent.touchEnd(container);
       await vi.advanceTimersByTimeAsync(600);
     });
 
@@ -53,8 +53,8 @@ describe("PullToRefresh", () => {
     const { container } = renderPullToRefresh(onRefresh);
 
     pullDown(container, 100);
+    fireEvent.touchEnd(container);
     await act(async () => {
-      fireEvent.touchEnd(container);
       await vi.advanceTimersByTimeAsync(600);
     });
 
@@ -67,8 +67,8 @@ describe("PullToRefresh", () => {
     container.scrollTop = 40;
 
     pullDown(container, 200);
+    fireEvent.touchEnd(container);
     await act(async () => {
-      fireEvent.touchEnd(container);
       await vi.advanceTimersByTimeAsync(600);
     });
 
@@ -83,8 +83,8 @@ describe("PullToRefresh", () => {
     fireEvent.touchMove(container, { touches: [touchAt(120)] });
     vi.advanceTimersByTime(110);
     fireEvent.touchMove(container, { touches: [touchAt(120)] });
+    fireEvent.touchEnd(container);
     await act(async () => {
-      fireEvent.touchEnd(container);
       await vi.advanceTimersByTimeAsync(600);
     });
 
@@ -99,8 +99,8 @@ describe("PullToRefresh", () => {
     fireEvent.touchMove(container, { touches: [touchAt(5, 100)] });
     vi.advanceTimersByTime(110);
     fireEvent.touchMove(container, { touches: [touchAt(5, 100)] });
+    fireEvent.touchEnd(container);
     await act(async () => {
-      fireEvent.touchEnd(container);
       await vi.advanceTimersByTimeAsync(600);
     });
 
@@ -112,8 +112,8 @@ describe("PullToRefresh", () => {
     const { container } = renderPullToRefresh(onRefresh, { disabled: true });
 
     pullDown(container, 200);
+    fireEvent.touchEnd(container);
     await act(async () => {
-      fireEvent.touchEnd(container);
       await vi.advanceTimersByTimeAsync(600);
     });
 

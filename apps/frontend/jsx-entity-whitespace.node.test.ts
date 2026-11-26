@@ -4,8 +4,18 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 
-const require = createRequire(import.meta.url);
-const swc = require("next/dist/build/swc");
+type Swc = {
+  loadBindings: () => Promise<unknown>;
+  transform: (
+    source: string,
+    options: {
+      filename: string;
+      jsc: { parser: { syntax: string; tsx: boolean } };
+    },
+  ) => Promise<{ code: string }>;
+};
+
+const swc = createRequire(import.meta.url)("next/dist/build/swc") as Swc;
 
 const APP_ROOT = path.dirname(fileURLToPath(import.meta.url));
 const ENTITY = /&(?:[a-zA-Z][a-zA-Z0-9]{1,10}|#\d+|#x[0-9a-fA-F]+);/g;
@@ -39,7 +49,7 @@ async function compile(source: string, filename: string) {
       filename,
       jsc: { parser: { syntax: "typescript", tsx: true } },
     })
-  ).code as string;
+  ).code;
 }
 
 describe("HTML entities in JSX text", () => {

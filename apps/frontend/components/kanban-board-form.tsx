@@ -167,7 +167,7 @@ export function KanbanBoardForm({
           placeholder="Board name"
           disabled={isSubmitting}
           required
-          autoFocus={!isEditing}
+          initialFocus={!isEditing}
           error={validationErrors.name}
         />
         <FormTextareaField

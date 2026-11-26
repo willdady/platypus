@@ -1,9 +1,11 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { ESLint } from "eslint";
+import { ESLint, type Linter } from "eslint";
 import tseslint from "typescript-eslint";
 import path from "node:path";
+import { readFileSync } from "node:fs";
 
 type LintResult = ESLint.LintResult;
+type PackageManifest = { scripts: Record<string, string> };
 
 const APP_ROOT = import.meta.dirname;
 
@@ -248,4 +250,52 @@ describe("frontend convention lint rules", () => {
       ).toEqual([]);
     },
   );
+});
+
+const RATCHETED_TEST_RULES = [
+  "testing-library/no-node-access",
+  "testing-library/no-container",
+  "testing-library/no-unnecessary-act",
+  "@typescript-eslint/no-unsafe-member-access",
+  "@typescript-eslint/no-unnecessary-type-assertion",
+  "@typescript-eslint/no-unsafe-assignment",
+  "@typescript-eslint/unbound-method",
+  "@typescript-eslint/no-unsafe-return",
+  "@typescript-eslint/no-base-to-string",
+  "@typescript-eslint/no-unsafe-call",
+  "@typescript-eslint/no-unsafe-argument",
+  "@typescript-eslint/prefer-promise-reject-errors",
+] as const;
+
+function ruleSeverity(rules: Record<string, unknown>, rule: string) {
+  const entry = rules[rule];
+  const level = Array.isArray(entry) ? (entry as unknown[])[0] : entry;
+  if (typeof level === "string") return level === "error" ? 2 : 1;
+  return typeof level === "number" ? level : undefined;
+}
+
+describe("frontend test-file lint ratchet", () => {
+  let severities: Record<string, number | undefined>;
+
+  beforeAll(async () => {
+    const config = (await new ESLint({ cwd: APP_ROOT }).calculateConfigForFile(
+      path.join(APP_ROOT, "components", "list-state.test.tsx"),
+    )) as Linter.Config | undefined;
+    const rules: Record<string, unknown> = config?.rules ?? {};
+    severities = Object.fromEntries(
+      RATCHETED_TEST_RULES.map((rule) => [rule, ruleSeverity(rules, rule)]),
+    );
+  }, 120_000);
+
+  it.each(RATCHETED_TEST_RULES)("keeps %s an error in test files", (rule) => {
+    expect(severities[rule]).toBe(2);
+  });
+
+  it("gives the lint script no warnings allowance", () => {
+    const manifest = JSON.parse(
+      readFileSync(path.join(APP_ROOT, "package.json"), "utf8"),
+    ) as PackageManifest;
+    const allowance = /--max-warnings[= ](\d+)/.exec(manifest.scripts.lint);
+    expect(allowance ? Number(allowance[1]) : 0).toBe(0);
+  });
 });

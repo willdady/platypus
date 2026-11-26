@@ -40,10 +40,16 @@ describe("OrgAgentsList menu", () => {
     await openDropdownMenu();
 
     const separator = screen.getByRole("separator");
-    expect(separator.previousElementSibling).toHaveTextContent(
-      "Manage attachments",
-    );
-    expect(separator.nextElementSibling).toHaveTextContent("Delete");
+    const manage = screen.getByRole("menuitem", { name: "Manage attachments" });
+    const remove = screen.getByRole("menuitem", { name: "Delete" });
+    expect(
+      manage.compareDocumentPosition(separator) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      separator.compareDocumentPosition(remove) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 });
 
@@ -93,8 +99,7 @@ describe("OrgAgentsList delete", () => {
 });
 
 describe("OrgAgentsList unattached warning", () => {
-  const card = () =>
-    screen.getByText(sharedAgent.name).closest('[data-slot="item"]');
+  const card = () => screen.getByRole("group", { name: sharedAgent.name });
 
   it("warns about an agent attached to no Workspaces", async () => {
     mockScopedSWR({ "/attachments?": [] });

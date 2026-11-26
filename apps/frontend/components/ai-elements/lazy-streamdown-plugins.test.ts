@@ -1,9 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
+import type { HighlightResult } from "@streamdown/code";
 import { lazyCode } from "./lazy-streamdown-plugins";
 
 describe("lazyCode", () => {
   it("highlights a block once the highlighter has loaded", async () => {
-    const onResult = vi.fn();
+    const onResult = vi.fn<(result: HighlightResult) => void>();
 
     const first = lazyCode.highlight(
       {

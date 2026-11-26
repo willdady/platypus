@@ -158,7 +158,7 @@ function A2aEndpointForm({
           >
             {agents.map((agent) => (
               <SelectItem key={agent.id} value={agent.id}>
-                <AgentAvatar agent={agent} className="size-5" />
+                <AgentAvatar agent={agent} className="size-5" decorative />
                 {agent.name}
               </SelectItem>
             ))}

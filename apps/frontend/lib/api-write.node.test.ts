@@ -35,7 +35,9 @@ const providerBody = {
 };
 
 function respond(status: number, body: unknown = {}) {
-  const fetchMock = vi.fn().mockResolvedValue(jsonResponse(status, body));
+  const fetchMock =
+    vi.fn<(input: RequestInfo | URL, init: RequestInit) => Promise<Response>>();
+  fetchMock.mockResolvedValue(jsonResponse(status, body));
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
 }

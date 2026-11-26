@@ -34,7 +34,7 @@ describe("TriggerRunRow", () => {
   it("makes the whole row a link to the run's own page", () => {
     render(<TriggerRunRow run={run()} orgId="org-1" workspaceId="ws-1" />);
 
-    const row = screen.getByText("Nightly digest").closest("a");
+    const row = screen.getByRole("link");
     expect(row).toHaveAttribute(
       "href",
       "/org-1/workspace/ws-1/trigger-runs/run-1",
@@ -55,7 +55,7 @@ describe("TriggerRunRow", () => {
     );
 
     const name = screen.getByText("Nightly digest");
-    expect(name.closest("a")).toBeNull();
+    expect(name).toBeInTheDocument();
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
   });
 
@@ -167,7 +167,9 @@ describe("TriggerRunRow", () => {
     const name = screen.getByText("Nightly digest");
     const badge = screen.getByText("Success");
     const relative = screen.getByText(/ago$/);
-    const column = name.parentElement!;
+    const column = screen.getByRole("group", {
+      name: "Nightly digest run details",
+    });
     expect(column).toContainElement(badge);
     expect(column).toContainElement(relative);
     expect(name.compareDocumentPosition(badge)).toBe(

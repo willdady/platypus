@@ -285,10 +285,13 @@ describe("useEntityForm submit lifecycle", () => {
     expect(configuredMutate).toHaveBeenCalledWith(
       "http://test/organizations/org1/skills",
     );
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const [url, init] = fetchMock.mock.calls[0] as [
+      string,
+      { method: string; body: string },
+    ];
     expect(url).toBe("http://test/organizations/org1/skills");
     expect(init.method).toBe("POST");
-    expect(JSON.parse(String(init.body))).toEqual({
+    expect(JSON.parse(init.body)).toEqual({
       name: "Deploy",
       description: "",
       body: "",

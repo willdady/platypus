@@ -92,7 +92,7 @@ function setViewport(mobile: boolean) {
     addListener: () => {},
     removeListener: () => {},
     dispatchEvent: () => false,
-  })) as unknown as typeof window.matchMedia;
+  }));
 }
 
 function search(value: string) {
@@ -156,7 +156,7 @@ describe("AppSidebar New chat", () => {
       renderSidebar();
 
       act(() => {
-        screen.getByRole("button", { name: "New chat" }).parentElement!.focus();
+        screen.getByTestId("new-chat-hint").focus();
       });
 
       expect(await screen.findByRole("tooltip")).toHaveTextContent(hint);
@@ -384,10 +384,9 @@ describe("AppSidebar chat actions", () => {
   });
 
   const openChatMenu = (title: string) => {
-    const trigger = within(screen.getByText(title).closest("li")!).getByRole(
-      "button",
-      { name: `Actions for ${title}` },
-    );
+    const trigger = screen.getByRole("button", {
+      name: `Actions for ${title}`,
+    });
     fireEvent.pointerDown(trigger, { button: 0, pointerId: 1 });
     fireEvent.pointerUp(trigger, { button: 0, pointerId: 1 });
     fireEvent.click(trigger, { button: 0 });
@@ -449,10 +448,10 @@ describe("AppSidebar chat actions", () => {
     );
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    const [url, init] = fetchMock.mock.calls[0];
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("http://test/organizations/org1/workspaces/ws1/chat/c1");
     expect(init.method).toBe("PUT");
-    expect(JSON.parse(init.body)).toEqual({ isPinned: true });
+    expect(JSON.parse(init.body as string)).toEqual({ isPinned: true });
     expect(expectSentBodyToMatchSchema(fetchMock, chatUpdateSchema)).toEqual({
       isPinned: true,
     });
@@ -516,9 +515,7 @@ describe("AppSidebar chat actions", () => {
 
     for (const title of ["First chat", "Second chat"]) {
       expect(
-        within(screen.getByText(title).closest("li")!).queryByRole("button", {
-          name: `Actions for ${title}`,
-        }),
+        screen.queryByRole("button", { name: `Actions for ${title}` }),
       ).not.toBeInTheDocument();
     }
   });

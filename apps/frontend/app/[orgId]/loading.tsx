@@ -34,12 +34,15 @@ function ContentSkeleton() {
 
 function AddWorkspaceSkeleton() {
   return (
-    <div className="h-dvh overflow-y-auto pb-4">
+    <div data-testid="workspace-setup" className="h-dvh overflow-y-auto pb-4">
       <LoadingRegion
         label="Loading workspace setup"
         className={resourcePageLayout.wide.outer}
       >
-        <div className={resourcePageLayout.wide.inner}>
+        <div
+          data-testid="workspace-setup-body"
+          className={resourcePageLayout.wide.inner}
+        >
           <Skeleton className="mb-8 h-8 w-20" />
           <Skeleton className="mb-4 h-8 w-56" />
           <div className="mb-8 flex flex-wrap gap-x-6 gap-y-2">

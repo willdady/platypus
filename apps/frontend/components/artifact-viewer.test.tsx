@@ -4,8 +4,23 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import { formatDateTime } from "@/lib/format-date";
 
 const { artifactHook, versionsHook, copy } = vi.hoisted(() => ({
-  artifactHook: vi.fn(),
-  versionsHook: vi.fn(),
+  artifactHook:
+    vi.fn<
+      (
+        scope: unknown,
+        artifactId: string,
+        version?: number,
+      ) => { data?: unknown; isLoading?: boolean; error?: unknown }
+    >(),
+  versionsHook: vi.fn<
+    (
+      scope: unknown,
+      artifactId: string,
+    ) => {
+      data?: unknown;
+      isLoading?: boolean;
+    }
+  >(),
   copy: vi.fn(async () => true),
 }));
 
@@ -337,7 +352,7 @@ describe("ArtifactViewer", () => {
       isLoading: false,
     });
     renderViewer();
-    const frame = screen.getByTitle("Artifact preview") as HTMLIFrameElement;
+    const frame = screen.getByTitle<HTMLIFrameElement>("Artifact preview");
 
     fireEvent(
       window,
@@ -437,7 +452,7 @@ describe("ArtifactViewer", () => {
     );
     renderViewer();
 
-    const frame = screen.getByTitle("Artifact preview") as HTMLIFrameElement;
+    const frame = screen.getByTitle<HTMLIFrameElement>("Artifact preview");
     expect(frame.srcdoc).toContain("<h1>New page</h1>");
 
     await selectOption(
@@ -445,8 +460,7 @@ describe("ArtifactViewer", () => {
       `Version 1 · You · ${formatDateTime("2026-01-01T00:00:00.000Z")}`,
     );
 
-    const doc = (screen.getByTitle("Artifact preview") as HTMLIFrameElement)
-      .srcdoc;
+    const doc = screen.getByTitle<HTMLIFrameElement>("Artifact preview").srcdoc;
     expect(doc).toContain("<h1>Old page</h1>");
     expect(doc).not.toContain("New page");
     expect(screen.getByText("Read-only")).toBeInTheDocument();

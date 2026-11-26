@@ -112,7 +112,12 @@ function EntityCardGrid<T extends EntityCard>({
         <Link href={link}>{content}</Link>
       </Item>
     ) : (
-      <Item variant="outline" className={cn("h-full", extras.className)}>
+      <Item
+        variant="outline"
+        role="group"
+        aria-label={item.name}
+        className={cn("h-full", extras.className)}
+      >
         {content}
       </Item>
     );

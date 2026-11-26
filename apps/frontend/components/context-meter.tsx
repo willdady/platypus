@@ -30,6 +30,7 @@ export function ContextMeterEntrance({
       animate={visible}
       transition={{ duration: shouldAnimate ? 0.5 : 0, ease: "easeOut" }}
       className={cn("shrink-0 overflow-hidden -mb-3 sm:mb-0", className)}
+      data-testid="context-meter-entrance"
     >
       {children}
     </motion.div>

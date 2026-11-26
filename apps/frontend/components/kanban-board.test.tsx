@@ -57,8 +57,12 @@ const toastSuccess = vi.fn();
 const toastError = vi.fn();
 vi.mock("sonner", () => ({
   toast: {
-    error: (...args: unknown[]) => toastError(...args),
-    success: (...args: unknown[]) => toastSuccess(...args),
+    error: (...args: unknown[]) => {
+      toastError(...args);
+    },
+    success: (...args: unknown[]) => {
+      toastSuccess(...args);
+    },
   },
 }));
 
@@ -217,10 +221,9 @@ function renderBoard() {
 }
 
 function openColumnMenuItem(columnName: string, itemText: string) {
-  const columnContainer = screen.getByText(columnName).closest(".w-80")!;
-  const trigger = columnContainer.querySelector(
-    'button[aria-haspopup="menu"]',
-  )!;
+  const trigger = screen.getByRole("button", {
+    name: `Actions for ${columnName}`,
+  });
   fireEvent.pointerDown(trigger, { pointerId: 1, button: 0 });
   fireEvent.pointerUp(trigger, { pointerId: 1, button: 0 });
   fireEvent.click(trigger);
@@ -516,10 +519,7 @@ describe("KanbanBoard transport", () => {
     });
 
     async function moveFirstColumnRight() {
-      const columnContainer = screen.getByText("To Do").closest(".w-80")!;
-      const trigger = columnContainer.querySelector(
-        'button[aria-haspopup="menu"]',
-      )!;
+      const trigger = screen.getByRole("button", { name: "Actions for To Do" });
       fireEvent.pointerDown(trigger, { pointerId: 1, button: 0 });
       fireEvent.pointerUp(trigger, { pointerId: 1, button: 0 });
       fireEvent.click(trigger);
@@ -700,9 +700,7 @@ describe("KanbanBoard transport", () => {
     });
 
     function cardOrder() {
-      const column = screen
-        .getByText("In Progress")
-        .closest(".w-80") as HTMLElement;
+      const column = screen.getByRole("region", { name: "In Progress" });
       return within(column)
         .getAllByText(/^Card (one|two)$/)
         .map((el) => el.textContent);
@@ -1049,11 +1047,10 @@ describe("KanbanBoard open card", () => {
     renderBoard();
 
     const card = screen.getByRole("button", { name: /A card/ });
-    const instructions = document.getElementById(
-      card.getAttribute("aria-describedby")!,
+    expect(card).toHaveAttribute("aria-describedby");
+    expect(screen.getByText(/press space to pick it up/i)).toHaveTextContent(
+      /press enter to open it/i,
     );
-    expect(instructions).toHaveTextContent(/press space to pick it up/i);
-    expect(instructions).toHaveTextContent(/press enter to open it/i);
   });
 
   it("opens a card on Enter", async () => {

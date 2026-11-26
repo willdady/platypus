@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import type { ComponentProps, ReactNode } from "react";
 import {
   humanizeToolType,
@@ -29,7 +29,7 @@ describe("Tool disclosure", () => {
     children: ReactNode = <div>Body</div>,
   ) =>
     render(
-      <Tool>
+      <Tool data-testid="tool-row">
         <ToolHeader type="tool-getCard" state="output-available" {...props} />
         <ToolContent>{children}</ToolContent>
       </Tool>,
@@ -82,8 +82,8 @@ describe("Tool disclosure", () => {
   });
 
   it("draws no border around the row", () => {
-    const { container } = renderTool();
-    expect(container.firstElementChild?.className).not.toMatch(/\bborder\b/);
+    renderTool();
+    expect(screen.getByTestId("tool-row").className).not.toMatch(/\bborder\b/);
   });
 
   it("truncates a long name and keeps the full name on the element", () => {
@@ -92,7 +92,7 @@ describe("Tool disclosure", () => {
 
     const label = screen.getByText(name);
     expect(label).toHaveClass("truncate");
-    expect(label.closest("[title]")).toHaveAttribute("title", name);
+    expect(label).toHaveAttribute("title", name);
     expect(screen.getByRole("button")).toHaveClass("min-w-0");
   });
 
@@ -113,20 +113,16 @@ describe("Tool disclosure", () => {
 
     const outer = screen.getByRole("button", { name: /Outer/ });
     const inner = screen.getByRole("button", { name: /Inner/ });
+    const outerChevron = within(outer).getByTestId("tool-chevron");
+    const innerChevron = within(inner).getByTestId("tool-chevron");
     expect(inner).toHaveAttribute("aria-expanded", "false");
-    expect(outer.querySelector(":scope > svg:last-child")).toHaveClass(
-      "rotate-180",
-    );
-    expect(inner.querySelector(":scope > svg:last-child")).not.toHaveClass(
-      "rotate-180",
-    );
+    expect(outerChevron).toHaveClass("rotate-180");
+    expect(innerChevron).not.toHaveClass("rotate-180");
 
     fireEvent.click(inner);
 
     expect(inner).toHaveAttribute("aria-expanded", "true");
-    expect(inner.querySelector(":scope > svg:last-child")).toHaveClass(
-      "rotate-180",
-    );
+    expect(within(inner).getByTestId("tool-chevron")).toHaveClass("rotate-180");
     expect(screen.getByText("Inner body")).toBeInTheDocument();
   });
 });
@@ -135,26 +131,26 @@ describe("Tool parameter and result panels", () => {
   const longUrl = `https://example.com/${"x".repeat(400)}`;
 
   it("pretty-prints the input as scrollable JSON", () => {
-    const { container } = render(<ToolInput input={{ url: longUrl }} />);
-    const pre = container.querySelector("pre");
+    render(<ToolInput input={{ url: longUrl }} />);
+    const panel = screen.getByRole("group", { name: "Parameters" });
+    const pre = within(panel).getByText(/"url"/);
 
     expect(pre).toHaveTextContent(`"url": "${longUrl}"`);
     expect(pre).toHaveClass("overflow-auto");
-    expect(pre?.parentElement).not.toHaveClass("overflow-hidden");
+    expect(panel).not.toHaveClass("overflow-hidden");
   });
 
   it("pretty-prints an object result as scrollable JSON", () => {
-    const { container } = render(
-      <ToolOutput output={{ url: longUrl }} errorText={undefined} />,
-    );
-    const pre = container.querySelector("pre");
+    render(<ToolOutput output={{ url: longUrl }} errorText={undefined} />);
+    const panel = screen.getByRole("group", { name: "Result" });
+    const pre = within(panel).getByText(/"url"/);
 
     expect(pre).toHaveTextContent(`"url": "${longUrl}"`);
     expect(pre).toHaveClass("overflow-auto");
   });
 
   it("draws Parameters and Result in the same colour", () => {
-    const { container } = render(
+    render(
       <Tool defaultOpen>
         <ToolHeader type="tool-getCard" state="output-available" />
         <ToolContent>
@@ -164,7 +160,12 @@ describe("Tool parameter and result panels", () => {
       </Tool>,
     );
 
-    const [parameters, result] = container.querySelectorAll("pre");
+    const parameters = within(
+      screen.getByRole("group", { name: "Parameters" }),
+    ).getByText(/"id"/);
+    const result = within(
+      screen.getByRole("group", { name: "Result" }),
+    ).getByText(/"id"/);
 
     expect(parameters).toHaveClass("text-foreground");
     expect(result).toHaveClass("text-foreground");

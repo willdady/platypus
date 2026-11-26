@@ -835,7 +835,7 @@ function ProviderForm({
             onChange={toFieldChange("name")}
             disabled={isSubmitting || isReadOnly}
             error={validationErrors.name}
-            autoFocus
+            initialFocus
           />
 
           <FormTextField

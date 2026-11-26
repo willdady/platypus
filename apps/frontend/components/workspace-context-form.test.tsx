@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { contextCreateSchema, type Context } from "@platypus/schemas";
+import { contextCreateSchema } from "@platypus/schemas";
 import {
   authMock,
   configuredMutate,
@@ -15,13 +15,21 @@ import { expectSentBodyToMatchSchema, selectOption } from "@/test/test-utils";
 import { FIX_FORM_ERRORS_MESSAGE } from "@/lib/apply-write-outcome";
 
 // why: vi.hoisted, so the swr mock can read it before the module body runs
-const state = vi.hoisted(() => ({
-  contextData: undefined as unknown,
-  orgsError: undefined as Error | undefined,
-  workspacesError: undefined as Error | undefined,
-  workspacesPending: false,
-  noOrgs: false,
-}));
+const state = vi.hoisted(
+  (): {
+    contextData: unknown;
+    orgsError: Error | undefined;
+    workspacesError: Error | undefined;
+    workspacesPending: boolean;
+    noOrgs: boolean;
+  } => ({
+    contextData: undefined,
+    orgsError: undefined,
+    workspacesError: undefined,
+    workspacesPending: false,
+    noOrgs: false,
+  }),
+);
 
 vi.mock("@/components/auth-provider", () => authMock);
 
@@ -101,7 +109,7 @@ function renderEditForm() {
     userId: "u1",
     workspaceId: "ws1",
     content: "existing context",
-  } as unknown as Context;
+  };
   return render(<WorkspaceContextForm contextId="ctx1" />);
 }
 

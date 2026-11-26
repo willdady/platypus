@@ -57,7 +57,7 @@ export function AddColumnDialog({
               value={name}
               onChange={setName}
               placeholder="Enter column name"
-              autoFocus
+              initialFocus
             />
           </div>
           <DialogFooter>
@@ -101,7 +101,7 @@ export function AddCardDialog({
               value={title}
               onChange={setTitle}
               placeholder="Enter card title"
-              autoFocus
+              initialFocus
             />
             {labels.length > 0 && (
               <div role="group" aria-labelledby="new-card-labels-label">

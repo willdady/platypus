@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthClient } from "@/components/auth-provider";
 import { useSignUpOpen } from "@/hooks/use-sign-up-open";
+import { useInitialFocus } from "@/hooks/use-initial-focus";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
@@ -22,6 +23,7 @@ export default function SignUpPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const nameInput = useInitialFocus<HTMLInputElement>();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -85,11 +87,11 @@ export default function SignUpPage() {
                 <Label htmlFor="name">Name</Label>
                 <Input
                   id="name"
+                  ref={nameInput}
                   type="text"
                   placeholder="Your name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  autoFocus
                   required
                 />
               </div>

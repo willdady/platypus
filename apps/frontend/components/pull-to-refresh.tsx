@@ -17,6 +17,7 @@ type PullToRefreshProps = {
   onRefresh: () => Promise<void>;
   disabled?: boolean;
   className?: string;
+  "data-testid"?: string;
   children: React.ReactNode;
 };
 
@@ -24,6 +25,7 @@ export function PullToRefresh({
   onRefresh,
   disabled = false,
   className,
+  "data-testid": testId,
   children,
 }: PullToRefreshProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -148,6 +150,7 @@ export function PullToRefresh({
   return (
     <div
       ref={containerRef}
+      data-testid={testId}
       className={cn("relative [overscroll-behavior-y:contain]", className)}
     >
       <AnimatePresence>

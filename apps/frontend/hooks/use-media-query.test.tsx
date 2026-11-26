@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import { useMediaQuery } from "./use-media-query";
 
-const realMatchMedia = window.matchMedia;
+const realMatchMedia = window.matchMedia.bind(window);
 
 function installMediaQueryList(initial: boolean) {
   const listeners = new Set<() => void>();

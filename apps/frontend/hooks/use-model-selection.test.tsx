@@ -11,6 +11,7 @@ import {
   encodeProviderSelection,
 } from "@/lib/selection-reference";
 import type { Serialized } from "@/lib/api-write";
+import type { StoredSelection } from "@/lib/restore-selection";
 
 const WORKSPACE_ID = "w1";
 const STORAGE_KEY = `platypus:workspace:${WORKSPACE_ID}:lastSelection`;
@@ -209,7 +210,10 @@ describe("useModelSelection — user choice", () => {
       modelId: "",
       providerId: "",
     });
-    expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!).value).toEqual({
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY)!) as {
+      value: StoredSelection;
+    };
+    expect(stored.value).toEqual({
       type: "agent",
       id: "a1",
     });

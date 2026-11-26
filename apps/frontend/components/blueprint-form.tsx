@@ -353,7 +353,7 @@ function BlueprintForm({
             onChange={toFieldChange("name")}
             disabled={isSubmitting}
             error={validationErrors.name}
-            autoFocus
+            initialFocus
             trailing={
               <p className="text-xs text-muted-foreground">
                 {formData.name.length}/{BLUEPRINT_NAME_MAX_LENGTH}

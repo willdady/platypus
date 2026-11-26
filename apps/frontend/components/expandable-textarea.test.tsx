@@ -101,10 +101,17 @@ describe("ExpandableTextarea expanded editor", () => {
 
     const dialog = await screen.findByRole("dialog");
     await waitFor(() =>
-      expect(dialog.contains(document.activeElement)).toBe(true),
+      expect(
+        within(dialog).getByRole("button", { name: "Collapse" }),
+      ).toHaveFocus(),
     );
 
-    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+    fireEvent.keyDown(
+      within(dialog).getByRole("button", { name: "Collapse" }),
+      {
+        key: "Escape",
+      },
+    );
     await waitFor(() =>
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
     );
@@ -135,7 +142,7 @@ describe("ExpandableTextarea expanded editor", () => {
     expand();
 
     const dialog = await screen.findByRole("dialog");
-    const editor = dialog.querySelector("textarea")!;
+    const editor = within(dialog).getByRole("textbox");
     fireEvent.change(editor, { target: { value: "Hello world" } });
     fireEvent.click(screen.getByRole("button", { name: "Collapse" }));
 

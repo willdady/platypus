@@ -38,10 +38,13 @@ const ACCEPT_BODY = {
 };
 const WORKSPACE_PATH = "/org-9/workspace/ws-9";
 
+type StubbedInit = { method?: string; credentials?: string; body?: string };
+type StubFetch = (url: string, init?: StubbedInit) => Promise<Response>;
+
 function stubInvite(
   routes: Partial<Record<"register" | "accept", [number, unknown]>> = {},
 ) {
-  const fetchMock = vi.fn(async (url: string) => {
+  const fetchMock = vi.fn<StubFetch>(async (url) => {
     const route = (["register", "accept"] as const).find((r) =>
       String(url).endsWith(`/${r}`),
     );
@@ -108,9 +111,8 @@ describe("InviteTokenPage", () => {
 
       render(<InviteTokenPage />);
 
-      const emailInput = (await screen.findByLabelText(
-        "Email",
-      )) as HTMLInputElement;
+      const emailInput =
+        await screen.findByLabelText<HTMLInputElement>("Email");
       expect(emailInput.value).toBe("invitee@example.com");
       expect(emailInput).toBeDisabled();
       expect(screen.getByText("Acme", { exact: false })).toBeInTheDocument();
@@ -129,12 +131,12 @@ describe("InviteTokenPage", () => {
 
       const registerCall = fetchMock.mock.calls.find(([url]) =>
         String(url).endsWith("/register"),
-      ) as unknown as [string, RequestInit];
+      )!;
       expect(registerCall[1]).toMatchObject({
         method: "POST",
         credentials: "include",
       });
-      expect(JSON.parse(String(registerCall[1].body))).toEqual({
+      expect(JSON.parse(registerCall[1]?.body ?? "")).toEqual({
         name: "Robin",
         password: "at-least-8-chars",
       });

@@ -62,23 +62,25 @@ afterEach(() => {
 
 describe("OrganizationLoading", () => {
   it("draws the Organization home from the cache, not placeholders", () => {
-    const { container } = render(<OrganizationLoading />);
+    render(<OrganizationLoading />);
 
     expect(screen.getByRole("link", { name: "Acme" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Globex" })).toBeInTheDocument();
     expect(screen.getByText("Alpha")).toBeInTheDocument();
-    expect(container.querySelector('[data-slot="skeleton"]')).toBeNull();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
   it("takes the wide wizard shape while Add Workspace loads", () => {
     nav.pathname = "/org2/create";
-    const { container } = render(<OrganizationLoading />);
+    render(<OrganizationLoading />);
 
     const status = screen.getByRole("status");
     expect(status).toHaveAttribute("aria-busy", "true");
     expect(status).toHaveClass(resourcePageLayout.wide.outer!);
-    expect(status.firstElementChild).toHaveClass(resourcePageLayout.wide.inner);
-    expect(container.firstElementChild).toHaveClass(
+    expect(screen.getByTestId("workspace-setup-body")).toHaveClass(
+      resourcePageLayout.wide.inner,
+    );
+    expect(screen.getByTestId("workspace-setup")).toHaveClass(
       "h-dvh overflow-y-auto pb-4",
     );
     expect(screen.getAllByTestId("step-placeholder")).toHaveLength(3);

@@ -224,6 +224,7 @@ export function Tool({
         className={cn("w-full min-w-0", className)}
         open={isOpen}
         onOpenChange={setIsOpen}
+        data-testid="tool"
         {...props}
       >
         {children}
@@ -333,6 +334,7 @@ export function ToolHeader({
           "size-4 shrink-0 transition-transform",
           isOpen ? "rotate-180" : "rotate-0",
         )}
+        data-testid="tool-chevron"
       />
     </CollapsibleTrigger>
   );
@@ -362,7 +364,12 @@ export type ToolInputProps = ComponentProps<"div"> & {
 
 export function ToolInput({ className, input, ...props }: ToolInputProps) {
   return (
-    <div className={cn("flex flex-col gap-2", className)} {...props}>
+    <div
+      aria-label="Parameters"
+      className={cn("flex flex-col gap-2", className)}
+      role="group"
+      {...props}
+    >
       <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
         Parameters
       </h4>
@@ -401,7 +408,12 @@ export function ToolOutput({
   }
 
   return (
-    <div className={cn("flex flex-col gap-2", className)} {...props}>
+    <div
+      aria-label={errorText ? "Error" : "Result"}
+      className={cn("flex flex-col gap-2", className)}
+      role="group"
+      {...props}
+    >
       <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
         {errorText ? "Error" : "Result"}
       </h4>

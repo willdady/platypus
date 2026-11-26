@@ -1,6 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { memo } from "react";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import {
   DefaultChatTransport,
   lastAssistantMessageIsCompleteWithApprovalResponses,
@@ -23,6 +29,12 @@ type SwrCall = {
   config: Record<string, unknown> | undefined;
 };
 
+type TurnOptions = { body: unknown };
+
+function turnOptions(body: unknown): TurnOptions {
+  return { body };
+}
+
 const { harness } = vi.hoisted(() => ({
   harness: {
     swrCalls: [] as SwrCall[],
@@ -34,10 +46,25 @@ const { harness } = vi.hoisted(() => ({
       error: undefined as Error | undefined,
       messages: [] as PlatypusUIMessage[],
     },
-    setMessages: vi.fn(),
-    sendMessage: vi.fn(),
-    regenerate: vi.fn(),
-    addToolApprovalResponse: vi.fn(),
+    setMessages:
+      vi.fn<
+        (
+          update:
+            | PlatypusUIMessage[]
+            | ((held: PlatypusUIMessage[]) => PlatypusUIMessage[]),
+        ) => void
+      >(),
+    sendMessage: vi.fn<(message: unknown, options: TurnOptions) => void>(),
+    regenerate:
+      vi.fn<(options: TurnOptions & { messageId?: string }) => void>(),
+    addToolApprovalResponse:
+      vi.fn<
+        (options: {
+          id: string;
+          approved: boolean;
+          options: TurnOptions;
+        }) => void
+      >(),
     stop: vi.fn(),
     toastError: vi.fn(),
     toastInfo: vi.fn(),
@@ -504,9 +531,7 @@ describe("Chat Artifact panel", () => {
     harness.turn.messages = [message("a1", "Hello")];
     renderChat();
 
-    const columns =
-      // eslint-disable-next-line testing-library/no-node-access
-      document.querySelectorAll(".max-w-4xl");
+    const columns = screen.getAllByTestId("chat-column");
     expect(columns.length).toBeGreaterThan(0);
     for (const column of columns) {
       expect(column).toHaveClass("xl:w-4/5");
@@ -522,8 +547,11 @@ describe("Chat Artifact panel", () => {
     expect(
       screen.getByText("Artifact panel artifact-1 v1"),
     ).toBeInTheDocument();
-    // eslint-disable-next-line testing-library/no-node-access
-    expect(document.querySelector(".max-w-4xl")).toBeNull();
+    const columns = screen.getAllByTestId("chat-column");
+    expect(columns.length).toBeGreaterThan(0);
+    for (const column of columns) {
+      expect(column).not.toHaveClass("max-w-4xl");
+    }
   });
 
   it("opens the viewer beside the transcript and closes it", () => {
@@ -1061,41 +1089,41 @@ describe("routing a chat error", () => {
 
   it("shows an inline line and no modal when the run is still going", () => {
     harness.data.set(`/chat/${CHAT_ID}`, { status: "running", messages: [] });
-    const { container } = renderThrough(...DROPPED);
+    renderThrough(...DROPPED);
 
-    expect(container).toHaveTextContent(RECOVERING);
+    expect(screen.getByText(RECOVERING)).toBeInTheDocument();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   it("says nothing once the run has finished behind the drop", () => {
     harness.data.set(`/chat/${CHAT_ID}`, { status: "succeeded", messages: [] });
-    const { container } = renderThrough(...DROPPED);
+    renderThrough(...DROPPED);
 
-    expect(container).not.toHaveTextContent(RECOVERING);
+    expect(screen.queryByText(RECOVERING)).not.toBeInTheDocument();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   it("opens the modal for a run that reached a terminal failed status", () => {
     harness.data.set(`/chat/${CHAT_ID}`, { status: "failed", messages: [] });
-    const { container } = renderThrough(...DROPPED);
+    renderThrough(...DROPPED);
 
     expect(screen.getByRole("dialog")).toBeInTheDocument();
-    expect(container).not.toHaveTextContent(RECOVERING);
+    expect(screen.queryByText(RECOVERING)).not.toBeInTheDocument();
   });
 
   it("opens the modal for a request that never established", () => {
     harness.data.set(`/chat/${CHAT_ID}`, { status: "succeeded", messages: [] });
-    const { container } = renderThrough(...REFUSED);
+    renderThrough(...REFUSED);
 
     expect(screen.getByRole("dialog")).toBeInTheDocument();
-    expect(container).not.toHaveTextContent(RECOVERING);
+    expect(screen.queryByText(RECOVERING)).not.toBeInTheDocument();
   });
 
   it("says nothing at all while a turn is healthy", () => {
     harness.data.set(`/chat/${CHAT_ID}`, { status: "running", messages: [] });
-    const { container } = renderChat();
+    renderChat();
 
-    expect(container).not.toHaveTextContent(RECOVERING);
+    expect(screen.queryByText(RECOVERING)).not.toBeInTheDocument();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
@@ -1303,7 +1331,7 @@ describe("editing a message", () => {
 
     expect(harness.sendMessage).toHaveBeenCalledWith(
       { text: "What does this say? (edited)", files: [reportPdf] },
-      { body: expect.objectContaining({ providerId: expect.anything() }) },
+      turnOptions(expect.objectContaining({ providerId: "p1" })),
     );
   });
 
@@ -1339,9 +1367,10 @@ describe("editing a message", () => {
     openEditOn("u2");
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
-    expect(harness.sendMessage).toHaveBeenCalledWith(expect.anything(), {
-      body: expect.objectContaining({ parentId: "a1" }),
-    });
+    expect(harness.sendMessage).toHaveBeenCalledWith(
+      expect.anything(),
+      turnOptions(expect.objectContaining({ parentId: "a1" })),
+    );
   });
 
   it("closes the surface once the edit is sent", () => {
@@ -1393,7 +1422,9 @@ describe("starting a turn", () => {
     fireEvent.click(screen.getByRole("button", { name: "Regenerate a1" }));
 
     expect(harness.regenerate).toHaveBeenCalledWith({
-      body: expect.objectContaining({ providerId: "p1", maxSteps: 10 }),
+      ...turnOptions(
+        expect.objectContaining({ providerId: "p1", maxSteps: 10 }),
+      ),
       messageId: "a1",
     });
     expect(harness.chatMutate).toHaveBeenCalledTimes(1);
@@ -1425,12 +1456,12 @@ describe("starting a turn", () => {
     expect(harness.addToolApprovalResponse).toHaveBeenCalledWith({
       id: "ap1",
       approved: true,
-      options: {
-        body: expect.objectContaining({
+      options: turnOptions(
+        expect.objectContaining({
           providerId: "p1",
           maxSteps: 10,
-        }) as unknown,
-      },
+        }),
+      ),
     });
     expect(harness.chatOptions!.sendAutomaticallyWhen).toBe(
       lastAssistantMessageIsCompleteWithApprovalResponses,
@@ -1531,7 +1562,7 @@ describe("starting a turn", () => {
     await waitFor(() => expect(harness.sendMessage).toHaveBeenCalled());
     expect(harness.sendMessage).toHaveBeenCalledWith(
       { text: "Hello", files: [] },
-      { body: expect.objectContaining({ providerId: "p1" }) },
+      turnOptions(expect.objectContaining({ providerId: "p1" })),
     );
     expect(harness.chatMutate).toHaveBeenCalledTimes(1);
   });
@@ -1774,8 +1805,7 @@ describe("loading", () => {
     renderChat();
 
     expect(loadingSkeleton()).toBeInTheDocument();
-    // eslint-disable-next-line testing-library/no-node-access
-    const columns = document.querySelectorAll(".max-w-4xl");
+    const columns = screen.getAllByTestId("chat-column");
     expect(columns.length).toBeGreaterThan(0);
     for (const column of columns) {
       expect(column).toHaveClass("xl:w-4/5");
@@ -1884,7 +1914,11 @@ describe("loading", () => {
     it("holds the skeleton, drawing the composer rather than the read-only notice", () => {
       renderChat();
 
-      expect(loadingSkeleton()?.querySelector(".border-input")).toBeTruthy();
+      expect(
+        within(
+          screen.getByRole("status", { name: "Loading chat" }),
+        ).getByTestId("composer-skeleton"),
+      ).toBeInTheDocument();
       expect(composer()).not.toBeInTheDocument();
       expect(screen.queryByText(/Read-only mode/)).not.toBeInTheDocument();
     });

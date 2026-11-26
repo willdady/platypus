@@ -74,7 +74,7 @@ function renderPicker({
   };
 
   render(<Harness />);
-  const textarea = screen.getByRole("combobox") as HTMLTextAreaElement;
+  const textarea = screen.getByRole<HTMLTextAreaElement>("combobox");
   return { textarea, onSubmit };
 }
 

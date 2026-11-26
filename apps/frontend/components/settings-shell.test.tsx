@@ -22,27 +22,27 @@ describe("SettingsColumns", () => {
   });
 
   it("maps the wide column and menu widths", () => {
-    const { container } = render(
+    render(
       <SettingsColumns menu={<nav />} columnWidth="wide" menuWidth="wide">
         <p>content</p>
       </SettingsColumns>,
     );
 
-    expect(container.querySelector(".max-w-5xl")).toBeInTheDocument();
-    expect(container.querySelector(".md\\:w-64")).toBeInTheDocument();
-    expect(container.querySelector(".md\\:ml-64")).toBeInTheDocument();
+    expect(screen.getByTestId("settings-columns")).toHaveClass("max-w-5xl");
+    expect(screen.getByTestId("settings-menu")).toHaveClass("md:w-64");
+    expect(screen.getByTestId("settings-content")).toHaveClass("md:ml-64");
   });
 
   it("maps the narrow column and menu widths", () => {
-    const { container } = render(
+    render(
       <SettingsColumns menu={<nav />} columnWidth="narrow">
         <p>content</p>
       </SettingsColumns>,
     );
 
-    expect(container.querySelector(".max-w-3xl")).toBeInTheDocument();
-    expect(container.querySelector(".md\\:w-48")).toBeInTheDocument();
-    expect(container.querySelector(".md\\:ml-48")).toBeInTheDocument();
+    expect(screen.getByTestId("settings-columns")).toHaveClass("max-w-3xl");
+    expect(screen.getByTestId("settings-menu")).toHaveClass("md:w-48");
+    expect(screen.getByTestId("settings-content")).toHaveClass("md:ml-48");
   });
 });
 

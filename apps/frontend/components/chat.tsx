@@ -602,6 +602,7 @@ export function Chat({
                   "flex flex-col gap-4",
                   chatColumnClass(artifactPanelOpen),
                 )}
+                data-testid="chat-column"
               >
                 {chatData?.a2aClientName && (
                   <p className="text-center text-xs text-muted-foreground">
@@ -678,6 +679,7 @@ export function Chat({
                 "relative min-w-0",
                 chatColumnClass(artifactPanelOpen),
               )}
+              data-testid="chat-column"
             >
               {isRecoveringRun && <ChatReconnectingNotice />}
               {(summarisingStatus || compacting) && (

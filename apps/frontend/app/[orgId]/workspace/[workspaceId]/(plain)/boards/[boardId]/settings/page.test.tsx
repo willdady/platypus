@@ -32,7 +32,8 @@ import BoardSettingsPage from "./page";
 const BOARD = "http://test/organizations/org1/workspaces/ws1/boards/b1";
 
 async function renderPage() {
-  await act(async () => {
+  // why: use() suspends on the params Promise, so the render must settle in an async act
+  function mountPage() {
     render(
       <Suspense>
         <BoardSettingsPage
@@ -44,6 +45,9 @@ async function renderPage() {
         />
       </Suspense>,
     );
+  }
+  await act(async () => {
+    mountPage();
   });
 }
 

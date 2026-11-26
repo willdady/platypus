@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth, useAuthClient } from "@/components/auth-provider";
 import { useSignUpOpen } from "@/hooks/use-sign-up-open";
+import { useInitialFocus } from "@/hooks/use-initial-focus";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
@@ -22,6 +23,7 @@ export default function SignInPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const emailInput = useInitialFocus<HTMLInputElement>();
 
   useEffect(() => {
     if (user) router.replace(signInDestination(window.location.search));
@@ -75,11 +77,11 @@ export default function SignInPage() {
             <Label htmlFor="email">Email</Label>
             <Input
               id="email"
+              ref={emailInput}
               type="email"
               placeholder="you@example.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              autoFocus
               required
             />
           </div>

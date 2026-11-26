@@ -23,7 +23,7 @@ export function OrgSettingsMenu({
           >
             {organizationName}
           </h2>
-          <SidebarSeparator className="mx-0 my-1" />
+          <SidebarSeparator className="mx-0 my-1" decorative={false} />
         </>
       )}
     </SettingsNavMenu>

@@ -18,7 +18,7 @@ describe("MessageResponse code-block copy over plain HTTP", () => {
     let copied = "";
     Object.defineProperty(document, "execCommand", {
       value: vi.fn(() => {
-        copied = (document.activeElement as HTMLTextAreaElement).value;
+        copied = screen.getByRole<HTMLTextAreaElement>("textbox").value;
         return true;
       }),
       configurable: true,

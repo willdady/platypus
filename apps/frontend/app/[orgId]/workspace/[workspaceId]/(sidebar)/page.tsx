@@ -126,7 +126,7 @@ function WorkspaceSkeleton() {
         </div>
       </div>
 
-      <Separator />
+      <Separator decorative={false} />
 
       <CollapsibleSectionSkeleton
         storageKey={SECTION_KEYS.skills}
@@ -137,7 +137,7 @@ function WorkspaceSkeleton() {
         <ButtonRowSkeleton widths={["w-32"]} />
       </CollapsibleSectionSkeleton>
 
-      <Separator />
+      <Separator decorative={false} />
 
       <CollapsibleSectionSkeleton
         storageKey={SECTION_KEYS.triggers}
@@ -338,7 +338,12 @@ function Workspace() {
           </div>
           <div className="hidden lg:grid gap-4 grid-cols-5">
             {stats.map((stat) => (
-              <Card key={stat.label} className="gap-2 py-4">
+              <Card
+                key={stat.label}
+                role="group"
+                aria-label={stat.label}
+                className="gap-2 py-4"
+              >
                 <CardHeader className="flex flex-row items-center justify-between pb-0 px-4">
                   <CardTitle className="text-sm font-medium">
                     {stat.label}
