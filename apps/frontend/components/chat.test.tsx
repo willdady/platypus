@@ -90,6 +90,7 @@ function rendersOf(messageId: string) {
 }
 
 let lastChatMessageProps: null | {
+  status: string;
   onMessageDelete: (messageId: string) => void;
   onRegenerate?: (messageId: string) => void;
   onSwitchAlternative: (fromId: string, toId: string) => void;
@@ -267,6 +268,7 @@ vi.mock("@/components/ai-elements/prompt-input", () => ({
 vi.mock("./chat-message", () => ({
   ChatMessage: memo(function ChatMessageStub({
     message,
+    status,
     editor,
     onEditStart,
     onMessageDelete,
@@ -279,6 +281,7 @@ vi.mock("./chat-message", () => ({
     onOpenArtifact,
   }: {
     message: PlatypusUIMessage;
+    status: string;
     editor?: React.ReactNode;
     onEditStart: (messageId: string) => void;
     onMessageDelete: (messageId: string) => void;
@@ -292,6 +295,7 @@ vi.mock("./chat-message", () => ({
   }) {
     chatMessageRendered(message.id);
     recordChatMessageProps({
+      status,
       onMessageDelete,
       onRegenerate,
       onSwitchAlternative,
@@ -1272,6 +1276,14 @@ describe("holding the composer", () => {
     renderChat();
 
     expect(screen.getByPlaceholderText("Run in progress…")).toBeDisabled();
+  });
+
+  it("keeps the reply in flight for a tab that arrived mid-run", () => {
+    harness.data.set(`/chat/${CHAT_ID}`, { status: "running", messages: [] });
+    harness.turn.messages = [message("u1", "hi"), message("a2", "partial")];
+    renderChat();
+
+    expect(lastChatMessageProps!.status).toBe("streaming");
   });
 
   it("releases it once the run is over, with no failure on the button", () => {
