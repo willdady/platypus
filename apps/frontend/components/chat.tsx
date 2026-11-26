@@ -618,7 +618,7 @@ export function Chat({
                     <ChatMessage
                       message={message}
                       isLastMessage={messageIndex === messages.length - 1}
-                      status={status}
+                      status={effectiveStatus}
                       canSendMessages={canSendMessages}
                       editor={
                         editing?.messageId === message.id ? (
