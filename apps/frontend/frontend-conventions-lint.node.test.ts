@@ -9,6 +9,9 @@ const APP_ROOT = import.meta.dirname;
 
 const PROBE_FILE = path.join(APP_ROOT, "components", "plugins-list.tsx");
 
+const RAW_WRITE_MESSAGE =
+  "Writes go through writeEntity()/writeAt() in lib/api-write.ts, not a raw fetch() — see ADR-0010 and #563.";
+
 const PROBES = [
   {
     name: "a hand-drawn Disabled badge",
@@ -88,8 +91,7 @@ export async function RawWriteProbe() {
   await fetch("/organizations/org1/agents", { method: "POST" });
 }
 `,
-    message:
-      "Writes go through writeEntity()/writeAt() in lib/api-write.ts, not a raw fetch() — see ADR-0010 and #563.",
+    message: RAW_WRITE_MESSAGE,
   },
 ] as const;
 
@@ -180,6 +182,11 @@ const EXEMPT_LEGITIMATE_USES = [
   },
 ] as const;
 
+const FORMERLY_RAW_WRITE_EXEMPT = [
+  "components/agent-form.tsx",
+  "hooks/use-shared-resource-actions.ts",
+] as const;
+
 function conventionMessages(result: LintResult) {
   return result.messages.filter(
     (message) => message.ruleId === "no-restricted-syntax",
@@ -207,6 +214,13 @@ describe("frontend convention lint rules", () => {
     fileResults = await eslint.lintFiles(realFiles);
   }, 120_000);
 
+  async function configuredRules(file: string): Promise<string> {
+    const config = (await eslint.calculateConfigForFile(
+      path.join(APP_ROOT, file),
+    )) as unknown as { rules?: Record<string, unknown> };
+    return JSON.stringify(config.rules?.["no-restricted-syntax"] ?? "");
+  }
+
   it.each(PROBES)(
     "fails $name with the primitive's message",
     async ({ source, message }) => {
@@ -218,6 +232,19 @@ describe("frontend convention lint rules", () => {
       ]);
     },
   );
+
+  it.each(FORMERLY_RAW_WRITE_EXEMPT)(
+    "no longer exempts %s from the raw-write rule",
+    async (file) => {
+      const rules = await configuredRules(file);
+      expect(rules).toContain(RAW_WRITE_MESSAGE);
+    },
+  );
+
+  it("keeps the write helper itself exempt from the raw-write rule", async () => {
+    const rules = await configuredRules("lib/api-write.ts");
+    expect(rules).not.toContain(RAW_WRITE_MESSAGE);
+  });
 
   it.each(EXEMPT_PRIMITIVES)(
     "leaves $file exempt from its own rule",

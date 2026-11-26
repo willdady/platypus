@@ -4,12 +4,11 @@ import { useBackendUrl } from "@/components/auth-provider";
 import {
   attachmentsEntity,
   detachResource,
-  errorMessage,
-  scopedPath,
   scopedUrl,
+  writeAt,
   type Scope,
 } from "@/lib/api-write";
-import { fetcher, joinUrl } from "@/lib/utils";
+import { fetcher } from "@/lib/utils";
 import { toast } from "sonner";
 import { useDeleteFlow, type DeleteFlow } from "@/hooks/use-delete-flow";
 
@@ -102,29 +101,16 @@ export function usePromoteShared<T extends NamedResource>({
     setError(null);
     setBlockers([]);
     try {
-      // why: raw fetch, not writeEntity, because the 422 carries a blockers array
-      let response: Response;
-      try {
-        response = await fetch(
-          joinUrl(
-            backendUrl,
-            `${scopedPath(entity, scope)}/${selected.id}/promote`,
-          ),
-          { method: "POST", credentials: "include" },
-        );
-      } catch {
-        setError("Network request failed");
-        return;
-      }
-      if (response.ok) {
+      const outcome = await writeAt(
+        scopedUrl(backendUrl, `${entity}/${selected.id}/promote`, scope),
+        { method: "POST" },
+      );
+      if (outcome.outcome === "success") {
         await mutate();
         setSelected(null);
       } else {
-        const body: unknown = await response.json().catch(() => null);
-        setBlockers(parseBlockers(body));
-        setError(
-          errorMessage(body) ?? (response.statusText || "Failed to promote."),
-        );
+        setBlockers(parseBlockers(outcome.body));
+        setError(outcome.message);
       }
     } finally {
       setPromoting(false);
