@@ -2,8 +2,6 @@
 
 import { useState } from "react";
 import type { KanbanLabel } from "@platypus/schemas";
-import { readableTextColor } from "@/lib/color";
-import { cn } from "@/lib/utils";
 import { useMutation } from "@/hooks/use-mutation";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,7 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Badge } from "@/components/ui/badge";
+import { KanbanLabelToggles } from "@/components/kanban-label-toggles";
 import { FormTextField } from "@/components/form-text-field";
 
 // why: each dialog unmounts when closed, so its inputs reset without an effect
@@ -104,40 +102,26 @@ export function AddCardDialog({
               autoFocus
             />
             {labels.length > 0 && (
-              <div role="group" aria-labelledby="new-card-labels-label">
+              <div>
                 <p
                   id="new-card-labels-label"
                   className="flex items-center gap-2 text-sm leading-none font-medium"
                 >
                   Labels
                 </p>
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                  {labels.map((label) => {
-                    const isActive = labelIds.includes(label.id);
-                    return (
-                      <Badge
-                        key={label.id}
-                        className={cn(
-                          "cursor-pointer transition-opacity border-0",
-                          !isActive && "opacity-40",
-                        )}
-                        style={{
-                          backgroundColor: label.color,
-                          color: readableTextColor(label.color),
-                        }}
-                        onClick={() =>
-                          setLabelIds((prev) =>
-                            prev.includes(label.id)
-                              ? prev.filter((id) => id !== label.id)
-                              : [...prev, label.id],
-                          )
-                        }
-                      >
-                        {label.name}
-                      </Badge>
-                    );
-                  })}
-                </div>
+                <KanbanLabelToggles
+                  labels={labels}
+                  selectedIds={labelIds}
+                  onToggle={(labelId) =>
+                    setLabelIds((prev) =>
+                      prev.includes(labelId)
+                        ? prev.filter((id) => id !== labelId)
+                        : [...prev, labelId],
+                    )
+                  }
+                  labelledBy="new-card-labels-label"
+                  className="mt-2"
+                />
               </div>
             )}
           </div>
