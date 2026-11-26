@@ -90,13 +90,10 @@ type ReadModelOptions = {
 export const mcpReadModel = (
   row: McpRecord,
   opts: ReadModelOptions,
-): McpResponse => {
-  const model = {
-    ...redactMcpSecrets(sanitizeMcpResponse(row), { reveal: opts.reveal }),
-    scope: opts.scope,
-  };
-  return model as McpResponse;
-};
+): McpResponse => ({
+  ...redactMcpSecrets(sanitizeMcpResponse(row), { reveal: opts.reveal }),
+  scope: opts.scope,
+});
 
 export const providerReadModel = (
   row: typeof providerTable.$inferSelect,
