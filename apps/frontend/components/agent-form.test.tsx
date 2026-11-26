@@ -27,7 +27,11 @@ import {
   stubRejectedSave,
   stubSaveSequence,
 } from "@/test/form-test-harness";
-import { expectSentBodyToMatchSchema, selectOption } from "@/test/test-utils";
+import {
+  expectSentBodyToMatchSchema,
+  fetchInit,
+  selectOption,
+} from "@/test/test-utils";
 
 vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("swr", () => swrMock);
@@ -362,6 +366,9 @@ describe("AgentForm avatar write partial-success handling", () => {
     );
     expect(toastError).toHaveBeenCalledWith("Storage unavailable");
     expect(fetchMock).toHaveBeenCalledTimes(2);
+    const avatarInit = fetchInit(fetchMock, 1);
+    expect(avatarInit.body).toBeInstanceOf(FormData);
+    expect(avatarInit.headers).toBeUndefined();
   });
 
   it("surfaces a toast but still navigates when the avatar delete fails after a successful agent save", async () => {

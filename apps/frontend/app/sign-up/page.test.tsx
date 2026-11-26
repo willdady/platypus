@@ -68,6 +68,39 @@ describe("SignUpPage when an invitation is required", () => {
   });
 });
 
+describe("SignUpPage heading", () => {
+  it("names the page and says what to do while sign-up is open", async () => {
+    stubSignUpAvailability(true);
+
+    renderPage();
+
+    expect(
+      await screen.findByRole("heading", {
+        level: 1,
+        name: "Create an account",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Sign up to get started with Platypus"),
+    ).toBeInTheDocument();
+  });
+
+  it("explains how to join while an invitation is required", async () => {
+    stubSignUpAvailability(false);
+
+    renderPage();
+
+    expect(
+      await screen.findByText(
+        "This deployment does not accept open sign-ups.",
+        {
+          exact: false,
+        },
+      ),
+    ).toBeInTheDocument();
+  });
+});
+
 describe("SignUpPage form", () => {
   const submit = () => {
     fireEvent.change(screen.getByLabelText("Name"), {

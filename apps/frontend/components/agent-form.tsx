@@ -370,17 +370,14 @@ function AgentForm({
       } else if (avatarFile) {
         const avatarFormData = new FormData();
         avatarFormData.append("file", avatarFile);
-        const avatarResponse = await fetch(
+        const avatarOutcome = await writeAt(
           scopedUrl(backendUrl, `agents/${savedAgentId}/avatar`, scope),
-          {
-            method: "POST",
-            body: avatarFormData,
-            credentials: "include",
-          },
+          { method: "POST", data: avatarFormData },
         );
-        if (!avatarResponse.ok) {
-          const body: unknown = await avatarResponse.json().catch(() => null);
-          toast.error(errorMessage(body) ?? "Failed to upload the avatar");
+        if (avatarOutcome.outcome !== "success") {
+          toast.error(
+            errorMessage(avatarOutcome.body) ?? "Failed to upload the avatar",
+          );
         }
       }
 

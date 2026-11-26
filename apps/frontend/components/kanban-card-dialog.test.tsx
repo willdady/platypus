@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
+import userEvent from "@testing-library/user-event";
 import {
   render,
   screen,
@@ -371,6 +372,48 @@ describe("KanbanCardDialog fields across card updates", () => {
       "c1",
       expect.objectContaining({ labelIds: ["l1"] }),
     );
+  });
+
+  it("groups the label toggles under an accessible name", () => {
+    const labels: KanbanLabel[] = [
+      { id: "l1", name: "Bug", color: "#ef4444" },
+      { id: "l2", name: "UI", color: "#3b82f6" },
+    ];
+    render(dialogElement({ labels }));
+
+    expect(screen.getByRole("group", { name: "Labels" })).toBeInTheDocument();
+  });
+
+  it("toggles an unselected label on with Space", async () => {
+    const labels: KanbanLabel[] = [
+      { id: "l1", name: "Bug", color: "#ef4444" },
+      { id: "l2", name: "UI", color: "#3b82f6" },
+    ];
+    render(dialogElement({ labels }));
+    const user = userEvent.setup();
+
+    const toggle = screen.getByRole("button", { name: "Bug" });
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    toggle.focus();
+    await user.keyboard(" ");
+
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("toggles a selected label off with Enter", async () => {
+    const labels: KanbanLabel[] = [
+      { id: "l1", name: "Bug", color: "#ef4444" },
+      { id: "l2", name: "UI", color: "#3b82f6" },
+    ];
+    render(dialogElement({ labels, card: { ...card, labelIds: ["l1"] } }));
+    const user = userEvent.setup();
+
+    const toggle = screen.getByRole("button", { name: "Bug" });
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
+    toggle.focus();
+    await user.keyboard("{Enter}");
+
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
   });
 
   it("leaves a remote Column move alone when saving other edits", () => {

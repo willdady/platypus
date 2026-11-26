@@ -69,6 +69,21 @@ describe("SignInPage sign-up link", () => {
   });
 });
 
+describe("SignInPage heading", () => {
+  it("names the page and says what to do", () => {
+    stubSignUpAvailability(true);
+
+    renderPage();
+
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Sign in to Platypus" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Enter your credentials to continue"),
+    ).toBeInTheDocument();
+  });
+});
+
 describe("SignInPage form", () => {
   beforeEach(() => {
     stubSignUpAvailability(true);

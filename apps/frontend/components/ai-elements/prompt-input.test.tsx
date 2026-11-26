@@ -9,6 +9,8 @@ import {
   PromptInputBody,
   PromptInputSubmit,
   PromptInputTextarea,
+  type PromptInputError,
+  type PromptInputProps,
   type PromptInputMessage,
 } from "./prompt-input";
 
@@ -644,6 +646,86 @@ describe("PromptInput blob-URL lifecycle", () => {
       expect(toast.error).toHaveBeenCalledWith(
         "Couldn't read an attachment. Remove it and try again.",
       ),
+    );
+  });
+});
+
+describe("PromptInput submit failure", () => {
+  const seeded = {
+    type: "file" as const,
+    url: "https://example.com/report.pdf",
+    mediaType: "application/pdf",
+    filename: "report.pdf",
+  };
+
+  const failure: PromptInputError = {
+    code: "submit",
+    message: "Your message couldn't be sent. Try again.",
+  };
+
+  const failingSubmits: [string, PromptInputProps["onSubmit"]][] = [
+    ["a rejected promise", () => Promise.reject(new Error("send failed"))],
+    [
+      "a synchronous throw",
+      () => {
+        throw new Error("send failed");
+      },
+    ],
+  ];
+
+  const renderInput = (
+    onSubmit: PromptInputProps["onSubmit"],
+    onError?: PromptInputProps["onError"],
+  ) =>
+    render(
+      <PromptInput
+        initialAttachments={[seeded]}
+        onError={onError}
+        onSubmit={onSubmit}
+      >
+        <PromptInputAttachments className="w-full">
+          {(attachment) => <PromptInputAttachment data={attachment} />}
+        </PromptInputAttachments>
+        <PromptInputBody>
+          <PromptInputTextarea />
+        </PromptInputBody>
+        <PromptInputSubmit />
+      </PromptInput>,
+    );
+
+  const submit = () =>
+    fireEvent.click(screen.getByRole("button", { name: "Submit" }));
+
+  describe.each(failingSubmits)("with %s", (_, onSubmit) => {
+    it("reports the failure and keeps the attachments", async () => {
+      const onError = vi.fn();
+      renderInput(onSubmit, onError);
+
+      submit();
+
+      await waitFor(() => expect(onError).toHaveBeenCalledWith(failure));
+      expect(screen.getByText("report.pdf")).toBeInTheDocument();
+    });
+
+    it("falls back to a toast when no onError handler is supplied", async () => {
+      renderInput(onSubmit);
+
+      submit();
+
+      await waitFor(() =>
+        expect(toast.error).toHaveBeenCalledWith(failure.message),
+      );
+      expect(screen.getByText("report.pdf")).toBeInTheDocument();
+    });
+  });
+
+  it("clears the attachments after a successful submit", async () => {
+    renderInput(async () => {});
+
+    submit();
+
+    await waitFor(() =>
+      expect(screen.queryByText("report.pdf")).not.toBeInTheDocument(),
     );
   });
 });

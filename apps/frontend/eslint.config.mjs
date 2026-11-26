@@ -56,12 +56,6 @@ const HAND_BUILT_ORG_PATH = {
     "Build backend paths with scopedUrl()/scopedPath() from lib/api-write.ts (or backendPath on the server), not a template literal.",
 };
 
-const RAW_FETCH_EXEMPT = [
-  "lib/api-write.ts",
-  "components/agent-form.tsx",
-  "hooks/use-shared-resource-actions.ts",
-];
-
 const TOP_LEVEL_FUNCTION_DECLARATIONS = {
   selector:
     ":matches(Program, Program > ExportNamedDeclaration) > VariableDeclaration > VariableDeclarator > :matches(ArrowFunctionExpression, FunctionExpression)",
@@ -174,16 +168,9 @@ const eslintConfig = defineConfig([
   },
   {
     files: ["**/*.ts", "**/*.tsx"],
-    ignores: RAW_FETCH_EXEMPT,
-    rules: {
-      "no-restricted-syntax": syntaxRules(),
-    },
-  },
-  {
-    files: RAW_FETCH_EXEMPT,
     ignores: ["lib/api-write.ts"],
     rules: {
-      "no-restricted-syntax": syntaxRules("rawWriteFetch"),
+      "no-restricted-syntax": syntaxRules(),
     },
   },
   {
