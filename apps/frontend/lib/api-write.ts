@@ -170,19 +170,33 @@ export type WriteOutcome<TResult> =
       readonly data: Serialized<TResult>;
       readonly revalidateKeys: readonly string[];
     }
-  | { readonly outcome: "notFound"; readonly message: string }
-  | { readonly outcome: "forbidden"; readonly message: string }
-  | { readonly outcome: "conflict"; readonly message: string }
+  | {
+      readonly outcome: "notFound";
+      readonly message: string;
+      readonly body?: unknown;
+    }
+  | {
+      readonly outcome: "forbidden";
+      readonly message: string;
+      readonly body?: unknown;
+    }
+  | {
+      readonly outcome: "conflict";
+      readonly message: string;
+      readonly body?: unknown;
+    }
   | {
       readonly outcome: "invalid";
       readonly message: string;
       readonly fieldErrors: Record<string, string>;
       readonly files?: string[];
+      readonly body?: unknown;
     }
   | {
       readonly outcome: "error";
       readonly message: string;
       readonly httpStatus?: number;
+      readonly body?: unknown;
     };
 
 export type FormDraft = {
@@ -310,7 +324,10 @@ async function performWrite<TResult, TData>(
   revalidateKeys: readonly string[],
   extraHeaders?: Record<string, string>,
 ): Promise<WriteOutcome<TResult>> {
-  const json = data !== undefined && !(data instanceof Blob);
+  const json =
+    data !== undefined &&
+    !(data instanceof Blob) &&
+    !(data instanceof FormData);
   let response: Response;
   try {
     response = await fetch(url, {
@@ -324,7 +341,7 @@ async function performWrite<TResult, TData>(
           ? undefined
           : json
             ? JSON.stringify(data)
-            : (data as Blob),
+            : (data as Blob | FormData),
     });
   } catch {
     return { outcome: "error", message: "Network request failed" };
@@ -345,16 +362,19 @@ async function performWrite<TResult, TData>(
       return {
         outcome: "notFound",
         message: errorMessage(body) ?? DEFAULT_MESSAGES.notFound,
+        body,
       };
     case 403:
       return {
         outcome: "forbidden",
         message: errorMessage(body) ?? DEFAULT_MESSAGES.forbidden,
+        body,
       };
     case 409:
       return {
         outcome: "conflict",
         message: errorMessage(body) ?? DEFAULT_MESSAGES.conflict,
+        body,
       };
     case 400: {
       const fieldErrors = parseValidationErrors(body);
@@ -368,6 +388,7 @@ async function performWrite<TResult, TData>(
         message,
         fieldErrors,
         ...(files ? { files } : {}),
+        body,
       };
     }
     default:
@@ -376,6 +397,7 @@ async function performWrite<TResult, TData>(
         message:
           (errorMessage(body) ?? response.statusText) || DEFAULT_MESSAGES.error,
         httpStatus: response.status,
+        body,
       };
   }
 }

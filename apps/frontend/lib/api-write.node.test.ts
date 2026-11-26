@@ -12,7 +12,7 @@ import {
   organizationEntity,
   type Serialized,
 } from "./api-write";
-import { jsonResponse } from "@/test/test-utils";
+import { fetchInit, jsonResponse } from "@/test/test-utils";
 
 const BACKEND_URL = "http://localhost:4000";
 
@@ -348,15 +348,17 @@ describe("the attachment writes", () => {
   });
 
   it("maps a refusal through the shared outcome mapping", async () => {
-    respond(403, {
+    const body = {
       error: "This resource is managed at the organization level",
-    });
+    };
+    respond(403, body);
 
     const result = await attachResource(BACKEND_URL, scope, "skill", "s1");
 
     expect(result).toEqual({
       outcome: "forbidden",
       message: "This resource is managed at the organization level",
+      body,
     });
   });
 });
@@ -464,7 +466,11 @@ describe("writeEntity — outcomes", () => {
       "an unmapped status",
       500,
       { error: "Internal Server Error" },
-      { outcome: "error", message: "Internal Server Error", httpStatus: 500 },
+      {
+        outcome: "error",
+        message: "Internal Server Error",
+        httpStatus: 500,
+      },
     ],
   ])("maps a %s", async (_name, status, body, expected) => {
     respond(status, body);
@@ -476,18 +482,19 @@ describe("writeEntity — outcomes", () => {
       { id: "a1", data: { ...agentBody, name: "x" } },
     );
 
-    expect(result).toEqual(expected);
+    expect(result).toEqual({ ...expected, body });
   });
 
   it("maps a 400 with sValidator's issue-array shape to invalid with dot-path field errors", async () => {
-    respond(400, {
+    const body = {
       data: {},
       success: false,
       error: [
         { path: ["modelIds", 1, "alias"], message: "Alias 'dup' duplicates" },
         { path: ["name"], message: "Name is required" },
       ],
-    });
+    };
+    respond(400, body);
 
     const result = await writeEntity(
       BACKEND_URL,
@@ -504,14 +511,16 @@ describe("writeEntity — outcomes", () => {
         modelIds: "Alias 'dup' duplicates",
         name: "Name is required",
       },
+      body,
     });
   });
 
   it("maps a 400 with a files array (FileValidationError) to invalid, carrying the offending files", async () => {
-    respond(400, {
+    const body = {
       error: "Some files could not be processed: scan.pdf",
       files: ["scan.pdf"],
-    });
+    };
+    respond(400, body);
 
     const result = await writeEntity(BACKEND_URL, "attachments", {
       orgId: "org1",
@@ -522,6 +531,7 @@ describe("writeEntity — outcomes", () => {
       message: "Some files could not be processed: scan.pdf",
       fieldErrors: {},
       files: ["scan.pdf"],
+      body,
     });
   });
 
@@ -602,6 +612,21 @@ describe("writeAt", () => {
     expect(init.headers).toBeUndefined();
   });
 
+  it("sends a FormData as the raw multipart body, without setting a content type", async () => {
+    const fetchMock = respond(200);
+    const form = new FormData();
+    form.append("file", new File([new Uint8Array([1, 2])], "a.png"));
+
+    await writeAt(`${BACKEND_URL}/agents/a1/avatar`, {
+      method: "POST",
+      data: form,
+    });
+
+    const init = fetchInit(fetchMock);
+    expect(init.body).toBe(form);
+    expect(init.headers).toBeUndefined();
+  });
+
   it("sends no body for a DELETE", async () => {
     const fetchMock = respond(200);
 
@@ -646,7 +671,8 @@ describe("writeAt", () => {
   });
 
   it("maps outcomes through the same ADR-0010 mapping as writeEntity", async () => {
-    respond(409, { error: "You already have a context for this scope" });
+    const body = { error: "You already have a context for this scope" };
+    respond(409, body);
 
     const result = await writeAt(`${BACKEND_URL}/users/me/contexts`, {
       method: "POST",
@@ -656,6 +682,23 @@ describe("writeAt", () => {
     expect(result).toEqual({
       outcome: "conflict",
       message: "You already have a context for this scope",
+      body,
+    });
+  });
+
+  it("carries a 422's parsed body on the error outcome so the caller can read its blockers", async () => {
+    const blockers = [{ type: "provider", id: "p1", name: "Private" }];
+    respond(422, { error: "Promote blocked", blockers });
+
+    const result = await writeAt(`${BACKEND_URL}/skills/s1/promote`, {
+      method: "POST",
+    });
+
+    expect(result).toEqual({
+      outcome: "error",
+      message: "Promote blocked",
+      httpStatus: 422,
+      body: { error: "Promote blocked", blockers },
     });
   });
 });

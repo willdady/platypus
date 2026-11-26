@@ -118,6 +118,17 @@ export function expectEntryActionVariant(
 
 type SentBodyFetchMock = { mock: { calls: unknown[][] } };
 
+export function fetchInit(
+  fetchMock: SentBodyFetchMock,
+  callIndex = 0,
+): RequestInit {
+  const [, init] = fetchMock.mock.calls.at(callIndex) as unknown as [
+    string,
+    RequestInit,
+  ];
+  return init;
+}
+
 export function expectSentBodyToMatchSchema<T extends z.ZodType>(
   fetchMock: SentBodyFetchMock,
   schema: T,

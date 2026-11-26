@@ -147,6 +147,7 @@ describe("usePromoteShared", () => {
     act(() => result.current.open(skill));
     await act(async () => result.current.confirm());
     expect(result.current.blockers).toHaveLength(1);
+    expect(result.current.error).toBe("Promote blocked");
 
     act(() => result.current.close());
 
