@@ -460,8 +460,6 @@ export type TranscriptSummaryPassInput = {
   signal?: AbortSignal;
   instruction?: string;
   keptTurns?: number;
-  now?: () => Date;
-  generateId?: () => string;
 };
 
 export const takeTranscriptSummary = async (
@@ -478,8 +476,6 @@ export const takeTranscriptSummary = async (
     signal,
     instruction,
     keptTurns = transcriptSummaryKeptTurns(readingSummaryId),
-    now = () => new Date(),
-    generateId = defaultSummaryId,
   } = input;
 
   const { chat: chatModel, task: taskModel } = models;
@@ -555,7 +551,7 @@ export const takeTranscriptSummary = async (
       }
       const anchorId = anchor.id;
       const row: ChatSummaryRow = {
-        id: generateId(),
+        id: defaultSummaryId(),
         chatId,
         anchorId,
         coveredIds: path
@@ -568,7 +564,7 @@ export const takeTranscriptSummary = async (
           outputTokens: result.usage.outputTokens ?? 0,
           triggeredFromOccupancy,
         },
-        createdAt: now(),
+        createdAt: new Date(),
       };
       try {
         await db.insert(chatSummary).values(row);

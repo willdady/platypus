@@ -59,6 +59,7 @@ const sixTurns = (): PlatypusUIMessage[] => [
 const seedSummaryTable = () => seedDb({ chat_summary: [] });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -101,6 +102,8 @@ describe("takeTranscriptSummary", () => {
   });
 
   it("writes exactly one chat_summary row and no chat_message row", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-02-01T00:00:00Z"));
     const fake = seedSummaryTable();
     const row = await takeTranscriptSummary({
       chatId: "chat-1",
@@ -109,12 +112,9 @@ describe("takeTranscriptSummary", () => {
       triggeredFromOccupancy: 8_200,
       previousSummary: undefined,
       readingSummaryId: undefined,
-      now: () => new Date("2026-02-01T00:00:00Z"),
-      generateId: () => "sum-1",
     });
 
     expect(row).toMatchObject({
-      id: "sum-1",
       chatId: "chat-1",
       anchorId: "a2",
       coveredIds: ["u1", "a1", "u2", "a2"],
@@ -126,6 +126,8 @@ describe("takeTranscriptSummary", () => {
         triggeredFromOccupancy: 8_200,
       },
     });
+    expect(row?.id).toMatch(/^sum_/);
+    expect(row?.createdAt).toEqual(new Date("2026-02-01T00:00:00Z"));
     expect(fake.tables.chat_summary).toHaveLength(1);
     expect(
       fake.queries.filter(
