@@ -2336,5 +2336,3 @@ describe("dangling tool calls in the Transcript", () => {
     ]);
   });
 });
-
-void streamResultOf({ usage: undefined });
