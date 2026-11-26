@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { ResourcePage } from "./resource-page";
 
 vi.mock("next/navigation", () => ({
@@ -22,13 +22,13 @@ describe("ResourcePage", () => {
   });
 
   it("defaults to the bare variant with no outer centering wrapper", () => {
-    const { container } = render(
+    render(
       <ResourcePage backFallbackHref="/somewhere" title="Title">
         <div>content</div>
       </ResourcePage>,
     );
 
-    expect(container.firstChild).not.toHaveClass("flex");
+    expect(screen.getByTestId("resource-page")).not.toHaveClass("flex");
   });
 
   it("applies the narrow variant's centered column and mb-4 title spacing", () => {
@@ -62,13 +62,13 @@ describe("ResourcePage", () => {
   });
 
   it("applies the wide variant's w-lg column", () => {
-    const { container } = render(
+    render(
       <ResourcePage backFallbackHref="/somewhere" title="Title" variant="wide">
         <div>content</div>
       </ResourcePage>,
     );
 
-    expect(container.querySelector(".w-lg")).toBeInTheDocument();
+    expect(screen.getByTestId("resource-page")).toHaveClass("w-lg");
   });
 
   it("renders the actions beside the title", () => {
@@ -82,10 +82,13 @@ describe("ResourcePage", () => {
       </ResourcePage>,
     );
 
-    const heading = screen.getByRole("heading", { name: "Edit Thing" });
-    expect(heading.parentElement).toContainElement(
-      screen.getByRole("button", { name: "View runs" }),
-    );
+    const header = screen.getByTestId("page-header");
+    expect(
+      within(header).getByRole("heading", { name: "Edit Thing" }),
+    ).toBeInTheDocument();
+    expect(
+      within(header).getByRole("button", { name: "View runs" }),
+    ).toBeInTheDocument();
   });
 
   it("leaves the title on its own without actions", () => {
@@ -96,6 +99,10 @@ describe("ResourcePage", () => {
     );
 
     const heading = screen.getByRole("heading", { name: "Edit Thing" });
-    expect(heading.previousElementSibling).toHaveTextContent("Back");
+    const back = screen.getByRole("button", { name: /Back/ });
+    expect(
+      back.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(screen.queryByTestId("page-header")).not.toBeInTheDocument();
   });
 });

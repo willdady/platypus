@@ -474,7 +474,7 @@ function McpForm({
             onChange={toFieldChange("name")}
             disabled={isSubmitting}
             error={validationErrors.name}
-            autoFocus
+            initialFocus
           />
 
           <FormTextField

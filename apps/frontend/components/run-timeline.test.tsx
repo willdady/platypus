@@ -30,7 +30,7 @@ function event(over: Partial<RunEvent> & { id: string }): RunEvent {
 
 describe("RunTimeline", () => {
   it("renders one row per event, nested by parent, with its duration", () => {
-    const { container } = render(
+    render(
       <RunTimeline
         events={[
           event({
@@ -63,14 +63,14 @@ describe("RunTimeline", () => {
     expect(screen.getByText("lookup")).toBeInTheDocument();
     expect(screen.getByText("Generating response…")).toBeInTheDocument();
     expect(screen.getByText("250ms")).toBeInTheDocument();
-    const depths = Array.from(container.querySelectorAll("li[data-depth]")).map(
-      (li) => li.getAttribute("data-depth"),
-    );
+    const depths = screen
+      .getAllByRole("listitem")
+      .map((li) => li.getAttribute("data-depth"));
     expect(depths).toEqual(["0", "1", "0"]);
   });
 
   it("labels argument generation for its tool, in its own colour", () => {
-    const { container } = render(
+    render(
       <RunTimeline
         events={[
           event({ id: "i", type: "tool-input", toolName: "delegate" }),
@@ -89,18 +89,17 @@ describe("RunTimeline", () => {
         }),
       ),
     ).toBeInTheDocument();
-    const [input, call] = Array.from(
-      container.querySelectorAll<HTMLElement>('[role="img"]'),
-    );
+    const input = screen.getByRole("img", { name: "tool-input bar" });
+    const call = screen.getByRole("img", { name: "tool-call bar" });
     expect(activityColor["tool-input"].bg).not.toBe(
       activityColor["tool-call"].bg,
     );
-    expect(input.className).toContain(activityColor["tool-input"].bg);
-    expect(call.className).toContain(activityColor["tool-call"].bg);
+    expect(input).toHaveClass(activityColor["tool-input"].bg);
+    expect(call).toHaveClass(activityColor["tool-call"].bg);
   });
 
   it("draws parallel tool calls as overlapping bars", () => {
-    const { container } = render(
+    render(
       <RunTimeline
         events={[
           event({ id: "a", toolName: "a", durationMs: 100 }),
@@ -116,9 +115,7 @@ describe("RunTimeline", () => {
       />,
     );
 
-    const bars = Array.from(
-      container.querySelectorAll<HTMLElement>('[role="img"]'),
-    );
+    const bars = screen.getAllByRole("img", { name: "tool-call bar" });
     expect(bars).toHaveLength(2);
     const [a, b] = bars.map((bar) => ({
       left: parseFloat(bar.style.left),
@@ -129,7 +126,7 @@ describe("RunTimeline", () => {
   });
 
   it("gives a sub-millisecond span a visible minimum width", () => {
-    const { container } = render(
+    render(
       <RunTimeline
         events={[
           event({ id: "tiny", toolName: "tiny", durationMs: 0 }),
@@ -139,15 +136,13 @@ describe("RunTimeline", () => {
       />,
     );
 
-    const [tiny] = Array.from(
-      container.querySelectorAll<HTMLElement>('[role="img"]'),
-    );
+    const [tiny] = screen.getAllByRole("img", { name: "tool-call bar" });
     expect(parseFloat(tiny.style.width)).toBeGreaterThan(0);
-    expect(tiny.className).toContain("min-w-");
+    expect(tiny).toHaveClass(/min-w-/);
   });
 
   it("says an open event under a terminal run has an unknown duration instead of drawing it to now", () => {
-    const { container } = render(
+    render(
       <RunTimeline
         events={[
           event({ id: "done", durationMs: 400 }),
@@ -166,11 +161,13 @@ describe("RunTimeline", () => {
     );
 
     expect(screen.getByText(UNKNOWN_DURATION_LABEL)).toBeInTheDocument();
-    expect(container.querySelectorAll('[role="img"]')).toHaveLength(1);
+    expect(screen.getAllByRole("img", { name: "tool-call bar" })).toHaveLength(
+      1,
+    );
   });
 
   it("draws an open event under a running run to now", () => {
-    const { container } = render(
+    render(
       <RunTimeline
         events={[
           event({
@@ -185,10 +182,8 @@ describe("RunTimeline", () => {
       />,
     );
 
-    const [bar] = Array.from(
-      container.querySelectorAll<HTMLElement>('[role="img"]'),
-    );
-    expect(bar.className).toContain("animate-pulse");
+    const bar = screen.getByRole("img", { name: "tool-call bar" });
+    expect(bar).toHaveClass("animate-pulse");
     expect(screen.queryByText(UNKNOWN_DURATION_LABEL)).not.toBeInTheDocument();
     expect(screen.getByText("running")).toBeInTheDocument();
   });

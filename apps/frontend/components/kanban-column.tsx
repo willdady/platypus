@@ -204,6 +204,8 @@ function SortableKanbanColumn({
     <div
       ref={setNodeRef}
       style={style}
+      role="region"
+      aria-label={column.name}
       className="flex flex-col w-80 min-w-80 shrink-0 bg-muted/50 rounded-lg"
     >
       <ColumnContent
@@ -230,7 +232,11 @@ function KanbanColumnComponentInner(props: KanbanColumnProps) {
   // why: the overlay renders static, so the dnd hooks stay in SortableKanbanColumn
   if (props.overlay) {
     return (
-      <div className="flex flex-col w-80 min-w-80 shrink-0 bg-muted/50 rounded-lg">
+      <div
+        role="region"
+        aria-label={props.column.name}
+        className="flex flex-col w-80 min-w-80 shrink-0 bg-muted/50 rounded-lg"
+      >
         <ColumnContent
           column={props.column}
           labels={props.labels}

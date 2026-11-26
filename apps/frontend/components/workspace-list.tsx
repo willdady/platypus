@@ -45,7 +45,12 @@ function WorkspaceList({
       <LoadingRegion label="Loading workspaces">
         <ItemGroup className={cn("mb-4", className)}>
           {Array.from({ length: 3 }).map((_, i) => (
-            <Item key={i} variant="outline" className="mb-2">
+            <Item
+              key={i}
+              variant="outline"
+              data-testid="workspace-skeleton"
+              className="mb-2"
+            >
               <ItemContent>
                 <ItemTitle>
                   <Skeleton className="size-[18px] shrink-0 rounded" />

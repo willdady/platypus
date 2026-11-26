@@ -42,7 +42,8 @@ describe("useSandboxUploads", () => {
       { path: "a.csv", size: 3 },
       { path: "b.txt", size: 5 },
     ]);
-    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+    const calls = fetchMock.mock.calls as [string, RequestInit][];
+    expect(calls.map(([url]) => url)).toEqual([
       `${FILE_URL}?path=a.csv`,
       `${FILE_URL}?path=b.txt`,
     ]);

@@ -69,6 +69,13 @@ function asOwner(owns: boolean) {
   return Object.assign(authState, { ownsWorkspace: owns });
 }
 
+// why: the option's name includes the avatar's label, so match it in part
+async function selectAgent(name: string) {
+  const user = setupUser();
+  await user.click(screen.getByRole("combobox", { name: "Agent" }));
+  await user.click(screen.getByRole("option", { name }));
+}
+
 beforeEach(() => {
   resetFormHarness();
   asOwner(true);
@@ -93,11 +100,11 @@ describe("A2aEndpointForm", () => {
   it("fills the name and description from the agent picked", async () => {
     render(<A2aEndpointForm orgId="org1" workspaceId="ws1" />);
 
-    await selectOption("Select an agent", "Helper");
+    await selectAgent("Helper");
     expect(screen.getByLabelText("Name")).toHaveValue("Helper");
     expect(screen.getByLabelText("Description")).toHaveValue("Internal");
 
-    await selectOption("Helper", "Scout");
+    await selectAgent("Scout");
     expect(screen.getByLabelText("Name")).toHaveValue("Scout");
     expect(screen.getByLabelText("Description")).toHaveValue("Finds things");
   });
@@ -108,14 +115,14 @@ describe("A2aEndpointForm", () => {
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Acme helpdesk" },
     });
-    await selectOption("Select an agent", "Helper");
+    await selectAgent("Helper");
     expect(screen.getByLabelText("Name")).toHaveValue("Acme helpdesk");
     expect(screen.getByLabelText("Description")).toHaveValue("Internal");
 
     fireEvent.change(screen.getByLabelText("Description"), {
       target: { value: "Ask about your order" },
     });
-    await selectOption("Helper", "Scout");
+    await selectAgent("Scout");
     expect(screen.getByLabelText("Name")).toHaveValue("Acme helpdesk");
     expect(screen.getByLabelText("Description")).toHaveValue(
       "Ask about your order",
@@ -126,7 +133,7 @@ describe("A2aEndpointForm", () => {
     const fetchMock = stubAcceptedSave({ ...endpoint, tokens: undefined });
     render(<A2aEndpointForm orgId="org1" workspaceId="ws1" />);
 
-    await selectOption("Select an agent", "Helper");
+    await selectAgent("Helper");
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() =>
@@ -150,7 +157,7 @@ describe("A2aEndpointForm", () => {
     const fetchMock = stubAcceptedSave({ ...endpoint, tokens: undefined });
     render(<A2aEndpointForm orgId="org1" workspaceId="ws1" />);
 
-    await selectOption("Select an agent", "Helper");
+    await selectAgent("Helper");
     await setupUser().type(screen.getByLabelText("Name"), "{Enter}");
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
@@ -161,9 +168,9 @@ describe("A2aEndpointForm", () => {
 
   it("lands on the token name when opened just after create", async () => {
     window.location.hash = "#access";
-    const original = Element.prototype.scrollIntoView;
-    const scrollIntoView = vi.fn();
-    Element.prototype.scrollIntoView = scrollIntoView;
+    const scrollIntoView = vi
+      .spyOn(Element.prototype, "scrollIntoView")
+      .mockImplementation(() => {});
     try {
       setDataFor("/a2a-endpoints/ep-1", endpoint);
       render(
@@ -176,7 +183,7 @@ describe("A2aEndpointForm", () => {
       expect(scrollIntoView).toHaveBeenCalled();
       expect(window.location.hash).toBe("");
     } finally {
-      Element.prototype.scrollIntoView = original;
+      scrollIntoView.mockRestore();
       window.location.hash = "";
     }
   });
@@ -254,7 +261,10 @@ describe("A2aEndpointForm", () => {
     );
 
     expect(screen.getByText("Expiring soon")).toBeInTheDocument();
-    const row = screen.getByText("Hermes").closest("li");
+    const row = screen
+      .getAllByRole("listitem")
+      .find((item) => within(item).queryByText("Hermes"));
+    if (!row) throw new Error('No token row for "Hermes"');
     expect(row).toHaveTextContent(/Expires: .*2026/);
     expect(row).toHaveTextContent(/Last used: Never/);
     expect(row).toHaveTextContent(/Last rejected: .*2026/);

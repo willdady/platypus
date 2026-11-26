@@ -256,7 +256,11 @@ export function AppSidebar() {
                   // why: a disabled button fires no pointer or focus events, so the span opens it
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span tabIndex={0} className="block">
+                      <span
+                        tabIndex={0}
+                        data-testid="new-chat-hint"
+                        className="block"
+                      >
                         <Button disabled className="w-full">
                           <BotMessageSquare /> New chat
                         </Button>

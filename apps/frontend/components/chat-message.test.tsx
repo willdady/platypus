@@ -1,11 +1,5 @@
 import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
-import {
-  render,
-  screen,
-  fireEvent,
-  waitFor,
-  within,
-} from "@testing-library/react";
+import { render, screen, fireEvent, within } from "@testing-library/react";
 import {
   WEB_TOOL_NORMALIZED_KEY,
   type Agent,
@@ -110,7 +104,7 @@ describe("ChatMessage agent attribution", () => {
   });
 
   it("names the agent once per message, not on every part's avatar", () => {
-    const { container } = renderMessage({
+    renderMessage({
       ...assistantMessage({ agentId: "agent-1" }),
       parts: [
         { type: "text", text: "First" },
@@ -119,34 +113,28 @@ describe("ChatMessage agent attribution", () => {
     });
 
     expect(screen.getAllByAltText("Research Agent")).toHaveLength(1);
-    expect(
-      container.querySelectorAll('img[src="https://example.com/agent-1.png"]'),
-    ).toHaveLength(2);
+    expect(screen.getAllByAltText("")).toHaveLength(1);
   });
 
   it("shows the fallback when the agent image fails to load", async () => {
-    const { container } = renderMessage(
-      assistantMessage({ agentId: "agent-1" }),
-      { agents: [makeAgent({ avatarUrl: "https://example.com/broken.png" })] },
-    );
+    renderMessage(assistantMessage({ agentId: "agent-1" }), {
+      agents: [makeAgent({ avatarUrl: "https://example.com/broken.png" })],
+    });
 
-    await waitFor(() =>
-      expect(
-        container.querySelector('[data-slot="avatar-fallback"]'),
-      ).toBeInTheDocument(),
-    );
+    expect(
+      await screen.findByRole("img", { name: "Research Agent avatar" }),
+    ).toBeInTheDocument();
     expect(screen.queryByAltText("Research Agent")).not.toBeInTheDocument();
   });
 
   it("shows the fallback for a resolved agent with no avatar URL", () => {
-    const { container } = renderMessage(
-      assistantMessage({ agentId: "agent-1" }),
-      { agents: [makeAgent({ avatarUrl: undefined })] },
-    );
+    renderMessage(assistantMessage({ agentId: "agent-1" }), {
+      agents: [makeAgent({ avatarUrl: undefined })],
+    });
 
     expect(
-      container.querySelector('[data-slot="avatar-fallback"] svg'),
-    ).not.toBeNull();
+      screen.getByRole("img", { name: "Research Agent avatar" }),
+    ).toBeInTheDocument();
     expect(screen.queryByAltText("Research Agent")).not.toBeInTheDocument();
   });
 
@@ -154,12 +142,12 @@ describe("ChatMessage agent attribution", () => {
     ["a run with no attribution", undefined],
     ["an agentId that resolves to no agent", { agentId: "gone" }],
   ] as const)("falls back to the generic bot avatar for %s", (_, metadata) => {
-    const { container } = renderMessage(assistantMessage(metadata));
+    renderMessage(assistantMessage(metadata));
 
     expect(screen.queryByAltText("Research Agent")).not.toBeInTheDocument();
     expect(
-      container.querySelector('[data-slot="avatar-fallback"] svg'),
-    ).not.toBeNull();
+      screen.getByRole("img", { name: "Assistant avatar" }),
+    ).toBeInTheDocument();
   });
 });
 
@@ -257,7 +245,7 @@ describe("ChatMessage image parts", () => {
   });
 
   it("falls back to a file attachment for an image media type with no URL", () => {
-    const { container } = renderMessage(
+    renderMessage(
       userMessageWithFilePart({
         type: "file",
         mediaType: "image/png",
@@ -266,13 +254,13 @@ describe("ChatMessage image parts", () => {
       }),
     );
 
-    expect(container.querySelector("img")).toBeNull();
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
   });
 });
 
 describe("ChatMessage Sandbox upload parts", () => {
   it("shows the upload's path and size, with no download link", () => {
-    const { container } = renderMessage({
+    renderMessage({
       id: "m1",
       role: "user",
       parts: [
@@ -284,10 +272,12 @@ describe("ChatMessage Sandbox upload parts", () => {
       ],
     });
 
-    const chip = screen.getByText("Sandbox").parentElement!;
+    const chip = screen.getByRole("group", {
+      name: "Sandbox upload data.csv",
+    });
     expect(chip).toHaveTextContent("data.csv");
     expect(chip).toHaveTextContent("1.2 MB");
-    expect(container.querySelector("a")).toBeNull();
+    expect(within(chip).queryByRole("link")).not.toBeInTheDocument();
   });
 });
 
@@ -362,8 +352,9 @@ describe("ChatMessage sources from a Web-search backend", () => {
     expect(screen.queryByText("Evil")).not.toBeInTheDocument();
     expect(screen.queryByText("Data")).not.toBeInTheDocument();
     expect(screen.getByText("Fine")).toBeInTheDocument();
-    expect(document.querySelector('a[href^="javascript:"]')).toBeNull();
-    expect(document.querySelector('a[href^="data:"]')).toBeNull();
+    for (const link of screen.queryAllByRole("link")) {
+      expect(link).not.toHaveAttribute("href", /^(javascript|data):/);
+    }
   });
 
   it("counts only the results it will render", () => {
@@ -1350,11 +1341,11 @@ describe("ChatMessage Alternatives", () => {
   });
 
   it("never calls them versions or branches", () => {
-    const { container } = renderMessage(assistantMessage(), {
+    renderMessage(assistantMessage(), {
       alternatives: first,
     });
 
-    expect(container.innerHTML).not.toMatch(/version|branch/i);
+    expect(screen.queryByText(/version|branch/i)).not.toBeInTheDocument();
   });
 
   it("shows no arrows to a reader", () => {

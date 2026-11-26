@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { Suspense } from "react";
 import type { TriggerRunStats, TriggerRunWithTrigger } from "@platypus/schemas";
 
@@ -121,7 +127,8 @@ function run(
 }
 
 async function renderPage() {
-  await act(async () => {
+  // why: use() suspends on the params Promise, so the render must settle in an async act
+  function mountPage() {
     render(
       <Suspense>
         <TriggerRunsPage
@@ -129,6 +136,9 @@ async function renderPage() {
         />
       </Suspense>,
     );
+  }
+  await act(async () => {
+    mountPage();
   });
   await screen.findByRole("heading", { name: "Trigger runs" });
 }
@@ -159,11 +169,10 @@ describe("Trigger runs list", () => {
       }),
     ]);
 
-    expect(screen.getByText("Nightly digest").closest("a")).toHaveAttribute(
-      "href",
-      "/org-1/workspace/ws-1/trigger-runs/run-1",
-    );
-    expect(screen.getByText("Card watcher").closest("a")).toHaveAttribute(
+    expect(
+      screen.getByRole("link", { name: /Nightly digest/ }),
+    ).toHaveAttribute("href", "/org-1/workspace/ws-1/trigger-runs/run-1");
+    expect(screen.getByRole("link", { name: /Card watcher/ })).toHaveAttribute(
       "href",
       "/org-1/workspace/ws-1/trigger-runs/run-2",
     );
@@ -344,9 +353,7 @@ describe("Trigger runs empty states", () => {
     window.history.replaceState(null, "", "?status=failed&triggerId=trigger-1");
     await renderRuns([]);
 
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
-    });
+    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
 
     expect(window.location.search).toBe("");
     expect(replaceSpy).not.toHaveBeenCalled();
@@ -377,9 +384,7 @@ describe("Trigger runs paging", () => {
   it("asks for the next page and keeps the loaded ones", async () => {
     await renderRuns(fullPage);
 
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Load more" }));
-    });
+    fireEvent.click(screen.getByRole("button", { name: "Load more" }));
 
     expect(state.setSize).toHaveBeenCalled();
     const nextSize = state.setSize.mock.calls[0][0] as
@@ -443,8 +448,9 @@ describe("Trigger runs suppression", () => {
       run({ status: "suppressed", stats: null, completedAt: null }),
     ]);
 
-    const name = screen.getByText("Nightly digest");
-    expect(name.closest("a")).toBeNull();
+    expect(
+      screen.queryByRole("link", { name: /Nightly digest/ }),
+    ).not.toBeInTheDocument();
     await openDropdownMenu();
     expect(
       screen.getAllByRole("menuitem").map((item) => item.textContent?.trim()),
@@ -613,11 +619,9 @@ describe("Trigger runs copy-run-id control", () => {
 
     await openDropdownMenu();
     stubClipboard();
-    await act(async () => {
-      fireEvent.click(screen.getByRole("menuitem", { name: "Copy run id" }));
-    });
+    fireEvent.click(screen.getByRole("menuitem", { name: "Copy run id" }));
 
-    expect(writeText).toHaveBeenCalledWith("run-1");
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith("run-1"));
     expect(toastSuccessSpy).toHaveBeenCalledWith("Copied to clipboard");
   });
 
@@ -631,10 +635,10 @@ describe("Trigger runs copy-run-id control", () => {
 
     await openDropdownMenu();
     stubClipboard();
-    await act(async () => {
-      fireEvent.click(screen.getByRole("menuitem", { name: "Copy run id" }));
-    });
+    fireEvent.click(screen.getByRole("menuitem", { name: "Copy run id" }));
 
-    expect(toastErrorSpy).toHaveBeenCalledWith("Failed to copy to clipboard");
+    await waitFor(() =>
+      expect(toastErrorSpy).toHaveBeenCalledWith("Failed to copy to clipboard"),
+    );
   });
 });

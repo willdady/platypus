@@ -118,7 +118,7 @@ describe("ContextsPage saving the global context", () => {
     await waitFor(() =>
       expect(toastSuccess).toHaveBeenCalledWith("Global context saved"),
     );
-    const [url, init] = fetchMock.mock.calls[0];
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("http://test/users/me/contexts/ctx1");
     expect(init).toMatchObject({ method: "PUT" });
     expect(expectSentBodyToMatchSchema(fetchMock, contextUpdateSchema)).toEqual(
@@ -139,7 +139,7 @@ describe("ContextsPage saving the global context", () => {
     await waitFor(() =>
       expect(toastSuccess).toHaveBeenCalledWith("Global context saved"),
     );
-    const [url, init] = fetchMock.mock.calls[0];
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("http://test/users/me/contexts");
     expect(init).toMatchObject({ method: "POST" });
     expect(expectSentBodyToMatchSchema(fetchMock, contextCreateSchema)).toEqual(

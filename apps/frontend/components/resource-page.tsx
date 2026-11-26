@@ -45,7 +45,7 @@ export function ResourcePage({
   const layout = resourcePageLayout[variant];
 
   const inner = (
-    <div className={layout.inner}>
+    <div data-testid="resource-page" className={layout.inner}>
       {backFallbackHref && (
         <BackButton fallbackHref={backFallbackHref} className={layout.back} />
       )}

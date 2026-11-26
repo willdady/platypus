@@ -116,7 +116,7 @@ export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
               onChange={toFieldChange("email")}
               disabled={isSubmitting}
               error={validationErrors.email}
-              autoFocus
+              initialFocus
               required
             />
 

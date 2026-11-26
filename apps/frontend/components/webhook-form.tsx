@@ -289,7 +289,7 @@ function WebhookForm({ orgId, workspaceId, webhookId }: WebhookFormProps) {
             disabled={isSubmitting}
             error={validationErrors.name}
             maxLength={WEBHOOK_NAME_MAX_LENGTH}
-            autoFocus
+            initialFocus
           />
 
           <FormTextField

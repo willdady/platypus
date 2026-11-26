@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { act, fireEvent, screen, within } from "@testing-library/react";
+import { fireEvent, screen, within } from "@testing-library/react";
 import {
   authMock,
   mockScopedSWR,
@@ -18,9 +18,7 @@ import { CommandMenu } from "./command-menu";
 
 async function openMenu() {
   await renderList(<CommandMenu orgId="org1" workspaceId="ws1" />);
-  act(() => {
-    fireEvent.keyDown(document, { key: "k", metaKey: true });
-  });
+  fireEvent.keyDown(document, { key: "k", metaKey: true });
 }
 
 beforeEach(() => {

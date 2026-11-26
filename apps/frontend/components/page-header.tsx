@@ -25,7 +25,10 @@ export function PageHeader({
   return (
     <>
       {actions ? (
-        <div className="flex items-start justify-between gap-4">
+        <div
+          data-testid="page-header"
+          className="flex items-start justify-between gap-4"
+        >
           {heading}
           <div className="flex shrink-0 items-center gap-2">{actions}</div>
         </div>

@@ -198,7 +198,7 @@ function WorkspaceForm({ orgId, workspaceId }: WorkspaceFormProps) {
               onChange={toFieldChange("name")}
               disabled={isSubmitting}
               error={validationErrors.name}
-              autoFocus
+              initialFocus
             />
 
             <ExpandableTextarea

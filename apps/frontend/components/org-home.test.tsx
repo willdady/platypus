@@ -3,10 +3,16 @@ import { render, screen } from "@testing-library/react";
 import type { Actor, OrgRole } from "@/lib/authorization";
 import { expectEntryActionVariant } from "@/test/test-utils";
 
-const auth = vi.hoisted(() => ({
-  actor: "org-member" as Actor,
-  orgMembership: { role: "member" } as { role: OrgRole } | null,
-}));
+const auth = vi.hoisted(() => {
+  const auth: {
+    actor: Actor;
+    orgMembership: { role: OrgRole } | null;
+  } = {
+    actor: "org-member",
+    orgMembership: { role: "member" },
+  };
+  return auth;
+});
 const reads = vi.hoisted(() => ({ workspaces: [] as unknown[] }));
 
 vi.mock("next/navigation", () => ({

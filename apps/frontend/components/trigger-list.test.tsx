@@ -641,9 +641,7 @@ describe("TriggerList filters in the URL", () => {
     await act(async () => {
       await selectOption("All types", "Cron");
     });
-    await act(async () => {
-      screen.getByRole("switch", { name: "Show fired" }).click();
-    });
+    fireEvent.click(screen.getByRole("switch", { name: "Show fired" }));
     expect(window.location.search).toBe(
       "?triggerType=cron&triggerShowFired=true",
     );
@@ -651,9 +649,7 @@ describe("TriggerList filters in the URL", () => {
     await act(async () => {
       await selectOption("Cron", "All types");
     });
-    await act(async () => {
-      screen.getByRole("switch", { name: "Show fired" }).click();
-    });
+    fireEvent.click(screen.getByRole("switch", { name: "Show fired" }));
     expect(window.location.search).toBe("");
     expect(pushState).not.toHaveBeenCalled();
   });
@@ -703,11 +699,6 @@ describe("TriggerList last run", () => {
       ...trigger,
     }) as unknown as Trigger;
 
-  const lastRunLine = (name: string) =>
-    within(screen.getByText(name).closest("li") as HTMLElement).queryByText(
-      "Last run:",
-    )?.parentElement ?? null;
-
   it("shows every type's last run status and when it started", async () => {
     await renderTriggers([
       ran({ ...cronTrigger }),
@@ -737,11 +728,13 @@ describe("TriggerList last run", () => {
       ["Card watcher", "Failed"],
       ["Ready for AI", "Running"],
     ]) {
-      const line = lastRunLine(name) as HTMLElement;
+      const card = screen.getByRole("link", { name: new RegExp(name) });
       expect(
-        within(line).getByRole("img", { name: label }),
+        within(card).getByRole("img", { name: label }),
       ).toBeInTheDocument();
-      expect(line).toHaveTextContent(`relative:${startedAt}`);
+      expect(
+        within(card).getByText(`relative:${startedAt}`),
+      ).toBeInTheDocument();
     }
     expect(screen.getAllByTitle(`formatted:${startedAt}`)).toHaveLength(3);
   });
@@ -768,16 +761,15 @@ describe("TriggerList last run", () => {
       ),
     ]);
 
-    await act(async () => {
-      screen.getByRole("switch", { name: "Show fired" }).click();
-    });
+    fireEvent.click(screen.getByRole("switch", { name: "Show fired" }));
 
     expect(screen.getByText("Fired")).toBeInTheDocument();
     expect(screen.getAllByRole("img", { name: "Failed" })).toHaveLength(1);
     expect(
-      within(lastRunLine("Nightly job") as HTMLElement).getByRole("img", {
-        name: "Failed",
-      }),
+      within(screen.getByRole("link", { name: /Nightly job/ })).getByRole(
+        "img",
+        { name: "Failed" },
+      ),
     ).toBeInTheDocument();
   });
 
@@ -786,9 +778,10 @@ describe("TriggerList last run", () => {
 
     expect(screen.getByText("Disabled")).toBeInTheDocument();
     expect(
-      within(lastRunLine("Nightly job") as HTMLElement).getByRole("img", {
-        name: "Failed",
-      }),
+      within(screen.getByRole("link", { name: /Nightly job/ })).getByRole(
+        "img",
+        { name: "Failed" },
+      ),
     ).toBeInTheDocument();
   });
 });

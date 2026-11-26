@@ -34,7 +34,8 @@ describe("ContextsList", () => {
     mockScopedSWR({ contexts: [workspaceContext] }, { strict: true });
     await renderList(<ContextsList />);
 
-    expect(screen.getByText("Engineering").closest("a")).toHaveAttribute(
+    expect(screen.getByText("Engineering")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Engineering/ })).toHaveAttribute(
       "href",
       "/settings/contexts/ctx1",
     );
@@ -142,7 +143,8 @@ describe("WorkspaceList", () => {
       .getAllByRole("link")
       .map((link) => link.textContent?.trim());
     expect(names).toEqual(["Delivery", "Research"]);
-    expect(screen.getByText("Delivery").closest("a")).toHaveAttribute(
+    expect(screen.getByText("Delivery")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Delivery/ })).toHaveAttribute(
       "href",
       "/org1/workspace/ws1",
     );
@@ -150,24 +152,22 @@ describe("WorkspaceList", () => {
 
   it("renders no rows and no skeletons when the organization has none", async () => {
     mockScopedSWR({ workspaces: [] }, { strict: true });
-    const { container } = await renderList(<WorkspaceList orgId="org1" />);
+    await renderList(<WorkspaceList orgId="org1" />);
 
     expect(screen.queryAllByRole("link")).toHaveLength(0);
-    expect(container.querySelectorAll('[data-slot="skeleton"]')).toHaveLength(
-      0,
-    );
+    expect(screen.queryAllByTestId("workspace-skeleton")).toHaveLength(0);
   });
 
   it("holds the row space with skeletons while the read is in flight", async () => {
     mockScopedSWR({ workspaces: { isLoading: true } }, { strict: true });
-    const { container } = await renderList(<WorkspaceList orgId="org1" />);
+    await renderList(<WorkspaceList orgId="org1" />);
 
     expect(
       screen.getByRole("status", { name: "Loading workspaces" }),
     ).toBeInTheDocument();
-    expect(
-      container.querySelectorAll('[data-slot="skeleton"]').length,
-    ).toBeGreaterThan(0);
+    expect(screen.getAllByTestId("workspace-skeleton").length).toBeGreaterThan(
+      0,
+    );
   });
 
   it("says the read failed rather than rendering nothing", async () => {

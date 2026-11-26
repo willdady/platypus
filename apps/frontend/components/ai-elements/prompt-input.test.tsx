@@ -11,14 +11,15 @@ import {
   PromptInputTextarea,
   type PromptInputError,
   type PromptInputProps,
+  type PromptInputMessage,
 } from "./prompt-input";
 
 function getFileInput() {
-  return screen.getByLabelText("Upload files") as HTMLInputElement;
+  return screen.getByLabelText<HTMLInputElement>("Upload files");
 }
 
 function getSandboxFileInput() {
-  return screen.getByLabelText("Upload files to Sandbox") as HTMLInputElement;
+  return screen.getByLabelText<HTMLInputElement>("Upload files to Sandbox");
 }
 
 function fireFileChange(input: HTMLInputElement, files: File[]) {
@@ -161,7 +162,7 @@ describe("PromptInput attachments", () => {
 
 describe("PromptInput drop routing with two inputs", () => {
   const named = (label: string, globalDrop: boolean) => (
-    <PromptInput globalDrop={globalDrop} onSubmit={vi.fn()}>
+    <PromptInput aria-label={label} globalDrop={globalDrop} onSubmit={vi.fn()}>
       <PromptInputAttachments className="w-full">
         {(attachment) => (
           <PromptInputAttachment
@@ -186,27 +187,29 @@ describe("PromptInput drop routing with two inputs", () => {
 
   const chips = (label: string) => screen.queryAllByTestId(`${label}-chip`);
 
+  const form = (label: string) => screen.getByRole("form", { name: label });
+
   const renderBoth = () =>
     render(
       <>
         {named("composer", true)}
         {named("editor", false)}
       </>,
-    ).container.querySelectorAll("form");
+    );
 
   it("gives a file dropped on the inline input to that input alone", () => {
-    const forms = renderBoth();
+    renderBoth();
 
-    dropOn(forms[1]);
+    dropOn(form("editor"));
 
     expect(chips("editor")).toHaveLength(1);
     expect(chips("composer")).toHaveLength(0);
   });
 
   it("takes a file dropped on the composer once, not twice", () => {
-    const forms = renderBoth();
+    renderBoth();
 
-    dropOn(forms[0]);
+    dropOn(form("composer"));
 
     expect(chips("composer")).toHaveLength(1);
     expect(chips("editor")).toHaveLength(0);
@@ -294,7 +297,7 @@ describe("PromptInput initialAttachments", () => {
         blob: async () => new Blob(["hi"], { type: "text/plain" }),
       }),
     );
-    const onSubmit = vi.fn();
+    const onSubmit = vi.fn<(message: PromptInputMessage) => void>();
     render(
       <PromptInput initialAttachments={[seededPdf]} onSubmit={onSubmit}>
         <PromptInputAttachments className="w-full">
@@ -323,7 +326,7 @@ describe("PromptInput initialAttachments", () => {
   });
 
   it("drops a seeded part the user removes", async () => {
-    const onSubmit = vi.fn();
+    const onSubmit = vi.fn<(message: PromptInputMessage) => void>();
     render(
       <PromptInput initialAttachments={[seededPdf]} onSubmit={onSubmit}>
         <PromptInputAttachments className="w-full">
@@ -511,23 +514,21 @@ describe("PromptInputTextarea onKeyDown", () => {
 });
 
 describe("PromptInput blob-URL lifecycle", () => {
-  const originals = {
-    createObjectURL: URL.createObjectURL,
-    revokeObjectURL: URL.revokeObjectURL,
-  };
   let nextBlobId = 0;
+  const createObjectURL = vi.fn(() => `blob:test-${++nextBlobId}`);
+  const revokeObjectURL = vi.fn();
 
   beforeEach(() => {
     nextBlobId = 0;
-    URL.createObjectURL = vi.fn(
-      () => `blob:test-${++nextBlobId}`,
-    ) as unknown as typeof URL.createObjectURL;
-    URL.revokeObjectURL = vi.fn() as unknown as typeof URL.revokeObjectURL;
+    createObjectURL.mockClear();
+    revokeObjectURL.mockClear();
+    URL.createObjectURL = createObjectURL;
+    URL.revokeObjectURL = revokeObjectURL;
   });
 
   afterEach(() => {
-    URL.createObjectURL = originals.createObjectURL;
-    URL.revokeObjectURL = originals.revokeObjectURL;
+    Reflect.deleteProperty(URL, "createObjectURL");
+    Reflect.deleteProperty(URL, "revokeObjectURL");
   });
 
   const fileA = () => new File(["a"], "a.txt", { type: "text/plain" });
@@ -558,7 +559,7 @@ describe("PromptInput blob-URL lifecycle", () => {
 
     expect(screen.getByText("a.txt")).toBeInTheDocument();
     expect(screen.getByText("b.txt")).toBeInTheDocument();
-    expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+    expect(revokeObjectURL).not.toHaveBeenCalled();
   });
 
   it("submits the remaining attachment after one of two is removed", async () => {
@@ -568,7 +569,7 @@ describe("PromptInput blob-URL lifecycle", () => {
         blob: async () => new Blob(["b"], { type: "text/plain" }),
       }),
     );
-    const onSubmit = vi.fn();
+    const onSubmit = vi.fn<(message: PromptInputMessage) => void>();
     renderInput(onSubmit);
 
     fireFileChange(getFileInput(), [fileA(), fileB()]);
@@ -595,8 +596,8 @@ describe("PromptInput blob-URL lifecycle", () => {
       screen.getAllByRole("button", { name: "Remove attachment" })[0],
     );
 
-    expect(URL.revokeObjectURL).toHaveBeenCalledTimes(1);
-    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:test-1");
+    expect(revokeObjectURL).toHaveBeenCalledTimes(1);
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:test-1");
   });
 
   it("revokes every live attachment URL on unmount", () => {
@@ -605,9 +606,9 @@ describe("PromptInput blob-URL lifecycle", () => {
     fireFileChange(getFileInput(), [fileA(), fileB()]);
     view.unmount();
 
-    expect(URL.revokeObjectURL).toHaveBeenCalledTimes(2);
-    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:test-1");
-    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:test-2");
+    expect(revokeObjectURL).toHaveBeenCalledTimes(2);
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:test-1");
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:test-2");
   });
 
   it("reports a failed conversion instead of silently blocking submit", async () => {

@@ -621,7 +621,7 @@ function SandboxSettings({
             onChange={toFieldChange("name")}
             disabled={isSubmitting}
             error={validationErrors.name}
-            autoFocus
+            initialFocus
           />
 
           <FormSelectField

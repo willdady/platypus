@@ -93,7 +93,10 @@ export function AgentCardsSkeleton({ cards }: { cards?: number }) {
         </div>
       }
       actions={
-        <ItemActions className={agentCardActionsClassName}>
+        <ItemActions
+          data-testid="skeleton-card-actions"
+          className={agentCardActionsClassName}
+        >
           <Skeleton className="h-8 w-24" />
           <IconButtonSkeleton />
         </ItemActions>

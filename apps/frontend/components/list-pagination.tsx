@@ -133,6 +133,7 @@ export function ListFooter({
   return (
     <div
       data-slot="list-footer"
+      data-testid="list-footer"
       className={cn(
         "flex flex-wrap items-center justify-between gap-2",
         className,

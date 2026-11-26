@@ -354,11 +354,10 @@ describe("AgentForm avatar write partial-success handling", () => {
       { status: 500, body: { error: "Storage unavailable" } },
     );
 
-    const { container } = renderCreateForm();
-    const fileInput = container.querySelector(
-      'input[type="file"]',
-    ) as HTMLInputElement;
-    fireEvent.change(fileInput, { target: { files: [file] } });
+    renderCreateForm();
+    fireEvent.change(screen.getByLabelText("Avatar"), {
+      target: { files: [file] },
+    });
 
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
@@ -702,7 +701,7 @@ describe("AgentForm Skills search", () => {
     );
     expect(await screen.findByDisplayValue("Bot")).toBeInTheDocument();
 
-    fireEvent.click(document.getElementById("skill-s2")!);
+    fireEvent.click(screen.getByRole("switch", { name: "Writing" }));
     fireEvent.change(screen.getByRole("searchbox", { name: "Search skills" }), {
       target: { value: "analysis" },
     });
@@ -740,7 +739,7 @@ describe("AgentForm Skills search", () => {
     expect(
       screen.getByRole("searchbox", { name: "Search skills" }),
     ).toBeEnabled();
-    expect(document.getElementById("skill-s1")).toBeDisabled();
+    expect(screen.getByRole("switch", { name: "Analysis" })).toBeDisabled();
   });
 });
 

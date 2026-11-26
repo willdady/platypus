@@ -381,9 +381,7 @@ describe("AgentsList pinning", () => {
       fireEvent.pointerUp(trigger, { button: 0, pointerId: 1 });
       fireEvent.click(trigger, { button: 0 });
       expect(screen.queryByText(/^(Un)?pin$/)).not.toBeInTheDocument();
-      fireEvent.keyDown(document.activeElement ?? document.body, {
-        key: "Escape",
-      });
+      fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
     }
     expect(namesIn("Pinned agents")).toEqual(["Mia"]);
   });
@@ -430,7 +428,9 @@ describe("AgentsList card actions", () => {
       expect(
         within(item).getAllByRole("link", { name: /New chat/ }),
       ).toHaveLength(1);
-      expect(item.querySelectorAll('[aria-haspopup="menu"]')).toHaveLength(1);
+      expect(
+        within(item).getAllByRole("button", { name: /^Actions for/ }),
+      ).toHaveLength(1);
     }
   });
 
@@ -443,7 +443,7 @@ describe("AgentsList card actions", () => {
     const cards = screen.getAllByRole("listitem");
     expect(cards.length).toBeGreaterThan(0);
     for (const card of cards) {
-      expect(card.querySelectorAll('[data-slot="item-actions"]')).toHaveLength(
+      expect(within(card).getAllByTestId("skeleton-card-actions")).toHaveLength(
         1,
       );
     }

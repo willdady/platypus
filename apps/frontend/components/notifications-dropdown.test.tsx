@@ -24,13 +24,18 @@ type SwrCall = {
   config?: { refreshInterval?: number };
 };
 
-const { swrCalls, feeds, mutate, mutatedKeys, toastError } = vi.hoisted(() => ({
-  swrCalls: [] as SwrCall[],
-  feeds: {} as Record<string, unknown>,
-  mutate: vi.fn(),
-  mutatedKeys: [] as (string | null)[],
-  toastError: vi.fn(),
-}));
+type Feed = { results?: unknown[]; count?: number };
+
+const { swrCalls, feeds, mutate, mutatedKeys, toastError } = vi.hoisted(() => {
+  const feeds: Record<string, Feed> = {};
+  return {
+    swrCalls: [] as SwrCall[],
+    feeds,
+    mutate: vi.fn(),
+    mutatedKeys: [] as (string | null)[],
+    toastError: vi.fn(),
+  };
+});
 
 vi.mock("sonner", () => ({ toast: { error: toastError } }));
 
@@ -333,11 +338,9 @@ describe("NotificationsDropdown avatar", () => {
       render(<NotificationsDropdown orgId="org1" workspaceId="ws1" />);
       await openDropdownMenu();
 
-      await waitFor(() =>
-        expect(
-          document.querySelector('[data-slot="avatar-fallback"] svg'),
-        ).not.toBeNull(),
-      );
+      expect(
+        await screen.findByRole("img", { name: "Scout avatar" }),
+      ).toBeInTheDocument();
       expect(screen.queryByAltText("Scout")).not.toBeInTheDocument();
     },
   );
@@ -421,18 +424,26 @@ describe("NotificationsDropdown body", () => {
   it("renders an unordered list with every item", async () => {
     await renderBody("Acceptance criteria:\n- item one\n- item two\n\nSize: S");
 
-    const items = await screen.findAllByRole("listitem");
-    expect(items.map((li) => li.textContent)).toEqual(["item one", "item two"]);
-    expect(items[0].closest("ul")).not.toBeNull();
+    const list = screen.getByRole("list");
+    expect(list.tagName).toBe("UL");
+    expect(
+      within(list)
+        .getAllByRole("listitem")
+        .map((li) => li.textContent),
+    ).toEqual(["item one", "item two"]);
     expect(screen.getByText("Size: S")).toBeInTheDocument();
   });
 
   it("renders an ordered list with every item", async () => {
     await renderBody("1. first\n2. second");
 
-    const items = await screen.findAllByRole("listitem");
-    expect(items.map((li) => li.textContent)).toEqual(["first", "second"]);
-    expect(items[0].closest("ol")).not.toBeNull();
+    const list = screen.getByRole("list");
+    expect(list.tagName).toBe("OL");
+    expect(
+      within(list)
+        .getAllByRole("listitem")
+        .map((li) => li.textContent),
+    ).toEqual(["first", "second"]);
   });
 
   it("shows a disallowed block's text without its element", async () => {
@@ -469,10 +480,10 @@ describe("NotificationsDropdown body", () => {
     await renderBody("See [the run](https://example.com/run)");
     const link = await screen.findByRole("button", { name: "the run" });
 
-    await act(async () => {
-      fireEvent.click(link);
+    fireEvent.click(link);
+    const dialog = await screen.findByRole("dialog", {
+      name: "Open external link?",
     });
-    const dialog = screen.getByRole("dialog", { name: "Open external link?" });
     fireEvent.keyDown(dialog, { key: "Escape" });
 
     expect(

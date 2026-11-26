@@ -10,6 +10,7 @@ vi.mock("./model-selector-dialog", () => ({
 }));
 
 import { MessageEditor } from "./message-editor";
+import type { PromptInputMessage } from "./ai-elements/prompt-input";
 import {
   reportPdf,
   installSpeechRecognition,
@@ -36,8 +37,8 @@ const provider = {
 function renderEditor(
   overrides: Partial<React.ComponentProps<typeof MessageEditor>> = {},
 ) {
-  const onSubmit = vi.fn();
-  const onCancel = vi.fn();
+  const onSubmit = vi.fn<(message: PromptInputMessage) => void>();
+  const onCancel = vi.fn<() => void>();
   const view = render(
     <MessageEditor
       initialText="What does this say?"
@@ -107,7 +108,7 @@ describe("MessageEditor", () => {
     );
     const { onSubmit } = renderEditor();
 
-    const input = screen.getByLabelText("Upload files") as HTMLInputElement;
+    const input = screen.getByLabelText<HTMLInputElement>("Upload files");
     Object.defineProperty(input, "files", {
       value: [new File(["hi"], "extra.txt", { type: "text/plain" })],
       configurable: true,
@@ -175,7 +176,7 @@ describe("MessageEditor", () => {
   it("selects the text it opens on", () => {
     renderEditor();
 
-    const textarea = screen.getByRole("textbox") as HTMLTextAreaElement;
+    const textarea = screen.getByRole<HTMLTextAreaElement>("textbox");
     expect(textarea.selectionStart).toBe(0);
     expect(textarea.selectionEnd).toBe("What does this say?".length);
   });
@@ -196,11 +197,11 @@ describe("MessageEditor", () => {
   it("keeps a file dropped on itself, and stops it bubbling onward", () => {
     const onWindowDrop = vi.fn();
     document.addEventListener("drop", onWindowDrop);
-    const { container } = renderEditor({
+    renderEditor({
       passthroughFileTypes: ["application/pdf", "image/png"],
     });
 
-    fireEvent.drop(container.querySelector("form")!, {
+    fireEvent.drop(screen.getByRole("textbox"), {
       dataTransfer: {
         types: ["Files"],
         files: [new File(["hi"], "dropped.png", { type: "image/png" })],

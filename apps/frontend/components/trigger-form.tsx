@@ -367,7 +367,7 @@ function TriggerForm({
                 onChange={toFieldChange("name")}
                 disabled={isSubmitting}
                 error={validationErrors.name}
-                autoFocus
+                initialFocus
               />
 
               <FormTextField
@@ -391,7 +391,7 @@ function TriggerForm({
               >
                 {agents.map((agent) => (
                   <SelectItem key={agent.id} value={agent.id}>
-                    <AgentAvatar agent={agent} className="size-5" />
+                    <AgentAvatar agent={agent} className="size-5" decorative />
                     {agent.name}
                   </SelectItem>
                 ))}

@@ -47,10 +47,10 @@ describe("WorkspaceScrollContainer refresh", () => {
           finishFetch = resolve;
         }),
     );
-    const cache = new Map();
+    const cache = new Map<string, { data: string }>();
     cache.set("/page", { data: "Current content" });
 
-    const { container } = render(
+    render(
       <SWRConfig value={{ provider: () => cache, dedupingInterval: 0 }}>
         <WorkspaceScrollContainer>
           <CachedPage fetcher={fetcher} />
@@ -60,7 +60,7 @@ describe("WorkspaceScrollContainer refresh", () => {
     expect(screen.getByText("Current content")).toBeInTheDocument();
 
     await act(async () => {
-      await pullDown(container.firstElementChild as HTMLElement);
+      await pullDown(screen.getByTestId("workspace-scroll-container"));
     });
     await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
     expect(cache.get("/page")?.data).toBe("Current content");
@@ -73,12 +73,14 @@ describe("WorkspaceScrollContainer refresh", () => {
 
   it("does not attach pull-to-refresh on chat routes", () => {
     pathname = "/workspaces/test/chat/123";
-    const { container } = render(
+    render(
       <SWRConfig value={{ provider: () => new Map() }}>
         <WorkspaceScrollContainer>Chat</WorkspaceScrollContainer>
       </SWRConfig>,
     );
-    expect(container.firstElementChild).not.toHaveClass("relative");
+    expect(screen.getByTestId("workspace-scroll-container")).not.toHaveClass(
+      "relative",
+    );
     expect(screen.getByText("Chat")).toBeInTheDocument();
   });
 });

@@ -172,7 +172,11 @@ export function TriggerRunRow({
   // why: last step's occupancy, a different quantity from the cross-step sums
   const rowBody = (
     <div className="flex items-center gap-4 justify-between">
-      <div className="min-w-0 flex-1">
+      <div
+        role="group"
+        aria-label={`${run.triggerName} run details`}
+        className="min-w-0 flex-1"
+      >
         <p className="font-medium break-words">{run.triggerName}</p>
         <div className="my-1 flex">{statusBadge(run.status)}</div>
         <p className="text-sm">{formatDateTime(run.startedAt)}</p>

@@ -121,24 +121,29 @@ const params = Promise.resolve({
   runId: "run-1",
 });
 
+let view!: ReturnType<typeof render>;
+
+// why: use() suspends on the params Promise, so the render must settle in an async act
+function mountPageView() {
+  view = render(
+    <Suspense fallback={null}>
+      <TriggerRunDetailPage params={params} />
+    </Suspense>,
+  );
+}
+
 async function renderPage() {
-  let view!: ReturnType<typeof render>;
   await act(async () => {
-    view = render(
+    mountPageView();
+  });
+  await screen.findByRole("heading", { name: "Trigger run" });
+  rerender = () => {
+    view.rerender(
       <Suspense fallback={null}>
         <TriggerRunDetailPage params={params} />
       </Suspense>,
     );
-  });
-  await screen.findByRole("heading", { name: "Trigger run" });
-  rerender = () =>
-    act(() => {
-      view.rerender(
-        <Suspense fallback={null}>
-          <TriggerRunDetailPage params={params} />
-        </Suspense>,
-      );
-    });
+  };
 }
 
 describe("TriggerRunDetailPage", () => {

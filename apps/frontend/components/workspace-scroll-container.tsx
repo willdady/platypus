@@ -19,7 +19,11 @@ export function WorkspaceScrollContainer({
   const isChatRoute = /\/chat(\/|$)/.test(pathname);
 
   if (isChatRoute) {
-    return <div className={CONTENT_CLASSES}>{children}</div>;
+    return (
+      <div data-testid="workspace-scroll-container" className={CONTENT_CLASSES}>
+        {children}
+      </div>
+    );
   }
 
   async function handleRefresh() {
@@ -27,7 +31,11 @@ export function WorkspaceScrollContainer({
   }
 
   return (
-    <PullToRefresh onRefresh={handleRefresh} className={CONTENT_CLASSES}>
+    <PullToRefresh
+      onRefresh={handleRefresh}
+      data-testid="workspace-scroll-container"
+      className={CONTENT_CLASSES}
+    >
       {children}
     </PullToRefresh>
   );

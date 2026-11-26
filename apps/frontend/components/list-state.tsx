@@ -11,6 +11,11 @@ const TONE: Record<ListStateVariant, string> = {
   error: "text-destructive",
 };
 
+const ROLE: Record<ListStateVariant, "status" | "alert"> = {
+  empty: "status",
+  error: "alert",
+};
+
 const FRAME: Record<ListStateVariant, string> = {
   empty: "rounded-lg border-2 border-dashed",
   error: "",
@@ -27,6 +32,7 @@ export function ListState({
 }) {
   return (
     <div
+      role={ROLE[variant]}
       className={cn(
         "flex flex-col items-center justify-center gap-3 py-8",
         FRAME[variant],

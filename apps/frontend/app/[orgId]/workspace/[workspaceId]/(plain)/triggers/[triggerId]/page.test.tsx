@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { act, render, screen } from "@testing-library/react";
-import { Suspense } from "react";
+import { Suspense, type ReactElement } from "react";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), back: vi.fn() }),
@@ -18,15 +18,23 @@ const params = Promise.resolve({
   triggerId: "trigger-1",
 });
 
+// why: use() suspends on the params Promise, so the render must settle in an async act
+async function renderPage(page: ReactElement) {
+  function mountPage() {
+    render(page);
+  }
+  await act(async () => {
+    mountPage();
+  });
+}
+
 describe("Edit Trigger page", () => {
   it("offers View runs beside its title, filtered to this Trigger", async () => {
-    await act(async () => {
-      render(
-        <Suspense>
-          <EditTriggerPage params={params} />
-        </Suspense>,
-      );
-    });
+    await renderPage(
+      <Suspense>
+        <EditTriggerPage params={params} />
+      </Suspense>,
+    );
 
     await screen.findByRole("heading", { name: "Edit Trigger" });
     expect(screen.getByRole("link", { name: "View runs" })).toHaveAttribute(
@@ -36,13 +44,11 @@ describe("Edit Trigger page", () => {
   });
 
   it("offers no View runs while the Trigger is being created", async () => {
-    await act(async () => {
-      render(
-        <Suspense>
-          <CreateTriggerPage params={params} />
-        </Suspense>,
-      );
-    });
+    await renderPage(
+      <Suspense>
+        <CreateTriggerPage params={params} />
+      </Suspense>,
+    );
 
     await screen.findByRole("heading");
     expect(

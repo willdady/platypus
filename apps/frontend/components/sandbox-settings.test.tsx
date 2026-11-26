@@ -32,6 +32,12 @@ function savedSandboxBody(
   return expectSentBodyToMatchSchema(fetchMock, schema);
 }
 
+type FetchCall = [url: string, init: RequestInit];
+
+function fetchCalls(fetchMock: ReturnType<typeof vi.fn>) {
+  return fetchMock.mock.calls as FetchCall[];
+}
+
 const DOCKER_SANDBOX = {
   id: "sb1",
   workspaceId: "ws1",
@@ -492,7 +498,7 @@ describe("SandboxSettings save", () => {
     await waitFor(() =>
       expect(toastSuccess).toHaveBeenCalledWith("Sandbox configured"),
     );
-    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+    expect(fetchCalls(fetchMock).map(([url]) => url)).toEqual([
       SANDBOX_URL,
       `${SANDBOX_URL}?force=true`,
     ]);
@@ -802,7 +808,7 @@ describe("SandboxSettings delete", () => {
       expect(toastSuccess).toHaveBeenCalledWith("Sandbox deleted"),
     );
     expect(
-      fetchMock.mock.calls.map(([url, init]) => [url, init.method]),
+      fetchCalls(fetchMock).map(([url, init]) => [url, init.method]),
     ).toEqual([
       [SANDBOX_URL, "DELETE"],
       [`${SANDBOX_URL}?force=true`, "DELETE"],

@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import { useMutation } from "@/hooks/use-mutation";
+import { useInitialFocus } from "@/hooks/use-initial-focus";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useUnsavedChangesGuard } from "@/components/unsaved-changes-guard";
@@ -313,13 +314,17 @@ function CardTitleSection({
   onCopyMarkdown: () => void;
   onEdit: () => void;
 }) {
+  const titleInput = useInitialFocus<HTMLInputElement>(
+    isEditing && focusField === "title",
+  );
+
   if (isEditing) {
     return (
       <div className="flex flex-col gap-2">
         <FieldLabel htmlFor="kanban-card-title">Title</FieldLabel>
         <Input
           id="kanban-card-title"
-          autoFocus={focusField === "title"}
+          ref={titleInput}
           value={title}
           onChange={(e) => onTitleChange(e.target.value)}
           className="text-xl font-semibold"
@@ -353,6 +358,10 @@ function CardBodySection({
   focusField: "title" | "body";
   onBodyChange: (body: string) => void;
 }) {
+  const bodyInput = useInitialFocus<HTMLTextAreaElement>(
+    isEditing && focusField === "body",
+  );
+
   if (isEditing) {
     return (
       <div>
@@ -361,7 +370,7 @@ function CardBodySection({
         </FieldLabel>
         <Textarea
           id="kanban-card-description"
-          autoFocus={focusField === "body"}
+          ref={bodyInput}
           value={body}
           onChange={(e) => onBodyChange(e.target.value)}
           placeholder="Add a description..."
@@ -466,6 +475,8 @@ function CommentsSection({
   commentDeleting,
 }: { className?: string } & CardCommentsSectionProps) {
   const commentBusy = !!commentAction || commentDeleting;
+  const commentEditor =
+    useInitialFocus<HTMLTextAreaElement>(!!editingCommentId);
 
   return (
     <div className={className}>
@@ -485,10 +496,10 @@ function CommentsSection({
               {editingCommentId === comment.id ? (
                 <div className="flex flex-col gap-2">
                   <Textarea
+                    ref={commentEditor}
                     value={editingCommentBody}
                     onChange={(e) => onEditingCommentBodyChange(e.target.value)}
                     rows={3}
-                    autoFocus
                   />
                   <div className="flex gap-2">
                     <Button

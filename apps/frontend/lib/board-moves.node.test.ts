@@ -275,7 +275,10 @@ describe("applyCardMove", () => {
 
 describe("writes", () => {
   const baseUrl = "http://test/boards/board-1";
-  const sync = () => ({ setColumns: vi.fn(), refetch: vi.fn() });
+  const sync = () => ({
+    setColumns: vi.fn<(columns: ColumnWithCards[] | null) => void>(),
+    refetch: vi.fn(),
+  });
   const move = {
     cardId: "card-1",
     columnId: "col-2",
@@ -341,7 +344,7 @@ describe("writes", () => {
       expect(await reorderColumns(baseUrl, columns, 0, 1, s)).toEqual({
         outcome: "reordered",
       });
-      expect(ids(s.setColumns.mock.calls[0][0])).toEqual({
+      expect(ids(s.setColumns.mock.calls[0][0]!)).toEqual({
         "col-2": [],
         "col-1": [],
       });

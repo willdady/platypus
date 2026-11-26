@@ -102,7 +102,7 @@ describe("SignUpPage heading", () => {
 });
 
 describe("SignUpPage form", () => {
-  const submit = (container: HTMLElement) => {
+  const submit = () => {
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Ada Lovelace" },
     });
@@ -112,7 +112,7 @@ describe("SignUpPage form", () => {
     fireEvent.change(screen.getByLabelText("Password"), {
       target: { value: "my-secure-password" },
     });
-    fireEvent.submit(container.querySelector("form")!);
+    fireEvent.click(screen.getByRole("button", { name: "Sign up" }));
   };
 
   it("masks the password field", async () => {
@@ -126,9 +126,9 @@ describe("SignUpPage form", () => {
 
   it("submits the credentials and enters the app", async () => {
     mockSignUpEmail.mockResolvedValue({});
-    const { container } = await renderOpen();
+    await renderOpen();
 
-    submit(container);
+    submit();
 
     await waitFor(() => expect(mockPush).toHaveBeenCalledWith("/"));
     expect(mockSignUpEmail).toHaveBeenCalledWith({
@@ -158,9 +158,9 @@ describe("SignUpPage form", () => {
     ],
   ])("shows %s and stays on the page", async (_name, impl, message) => {
     mockSignUpEmail.mockImplementation(async () => impl());
-    const { container } = await renderOpen();
+    await renderOpen();
 
-    submit(container);
+    submit();
 
     expect(await screen.findByText(message)).toBeInTheDocument();
     expect(mockPush).not.toHaveBeenCalled();

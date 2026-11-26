@@ -21,10 +21,12 @@ function setClipboard(writeText: ((text: string) => Promise<void>) | null) {
 }
 
 function setExecCommand(impl: (command: string) => boolean) {
-  return Object.defineProperty(document, "execCommand", {
-    value: vi.fn(impl),
+  const execCommand = vi.fn(impl);
+  Object.defineProperty(document, "execCommand", {
+    value: execCommand,
     configurable: true,
   });
+  return execCommand;
 }
 
 afterEach(() => {
@@ -36,11 +38,11 @@ describe("copyToClipboard", () => {
     stubSecureContext(true);
     const writeText = vi.fn().mockResolvedValue(undefined);
     setClipboard(writeText);
-    setExecCommand(() => true);
+    const execCommand = setExecCommand(() => true);
 
     expect(await copyToClipboard("tok_123")).toBe(true);
     expect(writeText).toHaveBeenCalledWith("tok_123");
-    expect(document.execCommand).not.toHaveBeenCalled();
+    expect(execCommand).not.toHaveBeenCalled();
   });
 
   it("falls back to the copy command over plain HTTP, where the API is missing", async () => {
@@ -100,10 +102,10 @@ describe("copyToClipboard", () => {
   it("falls back when the Clipboard API refuses", async () => {
     stubSecureContext(true);
     setClipboard(vi.fn().mockRejectedValue(new Error("NotAllowedError")));
-    setExecCommand(() => true);
+    const execCommand = setExecCommand(() => true);
 
     expect(await copyToClipboard("tok_123")).toBe(true);
-    expect(document.execCommand).toHaveBeenCalledWith("copy");
+    expect(execCommand).toHaveBeenCalledWith("copy");
   });
 
   it("reports failure when neither way copies", async () => {

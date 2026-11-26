@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import type { FileUIPart, UIMessage } from "ai";
 import { useMessageEditing } from "./use-message-editing";
+import type { TurnMessage } from "./use-chat-turn";
 import { reportPdf, screenshotPng } from "@/test/chat-test-fixtures";
 
 const transcript: UIMessage[] = [
@@ -23,7 +24,9 @@ const transcript: UIMessage[] = [
 ];
 
 function harness(messages: UIMessage[] = transcript, started = true) {
-  const resend = vi.fn().mockReturnValue(started);
+  const resend = vi
+    .fn<(truncateAt: number, message: TurnMessage) => boolean>()
+    .mockReturnValue(started);
   const view = renderHook(() => useMessageEditing(messages, resend));
   return { ...view, resend };
 }

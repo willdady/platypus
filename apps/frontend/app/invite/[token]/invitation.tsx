@@ -4,6 +4,7 @@ import { appRoutes, withBasePath, workspaceRoutes } from "@/lib/routes";
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import useSWR, { useSWRConfig } from "swr";
+import { useInitialFocus } from "@/hooks/use-initial-focus";
 import {
   useAuth,
   useAuthClient,
@@ -54,6 +55,7 @@ export default function InviteTokenPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSigningIn, setIsSigningIn] = useState(false);
+  const nameInput = useInitialFocus<HTMLInputElement>(!isSigningIn);
 
   const enterWorkspace = ({
     organizationId,
@@ -244,11 +246,11 @@ export default function InviteTokenPage() {
             <Label htmlFor="name">Name</Label>
             <Input
               id="name"
+              ref={nameInput}
               type="text"
               placeholder="Your name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              autoFocus
               required
             />
           </div>

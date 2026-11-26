@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import type { ToolUIPart } from "ai";
 
 import {
@@ -181,13 +181,13 @@ describe("SubAgentTool step-limit marker", () => {
 
 describe("SubAgentTool disclosure", () => {
   it("is collapsed until clicked and reports its status in the header", () => {
-    const { container } = render(<SubAgentTool toolPart={delegateCall()} />);
+    render(<SubAgentTool toolPart={delegateCall()} />);
 
     const trigger = screen.getByRole("button", { name: /Research Bot/ });
     expect(trigger).toHaveAttribute("aria-expanded", "false");
     expect(screen.getByText("Completed")).toBeInTheDocument();
     expect(screen.queryByText("Task")).not.toBeInTheDocument();
-    expect(container.firstElementChild?.className).not.toMatch(/\bborder\b/);
+    expect(screen.getByTestId("tool")).not.toHaveClass("border");
 
     fireEvent.click(trigger);
 
@@ -222,11 +222,11 @@ describe("SubAgentTool disclosure", () => {
     render(<SubAgentTool toolPart={delegateCall()} />);
     const trigger = screen.getByRole("button", { name: /Research Bot/ });
 
-    expect(trigger.querySelector(":scope > svg:last-child")).not.toHaveClass(
+    expect(within(trigger).getByTestId("tool-chevron")).not.toHaveClass(
       "rotate-180",
     );
     fireEvent.click(trigger);
-    expect(trigger.querySelector(":scope > svg:last-child")).toHaveClass(
+    expect(within(trigger).getByTestId("tool-chevron")).toHaveClass(
       "rotate-180",
     );
   });

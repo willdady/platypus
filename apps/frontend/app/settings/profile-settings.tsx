@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useInitialFocus } from "@/hooks/use-initial-focus";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useEntityForm } from "@/hooks/use-entity-form";
 import { useAuth, useAuthClient } from "@/components/auth-provider";
@@ -18,6 +19,7 @@ function UserSettingsPage() {
   const { user } = useAuth();
   const authClient = useAuthClient();
   const [isEditing, setIsEditing] = useState(false);
+  const nameInput = useInitialFocus<HTMLInputElement>(isEditing);
 
   const savedTimezone = user?.timezone ?? null;
   const detectedTimezone = getBrowserTimezone();
@@ -83,10 +85,10 @@ function UserSettingsPage() {
             <div className="flex gap-2">
               <Input
                 id="name"
+                ref={nameInput}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 disabled={isLoading}
-                autoFocus
                 onFocus={(e) => e.target.select()}
               />
               <Button

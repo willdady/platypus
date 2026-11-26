@@ -15,7 +15,8 @@ vi.mock("swr", () => swrMock);
 import BoardsPage from "./boards-page";
 
 async function renderPage() {
-  await act(async () => {
+  // why: use() suspends on the params Promise, so the render must settle in an async act
+  function mountPage() {
     render(
       <Suspense>
         <BoardsPage
@@ -23,6 +24,9 @@ async function renderPage() {
         />
       </Suspense>,
     );
+  }
+  await act(async () => {
+    mountPage();
   });
 }
 

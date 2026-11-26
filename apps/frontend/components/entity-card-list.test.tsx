@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import type { ComponentType } from "react";
 import {
   authMock,
@@ -65,7 +71,7 @@ describe.each(RESOURCES)(
     it("renders each card as a link to its detail page", async () => {
       await renderCards([card]);
 
-      expect(screen.getByText("Revenue").closest("a")).toHaveAttribute(
+      expect(screen.getByRole("link", { name: /Revenue/ })).toHaveAttribute(
         "href",
         `/org1/workspace/ws1/${entity}/r1`,
       );
@@ -265,7 +271,7 @@ function renderCards(
 }
 
 function renderedCard() {
-  return screen.getByText("Alpha").closest('[data-slot="item"]');
+  return screen.getByRole("group", { name: "Alpha" });
 }
 
 describe("EntityCardList list states", () => {
@@ -352,38 +358,50 @@ describe("EntityCardList slots", () => {
   it("links the card to `href`", () => {
     renderCards({ href: (i) => `/things/${i.id}` });
 
-    expect(renderedCard()).toHaveAttribute("href", "/things/i1");
+    expect(screen.getByRole("link", { name: /Alpha/ })).toHaveAttribute(
+      "href",
+      "/things/i1",
+    );
   });
 
   it("renders a plain card without `href`", () => {
     renderCards();
 
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
-    expect(renderedCard()?.tagName).toBe("DIV");
+    expect(renderedCard().tagName).toBe("DIV");
   });
 
   it("renders `media` before the content", () => {
     renderCards({ media: (i) => <span>Avatar of {i.name}</span> });
 
     expect(
-      screen.getByText("Avatar of Alpha").nextElementSibling,
-    ).toHaveAttribute("data-slot", "item-content");
+      screen
+        .getByText("Avatar of Alpha")
+        .compareDocumentPosition(screen.getByText("First")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("renders `badges` in the title row after the name", () => {
     renderCards({ badges: (i) => <span>Badge for {i.name}</span> });
 
-    expect(screen.getByText("Alpha").parentElement).toHaveTextContent(
-      "AlphaBadge for Alpha",
-    );
+    expect(
+      screen
+        .getByText("Alpha")
+        .compareDocumentPosition(screen.getByText("Badge for Alpha")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("renders `meta` under the description", () => {
     renderCards({ meta: (i) => <span>Meta of {i.name}</span> });
 
-    expect(screen.getByText("First").nextElementSibling).toHaveTextContent(
-      "Meta of Alpha",
-    );
+    expect(
+      screen
+        .getByText("First")
+        .compareDocumentPosition(screen.getByText("Meta of Alpha")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("renders `actions` before `menu` in the card's actions", () => {
@@ -403,14 +421,14 @@ describe("EntityCardList slots", () => {
   it("renders `menu` in the card's actions, and no actions without it", () => {
     const { unmount } = renderCards();
     expect(
-      renderedCard()?.querySelector('[data-slot="item-actions"]'),
+      within(renderedCard()).queryByRole("button"),
     ).not.toBeInTheDocument();
     unmount();
 
     renderCards({ menu: (i) => <button>Menu for {i.name}</button> });
     expect(
-      renderedCard()?.querySelector('[data-slot="item-actions"]'),
-    ).toHaveTextContent("Menu for Alpha");
+      within(renderedCard()).getByRole("button", { name: "Menu for Alpha" }),
+    ).toBeInTheDocument();
   });
 
   it("draws a shared card as a plain card with the Organization badge", () => {
@@ -436,7 +454,7 @@ describe("EntityCardList slots", () => {
 
     expect(
       screen.getByRole("region", { name: "Wrapper of Alpha" }),
-    ).toContainElement(renderedCard() as HTMLElement);
+    ).toContainElement(renderedCard());
     expect(renderedCard()).toHaveClass("border-warning");
     expect(screen.getByText("Extra")).toBeInTheDocument();
   });

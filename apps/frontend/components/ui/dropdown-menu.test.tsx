@@ -24,11 +24,7 @@ function Menu({
 
 // why: Radix hides the trigger from the a11y tree while the menu is open
 function trigger() {
-  const el = document.querySelector<HTMLElement>(
-    '[data-slot="dropdown-menu-trigger"]',
-  );
-  if (!el) throw new Error("No dropdown menu trigger rendered");
-  return el;
+  return screen.getByRole("button", { name: "Open", hidden: true });
 }
 function isOpen() {
   return trigger().getAttribute("data-state") === "open";

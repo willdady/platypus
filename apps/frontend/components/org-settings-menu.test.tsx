@@ -49,33 +49,27 @@ describe("OrgSettingsMenu organization heading", () => {
   });
 
   it("separates the heading from the links with a rule", () => {
-    const { container } = renderMenu("Acme Corp");
+    renderMenu("Acme Corp");
 
-    const separator = container.querySelector(
-      '[data-slot="sidebar-separator"]',
-    );
-    expect(separator).toBeInTheDocument();
-
+    const separator = screen.getByRole("separator");
     const heading = screen.getByRole("heading", { name: "Acme Corp" });
     const generalLink = screen.getByRole("link", { name: "General" });
     expect(
-      heading.compareDocumentPosition(separator!) &
+      heading.compareDocumentPosition(separator) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(
-      separator!.compareDocumentPosition(generalLink) &
+      separator.compareDocumentPosition(generalLink) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
   });
 
   it("omits the heading without surfacing an error when the name is unavailable", () => {
-    const { container } = renderMenu(undefined);
+    renderMenu(undefined);
 
     expect(screen.queryByRole("heading")).not.toBeInTheDocument();
-    expect(
-      container.querySelector('[data-slot="sidebar-separator"]'),
-    ).toBeNull();
-    expect(container).not.toHaveTextContent(/error/i);
+    expect(screen.queryByRole("separator")).not.toBeInTheDocument();
+    expect(screen.queryByText(/error/i)).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Members" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Plugins" })).toBeInTheDocument();
   });

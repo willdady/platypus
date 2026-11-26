@@ -2,20 +2,29 @@ import { describe, it, expect, expectTypeOf, vi, beforeEach } from "vitest";
 import { memo, useRef, useState } from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
 
+type ReadState = {
+  data: unknown;
+  error: unknown;
+  isLoading: boolean;
+};
+
 const { sessionData, sessionState } = vi.hoisted(() => {
   const sessionData = {
     user: { id: "u1", role: "user" },
     session: { token: "t" },
   };
-  return {
-    sessionData,
-    sessionState: {
-      data: sessionData as typeof sessionData | null,
-      isPending: false,
-      error: null as unknown,
-      refetch: vi.fn(),
-    },
+  const sessionState: {
+    data: typeof sessionData | null;
+    isPending: boolean;
+    error: { status: number } | null;
+    refetch: ReturnType<typeof vi.fn>;
+  } = {
+    data: sessionData,
+    isPending: false,
+    error: null,
+    refetch: vi.fn(),
   };
+  return { sessionData, sessionState };
 });
 
 vi.mock("better-auth/react", () => ({
@@ -39,25 +48,31 @@ const { swrCalls, membership, workspace, reads } = vi.hoisted(() => {
     providerSelfManagement: true,
     mcpSelfManagement: false,
   };
+  // why: built once — a new identity each render would churn the memoised context
+  const reads: {
+    membership: ReadState;
+    workspace: ReadState;
+    mutateMembership: ReturnType<typeof vi.fn>;
+    mutateWorkspace: ReturnType<typeof vi.fn>;
+  } = {
+    membership: {
+      data: membership,
+      error: undefined,
+      isLoading: false,
+    },
+    workspace: {
+      data: workspace,
+      error: undefined,
+      isLoading: false,
+    },
+    mutateMembership: vi.fn(),
+    mutateWorkspace: vi.fn(),
+  };
   return {
     swrCalls: [] as string[],
     membership,
     workspace,
-    // why: built once — a new identity each render would churn the memoised context
-    reads: {
-      membership: {
-        data: membership as unknown,
-        error: undefined as unknown,
-        isLoading: false,
-      },
-      workspace: {
-        data: workspace as unknown,
-        error: undefined as unknown,
-        isLoading: false,
-      },
-      mutateMembership: vi.fn(),
-      mutateWorkspace: vi.fn(),
-    },
+    reads,
   };
 });
 

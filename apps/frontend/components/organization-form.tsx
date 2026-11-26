@@ -117,7 +117,7 @@ function OrganizationForm({ classNames, orgId }: OrganizationFormProps) {
               onChange={toFieldChange("name")}
               disabled={isSubmitting}
               error={validationErrors.name}
-              autoFocus
+              initialFocus
             />
 
             {orgId && (

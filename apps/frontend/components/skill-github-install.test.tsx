@@ -137,7 +137,7 @@ describe("SkillGithubInstall", () => {
     fireEvent.click(screen.getByRole("button", { name: "Install 1 skill" }));
 
     await screen.findByRole("link", { name: "pdf" });
-    const [url, init] = fetchMock.mock.calls[1] as [string, RequestInit];
+    const [url] = fetchMock.mock.calls[1] as [string, RequestInit];
     expect(url).toMatch(/\/workspaces\/ws1\/skills\/github\/install$/);
     expect(
       expectSentBodyToMatchSchema(

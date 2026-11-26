@@ -68,7 +68,7 @@ beforeEach(() => {
   authState.user = { id: "u1" };
   authState.ownsWorkspace = true;
   fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-    const url = input.toString();
+    const url = input instanceof Request ? input.url : input.toString();
     if (init?.method === "POST" && url === `${BASE}/chat/${CHAT_ID}/turns`) {
       return Promise.resolve(sseResponse());
     }

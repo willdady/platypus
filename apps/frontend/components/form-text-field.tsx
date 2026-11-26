@@ -6,6 +6,7 @@ import {
   FieldError,
 } from "@/components/ui/field";
 import { formFieldIds } from "@/components/form-field-ids";
+import { useInitialFocus } from "@/hooks/use-initial-focus";
 import { Input } from "@/components/ui/input";
 import { RevealableInput } from "@/components/ui/revealable-input";
 
@@ -19,7 +20,7 @@ export type FormTextFieldProps = {
   placeholder?: string;
   disabled?: boolean;
   required?: boolean;
-  autoFocus?: boolean;
+  initialFocus?: boolean;
   autoComplete?: string;
   type?: string;
   trailing?: ReactNode;
@@ -44,7 +45,7 @@ export function FormTextField({
   placeholder,
   disabled,
   required,
-  autoFocus,
+  initialFocus,
   autoComplete,
   type = "text",
   trailing,
@@ -59,6 +60,7 @@ export function FormTextField({
   revealLabel,
 }: FormTextFieldProps) {
   const ids = formFieldIds(name, { description, error });
+  const input = useInitialFocus<HTMLInputElement>(initialFocus);
   const control = {
     id: name,
     type,
@@ -68,7 +70,6 @@ export function FormTextField({
       onChange(e.target.value),
     disabled,
     required,
-    autoFocus,
     autoComplete,
     "aria-invalid": !!error,
     "aria-describedby": ids.describedBy,
@@ -83,9 +84,9 @@ export function FormTextField({
     <Field className={className} data-invalid={!!error}>
       <FieldLabel htmlFor={name}>{label}</FieldLabel>
       {revealable ? (
-        <RevealableInput {...control} revealLabel={revealLabel} />
+        <RevealableInput {...control} ref={input} revealLabel={revealLabel} />
       ) : (
-        <Input {...control} />
+        <Input {...control} ref={input} />
       )}
       {description && (
         <FieldDescription id={ids.descriptionId}>

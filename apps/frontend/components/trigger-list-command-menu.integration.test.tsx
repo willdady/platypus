@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
-  act,
   fireEvent,
   render,
   screen,
@@ -54,7 +53,12 @@ beforeEach(() => {
     firedOneOff,
   ];
   fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-    const url = input.toString();
+    const url =
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.href
+          : input.url;
     if (init?.method === "DELETE") {
       triggers = triggers.filter((trigger) => !url.endsWith(trigger.id));
       return Promise.resolve(jsonResponse(200, {}));
@@ -81,9 +85,7 @@ function renderTriggersAndMenu() {
 }
 
 function toggleMenu() {
-  act(() => {
-    fireEvent.keyDown(document, { key: "k", metaKey: true });
-  });
+  fireEvent.keyDown(document, { key: "k", metaKey: true });
 }
 
 async function deleteFirstTrigger() {
