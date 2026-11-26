@@ -231,6 +231,7 @@ export function ModelEntryDialog({
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent
+        className="max-h-[90vh] overflow-y-auto"
         onOpenAutoFocus={(e) => {
           e.preventDefault();
           modelIdRef.current?.focus();
@@ -461,7 +462,7 @@ export function ModelEntryDialog({
                     <Textarea
                       id="model-reasoning"
                       rows={6}
-                      className="font-mono text-xs"
+                      className="max-h-[15em] font-mono text-xs"
                       placeholder={'{ "thinking": { "on": {}, "off": {} } }'}
                       value={reasoningText}
                       aria-invalid={!!fieldErrors.reasoning}
