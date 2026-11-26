@@ -1,6 +1,6 @@
 "use client";
 
-import { MAIN_CONTENT_ID } from "@/components/skip-link";
+import { AuthShell } from "@/components/auth-shell";
 import { appRoutes, signInDestination } from "@/lib/routes";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -52,66 +52,57 @@ export default function SignInPage() {
   };
 
   return (
-    <main
-      id={MAIN_CONTENT_ID}
-      className="flex min-h-screen items-center justify-center"
+    <AuthShell
+      title="Sign in to Platypus"
+      description="Enter your credentials to continue"
     >
-      <div className="w-full max-w-md flex flex-col gap-8 p-8">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold">Sign in to Platypus</h1>
-          <p className="text-muted-foreground mt-2">
-            Enter your credentials to continue
-          </p>
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        {error && (
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="email">Email</Label>
+          <Input
+            id="email"
+            type="email"
+            placeholder="you@example.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            autoFocus
+            required
+          />
         </div>
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          {error && (
-            <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="password">Password</Label>
+          <RevealableInput
+            id="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            disabled={isLoading}
+          />
+        </div>
 
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              autoFocus
-              required
-            />
-          </div>
+        <Button type="submit" className="w-full" disabled={isLoading}>
+          {isLoading ? "Signing in..." : "Sign in"}
+        </Button>
+      </form>
 
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="password">Password</Label>
-            <RevealableInput
-              id="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              disabled={isLoading}
-            />
-          </div>
-
-          <Button type="submit" className="w-full" disabled={isLoading}>
-            {isLoading ? "Signing in..." : "Sign in"}
-          </Button>
-        </form>
-
-        {signUpOpen && (
-          <p className="text-center text-sm text-muted-foreground">
-            Don&apos;t have an account?{" "}
-            <Link
-              href={appRoutes.signUp}
-              className="text-primary hover:underline"
-            >
-              Sign up
-            </Link>
-          </p>
-        )}
-      </div>
-    </main>
+      {signUpOpen && (
+        <p className="text-center text-sm text-muted-foreground">
+          Don&apos;t have an account?{" "}
+          <Link
+            href={appRoutes.signUp}
+            className="text-primary hover:underline"
+          >
+            Sign up
+          </Link>
+        </p>
+      )}
+    </AuthShell>
   );
 }
