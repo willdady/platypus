@@ -540,6 +540,16 @@ const LIVE = {
   lastRejectedAt: null,
 };
 
+const TASK_COLUMN_DEFAULTS: Row = { pushCount: 0 };
+
+const withTaskColumnDefaults = ({
+  a2a_task: tasks = [],
+  ...rows
+}: Record<string, Row[]>) => ({
+  ...rows,
+  a2a_task: tasks.map((task) => ({ ...TASK_COLUMN_DEFAULTS, ...task })),
+});
+
 const seedConversation = (
   rows: Record<string, Row[]> = {},
   {
@@ -644,7 +654,7 @@ const seedConversation = (
           ...LIVE,
         },
       ],
-      ...rows,
+      ...withTaskColumnDefaults(rows),
     },
     {
       unique: {
@@ -656,6 +666,7 @@ const seedConversation = (
           },
         ],
       },
+      defaults: { a2a_task: TASK_COLUMN_DEFAULTS },
       onInsert,
     },
   ));

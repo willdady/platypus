@@ -165,13 +165,11 @@ const reservePushes = async (
       .where(eq(a2aTaskTable.id, taskId))
       .limit(1);
     if (!task) return 0;
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- NOT NULL in Postgres, but the tests' in-memory db skips column defaults
-    const sent = task.pushCount ?? 0;
-    const granted = Math.min(wanted, MAX_PUSHES_PER_TASK - sent);
+    const granted = Math.min(wanted, MAX_PUSHES_PER_TASK - task.pushCount);
     if (granted <= 0) return 0;
     const reserved = await db
       .update(a2aTaskTable)
-      .set({ pushCount: sent + granted })
+      .set({ pushCount: task.pushCount + granted })
       .where(
         and(
           eq(a2aTaskTable.id, taskId),
