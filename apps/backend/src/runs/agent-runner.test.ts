@@ -236,7 +236,7 @@ const streamResultOf = (
   data: {
     text?: string;
     steps?: unknown[];
-    usage?: unknown;
+    usage: unknown;
     finishReason?: string;
     rawFinishReason?: string;
   },
@@ -248,7 +248,7 @@ const streamResultOf = (
   return {
     text: after(data.text ?? "ok"),
     steps: after(data.steps ?? []),
-    usage: after(data.usage ?? {}),
+    usage: after(data.usage),
     finishReason: after(data.finishReason ?? "stop"),
     rawFinishReason: after(data.rawFinishReason ?? "stop"),
   };

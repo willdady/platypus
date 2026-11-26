@@ -375,8 +375,7 @@ const modelLoop = ({
         finishReason,
         rawFinishReason,
         steps: (steps as LoopStep[] | undefined) ?? [],
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- the runtime value can be absent though the type says otherwise
-        totalUsage: totalUsage ?? {},
+        totalUsage,
         stepMessages,
         completedSteps,
       };
