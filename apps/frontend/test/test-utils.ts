@@ -1,6 +1,6 @@
 import { useMemo, useSyncExternalStore } from "react";
 import { expect, vi, type Mock } from "vitest";
-import { screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { z } from "zod";
 
@@ -75,18 +75,33 @@ export async function openDropdownMenu() {
   await setupUser().click(trigger);
 }
 
-export async function selectOption(from: string | HTMLElement, option: string) {
-  const combobox =
-    typeof from === "string"
-      ? screen.getAllByRole("combobox").find((el) => el.textContent === from)
-      : from;
+function findCombobox(from: string | HTMLElement) {
+  if (typeof from !== "string") return from;
+  const combobox = screen
+    .getAllByRole("combobox")
+    .find((el) => el.textContent === from);
   if (!combobox) {
-    throw new Error(`No select reading "${from as string}" found`);
+    throw new Error(`No combobox reading "${from}" found`);
   }
+  return combobox;
+}
+
+export async function selectOption(from: string | HTMLElement, option: string) {
   const user = setupUser();
+  const combobox = findCombobox(from);
   combobox.focus();
   await user.keyboard("{ArrowDown}");
   await user.click(await screen.findByRole("option", { name: option }));
+}
+
+export async function selectTimezone(from: string, zone: string) {
+  const user = setupUser();
+  await user.click(findCombobox(from));
+  // why: typing each character refilters the whole IANA list; the default timeout is tight
+  fireEvent.change(screen.getByPlaceholderText("Search timezones..."), {
+    target: { value: zone },
+  });
+  await user.click(await screen.findByRole("option", { name: zone }));
 }
 
 export function firePageShow(persisted: boolean) {

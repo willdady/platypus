@@ -1,9 +1,16 @@
 "use client";
 
-import { Field, FieldTitle } from "@/components/ui/field";
+import {
+  Field,
+  FieldError,
+  FieldLabel,
+  FieldTitle,
+} from "@/components/ui/field";
+import { formFieldIds } from "@/components/form-field-ids";
 import { FormTextField } from "@/components/form-text-field";
 import { FormSelectField } from "@/components/form-select-field";
 import { FormSwitchField } from "@/components/form-switch-field";
+import { TimezoneCombobox } from "@/components/timezone-combobox";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { SelectGroup, SelectItem } from "@/components/ui/select";
@@ -18,7 +25,7 @@ import {
   type Frequency,
   type SimpleSchedule,
 } from "@/lib/cron";
-import { getBrowserTimezone, TIMEZONES } from "@/lib/timezones";
+import { getBrowserTimezone } from "@/lib/timezones";
 import type { TriggerFieldsProps } from "@/components/trigger-form";
 
 const DAYS_OF_WEEK = [
@@ -92,6 +99,9 @@ function TriggerCronFields({
 
   const fired = !!trigger?.firedAt;
   const scheduleLocked = disabled || fired;
+  const timezoneFieldIds = formFieldIds("timezone", {
+    error: errors.timezone,
+  });
 
   const effectiveCronExpression =
     scheduleMode === "simple"
@@ -312,27 +322,26 @@ function TriggerCronFields({
         />
       )}
 
-      <FormSelectField
-        label="Timezone"
-        name="timezone"
-        value={timezone}
-        onValueChange={(value) => {
-          setTimezoneTouched(true);
-          clearErrors("timezone");
-          setTimezone(value);
-        }}
-        disabled={scheduleLocked}
-        placeholder="Select timezone"
-        error={errors.timezone}
-      >
-        <SelectGroup>
-          {TIMEZONES.map((tz) => (
-            <SelectItem key={tz} value={tz}>
-              {tz}
-            </SelectItem>
-          ))}
-        </SelectGroup>
-      </FormSelectField>
+      <Field data-invalid={!!errors.timezone}>
+        <FieldLabel htmlFor="timezone">Timezone</FieldLabel>
+        <TimezoneCombobox
+          id="timezone"
+          value={timezone}
+          onChange={(value) => {
+            setTimezoneTouched(true);
+            clearErrors("timezone");
+            setTimezone(value);
+          }}
+          disabled={scheduleLocked}
+          invalid={!!errors.timezone}
+          describedBy={timezoneFieldIds.describedBy}
+        />
+        {errors.timezone && (
+          <FieldError id={timezoneFieldIds.errorId}>
+            {errors.timezone}
+          </FieldError>
+        )}
+      </Field>
 
       {nextRunPreview && isCronValid && (
         <Field>
