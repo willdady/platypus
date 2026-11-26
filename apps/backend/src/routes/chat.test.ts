@@ -45,7 +45,10 @@ vi.mock("ai", async () => {
   const actual = await vi.importActual("ai");
   return {
     ...actual,
-    streamText: vi.fn(() => ({ stream: new ReadableStream() })),
+    streamText: vi.fn(() => ({
+      stream: new ReadableStream(),
+      usage: Promise.resolve({ inputTokens: 0, outputTokens: 0 }),
+    })),
     toUIMessageStream: vi.fn(
       () =>
         new ReadableStream({

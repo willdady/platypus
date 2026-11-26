@@ -117,6 +117,7 @@ import { openToolSession } from "../tools/tool-session.ts";
 import type { ResolvedRunPlan, RunInput, RunSink, RunStats } from "./types.ts";
 import type { WorkspaceScope } from "../scope.ts";
 import { RunEventRecorder } from "./run-events.ts";
+import type { computeStats } from "./run-stats.ts";
 
 type LifecycleEvent =
   | {
@@ -232,11 +233,13 @@ const fakeGenerateResult = {
   usage: { inputTokens: 10, outputTokens: 5 },
 };
 
+type TotalUsage = Parameters<typeof computeStats>[0]["totalUsage"];
+
 const streamResultOf = (
   data: {
     text?: string;
     steps?: unknown[];
-    usage: unknown;
+    usage: TotalUsage;
     finishReason?: string;
     rawFinishReason?: string;
   },
@@ -2333,3 +2336,5 @@ describe("dangling tool calls in the Transcript", () => {
     ]);
   });
 });
+
+void streamResultOf({ usage: undefined });
