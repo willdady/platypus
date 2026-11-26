@@ -81,12 +81,12 @@ const { harness } = vi.hoisted(() => ({
   },
 }));
 
-let chatMessageRenders = 0;
-let chatMessageRendersById: Record<string, number> = {};
-function countChatMessageRender(messageId: string) {
-  chatMessageRenders += 1;
-  chatMessageRendersById[messageId] =
-    (chatMessageRendersById[messageId] ?? 0) + 1;
+const chatMessageRendered = vi.hoisted(() =>
+  vi.fn<(messageId: string) => void>(),
+);
+function rendersOf(messageId: string) {
+  return chatMessageRendered.mock.calls.filter(([id]) => id === messageId)
+    .length;
 }
 
 let lastChatMessageProps: null | {
@@ -290,7 +290,7 @@ vi.mock("./chat-message", () => ({
     onApprovalResponse?: (approvalId: string, approved: boolean) => void;
     onOpenArtifact?: (target: ArtifactOpenTarget) => void;
   }) {
-    countChatMessageRender(message.id);
+    chatMessageRendered(message.id);
     recordChatMessageProps({
       onMessageDelete,
       onRegenerate,
@@ -1038,8 +1038,7 @@ beforeEach(() => {
   harness.chatMutate.mockResolvedValue(undefined);
   harness.agentsMutate.mockReset();
   harness.agentsMutate.mockResolvedValue(undefined);
-  chatMessageRenders = 0;
-  chatMessageRendersById = {};
+  chatMessageRendered.mockClear();
   lastChatMessageProps = null;
 });
 
@@ -1608,14 +1607,14 @@ describe("transcript stability", () => {
   it("does not re-render the transcript while the composer is typed into", () => {
     harness.turn.messages = [message("u1", "q"), message("a1", "a")];
     renderChat();
-    const before = chatMessageRenders;
+    const before = chatMessageRendered.mock.calls.length;
 
     fireEvent.change(
       screen.getByPlaceholderText("What would you like to know?"),
       { target: { value: "hello" } },
     );
 
-    expect(chatMessageRenders).toBe(before);
+    expect(chatMessageRendered.mock.calls.length).toBe(before);
   });
 
   it("re-renders only the copied message and not the rest of the transcript", async () => {
@@ -1625,16 +1624,16 @@ describe("transcript stability", () => {
       message("a2", "b"),
     ];
     renderChat();
-    chatMessageRendersById = {};
+    chatMessageRendered.mockClear();
 
     fireEvent.click(screen.getByRole("button", { name: "Copy a1" }));
 
     await waitFor(() => {
-      expect(chatMessageRendersById.a1).toBe(1);
+      expect(rendersOf("a1")).toBe(1);
     });
 
-    expect(chatMessageRendersById.u1).toBeUndefined();
-    expect(chatMessageRendersById.a2).toBeUndefined();
+    expect(rendersOf("u1")).toBe(0);
+    expect(rendersOf("a2")).toBe(0);
   });
 
   it("keeps the cleared tool-call set stable while a reply streams", () => {
