@@ -487,8 +487,8 @@ running sends nothing.
   at the wrong moment can lose one, and nothing resends it. Cron and Event runs
   have no fallback, so don't build anything that waits forever on the event. An
   Inbound caller can [poll the
-  run](/building-with-platypus/triggers#check-on-a-run) with its token until
-  **Max Runs to Keep** prunes it.
+  run](/building-with-platypus/triggers#check-on-a-run) with its token until it
+  is pruned from run history.
 </Callout>
 
 ## Headers

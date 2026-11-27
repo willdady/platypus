@@ -8,10 +8,16 @@ import { Callout, Steps } from "nextra/components";
 # Boards
 
 A **Board** is a Kanban board scoped to your Workspace: columns you arrange
-left-to-right, and cards you drag between them. Boards are a shared working
-surface — both you and your Agents can read and update the same Board, which
-makes them a natural place for an Agent to track tasks, triage items, or hand
-work back to you.
+left-to-right, and cards you drag between them. You and your Agents read and
+update the same Board, so an Agent can track tasks, triage items, or hand work
+back to you on it.
+
+<Callout type="warning">
+  **Only the Workspace Owner can change a Board.** Anyone else who can open the
+  Workspace, Org Admins included, sees the same controls, but every change to a
+  Board, its columns or its cards is refused with "Only the workspace owner can
+  perform this action". They can read the Board and comment on cards.
+</Callout>
 
 ## Create a Board
 
@@ -39,7 +45,7 @@ anywhere in the Workspace too, under **Go to → Boards**, beside **Home** and
 Save to create the Board. It starts with three columns — **To Do**,
 **In Progress** and **Done** — which you rename, move or delete like any other.
 You can edit the name, description, and labels anytime
-from the gear beside the Board's name, or **Edit** in the
+from **Board settings** (the gear at the right of the Board's header), or **Edit** in the
 Board card's three-dot menu on the **Boards** screen.
 
 </Steps>
@@ -87,19 +93,23 @@ The Board view scrolls horizontally across its **columns**. From here you:
 
 Click a card, or press Enter on it, to open its detail dialog, where you can edit:
 
-- The title and description (the description supports Markdown).
-- **Column**, **Labels**, and **Priority** (None, Low, Medium, High, Urgent).
+- The title and description, after you click **Edit card** (the pencil). The
+  description supports Markdown.
+- **Column** (shown when the Board has more than one), **Labels**, and
+  **Priority** (None, Low, Medium, High, Urgent).
 - **Due Date** and a single **Assignee** — yourself or an Agent.
 - **Comments** — a discussion on the card (also Markdown).
 
 Changes to the card's fields apply only when you click **Save**; comments post
 on their own. **Delete**, beside **Save**, removes the card after a confirm,
 along with its comments and history. The dialog keeps up with the Board while
-it is open: with nothing changed in it, an Agent's or a teammate's update shows
+it is open: with nothing changed in it, an Agent's update shows
 up as it arrives. Once you have changed a field, the dialog holds your version
 instead, and saving it overwrites what changed remotely in the meantime — apart
 from a card someone else moved, which stays where they put it unless you pick a
 **Column** yourself.
+
+The dialog also offers **Copy link to card** and **Copy card as Markdown**.
 
 You can edit or delete only your own comments, unless you are an Org Admin.
 That includes comments an Agent wrote: the **Delete** button is there, but the
@@ -155,9 +165,9 @@ can in turn fire **Event** Triggers, so a change on a Board can kick off another
 Agent run. Deleting a whole Board is not card activity: its cards fire
 nothing.
 
-### When two people move the same card
+### When two moves race
 
-An Agent run can take minutes, and a Board can be open in someone's browser the
+An Agent run can take minutes, and a Board can be open in your browser the
 whole time — so a card can move while another move is already on its way.
 Platypus refuses the later move rather than letting it silently overwrite the
 first. The same holds between two Agents working one Board at once, when the
@@ -165,12 +175,12 @@ moving Agent names the column it last saw the card in: a move made from a stale
 reading is refused, and the Agent is told to look again.
 
 <Callout type="warning">
-  If you move a card that someone else has moved since your Board last
-  refreshed, your move does not apply and the Board reloads to show where the
-  card actually is. A dragged card snaps back. If you changed the card's
-  **Column** in the card dialog, your other edits to the card are still saved
-  and the dialog closes. Nothing else is lost, and you can repeat the move
-  against the Board as it now stands.
+  If you move a card that an Agent has moved since your Board last refreshed,
+  your move does not apply and the Board reloads to show where the card actually
+  is. A dragged card snaps back. If you changed the card's **Column** in the
+  card dialog, your other edits to the card are still saved and the dialog
+  closes. Nothing else is lost, and you can repeat the move against the Board as
+  it now stands.
 </Callout>
 
 ## Card history

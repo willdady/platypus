@@ -1,6 +1,6 @@
 ---
 title: Tool sets
-description: What each built-in Tool set lets an Agent do, which ones an Operator has to enable, and which ones let an Agent change your Workspace.
+description: What each built-in Tool set lets an Agent do, which ones an Operator has to enable, and which ones let an Agent rewrite your Workspace's configuration.
 ---
 
 import { Callout } from "nextra/components";
@@ -35,7 +35,7 @@ has loaded. If something below isn't there, your Operator hasn't enabled it — 
 | **Web Fetch**        | Web           | Fetch the contents of a URL the model chose.                                                                                                                                                           | When the Operator loads its Plugin |
 | **Sandbox**          | Sandbox       | Run shell commands, read, write, edit and list files inside the Workspace's Sandbox, and — where the Sandbox supports it — look at an image or document it made, or offer a file to you as a download. | Needs a Sandbox on the Workspace   |
 
-## Four of these change your Workspace
+## Four of these rewrite your configuration
 
 <Callout type="warning">
   **Agent Management**, **Skill Management**, **Triggers** and **Kanban Boards**
@@ -50,6 +50,10 @@ to a general-purpose assistant because they looked harmless in a list.
 
 </Callout>
 
+**Kanban Cards**, **Notifications**, **Artifacts** and **Sandbox** write too —
+an Agent granted Kanban Cards can delete or bulk-edit cards — but none of them
+changes your Agents, Skills, Triggers or Boards.
+
 **Agent Discovery** is the safe half of the same idea: it reads the same
 information and changes nothing. If an Agent needs to answer "what Agents exist
 here?", that is the one to grant.
@@ -57,8 +61,7 @@ here?", that is the one to grant.
 ## Two need something switched on elsewhere
 
 **Web Fetch** ships as a separate Plugin so network egress can be denied on its
-own. It loads only when the Operator lists it in `PLATYPUS_PLUGINS`; the shipped
-example configuration lists it, but leaving the variable unset loads none. If the
+own. It loads only when the Operator lists it in `PLATYPUS_PLUGINS`. If the
 switch isn't on the Agent form, ask your Operator — see
 [Configuration → Plugins](/self-hosting/configuration#plugins).
 

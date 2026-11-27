@@ -349,7 +349,8 @@ registered.
 - **A Task that has already ended** when a URL is registered on it is pushed
   straight away, so a run that finishes before the client registers is not
   missed.
-- **A run lost to a server crash** ends `failed` within a couple of minutes, once
+- **A run lost to a server crash** ends `failed` within a couple of minutes at the
+  default scheduler interval, once
   Platypus notices it has gone quiet, and that is pushed like any other end. A
   run stopped by a server shutting down cleanly ends `canceled`. An end that
   a crash kept from being pushed is pushed within about a minute. A push a crash
@@ -388,12 +389,10 @@ registered.
 
 <Callout type="warning">
   The push carries the Agent's reply, so the receiving URL sees the
-  conversation. Use an `https` URL you control, and check the credentials before
-  trusting the body. A retry after a timeout can deliver the same Task twice, so
-  handle a repeat of a Task id you've already seen. A push a server restart
-  interrupts mid-delivery is sent again after about five minutes, though one the
-  receiving URL refuses isn't retried, so a client that must not miss an end
-  should still poll `GetTask` now and then.
+  conversation. Use an `https` URL you control, check the credentials before
+  trusting the body, and treat a repeat of a Task id you've already seen as a
+  duplicate. A client that must not miss an end should still poll `GetTask` now
+  and then.
 </Callout>
 
 ## Memories

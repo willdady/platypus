@@ -380,6 +380,13 @@ An Agent that manages your Skills creates your Workspace's own version when it
 writes a Skill with the same name as a Shared Skill. Any bundled files come
 with it, and later changes to the Shared Skill don't reach your version.
 
+<Callout type="warning">
+  Only the files come across. The new version is not **User-invocable only**,
+  has no **Argument hint**, and keeps no frontmatter or GitHub link, even when
+  the Shared Skill had them — so a Skill you kept away from the model becomes
+  one it can load. Check the new version's settings after the Agent writes it.
+</Callout>
+
 An Org Admin can turn a Workspace Skill into a Shared one with **Promote to
 organization** in the Skill's menu — see [Promote](/concepts/sharing#promote).
 

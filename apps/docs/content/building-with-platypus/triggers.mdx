@@ -18,7 +18,7 @@ are three types:
   a CI pipeline, calls it over HTTP with the Trigger's token. See
   [Inbound Triggers](#inbound-triggers).
 
-You'll find Triggers in the **Triggers** section of the Workspace home. It
+You'll find Triggers in the **Triggers** section of **Home**, the first item in the rail. It
 starts collapsed the first time, then opens as you last left it in that
 browser. The list
 shows every type; pick **Cron**, **Event** or **Inbound** in the menu above it,
@@ -40,7 +40,7 @@ event by name.
 
 ### Open the Trigger form
 
-On the Workspace home, expand the **Triggers** section and click **Create
+On **Home**, expand the **Triggers** section and click **Create
 trigger**, or choose **Create trigger** from the command menu.
 
 ### Pick the type and Agent
@@ -166,7 +166,8 @@ and a caller can't talk an Agent into removing the integration it depends on.
 
 ### Finish
 
-Set **Max Runs to Keep** (the fewest recent run records to keep), optionally
+Set **Max Runs to Keep** (the fewest recent run records to keep: 1 to 1,000,
+default 10), optionally
 enable **Web Search** (web search on the resolved Provider — its built-in tool,
 or a Web-search backend selected on it; see [Providers &
 models](/concepts/providers#web-search)), and leave **Enabled** on. Expand
@@ -262,7 +263,7 @@ result the Agent produced, written as the run goes. A run that fails or is
 cancelled keeps what it wrote up to that point. A _Suppressed_ run never started,
 so it has none.
 
-The app doesn't show a run's Transcript yet. It is the record
+The app doesn't show a run's Transcript. It is the record
 [Extract Memories](#memories-in-a-run) reads, and the run page still shows the
 **Response** and **Timeline**.
 
@@ -518,8 +519,8 @@ rejected**.
   **Regenerate** uses the saved lifetime, not one you picked and didn't save.
   The current token keeps its expiry.
 - **You get a notification** 30 days and 7 days before expiry (a 30-day token
-  only gets the 7-day one), and the first time a call arrives with an expired
-  token.
+  only gets the 7-day one), and the first time a call or a poll arrives with an
+  expired token.
 - **An Org Admin can revoke** the token. Calls are refused from then on, and you
   get a notification. **Issue token** on the Trigger's page starts again.
 
@@ -587,12 +588,12 @@ best-effort and can be lost.
 
 ## Review run history
 
-**Trigger runs** is one page per Workspace. Open it from **Trigger runs** in the Triggers section of the Workspace
-home page, or from the command menu. Recent runs from every Trigger in the
+**Trigger runs** is one page per Workspace. Open it from **Trigger runs** in the Triggers section of **Home**, or from the
+command menu. Recent runs from every Trigger in the
 Workspace are there, newest first, each row naming the Trigger it came from.
 Click a row to open that run. To edit its Trigger, choose **Edit trigger** from
-the row's three-dot menu. Older runs are pruned per Trigger, keeping at least its newest
-**Max Runs to Keep** — see [What a run does](#what-a-run-does).
+the row's three-dot menu. Older runs are pruned per Trigger — see
+[What a run does](#what-a-run-does).
 
 To see whether a Trigger is failing, you don't need this page: every Trigger in
 the Workspace home list shows a **Last run** line with how long ago its newest
