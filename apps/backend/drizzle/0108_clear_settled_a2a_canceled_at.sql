@@ -9,6 +9,6 @@
 -- A settled row is never owed anything: the run it belonged to has ended.
 -- Runs in production via scripts/migrate.ts. Idempotent: clearing an already
 -- NULL column is a no-op. A cancel claimed in the deploy window whose run is
--- still going loses its stamp here; the run timeout bounds it, as ADR-0049
+-- still going loses its stamp here; the run timeout bounds it, as ADR-0054
 -- already accepts for a cancel missed during a rolling deploy.
 UPDATE "a2a_task" SET "canceled_at" = NULL WHERE "state" IS NOT NULL;

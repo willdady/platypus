@@ -306,7 +306,7 @@ export class AgentRunner {
       Promise.withResolvers<void>();
     let outputSeen = false;
 
-    // why: drained server-side so a disconnected client can't stop the run (ADR-0049)
+    // why: drained server-side so a disconnected client can't stop the run (ADR-0053)
     void (async () => {
       try {
         for await (const message of drive.snapshots) {

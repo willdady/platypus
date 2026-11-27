@@ -4,7 +4,7 @@ status: accepted
 
 # An A2A cancel names the turn it claimed, not the moment it was decided
 
-ADR-0049 said a cancel carries the moment it was decided, so it stops only a run
+ADR-0054 said a cancel carries the moment it was decided, so it stops only a run
 claimed before then. That compares clocks from two instances: a run's start time
 comes from the instance running it, while `canceledAt` comes from the instance
 that took the cancel. Skew between them let a cancel stop the Chat's next turn —
@@ -47,4 +47,4 @@ instance holds, because the User means the Chat's current run.
   to give the stamp its one meaning from the first sweep onward.
 - A `run_cancel` payload now carries `turnId` in place of `startedBefore`, so an
   instance still sending the old key is ignored as an unknown shape during a
-  rolling deploy, as ADR-0049 already accepts for payloads it does not know.
+  rolling deploy, as ADR-0054 already accepts for payloads it does not know.
