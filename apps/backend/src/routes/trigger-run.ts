@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { paginationQuerySchema, validate } from "../validate.ts";
+import { validate } from "../validate.ts";
 import { z } from "zod";
 import { and, asc, desc, eq, gt } from "drizzle-orm";
 import { db } from "../index.ts";
@@ -8,7 +8,10 @@ import {
   triggerRun as triggerRunTable,
   triggerRunEvent as triggerRunEventTable,
 } from "../db/schema.ts";
-import { triggerRunStatusSchema } from "@platypus/schemas";
+import {
+  paginationQuerySchema,
+  triggerRunStatusSchema,
+} from "@platypus/schemas";
 import { requireAuth } from "../middleware/authentication.ts";
 import {
   requireOrgAccess,

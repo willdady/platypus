@@ -4817,12 +4817,22 @@ export const artifactListSchema = z.object({
 export type ArtifactList = z.infer<typeof artifactListSchema>;
 
 /**
+ * Which page of a list to read: up to a hundred rows, `defaultLimit` when the
+ * query names no size, starting `offset` rows in. Every paged list route builds
+ * its query on this, so the bounds are written once, and a parameter the list
+ * does not add is refused.
+ */
+export const paginationQuerySchema = (defaultLimit: number) =>
+  z.strictObject({
+    limit: z.coerce.number().int().min(1).max(100).default(defaultLimit),
+    offset: z.coerce.number().int().min(0).default(0),
+  });
+
+/**
  * Which page of a Workspace's Artifacts to list, optionally narrowed to the
  * titles containing some text or to one type.
  */
-export const artifactListQuerySchema = z.strictObject({
-  limit: z.coerce.number().int().min(1).max(100).default(50),
-  offset: z.coerce.number().int().min(0).default(0),
+export const artifactListQuerySchema = paginationQuerySchema(50).extend({
   search: z.string().optional(),
   type: artifactTypeSchema.optional(),
 });

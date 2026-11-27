@@ -90,6 +90,7 @@ import {
   kanbanCardCommentUpdateSchema,
   partialWithoutDefaults,
   artifactListQuerySchema,
+  paginationQuerySchema,
 } from "./index";
 
 describe("Organization Schema", () => {
@@ -2589,6 +2590,49 @@ describe("timezoneSchema", () => {
   it("rejects an unknown zone rather than coercing it", () => {
     expect(timezoneSchema.safeParse("Mars/Olympus").success).toBe(false);
     expect(timezoneSchema.safeParse("").success).toBe(false);
+  });
+});
+
+describe("paginationQuerySchema", () => {
+  it("pages from the start, at the list's own page size, when the query names no page", () => {
+    expect(paginationQuerySchema(50).parse({})).toEqual({
+      limit: 50,
+      offset: 0,
+    });
+    expect(paginationQuerySchema(100).parse({})).toEqual({
+      limit: 100,
+      offset: 0,
+    });
+  });
+
+  it("reads the page from query strings", () => {
+    expect(
+      paginationQuerySchema(50).parse({ limit: "10", offset: "20" }),
+    ).toEqual({ limit: 10, offset: 20 });
+  });
+
+  it("accepts the smallest and the largest page size", () => {
+    const schema = paginationQuerySchema(50);
+    expect(schema.parse({ limit: "1" }).limit).toBe(1);
+    expect(schema.parse({ limit: "100" }).limit).toBe(100);
+  });
+
+  it("refuses a page size outside 1 to 100, a fraction and a negative offset", () => {
+    const schema = paginationQuerySchema(50);
+    expect(schema.safeParse({ limit: "0" }).success).toBe(false);
+    expect(schema.safeParse({ limit: "101" }).success).toBe(false);
+    expect(schema.safeParse({ limit: "1.5" }).success).toBe(false);
+    expect(schema.safeParse({ offset: "-1" }).success).toBe(false);
+  });
+
+  it("refuses an unknown parameter until a list adds it", () => {
+    const schema = paginationQuerySchema(50);
+    expect(schema.safeParse({ search: "plan" }).success).toBe(false);
+    expect(
+      schema.extend({ search: z.string().optional() }).parse({
+        search: "plan",
+      }),
+    ).toEqual({ limit: 50, offset: 0, search: "plan" });
   });
 });
 

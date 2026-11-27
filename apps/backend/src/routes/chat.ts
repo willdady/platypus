@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { paginationQuerySchema, validate } from "../validate.ts";
+import { validate } from "../validate.ts";
 import { z } from "zod";
 import { db } from "../index.ts";
 import { chat as chatTable } from "../db/schema.ts";
@@ -9,6 +9,7 @@ import {
   chatCompactSchema,
   chatSubmitSchema,
   chatUpdateSchema,
+  paginationQuerySchema,
 } from "@platypus/schemas";
 import { and, count, desc, eq, isNull, sql } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
