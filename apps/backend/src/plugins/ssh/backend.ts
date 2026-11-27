@@ -140,7 +140,9 @@ async function sftpReadCapped(
 function endQuietly(client: Client): void {
   try {
     client.end();
-  } catch {}
+  } catch {
+    // why: best-effort teardown of a connection already being discarded
+  }
 }
 
 function signalExitCode(signalName: string | undefined): number {
@@ -382,7 +384,9 @@ class SshSandboxTransport implements SandboxTransport {
         }
         try {
           stream.close();
-        } catch {}
+        } catch {
+          // why: the run settles on the close event regardless
+        }
       };
       const settle = (act: () => void) => {
         if (settled) return;
@@ -406,7 +410,9 @@ class SshSandboxTransport implements SandboxTransport {
         if (cancelled) {
           try {
             channel.close();
-          } catch {}
+          } catch {
+            // why: the run settles on the close event regardless
+          }
         }
 
         const stdoutSink = createCappedSink(stdoutCap);
@@ -418,7 +424,9 @@ class SshSandboxTransport implements SandboxTransport {
           timedOut = true;
           try {
             channel.close();
-          } catch {}
+          } catch {
+            // why: the timeout resolves on the close event regardless
+          }
         }, timeoutMs);
         timer.unref();
 

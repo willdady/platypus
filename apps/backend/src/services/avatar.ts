@@ -71,5 +71,7 @@ export async function deleteAvatar(
   if (!key) return;
   try {
     await getStorage().delete(key);
-  } catch {}
+  } catch {
+    // why: a leftover avatar file is harmless, so its delete must not fail the caller
+  }
 }
