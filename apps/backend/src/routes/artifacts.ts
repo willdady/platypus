@@ -1,16 +1,15 @@
 import { Hono } from "hono";
-import { z } from "zod";
 import {
   artifactCreateSchema,
+  artifactListQuerySchema,
   artifactListSchema,
   artifactReadSchema,
   artifactSchema,
-  artifactTypeSchema,
   artifactUpdateSchema,
   artifactVersionListSchema,
   artifactVersionQuerySchema,
 } from "@platypus/schemas";
-import { paginationQuerySchema, validate } from "../validate.ts";
+import { validate } from "../validate.ts";
 import { db } from "../index.ts";
 import { respond } from "../respond.ts";
 import { requireAuth } from "../middleware/authentication.ts";
@@ -41,11 +40,6 @@ const readers = [
 ] as const;
 const owner = [...readers, requireWorkspaceOwner] as const;
 
-const listQuerySchema = paginationQuerySchema(50).extend({
-  search: z.string().optional(),
-  type: artifactTypeSchema.optional(),
-});
-
 function withViewerSettings(
   read: Awaited<ReturnType<typeof getArtifactWithVersion>>,
 ) {
@@ -59,7 +53,7 @@ function withViewerSettings(
 artifacts.get(
   "/",
   ...readers,
-  validate("query", listQuerySchema),
+  validate("query", artifactListQuerySchema),
   async (c) => {
     const { workspaceId } = workspaceScopeOf(c);
     const { limit, offset, search, type } = c.req.valid("query");

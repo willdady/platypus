@@ -89,6 +89,7 @@ import {
   kanbanCardUpdateSchema,
   kanbanCardCommentUpdateSchema,
   partialWithoutDefaults,
+  artifactListQuerySchema,
 } from "./index";
 
 describe("Organization Schema", () => {
@@ -2588,5 +2589,43 @@ describe("timezoneSchema", () => {
   it("rejects an unknown zone rather than coercing it", () => {
     expect(timezoneSchema.safeParse("Mars/Olympus").success).toBe(false);
     expect(timezoneSchema.safeParse("").success).toBe(false);
+  });
+});
+
+describe("artifactListQuerySchema", () => {
+  it("pages from the start, fifty at a time, when the query names no page", () => {
+    expect(artifactListQuerySchema.parse({})).toEqual({ limit: 50, offset: 0 });
+  });
+
+  it("reads the page, the title search and the type from query strings", () => {
+    expect(
+      artifactListQuerySchema.parse({
+        limit: "10",
+        offset: "20",
+        search: "plan",
+        type: "code",
+      }),
+    ).toEqual({ limit: 10, offset: 20, search: "plan", type: "code" });
+  });
+
+  it("refuses a page size outside 1 to 100 and a negative offset", () => {
+    expect(artifactListQuerySchema.safeParse({ limit: "0" }).success).toBe(
+      false,
+    );
+    expect(artifactListQuerySchema.safeParse({ limit: "101" }).success).toBe(
+      false,
+    );
+    expect(artifactListQuerySchema.safeParse({ offset: "-1" }).success).toBe(
+      false,
+    );
+  });
+
+  it("refuses an unknown type and an unknown parameter", () => {
+    expect(
+      artifactListQuerySchema.safeParse({ type: "spreadsheet" }).success,
+    ).toBe(false);
+    expect(artifactListQuerySchema.safeParse({ sort: "title" }).success).toBe(
+      false,
+    );
   });
 });
