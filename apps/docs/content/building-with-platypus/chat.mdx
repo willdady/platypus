@@ -331,7 +331,7 @@ there is no one to ask, so a call a gate wants approved is stopped there.
 
 ## Where a reply's time and tokens went
 
-An **(i)** button on an assistant message opens a panel breaking the reply down
+The info button on an assistant message, **Response metrics**, opens a panel breaking the reply down
 into whichever of these it has a reading for:
 
 - **Input**, **Output**, **Total** tokens — how many tokens this reply was
@@ -551,7 +551,7 @@ only what the model is sent — the summary stands in for those messages.
 
 The expanded summary also shows a quiet **Summarised by** line: the model that
 wrote the summary, and the input and output tokens it used. Those tokens are the
-summary's own cost; they are not counted in any reply's **Token usage**.
+summary's own cost; they are not counted in any reply's **Input** or **Output**.
 
 Three things follow from that, and all are worth knowing:
 
@@ -750,7 +750,7 @@ ask an Org Admin.
 
 On a phone, the rail and the sidebar give way to a menu button in the top bar.
 Its sheet holds the Organization and Workspace switcher, then **Home**,
-**Boards** and **Artifacts**, then **New chat**, the search box and the Chat
+**Boards**, **Artifacts** and **Workspace settings**, then **New chat**, the search box and the Chat
 list. Picking anything closes the sheet.
 
 The sidebar shows your 100 most recent Chats, **Pinned** first. An older Chat
@@ -886,7 +886,7 @@ edit, or **Regenerate**.
   **With an Agent selected there is no settings button.** A Chat does not
   override an Agent's Instructions, sampling parameters or Reasoning controls
   for one conversation — the Agent's own settings win, including its **Max
-  steps**. The info button shows its Instructions, **Max steps** and sampling
+  steps**. The info button shows its Instructions, **Max Steps** and sampling
   parameters, and **Edit agent** there opens the Agent. If you want different
   behaviour, edit the Agent, or copy it and edit the copy. Looking for the gear
   on an Agent-backed Chat and concluding it's a bug is the usual confusion here.

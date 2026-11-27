@@ -20,7 +20,10 @@ The bell in the header carries a count. Click it for the list. Each entry shows
 the Agent that posted it — by name and avatar — its title if it has one, the
 message, and how long ago. A Notification Platypus posts itself, such as the notice a new
 owner gets when a Workspace is transferred to them or a Trigger run's failure
-notice, shows **Platypus** instead.
+notice, shows **Platypus** instead. Reminders that an A2A endpoint's or an
+Inbound Trigger's token is about to expire, and notices that an Org Admin revoked
+one, are the exception: they show the Agent that endpoint or Trigger runs, and
+they are sent as `notification.created` events.
 
 - Clicking a Notification marks it read and expands it; **Show more** and **Show
   less** toggle the full text.

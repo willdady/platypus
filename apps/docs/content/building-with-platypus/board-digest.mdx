@@ -52,7 +52,7 @@ The digest format is know-how, not personality, so it belongs in a Skill rather
 than in the Agent's Instructions. That keeps the Agent's prompt short and lets you
 change the format without touching the Agent.
 
-**Skills → Create skill**:
+**Home → Skills → Create skill**:
 
 - **Name**: `write-board-digest`
 - **Description**: `Format a daily digest of a Kanban board from its state and each card's history, including a stalled-work section. Use when asked to write or file a board digest.`
@@ -89,7 +89,7 @@ Rules:
 
 ## 3. The Agent
 
-**Agents → Create agent**:
+**Home → Agents → Create agent**:
 
 - **Name**: `Board digest`
 - **Description**: `Reads the My work board and files a daily digest on it.`
@@ -153,7 +153,7 @@ history — fix the Agent's **Instructions**.
 
 ## 5. The Trigger
 
-**Triggers → Create trigger**:
+**Home → Triggers → Create trigger**:
 
 - **Trigger Type**: **Cron**
 - **Name**: `Daily digest`
@@ -175,7 +175,7 @@ the expression right before you wait a day to find out.
 
 ## 6. Confirm it fired
 
-The morning after, click the Trigger's card in the **Triggers** list to open its
+The morning after, on **Home**, click the Trigger's card under **Triggers** to open its
 runs. A **Success** run and a new card in `Digests` is the whole
 acceptance test.
 
