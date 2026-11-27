@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import type { KanbanLabel } from "@platypus/schemas";
 import { KanbanLabelToggles } from "./kanban-label-toggles";
 
@@ -10,7 +10,7 @@ const labels: KanbanLabel[] = [
 
 function renderToggles({
   selectedIds = [] as string[],
-  onToggle = vi.fn(),
+  onChange = vi.fn<(selectedIds: string[]) => void>(),
 } = {}) {
   return render(
     <>
@@ -18,7 +18,7 @@ function renderToggles({
       <KanbanLabelToggles
         labels={labels}
         selectedIds={selectedIds}
-        onToggle={onToggle}
+        onChange={onChange}
         labelledBy="labels-label"
       />
     </>,
@@ -47,6 +47,24 @@ describe("KanbanLabelToggles", () => {
     expect(unselected).toHaveAttribute("aria-pressed", "false");
     expect(unselected).toHaveClass("opacity-40");
     expect(selected).not.toHaveClass("opacity-40");
+  });
+
+  it("adds an unselected label to the selection when it is clicked", () => {
+    const onChange = vi.fn<(selectedIds: string[]) => void>();
+    renderToggles({ selectedIds: ["l1"], onChange });
+
+    fireEvent.click(screen.getByRole("button", { name: "UI" }));
+
+    expect(onChange).toHaveBeenCalledExactlyOnceWith(["l1", "l2"]);
+  });
+
+  it("takes a selected label out of the selection when it is clicked", () => {
+    const onChange = vi.fn<(selectedIds: string[]) => void>();
+    renderToggles({ selectedIds: ["l1", "l2"], onChange });
+
+    fireEvent.click(screen.getByRole("button", { name: "Bug" }));
+
+    expect(onChange).toHaveBeenCalledExactlyOnceWith(["l2"]);
   });
 
   it("keeps the label colours", () => {

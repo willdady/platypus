@@ -121,6 +121,7 @@ const eslintConfig = defineConfig([
   {
     settings: {
       react: {
+        // why: eslint-config-next's "detect" makes eslint-plugin-react call context.getFilename(), which ESLint 10 removed and every lint run crashes on; drop the pin once the plugin supports ESLint 10
         version: "19.2",
       },
     },
@@ -149,6 +150,7 @@ const eslintConfig = defineConfig([
     files: TS_FILES,
     languageOptions: {
       parserOptions: {
+        // why: projectService only finds a file's nearest tsconfig.json, and the app tsconfig excludes the tests, so every test file would fail to parse
         project: ["./tsconfig.json", "./tsconfig.test.json"],
         tsconfigRootDir: import.meta.dirname,
       },

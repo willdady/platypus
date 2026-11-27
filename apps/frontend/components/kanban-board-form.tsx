@@ -99,39 +99,34 @@ export function KanbanBoardForm({
 
   const { labels } = formData;
 
-  const handleAddLabel = () => {
+  const updateLabels = (
+    update: (labels: BoardFormData["labels"]) => BoardFormData["labels"],
+  ) => {
     clearErrors("labels");
-    setFormData((prev) => ({
+    setFormData((prev) => ({ ...prev, labels: update(prev.labels) }));
+  };
+
+  const handleAddLabel = () => {
+    updateLabels((prev) => [
       ...prev,
-      labels: [
-        ...prev.labels,
-        { id: nanoid(), name: "", color: DEFAULT_COLOR },
-      ],
-    }));
+      { id: nanoid(), name: "", color: DEFAULT_COLOR },
+    ]);
   };
 
   const handleLabelNameChange = (id: string, value: string) => {
-    clearErrors("labels");
-    setFormData((prev) => ({
-      ...prev,
-      labels: prev.labels.map((l) => (l.id === id ? { ...l, name: value } : l)),
-    }));
+    updateLabels((prev) =>
+      prev.map((l) => (l.id === id ? { ...l, name: value } : l)),
+    );
   };
 
   const handleLabelColorChange = (id: string, color: string) => {
-    clearErrors("labels");
-    setFormData((prev) => ({
-      ...prev,
-      labels: prev.labels.map((l) => (l.id === id ? { ...l, color } : l)),
-    }));
+    updateLabels((prev) =>
+      prev.map((l) => (l.id === id ? { ...l, color } : l)),
+    );
   };
 
   const handleDeleteLabel = (id: string) => {
-    clearErrors("labels");
-    setFormData((prev) => ({
-      ...prev,
-      labels: prev.labels.filter((l) => l.id !== id),
-    }));
+    updateLabels((prev) => prev.filter((l) => l.id !== id));
   };
 
   return (

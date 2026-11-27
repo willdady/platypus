@@ -112,13 +112,7 @@ export function AddCardDialog({
                 <KanbanLabelToggles
                   labels={labels}
                   selectedIds={labelIds}
-                  onToggle={(labelId) =>
-                    setLabelIds((prev) =>
-                      prev.includes(labelId)
-                        ? prev.filter((id) => id !== labelId)
-                        : [...prev, labelId],
-                    )
-                  }
+                  onChange={setLabelIds}
                   labelledBy="new-card-labels-label"
                   className="mt-2"
                 />

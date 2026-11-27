@@ -760,12 +760,10 @@ const withTaskSummariserModel = async (args: {
       pointerSettingModelId(taskModelId),
       taskProvider.provider.taskModelSettings,
     );
-    const isChatModel = isChatsOwnModel({
-      taskProviderId: taskProvider.provider.id,
-      taskModelId,
-      chatProviderId,
-      chatModelId: chat.modelId,
-    });
+    const isChatModel = isChatsOwnModel(
+      { providerId: taskProvider.provider.id, modelId: taskModelId },
+      { providerId: chatProviderId, modelId: chat.modelId },
+    );
     const maxOutputTokens = jobMaxOutputTokens(
       taskProvider.provider,
       pointerSettingModelId(taskModelId),
