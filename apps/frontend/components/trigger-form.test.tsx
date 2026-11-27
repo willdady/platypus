@@ -27,6 +27,7 @@ import {
   selectTimezone,
 } from "@/test/test-utils";
 import { getBrowserTimezone, TIMEZONES } from "@/lib/timezones";
+import { FIX_FORM_ERRORS_MESSAGE } from "@/lib/apply-write-outcome";
 
 vi.mock("@/components/auth-provider", () => authMock);
 vi.mock("swr", () => swrMock);
@@ -87,47 +88,47 @@ describe("TriggerForm — form submission", () => {
 });
 
 describe("TriggerForm — Max Runs to Keep validation", () => {
-  it("shows the server's rejection inline under the field, and clears it on edit", async () => {
-    stubRejectedSave([
-      {
-        path: ["maxRunsToKeep"],
-        message: "Number must be less than or equal to 1000",
-      },
-    ]);
-    render(<TriggerForm orgId="org1" workspaceId="ws1" />);
-    expect(await screen.findByText("Agent")).toBeInTheDocument();
+  it.each([
+    ["0", "Number must be greater than or equal to 1"],
+    ["5000", "Number must be less than or equal to 1000"],
+  ])(
+    "shows the server's rejection of %s inline, and clears it once the field is edited",
+    async (rejected, message) => {
+      stubRejectedSave([{ path: ["maxRunsToKeep"], message }]);
+      render(<TriggerForm orgId="org1" workspaceId="ws1" />);
+      expect(await screen.findByText("Agent")).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText("Name"), {
-      target: { value: "Nightly" },
-    });
-    fireEvent.change(screen.getByLabelText("Instruction"), {
-      target: { value: "Do it" },
-    });
-    fireEvent.change(screen.getByLabelText("Max Runs to Keep"), {
-      target: { value: "5000" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+      fireEvent.change(screen.getByLabelText("Name"), {
+        target: { value: "Nightly" },
+      });
+      fireEvent.change(screen.getByLabelText("Instruction"), {
+        target: { value: "Do it" },
+      });
+      fireEvent.change(screen.getByLabelText("Max Runs to Keep"), {
+        target: { value: rejected },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
-    expect(
-      await screen.findByText("Number must be less than or equal to 1000"),
-    ).toBeInTheDocument();
-    expect(screen.getByLabelText("Max Runs to Keep")).toHaveAttribute(
-      "aria-invalid",
-      "true",
-    );
+      expect(await screen.findByText(message)).toBeInTheDocument();
+      expect(toastError).toHaveBeenCalledWith(FIX_FORM_ERRORS_MESSAGE);
+      expect(screen.getByLabelText("Max Runs to Keep")).toHaveAttribute(
+        "aria-invalid",
+        "true",
+      );
 
-    fireEvent.change(screen.getByLabelText("Max Runs to Keep"), {
-      target: { value: "500" },
-    });
+      fireEvent.change(screen.getByLabelText("Max Runs to Keep"), {
+        target: { value: "500" },
+      });
 
-    expect(
-      screen.queryByText("Number must be less than or equal to 1000"),
-    ).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Max Runs to Keep")).toHaveAttribute(
-      "aria-invalid",
-      "false",
-    );
-  });
+      await waitFor(() =>
+        expect(screen.queryByText(message)).not.toBeInTheDocument(),
+      );
+      expect(screen.getByLabelText("Max Runs to Keep")).toHaveAttribute(
+        "aria-invalid",
+        "false",
+      );
+    },
+  );
 });
 
 describe("TriggerForm — success feedback", () => {
