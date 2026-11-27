@@ -55,7 +55,7 @@ export const resolveTaskModelProvider = async (
   return { provider, ...selection };
 };
 
-export type ProviderModel = {
+type ProviderModel = {
   providerId: string;
   modelId: string;
 };
