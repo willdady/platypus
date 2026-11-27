@@ -94,14 +94,24 @@ function ArtifactImage({
   );
 }
 
+export type ArtifactGutter = "document" | "source";
+
+// why: a document outgrows its pane-high box, hiding the pane's inset; source scrolls inside its block
+const GUTTER: Record<ArtifactGutter, string> = {
+  document: "pb-4",
+  source: "size-full [&_[data-streamdown=code-block-body]]:pb-8",
+};
+
 export function ArtifactMarkdown({
   content,
   storageBaseUrl,
   className,
+  gutter,
 }: {
   content: string;
   storageBaseUrl?: string | null;
   className?: string;
+  gutter?: ArtifactGutter;
 }) {
   const components = useMemo(
     () => ({
@@ -112,7 +122,7 @@ export function ArtifactMarkdown({
     [storageBaseUrl],
   );
 
-  return (
+  const document = (
     <MessageResponse
       className={className}
       components={components}
@@ -121,6 +131,14 @@ export function ArtifactMarkdown({
     >
       {content}
     </MessageResponse>
+  );
+
+  return gutter ? (
+    <div data-testid="artifact-gutter" className={GUTTER[gutter]}>
+      {document}
+    </div>
+  ) : (
+    document
   );
 }
 
