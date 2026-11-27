@@ -86,6 +86,50 @@ describe("TriggerForm — form submission", () => {
   });
 });
 
+describe("TriggerForm — Max Runs to Keep validation", () => {
+  it("shows the server's rejection inline under the field, and clears it on edit", async () => {
+    stubRejectedSave([
+      {
+        path: ["maxRunsToKeep"],
+        message: "Number must be less than or equal to 1000",
+      },
+    ]);
+    render(<TriggerForm orgId="org1" workspaceId="ws1" />);
+    expect(await screen.findByText("Agent")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Nightly" },
+    });
+    fireEvent.change(screen.getByLabelText("Instruction"), {
+      target: { value: "Do it" },
+    });
+    fireEvent.change(screen.getByLabelText("Max Runs to Keep"), {
+      target: { value: "5000" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(
+      await screen.findByText("Number must be less than or equal to 1000"),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Max Runs to Keep")).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
+
+    fireEvent.change(screen.getByLabelText("Max Runs to Keep"), {
+      target: { value: "500" },
+    });
+
+    expect(
+      screen.queryByText("Number must be less than or equal to 1000"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Max Runs to Keep")).toHaveAttribute(
+      "aria-invalid",
+      "false",
+    );
+  });
+});
+
 describe("TriggerForm — success feedback", () => {
   it("toasts that the Trigger was created", async () => {
     stubAcceptedSave({ id: "t1" });

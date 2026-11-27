@@ -437,6 +437,7 @@ function TriggerForm({
                 value={String(formData.maxRunsToKeep)}
                 onChange={(value) => setNumberField("maxRunsToKeep", value)}
                 disabled={isSubmitting}
+                error={validationErrors.maxRunsToKeep}
                 description="Minimum number of recent run records to keep; older ones are pruned"
               />
 
