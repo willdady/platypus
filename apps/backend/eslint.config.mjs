@@ -31,7 +31,6 @@ const eslintConfig = defineConfig([
     plugins: { local: { rules: { "no-comments": noComments } } },
     rules: {
       "local/no-comments": "error",
-      "no-empty": ["error", { allowEmptyCatch: true }],
     },
   },
 

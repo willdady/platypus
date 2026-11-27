@@ -4,7 +4,9 @@ import { defineConfig } from "vitest/config";
 // why: these tests need a real Postgres, which `pnpm test` must not need
 try {
   process.loadEnvFile(fileURLToPath(new URL(".env", import.meta.url)));
-} catch {}
+} catch {
+  // why: a missing .env is fine when the environment already supplies the variables
+}
 
 export default defineConfig({
   test: {
