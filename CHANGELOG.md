@@ -1,5 +1,53 @@
 # Changelog
 
+## [4.7.0](https://github.com/willdady/platypus/compare/v4.6.0...v4.7.0) (2026-11-27)
+
+
+### Features
+
+* add the Workspace Artifacts page ([#2033](https://github.com/willdady/platypus/issues/2033)) ([c022f35](https://github.com/willdady/platypus/commit/c022f35865439d9b501a4b9e26b94b804c0c4433))
+* **artifacts:** create an Artifact and open it from the Chat ([#2031](https://github.com/willdady/platypus/issues/2031)) ([7e40bff](https://github.com/willdady/platypus/commit/7e40bffacdfc518e6567baca9d54dfac7a57ee3b))
+* **artifacts:** let Agents edit, read and list with versions ([#2035](https://github.com/willdady/platypus/issues/2035)) ([2cfade0](https://github.com/willdady/platypus/commit/2cfade0c3bfddc63c7534da0321490a6b0159f57))
+* **artifacts:** polish the Artifact viewer ([#2040](https://github.com/willdady/platypus/issues/2040)) ([27089f0](https://github.com/willdady/platypus/commit/27089f07e65ed597305f4499ab13826d696cb0a5))
+* **artifacts:** run HTML and SVG Artifacts in a sandboxed frame ([#2034](https://github.com/willdady/platypus/issues/2034)) ([380fc01](https://github.com/willdady/platypus/commit/380fc0146e2ec6b10ee1198ab68814afbfe0a79e))
+* **artifacts:** upload a text file as an Artifact ([#2036](https://github.com/willdady/platypus/issues/2036)) ([37a7fd0](https://github.com/willdady/platypus/commit/37a7fd08968a7183ab1dd27bd8191e366d6605b4))
+* **backend:** create Workspace versions of Shared bundled Skills ([#2167](https://github.com/willdady/platypus/issues/2167)) ([2b219a1](https://github.com/willdady/platypus/commit/2b219a12d9cbb2d79e121ffdd771396461f43e2c))
+* **backend:** give the Transcript summary prompt required sections and an 8,192-token cap ([#2053](https://github.com/willdady/platypus/issues/2053)) ([c20ab87](https://github.com/willdady/platypus/commit/c20ab87671c9c72481f08a2d3592e9b58e1337f0))
+* **backend:** pass the turn's abort signal to a web backend's factory ([#2172](https://github.com/willdady/platypus/issues/2172)) ([41bcf7e](https://github.com/willdady/platypus/commit/41bcf7e75a07aa703d5fdfa7562ae569da627d2e))
+* **backend:** start a Chat's title alongside its reply when the title model differs ([#2065](https://github.com/willdady/platypus/issues/2065)) ([f7896e1](https://github.com/willdady/platypus/commit/f7896e1e9be6b1db17f680765dc0dc6735e078a1))
+* **frontend:** add a Workspace rail, a Boards screen and move the switcher to the top bar ([#2047](https://github.com/willdady/platypus/issues/2047)) ([d2e5f80](https://github.com/willdady/platypus/commit/d2e5f8066722bfe9860b8c47e5aeb5a970b507b8))
+* **frontend:** list a finished reply's Artifacts in its tray ([#2062](https://github.com/willdady/platypus/issues/2062)) ([bd9357d](https://github.com/willdady/platypus/commit/bd9357d367a33bfdd838179f112eca4dd5721592))
+* **frontend:** make the Artifact panel split resizable ([#2064](https://github.com/willdady/platypus/issues/2064)) ([23f380c](https://github.com/willdady/platypus/commit/23f380c06de711400ca534685e50056af67d844c))
+* **frontend:** show Artifact content while the Agent writes it ([#2032](https://github.com/willdady/platypus/issues/2032)) ([c30348c](https://github.com/willdady/platypus/commit/c30348c095eaff821e645c5eb0aead242380d212))
+* render the Sandbox config form from the backend's schema ([25e3ba5](https://github.com/willdady/platypus/commit/25e3ba5c88d6ac2c0b95a31edc94f464e75a0145))
+
+
+### Bug Fixes
+
+* **artifacts:** load Markdown Artifact images from the storage base ([#2039](https://github.com/willdady/platypus/issues/2039)) ([beda459](https://github.com/willdady/platypus/commit/beda4595727bc42582d9f366b2c02971b21961a7))
+* **backend:** bound the Transcript summary's user requests section ([#2060](https://github.com/willdady/platypus/issues/2060)) ([9b0d32d](https://github.com/willdady/platypus/commit/9b0d32dc57e0abb197a063d0b03450fbdf58a810))
+* **backend:** cancel an A2A run by its turn, not by a cross-instance clock ([#2165](https://github.com/willdady/platypus/issues/2165)) ([c57abe2](https://github.com/willdady/platypus/commit/c57abe245c6070b40da94c5242c36e6bf01dea1b))
+* **backend:** deliver A2A push notifications at least once ([#2162](https://github.com/willdady/platypus/issues/2162)) ([fdd14d2](https://github.com/willdady/platypus/commit/fdd14d2c07b0a770ba244ee175c37bdfe29e4048))
+* **backend:** hold a job's output cap to the model's declared limit ([#2063](https://github.com/willdady/platypus/issues/2063)) ([e6a09c0](https://github.com/willdady/platypus/commit/e6a09c026b59d194aa441ed4f7d3300f8faee4a7))
+* **backend:** hold the per-Task push-config cap under concurrent registrations ([#2163](https://github.com/willdady/platypus/issues/2163)) ([552c981](https://github.com/willdady/platypus/commit/552c981186bc4d455457991a3122c95cdb97b320))
+* **backend:** keep outside writes through a fake db transaction ([d02a31f](https://github.com/willdady/platypus/commit/d02a31fc88819c084025f74849d286a36cc449d1)), closes [#2122](https://github.com/willdady/platypus/issues/2122)
+* **backend:** leave room for a job call's reply in its input budget ([#2061](https://github.com/willdady/platypus/issues/2061)) ([68b47a9](https://github.com/willdady/platypus/commit/68b47a9b369b22b73d5de2651047abf978a1a8be))
+* **backend:** make Run event tool names storable at record time ([#2029](https://github.com/willdady/platypus/issues/2029)) ([aadc197](https://github.com/willdady/platypus/commit/aadc1975fb3efae159d215ad102dd3e721a15758))
+* **backend:** reconnect the notification listener when its socket goes half-open ([#2156](https://github.com/willdady/platypus/issues/2156)) ([4e71f69](https://github.com/willdady/platypus/commit/4e71f69493209251c30c4259126137dac4b67503))
+* **backend:** warn when storable() drops a value on a key collision ([#2028](https://github.com/willdady/platypus/issues/2028)) ([27b33d9](https://github.com/willdady/platypus/commit/27b33d99f77c7ae1b93f6fe3dafebfe3102c5615))
+* **docs:** correct Building with Platypus claims the 4.7.0 docs audit found ([#2249](https://github.com/willdady/platypus/issues/2249)) ([8b17723](https://github.com/willdady/platypus/commit/8b1772367827f216de4a46e62b6e0190e095adb0))
+* **frontend:** delay workspace rail tooltips by 700ms ([5454552](https://github.com/willdady/platypus/commit/545455205062ac6872cc389e04d69fa2b82486d8))
+* **frontend:** hide "Add provider" from users who cannot add one ([#2059](https://github.com/willdady/platypus/issues/2059)) ([69a3c18](https://github.com/willdady/platypus/commit/69a3c189acc7bf75fd1a4f7e361f5b43548a6dc0))
+* **frontend:** keep a reply in flight after reloading a Chat mid-run ([#2234](https://github.com/willdady/platypus/issues/2234)) ([4a18b03](https://github.com/willdady/platypus/commit/4a18b0332fceb07c94b2b8055f5605db2bdc4d06))
+* **frontend:** keep the Edit model dialog scrollable when the Reasoning map is long ([#2241](https://github.com/willdady/platypus/issues/2241)) ([6a6c4f6](https://github.com/willdady/platypus/commit/6a6c4f6eb66d35b10c398529396d78c368a5a33f))
+* **frontend:** make Kanban label toggles keyboard-operable ([#2228](https://github.com/willdady/platypus/issues/2228)) ([63d4ca9](https://github.com/willdady/platypus/commit/63d4ca9416255d1835fd19554800b73d543955a5))
+* **frontend:** reject duplicate provider headers ([#2000](https://github.com/willdady/platypus/issues/2000)) ([5b7018b](https://github.com/willdady/platypus/commit/5b7018bf7601c4124470d45d376421f1fb25be74))
+* **frontend:** restore accessible names to remove-member selects ([#2026](https://github.com/willdady/platypus/issues/2026)) ([f1e9d0b](https://github.com/willdady/platypus/commit/f1e9d0b337d16519ee53d48abbde92eba47a9fd0))
+* **frontend:** show a rejected label write and clear it on the next edit ([#2222](https://github.com/willdady/platypus/issues/2222)) ([a73a463](https://github.com/willdady/platypus/commit/a73a46335449a5bafa538ad830a1d5bcc3cf1822))
+* **frontend:** show validation error on Trigger "Max Runs to Keep" ([#2242](https://github.com/willdady/platypus/issues/2242)) ([e10167f](https://github.com/willdady/platypus/commit/e10167f7be247443d9b7d3ad8938a4be32fdb8d0))
+* **frontend:** surface a failed send instead of swallowing it ([#2224](https://github.com/willdady/platypus/issues/2224)) ([c65ff73](https://github.com/willdady/platypus/commit/c65ff7332a3ad4fecb63bae566478b91e823ccbf))
+* **frontend:** toast on duplicate header save refusal ([#2027](https://github.com/willdady/platypus/issues/2027)) ([133ed6a](https://github.com/willdady/platypus/commit/133ed6a0234aa7d046675c8fb80aea77b9ecd781))
+
 ## [4.6.0](https://github.com/willdady/platypus/compare/v4.5.0...v4.6.0) (2026-11-21)
 
 
