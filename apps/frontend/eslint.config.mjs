@@ -116,8 +116,6 @@ const eslintConfig = defineConfig([
     ...config,
     files: TS_FILES,
   })),
-  // eslint-config-next sets `settings.react.version = "detect"`, which makes
-  // eslint-plugin-react@7.37.5 call the `context.getFilename()` API that was
   {
     settings: {
       react: {
