@@ -55,14 +55,16 @@ export const resolveTaskModelProvider = async (
   return { provider, ...selection };
 };
 
-export const isChatsOwnModel = (args: {
-  taskProviderId: string;
-  taskModelId: string;
-  chatProviderId: string;
-  chatModelId: string;
-}): boolean =>
-  args.taskProviderId === args.chatProviderId &&
-  args.taskModelId === args.chatModelId;
+type ProviderModel = {
+  providerId: string;
+  modelId: string;
+};
+
+export const isChatsOwnModel = (
+  task: ProviderModel,
+  chat: ProviderModel,
+): boolean =>
+  task.providerId === chat.providerId && task.modelId === chat.modelId;
 
 export const drizzleTaskModelQueries: TaskModelQueries = {
   async getProvider(id, orgId, workspaceId) {

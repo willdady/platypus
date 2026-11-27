@@ -8,13 +8,13 @@ import { cn } from "@/lib/utils";
 export function KanbanLabelToggles({
   labels,
   selectedIds,
-  onToggle,
+  onChange,
   labelledBy,
   className,
 }: {
   labels: KanbanLabel[];
   selectedIds: string[];
-  onToggle: (labelId: string) => void;
+  onChange: (selectedIds: string[]) => void;
   labelledBy: string;
   className?: string;
 }) {
@@ -39,7 +39,13 @@ export function KanbanLabelToggles({
             <button
               type="button"
               aria-pressed={isSelected}
-              onClick={() => onToggle(label.id)}
+              onClick={() =>
+                onChange(
+                  isSelected
+                    ? selectedIds.filter((id) => id !== label.id)
+                    : [...selectedIds, label.id],
+                )
+              }
               className={cn(
                 "focus-visible:opacity-100",
                 !isSelected && "opacity-40",

@@ -301,12 +301,10 @@ export const startEarlyChatTitle = async (
   if (provider.taskModelId.trim() === "") return;
 
   if (
-    isChatsOwnModel({
-      taskProviderId: provider.id,
-      taskModelId: provider.taskModelId,
-      chatProviderId: providerId,
-      chatModelId: modelId,
-    })
+    isChatsOwnModel(
+      { providerId: provider.id, modelId: provider.taskModelId },
+      { providerId, modelId },
+    )
   ) {
     return;
   }

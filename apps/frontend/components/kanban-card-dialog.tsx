@@ -585,7 +585,7 @@ function CardMetadataSection({
   onColumnChange,
   labels,
   selectedLabelIds,
-  onToggleLabel,
+  onLabelIdsChange,
   selectedPriority,
   onPriorityChange,
   selectedDueDate,
@@ -605,7 +605,7 @@ function CardMetadataSection({
   onColumnChange: (columnId: string) => void;
   labels: KanbanLabel[];
   selectedLabelIds: string[];
-  onToggleLabel: (labelId: string) => void;
+  onLabelIdsChange: (labelIds: string[]) => void;
   selectedPriority: KanbanCardPriority;
   onPriorityChange: (priority: KanbanCardPriority) => void;
   selectedDueDate: string | null;
@@ -647,7 +647,7 @@ function CardMetadataSection({
           <KanbanLabelToggles
             labels={labels}
             selectedIds={selectedLabelIds}
-            onToggle={onToggleLabel}
+            onChange={onLabelIdsChange}
             labelledBy="card-labels-label"
           />
         </div>
@@ -887,14 +887,6 @@ export function KanbanCardDialog({
     );
   };
 
-  const toggleLabel = (labelId: string) => {
-    setSelectedLabelIds((prev) =>
-      prev.includes(labelId)
-        ? prev.filter((id) => id !== labelId)
-        : [...prev, labelId],
-    );
-  };
-
   const toggleAssignee = (type: "user" | "agent", id: string) => {
     setSelectedAssignees((prev) => {
       const exists = prev.some((a) => a.type === type && a.id === id);
@@ -924,7 +916,7 @@ export function KanbanCardDialog({
       onColumnChange={setSelectedColumnId}
       labels={labels}
       selectedLabelIds={selectedLabelIds}
-      onToggleLabel={toggleLabel}
+      onLabelIdsChange={setSelectedLabelIds}
       selectedPriority={selectedPriority}
       onPriorityChange={setSelectedPriority}
       selectedDueDate={selectedDueDate}

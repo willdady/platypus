@@ -116,11 +116,10 @@ const eslintConfig = defineConfig([
     ...config,
     files: TS_FILES,
   })),
-  // eslint-config-next sets `settings.react.version = "detect"`, which makes
-  // eslint-plugin-react@7.37.5 call the `context.getFilename()` API that was
   {
     settings: {
       react: {
+        // why: "detect" calls context.getFilename(), gone in ESLint 10; unpin once eslint-plugin-react supports it
         version: "19.2",
       },
     },
@@ -149,6 +148,7 @@ const eslintConfig = defineConfig([
     files: TS_FILES,
     languageOptions: {
       parserOptions: {
+        // why: projectService only finds the nearest tsconfig.json, which excludes the test files
         project: ["./tsconfig.json", "./tsconfig.test.json"],
         tsconfigRootDir: import.meta.dirname,
       },
