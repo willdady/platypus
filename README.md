@@ -40,6 +40,7 @@ Platypus is an open-source, full-stack application for building AI Agents that r
 - **🏖️ Sandbox:** Shell and filesystem access inside an isolated, per-workspace execution environment, with pluggable Docker and SSH reference backends.
 - **🧠 Memory:** Facts and preferences are extracted from your conversations in the background and injected into future chats, so Agents remember you over time.
 - **📋 Boards:** Drag-and-drop Kanban boards, readable and updatable by Agents through built-in tools.
+- **📄 Artifacts:** Agents write standalone, versioned documents, code, Mermaid diagrams, HTML pages, and SVG images that open beside the Chat and live on a Workspace Artifacts page.
 - **⏰ Triggers:** Run Agents on a cron schedule, as a one-off, or in response to Workspace events like a card landing on a Board.
 - **🔔 Notifications & Webhooks:** Agents post Notifications to the Workspace, and HMAC-signed webhooks push Board and Notification events to your own systems, with per-event filtering and automatic retries.
 - **🏢 Multi-Tenancy:** Organizations and Workspaces isolate data and keep one team's work out of another's.
