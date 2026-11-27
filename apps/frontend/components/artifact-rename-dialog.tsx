@@ -38,7 +38,7 @@ export function ArtifactRenameDialog({
       buildPayload: (data) => ({ title: data.title }),
       conflictField: null,
       invalidMessage: null,
-      successMessage: "Artifact renamed",
+      successMessage: "Artifact updated",
       onSuccess: () => {
         onRenamed();
         onOpenChange(false);

@@ -1,10 +1,11 @@
 import { and, count, desc, eq, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import {
-  ARTIFACT_CONTENT_MAX_BYTES,
+  ARTIFACT_CONTENT_TOO_LARGE_MESSAGE,
   ARTIFACT_TITLE_MAX_LENGTH,
   ARTIFACT_TITLE_MIN_LENGTH,
-  artifactContentByteLength,
+  artifactContentSchema,
+  artifactTitleSchema,
   type ArtifactAuthor,
   type ArtifactEdit,
   type ArtifactType,
@@ -40,19 +41,10 @@ export type CreateArtifactInput = {
   author: ArtifactAuthor;
 };
 
-export type RewriteArtifactInput = {
-  title: string;
-  type: ArtifactType;
-  language?: string;
-  content: string;
-  author: ArtifactAuthor;
-};
+export type RewriteArtifactInput = Omit<CreateArtifactInput, "sourceChatId">;
 
 export function assertArtifactTitle(title: string): void {
-  if (
-    title.length < ARTIFACT_TITLE_MIN_LENGTH ||
-    title.length > ARTIFACT_TITLE_MAX_LENGTH
-  ) {
+  if (!artifactTitleSchema.safeParse(title).success) {
     throw new ValidationError(
       `Artifact title must be between ${ARTIFACT_TITLE_MIN_LENGTH} and ${ARTIFACT_TITLE_MAX_LENGTH} characters`,
     );
@@ -60,10 +52,8 @@ export function assertArtifactTitle(title: string): void {
 }
 
 export function assertArtifactContent(content: string): void {
-  if (artifactContentByteLength(content) > ARTIFACT_CONTENT_MAX_BYTES) {
-    throw new ValidationError(
-      `Artifact content must be at most ${ARTIFACT_CONTENT_MAX_BYTES / 1024} KB`,
-    );
+  if (!artifactContentSchema.safeParse(content).success) {
+    throw new ValidationError(ARTIFACT_CONTENT_TOO_LARGE_MESSAGE);
   }
 }
 

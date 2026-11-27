@@ -258,7 +258,7 @@ describe("ArtifactsList", () => {
         body: JSON.stringify({ title: "Renamed" }),
       }),
     );
-    expect(toastSuccess).toHaveBeenCalledWith("Artifact renamed");
+    expect(toastSuccess).toHaveBeenCalledWith("Artifact updated");
     expect(mutate).toHaveBeenCalled();
   });
 

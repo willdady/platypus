@@ -7,7 +7,7 @@ import type {
 import type { DelegateTool } from "./tools/sub-agent.ts";
 import type { createFsDownloadTool } from "./sandbox/tools.ts";
 import type {
-  createCreateArtifactTool,
+  createCreateOrRewriteArtifactTool,
   createUpdateArtifactTool,
 } from "./tools/artifacts.ts";
 
@@ -47,7 +47,7 @@ export type CustomUIToolsMatchBackend = [
   >,
   Expect<
     Equal<
-      InferUITool<ReturnType<typeof createCreateArtifactTool>>,
+      InferUITool<ReturnType<typeof createCreateOrRewriteArtifactTool>>,
       CustomUITools["createArtifact"]
     >
   >,

@@ -4732,12 +4732,21 @@ export const artifactScriptOriginSchema = z.string().transform((value, ctx) => {
 export const ARTIFACT_TITLE_MIN_LENGTH = 1;
 export const ARTIFACT_TITLE_MAX_LENGTH = 200;
 
+/** An Artifact's title within its bounds, wherever one is written. */
+export const artifactTitleSchema = z
+  .string()
+  .min(ARTIFACT_TITLE_MIN_LENGTH)
+  .max(ARTIFACT_TITLE_MAX_LENGTH);
+
 /** The most a single Artifact version may hold, measured in UTF-8 bytes. */
 export const ARTIFACT_CONTENT_MAX_BYTES = 512 * 1024;
 
 /** The exact UTF-8 byte length of Artifact content, which is what the cap bounds. */
 export const artifactContentByteLength = (content: string): number =>
   new TextEncoder().encode(content).length;
+
+/** What a writer is told when a version is over the cap. */
+export const ARTIFACT_CONTENT_TOO_LARGE_MESSAGE = `Artifact content must be at most ${ARTIFACT_CONTENT_MAX_BYTES / 1024} KB`;
 
 /**
  * Artifact content within its per-version cap. Bytes rather than characters:
@@ -4749,9 +4758,7 @@ export const artifactContentSchema = z
   .refine(
     (content) =>
       artifactContentByteLength(content) <= ARTIFACT_CONTENT_MAX_BYTES,
-    {
-      message: `Artifact content must be at most ${ARTIFACT_CONTENT_MAX_BYTES / 1024} KB`,
-    },
+    { message: ARTIFACT_CONTENT_TOO_LARGE_MESSAGE },
   );
 
 export const artifactSchema = z.object({
@@ -4759,10 +4766,7 @@ export const artifactSchema = z.object({
   workspaceId: z.string(),
   /** The Chat that first produced the Artifact; null once that Chat is gone. */
   sourceChatId: z.string().nullable().optional(),
-  title: z
-    .string()
-    .min(ARTIFACT_TITLE_MIN_LENGTH)
-    .max(ARTIFACT_TITLE_MAX_LENGTH),
+  title: artifactTitleSchema,
   type: artifactTypeSchema,
   /** Set for `code` Artifacts only; null for every other type. */
   language: z.string().nullable().optional(),
@@ -4812,12 +4816,20 @@ export const artifactListSchema = z.object({
 
 export type ArtifactList = z.infer<typeof artifactListSchema>;
 
+/**
+ * Which page of a Workspace's Artifacts to list, optionally narrowed to the
+ * titles containing some text or to one type.
+ */
+export const artifactListQuerySchema = z.strictObject({
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+  search: z.string().optional(),
+  type: artifactTypeSchema.optional(),
+});
+
 /** The body that renames an Artifact; the title obeys the same bound as create. */
 export const artifactUpdateSchema = z.strictObject({
-  title: z
-    .string()
-    .min(ARTIFACT_TITLE_MIN_LENGTH)
-    .max(ARTIFACT_TITLE_MAX_LENGTH),
+  title: artifactTitleSchema,
 });
 
 export type ArtifactUpdate = z.infer<typeof artifactUpdateSchema>;
@@ -4832,10 +4844,7 @@ export const artifactVersionQuerySchema = z.strictObject({
 
 /** The body an Agent's `createArtifact` call writes into version 1. */
 export const artifactCreateSchema = z.strictObject({
-  title: z
-    .string()
-    .min(ARTIFACT_TITLE_MIN_LENGTH)
-    .max(ARTIFACT_TITLE_MAX_LENGTH),
+  title: artifactTitleSchema,
   type: artifactTypeSchema,
   language: z.string().optional(),
   content: artifactContentSchema,

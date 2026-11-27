@@ -4,6 +4,7 @@ import {
   ARTIFACT_TITLE_MAX_LENGTH,
   ARTIFACT_TITLE_MIN_LENGTH,
   artifactContentSchema,
+  artifactTitleSchema,
   artifactTypeSchema,
 } from "@platypus/schemas";
 import { z } from "zod";
@@ -29,7 +30,10 @@ function approvedOriginsSentence(scriptOrigins: readonly string[]): string {
   );
 }
 
-export function createCreateArtifactTool(
+const TITLE_LIMIT = `${ARTIFACT_TITLE_MIN_LENGTH} to ${ARTIFACT_TITLE_MAX_LENGTH} characters`;
+const CONTENT_LIMIT = `at most ${ARTIFACT_CONTENT_MAX_BYTES / 1024} KB`;
+
+export function createCreateOrRewriteArtifactTool(
   workspaceId: string,
   sourceChatId: string,
 ) {
@@ -38,9 +42,8 @@ export function createCreateArtifactTool(
       "Create a standalone Artifact in this workspace — a document, a script, " +
       "a Mermaid diagram, an HTML page or an SVG image — or rewrite an " +
       "existing one whole by passing its id. Use it for a piece worth keeping " +
-      "apart from the conversation. The title is 1 to " +
-      `${ARTIFACT_TITLE_MAX_LENGTH} characters; the content is at most ` +
-      `${ARTIFACT_CONTENT_MAX_BYTES / 1024} KB. Set language only for code. ` +
+      `apart from the conversation. The title is ${TITLE_LIMIT}; the content ` +
+      `is ${CONTENT_LIMIT}. Set language only for code. ` +
       "An Artifact's type cannot change after it is created. " +
       `${approvedOriginsSentence(env().ARTIFACT_SCRIPT_ORIGINS)} ` +
       "Returns the Artifact's id, title and version number, never its content.",
@@ -51,11 +54,9 @@ export function createCreateArtifactTool(
         .describe(
           "An existing Artifact's id to rewrite with the whole content. Omit to create a new Artifact.",
         ),
-      title: z
-        .string()
-        .min(ARTIFACT_TITLE_MIN_LENGTH)
-        .max(ARTIFACT_TITLE_MAX_LENGTH)
-        .describe("A short name for the Artifact, 1 to 200 characters"),
+      title: artifactTitleSchema.describe(
+        `A short name for the Artifact, ${TITLE_LIMIT}`,
+      ),
       type: artifactTypeSchema.describe(
         "The content type. Use code for a script, mermaid for a diagram, html for a page, svg for an image.",
       ),
@@ -66,7 +67,7 @@ export function createCreateArtifactTool(
           "The programming language for a code Artifact; omit for every other type",
         ),
       content: artifactContentSchema.describe(
-        "The full content, at most 512 KB",
+        `The full content, ${CONTENT_LIMIT}`,
       ),
     }),
     execute: async ({ id, title, type, language, content }) =>
@@ -228,7 +229,10 @@ export function createArtifactTools(
   sourceChatId: string,
 ): Record<string, Tool> {
   return {
-    createArtifact: createCreateArtifactTool(workspaceId, sourceChatId),
+    createArtifact: createCreateOrRewriteArtifactTool(
+      workspaceId,
+      sourceChatId,
+    ),
     updateArtifact: createUpdateArtifactTool(workspaceId),
     readArtifact: createReadArtifactTool(workspaceId),
     listArtifacts: createListArtifactsTool(workspaceId),
