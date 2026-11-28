@@ -46,6 +46,10 @@ export function createCreateOrRewriteArtifactTool(
       `is ${CONTENT_LIMIT}. Set language only for code. ` +
       "An Artifact's type cannot change after it is created. " +
       `${approvedOriginsSentence(env().ARTIFACT_SCRIPT_ORIGINS)} ` +
+      "HTML and SVG Artifacts render in a sandboxed frame with no network, " +
+      "storage, eval or popups: fetch, localStorage, cookies, eval, " +
+      "new Function, alert and form submits fail, and images must be inline " +
+      "data: URIs. Embed all data in the page. " +
       "Returns the Artifact's id, title and version number, never its content.",
     inputSchema: z.object({
       id: z

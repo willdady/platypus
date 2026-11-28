@@ -1,5 +1,7 @@
 import type { ArtifactType } from "@platypus/schemas";
 
+// why: the backend createArtifact tool description tells the model these limits; change both together
+
 export const ARTIFACT_FRAME_SANDBOX = "allow-scripts";
 
 export const ARTIFACT_FRAME_HOST_CSP = "frame-src 'none'";

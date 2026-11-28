@@ -130,6 +130,12 @@ describe("createArtifactTools", () => {
     );
   });
 
+  it("tells the model what the Artifact frame blocks", () => {
+    expect(tools.createArtifact.description).toMatch(
+      /no network, storage, eval or popups/,
+    );
+  });
+
   it("says no external origins are allowed when the list is empty", () => {
     vi.stubEnv("ARTIFACT_SCRIPT_ORIGINS", "");
 
