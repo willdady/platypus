@@ -347,6 +347,23 @@ describe("ArtifactViewer", () => {
     expect(screen.queryByText(/```mermaid/)).not.toBeInTheDocument();
   });
 
+  it("hides the Artifact frame until its document loads", () => {
+    artifactHook.mockReturnValue({
+      data: {
+        ...markdown,
+        artifact: { ...markdown.artifact, type: "html" },
+        version: { ...markdown.version, content: "<h1>Quarterly sales</h1>" },
+      },
+      isLoading: false,
+    });
+    renderViewer();
+
+    const frame = screen.getByTitle("Artifact preview");
+    expect(frame).toHaveClass("invisible");
+    fireEvent.load(frame);
+    expect(frame).not.toHaveClass("invisible");
+  });
+
   it("runs an HTML Artifact in a frame fed by srcDoc, with exactly allow-scripts", () => {
     artifactHook.mockReturnValue({
       data: {
