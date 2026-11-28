@@ -1,5 +1,21 @@
 # Changelog
 
+## [4.8.0](https://github.com/willdady/platypus/compare/v4.7.0...v4.8.0) (2026-11-28)
+
+
+### Features
+
+* **frontend:** add an Artifacts count to the workspace home ([#2265](https://github.com/willdady/platypus/issues/2265)) ([74455b1](https://github.com/willdady/platypus/commit/74455b17027a87d687a8824e8c137a5325f8534a))
+* **frontend:** put Home back in the top bar on mobile ([#2263](https://github.com/willdady/platypus/issues/2263)) ([a5593c4](https://github.com/willdady/platypus/commit/a5593c4797d9bd6b8d624e57e5715ed719db3a54))
+
+
+### Bug Fixes
+
+* **frontend:** cover accepted Trigger Max Runs to Keep values ([#2262](https://github.com/willdady/platypus/issues/2262)) ([7f67bab](https://github.com/willdady/platypus/commit/7f67babf075e6a8533a3622cb2f5d9ba9284abe0))
+* **frontend:** give an Artifact a gutter under its last line ([#2258](https://github.com/willdady/platypus/issues/2258)) ([7a2de38](https://github.com/willdady/platypus/commit/7a2de3847dc44f47a09a7fec952734f47fc734e5))
+* **frontend:** keep the Artifact's full screen view across a refresh ([#2257](https://github.com/willdady/platypus/issues/2257)) ([21d2738](https://github.com/willdady/platypus/commit/21d27386a1ed4bfb0208590af0fac3a4e86280f6))
+* **frontend:** stop the Artifact preview flashing white and round the panel's top edge ([#2264](https://github.com/willdady/platypus/issues/2264)) ([bbfa0ee](https://github.com/willdady/platypus/commit/bbfa0ee82e5e8bc41c88d293f5c5e4e9af565697))
+
 ## [4.7.0](https://github.com/willdady/platypus/compare/v4.6.0...v4.7.0) (2026-11-27)
 
 
