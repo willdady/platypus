@@ -53,10 +53,12 @@ import {
   type KeyboardEventHandler,
   type ReactNode,
   type RefObject,
+  type ChangeEvent,
   type ChangeEventHandler,
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -688,11 +690,61 @@ export function PromptInputTextarea({
   placeholder = "What would you like to know?",
   status,
   onKeyDown,
+  value,
+  onChange,
+  ref: forwardedRef,
   ...props
 }: PromptInputTextareaProps) {
   const attachments = usePromptInputAttachments();
   const [isComposing, setIsComposing] = useState(false);
   const isMobile = useIsMobile();
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  // why: `ref` is an ordinary prop here, so spreading the rest would overwrite it
+  const setRefs = useCallback(
+    (node: HTMLTextAreaElement | null) => {
+      textareaRef.current = node;
+      if (typeof forwardedRef === "function") {
+        forwardedRef(node);
+      } else if (forwardedRef) {
+        forwardedRef.current = node;
+      }
+    },
+    [forwardedRef],
+  );
+  // why: the prop may also carry numbers or arrays, the node only ever holds a string
+  const asText = (text: PromptInputTextareaProps["value"]) => String(text ?? "");
+  const lastPropValue = useRef(asText(value));
+  const acceptedValue = useRef(asText(value));
+
+  // why: dictation writes through the accessibility API and fires no `input` event
+  useLayoutEffect(() => {
+    const node = textareaRef.current;
+    if (!node) return;
+    const text = asText(value);
+    const propChanged = text !== lastPropValue.current;
+    lastPropValue.current = text;
+    if (propChanged) {
+      if (node.value !== text) {
+        node.value = text;
+        node.setSelectionRange(node.value.length, node.value.length);
+      }
+      acceptedValue.current = text;
+      return;
+    }
+    if (node.value === acceptedValue.current) return;
+    acceptedValue.current = node.value;
+    const target = { value: node.value } as HTMLTextAreaElement;
+    onChange?.({
+      nativeEvent: new Event("input"),
+      target,
+      currentTarget: target,
+    } as unknown as ChangeEvent<HTMLTextAreaElement>);
+  });
+
+  const handleChange: ChangeEventHandler<HTMLTextAreaElement> = (e) => {
+    acceptedValue.current = e.target.value;
+    onChange?.(e);
+  };
 
   const handleKeyDown: KeyboardEventHandler<HTMLTextAreaElement> = (e) => {
     onKeyDown?.(e);
@@ -762,8 +814,11 @@ export function PromptInputTextarea({
 
   return (
     <InputGroupTextarea
+      ref={setRefs}
+      defaultValue={value}
       className={cn("field-sizing-content max-h-48 min-h-16", className)}
       name="message"
+      onChange={handleChange}
       onCompositionEnd={() => setIsComposing(false)}
       onCompositionStart={() => setIsComposing(true)}
       onKeyDown={handleKeyDown}
