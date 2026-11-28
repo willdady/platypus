@@ -181,6 +181,18 @@ describe("Workspace home", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("counts every Artifact from the list envelope, not the one row it fetches", async () => {
+    mockScopedSWR({
+      "/artifacts": { data: { results: [{ id: "a1" }], totalCount: 7 } },
+      "/providers": [{ id: "p1", name: "OpenAI" }],
+      ...workspaceRead,
+    });
+    await renderList(<Workspace />);
+
+    const artifactsCard = screen.getByRole("group", { name: "Artifacts" });
+    expect(within(artifactsCard).getByText("7")).toBeInTheDocument();
+  });
+
   it("leaves the Boards section out of the loading skeleton", async () => {
     localStorage.setItem("section:boards:open", "true");
     mockScopedSWR({
