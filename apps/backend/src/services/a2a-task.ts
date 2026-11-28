@@ -388,6 +388,7 @@ const startTurn = async (
         parentId,
       },
       includeMemories: endpoint.includeMemories,
+      search: endpoint.search,
       origin: caller.origin,
       newChat: {
         agentId: endpoint.agentId,
@@ -615,10 +616,14 @@ export const listA2aTasks = async (
     limit: pageSize + 1,
   });
   // why: a Task's status comes from its page row, so this reads only the page
-  const page = rows.slice(0, pageSize).map((row) => ({
-    ...row,
-    status: derivedTaskStatus(row),
-  }));
+  const page = rows.slice(0, pageSize).map((row) => {
+    const status = derivedTaskStatus(row);
+    return {
+      ...row,
+      replyMetadata: status.replyId ? row.firstReplyMetadata : null,
+      status,
+    };
+  });
   const last = page.at(-1);
   const replies = await recordedReplies(page, {
     withText: !!params.includeArtifacts,

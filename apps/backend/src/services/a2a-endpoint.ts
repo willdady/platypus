@@ -120,6 +120,7 @@ export const createA2aEndpoint = async (
         name: fields.name ?? agent.row.name,
         description: fields.description ?? agent.row.description,
         enabled: fields.enabled,
+        search: fields.search,
         includeMemories: fields.includeMemories,
         extractMemories: fields.extractMemories,
         createdAt: now,

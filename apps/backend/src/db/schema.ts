@@ -1233,6 +1233,7 @@ export const a2aEndpoint = pgTable(
     name: t.text("name").notNull(),
     description: t.text("description").notNull(),
     enabled: t.boolean("enabled").notNull().default(true),
+    search: t.boolean("search").notNull().default(false),
     includeMemories: t.boolean("include_memories").notNull().default(false),
     extractMemories: t.boolean("extract_memories").notNull().default(false),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),

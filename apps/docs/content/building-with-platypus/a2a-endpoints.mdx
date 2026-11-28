@@ -68,6 +68,11 @@ Go to **Workspace settings → A2A endpoints** and click **Add A2A endpoint**.
 - **Enabled** — when off, the endpoint answers every call with **Not Found**,
   and its card is badged **Disabled**. **Enable** and **Disable** are also in
   the card's three-dot menu.
+- **Web Search** — whether the endpoint's runs search the web, through the
+  Provider's own search or a Web-search backend selected on it. Off by default:
+  the caller never sees the compose bar, so this is your call, not theirs. A
+  Provider that can serve neither leaves the run unsearched, and the Task says
+  so (see [Conversations](#conversations)).
 - **Include Memories** and **Extract Memories** — whether the endpoint's runs
   read your Memories and its Chats write to them. Both are off by default; see
   [Memories](#memories).
@@ -218,6 +223,13 @@ learns one out of your Chats.
   reply in the Chat doesn't change them. Nobody is watching an A2A run, so
   give the exposed Agent enough **Max steps** for the work you expect clients
   to send it.
+- **A reply written without search says so.** When the endpoint has **Web
+  Search** on and the Provider can serve neither its own search nor a backend
+  selected on it, the run goes ahead without searching. The reply is still an
+  artifact and the Task still ends `completed`; its `metadata` carries
+  `searchUnavailable: true` and its status carries a short message. Check that
+  flag before taking a reply as researched: it also appears next to a
+  `stopReason`, since a cut-short reply can be unsearched too.
 - **A retry is safe.** The client's `messageId` becomes the message's id in the
   Chat, so sending the same `messageId` again answers with the Task it already
   started, never a second run. That holds even when the retry arrives while

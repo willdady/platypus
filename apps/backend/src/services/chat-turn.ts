@@ -31,6 +31,8 @@ export const startChatTurn = async (params: {
   chatId: string;
   request: ChatSubmitData;
   includeMemories: boolean;
+  // why: the endpoint owns search for its runs, a Chat keeps the caller's
+  search?: boolean;
   origin: string;
   newChat?: Extract<ChatSinkParams["newChat"], { a2aEndpointId: string }>;
   onEnded?: () => void;
@@ -41,6 +43,7 @@ export const startChatTurn = async (params: {
     chatId,
     request,
     includeMemories: callerIncludesMemories,
+    search: callerSearch,
     origin,
     newChat,
     onEnded,
@@ -112,10 +115,13 @@ export const startChatTurn = async (params: {
   const chatSummaries = await loadChatSummaries(chatId);
 
   const turnId = turn.turnId;
+  // why: the endpoint owns search for its runs, the same way a Trigger does
+  const runRequest =
+    callerSearch === undefined ? request : { ...request, search: callerSearch };
   const input: RunInput = {
     runId: chatId,
     turnId,
-    request,
+    request: runRequest,
     messages,
     chatSummaries,
     memorySnapshot,

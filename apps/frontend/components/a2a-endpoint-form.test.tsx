@@ -48,6 +48,7 @@ const endpoint = {
   enabled: true,
   includeMemories: false,
   extractMemories: false,
+  search: false,
   createdAt: "2026-09-01T00:00:00.000Z",
   updatedAt: "2026-09-01T00:00:00.000Z",
   tokens: [
@@ -150,6 +151,7 @@ describe("A2aEndpointForm", () => {
       enabled: true,
       includeMemories: false,
       extractMemories: false,
+      search: false,
     });
   });
 
@@ -212,6 +214,33 @@ describe("A2aEndpointForm", () => {
         enabled: true,
         includeMemories: true,
         extractMemories: true,
+        search: false,
+      }),
+    );
+  });
+
+  it("turns on web search", async () => {
+    setDataFor("/a2a-endpoints/ep-1", endpoint);
+    const fetchMock = stubAcceptedSave(endpoint);
+    render(
+      <A2aEndpointForm orgId="org1" workspaceId="ws1" endpointId="ep-1" />,
+    );
+
+    const search = screen.getByRole("switch", { name: /Web Search/ });
+    expect(search).not.toBeChecked();
+    fireEvent.click(search);
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+
+    await waitFor(() =>
+      expect(
+        expectSentBodyToMatchSchema(fetchMock, a2aEndpointUpdateSchema),
+      ).toEqual({
+        name: "Acme helpdesk",
+        description: "Ask about your order",
+        enabled: true,
+        includeMemories: false,
+        extractMemories: false,
+        search: true,
       }),
     );
   });

@@ -234,3 +234,42 @@ time. **Platypus accepts a `contextId` it did not issue.**
   talk to Platypus at all. Keeping the error for Platypus's own UUIDv5 ids was
   also considered; it would leak whether an id is a Chat id somewhere, and a
   fresh Chat costs a client nothing it could not already get.
+
+## Amendment — an endpoint carries the Web search setting (#2252)
+
+A caller reaching the Agent over A2A never sees the compose bar, so it cannot
+pick a search mode per turn. The endpoint now carries `search`, default false,
+and every run it starts inherits it: the run's tools hold the Provider's native
+search, or the Web-search backend selected on that Provider, exactly as a UI
+turn started with Web search on would.
+
+It belongs to the endpoint for the same reason the memory settings do. The
+caller is not necessarily the Owner, so whether a turn reaches the network is
+the Owner's call and not the caller's. Off by default keeps an endpoint that
+was never meant to browse from doing so after an upgrade.
+
+Letting the caller choose per message was the alternative. It fits A2A's
+extension mechanism, but the endpoint's Agent Card would then have to advertise
+a setting the Owner did not set, and a Gateway relaying several products would
+pick per product rather than once. Caller-chosen search is deferred, not ruled
+out.
+
+An endpoint that asks for search the Provider cannot serve — no backend
+selected, or the one it names not installed — runs without it, as a UI turn
+does. The reply is still an artifact, so the Task ends `completed` either way,
+and it says so: `searchUnavailable` on the Task's `metadata`, and a short
+message in its status where #1422 puts the cut-short reasons. It rides beside a
+`stopReason` rather than replacing it, since a reply cut short can also be one
+written without search. A quiet field was considered: `search` is already on
+the endpoint the client got the card from, but a client reads it once when it
+picks the endpoint, not on each Task, so the Task carries its own marker.
+
+The marker is the Chat's own. A UI turn already records `searchUnavailable` in
+its reply's `metadata` when search was asked for and nothing could serve it, so
+the A2A path adds no second record: the Task reads its own reply's metadata.
+That makes it the run's fact rather than the endpoint's current setting — the
+reply stays marked after the Provider is fixed, and a Task whose endpoint had
+search off stays unmarked when it is switched on later. Reply-level means it
+goes with the reply: regenerating one drops it, as it does for the cut-short
+flags beside it, and replies written before the flag existed carry no marker
+either way.

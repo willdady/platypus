@@ -22,11 +22,23 @@ const { model } = vi.hoisted(() => ({
     toolNames: [] as string[][],
     toolCall: null as string | null,
     finishReason: null as "length" | null,
+    withSearchTools: true,
   },
 }));
 vi.mock("../services/provider.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../services/provider.ts")>()),
   openProvider: () => ({
+    // why: the real one is built per provider, this mock serves a single tool
+    ...(model.withSearchTools
+      ? {
+          searchTools: () => ({
+            web_search: tool({
+              inputSchema: z.object({}),
+              execute: () => ({}),
+            }),
+          }),
+        }
+      : {}),
     languageModel: () =>
       new MockLanguageModelV3({
         doStream: async (options) => {
@@ -1256,6 +1268,53 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
     },
   );
 
+  describe("search setting", () => {
+    const seedSearch = (search: boolean) => {
+      seedConversation();
+      rows("a2a_endpoint")[0].search = search;
+    };
+
+    it("serves the provider's own search once the endpoint turns it on", async () => {
+      seedSearch(true);
+
+      await send({ messageId: "msg-a" });
+
+      expect(model.toolNames[0]).toContain("web_search");
+    });
+
+    it("leaves the provider's own search off by default", async () => {
+      seedSearch(false);
+
+      await send({ messageId: "msg-a" });
+
+      expect(model.toolNames[0]).not.toContain("web_search");
+    });
+
+    it("tells the caller when it turned search on and got none", async () => {
+      model.withSearchTools = false;
+      seedSearch(true);
+
+      const { task } = (await send({ messageId: "msg-a" })).body.result;
+      const read = (await rpc("GetTask", { id: task.id })).body.result;
+      expect(model.toolNames[0]).not.toContain("web_search");
+      expect(read.metadata).toEqual({ searchUnavailable: true });
+      expect(read.status.message!.parts[0].text).toMatch(
+        /^Search was unavailable/,
+      );
+    });
+
+    it("leaves a run with search off unmarked", async () => {
+      model.withSearchTools = false;
+      seedSearch(false);
+
+      const { task } = (await send({ messageId: "msg-a" })).body.result;
+
+      const read = (await rpc("GetTask", { id: task.id })).body.result;
+      expect(read.metadata).toBeUndefined();
+      expect(read.status.message).toBeUndefined();
+    });
+  });
+
   describe("memory settings", () => {
     const seedMemories = (settings: {
       includeMemories: boolean;
@@ -2287,8 +2346,13 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
         (artifact) => artifact.parts[0].text,
       );
 
-    const complete = async () => {
+    const complete = async ({
+      withSearchTools = true,
+      search = false,
+    } = {}) => {
+      model.withSearchTools = withSearchTools;
       seedConversation();
+      rows("a2a_endpoint")[0].search = search;
       const task = (await send({ messageId: "msg-a" })).body.result.task;
       const reply = rows("chat_message").find((m) => m.role === "assistant")!;
       return { task, reply };
@@ -2343,6 +2407,34 @@ describe("POST /a2a/:endpointId (JSON-RPC)", () => {
       expect(read.metadata).toEqual({ stopReason: "output_limit" });
       expect(read.status.message).toMatchObject({ role: "ROLE_AGENT" });
       expect(read.status.message!.parts[0].text).toMatch(/output limit/);
+    });
+
+    it("says a reply was written without search, still completed", async () => {
+      const { task } = await complete({ withSearchTools: false, search: true });
+
+      const read = (await rpc("GetTask", { id: task.id })).body.result;
+
+      expect(read.status.state).toBe("TASK_STATE_COMPLETED");
+      expect(read.metadata).toEqual({ searchUnavailable: true });
+      expect(read.status.message!.parts[0].text).toMatch(
+        /^Search was unavailable/,
+      );
+      expect(read.artifacts![0].parts[0].text).toBe("Hello from Helper");
+    });
+
+    it("keeps a cut-short reason alongside the search marker", async () => {
+      model.finishReason = "length";
+      const { task } = await complete({ withSearchTools: false, search: true });
+
+      const read = (await rpc("GetTask", { id: task.id })).body.result;
+
+      expect(read.metadata).toEqual({
+        stopReason: "output_limit",
+        searchUnavailable: true,
+      });
+      expect(read.status.message!.parts[0].text).toMatch(
+        /^Reply cut short at the model's output limit.*Search was unavailable/,
+      );
     });
 
     it("reads a finished reply's Task exactly as before, with no stop reason or status message", async () => {
@@ -2740,7 +2832,7 @@ describe("POST /a2a/:endpointId — ListTasks", () => {
       return [...seeded.queries];
     };
 
-    it("reads a completed Task for GetTask in two", async () => {
+    it("reads a completed Task for GetTask in three", async () => {
       const seeded = seedTasks([{ id: "a", minute: 1 }]);
 
       const queries = await queriesOf(seeded, async () => {
@@ -2750,7 +2842,7 @@ describe("POST /a2a/:endpointId — ListTasks", () => {
         });
       });
 
-      expect(queries.length).toBeLessThanOrEqual(2);
+      expect(queries.length).toBeLessThanOrEqual(3);
     });
 
     it("reads a running Task for GetTask in two", async () => {
@@ -2764,7 +2856,7 @@ describe("POST /a2a/:endpointId — ListTasks", () => {
       expect(queries.length).toBeLessThanOrEqual(2);
     });
 
-    it("lists a page of 100 Tasks without artifacts in four, one for their replies' stop reasons", async () => {
+    it("lists a page of 100 Tasks without artifacts in five, one for their replies' stop reasons", async () => {
       const seeded = seedTasks(
         Array.from({ length: 100 }, (_, i) => ({ id: `t${i}`, minute: i })),
       );
@@ -2774,7 +2866,7 @@ describe("POST /a2a/:endpointId — ListTasks", () => {
         expect(page.tasks).toHaveLength(100);
       });
 
-      expect(queries.length).toBeLessThanOrEqual(4);
+      expect(queries.length).toBeLessThanOrEqual(5);
       expect(
         queries.filter((q) => q.table === "chat_message").length,
       ).toBeLessThanOrEqual(1);
@@ -2839,7 +2931,7 @@ describe("POST /a2a/:endpointId — ListTasks", () => {
         );
       });
 
-      expect(queries.length).toBeLessThanOrEqual(4);
+      expect(queries.length).toBeLessThanOrEqual(5);
     });
   });
 

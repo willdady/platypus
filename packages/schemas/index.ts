@@ -4337,6 +4337,9 @@ export const a2aEndpointSchema = z.object({
   name: z.string().min(1).max(A2A_ENDPOINT_NAME_MAX_LENGTH),
   description: z.string().min(1).max(A2A_ENDPOINT_DESCRIPTION_MAX_LENGTH),
   enabled: z.boolean(),
+  // Off by default: an outside caller cannot turn search on for an Agent it
+  // does not own.
+  search: z.boolean(),
   // Both default off, because the caller may not be the Owner.
   includeMemories: z.boolean(),
   extractMemories: z.boolean(),
@@ -4360,6 +4363,7 @@ export const a2aEndpointCreateSchema = strictRequest(
       enabled: true,
       name: true,
       description: true,
+      search: true,
       includeMemories: true,
       extractMemories: true,
     })
@@ -4367,6 +4371,7 @@ export const a2aEndpointCreateSchema = strictRequest(
     .required({ agentId: true })
     .extend({
       enabled: z.boolean().default(true),
+      search: z.boolean().default(false),
       includeMemories: z.boolean().default(false),
       extractMemories: z.boolean().default(false),
     }),
@@ -4382,6 +4387,7 @@ export const a2aEndpointUpdateSchema = strictRequest(
       name: true,
       description: true,
       enabled: true,
+      search: true,
       includeMemories: true,
       extractMemories: true,
     })

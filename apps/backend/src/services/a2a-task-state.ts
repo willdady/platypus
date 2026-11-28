@@ -140,6 +140,7 @@ export type TaskReading = TaskRow & {
   chatStatus: ChatStatus | null;
   leafId: string | null;
   firstReplyId: string | null;
+  firstReplyMetadata: unknown;
 };
 
 export type TaskRowCursor = { at: Date; id: string };
@@ -147,7 +148,7 @@ export type TaskRowCursor = { at: Date; id: string };
 // why: the same first-reply rule as firstReply; change them together
 const taskReadingQuery = (where: SQL | undefined) => {
   const reply = db
-    .select({ id: chatMessage.id })
+    .select({ id: chatMessage.id, metadata: chatMessage.metadata })
     .from(chatMessage)
     .where(
       and(
@@ -167,6 +168,7 @@ const taskReadingQuery = (where: SQL | undefined) => {
       chatStatus: chatTable.status,
       leafId: chatTable.activeLeafId,
       firstReplyId: reply.id,
+      firstReplyMetadata: reply.metadata,
     })
     .from(a2aTaskTable)
     .leftJoin(chatTable, eq(chatTable.id, a2aTaskTable.chatId))
@@ -254,7 +256,11 @@ type ReplyParts = { type: string; text?: string }[];
 
 export type StopReason = "max_steps" | "output_limit";
 
-export type RecordedReply = { text: string; stopReason?: StopReason };
+export type RecordedReply = {
+  text: string;
+  stopReason?: StopReason;
+  searchUnavailable: boolean;
+};
 
 const stopReasonOf = (metadata: unknown): StopReason | undefined => {
   const marked = (metadata ?? {}) as Pick<
@@ -266,6 +272,14 @@ const stopReasonOf = (metadata: unknown): StopReason | undefined => {
   return undefined;
 };
 
+// why: written beside the reply as it is claimed; older replies predate it and read as searched
+const searchUnavailableOf = (metadata: unknown): boolean =>
+  (metadata as Pick<ChatMessageMetadata, "searchUnavailable"> | null)
+    ?.searchUnavailable === true;
+
+const SEARCH_UNAVAILABLE_TEXT =
+  "Search was unavailable, so this reply was written without it.";
+
 const STOP_REASON_TEXT: Record<StopReason, string> = {
   max_steps: "Reply cut short at the step limit, so it may be incomplete.",
   output_limit:
@@ -273,12 +287,17 @@ const STOP_REASON_TEXT: Record<StopReason, string> = {
 };
 
 export const recordedReplies = async (
-  tasks: { id: string; chatId: string; status: TaskStatus }[],
+  tasks: {
+    id: string;
+    chatId: string;
+    status: TaskStatus;
+    replyMetadata: unknown;
+  }[],
   { withText }: { withText: boolean },
 ): Promise<Map<string, RecordedReply>> => {
-  const completed = tasks.flatMap(({ id, chatId, status }) =>
+  const completed = tasks.flatMap(({ id, chatId, status, replyMetadata }) =>
     status.state === TaskState.TASK_STATE_COMPLETED && status.replyId
-      ? [{ id, chatId, replyId: status.replyId }]
+      ? [{ id, chatId, replyId: status.replyId, replyMetadata }]
       : [],
   );
   if (!completed.length) return new Map();
@@ -320,6 +339,7 @@ export const recordedReplies = async (
         .map((part) => part.text)
         .join("\n\n"),
       stopReason: stopReasonOf(reply.metadata),
+      searchUnavailable: searchUnavailableOf(task.replyMetadata),
     });
   }
   return read;
@@ -328,13 +348,23 @@ export const recordedReplies = async (
 const stopMessage = (
   task: Pick<Task, "id" | "contextId">,
   replyId: string,
-  stopReason: StopReason,
+  stopReason: StopReason | undefined,
+  searchUnavailable: boolean,
 ): Message => ({
-  messageId: `${replyId}:${stopReason}`,
+  messageId: `${replyId}:${stopReason ?? "search"}`,
   contextId: task.contextId,
   taskId: task.id,
   role: Role.ROLE_AGENT,
-  parts: [a2aTextPart(STOP_REASON_TEXT[stopReason])],
+  parts: [
+    a2aTextPart(
+      [
+        stopReason ? STOP_REASON_TEXT[stopReason] : undefined,
+        searchUnavailable ? SEARCH_UNAVAILABLE_TEXT : undefined,
+      ]
+        .filter(Boolean)
+        .join(" "),
+    ),
+  ],
   metadata: undefined,
   extensions: [],
   referenceTaskIds: [],
@@ -348,10 +378,16 @@ export const toTask = (
   const id = task.id;
   const contextId = taskContextId(task);
   const stopReason = replyId ? reply?.stopReason : undefined;
+  // why: a reply written without search is still whole, so this rides along a cut-short reason rather than replacing it
+  const searchUnavailable = !!replyId && reply?.searchUnavailable === true;
   const message =
-    replyId && stopReason
-      ? stopMessage({ id, contextId }, replyId, stopReason)
+    replyId && (stopReason || searchUnavailable)
+      ? stopMessage({ id, contextId }, replyId, stopReason, searchUnavailable)
       : undefined;
+  const metadata = {
+    ...(stopReason ? { stopReason } : {}),
+    ...(searchUnavailable ? { searchUnavailable: true } : {}),
+  };
   const result: Task = {
     id,
     contextId,
@@ -363,7 +399,7 @@ export const toTask = (
     artifacts:
       reply?.text && replyId ? [replyArtifact(replyId, reply.text)] : [],
     history: [],
-    metadata: stopReason ? { stopReason } : undefined,
+    metadata: Object.keys(metadata).length ? metadata : undefined,
   };
   chatIds.set(result, task.chatId);
   return result;
@@ -377,10 +413,28 @@ export const readWithStatus = async (
   task: TaskRow,
   status: TaskStatus,
 ): Promise<Task> => {
-  const replies = await recordedReplies([{ ...task, status }], {
-    withText: true,
-  });
+  const replies = await recordedReplies(
+    [
+      {
+        ...task,
+        replyMetadata: status.replyId
+          ? await replyMetadata(status.replyId)
+          : null,
+        status,
+      },
+    ],
+    { withText: true },
+  );
   return toTask(task, status, replies.get(task.id));
+};
+
+const replyMetadata = async (replyId: string): Promise<unknown> => {
+  const [row] = await db
+    .select({ metadata: chatMessage.metadata })
+    .from(chatMessage)
+    .where(eq(chatMessage.id, replyId))
+    .limit(1);
+  return row?.metadata ?? null;
 };
 
 export const readingOf = async (task: TaskRow): Promise<TaskReading> => {
@@ -393,6 +447,7 @@ export const bareReading = (task: TaskRow): TaskReading => ({
   chatStatus: null,
   leafId: null,
   firstReplyId: null,
+  firstReplyMetadata: null,
 });
 
 export const readRecordedTask = (

@@ -1,6 +1,6 @@
 {
-  "id": "eb3eba7a-8372-4d1f-a2b7-46649b1bde3d",
-  "prevId": "fffeab6a-61e9-4fed-a351-3cc0be24f37d",
+  "id": "ce3e7927-37e9-4dbf-a151-86d2cbd1cebf",
+  "prevId": "eb3eba7a-8372-4d1f-a2b7-46649b1bde3d",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -44,6 +44,13 @@
           "primaryKey": false,
           "notNull": true,
           "default": true
+        },
+        "search": {
+          "name": "search",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         },
         "include_memories": {
           "name": "include_memories",

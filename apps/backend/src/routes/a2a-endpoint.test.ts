@@ -278,6 +278,28 @@ describe("A2A endpoint routes", () => {
       });
     });
 
+    it("creates an endpoint with search off unless set", async () => {
+      const fake = seed({ endpoints: [] });
+
+      await send("", "POST", { agentId: "agent-1" });
+      await send("", "POST", { agentId: "agent-1", search: true });
+
+      expect(fake.tables.a2a_endpoint).toEqual([
+        expect.objectContaining({ search: false }),
+        expect.objectContaining({ search: true }),
+      ]);
+    });
+
+    it("updates the search setting", async () => {
+      const fake = seed({ endpoints: [endpoint({ search: false })] });
+
+      const res = await send("/ep-1", "PATCH", { search: true });
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({ search: true });
+      expect(fake.tables.a2a_endpoint[0]).toMatchObject({ search: true });
+    });
+
     it("rejects an attempt to move the endpoint to another Agent", async () => {
       const fake = seed();
 

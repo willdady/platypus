@@ -1,4 +1,4 @@
-import { openProvider, type OpenedProvider } from "./provider.ts";
+import { openProvider } from "./provider.ts";
 import { eq } from "drizzle-orm";
 import { db } from "../index.ts";
 import type { agent as agentTable } from "../db/schema.ts";
@@ -342,7 +342,7 @@ export const resolveSearchMode = (
 
 const resolveSearchTools = async (
   resolution: SearchResolution,
-  opened: Pick<OpenedProvider, "searchTools">,
+  providerSearchTools: (() => Record<string, Tool>) | undefined,
   provider: Pick<ProviderRow, "id">,
   ctx: WithCoreRegistrar<WebBackendContext>,
   signal: AbortSignal | undefined,
@@ -350,7 +350,7 @@ const resolveSearchTools = async (
   const turnCtx = { ...ctx, providerId: provider.id };
 
   if (resolution.kind === "none") return {};
-  if (resolution.kind === "native") return opened.searchTools?.() ?? {};
+  if (resolution.kind === "native") return providerSearchTools?.() ?? {};
 
   const registration = getWebBackend(resolution.backend);
   if (!registration) {
@@ -434,6 +434,8 @@ export const prepareChatTurn = async (
     const registerCloser = deferCloserRegistrar(sessionPromise);
 
     const searchResolution = resolveSearchMode(request.search, provider);
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- called as a plain function
+    const providerSearchTools = opened.searchTools;
 
     const includeMemories = input.includeMemories;
 
@@ -468,7 +470,7 @@ export const prepareChatTurn = async (
       queries.getSandboxEnvKeys(workspaceId),
       resolveSearchTools(
         searchResolution,
-        opened,
+        providerSearchTools,
         provider,
         {
           orgId,

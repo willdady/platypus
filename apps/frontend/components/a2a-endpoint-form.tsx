@@ -33,6 +33,7 @@ const INITIAL_DATA = {
   name: "",
   description: "",
   enabled: true,
+  search: false,
   includeMemories: false,
   extractMemories: false,
 };
@@ -77,6 +78,7 @@ function A2aEndpointForm({
       name: record.name,
       description: record.description,
       enabled: record.enabled,
+      search: record.search,
       includeMemories: record.includeMemories,
       extractMemories: record.extractMemories,
     }),
@@ -87,12 +89,14 @@ function A2aEndpointForm({
             name: data.name,
             description: data.description,
             enabled: data.enabled,
+            search: data.search,
             includeMemories: data.includeMemories,
             extractMemories: data.extractMemories,
           }
         : {
             agentId: data.agentId,
             enabled: data.enabled,
+            search: data.search,
             includeMemories: data.includeMemories,
             extractMemories: data.extractMemories,
             ...(data.name.trim() ? { name: data.name } : {}),
@@ -194,6 +198,15 @@ function A2aEndpointForm({
             description="When disabled, the endpoint answers every call with Not Found."
             checked={formData.enabled}
             onCheckedChange={(checked) => setField("enabled", checked)}
+            disabled={isSubmitting || readOnly}
+          />
+
+          <FormSwitchField
+            name="search"
+            label="Web Search"
+            description="Web search on the agent's provider — its built-in tool, or a Web-search backend selected on it."
+            checked={formData.search}
+            onCheckedChange={(checked) => setField("search", checked)}
             disabled={isSubmitting || readOnly}
           />
 
