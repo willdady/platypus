@@ -14,6 +14,7 @@ import { Separator } from "@/components/ui/separator";
 import {
   Bot,
   MessageSquare,
+  FileText,
   FolderOpen,
   Sparkles,
   Zap,
@@ -108,12 +109,12 @@ function WorkspaceSkeleton() {
       </div>
 
       <div className="flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden pb-1 lg:hidden">
-        {Array.from({ length: 5 }).map((_, i) => (
+        {Array.from({ length: 6 }).map((_, i) => (
           <Skeleton key={i} className="h-[46px] w-24 shrink-0 rounded-xl" />
         ))}
       </div>
-      <div className="hidden lg:grid gap-4 grid-cols-5">
-        {Array.from({ length: 5 }).map((_, i) => (
+      <div className="hidden lg:grid gap-4 grid-cols-6">
+        {Array.from({ length: 6 }).map((_, i) => (
           <Skeleton key={i} className="h-[106px] w-full rounded-xl" />
         ))}
       </div>
@@ -224,6 +225,10 @@ function Workspace() {
   const agents = useScopedList<unknown>("agents", scope);
   const skills = useScopedList<unknown>("skills", scope);
   const boards = useScopedList<unknown>("boards", scope);
+  const artifacts = useScopedSWR<{ results: []; totalCount: number }>(
+    "artifacts?limit=1",
+    scope,
+  );
   const triggers = useScopedList<Trigger>(
     triggerListEntity({ includeFired: true }),
     scope,
@@ -277,17 +282,10 @@ function Workspace() {
     },
     {
       label: "Skills",
-      description: "Reusable instruction sets",
+      description: "Agent instructions",
       icon: Sparkles,
       read: skills,
       count: listCount(skills),
-    },
-    {
-      label: "Boards",
-      description: "Visual work management",
-      icon: KanbanSquare,
-      read: boards,
-      count: listCount(boards),
     },
     {
       label: "Triggers",
@@ -295,6 +293,20 @@ function Workspace() {
       icon: Zap,
       read: triggers,
       count: listCount(triggers, (trigger) => !hasFired(trigger)),
+    },
+    {
+      label: "Boards",
+      description: "Kanban boards",
+      icon: KanbanSquare,
+      read: boards,
+      count: listCount(boards),
+    },
+    {
+      label: "Artifacts",
+      description: "Versioned content",
+      icon: FileText,
+      read: artifacts,
+      count: artifacts.data?.totalCount,
     },
   ];
 
@@ -336,7 +348,7 @@ function Workspace() {
               </Card>
             ))}
           </div>
-          <div className="hidden lg:grid gap-4 grid-cols-5">
+          <div className="hidden lg:grid gap-4 grid-cols-6">
             {stats.map((stat) => (
               <Card
                 key={stat.label}
