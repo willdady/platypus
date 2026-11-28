@@ -30,6 +30,8 @@ export function ArtifactPreviewFrame({
     origins: [],
   });
   const blocked = report.doc === srcDoc ? report.origins : [];
+  // why: the white frame flashes before a dark page paints its own background
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     function onMessage(event: MessageEvent) {
@@ -64,7 +66,11 @@ export function ArtifactPreviewFrame({
         title="Artifact preview"
         sandbox={ARTIFACT_FRAME_SANDBOX}
         srcDoc={srcDoc}
-        className="min-h-0 w-full flex-1 border-0 bg-white"
+        onLoad={() => setLoaded(true)}
+        className={cn(
+          "min-h-0 w-full flex-1 border-0 bg-white",
+          !loaded && "invisible",
+        )}
       />
     </div>
   );

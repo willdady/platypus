@@ -148,12 +148,12 @@ export function ChatArtifactSplit({
         fullScreen ? "full-screen" : overlay ? "overlay" : "split"
       }
       className={cn(
-        "flex flex-col bg-background",
+        "flex flex-col overflow-hidden bg-background",
         fullScreen
           ? "fixed inset-0 z-50"
           : overlay
-            ? "absolute inset-0 z-20 border-l"
-            : "size-full",
+            ? "absolute inset-0 z-20 rounded-tl-xl border-t border-l"
+            : "size-full rounded-tl-xl border-t border-l",
       )}
     >
       {panel}
@@ -180,6 +180,8 @@ export function ChatArtifactSplit({
         {splitShown && (
           <ResizableHandle
             withHandle
+            // why: the panel's own left border draws the divider so its corner can round
+            className="bg-transparent"
             aria-label="Resize the Artifact panel"
             disableDoubleClick
             onDoubleClick={resetSplit}
