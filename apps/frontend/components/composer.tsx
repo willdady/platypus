@@ -114,8 +114,9 @@ export function Composer({
       <FileCompatibilityWarning passthroughFileTypes={passthroughFileTypes} />
       <PromptInputBody>
         <PromptInputTextarea
-          ref={textareaRef}
+          // why: `textarea.ref` is the surface's own handle for this same node
           {...textareaProps}
+          ref={textareaRef}
           // why: after the spread, so a surface can't take the name
           aria-label="Message"
         />
