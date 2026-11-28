@@ -16,6 +16,7 @@ import {
   setupUser,
   stubAcceptedSave,
   stubRejectedSave,
+  stubSaveSequence,
   push,
   toastError,
   toastSuccess,
@@ -88,8 +89,19 @@ describe("TriggerForm — form submission", () => {
 });
 
 describe("TriggerForm — Max Runs to Keep validation", () => {
+  const MIN_RUNS_TO_KEEP_MESSAGE = "Number must be greater than or equal to 1";
+
+  function fillNameAndInstruction() {
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Nightly" },
+    });
+    fireEvent.change(screen.getByLabelText("Instruction"), {
+      target: { value: "Do it" },
+    });
+  }
+
   it.each([
-    ["0", "Number must be greater than or equal to 1"],
+    ["0", MIN_RUNS_TO_KEEP_MESSAGE],
     ["5000", "Number must be less than or equal to 1000"],
   ])(
     "shows the server's rejection of %s inline, and clears it once the field is edited",
@@ -98,12 +110,7 @@ describe("TriggerForm — Max Runs to Keep validation", () => {
       render(<TriggerForm orgId="org1" workspaceId="ws1" />);
       expect(await screen.findByText("Agent")).toBeInTheDocument();
 
-      fireEvent.change(screen.getByLabelText("Name"), {
-        target: { value: "Nightly" },
-      });
-      fireEvent.change(screen.getByLabelText("Instruction"), {
-        target: { value: "Do it" },
-      });
+      fillNameAndInstruction();
       fireEvent.change(screen.getByLabelText("Max Runs to Keep"), {
         target: { value: rejected },
       });
@@ -129,6 +136,37 @@ describe("TriggerForm — Max Runs to Keep validation", () => {
       );
     },
   );
+
+  it("saves a value inside the range once the field is edited after a rejection", async () => {
+    const message = MIN_RUNS_TO_KEEP_MESSAGE;
+    const fetchMock = stubSaveSequence(
+      { status: 400, body: { error: [{ path: ["maxRunsToKeep"], message }] } },
+      { status: 200, body: { id: "t1" } },
+    );
+    render(<TriggerForm orgId="org1" workspaceId="ws1" />);
+    expect(await screen.findByText("Agent")).toBeInTheDocument();
+
+    fillNameAndInstruction();
+    fireEvent.change(screen.getByLabelText("Max Runs to Keep"), {
+      target: { value: "0" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByText(message)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Max Runs to Keep"), {
+      target: { value: "500" },
+    });
+    await waitFor(() =>
+      expect(screen.queryByText(message)).not.toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(savedCreateBody(fetchMock)).toMatchObject({ maxRunsToKeep: 500 });
+    expect(toastSuccess).toHaveBeenCalledWith("Trigger created");
+    expect(push).toHaveBeenCalledWith("/org1/workspace/ws1");
+  });
 });
 
 describe("TriggerForm — success feedback", () => {
