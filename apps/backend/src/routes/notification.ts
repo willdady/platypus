@@ -19,7 +19,8 @@ import { NotFoundError } from "../errors.ts";
 import type { Variables } from "../server.ts";
 import { avatarKeyToUrl } from "../utils/avatar-url.ts";
 import { backendBaseUrl } from "../base-urls.ts";
-import { paginationQuerySchema, validate } from "../validate.ts";
+import { validate } from "../validate.ts";
+import { paginationQuerySchema } from "@platypus/schemas";
 
 const notification = new Hono<{ Variables: Variables }>();
 
