@@ -416,11 +416,13 @@ vi.mock("./artifact-viewer", () => ({
     version,
     live,
     onClose,
+    fullScreen,
   }: {
     artifactId?: string;
     version?: number;
     live?: { status: string; content: string };
     onClose?: () => void;
+    fullScreen?: { active: boolean; onToggle: () => void };
   }) => (
     <div>
       Artifact panel {artifactId ?? "streaming"} v{version}
@@ -428,6 +430,11 @@ vi.mock("./artifact-viewer", () => ({
         <div>
           Live {live.status} {live.content}
         </div>
+      )}
+      {fullScreen && (
+        <button type="button" onClick={fullScreen.onToggle}>
+          {fullScreen.active ? "Exit full screen" : "View full screen"}
+        </button>
       )}
       {onClose && (
         <button type="button" onClick={onClose}>
@@ -616,6 +623,109 @@ describe("Chat Artifact panel", () => {
     );
     expect(window.location.search).toBe("");
   });
+
+  const artifactPresentation = () =>
+    screen.getByRole("complementary").getAttribute("data-presentation");
+
+  it("comes back in full screen after a refresh that carries it in the URL", () => {
+    harness.turn.messages = [message("a1", "Hello")];
+    window.history.replaceState(
+      null,
+      "",
+      "?artifact=artifact-1%3A1&artifactFullScreen=1",
+    );
+
+    renderChat();
+
+    expect(
+      screen.getByText("Artifact panel artifact-1 v1"),
+    ).toBeInTheDocument();
+    expect(artifactPresentation()).toBe("full-screen");
+    expect(
+      screen.getByRole("button", { name: "Exit full screen" }),
+    ).toBeInTheDocument();
+  });
+
+  it("writes full screen to the URL and clears it on the way out", () => {
+    harness.turn.messages = [message("a1", "Hello")];
+    const first = renderChat();
+    fireEvent.click(screen.getByRole("button", { name: "Open artifact a1" }));
+    expect(artifactPresentation()).not.toBe("full-screen");
+
+    fireEvent.click(screen.getByRole("button", { name: "View full screen" }));
+
+    expect(window.location.search).toBe(
+      "?artifact=artifact-1%3A1&artifactFullScreen=1",
+    );
+    expect(artifactPresentation()).toBe("full-screen");
+
+    first.unmount();
+    const second = renderChat();
+    expect(artifactPresentation()).toBe("full-screen");
+
+    fireEvent.click(screen.getByRole("button", { name: "Exit full screen" }));
+
+    expect(window.location.search).toBe("?artifact=artifact-1%3A1");
+    expect(artifactPresentation()).not.toBe("full-screen");
+
+    second.unmount();
+    renderChat();
+    expect(
+      screen.getByText("Artifact panel artifact-1 v1"),
+    ).toBeInTheDocument();
+    expect(artifactPresentation()).not.toBe("full-screen");
+  });
+
+  it("clears both params when the Artifact is closed from full screen", () => {
+    harness.turn.messages = [message("a1", "Hello")];
+    window.history.replaceState(
+      null,
+      "",
+      "?artifact=artifact-1%3A1&artifactFullScreen=1",
+    );
+    renderChat();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Close artifact panel" }),
+    );
+
+    expect(window.location.search).toBe("");
+    expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open artifact a1" }));
+    expect(artifactPresentation()).not.toBe("full-screen");
+  });
+
+  it("lands in split view when a Card is opened from full screen", () => {
+    harness.turn.messages = [message("a1", "Hello")];
+    window.history.replaceState(
+      null,
+      "",
+      "?artifact=artifact-1%3A1&artifactFullScreen=1",
+    );
+    renderChat();
+    expect(artifactPresentation()).toBe("full-screen");
+
+    fireEvent.click(screen.getByRole("button", { name: "Open artifact a1" }));
+
+    expect(window.location.search).toBe("?artifact=artifact-1%3A1");
+    expect(artifactPresentation()).not.toBe("full-screen");
+  });
+
+  it.each(["?artifactFullScreen=1", "?artifact=nope&artifactFullScreen=1"])(
+    "shows the Chat alone for %s, full screen with no Artifact to show",
+    (search) => {
+      harness.turn.messages = [message("a1", "Hello")];
+      window.history.replaceState(null, "", search);
+
+      renderChat();
+
+      expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Open artifact a1" }),
+      ).toBeInTheDocument();
+    },
+  );
 
   it("opens a Card whose content is still streaming and follows the call to the stored version", () => {
     harness.turn.messages = [artifactCall({ state: "input-streaming" })];

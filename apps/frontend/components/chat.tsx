@@ -128,6 +128,8 @@ const CONTEXT_FOOTER_BAND =
   "mt-1.5 rounded-b-md bg-foreground/5 px-3 py-1.5 sm:mt-0 sm:rounded-none sm:bg-transparent sm:p-0";
 
 const ARTIFACT_PARAM = "artifact";
+const ARTIFACT_FULL_SCREEN_PARAM = "artifactFullScreen";
+const FULL_SCREEN_ON = "1";
 const CALL_PREFIX = "call:";
 
 function artifactParamOf(target: ArtifactOpenTarget): string {
@@ -165,28 +167,43 @@ export function Chat({
   const canSendMessages = canSendChatMessages(ownsWorkspace);
   const backendUrl = useBackendUrl();
   const scope = useMemo(() => ({ orgId, workspaceId }), [orgId, workspaceId]);
-  const artifactParam = useSearchParams().get(ARTIFACT_PARAM);
+  const searchParams = useSearchParams();
+  const artifactParam = searchParams.get(ARTIFACT_PARAM);
   const openArtifact = useMemo(
     () => artifactTargetFromParam(artifactParam),
     [artifactParam],
   );
+  // why: in the URL beside the open Artifact, so a refresh or a link keeps it
+  const artifactFullScreen =
+    openArtifact !== null &&
+    searchParams.get(ARTIFACT_FULL_SCREEN_PARAM) === FULL_SCREEN_ON;
   const setOpenArtifact = useCallback(
     (target: ArtifactOpenTarget | null) =>
       replaceSearchParam(ARTIFACT_PARAM, target && artifactParamOf(target)),
     [],
   );
+  const setArtifactFullScreen = useCallback(
+    (on: boolean) =>
+      replaceSearchParam(
+        ARTIFACT_FULL_SCREEN_PARAM,
+        on ? FULL_SCREEN_ON : null,
+      ),
+    [],
+  );
   // why: the count remounts the panel, so re-clicking the same Card resets it
   const [openArtifactCount, setOpenArtifactCount] = useState(0);
-  const [artifactFullScreen, setArtifactFullScreen] = useState(false);
   const openArtifactFromCard = useCallback(
     (target: ArtifactOpenTarget) => {
       setOpenArtifact(target);
       setOpenArtifactCount((count) => count + 1);
-      // why: reset on open, not close: the URL lands a render late, so closing flashes
       setArtifactFullScreen(false);
     },
-    [setOpenArtifact],
+    [setOpenArtifact, setArtifactFullScreen],
   );
+  const closeArtifact = useCallback(() => {
+    setOpenArtifact(null);
+    setArtifactFullScreen(false);
+  }, [setOpenArtifact, setArtifactFullScreen]);
   const chatUrl = joinUrl(
     backendUrl || "",
     `${scopedPath("chat", scope)}/${chatId}`,
@@ -562,10 +579,10 @@ export function Chat({
             artifactId={openStoredArtifact?.id}
             version={openStoredArtifact?.version}
             live={openLiveArtifact}
-            onClose={() => setOpenArtifact(null)}
+            onClose={closeArtifact}
             fullScreen={{
               active: artifactFullScreen,
-              onToggle: () => setArtifactFullScreen((on) => !on),
+              onToggle: () => setArtifactFullScreen(!artifactFullScreen),
             }}
             className="size-full"
           />
