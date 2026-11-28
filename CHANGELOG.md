@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.8.1](https://github.com/willdady/platypus/compare/v4.8.0...v4.8.1) (2026-11-28)
+
+
+### Bug Fixes
+
+* **backend:** tell the model what the Artifact frame blocks ([#2267](https://github.com/willdady/platypus/issues/2267)) ([6d155b9](https://github.com/willdady/platypus/commit/6d155b9b89c75d0a9d2f478779c2c592016a500f))
+
 ## [4.8.0](https://github.com/willdady/platypus/compare/v4.7.0...v4.8.0) (2026-11-28)
 
 
