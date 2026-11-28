@@ -44,10 +44,16 @@ vi.mock("./artifact-markdown", () => ({
   ArtifactMarkdown: ({
     content,
     storageBaseUrl,
+    gutter,
   }: {
     content: string;
     storageBaseUrl?: string | null;
-  }) => <pre data-storage-base={storageBaseUrl ?? ""}>{content}</pre>,
+    gutter?: string;
+  }) => (
+    <pre data-storage-base={storageBaseUrl ?? ""} data-gutter={gutter}>
+      {content}
+    </pre>
+  ),
   fencedCode: (content: string, language: string) =>
     `\`\`\`${language}\n${content}\n\`\`\``,
 }));
@@ -142,6 +148,69 @@ describe("ArtifactViewer", () => {
     expect(screen.getByText(/Version 2/)).toBeInTheDocument();
     expect(screen.getByText("# Version two")).toBeInTheDocument();
     expect(screen.queryByText("Read-only")).not.toBeInTheDocument();
+  });
+
+  describe("the gutter under the last line", () => {
+    const openCodeTab = () =>
+      fireEvent.mouseDown(screen.getByRole("tab", { name: "Code" }), {
+        button: 0,
+      });
+    const typed = (type: string, content: string) =>
+      artifactHook.mockReturnValue({
+        data: {
+          ...markdown,
+          artifact: { ...markdown.artifact, type },
+          version: { ...markdown.version, content },
+        },
+        isLoading: false,
+      });
+
+    it("ends a Markdown document with one, in Preview and in Code", () => {
+      renderViewer();
+
+      expect(screen.getByText("# Version two")).toHaveAttribute(
+        "data-gutter",
+        "document",
+      );
+
+      openCodeTab();
+
+      expect(screen.getByText(/```markdown/)).toHaveAttribute(
+        "data-gutter",
+        "source",
+      );
+    });
+
+    it("gives a code Artifact's source one in both tabs", () => {
+      typed("code", "const a = 1;");
+      renderViewer();
+
+      expect(screen.getByText(/const a = 1;/)).toHaveAttribute(
+        "data-gutter",
+        "source",
+      );
+
+      openCodeTab();
+
+      expect(screen.getByText(/const a = 1;/)).toHaveAttribute(
+        "data-gutter",
+        "source",
+      );
+    });
+
+    it("leaves a Mermaid diagram filling the pane, with one under its source", () => {
+      typed("mermaid", "graph TD; A-->B;");
+      renderViewer();
+
+      expect(screen.getByText(/```mermaid/)).not.toHaveAttribute("data-gutter");
+
+      openCodeTab();
+
+      expect(screen.getByText(/```text/)).toHaveAttribute(
+        "data-gutter",
+        "source",
+      );
+    });
   });
 
   it("passes the deployment's storage base from the read into the document", () => {
@@ -520,6 +589,23 @@ describe("ArtifactViewer while the Agent is still writing", () => {
     expect(screen.getByText("Markdown")).toBeInTheDocument();
     expect(screen.getByText("Streaming")).toBeInTheDocument();
     expect(screen.getByText("# Half a document")).toBeInTheDocument();
+  });
+
+  it("keeps the gutter under a Markdown document that is still streaming", () => {
+    renderViewer({
+      artifactId: undefined,
+      live: {
+        status: "streaming",
+        title: "Release notes",
+        type: "markdown",
+        content: "# Half a document",
+      },
+    });
+
+    expect(screen.getByText("# Half a document")).toHaveAttribute(
+      "data-gutter",
+      "document",
+    );
   });
 
   it("waits for content without inventing a title", () => {

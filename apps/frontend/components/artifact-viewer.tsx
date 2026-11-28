@@ -391,11 +391,18 @@ function ArtifactTabs({
             content={content}
             storageBaseUrl={storageBaseUrl}
             className="mx-auto max-w-3xl"
+            gutter="document"
+          />
+        ) : type === "mermaid" ? (
+          <ArtifactMarkdown
+            content={fencedCode(content, previewLanguage(type, language))}
+            className={MERMAID_FILL}
           />
         ) : (
           <ArtifactMarkdown
             content={fencedCode(content, previewLanguage(type, language))}
-            className={type === "mermaid" ? MERMAID_FILL : CODE_FILL}
+            className={CODE_FILL}
+            gutter="source"
           />
         )}
       </TabsContent>
@@ -406,6 +413,7 @@ function ArtifactTabs({
         <ArtifactMarkdown
           content={fencedCode(content, codeTabLanguage(type, language))}
           className={CODE_FILL}
+          gutter="source"
         />
       </TabsContent>
     </>

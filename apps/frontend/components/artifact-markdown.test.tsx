@@ -96,6 +96,46 @@ describe("ArtifactMarkdown images", () => {
   });
 });
 
+describe("the gutter under an Artifact's last line", () => {
+  it("wraps a document in a box of its own height that carries the gutter", () => {
+    render(
+      <ArtifactMarkdown
+        content={"A first line.\n\nThe last line."}
+        gutter="document"
+      />,
+    );
+
+    const gutter = screen.getByTestId("artifact-gutter");
+    expect(gutter).toHaveClass("pb-4");
+    expect(gutter.className).not.toMatch(/(^|\s)(h|size|min-h|max-h)-/);
+    expect(gutter).toContainElement(screen.getByText("The last line."));
+  });
+
+  it("puts the gutter of filled source inside the block that scrolls", () => {
+    render(
+      <ArtifactMarkdown
+        content={fencedCode("const a = 1;", "ts")}
+        gutter="source"
+      />,
+    );
+
+    const gutter = screen.getByTestId("artifact-gutter");
+    expect(gutter).toHaveClass(
+      "size-full",
+      "[&_[data-streamdown=code-block-body]]:pb-8",
+    );
+    expect(gutter).not.toHaveClass("pb-4");
+    expect(gutter).toHaveTextContent("const a = 1;");
+  });
+
+  it("adds nothing unless a surface asks for it", () => {
+    render(<ArtifactMarkdown content={"The last line."} />);
+
+    expect(screen.queryByTestId("artifact-gutter")).not.toBeInTheDocument();
+    expect(screen.getByText("The last line.")).toBeInTheDocument();
+  });
+});
+
 describe("the Artifact markdown schema", () => {
   it.each([
     "audio",
