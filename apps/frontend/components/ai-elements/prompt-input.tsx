@@ -712,7 +712,8 @@ export function PromptInputTextarea({
     [forwardedRef],
   );
   // why: the prop may also carry numbers or arrays, the node only ever holds a string
-  const asText = (text: PromptInputTextareaProps["value"]) => String(text ?? "");
+  const asText = (text: PromptInputTextareaProps["value"]) =>
+    String(text ?? "");
   const lastPropValue = useRef(asText(value));
   const acceptedValue = useRef(asText(value));
 
