@@ -334,19 +334,16 @@ describe("AppSidebar mobile sheet", () => {
       .map((link) => link.textContent?.trim());
     const newChat = within(sheet).getByRole("link", { name: "New chat" });
 
-    expect(rows).toEqual(["Home", "Boards", "Artifacts", "Workspace settings"]);
+    expect(rows).toEqual(["Boards", "Artifacts", "Workspace settings"]);
     expect(
-      within(workspaceNav).getByRole("link", { name: "Home" }),
-    ).toHaveAttribute("href", "/org1/workspace/ws1");
+      within(workspaceNav).queryByRole("link", { name: "Home" }),
+    ).not.toBeInTheDocument();
     expect(
       within(workspaceNav).getByRole("link", { name: "Boards" }),
     ).toHaveAttribute("href", "/org1/workspace/ws1/boards");
     expect(
       within(workspaceNav).getByRole("link", { name: "Artifacts" }),
     ).toHaveAttribute("href", "/org1/workspace/ws1/artifacts");
-    expect(
-      within(workspaceNav).getByRole("link", { name: "Home" }),
-    ).toHaveAttribute("aria-current", "page");
     expect(
       switcher.compareDocumentPosition(workspaceNav) &
         Node.DOCUMENT_POSITION_FOLLOWING,

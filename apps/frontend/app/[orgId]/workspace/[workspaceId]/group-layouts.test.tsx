@@ -44,7 +44,7 @@ describe("Workspace (sidebar) layout", () => {
 });
 
 describe("Workspace (plain) layout", () => {
-  it("draws no sidebar; the header holds Back and the switcher", async () => {
+  it("draws no sidebar; the header holds Back, Home and the switcher", async () => {
     render(await PlainLayout({ children: <p>page</p>, params }));
 
     expect(screen.queryByTestId("app-sidebar")).not.toBeInTheDocument();
@@ -57,8 +57,8 @@ describe("Workspace (plain) layout", () => {
     expect(screen.getByRole("button", { name: "Back" })).toBeInTheDocument();
     expect(screen.getByTestId("workspace-switcher")).toBeInTheDocument();
     expect(
-      screen.queryByRole("link", { name: "Workspace home" }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("link", { name: "Workspace home" }),
+    ).toHaveAttribute("href", "/org1/workspace/ws1");
     expect(screen.getByText("page")).toBeInTheDocument();
   });
 });

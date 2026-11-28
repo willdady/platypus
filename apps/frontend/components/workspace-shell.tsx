@@ -69,13 +69,18 @@ export function WorkspaceShell({
                 <BackButton variant="header" fallbackHref={home.href} />
               )}
               {workspaceId ? (
-                <div className="hidden md:block">
-                  <WorkspaceSwitcher
-                    orgId={orgId}
-                    workspaceId={workspaceId}
-                    presentation="bar"
-                  />
-                </div>
+                <>
+                  <div className="md:hidden">
+                    <HeaderHomeButton href={home.href} label={home.label} />
+                  </div>
+                  <div className="hidden md:block">
+                    <WorkspaceSwitcher
+                      orgId={orgId}
+                      workspaceId={workspaceId}
+                      presentation="bar"
+                    />
+                  </div>
+                </>
               ) : (
                 <HeaderHomeButton href={home.href} label={home.label} />
               )}
