@@ -44,8 +44,10 @@ export function WorkspaceSheetNavigation({
       </SidebarHeader>
       <nav aria-label="Workspace" className="px-2">
         <SidebarMenu>
-          {workspaceNavItems(orgId, workspaceId).map(
-            ({ section, label, href, icon: Icon }) => (
+          {workspaceNavItems(orgId, workspaceId)
+            // why: the header's Home is one tap, so the sheet lists only what it cannot reach
+            .filter(({ section }) => section !== "home")
+            .map(({ section, label, href, icon: Icon }) => (
               <SidebarMenuItem key={section}>
                 <SidebarMenuButton
                   asChild
@@ -57,8 +59,7 @@ export function WorkspaceSheetNavigation({
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
-            ),
-          )}
+            ))}
         </SidebarMenu>
       </nav>
     </>

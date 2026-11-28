@@ -178,11 +178,10 @@ describe("WorkspaceShell menu", () => {
       within(nav)
         .getAllByRole("link")
         .map((link) => link.textContent?.trim()),
-    ).toEqual(["Home", "Boards", "Artifacts", "Workspace settings"]);
-    expect(within(nav).getByRole("link", { name: "Home" })).toHaveAttribute(
-      "href",
-      "/org1/workspace/ws1",
-    );
+    ).toEqual(["Boards", "Artifacts", "Workspace settings"]);
+    expect(
+      within(nav).queryByRole("link", { name: "Home" }),
+    ).not.toBeInTheDocument();
     expect(within(nav).getByRole("link", { name: "Boards" })).toHaveAttribute(
       "href",
       "/org1/workspace/ws1/boards",
@@ -199,10 +198,10 @@ describe("WorkspaceShell menu", () => {
   });
 
   it.each([
-    ["the Workspace home", "/org1/workspace/ws1", "Home"],
+    ["the Workspace home", "/org1/workspace/ws1", null],
     ["a Board", "/org1/workspace/ws1/boards/b1", "Boards"],
     ["an Artifact", "/org1/workspace/ws1/artifacts/a1", "Artifacts"],
-    ["an Agent", "/org1/workspace/ws1/agents/a1", "Home"],
+    ["an Agent", "/org1/workspace/ws1/agents/a1", null],
     ["a Chat", "/org1/workspace/ws1/chat/c1", null],
     ["settings", "/org1/workspace/ws1/settings/webhooks", "Workspace settings"],
   ])("marks the sheet row for %s", (_, pathname, current) => {
@@ -230,13 +229,13 @@ describe("WorkspaceShell menu", () => {
 });
 
 describe("WorkspaceShell header", () => {
-  it("puts the switcher where Home was on a Workspace screen", () => {
+  it("draws Home and the switcher on a Workspace screen", () => {
     seedSwitcher();
     renderWorkspace();
 
     expect(
-      screen.queryByRole("link", { name: "Workspace home" }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("link", { name: "Workspace home" }),
+    ).toHaveAttribute("href", "/org1/workspace/ws1");
     expect(
       screen.getByRole("button", { name: /Acme\s*\/\s*Alpha/ }),
     ).toBeInTheDocument();
